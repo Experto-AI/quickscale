@@ -9,7 +9,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
 
 import click
 
@@ -54,6 +54,11 @@ from quickscale_cli.utils.project_identity import (
     derive_package_from_slug,
     resolve_project_identity,
 )
+
+
+ModuleExecutionMode = Literal["standalone", "apply"]
+STANDALONE_MODULE_EXECUTION_MODE: ModuleExecutionMode = "standalone"
+APPLY_MODULE_EXECUTION_MODE: ModuleExecutionMode = "apply"
 
 
 def _is_app_in_installed_apps(settings_content: str, app_name: str) -> bool:
@@ -482,12 +487,37 @@ def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _regenerate_wiring_for_execution_mode(
+    project_path: Path,
+    module_name: str,
+    module_config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
+    """Route managed wiring regeneration based on the active execution mode."""
+    if execution_mode == STANDALONE_MODULE_EXECUTION_MODE:
+        _regenerate_wiring_for_module(project_path, module_name, module_config)
+        return
+
+    _regenerate_wiring_for_module(
+        project_path,
+        module_name,
+        module_config,
+        execution_mode=execution_mode,
+    )
+
+
 def _regenerate_wiring_for_module(
     project_path: Path,
     module_name: str,
     module_config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> None:
     """Regenerate deterministic managed wiring for module integrations."""
+    if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+        return
+
     modules_dir = project_path / "modules"
     discovered_modules = (
         [p.name for p in modules_dir.iterdir() if p.is_dir()]
@@ -503,19 +533,31 @@ def _regenerate_wiring_for_module(
     )
     if not success:
         click.secho(
-            f"⚠️  Warning: managed wiring regeneration failed: {message}",
-            fg="yellow",
+            f"❌ Managed wiring regeneration failed: {message}",
+            fg="red",
+            err=True,
         )
-    else:
-        click.secho("  ✅ Regenerated managed module wiring", fg="green")
+        raise click.Abort()
+
+    click.secho("  ✅ Regenerated managed module wiring", fg="green")
 
 
-def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_auth_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply auth module configuration via managed wiring files."""
     normalized_config = _normalize_auth_config(config)
 
     # Managed wiring includes django-allauth + auth module URL routes.
-    _regenerate_wiring_for_module(project_path, "auth", normalized_config)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "auth",
+        normalized_config,
+        execution_mode=execution_mode,
+    )
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
@@ -570,9 +612,19 @@ def configure_blog_module(
     return config
 
 
-def apply_blog_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_blog_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply blog module configuration via managed wiring files."""
-    _regenerate_wiring_for_module(project_path, "blog", config)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "blog",
+        config,
+        execution_mode=execution_mode,
+    )
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
@@ -809,9 +861,19 @@ def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> N
         )
 
 
-def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_listings_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply listings module configuration via managed wiring files."""
-    _regenerate_wiring_for_module(project_path, "listings", config)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "listings",
+        config,
+        execution_mode=execution_mode,
+    )
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
@@ -1010,9 +1072,19 @@ def _update_crm_urls(urls_path: Path) -> None:
         click.secho("  ✅ Updated urls.py with CRM URLs", fg="green")
 
 
-def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_crm_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply CRM module configuration via managed wiring files."""
-    _regenerate_wiring_for_module(project_path, "crm", config)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "crm",
+        config,
+        execution_mode=execution_mode,
+    )
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
@@ -1082,9 +1154,19 @@ def configure_forms_module(
     return config
 
 
-def apply_forms_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_forms_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply forms module configuration to the project."""
-    _regenerate_wiring_for_module(project_path, "forms", config)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "forms",
+        config,
+        execution_mode=execution_mode,
+    )
     click.echo("\n\U0001f4cb Configuration applied:")
     click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
     click.echo(
@@ -1293,11 +1375,21 @@ def _add_storage_dependencies(project_path: Path, pyproject_path: Path) -> None:
         click.secho("  ✅ Added boto3 to pyproject.toml", fg="green")
 
 
-def apply_storage_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_storage_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply storage module configuration via managed wiring files."""
     normalized = get_default_storage_config() | config
 
-    _regenerate_wiring_for_module(project_path, "storage", normalized)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "storage",
+        normalized,
+        execution_mode=execution_mode,
+    )
 
     click.echo("\n📋 Configuration applied:")
     click.echo(f"  • Backend: {normalized['backend']}")
@@ -1567,11 +1659,21 @@ def configure_backups_module(
     return config
 
 
-def apply_backups_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_backups_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply backups module configuration via managed wiring files."""
     normalized = _resolve_backups_config(config)
     _raise_for_invalid_backups_config(normalized)
-    _regenerate_wiring_for_module(project_path, "backups", normalized)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "backups",
+        normalized,
+        execution_mode=execution_mode,
+    )
 
     click.echo("\n📋 Configuration applied:")
     click.echo(f"  • Retention days: {normalized['retention_days']}")
@@ -1735,12 +1837,20 @@ def configure_notifications_module(
 
 
 def apply_notifications_configuration(
-    project_path: Path, config: dict[str, Any]
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> None:
     """Apply notifications module configuration via managed wiring files."""
     resolved = resolve_notifications_module_options(config)
     _raise_for_invalid_notifications_config(resolved)
-    _regenerate_wiring_for_module(project_path, "notifications", resolved)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "notifications",
+        resolved,
+        execution_mode=execution_mode,
+    )
 
     click.echo("\n📋 Configuration applied:")
     click.echo(f"  • Sender: {resolved['sender_name']} <{resolved['sender_email']}>")
@@ -1851,11 +1961,21 @@ def configure_analytics_module(
     return config
 
 
-def apply_analytics_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_analytics_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply analytics module configuration via managed wiring files."""
     resolved = resolve_analytics_module_options(config)
     _raise_for_invalid_analytics_config(resolved)
-    _regenerate_wiring_for_module(project_path, "analytics", resolved)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "analytics",
+        resolved,
+        execution_mode=execution_mode,
+    )
 
     click.echo("\n📋 Configuration applied:")
     click.echo("  • Runtime: " + ("Enabled" if resolved["enabled"] else "Disabled"))
@@ -1967,11 +2087,21 @@ def configure_social_module(
     return config
 
 
-def apply_social_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_social_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply social module configuration via managed wiring files."""
     resolved = resolve_social_module_options(config)
     _raise_for_invalid_social_config(resolved)
-    _regenerate_wiring_for_module(project_path, "social", resolved)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "social",
+        resolved,
+        execution_mode=execution_mode,
+    )
 
     click.echo("\n📋 Configuration applied:")
     click.echo(

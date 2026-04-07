@@ -1,10 +1,38 @@
 """Tests for quickscale apply command"""
 
 import os
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
-from quickscale_cli.commands.apply_command import apply
+from quickscale_cli.commands.apply_command import (
+    _regenerate_managed_wiring_for_apply,
+    apply,
+)
+
+
+def _make_apply_context(project_path, *, package_name="myapp"):
+    return SimpleNamespace(
+        output_path=project_path,
+        existing_state=None,
+        delta=SimpleNamespace(modules_unchanged=[]),
+        qs_config=SimpleNamespace(
+            project=SimpleNamespace(package=package_name),
+            modules={"auth": SimpleNamespace(options={})},
+        ),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _stub_post_generation_steps():
+    """Keep CLI smoke tests focused on apply orchestration, not Poetry/migration tooling."""
+    with patch(
+        "quickscale_cli.commands.apply_command._run_post_generation_steps",
+        return_value=True,
+    ):
+        yield
 
 
 class TestApplyCommandBasic:
@@ -180,6 +208,7 @@ docker:
             )
 
             # Just check it processes the config correctly
+            assert result.exit_code == 0
             assert "myapp" in result.output
 
 
@@ -209,11 +238,10 @@ docker:
                 input="y\n",
             )
 
-            # Check project was generated
-            if result.exit_code == 0:
-                assert os.path.exists("testapp")
-                assert os.path.exists("testapp/manage.py")
-                assert os.path.exists("testapp/pyproject.toml")
+            assert result.exit_code == 0
+            assert os.path.exists("testapp")
+            assert os.path.exists("testapp/manage.py")
+            assert os.path.exists("testapp/pyproject.toml")
 
     def test_apply_shows_execution_steps(self):
         """Test that apply shows execution progress"""
@@ -238,6 +266,7 @@ docker:
             )
 
             # Should show progress indicators
+            assert result.exit_code == 0
             assert "⏳" in result.output or "Generating" in result.output
 
 
@@ -268,6 +297,7 @@ docker:
             )
 
             # Docker operations should be skipped
+            assert result.exit_code == 0
             assert "Starting Docker" not in result.output or "Docker" in result.output
 
     def test_apply_no_modules_flag(self):
@@ -295,6 +325,7 @@ docker:
             )
 
             # Module embedding should be skipped
+            assert result.exit_code == 0
             assert "Embedding module: auth" not in result.output
 
 
@@ -328,6 +359,7 @@ docker:
             )
 
             # Should show configuration summary
+            assert result.exit_code != 0
             assert "myapp" in result.output
             assert "showcase_html" in result.output
             assert "auth" in result.output
@@ -385,11 +417,10 @@ docker:
                 input="y\n",
             )
 
-            # Should succeed and create frontend directory
-            if result.exit_code == 0:
-                assert os.path.exists("myapp/frontend")
-                assert os.path.exists("myapp/frontend/package.json")
-                assert os.path.exists("myapp/frontend/src/main.tsx")
+            assert result.exit_code == 0
+            assert os.path.exists("myapp/frontend")
+            assert os.path.exists("myapp/frontend/package.json")
+            assert os.path.exists("myapp/frontend/src/main.tsx")
 
 
 class TestApplyDefaultConfig:
@@ -419,6 +450,7 @@ docker:
             )
 
             # Should find and use quickscale.yml
+            assert result.exit_code == 0
             assert "myapp" in result.output
 
     def test_apply_error_no_default_config(self):
@@ -461,9 +493,8 @@ docker:
                 input="y\n",
             )
 
-            if result.exit_code == 0:
-                # State file should be created
-                assert os.path.exists("testapp/.quickscale/state.yml")
+            assert result.exit_code == 0
+            assert os.path.exists("testapp/.quickscale/state.yml")
 
     def test_apply_second_apply_is_idempotent(self):
         """Test that second apply with same config shows 'nothing to do'"""
@@ -489,11 +520,12 @@ docker:
                 input="y\n",
             )
 
-            if result1.exit_code == 0:
-                # Create quickscale.yml in the generated project directory
-                with open("testapp/quickscale.yml", "w") as f:
-                    f.write(
-                        """
+            assert result1.exit_code == 0
+
+            # Create quickscale.yml in the generated project directory
+            with open("testapp/quickscale.yml", "w") as f:
+                f.write(
+                    """
 version: "1"
 project:
   slug: testapp
@@ -502,21 +534,21 @@ project:
 docker:
   start: false
 """
-                    )
-
-                # Second apply should detect no changes
-                result2 = runner.invoke(
-                    apply,
-                    ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
-                    input="y\n",
                 )
 
-                # Should show "nothing to do" message
-                assert (
-                    "Nothing to do" in result2.output
-                    or "No changes detected" in result2.output
-                    or "matches applied state" in result2.output
-                )
+            # Second apply should detect no changes
+            result2 = runner.invoke(
+                apply,
+                ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                input="y\n",
+            )
+
+            assert result2.exit_code != 0
+            assert (
+                "Nothing to do" in result2.output
+                or "No changes detected" in result2.output
+                or "matches applied state" in result2.output
+            )
 
     def test_apply_shows_delta_for_existing_project(self):
         """Test that apply shows delta when applying to existing project"""
@@ -542,11 +574,12 @@ docker:
                 input="y\n",
             )
 
-            if result1.exit_code == 0:
-                # Modify config to add a module (will not actually embed)
-                with open("testapp/quickscale.yml", "w") as f:
-                    f.write(
-                        """
+            assert result1.exit_code == 0
+
+            # Modify config to add a module (will not actually embed)
+            with open("testapp/quickscale.yml", "w") as f:
+                f.write(
+                    """
 version: "1"
 project:
   slug: testapp
@@ -557,21 +590,21 @@ modules:
 docker:
   start: false
 """
-                    )
-
-                # Second apply should show delta
-                result2 = runner.invoke(
-                    apply,
-                    ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
-                    input="n\n",  # Decline to proceed
                 )
 
-                # Should show modules to add
-                assert (
-                    "Modules to add" in result2.output
-                    or "auth" in result2.output
-                    or "Changes to apply" in result2.output
-                )
+            # Second apply should show delta
+            result2 = runner.invoke(
+                apply,
+                ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                input="n\n",  # Decline to proceed
+            )
+
+            assert result2.exit_code != 0
+            assert (
+                "Modules to add" in result2.output
+                or "auth" in result2.output
+                or "Changes to apply" in result2.output
+            )
 
 
 class TestApplyStateRecovery:
@@ -601,17 +634,18 @@ docker:
                 input="y\n",
             )
 
-            if result1.exit_code == 0:
-                # Delete state file to simulate corruption/missing state
-                import shutil
+            assert result1.exit_code == 0
 
-                if os.path.exists("testapp/.quickscale"):
-                    shutil.rmtree("testapp/.quickscale")
+            # Delete state file to simulate corruption/missing state
+            import shutil
 
-                # Move config back to project directory
-                with open("testapp/quickscale.yml", "w") as f:
-                    f.write(
-                        """
+            if os.path.exists("testapp/.quickscale"):
+                shutil.rmtree("testapp/.quickscale")
+
+            # Move config back to project directory
+            with open("testapp/quickscale.yml", "w") as f:
+                f.write(
+                    """
 version: "1"
 project:
   slug: testapp
@@ -620,17 +654,17 @@ project:
 docker:
   start: false
 """
-                    )
-
-                # Apply should detect existing project and handle gracefully
-                result2 = runner.invoke(
-                    apply,
-                    ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
-                    input="n\n",  # Don't proceed to avoid regeneration
                 )
 
-                # Should handle existing project gracefully
-                assert result2.exit_code != 0 or "Existing project" in result2.output
+            # Apply should detect existing project and handle gracefully
+            result2 = runner.invoke(
+                apply,
+                ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                input="n\n",  # Don't proceed to avoid regeneration
+            )
+
+            assert result2.exit_code != 0
+            assert "Directory already exists and is not empty" in result2.output
 
     def test_apply_detects_filesystem_modules(self):
         """Test that apply respects modules in state file"""
@@ -691,5 +725,153 @@ docker:
                 input="y\n",
             )
 
-            # Should show auth is unchanged
+            assert result.exit_code != 0
             assert "Nothing to do" in result.output or "unchanged" in result.output
+
+    def test_apply_retries_pending_post_embed_recovery_instead_of_no_op(self):
+        """A post-embed recovery snapshot should resume apply instead of no-oping."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs("testapp/.quickscale", exist_ok=True)
+            os.makedirs("testapp/modules/auth", exist_ok=True)
+
+            with open("testapp/manage.py", "w") as f:
+                f.write("# Django manage.py")
+
+            with open("testapp/modules/auth/module.yml", "w") as f:
+                f.write('name: auth\nversion: "0.82.0"\n')
+
+            with open("testapp/quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                )
+
+            with open("testapp/.quickscale/apply-recovery.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+  created_at: "2025-01-01T00:00:00"
+  last_applied: "2025-01-01T00:00:00"
+modules:
+  auth:
+    version: "0.82.0"
+    commit_sha:
+    embedded_at: "2025-01-01T00:00:00"
+    options: {}
+"""
+                )
+
+            with patch(
+                "quickscale_cli.commands.apply_command._execute_apply_steps"
+            ) as mock_execute:
+                result = runner.invoke(
+                    apply,
+                    ["testapp/quickscale.yml", "--no-docker"],
+                    input="y\n",
+                )
+
+        assert result.exit_code == 0
+        assert "Nothing to do" not in result.output
+        assert "Pending post-embed apply recovery detected" in result.output
+        mock_execute.assert_called_once()
+        assert mock_execute.call_args.args[0].has_pending_post_embed_recovery is True
+        assert mock_execute.call_args.args[0].existing_state is not None
+
+
+class TestApplyManagedWiringStrictContext:
+    """Tests for strict managed-wiring context failures during apply."""
+
+    def test_regeneration_fails_on_malformed_quickscale_yaml(self, tmp_path, capsys):
+        project = tmp_path / "myapp"
+        project.mkdir()
+        (project / "myapp").mkdir()
+        (project / "quickscale.yml").write_text('version: "1"\nproject: [\n')
+
+        ctx = _make_apply_context(project)
+
+        assert (
+            _regenerate_managed_wiring_for_apply(ctx, embedded_modules=["auth"])
+            is False
+        )
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Failed to load module options from quickscale.yml" in error_output
+
+    def test_regeneration_fails_on_malformed_state_yaml(self, tmp_path, capsys):
+        project = tmp_path / "myapp"
+        project.mkdir()
+        (project / "myapp").mkdir()
+        (project / ".quickscale").mkdir()
+        (project / "quickscale.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+        (project / ".quickscale" / "state.yml").write_text("project: [\n")
+
+        ctx = _make_apply_context(project)
+
+        assert (
+            _regenerate_managed_wiring_for_apply(ctx, embedded_modules=["auth"])
+            is False
+        )
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert (
+            "Failed to load module options from .quickscale/state.yml" in error_output
+        )
+
+    def test_regeneration_fails_on_managed_wiring_write_exception(
+        self, tmp_path, capsys
+    ):
+        project = tmp_path / "myapp"
+        project.mkdir()
+        (project / "myapp").mkdir()
+        (project / "quickscale.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        ctx = _make_apply_context(project)
+
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.write_managed_wiring",
+            side_effect=OSError("disk full"),
+        ):
+            assert (
+                _regenerate_managed_wiring_for_apply(ctx, embedded_modules=["auth"])
+                is False
+            )
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Failed to write managed wiring files: disk full" in error_output

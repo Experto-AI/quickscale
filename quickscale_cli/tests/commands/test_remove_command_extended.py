@@ -1,431 +1,404 @@
-"""Extended tests for remove_command.py - covering helper functions and edge cases."""
+"""Extended tests for remove_command.py transactional behavior."""
 
-from unittest.mock import Mock, patch
+import shutil
+from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 import yaml
+from click.testing import CliRunner
 
 from quickscale_cli.commands.remove_command import (
     _check_module_exists,
-    _log_step_result,
-    _perform_removal_steps,
     _regenerate_managed_wiring_after_removal,
     _remove_module_directory,
-    _show_module_not_found_error,
-    _show_removal_warning,
-    _show_success_message,
-    _update_quickscale_yml,
-    _update_state_for_removal,
     remove,
 )
 from quickscale_cli.schema.state_schema import StateManager
 
 
-# ============================================================================
-# _update_quickscale_yml
-# ============================================================================
+def _write_valid_remove_project(project_path: Path) -> None:
+    module_dir = project_path / "modules" / "auth"
+    module_dir.mkdir(parents=True)
+    (module_dir / "__init__.py").write_text("")
+    (module_dir / "models.py").write_text("# auth\n")
 
+    package_dir = project_path / "myproject"
+    (package_dir / "settings").mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("")
+    (package_dir / "settings" / "__init__.py").write_text("")
+    (package_dir / "settings" / "modules.py").write_text(
+        "ORIGINAL_SETTINGS = ['auth']\n"
+    )
+    (package_dir / "urls_modules.py").write_text("ORIGINAL_URLS = ['auth']\n")
+    managed_dir = package_dir / "quickscale_managed"
+    managed_dir.mkdir()
+    (managed_dir / "__init__.py").write_text("# original managed\n")
+    (managed_dir / "social_views.py").write_text("ORIGINAL_MANAGED = True\n")
 
-class TestUpdateQuickscaleYml:
-    """Tests for _update_quickscale_yml"""
-
-    def test_no_config_file(self, tmp_path):
-        """Return True when no config file exists"""
-        assert _update_quickscale_yml(tmp_path, "auth") is True
-
-    def test_remove_module_from_config(self, tmp_path):
-        """Successfully remove module from config"""
-        config = {"modules": {"auth": {"options": {}}, "blog": {"options": {}}}}
-        (tmp_path / "quickscale.yml").write_text(yaml.dump(config))
-
-        result = _update_quickscale_yml(tmp_path, "auth")
-        assert result is True
-
-        updated = yaml.safe_load((tmp_path / "quickscale.yml").read_text())
-        assert "auth" not in updated["modules"]
-        assert "blog" in updated["modules"]
-
-    def test_module_not_in_config(self, tmp_path):
-        """No error when module not in config"""
-        config = {"modules": {"blog": {}}}
-        (tmp_path / "quickscale.yml").write_text(yaml.dump(config))
-
-        result = _update_quickscale_yml(tmp_path, "auth")
-        assert result is True
-
-    def test_invalid_yaml(self, tmp_path):
-        """Return False on YAML parse error"""
-        (tmp_path / "quickscale.yml").write_text("invalid: [")
-        result = _update_quickscale_yml(tmp_path, "auth")
-        assert result is False
-
-    def test_empty_config(self, tmp_path):
-        """Handle empty config file"""
-        (tmp_path / "quickscale.yml").write_text("")
-        result = _update_quickscale_yml(tmp_path, "auth")
-        assert result is True
-
-    def test_no_modules_key(self, tmp_path):
-        """Handle config without modules key"""
-        (tmp_path / "quickscale.yml").write_text(
-            yaml.dump({"project": {"slug": "test", "package": "test"}})
+    quickscale_dir = project_path / ".quickscale"
+    quickscale_dir.mkdir()
+    (quickscale_dir / "state.yml").write_text(
+        yaml.safe_dump(
+            {
+                "version": "1",
+                "project": {
+                    "slug": "myproject",
+                    "package": "myproject",
+                    "theme": "showcase_html",
+                    "created_at": "2025-01-01T00:00:00",
+                    "last_applied": "2025-01-01T00:00:00",
+                },
+                "modules": {
+                    "auth": {
+                        "version": "0.71.0",
+                        "commit_sha": "abc123",
+                        "embedded_at": "2025-01-01T00:00:00",
+                        "options": {"registration_enabled": True},
+                    }
+                },
+            },
+            sort_keys=False,
         )
-        result = _update_quickscale_yml(tmp_path, "auth")
-        assert result is True
+    )
+    (quickscale_dir / "config.yml").write_text(
+        yaml.safe_dump(
+            {
+                "default_remote": "https://github.com/Experto-AI/quickscale.git",
+                "modules": {
+                    "auth": {
+                        "prefix": "modules/auth",
+                        "branch": "splits/auth-module",
+                        "installed_version": "0.71.0",
+                        "installed_at": "2025-01-01",
+                    }
+                },
+            },
+            sort_keys=False,
+        )
+    )
+    (project_path / "quickscale.yml").write_text(
+        yaml.safe_dump(
+            {
+                "version": "1",
+                "project": {
+                    "slug": "myproject",
+                    "package": "myproject",
+                    "theme": "showcase_html",
+                },
+                "modules": {
+                    "auth": {"registration_enabled": True},
+                },
+                "docker": {
+                    "start": False,
+                    "build": False,
+                    "create_superuser": False,
+                },
+            },
+            sort_keys=False,
+        )
+    )
 
 
-# ============================================================================
-# _remove_module_directory
-# ============================================================================
+def _write_apply_recovery_state(project_path: Path, module_names: list[str]) -> None:
+    quickscale_dir = project_path / ".quickscale"
+    quickscale_dir.mkdir(exist_ok=True)
+    (quickscale_dir / "apply-recovery.yml").write_text(
+        yaml.safe_dump(
+            {
+                "version": "1",
+                "project": {
+                    "slug": "myproject",
+                    "package": "myproject",
+                    "theme": "showcase_html",
+                    "created_at": "2025-01-01T00:00:00",
+                    "last_applied": "2025-01-02T00:00:00",
+                },
+                "modules": {
+                    module_name: {
+                        "version": "0.71.0",
+                        "commit_sha": "abc123",
+                        "embedded_at": "2025-01-01T00:00:00",
+                        "options": {},
+                    }
+                    for module_name in module_names
+                },
+            },
+            sort_keys=False,
+        )
+    )
 
 
-class TestRemoveModuleDirectory:
-    """Tests for _remove_module_directory"""
-
-    def test_directory_not_exists(self, tmp_path):
-        """Return success when directory already gone"""
-        success, msg = _remove_module_directory(tmp_path, "auth")
+class TestRemoveHelpers:
+    def test_directory_not_exists(self, tmp_path: Path) -> None:
+        success, message = _remove_module_directory(tmp_path, "auth")
         assert success is True
-        assert "not found" in msg
+        assert "not found" in message
 
-    def test_directory_removed(self, tmp_path):
-        """Successfully remove module directory"""
+    def test_directory_removed(self, tmp_path: Path) -> None:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "models.py").touch()
 
-        success, msg = _remove_module_directory(tmp_path, "auth")
+        success, message = _remove_module_directory(tmp_path, "auth")
+
         assert success is True
+        assert "Removed module directory" in message
         assert not module_dir.exists()
 
-    def test_permission_error(self, tmp_path):
-        """Handle permission error during removal"""
-        module_dir = tmp_path / "modules" / "auth"
-        module_dir.mkdir(parents=True)
+    def test_check_module_exists(self, tmp_path: Path) -> None:
+        _write_valid_remove_project(tmp_path)
 
-        with patch("shutil.rmtree", side_effect=PermissionError("denied")):
-            success, msg = _remove_module_directory(tmp_path, "auth")
-            assert success is False
-            assert "Failed" in msg
+        state_manager = StateManager(tmp_path)
+        in_state, in_fs, state = _check_module_exists(tmp_path, "auth", state_manager)
 
-
-# ============================================================================
-# _regenerate_managed_wiring_after_removal
-# ============================================================================
-
-
-class TestRegenerateManagedWiringAfterRemoval:
-    """Tests for managed wiring regeneration after module removal."""
-
-    @patch("quickscale_cli.commands.remove_command.regenerate_managed_wiring")
-    def test_success(self, mock_regenerate, tmp_path):
-        mock_regenerate.return_value = (True, "ok")
-        state = Mock(modules={"blog": Mock()})
-
-        success, msg = _regenerate_managed_wiring_after_removal(tmp_path, state)
-
-        assert success is True
-        assert "Regenerated" in msg
-
-    @patch("quickscale_cli.commands.remove_command.regenerate_managed_wiring")
-    def test_failure(self, mock_regenerate, tmp_path):
-        mock_regenerate.return_value = (False, "boom")
-        state = Mock(modules={})
-
-        success, msg = _regenerate_managed_wiring_after_removal(tmp_path, state)
-
-        assert success is False
-        assert "Failed" in msg
-
-
-# ============================================================================
-# _check_module_exists
-# ============================================================================
-
-
-class TestCheckModuleExists:
-    """Tests for _check_module_exists"""
-
-    def test_module_in_state_and_filesystem(self, tmp_path):
-        """Module exists in both state and filesystem"""
-        (tmp_path / "modules" / "auth").mkdir(parents=True)
-        (tmp_path / ".quickscale").mkdir()
-        state_content = {
-            "version": "1",
-            "project": {
-                "slug": "test",
-                "package": "test",
-                "theme": "html",
-                "created_at": "2025-01-01",
-                "last_applied": "2025-01-01",
-            },
-            "modules": {"auth": {"name": "auth", "embedded_at": "2025-01-01"}},
-        }
-        (tmp_path / ".quickscale" / "state.yml").write_text(yaml.dump(state_content))
-
-        sm = StateManager(tmp_path)
-        in_state, in_fs, state = _check_module_exists(tmp_path, "auth", sm)
         assert in_state is True
         assert in_fs is True
+        assert state is not None
 
-    def test_module_not_anywhere(self, tmp_path):
-        """Module doesn't exist"""
-        sm = StateManager(tmp_path)
-        in_state, in_fs, state = _check_module_exists(tmp_path, "auth", sm)
-        assert in_state is False
-        assert in_fs is False
+    @patch("quickscale_cli.commands.remove_command.regenerate_managed_wiring")
+    def test_regenerate_uses_remaining_modules_and_package(
+        self,
+        mock_regenerate,
+        tmp_path: Path,
+    ) -> None:
+        mock_regenerate.return_value = (True, "ok")
 
+        success, message = _regenerate_managed_wiring_after_removal(
+            tmp_path,
+            ["blog"],
+            "myproject",
+        )
 
-# ============================================================================
-# _show_module_not_found_error
-# ============================================================================
-
-
-class TestShowModuleNotFoundError:
-    """Tests for _show_module_not_found_error"""
-
-    def test_with_installed_modules(self):
-        """Show error with list of installed modules"""
-        state = Mock()
-        state.modules = {"blog": Mock(), "crm": Mock()}
-        _show_module_not_found_error("auth", state)
-
-    def test_with_no_modules(self):
-        """Show error with no installed modules"""
-        state = Mock()
-        state.modules = {}
-        _show_module_not_found_error("auth", state)
-
-    def test_with_none_state(self):
-        """Show error with None state"""
-        _show_module_not_found_error("auth", None)
+        assert success is True
+        assert "Regenerated" in message
+        mock_regenerate.assert_called_once_with(
+            tmp_path,
+            module_names=["blog"],
+            project_package="myproject",
+        )
 
 
-# ============================================================================
-# _show_removal_warning / _show_success_message
-# ============================================================================
+class TestRemoveTransactionalFailures:
+    def test_preflight_abort_on_malformed_quickscale(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _write_valid_remove_project(tmp_path)
+        (tmp_path / "quickscale.yml").write_text('version: "1"\nproject: [\n')
 
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
+        )
 
-class TestShowMessages:
-    """Tests for display message functions"""
+        assert result.exit_code != 0
+        assert "Failed to load quickscale.yml" in result.output
+        assert (tmp_path / "modules" / "auth").exists()
 
-    def test_show_removal_warning_with_data(self):
-        """Show removal warning without keep_data"""
-        _show_removal_warning("auth", keep_data=False)
+        state = yaml.safe_load((tmp_path / ".quickscale" / "state.yml").read_text())
+        assert "auth" in state.get("modules", {})
 
-    def test_show_removal_warning_keep_data(self):
-        """Show removal warning with keep_data"""
-        _show_removal_warning("auth", keep_data=True)
+    def test_preflight_abort_on_malformed_state(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _write_valid_remove_project(tmp_path)
+        (tmp_path / ".quickscale" / "state.yml").write_text("project: [\n")
 
-    def test_show_success_message(self):
-        """Show success message"""
-        _show_success_message("auth", keep_data=False)
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
+        )
 
-    def test_show_success_message_keep_data(self):
-        """Show success message with keep_data"""
-        _show_success_message("auth", keep_data=True)
+        assert result.exit_code != 0
+        assert "Failed to load .quickscale/state.yml" in result.output
+        assert (tmp_path / "modules" / "auth").exists()
 
+        config = yaml.safe_load((tmp_path / "quickscale.yml").read_text())
+        assert "auth" in config.get("modules", {})
 
-# ============================================================================
-# _log_step_result
-# ============================================================================
+    def test_regeneration_failure_rolls_back_all_mutations(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _write_valid_remove_project(tmp_path)
+        _write_apply_recovery_state(tmp_path, ["auth", "blog"])
 
+        package_dir = tmp_path / "myproject"
+        original_settings = (package_dir / "settings" / "modules.py").read_text()
+        original_urls = (package_dir / "urls_modules.py").read_text()
+        original_managed = (
+            package_dir / "quickscale_managed" / "social_views.py"
+        ).read_text()
+        original_apply_recovery = (
+            tmp_path / ".quickscale" / "apply-recovery.yml"
+        ).read_text()
 
-class TestLogStepResult:
-    """Tests for _log_step_result"""
+        def _mutate_managed_outputs_then_fail(
+            project_path: Path,
+            *,
+            module_names: list[str],
+            project_package: str,
+        ) -> tuple[bool, str]:
+            del module_names, project_package
+            package_dir = project_path / "myproject"
+            (package_dir / "settings" / "modules.py").write_text("BROKEN_SETTINGS\n")
+            (package_dir / "urls_modules.py").write_text("BROKEN_URLS\n")
+            shutil.rmtree(package_dir / "quickscale_managed")
+            return False, "boom"
 
-    def test_success_error_mode(self):
-        """Test success in error mode"""
-        _log_step_result(True, "Done", is_error=True)
+        monkeypatch.chdir(tmp_path)
+        with patch(
+            "quickscale_cli.commands.remove_command.regenerate_managed_wiring",
+            side_effect=_mutate_managed_outputs_then_fail,
+        ):
+            result = CliRunner().invoke(
+                remove,
+                ["auth", "--force"],
+                catch_exceptions=False,
+            )
 
-    def test_failure_error_mode(self):
-        """Test failure in error mode"""
-        _log_step_result(False, "Failed", is_error=True)
+        assert result.exit_code != 0
+        assert "Remove failed" in result.output
+        assert "removed successfully" not in result.output.lower()
+        assert (tmp_path / "modules" / "auth").exists()
 
-    def test_success_warning_mode(self):
-        """Test success in warning mode"""
-        _log_step_result(True, "Done", is_error=False)
+        config = yaml.safe_load((tmp_path / "quickscale.yml").read_text())
+        assert "auth" in config.get("modules", {})
 
-    def test_failure_warning_mode(self):
-        """Test failure in warning mode"""
-        _log_step_result(False, "Warning", is_error=False)
+        state = yaml.safe_load((tmp_path / ".quickscale" / "state.yml").read_text())
+        assert "auth" in state.get("modules", {})
 
+        legacy_config = yaml.safe_load(
+            (tmp_path / ".quickscale" / "config.yml").read_text()
+        )
+        assert "auth" in legacy_config.get("modules", {})
+        assert (
+            tmp_path / ".quickscale" / "apply-recovery.yml"
+        ).read_text() == original_apply_recovery
 
-# ============================================================================
-# _update_state_for_removal
-# ============================================================================
-
-
-class TestUpdateStateForRemoval:
-    """Tests for _update_state_for_removal"""
-
-    def test_remove_module_from_state(self, tmp_path):
-        """Successfully remove module from state"""
-        (tmp_path / ".quickscale").mkdir()
-        state_data = {
-            "version": "1",
-            "project": {
-                "slug": "test",
-                "package": "test",
-                "theme": "html",
-                "created_at": "2025-01-01",
-                "last_applied": "2025-01-01",
-            },
-            "modules": {"auth": {"name": "auth", "embedded_at": "2025-01-01"}},
-        }
-        (tmp_path / ".quickscale" / "state.yml").write_text(yaml.dump(state_data))
-
-        sm = StateManager(tmp_path)
-        state = sm.load()
-        _update_state_for_removal(state, "auth", sm)
-
-        updated = sm.load()
-        assert "auth" not in (updated.modules if updated else {})
-
-    def test_none_state(self, tmp_path):
-        """Handle None state"""
-        sm = StateManager(tmp_path)
-        _update_state_for_removal(None, "auth", sm)
-
-    def test_module_not_in_state(self, tmp_path):
-        """Handle module not in state"""
-        (tmp_path / ".quickscale").mkdir()
-        state_data = {
-            "version": "1",
-            "project": {
-                "slug": "test",
-                "package": "test",
-                "theme": "html",
-                "created_at": "2025-01-01",
-                "last_applied": "2025-01-01",
-            },
-            "modules": {},
-        }
-        (tmp_path / ".quickscale" / "state.yml").write_text(yaml.dump(state_data))
-
-        sm = StateManager(tmp_path)
-        state = sm.load()
-        _update_state_for_removal(state, "auth", sm)
-
-    def test_save_error(self, tmp_path):
-        """Handle save error gracefully"""
-        state = Mock()
-        state.modules = {"auth": Mock()}
-        sm = Mock()
-        sm.save.side_effect = OSError("write error")
-
-        _update_state_for_removal(state, "auth", sm)
-        # Should not raise
-
-
-# ============================================================================
-# _perform_removal_steps
-# ============================================================================
-
-
-class TestPerformRemovalSteps:
-    """Tests for _perform_removal_steps"""
-
-    def test_full_removal(self, tmp_path):
-        """Test complete module removal"""
-        # Create project structure
-        project = tmp_path / "myproject"
-        project.mkdir()
-        module_dir = project / "modules" / "auth"
-        module_dir.mkdir(parents=True)
-        (module_dir / "models.py").touch()
-
-        # State
-        (project / ".quickscale").mkdir()
-        state_data = {
-            "version": "1",
-            "project": {
-                "slug": "myproject",
-                "package": "myproject",
-                "theme": "html",
-                "created_at": "2025-01-01",
-                "last_applied": "2025-01-01",
-            },
-            "modules": {"auth": {"name": "auth", "embedded_at": "2025-01-01"}},
-        }
-        (project / ".quickscale" / "state.yml").write_text(yaml.dump(state_data))
-
-        # Settings
-        settings_dir = project / "myproject" / "settings"
-        settings_dir.mkdir(parents=True)
-        (settings_dir / "base.py").write_text("quickscale_modules_auth\n")
-
-        # URLs
-        (project / "myproject" / "urls.py").write_text("quickscale_modules_auth\n")
-
-        sm = StateManager(project)
-        state = sm.load()
-        _perform_removal_steps(project, "auth", state, sm)
-
-        assert not module_dir.exists()
-
-
-# ============================================================================
-# remove command integration
-# ============================================================================
+        assert (
+            package_dir / "settings" / "modules.py"
+        ).read_text() == original_settings
+        assert (package_dir / "urls_modules.py").read_text() == original_urls
+        assert (
+            package_dir / "quickscale_managed" / "social_views.py"
+        ).read_text() == original_managed
 
 
 class TestRemoveCommandIntegration:
-    """Integration tests for remove command"""
+    def test_remove_updates_pending_apply_recovery_snapshot(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _write_valid_remove_project(tmp_path)
+        _write_apply_recovery_state(tmp_path, ["auth", "blog"])
 
-    def test_remove_with_keep_data(self, tmp_path):
-        """Test remove with --keep-data flag"""
-        from click.testing import CliRunner
-
-        project = tmp_path / "myproject"
-        project.mkdir()
-        (project / "modules" / "auth").mkdir(parents=True)
-        (project / ".quickscale").mkdir()
-        state_data = {
-            "version": "1",
-            "project": {
-                "slug": "myproject",
-                "package": "myproject",
-                "theme": "html",
-                "created_at": "2025-01-01",
-                "last_applied": "2025-01-01",
-            },
-            "modules": {"auth": {"name": "auth", "embedded_at": "2025-01-01"}},
-        }
-        (project / ".quickscale" / "state.yml").write_text(yaml.dump(state_data))
-
-        runner = CliRunner()
-        import os
-
-        os.chdir(project)
-        result = runner.invoke(
-            remove, ["auth", "--force", "--keep-data"], catch_exceptions=False
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
         )
-        assert "removed successfully" in result.output
 
-    def test_remove_cancelled(self, tmp_path):
-        """Test remove cancelled by user"""
-        from click.testing import CliRunner
+        assert result.exit_code == 0
+        recovery_state = yaml.safe_load(
+            (tmp_path / ".quickscale" / "apply-recovery.yml").read_text()
+        )
+        assert set(recovery_state.get("modules", {})) == {"blog"}
+        assert "auth" not in recovery_state.get("modules", {})
 
-        project = tmp_path / "myproject"
-        project.mkdir()
-        (project / "modules" / "auth").mkdir(parents=True)
-        (project / ".quickscale").mkdir()
-        state_data = {
-            "version": "1",
-            "project": {
-                "slug": "myproject",
-                "package": "myproject",
-                "theme": "html",
-                "created_at": "2025-01-01",
-                "last_applied": "2025-01-01",
-            },
-            "modules": {"auth": {"name": "auth", "embedded_at": "2025-01-01"}},
+    def test_remove_does_not_materialize_future_desired_modules_during_regeneration(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _write_valid_remove_project(tmp_path)
+
+        config_path = tmp_path / "quickscale.yml"
+        config = yaml.safe_load(config_path.read_text())
+        config["modules"]["blog"] = {}
+        config_path.write_text(yaml.safe_dump(config, sort_keys=False))
+
+        recorded_call: dict[str, object] = {}
+
+        def _record_regeneration(
+            project_path: Path,
+            *,
+            module_names: list[str],
+            project_package: str,
+        ) -> tuple[bool, str]:
+            recorded_call["project_path"] = project_path
+            recorded_call["module_names"] = module_names
+            recorded_call["project_package"] = project_package
+            return True, "ok"
+
+        monkeypatch.chdir(tmp_path)
+        with patch(
+            "quickscale_cli.commands.remove_command.regenerate_managed_wiring",
+            side_effect=_record_regeneration,
+        ):
+            result = CliRunner().invoke(
+                remove,
+                ["auth", "--force"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0
+        assert recorded_call == {
+            "project_path": tmp_path,
+            "module_names": [],
+            "project_package": "myproject",
         }
-        (project / ".quickscale" / "state.yml").write_text(yaml.dump(state_data))
 
-        runner = CliRunner()
-        import os
+        updated_config = yaml.safe_load(config_path.read_text())
+        assert list(updated_config.get("modules", {}).keys()) == ["blog"]
 
-        os.chdir(project)
-        result = runner.invoke(remove, ["auth"], input="n\n", catch_exceptions=False)
-        assert result.exit_code != 0 or "Cancelled" in result.output
+        updated_state = yaml.safe_load(
+            (tmp_path / ".quickscale" / "state.yml").read_text()
+        )
+        assert updated_state.get("modules", {}) == {}
+
+    def test_remove_with_keep_data_success(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _write_valid_remove_project(tmp_path)
+
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            remove,
+            ["auth", "--force", "--keep-data"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0
+        assert "removed successfully" in result.output.lower()
+
+    def test_remove_cancelled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _write_valid_remove_project(tmp_path)
+
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            remove,
+            ["auth"],
+            input="n\n",
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code != 0
+        assert "cancelled" in result.output.lower()

@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from quickscale_cli.schema.state_schema import QuickScaleState
 
 
+class ProjectIdentityResolutionError(ValueError):
+    """Raised when project identity resolution must fail explicitly."""
+
+
 @dataclass(frozen=True)
 class ProjectIdentity:
     """Resolved project identity."""
@@ -43,8 +47,16 @@ def identity_from_state(state: QuickScaleState) -> ProjectIdentity:
     )
 
 
-def load_identity_from_config_file(project_path: Path) -> ProjectIdentity | None:
-    """Load identity from quickscale.yml if present and valid."""
+def load_identity_from_config_file(
+    project_path: Path,
+    *,
+    strict: bool = False,
+) -> ProjectIdentity | None:
+    """Load identity from quickscale.yml if present.
+
+    When strict is true, malformed config must fail explicitly instead of
+    falling back to other identity sources.
+    """
     config_path = project_path / "quickscale.yml"
     if not config_path.exists():
         return None
@@ -52,17 +64,34 @@ def load_identity_from_config_file(project_path: Path) -> ProjectIdentity | None
     try:
         config = validate_config(config_path.read_text())
         return identity_from_config(config)
-    except Exception:
+    except Exception as error:
+        if strict:
+            raise ProjectIdentityResolutionError(
+                f"Failed to resolve project identity from quickscale.yml: {error}"
+            ) from error
         return None
 
 
-def load_identity_from_state_file(project_path: Path) -> ProjectIdentity | None:
-    """Load identity from .quickscale/state.yml if present and valid."""
+def load_identity_from_state_file(
+    project_path: Path,
+    *,
+    strict: bool = False,
+) -> ProjectIdentity | None:
+    """Load identity from .quickscale/state.yml if present.
+
+    When strict is true, malformed state must fail explicitly instead of
+    falling back to an unresolved identity.
+    """
     from quickscale_cli.schema.state_schema import StateManager
 
     try:
         state = StateManager(project_path).load()
-    except Exception:
+    except Exception as error:
+        if strict:
+            raise ProjectIdentityResolutionError(
+                "Failed to resolve project identity from .quickscale/state.yml: "
+                f"{error}"
+            ) from error
         return None
 
     if state is None:
@@ -75,6 +104,7 @@ def resolve_project_identity(
     *,
     config: QuickScaleConfig | None = None,
     state: QuickScaleState | None = None,
+    strict: bool = False,
 ) -> ProjectIdentity:
     """Resolve project identity using explicit context first, then files.
 
@@ -92,15 +122,20 @@ def resolve_project_identity(
     if state is not None:
         return identity_from_state(state)
 
-    from_config = load_identity_from_config_file(project_path)
+    from_config = load_identity_from_config_file(project_path, strict=strict)
     if from_config is not None:
         return from_config
 
-    from_state = load_identity_from_state_file(project_path)
+    from_state = load_identity_from_state_file(project_path, strict=strict)
     if from_state is not None:
         return from_state
 
-    raise ValueError(
-        "Unable to resolve project identity. Expected quickscale.yml or .quickscale/state.yml "
-        "with project.slug and project.package."
+    message = (
+        "Unable to resolve project identity. Expected quickscale.yml or "
+        ".quickscale/state.yml with project.slug and project.package."
     )
+
+    if strict:
+        raise ProjectIdentityResolutionError(message)
+
+    raise ValueError(message)

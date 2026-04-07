@@ -8,8 +8,15 @@ from typing import Any, Mapping
 from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
 from quickscale_cli.schema.config_schema import validate_config
 from quickscale_cli.schema.state_schema import StateManager
-from quickscale_cli.utils.project_identity import resolve_project_identity
+from quickscale_cli.utils.project_identity import (
+    ProjectIdentityResolutionError,
+    resolve_project_identity,
+)
 from quickscale_core.module_wiring import write_managed_wiring
+
+
+class ManagedWiringContextError(ValueError):
+    """Raised when managed wiring cannot derive required project context."""
 
 
 def _discover_embedded_modules(project_path: Path) -> list[str]:
@@ -32,8 +39,10 @@ def _load_options_from_config(project_path: Path) -> dict[str, dict[str, Any]]:
 
     try:
         config = validate_config(config_path.read_text())
-    except Exception:
-        return {}
+    except Exception as error:
+        raise ManagedWiringContextError(
+            f"Failed to load module options from quickscale.yml: {error}"
+        ) from error
 
     return {
         module_name: (module_config.options or {})
@@ -44,8 +53,10 @@ def _load_options_from_config(project_path: Path) -> dict[str, dict[str, Any]]:
 def _load_options_from_state(project_path: Path) -> dict[str, dict[str, Any]]:
     try:
         state = StateManager(project_path).load()
-    except Exception:
-        return {}
+    except Exception as error:
+        raise ManagedWiringContextError(
+            f"Failed to load module options from .quickscale/state.yml: {error}"
+        ) from error
 
     if state is None:
         return {}
@@ -78,17 +89,23 @@ def regenerate_managed_wiring(
     package_name = project_package
     if package_name is None:
         try:
-            identity = resolve_project_identity(project_path)
+            identity = resolve_project_identity(project_path, strict=True)
             package_name = identity.package
-        except Exception as e:
-            return False, f"Unable to resolve project identity: {e}"
+        except ProjectIdentityResolutionError as error:
+            return False, str(error)
+        except Exception as error:
+            return False, f"Unable to resolve project identity: {error}"
 
     if module_names is None:
         selected_modules = _discover_embedded_modules(project_path)
     else:
         selected_modules = sorted(dict.fromkeys(module_names))
 
-    module_options = _load_module_options(project_path)
+    try:
+        module_options = _load_module_options(project_path)
+    except ManagedWiringContextError as error:
+        return False, str(error)
+
     if option_overrides:
         module_options.update(
             {
@@ -117,5 +134,9 @@ def regenerate_managed_wiring(
             f"Python package directory not found: {package_dir}",
         )
 
-    write_managed_wiring(package_dir, specs)
+    try:
+        write_managed_wiring(package_dir, specs)
+    except Exception as error:
+        return False, f"Failed to write managed wiring files: {error}"
+
     return True, "Managed wiring files regenerated"

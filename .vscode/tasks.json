@@ -13,6 +13,93 @@
 			],
 			"isBackground": false,
 			"group": "test"
+		},
+		{
+			"label": "quality-gate: make test",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"test"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: make test (captured)",
+			"type": "shell",
+			"command": "sh",
+			"args": [
+				"-c",
+				"set -o pipefail && make test > /tmp/quickscale-quality-gate-make-test.log 2>&1; status=$?; tail -n 120 /tmp/quickscale-quality-gate-make-test.log; exit $status"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: make test (captured bash)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -o pipefail && make test > /tmp/quickscale-quality-gate-make-test.log 2>&1; status=$?; tail -n 120 /tmp/quickscale-quality-gate-make-test.log; exit $status"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: inspect running pytest",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"ps -ef | grep -E 'pytest|make test' | grep -v grep"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: inspect running pytest (pgrep)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"pgrep -af pytest || true; pgrep -af 'make test' || true"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: wait for make test completion",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"while pgrep -f '^make test$' >/dev/null; do sleep 10; done; tail -n 200 /tmp/quickscale-quality-gate-make-test.log"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: wait for make test completion (simple)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"while pgrep -f \"make test\" >/dev/null; do sleep 10; done; tail -n 200 /tmp/quickscale-quality-gate-make-test.log"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: inspect running pytest (pgrep 2)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"pgrep -af pytest || true; pgrep -af \"make test\" || true"
+			],
+			"isBackground": false,
+			"group": "test"
 		}
 	]
 }

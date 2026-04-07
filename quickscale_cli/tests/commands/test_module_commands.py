@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import click
 import pytest
 
+from quickscale_cli.commands.module_config import APPLY_MODULE_EXECUTION_MODE
 from quickscale_core.manifest.loader import ManifestError
 
 from quickscale_cli.commands.module_commands import (
@@ -380,6 +381,55 @@ class TestPerformModuleEmbed:
         mock_add_module.assert_not_called()
         mock_install.assert_not_called()
 
+    def test_apply_mode_failure_cleans_partial_module_directory_and_tracking(
+        self,
+        tmp_path,
+    ):
+        """Apply embeds should remove failed subtree artifacts so reruns are not blocked."""
+
+        def _fake_subtree_add(*, prefix: str, remote: str, branch: str, squash: bool):
+            del remote, branch, squash
+            module_dir = tmp_path / prefix
+            module_dir.mkdir(parents=True, exist_ok=True)
+            (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
+
+        def _failing_applier(
+            project_path: Path,
+            config: dict[str, object],
+            *,
+            execution_mode: str,
+        ) -> None:
+            del project_path, config
+            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+                raise RuntimeError("apply-specific configuration failed")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+                side_effect=_fake_subtree_add,
+            ),
+            patch.dict(
+                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS",
+                {"blog": (Mock(), _failing_applier)},
+                clear=True,
+            ),
+        ):
+            result = _perform_module_embed(
+                tmp_path,
+                "blog",
+                "https://example.com/repo.git",
+                "splits/blog-module",
+                {"enabled": True},
+                sync_dependencies=False,
+                install_dependencies=False,
+                execution_mode=APPLY_MODULE_EXECUTION_MODE,
+            )
+
+        assert result is False
+        assert not (tmp_path / "modules" / "blog").exists()
+        config_path = tmp_path / ".quickscale" / "config.yml"
+        assert not config_path.exists() or "blog:" not in config_path.read_text()
+
 
 class TestInstallModuleDependencies:
     """Tests for _install_module_dependencies function."""
@@ -558,6 +608,47 @@ class TestPrintInstallationError:
 
 class TestEmbedModule:
     """Tests for embed_module function."""
+
+    def test_standalone_embed_regenerates_managed_wiring_immediately(self, tmp_path):
+        """Standalone embed should keep its immediate managed-wiring pass."""
+        module_dir = tmp_path / "modules" / "blog"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands._validate_git_environment",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._validate_module_not_exists",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._validate_remote_branch",
+                return_value=True,
+            ),
+            patch("quickscale_cli.commands.module_commands.run_git_subtree_add"),
+            patch("quickscale_cli.commands.module_commands.add_module"),
+            patch(
+                "quickscale_cli.commands.module_config.regenerate_managed_wiring",
+                return_value=(True, "ok"),
+            ) as mock_regenerate,
+        ):
+            result = embed_module(
+                "blog",
+                tmp_path,
+                non_interactive=True,
+                sync_dependencies=False,
+                install_dependencies=False,
+            )
+
+        assert result is True
+        mock_regenerate.assert_called_once()
+        assert mock_regenerate.call_args.kwargs["module_names"] == ["blog"]
+        assert mock_regenerate.call_args.kwargs["option_overrides"] == {
+            "blog": {"posts_per_page": 10, "enable_rss": True}
+        }
 
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")

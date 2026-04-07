@@ -10,6 +10,7 @@ from quickscale_cli.commands.module_config import (
     _add_django_allauth_dependency,
     _add_django_filter_dependency,
     _generate_auth_settings_addition,
+    _regenerate_wiring_for_module,
     apply_auth_configuration,
     apply_blog_configuration,
     apply_listings_configuration,
@@ -195,6 +196,39 @@ class TestAuthModuleConfig:
         except Exception:
             # Expected to fail on some operations, but tests that code runs
             pass
+
+    def test_apply_auth_configuration_aborts_on_malformed_quickscale(
+        self, tmp_path, capsys
+    ):
+        """Managed wiring should fail explicitly when quickscale.yml is malformed."""
+        project = tmp_path / "myproject"
+        project.mkdir()
+        (project / "quickscale.yml").write_text('version: "1"\nproject: [\n')
+
+        with pytest.raises(click.Abort):
+            apply_auth_configuration(project, get_default_auth_config())
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Failed to resolve project identity from quickscale.yml" in error_output
+
+    def test_apply_auth_configuration_aborts_when_identity_unresolved(
+        self, tmp_path, capsys
+    ):
+        """Managed wiring should fail explicitly when no identity source exists."""
+        project = tmp_path / "myproject"
+        project.mkdir()
+
+        with pytest.raises(click.Abort):
+            _regenerate_wiring_for_module(
+                project,
+                "auth",
+                get_default_auth_config(),
+            )
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Unable to resolve project identity" in error_output
 
 
 class TestBlogModuleConfig:

@@ -1,5 +1,6 @@
 """Module management commands for QuickScale CLI."""
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from quickscale_core.config import (
     add_module,
     load_config,
     normalize_installed_version,
+    remove_module,
     update_module_version,
 )
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
@@ -32,7 +34,10 @@ from quickscale_core.utils.git_utils import (
 )
 
 from .module_config import (
+    APPLY_MODULE_EXECUTION_MODE,
     MODULE_CONFIGURATORS,
+    STANDALONE_MODULE_EXECUTION_MODE,
+    ModuleExecutionMode,
     assess_auth_migration_state,
     format_auth_migration_remediation,
 )
@@ -218,6 +223,30 @@ def _validate_module_readiness(module: str) -> bool:
     return False
 
 
+def _cleanup_failed_apply_embed(project_path: Path, module: str) -> None:
+    """Best-effort cleanup for apply embeds that fail after subtree add."""
+    module_path = project_path / "modules" / module
+    try:
+        if module_path.is_dir():
+            shutil.rmtree(module_path)
+        elif module_path.exists():
+            module_path.unlink()
+    except OSError as error:
+        click.secho(
+            f"⚠️  Failed to remove partial apply embed at {module_path}: {error}",
+            fg="yellow",
+        )
+
+    try:
+        remove_module(module, project_path)
+    except OSError as error:
+        click.secho(
+            "⚠️  Failed to remove legacy tracking for partial apply embed "
+            f"'{module}': {error}",
+            fg="yellow",
+        )
+
+
 def _perform_module_embed(
     project_path: Path,
     module: str,
@@ -227,6 +256,7 @@ def _perform_module_embed(
     *,
     sync_dependencies: bool = True,
     install_dependencies: bool = True,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> bool:
     """Execute the actual module embedding.
 
@@ -252,24 +282,43 @@ def _perform_module_embed(
             "before continuing.",
             err=True,
         )
+        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+            _cleanup_failed_apply_embed(project_path, module)
         return False
 
-    # Update configuration tracking
-    add_module(
-        module_name=module,
-        prefix=prefix,
-        branch=branch,
-        version=installed_version,
-        project_path=project_path,
-    )
+    if execution_mode != APPLY_MODULE_EXECUTION_MODE:
+        add_module(
+            module_name=module,
+            prefix=prefix,
+            branch=branch,
+            version=installed_version,
+            project_path=project_path,
+        )
 
-    # Apply module-specific configuration
-    if module in MODULE_CONFIGURATORS and config:
-        _, applier = MODULE_CONFIGURATORS[module]
-        applier(project_path, config)
+    try:
+        # Apply module-specific configuration
+        if module in MODULE_CONFIGURATORS and config:
+            _, applier = MODULE_CONFIGURATORS[module]
+            if execution_mode == STANDALONE_MODULE_EXECUTION_MODE:
+                applier(project_path, config)
+            else:
+                applier(project_path, config, execution_mode=execution_mode)
+    except Exception as error:
+        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+            _cleanup_failed_apply_embed(project_path, module)
+            click.secho(
+                f"\n❌ Apply embed failed for {module}: {error}",
+                fg="red",
+                err=True,
+                bold=True,
+            )
+            return False
+        raise
 
     if sync_dependencies:
         if not _sync_module_dependencies(project_path, module, config):
+            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+                _cleanup_failed_apply_embed(project_path, module)
             return False
 
     if (
@@ -277,6 +326,27 @@ def _perform_module_embed(
         and _resolve_embedded_module_install_path(project_path, module) is not None
     ):
         if not _install_module_dependencies(project_path, module):
+            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+                _cleanup_failed_apply_embed(project_path, module)
+            return False
+
+    if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+        try:
+            add_module(
+                module_name=module,
+                prefix=prefix,
+                branch=branch,
+                version=installed_version,
+                project_path=project_path,
+            )
+        except Exception as error:
+            _cleanup_failed_apply_embed(project_path, module)
+            click.secho(
+                f"\n❌ Failed to update legacy module tracking for {module}: {error}",
+                fg="red",
+                err=True,
+                bold=True,
+            )
             return False
 
     # Success message
@@ -297,6 +367,8 @@ def embed_module(
     skip_auth_migration_check: bool = False,
     sync_dependencies: bool = True,
     install_dependencies: bool = True,
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> bool:
     """
     Embed a QuickScale module into a project via git subtree.
@@ -316,6 +388,8 @@ def embed_module(
         sync_dependencies: Sync missing pyproject.toml dependency entries for the
             embedded module
         install_dependencies: Run `poetry install` after dependency sync
+        execution_mode: Internal embedding mode used to control when managed
+            wiring regeneration happens
 
     Returns:
         True if embedding succeeded, False otherwise
@@ -373,6 +447,7 @@ def embed_module(
             config,
             sync_dependencies=sync_dependencies,
             install_dependencies=install_dependencies,
+            execution_mode=execution_mode,
         )
 
     except GitError as e:

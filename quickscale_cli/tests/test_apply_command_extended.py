@@ -1,6 +1,7 @@
 """Extended tests for apply_command.py - covering helper functions and edge cases."""
 
 from pathlib import Path
+import subprocess
 from unittest.mock import Mock, patch
 
 import click
@@ -55,8 +56,57 @@ from quickscale_cli.commands.apply_command import (
     _sync_notifications_env_example,
     _update_module_config_in_state,
 )
+from quickscale_cli.schema.state_schema import ProjectState, QuickScaleState
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest.loader import ManifestError
+
+
+def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a git command for apply checkpoint regression tests."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+def _init_apply_git_repo(project_path: Path) -> None:
+    """Create a minimal repo with tracked QuickScale-managed files."""
+    (project_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+    (project_path / "quickscale.yml").write_text(
+        'version: "1"\n'
+        "project:\n"
+        "  slug: myapp\n"
+        "  package: myapp\n"
+        "  theme: showcase_html\n"
+        "docker:\n"
+        "  start: false\n"
+    )
+    (project_path / ".quickscale" / "state.yml").write_text(
+        'version: "1"\n'
+        "project:\n"
+        "  slug: myapp\n"
+        "  package: myapp\n"
+        "  theme: showcase_html\n"
+        '  created_at: "2025-01-01T00:00:00"\n'
+        '  last_applied: "2025-01-01T00:00:00"\n'
+        "modules: {}\n"
+    )
+
+    _run_git(project_path, "init")
+    _run_git(project_path, "config", "user.email", "quickscale-tests@example.com")
+    _run_git(project_path, "config", "user.name", "QuickScale Tests")
+    _run_git(project_path, "add", "quickscale.yml", ".quickscale/state.yml")
+    _run_git(project_path, "commit", "-m", "initial")
+
+
+def _install_failing_pre_commit_hook(project_path: Path) -> None:
+    """Install a hook that makes checkpoint commits fail deterministically."""
+    hook_path = project_path / ".git" / "hooks" / "pre-commit"
+    hook_path.write_text("#!/bin/sh\nexit 1\n")
+    hook_path.chmod(0o755)
 
 
 # ============================================================================
@@ -225,6 +275,7 @@ class TestEmbedModule:
             skip_auth_migration_check=False,
             sync_dependencies=False,
             install_dependencies=False,
+            execution_mode="apply",
         )
 
     @patch("quickscale_cli.commands.apply_command.embed_module")
@@ -247,7 +298,38 @@ class TestEmbedModule:
             skip_auth_migration_check=True,
             sync_dependencies=False,
             install_dependencies=False,
+            execution_mode="apply",
         )
+
+    def test_apply_embed_defers_immediate_module_regeneration(self, tmp_path):
+        """Apply embedding should skip the per-module managed-wiring pass."""
+        module_dir = tmp_path / "modules" / "blog"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands._validate_git_environment",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._validate_module_not_exists",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._validate_remote_branch",
+                return_value=True,
+            ),
+            patch("quickscale_cli.commands.module_commands.run_git_subtree_add"),
+            patch("quickscale_cli.commands.module_commands.add_module"),
+            patch(
+                "quickscale_cli.commands.module_config.regenerate_managed_wiring"
+            ) as mock_regenerate,
+        ):
+            result = _embed_module(tmp_path, "blog")
+
+        assert result is True
+        mock_regenerate.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command.embed_module")
     def test_failure(self, mock_embed):
@@ -826,6 +908,52 @@ class TestPrepareApplyContext:
         with pytest.raises(click.Abort):
             _prepare_apply_context(config_path)
 
+    def test_merges_pending_post_embed_recovery_without_authoritative_state(
+        self, tmp_path
+    ):
+        """Apply should treat recovery snapshots as retry context, not a no-state project."""
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        config_path = project_path / "quickscale.yml"
+        config_path.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+        (project_path / ".quickscale").mkdir()
+        (project_path / ".quickscale" / "apply-recovery.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            '  created_at: "2025-01-01T00:00:00"\n'
+            '  last_applied: "2025-01-01T00:00:00"\n'
+            "modules:\n"
+            "  auth:\n"
+            '    version: "0.82.0"\n'
+            "    commit_sha:\n"
+            '    embedded_at: "2025-01-01T00:00:00"\n'
+            "    options: {}\n"
+        )
+        module_dir = project_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        ctx = _prepare_apply_context(config_path)
+
+        assert ctx.has_pending_post_embed_recovery is True
+        assert ctx.had_existing_state is False
+        assert ctx.existing_state is not None
+        assert list(ctx.existing_state.modules) == ["auth"]
+        assert ctx.delta.has_changes is False
+
 
 # ============================================================================
 # _determine_output_path
@@ -905,10 +1033,46 @@ class TestHandleDeltaAndExistingState:
         with pytest.raises(click.Abort):
             _handle_delta_and_existing_state(delta, state)
 
+    def test_no_changes_with_pending_post_embed_recovery_continues(self):
+        """Pending post-embed recovery should bypass the normal no-op abort."""
+        delta = Mock()
+        delta.has_changes = False
+        state = Mock()
+
+        with patch(
+            "quickscale_cli.commands.apply_command.format_delta", return_value="none"
+        ):
+            _handle_delta_and_existing_state(
+                delta,
+                state,
+                has_pending_post_embed_recovery=True,
+            )
+
+    def test_config_driven_module_removals_abort(self, capsys):
+        """Apply must reject config-driven removals and defer to quickscale remove."""
+        delta = Mock()
+        delta.has_changes = True
+        delta.modules_to_remove = ["auth", "blog"]
+        delta.has_immutable_config_changes = False
+        delta.theme_changed = False
+        state = Mock()
+
+        with patch(
+            "quickscale_cli.commands.apply_command.format_delta", return_value="changes"
+        ):
+            with pytest.raises(click.Abort):
+                _handle_delta_and_existing_state(delta, state)
+
+        output = capsys.readouterr().out
+        assert "config-driven module removals are not supported" in output
+        assert "quickscale remove auth" in output
+        assert "quickscale remove blog" in output
+
     def test_immutable_changes_abort(self):
         """Test abort on immutable changes"""
         delta = Mock()
         delta.has_changes = True
+        delta.modules_to_remove = []
         delta.has_immutable_config_changes = True
         delta.theme_changed = False
         change = Mock()
@@ -928,6 +1092,7 @@ class TestHandleDeltaAndExistingState:
         """Test theme change warning when user declines"""
         delta = Mock()
         delta.has_changes = True
+        delta.modules_to_remove = []
         delta.has_immutable_config_changes = False
         delta.theme_changed = True
         state = Mock()
@@ -946,6 +1111,7 @@ class TestHandleDeltaAndExistingState:
         """Test theme change warning when user accepts"""
         delta = Mock()
         delta.has_changes = True
+        delta.modules_to_remove = []
         delta.has_immutable_config_changes = False
         delta.theme_changed = True
         state = Mock()
@@ -1073,21 +1239,39 @@ class TestCommitPendingConfigChanges:
     ):
         """Test that config files are staged and committed when working directory is dirty"""
         mock_clean.return_value = False
-        # First subprocess.run: git add; second: git diff --cached
+        # First three subprocess calls inspect staged/unstaged/untracked changes.
         mock_subprocess.side_effect = [
-            Mock(returncode=0),
+            Mock(returncode=0, stdout="", stderr=""),
             Mock(returncode=0, stdout="quickscale.yml\n", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
         ]
+        mock_run_command.side_effect = [(True, ""), (True, "")]
 
         _commit_pending_config_changes(Path("/tmp/test"))
 
-        # Verify git add was called with config files
-        first_call_args = mock_subprocess.call_args_list[0]
-        assert first_call_args[0][0] == ["git", "add", "quickscale.yml", ".quickscale/"]
+        first_checkpoint_call = mock_run_command.call_args_list[0]
+        assert first_checkpoint_call.args[0] == [
+            "git",
+            "add",
+            "--",
+            "quickscale.yml",
+        ]
+        assert first_checkpoint_call.args[1] == Path("/tmp/test")
+        assert (
+            first_checkpoint_call.args[2]
+            == "Staging pending QuickScale configuration changes"
+        )
 
-        # Verify commit was created
-        mock_run_command.assert_called_once_with(
-            ["git", "commit", "-m", "Update QuickScale configuration"],
+        second_checkpoint_call = mock_run_command.call_args_list[1]
+        assert second_checkpoint_call.args == (
+            [
+                "git",
+                "commit",
+                "-m",
+                "Update QuickScale configuration",
+                "--",
+                "quickscale.yml",
+            ],
             Path("/tmp/test"),
             "Committing pending QuickScale configuration changes",
         )
@@ -1095,18 +1279,124 @@ class TestCommitPendingConfigChanges:
     @patch("quickscale_cli.commands.apply_command._run_command")
     @patch("quickscale_cli.commands.apply_command.subprocess.run")
     @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
-    def test_no_commit_when_config_files_not_modified(
+    def test_excludes_apply_recovery_snapshot_from_checkpoint_pathspec(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
-        """Test that no commit is created when config files have no staged changes"""
+        """Transient apply recovery files may coexist, but never enter the checkpoint commit."""
         mock_clean.return_value = False
-        # git add finds nothing for the config files, git diff shows nothing staged
         mock_subprocess.side_effect = [
-            Mock(returncode=0),
             Mock(returncode=0, stdout="", stderr=""),
+            Mock(
+                returncode=0,
+                stdout=(
+                    "quickscale.yml\n"
+                    ".quickscale/state.yml\n"
+                    ".quickscale/apply-recovery.yml\n"
+                ),
+                stderr="",
+            ),
+            Mock(returncode=0, stdout="", stderr=""),
+        ]
+        mock_run_command.side_effect = [(True, ""), (True, "")]
+
+        _commit_pending_config_changes(Path("/tmp/test"))
+
+        first_checkpoint_call = mock_run_command.call_args_list[0]
+        assert first_checkpoint_call.args[0] == [
+            "git",
+            "add",
+            "--",
+            "quickscale.yml",
+            ".quickscale/state.yml",
+        ]
+
+        second_checkpoint_call = mock_run_command.call_args_list[1]
+        assert second_checkpoint_call.args[0] == [
+            "git",
+            "commit",
+            "-m",
+            "Update QuickScale configuration",
+            "--",
+            "quickscale.yml",
+            ".quickscale/state.yml",
+        ]
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_only_transient_apply_recovery_dirty_skips_checkpoint_commit(
+        self, mock_clean, mock_subprocess, mock_run_command
+    ):
+        """Pending recovery snapshots alone should not trigger a synthetic checkpoint commit."""
+        mock_clean.return_value = False
+        mock_subprocess.side_effect = [
+            Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout=".quickscale/apply-recovery.yml\n", stderr=""),
         ]
 
         _commit_pending_config_changes(Path("/tmp/test"))
+
+        mock_run_command.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_aborts_when_unrelated_changes_are_already_staged(
+        self, mock_clean, mock_subprocess, mock_run_command
+    ):
+        """Apply must not create its synthetic commit with unrelated staged work."""
+        mock_clean.return_value = False
+        mock_subprocess.side_effect = [
+            Mock(
+                returncode=0,
+                stdout="quickscale.yml\nREADME.md\n",
+                stderr="",
+            ),
+            Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
+        ]
+
+        with pytest.raises(click.Abort):
+            _commit_pending_config_changes(Path("/tmp/test"))
+
+        mock_run_command.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_aborts_when_unrelated_unstaged_changes_are_present(
+        self, mock_clean, mock_subprocess, mock_run_command
+    ):
+        """Apply must abort when unrelated tracked changes remain unstaged."""
+        mock_clean.return_value = False
+        mock_subprocess.side_effect = [
+            Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="README.md\n", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
+        ]
+
+        with pytest.raises(click.Abort):
+            _commit_pending_config_changes(Path("/tmp/test"))
+
+        mock_run_command.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_aborts_when_unrelated_untracked_changes_are_present(
+        self, mock_clean, mock_subprocess, mock_run_command
+    ):
+        """Apply must abort when unrelated untracked files are present."""
+        mock_clean.return_value = False
+        mock_subprocess.side_effect = [
+            Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="quickscale.yml\n", stderr=""),
+            Mock(returncode=0, stdout="notes.txt\n", stderr=""),
+        ]
+
+        with pytest.raises(click.Abort):
+            _commit_pending_config_changes(Path("/tmp/test"))
 
         mock_run_command.assert_not_called()
 
@@ -1119,17 +1409,128 @@ class TestCommitPendingConfigChanges:
         """Test that both quickscale.yml and .quickscale/state.yml changes are committed"""
         mock_clean.return_value = False
         mock_subprocess.side_effect = [
-            Mock(returncode=0),
+            Mock(returncode=0, stdout=".quickscale/state.yml\n", stderr=""),
             Mock(
                 returncode=0,
-                stdout="quickscale.yml\n.quickscale/state.yml\n",
+                stdout="quickscale.yml\n",
                 stderr="",
             ),
+            Mock(returncode=0, stdout="", stderr=""),
         ]
+        mock_run_command.side_effect = [(True, ""), (True, "")]
 
         _commit_pending_config_changes(Path("/tmp/test"))
 
-        mock_run_command.assert_called_once()
+        assert mock_run_command.call_count == 2
+
+    def test_restores_preexisting_staged_state_when_checkpoint_commit_fails(
+        self, tmp_path
+    ):
+        """Failed synthetic checkpoints must not leave apply-staged managed files behind."""
+        _init_apply_git_repo(tmp_path)
+
+        quickscale_config = tmp_path / "quickscale.yml"
+        quickscale_config.write_text(
+            quickscale_config.read_text() + "modules:\n  auth:\n"
+        )
+        _run_git(tmp_path, "add", "quickscale.yml")
+
+        state_path = tmp_path / ".quickscale" / "state.yml"
+        state_path.write_text(state_path.read_text() + "# pending state update\n")
+
+        _install_failing_pre_commit_hook(tmp_path)
+
+        with pytest.raises(click.Abort):
+            _commit_pending_config_changes(tmp_path)
+
+        staged_paths = _run_git(tmp_path, "diff", "--cached", "--name-only").stdout
+        unstaged_paths = _run_git(tmp_path, "diff", "--name-only").stdout
+
+        assert staged_paths.splitlines() == ["quickscale.yml"]
+        assert unstaged_paths.splitlines() == [".quickscale/state.yml"]
+
+    def test_checkpoint_commit_does_not_include_apply_recovery_snapshot(self, tmp_path):
+        """Synthetic pre-embed commits must never absorb transient recovery snapshots."""
+        _init_apply_git_repo(tmp_path)
+
+        quickscale_config = tmp_path / "quickscale.yml"
+        quickscale_config.write_text(
+            quickscale_config.read_text() + "modules:\n  auth:\n"
+        )
+
+        state_path = tmp_path / ".quickscale" / "state.yml"
+        state_path.write_text(state_path.read_text() + "# pending state update\n")
+
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        recovery_path.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            '  created_at: "2025-01-01T00:00:00"\n'
+            '  last_applied: "2025-01-02T00:00:00"\n'
+            "modules:\n"
+            "  auth:\n"
+            '    version: "0.82.0"\n'
+            "    commit_sha:\n"
+            '    embedded_at: "2025-01-01T00:00:00"\n'
+            "    options: {}\n"
+        )
+
+        _commit_pending_config_changes(tmp_path)
+
+        commit_paths = set(
+            _run_git(
+                tmp_path,
+                "show",
+                "--pretty=format:",
+                "--name-only",
+                "HEAD",
+            ).stdout.splitlines()
+        )
+        status_output = _run_git(tmp_path, "status", "--short").stdout.splitlines()
+
+        assert "quickscale.yml" in commit_paths
+        assert ".quickscale/state.yml" in commit_paths
+        assert ".quickscale/apply-recovery.yml" not in commit_paths
+        assert "?? .quickscale/apply-recovery.yml" in status_output
+
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._commit_pending_config_changes")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_execute_apply_steps_aborts_before_embed_when_pre_embed_commit_aborts(
+        self,
+        mock_generate_new_project,
+        mock_commit_pending,
+        mock_embed_modules_step,
+    ):
+        """Existing-project apply should stop before subtree embed on staged-scope violations."""
+        mock_commit_pending.side_effect = click.Abort()
+
+        ctx = Mock()
+        ctx.existing_state = Mock()
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        mock_generate_new_project.assert_not_called()
+        mock_embed_modules_step.assert_not_called()
 
 
 # ============================================================================
@@ -1185,6 +1586,20 @@ class TestEmbedModulesStep:
             skip_auth_migration_check=True,
         )
 
+    @patch("quickscale_cli.commands.apply_command._git_commit")
+    @patch("quickscale_cli.commands.apply_command._embed_module")
+    def test_successful_embed_aborts_when_checkpoint_commit_fails(
+        self, mock_embed, mock_commit
+    ):
+        """Apply must hard-stop when a module checkpoint commit fails."""
+        mock_embed.return_value = True
+        mock_commit.return_value = False
+
+        with pytest.raises(click.Abort):
+            _embed_modules_step(Path("/tmp"), ["auth"], False, None)
+
+        mock_commit.assert_called_once_with(Path("/tmp"), "Add module: auth")
+
     @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
     @patch("quickscale_cli.commands.apply_command._git_commit")
     @patch("quickscale_cli.commands.apply_command._embed_module")
@@ -1198,6 +1613,25 @@ class TestEmbedModulesStep:
             success=False,
             embedded_modules=[],
             failed_module="auth",
+        )
+
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands.apply_command._git_commit")
+    @patch("quickscale_cli.commands.apply_command._embed_module")
+    def test_failed_embed_aborts_when_partial_checkpoint_commit_fails(
+        self, mock_embed, mock_commit, mock_clean
+    ):
+        """Apply must hard-stop when the partial embed checkpoint cannot be committed."""
+        mock_embed.return_value = False
+        mock_clean.return_value = False
+        mock_commit.return_value = False
+
+        with pytest.raises(click.Abort):
+            _embed_modules_step(Path("/tmp"), ["auth"], False, None)
+
+        mock_commit.assert_called_once_with(
+            Path("/tmp"),
+            "Partial module: auth (incomplete)",
         )
 
     @patch("quickscale_cli.commands.apply_command._git_commit")
@@ -1266,7 +1700,7 @@ class TestRunPostGenerationSteps:
         mock_lock.return_value = True
         mock_poetry.return_value = True
         mock_migrate.return_value = False
-        assert _run_post_generation_steps(Path("/tmp")) is True
+        assert _run_post_generation_steps(Path("/tmp")) is False
 
     @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
@@ -1339,7 +1773,7 @@ class TestSaveProjectState:
         delta = Mock()
         delta.config_deltas = {}
 
-        _save_project_state(tmp_path, config, None, ["auth"], delta)
+        assert _save_project_state(tmp_path, config, None, ["auth"], delta) is True
         assert (tmp_path / ".quickscale" / "state.yml").exists()
 
     def test_existing_project_state(self, tmp_path):
@@ -1347,9 +1781,17 @@ class TestSaveProjectState:
         # Pre-create state dir
         (tmp_path / ".quickscale").mkdir()
 
-        existing_state = Mock()
-        existing_state.project.last_applied = "old"
-        existing_state.modules = {}
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={},
+        )
 
         config = Mock()
         config.project.slug = "myapp"
@@ -1359,7 +1801,10 @@ class TestSaveProjectState:
         delta = Mock()
         delta.config_deltas = {}
 
-        _save_project_state(tmp_path, config, existing_state, ["blog"], delta)
+        assert (
+            _save_project_state(tmp_path, config, existing_state, ["blog"], delta)
+            is True
+        )
 
     def test_save_state_error(self, tmp_path):
         """Test state save error handling"""
@@ -1373,8 +1818,7 @@ class TestSaveProjectState:
 
         with patch("quickscale_cli.commands.apply_command.StateManager") as mock_sm:
             mock_sm.return_value.save.side_effect = OSError("write error")
-            _save_project_state(tmp_path, config, None, [], delta)
-            # Should not raise
+            assert _save_project_state(tmp_path, config, None, [], delta) is False
 
     def test_backups_state_save_sanitizes_legacy_secret_values(self, tmp_path):
         """Backups state should persist env-var references, not raw secrets."""
@@ -1396,7 +1840,7 @@ class TestSaveProjectState:
         delta = Mock()
         delta.config_deltas = {}
 
-        _save_project_state(tmp_path, config, None, ["backups"], delta)
+        assert _save_project_state(tmp_path, config, None, ["backups"], delta) is True
 
         state_text = (tmp_path / ".quickscale" / "state.yml").read_text()
         assert "legacy-key" not in state_text
@@ -1432,7 +1876,7 @@ class TestSaveProjectState:
         delta = Mock()
         delta.config_deltas = {}
 
-        _save_project_state(tmp_path, config, None, ["auth"], delta)
+        assert _save_project_state(tmp_path, config, None, ["auth"], delta) is True
 
         state_data = yaml.safe_load((quickscale_dir / "state.yml").read_text())
         legacy_config = yaml.safe_load((quickscale_dir / "config.yml").read_text())
@@ -1809,6 +2253,35 @@ class TestBackupsApplyHelpers:
         gitignore_text = (tmp_path / ".gitignore").read_text()
         assert ".quickscale/backups/" in gitignore_text
 
+    def test_ensure_backups_gitignore_rules_returns_false_when_gitignore_read_fails(
+        self,
+        tmp_path,
+    ):
+        qs_config = Mock()
+        qs_config.modules = {
+            "backups": Mock(options={"local_directory": ".private/backups"})
+        }
+        (tmp_path / ".gitignore").write_text("existing\n")
+
+        with patch.object(Path, "read_text", side_effect=OSError("read denied")):
+            result = _ensure_backups_gitignore_rules(tmp_path, qs_config)
+
+        assert result is False
+
+    def test_ensure_backups_gitignore_rules_returns_false_when_gitignore_write_fails(
+        self,
+        tmp_path,
+    ):
+        qs_config = Mock()
+        qs_config.modules = {
+            "backups": Mock(options={"local_directory": ".private/backups"})
+        }
+
+        with patch.object(Path, "write_text", side_effect=OSError("write denied")):
+            result = _ensure_backups_gitignore_rules(tmp_path, qs_config)
+
+        assert result is False
+
     @pytest.mark.parametrize(
         "local_directory",
         [
@@ -1847,6 +2320,203 @@ class TestBackupsApplyHelpers:
 
 class TestExecuteApplySteps:
     """Tests for _execute_apply_steps module-selection matrix."""
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_apply_uses_single_final_managed_wiring_regeneration(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Apply should rely on one final authoritative managed-wiring pass."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=["blog"],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"blog": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=False,
+            no_modules=False,
+            verbose_docker=False,
+        )
+
+        mock_regenerate_wiring.assert_called_once_with(ctx, ["blog"])
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_partial_embed_failure_persists_completed_modules_before_abort(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Apply should save successful embeds before aborting on a later embed failure."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=False,
+            embedded_modules=["auth"],
+            failed_module="blog",
+        )
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth", "blog"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {
+            "auth": Mock(options={}),
+            "blog": Mock(options={}),
+        }
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        mock_generate_new_project.assert_called_once_with(
+            ctx.qs_config,
+            ctx.output_path,
+            False,
+        )
+        mock_init_git.assert_called_once_with(ctx.output_path)
+        mock_save_state.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            ["auth"],
+            ctx.delta,
+        )
+        mock_save_recovery.assert_not_called()
+        mock_regenerate_wiring.assert_not_called()
+        mock_backups_gitignore.assert_not_called()
+        mock_notifications_env_sync.assert_not_called()
+        mock_analytics_env_sync.assert_not_called()
+        mock_sync_module_dependencies.assert_not_called()
+        mock_run_post.assert_not_called()
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._clear_apply_recovery_state")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_partial_embed_failure_does_not_clear_recovery_when_state_save_fails(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_save_state,
+        mock_clear_recovery,
+        capsys,
+    ):
+        """Recovery state must remain untouched until partial authoritative state saves."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=False,
+            embedded_modules=["auth"],
+            failed_module="blog",
+        )
+        mock_save_state.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth", "blog"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {
+            "auth": Mock(options={}),
+            "blog": Mock(options={}),
+        }
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        combined_output = capsys.readouterr()
+        text = combined_output.out + combined_output.err
+        assert "authoritative state persistence" in text
+        assert "could not save partial authoritative state" in text
+        mock_clear_recovery.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
@@ -1900,17 +2570,91 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
 
-        with pytest.raises(click.Abort):
-            _execute_apply_steps(
-                ctx,
-                force=False,
-                no_docker=False,
-                no_modules=False,
-                verbose_docker=False,
-            )
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
 
         mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
-        mock_save_state.assert_called_once()
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_managed_wiring_failure_aborts_when_recovery_state_cannot_be_saved(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_save_state,
+        mock_display_next_steps,
+        capsys,
+    ):
+        """Post-embed failures must not silently continue when recovery persistence fails."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=["auth"],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+            return_value=False,
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        combined_output = capsys.readouterr()
+        text = combined_output.out + combined_output.err
+        assert "apply recovery state persistence" in text
+        assert "managed module wiring generation failed" in text
+        assert ".quickscale/apply-recovery.yml" in text
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            ["auth"],
+            ctx.delta,
+        )
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
@@ -1959,16 +2703,100 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.start = False
         ctx.qs_config.docker.build = True
 
-        with pytest.raises(click.Abort):
-            _execute_apply_steps(
-                ctx,
-                force=False,
-                no_docker=False,
-                no_modules=False,
-                verbose_docker=False,
-            )
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
 
-        mock_save_state.assert_called_once()
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
+        mock_run_post.assert_not_called()
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_backups_gitignore_failure_aborts_apply_and_saves_recovery(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Backups gitignore failures must use the post-embed recovery path."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=["backups"],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["backups"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"backups": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            ["backups"],
+            ctx.delta,
+        )
+        mock_notifications_env_sync.assert_not_called()
+        mock_analytics_env_sync.assert_not_called()
+        mock_sync_module_dependencies.assert_not_called()
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
@@ -2131,6 +2959,87 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
+    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_local_migrations_failure_aborts_apply_and_saves_recovery(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_poetry_lock,
+        mock_poetry_install,
+        mock_run_migrations,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Non-Docker migration failures must take the same recovery-gated abort path."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_poetry_lock.return_value = True
+        mock_poetry_install.return_value = True
+        mock_run_migrations.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"blog": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        mock_run_migrations.assert_called_once_with(ctx.output_path)
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
     @patch("quickscale_cli.commands.apply_command._start_docker")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
@@ -2177,19 +3086,29 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.start = True
         ctx.qs_config.docker.build = True
 
-        with pytest.raises(click.Abort):
-            _execute_apply_steps(
-                ctx,
-                force=False,
-                no_docker=False,
-                no_modules=False,
-                verbose_docker=False,
-            )
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
 
         mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_run_migrations_in_docker.assert_not_called()
         mock_run_migrations.assert_not_called()
-        mock_save_state.assert_called_once()
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
@@ -2242,19 +3161,120 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.start = True
         ctx.qs_config.docker.build = True
 
-        with pytest.raises(click.Abort):
-            _execute_apply_steps(
-                ctx,
-                force=False,
-                no_docker=False,
-                no_modules=False,
-                verbose_docker=False,
-            )
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
 
         mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_run_migrations_in_docker.assert_called_once_with(ctx.output_path)
         mock_run_migrations.assert_not_called()
-        mock_save_state.assert_called_once()
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._clear_apply_recovery_state")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_authoritative_state_save_failure_preserves_recovery_and_aborts(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_clear_recovery,
+        mock_display_next_steps,
+        capsys,
+    ):
+        """Apply must not report success or clear recovery when state persistence fails."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+        mock_save_state.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+            return_value=True,
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        combined_output = capsys.readouterr()
+        text = combined_output.out + combined_output.err
+        assert "authoritative state persistence" in text
+        assert ".quickscale/state.yml" in text
+        assert ".quickscale/apply-recovery.yml" in text
+        mock_save_state.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
+        mock_clear_recovery.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
 
@@ -2326,6 +3346,36 @@ class TestGenerateWithExistingConfig:
         _generate_with_existing_config(mock_config, output, config_file, True)
         assert not (output / "old_file.txt").exists()
         assert (output / "manage.py").exists()
+
+
+class TestGitCheckpointRestoration:
+    """Regression coverage for apply-owned checkpoint cleanup."""
+
+    def test_git_commit_restores_preexisting_staged_state_when_commit_fails(
+        self, tmp_path
+    ):
+        """Checkpoint commit failure should restore the prior index exactly."""
+        _init_apply_git_repo(tmp_path)
+
+        quickscale_config = tmp_path / "quickscale.yml"
+        quickscale_config.write_text(
+            quickscale_config.read_text() + "modules:\n  auth:\n"
+        )
+        _run_git(tmp_path, "add", "quickscale.yml")
+
+        module_file = tmp_path / "modules" / "auth" / "module.yml"
+        module_file.parent.mkdir(parents=True, exist_ok=True)
+        module_file.write_text('name: auth\nversion: "0.83.0"\n')
+
+        _install_failing_pre_commit_hook(tmp_path)
+
+        assert _git_commit(tmp_path, "Add module: auth") is False
+
+        staged_paths = _run_git(tmp_path, "diff", "--cached", "--name-only").stdout
+        status_output = _run_git(tmp_path, "status", "--short").stdout.splitlines()
+
+        assert staged_paths.splitlines() == ["quickscale.yml"]
+        assert "?? modules/" in status_output
 
 
 class TestManagedSocialApplyRegression:

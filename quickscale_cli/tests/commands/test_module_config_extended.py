@@ -469,12 +469,16 @@ class TestGenerateAuthSettingsAddition:
 class TestApplyAuthConfiguration:
     """Tests for apply_auth_configuration with realistic project layout"""
 
-    def test_settings_not_found(self, tmp_path):
-        """Warn and return when settings.py missing"""
+    def test_settings_not_found(self, tmp_path, capsys):
+        """Abort when standalone regeneration cannot resolve project identity."""
         project = tmp_path / "proj"
         project.mkdir()
-        apply_auth_configuration(project, get_default_crm_config())
-        # Should not raise – just prints warning
+        with pytest.raises(click.Abort):
+            apply_auth_configuration(project, get_default_crm_config())
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Unable to resolve project identity" in error_output
 
     def test_already_configured(self, tmp_path):
         """Managed wiring remains idempotent when auth reapplied."""
@@ -603,11 +607,19 @@ class TestAddDjangoAllauthDependencyEdgeCases:
 class TestApplyBlogConfigurationFull:
     """Full tests for apply_blog_configuration"""
 
-    def test_settings_not_found(self, tmp_path):
-        """Warn and return when settings.py missing"""
+    def test_settings_not_found(self, tmp_path, capsys):
+        """Abort when standalone regeneration cannot resolve project identity."""
         project = tmp_path / "proj"
         project.mkdir()
-        apply_blog_configuration(project, {"posts_per_page": 10, "enable_rss": True})
+        with pytest.raises(click.Abort):
+            apply_blog_configuration(
+                project,
+                {"posts_per_page": 10, "enable_rss": True},
+            )
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Unable to resolve project identity" in error_output
 
     def test_already_configured(self, tmp_path):
         """Managed wiring remains idempotent when blog reapplied."""
@@ -662,11 +674,16 @@ class TestApplyBlogConfigurationFull:
 class TestApplyListingsConfigurationFull:
     """Full tests for apply_listings_configuration"""
 
-    def test_settings_not_found(self, tmp_path):
-        """Warn and return when settings.py missing"""
+    def test_settings_not_found(self, tmp_path, capsys):
+        """Abort when standalone regeneration cannot resolve project identity."""
         project = tmp_path / "proj"
         project.mkdir()
-        apply_listings_configuration(project, {"listings_per_page": 12})
+        with pytest.raises(click.Abort):
+            apply_listings_configuration(project, {"listings_per_page": 12})
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Unable to resolve project identity" in error_output
 
     def test_already_configured(self, tmp_path):
         """Managed wiring remains idempotent when listings reapplied."""
@@ -1159,15 +1176,9 @@ class TestFormsModuleConfig:
         project = tmp_path / "demo-project"
         project.mkdir()
 
-        with (
-            patch(
-                "quickscale_cli.commands.module_config.resolve_project_identity",
-                side_effect=RuntimeError("boom"),
-            ),
-            patch(
-                "quickscale_cli.commands.module_config.derive_package_from_slug",
-                return_value="demo_project",
-            ),
+        with patch(
+            "quickscale_cli.commands.module_config.resolve_project_identity",
+            side_effect=RuntimeError("boom"),
         ):
             remediation = format_auth_migration_remediation(project)
 
@@ -2085,11 +2096,16 @@ class TestAddDrfAndFilterDependencies:
 class TestApplyCRMConfiguration:
     """Tests for apply_crm_configuration"""
 
-    def test_settings_not_found(self, tmp_path):
-        """Warn and return when settings.py missing"""
+    def test_settings_not_found(self, tmp_path, capsys):
+        """Abort when standalone regeneration cannot resolve project identity."""
         project = tmp_path / "proj"
         project.mkdir()
-        apply_crm_configuration(project, get_default_crm_config())
+        with pytest.raises(click.Abort):
+            apply_crm_configuration(project, get_default_crm_config())
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "Unable to resolve project identity" in error_output
 
     def test_already_configured(self, tmp_path):
         """Managed wiring remains idempotent when CRM reapplied."""
