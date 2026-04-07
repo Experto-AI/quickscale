@@ -16,8 +16,6 @@ from quickscale_cli.backups_contract import (
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATORS,
     _add_django_allauth_dependency,
-    _add_django_filter_dependency,
-    _add_drf_and_filter_dependencies,
     _add_storage_dependencies,
     _filter_new_apps,
     _generate_auth_settings_addition,
@@ -653,8 +651,7 @@ class TestApplyBlogConfigurationFull:
 
         urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_blog.urls" in urls
-        # markdownx URL should not be added when RSS disabled
-        assert "markdownx.urls" not in urls
+        assert "markdownx.urls" in urls
 
     def test_blog_urls_already_present(self, tmp_path):
         """Skip URL update when blog urls already present"""
@@ -786,54 +783,6 @@ class TestApplyListingsConfigurationFull:
         assert "markdownx.urls" in managed_urls
 
 
-# ============================================================================
-# _add_django_filter_dependency edge cases
-# ============================================================================
-
-
-class TestAddDjangoFilterDependencyEdgeCases:
-    """Edge cases for _add_django_filter_dependency"""
-
-    def test_no_version_match(self, tmp_path):
-        """Abort when version cannot be parsed"""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
-        listings_dir = tmp_path / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
-
-        with pytest.raises(click.Abort):
-            _add_django_filter_dependency(tmp_path, pyproject)
-
-    def test_file_read_error(self, tmp_path):
-        """Abort on file read error"""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
-        listings_dir = tmp_path / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-
-        with patch(
-            "builtins.open", side_effect=[pyproject.open(), FileNotFoundError("mocked")]
-        ):
-            with pytest.raises(click.Abort):
-                _add_django_filter_dependency(tmp_path, pyproject)
-
-    def test_no_dependencies_section(self, tmp_path):
-        """Warn when [tool.poetry.dependencies] section missing"""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("[tool.poetry]\nname = 'test'\n")
-        listings_dir = tmp_path / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-
-        _add_django_filter_dependency(tmp_path, pyproject)
-
-
 class TestModuleWiringSpecs:
     """Regression tests for module wiring spec collisions"""
 
@@ -898,6 +847,18 @@ class TestModuleWiringSpecs:
             ("listings/", "quickscale_modules_listings.urls"),
             ("markdownx/", "markdownx.urls"),
         )
+
+    def test_blog_wiring_without_rss_still_includes_markdownx_urls(self):
+        """Blog wiring should keep markdownx URLs even when RSS is disabled."""
+        specs = build_module_wiring_specs(
+            {"blog": {"posts_per_page": 10, "enable_rss": False}}
+        )
+
+        _, _, settings, urls = collect_wiring(specs)
+
+        assert settings["BLOG_ENABLE_RSS"] is False
+        assert ("blog/", "quickscale_modules_blog.urls") in urls
+        assert ("markdownx/", "markdownx.urls") in urls
 
     def test_storage_wiring_local_keeps_filesystem_defaults(self):
         """Storage wiring should not force STORAGES override for local backend."""
@@ -2021,71 +1982,6 @@ class TestCRMModuleConfig:
         configurator, applier = MODULE_CONFIGURATORS["crm"]
         config = configurator(non_interactive=True)
         assert "enable_api" in config
-
-
-# ============================================================================
-# _add_drf_and_filter_dependencies
-# ============================================================================
-
-
-class TestAddDrfAndFilterDependencies:
-    """Tests for _add_drf_and_filter_dependencies"""
-
-    def test_crm_module_pyproject_missing(self, tmp_path):
-        """Abort when CRM module pyproject.toml not found"""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
-
-        with pytest.raises(click.Abort):
-            _add_drf_and_filter_dependencies(tmp_path, pyproject)
-
-    def test_adds_both_dependencies(self, tmp_path):
-        """Add both DRF and django-filter when missing"""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
-        crm_dir = tmp_path / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\n"
-            'djangorestframework = "^3.15.0"\n'
-            'django-filter = "^23.0"\n'
-        )
-
-        _add_drf_and_filter_dependencies(tmp_path, pyproject)
-
-        content = pyproject.read_text()
-        assert "djangorestframework" in content
-        assert "django-filter" in content
-
-    def test_skips_existing_dependencies(self, tmp_path):
-        """Skip deps that already exist in pyproject"""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.14"\n'
-            'djangorestframework = "^3.14.0"\n'
-            'django-filter = "^23.0"\n'
-        )
-        crm_dir = tmp_path / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\n"
-            'djangorestframework = "^3.15.0"\n'
-            'django-filter = "^24.0"\n'
-        )
-
-        _add_drf_and_filter_dependencies(tmp_path, pyproject)
-        # No error, and versions unchanged
-
-    def test_parse_error(self, tmp_path):
-        """Abort on parse error"""
-        pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
-        crm_dir = tmp_path / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text("invalid content")
-
-        # No version match → no additions needed → should not abort
-        _add_drf_and_filter_dependencies(tmp_path, pyproject)
 
 
 # ============================================================================

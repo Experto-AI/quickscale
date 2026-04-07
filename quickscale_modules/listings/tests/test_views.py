@@ -25,6 +25,40 @@ class TestListingListView:
         assert response.status_code == 200
         assert "No listings available" in str(response.content)
 
+    def test_listing_list_uses_runtime_listings_per_page_setting(
+        self,
+        client,
+        listing_factory,
+        settings,
+    ):
+        """Test list pagination reads LISTINGS_PER_PAGE at runtime."""
+        settings.LISTINGS_PER_PAGE = 2
+        for index in range(3):
+            listing_factory(title=f"Listing {index}", status="published")
+
+        response = client.get(reverse("concrete_listing_list"))
+
+        assert response.status_code == 200
+        assert response.context["paginator"].per_page == 2
+        assert len(response.context["page_obj"].object_list) == 2
+        assert response.context["is_paginated"] is True
+
+    def test_listing_list_invalid_listings_per_page_falls_back_to_default(
+        self,
+        client,
+        listing_factory,
+        settings,
+    ):
+        """Test invalid LISTINGS_PER_PAGE values fall back to the default."""
+        settings.LISTINGS_PER_PAGE = "invalid"
+        for index in range(13):
+            listing_factory(title=f"Default Listing {index}", status="published")
+
+        response = client.get(reverse("concrete_listing_list"))
+
+        assert response.status_code == 200
+        assert response.context["paginator"].per_page == 12
+
     def test_filter_by_price_min(self, client, listing_factory):
         """Test filtering by minimum price"""
         listing_factory(title="Cheap", status="published", price=Decimal("50.00"))

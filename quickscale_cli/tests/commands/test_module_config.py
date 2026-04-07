@@ -8,7 +8,6 @@ import pytest
 
 from quickscale_cli.commands.module_config import (
     _add_django_allauth_dependency,
-    _add_django_filter_dependency,
     _generate_auth_settings_addition,
     _regenerate_wiring_for_module,
     apply_auth_configuration,
@@ -310,45 +309,6 @@ class TestListingsModuleConfig:
         config = configure_listings_module(non_interactive=False)
 
         assert config["listings_per_page"] == 24
-
-    def test_add_django_filter_dependency_already_exists(self, tmp_path):
-        """Test adding django-filter when it already exists."""
-        pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-
-        # Should not raise
-        _add_django_filter_dependency(tmp_path, pyproject_path)
-
-    def test_add_django_filter_dependency_no_listings_module(self, tmp_path):
-        """Test adding django-filter when listings module is missing."""
-        pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
-
-        with pytest.raises(click.Abort):
-            _add_django_filter_dependency(tmp_path, pyproject_path)
-
-    def test_add_django_filter_dependency_success(self, tmp_path):
-        """Test successfully adding django-filter dependency."""
-        # Create main pyproject.toml
-        pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
-        )
-
-        # Create listings module pyproject.toml with django-filter
-        listings_dir = tmp_path / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        listings_pyproject = listings_dir / "pyproject.toml"
-        listings_pyproject.write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-
-        _add_django_filter_dependency(tmp_path, pyproject_path)
-
-        content = pyproject_path.read_text()
-        assert "django-filter" in content
 
     @patch("quickscale_cli.commands.module_config.Path.exists")
     def test_apply_listings_configuration(self, mock_exists, tmp_path):

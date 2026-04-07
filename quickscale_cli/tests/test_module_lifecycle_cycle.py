@@ -10,8 +10,15 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.apply_command import EmbedModulesResult, apply  # type: ignore[import-untyped]
-from quickscale_cli.commands.module_commands import push, update  # type: ignore[import-untyped]
+from quickscale_cli.commands.apply_command import (  # type: ignore[import-untyped]
+    EmbedModulesResult,
+    _embed_modules_step,
+    apply,
+)
+from quickscale_cli.commands.module_commands import (  # type: ignore[import-untyped]
+    push,
+    update,
+)
 from quickscale_cli.commands.remove_command import remove  # type: ignore[import-untyped]
 
 
@@ -231,6 +238,59 @@ def _write_backups_quickscale_config(
     (base_path / "quickscale.yml").write_text(
         yaml.safe_dump(config_data, sort_keys=False)
     )
+
+
+def _write_blog_quickscale_config(base_path: Path, *, enable_rss: bool) -> None:
+    """Write a quickscale.yml containing the blog module configuration."""
+    config_data = {
+        "version": "1",
+        "project": {
+            "slug": "myproject",
+            "package": "myproject",
+            "theme": "showcase_html",
+        },
+        "modules": {"blog": {"enable_rss": enable_rss}},
+        "docker": {"start": False},
+    }
+    (base_path / "quickscale.yml").write_text(
+        yaml.safe_dump(config_data, sort_keys=False)
+    )
+
+
+def _write_blog_state(project_path: Path, *, enable_rss: bool) -> None:
+    """Write .quickscale/state.yml with blog installed and configured."""
+    state_data = {
+        "version": "1",
+        "project": {
+            "slug": "myproject",
+            "package": "myproject",
+            "theme": "showcase_html",
+            "created_at": "2025-01-01T00:00:00",
+            "last_applied": "2025-01-01T00:00:00",
+        },
+        "modules": {
+            "blog": {
+                "name": "blog",
+                "version": "0.73.0",
+                "commit_sha": "abc123",
+                "embedded_at": "2025-01-01T00:00:00",
+                "options": {"enable_rss": enable_rss},
+            }
+        },
+    }
+    state_dir = project_path / ".quickscale"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
+
+
+def _write_embedded_blog_manifest(project_path: Path) -> None:
+    """Copy the current blog manifest into the embedded project module tree."""
+    repo_root = Path(__file__).resolve().parents[2]
+    manifest_source = repo_root / "quickscale_modules" / "blog" / "module.yml"
+    module_dir = project_path / "modules" / "blog"
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "__init__.py").write_text("")
+    (module_dir / "module.yml").write_text(manifest_source.read_text())
 
 
 def _generate_minimal_project(
@@ -596,91 +656,30 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
         assert backups_options["remote_region_name"] == "auto"
 
 
-def test_apply_embed_failure_after_subtree_add_preserves_prior_modules_and_allows_rerun() -> (
-    None
-):
-    """Apply-mode subtree failures should not leave stale module state blocking retry."""
+def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
+    """Repeat apply should treat blog.enable_rss as mutable and avoid re-embed."""
     cli_runner = CliRunner()
 
     with cli_runner.isolated_filesystem():
         workspace = Path.cwd()
-        _write_quickscale_config_with_modules(workspace, ["auth", "blog"])
-
-        def _fake_subtree_add(
-            *,
-            prefix: str,
-            remote: str,
-            branch: str,
-            squash: bool,
-        ) -> None:
-            del remote, branch, squash
-            module_name = Path(prefix).name
-            module_dir = project_path / prefix
-            module_dir.mkdir(parents=True, exist_ok=True)
-            (module_dir / "__init__.py").write_text("")
-            (module_dir / "module.yml").write_text(
-                f'name: {module_name}\nversion: "0.82.0"\n'
-            )
-
-        def _failing_blog_applier(
-            project_path_arg: Path,
-            config: dict[str, object],
-            *,
-            execution_mode: str,
-        ) -> None:
-            del project_path_arg, config
-            raise RuntimeError(f"{execution_mode} blog failure")
-
         project_path = workspace / "myproject"
+        project_path.mkdir()
+
+        package_dir = project_path / "myproject"
+        (package_dir / "settings").mkdir(parents=True, exist_ok=True)
+        (package_dir / "__init__.py").write_text("")
+        (package_dir / "urls.py").write_text("urlpatterns = []\n")
+        (project_path / "manage.py").write_text("# manage\n")
+
+        _write_blog_quickscale_config(project_path, enable_rss=False)
+        _write_blog_state(project_path, enable_rss=True)
+        _write_embedded_blog_manifest(project_path)
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._generate_new_project",
-                side_effect=_generate_minimal_project,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._init_git_with_config",
-                return_value=None,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
-                return_value=None,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._git_commit",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command.is_working_directory_clean",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.module_commands._validate_git_environment",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.module_commands._validate_remote_branch",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
-                side_effect=_fake_subtree_add,
-            ),
-            patch.dict(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS",
-                {
-                    "auth": (Mock(return_value={}), Mock()),
-                    "blog": (
-                        Mock(return_value={"enabled": True}),
-                        _failing_blog_applier,
-                    ),
-                },
-                clear=True,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
-                return_value=True,
-            ),
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                wraps=_embed_modules_step,
+            ) as mock_embed_modules_step,
             patch(
                 "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
                 return_value=True,
@@ -690,99 +689,32 @@ def test_apply_embed_failure_after_subtree_add_preserves_prior_modules_and_allow
                 return_value=True,
             ),
         ):
-            first_result = cli_runner.invoke(
+            result = cli_runner.invoke(
                 apply,
-                ["quickscale.yml", "--no-docker"],
+                ["myproject/quickscale.yml", "--no-docker"],
                 input="y\n",
                 catch_exceptions=False,
             )
 
-        assert first_result.exit_code != 0
-        assert (project_path / "modules" / "auth").exists()
-        assert not (project_path / "modules" / "blog").exists()
+        assert result.exit_code == 0
+        assert "Mutable config changes (1)" in result.output
+        assert "blog.enable_rss:" in result.output
+        assert "Immutable config changes" not in result.output
+        assert "No new modules to embed" in result.output
+        assert mock_embed_modules_step.call_args.args[1] == []
 
-        first_state = yaml.safe_load(
-            (project_path / ".quickscale" / "state.yml").read_text()
-        )
-        first_legacy_config = yaml.safe_load(
-            (project_path / ".quickscale" / "config.yml").read_text()
-        )
+        settings_modules = (package_dir / "settings" / "modules.py").read_text()
+        assert "'BLOG_ENABLE_RSS': False" in settings_modules
 
-        assert set(first_state["modules"]) == {"auth"}
-        assert set(first_legacy_config["modules"]) == {"auth"}
-
-        with (
-            patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
-                return_value=None,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._git_commit",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command.is_working_directory_clean",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.module_commands._validate_git_environment",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.module_commands._validate_remote_branch",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
-                side_effect=_fake_subtree_add,
-            ),
-            patch.dict(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS",
-                {
-                    "auth": (Mock(return_value={}), Mock()),
-                    "blog": (Mock(return_value={"enabled": True}), Mock()),
-                },
-                clear=True,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
-                return_value=True,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._run_post_generation_steps",
-                return_value=True,
-            ),
-        ):
-            rerun_result = cli_runner.invoke(
-                apply,
-                ["quickscale.yml", "--no-docker"],
-                input="y\n",
-                catch_exceptions=False,
-            )
-
-        assert rerun_result.exit_code == 0
-        assert (project_path / "modules" / "blog").exists()
-
-        final_state = yaml.safe_load(
-            (project_path / ".quickscale" / "state.yml").read_text()
-        )
-        final_legacy_config = yaml.safe_load(
-            (project_path / ".quickscale" / "config.yml").read_text()
-        )
-
-        assert set(final_state["modules"]) == {"auth", "blog"}
-        assert set(final_legacy_config["modules"]) == {"auth", "blog"}
+        state = yaml.safe_load((project_path / ".quickscale" / "state.yml").read_text())
+        assert state["modules"]["blog"]["options"]["enable_rss"] is False
 
 
-def test_update_after_successful_remove_only_targets_remaining_modules(
+def test_update_after_removal_only_targets_remaining_modules(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Update should only process modules left in legacy tracking after remove."""
+    """Test update only processes modules present in config after removal"""
     project_path = tmp_path / "myproject"
     _write_project_with_modules(project_path, ["auth", "blog"])
 
