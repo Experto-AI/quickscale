@@ -14,9 +14,12 @@ packages = [{include = "quickscale_modules_storage", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.14"
 Django = ">=6.0.3,<7.0.0"
-django-storages = "^1.14.4"
-boto3 = "^1.35.0"
+django-storages = {version = "^1.14.4", optional = true}
+boto3 = {version = "^1.35.0", optional = true}
 Pillow = ">=12.1.1,<13.0.0"
+
+[tool.poetry.extras]
+cloud = ["django-storages", "boto3"]
 
 [tool.poetry.group.dev.dependencies]
 pytest-django = "^4.11.1"

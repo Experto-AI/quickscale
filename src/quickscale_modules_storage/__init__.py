@@ -1,5 +1,7 @@
 """QuickScale storage module public API."""
 
+__version__ = "0.76.0"
+
 from .helpers import (
     StorageBackendSelection,
     ValidatedUpload,
