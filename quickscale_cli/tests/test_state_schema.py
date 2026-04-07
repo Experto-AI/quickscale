@@ -50,6 +50,19 @@ class TestModuleState:
 
         assert module.version == "1.0.0"
 
+    def test_module_state_prunes_legacy_auth_keys(self):
+        """Legacy auth keys should normalize to the canonical state contract."""
+        module = ModuleState(
+            name="auth",
+            options={
+                "registration_enabled": True,
+                "allow_registration": False,
+                "social_providers": ["google"],
+            },
+        )
+
+        assert module.options == {"registration_enabled": True}
+
 
 class TestProjectState:
     """Tests for ProjectState dataclass"""
@@ -173,6 +186,96 @@ class TestStateManager:
             assert loaded_state.modules["auth"].name == "auth"
             assert loaded_state.modules["auth"].version == "1.0.0"
             assert loaded_state.modules["auth"].options == {"registration": True}
+
+    def test_save_and_load_state_prunes_legacy_crm_default_pipeline_stages(self):
+        """Legacy CRM stage defaults should not persist in applied state."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            manager = StateManager(project_path)
+
+            project = ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            )
+            crm_module = ModuleState(
+                name="crm",
+                version="1.0.0",
+                commit_sha="def456",
+                embedded_at="2025-01-01T00:00:00",
+                options={
+                    "enable_api": True,
+                    "deals_per_page": 25,
+                    "contacts_per_page": 50,
+                    "default_pipeline_stages": [
+                        "Prospecting",
+                        "Negotiation",
+                        "Closed-Won",
+                        "Closed-Lost",
+                    ],
+                },
+            )
+            state = QuickScaleState(
+                version="1",
+                project=project,
+                modules={"crm": crm_module},
+            )
+
+            manager.save(state)
+
+            saved_data = yaml.safe_load(manager.state_file.read_text())
+            assert saved_data["modules"]["crm"]["options"] == {
+                "enable_api": True,
+                "deals_per_page": 25,
+                "contacts_per_page": 50,
+            }
+
+            loaded_state = manager.load()
+            assert loaded_state is not None
+            assert loaded_state.modules["crm"].options == {
+                "enable_api": True,
+                "deals_per_page": 25,
+                "contacts_per_page": 50,
+            }
+
+    def test_load_and_save_state_prunes_legacy_auth_keys(self):
+        """Legacy auth keys should be removed from loaded and persisted state."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            manager = StateManager(project_path)
+
+            manager.state_dir.mkdir(parents=True, exist_ok=True)
+            manager.state_file.write_text(
+                'version: "1"\n'
+                "project:\n"
+                "  slug: myapp\n"
+                "  package: myapp\n"
+                "  theme: showcase_html\n"
+                "modules:\n"
+                "  auth:\n"
+                '    version: "1.0.0"\n'
+                "    options:\n"
+                "      registration_enabled: true\n"
+                "      allow_registration: false\n"
+                "      social_providers:\n"
+                "        - google\n"
+            )
+
+            loaded_state = manager.load()
+
+            assert loaded_state is not None
+            assert loaded_state.modules["auth"].options == {
+                "registration_enabled": True,
+            }
+
+            manager.save(loaded_state)
+            saved_data = yaml.safe_load(manager.state_file.read_text())
+
+            assert saved_data["modules"]["auth"]["options"] == {
+                "registration_enabled": True,
+            }
 
     def test_save_state_atomic(self):
         """Test that state saving is atomic (uses temporary file)"""

@@ -2,6 +2,7 @@
 
 import pytest
 from django.db import IntegrityError
+from django.test import override_settings
 
 from quickscale_modules_forms.models import Form, FormField, FormSubmission
 
@@ -25,6 +26,24 @@ class TestFormModel:
         """data_retention_days defaults to 365"""
         form = Form.objects.create(title="Test", slug="test-retention")
         assert form.data_retention_days == 365
+
+    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    def test_form_data_retention_days_default_comes_from_setting(self):
+        """New forms should inherit the settings-backed retention default."""
+        form = Form.objects.create(title="Configured", slug="configured-retention")
+
+        assert form.data_retention_days == 730
+
+    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    def test_form_explicit_data_retention_days_preserves_per_row_value(self):
+        """Explicit per-form retention must win over the global default."""
+        form = Form.objects.create(
+            title="Explicit",
+            slug="explicit-retention",
+            data_retention_days=14,
+        )
+
+        assert form.data_retention_days == 14
 
     def test_form_is_active_defaults_to_true(self):
         """is_active defaults to True"""

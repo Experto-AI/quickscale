@@ -60,17 +60,10 @@ The module supports the following configuration options in `module.yml`:
 | `deals_per_page` | integer | `25` | Number of deals returned per page from the CRM deals API |
 | `contacts_per_page` | integer | `50` | Number of contacts returned per page from the CRM contacts API |
 
-### Immutable Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `default_pipeline_stages` | list | See below | Initial pipeline stages created on migration |
-
-Default pipeline stages:
-- Prospecting (order: 1)
-- Negotiation (order: 2)
-- Closed-Won (order: 3)
-- Closed-Lost (order: 4)
+Terminal won/lost stages are managed internally through hidden stage semantics.
+Stage CRUD stays editable through the admin and API, and the bulk `mark-won` /
+`mark-lost` actions recreate canonical terminal rows if older data snapshots no
+longer have a semantic terminal stage.
 
 ## API Endpoints
 
@@ -136,7 +129,8 @@ Contact records with:
 - `last_contacted_at` automatically updated when a contact note is created
 
 ### Stage
-Pipeline stages with name and order for sequencing.
+Pipeline stages with name and order for sequencing. Terminal won/lost semantics
+are tracked internally and are not part of the public config surface.
 
 ### Deal
 Deal records with:

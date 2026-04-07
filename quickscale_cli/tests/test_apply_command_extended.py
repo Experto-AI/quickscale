@@ -663,6 +663,33 @@ class TestLoadAndValidateConfig:
             in rewritten
         )
 
+    def test_auth_legacy_keys_are_sanitized_on_load(self, tmp_path):
+        """Legacy auth keys should be pruned from quickscale.yml during apply load."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "    registration_enabled: true\n"
+            "    allow_registration: false\n"
+            "    social_providers:\n"
+            "      - google\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
+
+        assert result.modules["auth"].options == {"registration_enabled": True}
+        assert "allow_registration" not in rewritten
+        assert "social_providers" not in rewritten
+        assert "registration_enabled: true" in rewritten
+
     def test_legacy_notifications_secrets_are_sanitized_on_load(self, tmp_path):
         """Legacy notification secrets should be rewritten to env-var references."""
         config = tmp_path / "quickscale.yml"

@@ -31,6 +31,7 @@ from quickscale_cli.commands.module_config import (
     apply_social_configuration,
     apply_storage_configuration,
     configure_analytics_module,
+    configure_auth_module,
     configure_backups_module,
     configure_forms_module,
     configure_storage_module,
@@ -38,6 +39,7 @@ from quickscale_cli.commands.module_config import (
     configure_notifications_module,
     configure_social_module,
     get_default_analytics_config,
+    get_default_auth_config,
     get_default_backups_config,
     get_default_crm_config,
     get_default_forms_config,
@@ -397,6 +399,55 @@ class TestFilterNewApps:
         content = 'INSTALLED_APPS = ["a", "b"]'
         result = _filter_new_apps(content, ["a", "b"])
         assert result == []
+
+
+class TestAuthModuleConfig:
+    """Tests for auth configurator defaults and legacy normalization."""
+
+    def test_auth_default_config_omits_legacy_social_providers(self):
+        """New auth defaults should not emit the removed social provider surface."""
+        config = get_default_auth_config()
+
+        assert "social_providers" not in config
+        assert config["authentication_method"] == "email"
+
+    def test_configure_auth_non_interactive_omits_legacy_social_providers(self, capsys):
+        """Legacy config reads stay non-fatal without re-emitting removed keys."""
+        config = configure_auth_module(
+            non_interactive=True,
+            existing_config={
+                "allow_registration": False,
+                "social_providers": ["google"],
+            },
+        )
+
+        output = capsys.readouterr().out
+
+        assert "social_providers" not in config
+        assert config["registration_enabled"] is False
+        assert "Registration: Disabled" in output
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    def test_apply_auth_configuration_tolerates_legacy_social_providers(
+        self,
+        mock_regenerate,
+        tmp_path,
+    ):
+        """Legacy social provider values should be ignored during apply."""
+        project = _make_project(tmp_path)
+
+        apply_auth_configuration(
+            project,
+            {
+                "registration_enabled": True,
+                "social_providers": ["google"],
+            },
+        )
+
+        normalized_config = mock_regenerate.call_args.args[2]
+
+        assert "social_providers" not in normalized_config
+        assert normalized_config["registration_enabled"] is True
 
 
 # ============================================================================
@@ -1956,6 +2007,7 @@ class TestCRMModuleConfig:
         assert config["enable_api"] is True
         assert config["deals_per_page"] == 25
         assert config["contacts_per_page"] == 50
+        assert "default_pipeline_stages" not in config
 
     def test_configure_crm_non_interactive(self):
         """Test non-interactive CRM configuration"""
@@ -1963,6 +2015,19 @@ class TestCRMModuleConfig:
         assert config["enable_api"] is True
         assert config["deals_per_page"] == 25
         assert config["contacts_per_page"] == 50
+
+    def test_configure_crm_non_interactive_prunes_legacy_stage_defaults(self):
+        """Legacy CRM stage defaults should not reappear in non-interactive mode."""
+        config = configure_crm_module(
+            non_interactive=True,
+            existing_config={
+                "deals_per_page": 30,
+                "default_pipeline_stages": ["Custom"],
+            },
+        )
+
+        assert config["deals_per_page"] == 30
+        assert "default_pipeline_stages" not in config
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
@@ -2018,6 +2083,33 @@ class TestApplyCRMConfiguration:
         apply_crm_configuration(project, config)
         settings = (project / "myproject" / "settings" / "modules.py").read_text()
         assert settings.count("quickscale_modules_crm") == 1
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    def test_apply_crm_configuration_prunes_legacy_stage_defaults(
+        self,
+        mock_regenerate,
+        tmp_path,
+    ):
+        """Legacy CRM stage defaults should be removed before managed wiring runs."""
+        project = _make_project(tmp_path)
+
+        apply_crm_configuration(
+            project,
+            {
+                "enable_api": True,
+                "deals_per_page": 25,
+                "contacts_per_page": 50,
+                "default_pipeline_stages": ["Prospecting", "Closed-Won"],
+            },
+        )
+
+        normalized_config = mock_regenerate.call_args.args[2]
+
+        assert normalized_config == {
+            "enable_api": True,
+            "deals_per_page": 25,
+            "contacts_per_page": 50,
+        }
 
     def test_full_apply_crm_with_api(self, tmp_path):
         """Full CRM config apply with API enabled"""

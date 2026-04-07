@@ -65,6 +65,56 @@ docker:
         assert config.docker.build is False
         assert config.docker.create_superuser is False
 
+    def test_validate_config_prunes_legacy_crm_default_pipeline_stages(self):
+        """Legacy CRM stage defaults should be removed during config parsing."""
+        yaml_content = """
+version: "1"
+project:
+  slug: myproject
+  package: myproject
+  theme: showcase_html
+modules:
+  crm:
+    enable_api: true
+    deals_per_page: 30
+    contacts_per_page: 60
+    default_pipeline_stages:
+      - Prospecting
+      - Negotiation
+      - Closed-Won
+      - Closed-Lost
+"""
+
+        config = validate_config(yaml_content)
+
+        assert config.modules["crm"].options == {
+            "enable_api": True,
+            "deals_per_page": 30,
+            "contacts_per_page": 60,
+        }
+
+    def test_validate_config_prunes_legacy_auth_keys(self):
+        """Mixed legacy/current auth keys should parse to the canonical contract."""
+        yaml_content = """
+version: "1"
+project:
+  slug: myproject
+  package: myproject
+  theme: showcase_html
+modules:
+  auth:
+    registration_enabled: true
+    allow_registration: false
+    social_providers:
+      - google
+"""
+
+        config = validate_config(yaml_content)
+
+        assert config.modules["auth"].options == {
+            "registration_enabled": True,
+        }
+
     def test_config_with_empty_modules(self):
         """Test config with modules section but empty options"""
         yaml_content = """
@@ -569,6 +619,44 @@ class TestGenerateYaml:
         assert parsed.docker.start == original.docker.start
         assert parsed.docker.build == original.docker.build
         assert parsed.docker.create_superuser == original.docker.create_superuser
+
+    def test_generate_yaml_omits_legacy_crm_default_pipeline_stages(self):
+        """YAML generation should not re-emit the retired CRM stage-default key."""
+        config = QuickScaleConfig(
+            version="1",
+            project=ProjectConfig(
+                slug="testproject",
+                package="testproject",
+                theme="showcase_react",
+            ),
+            modules={
+                "crm": ModuleConfig(
+                    name="crm",
+                    options={
+                        "enable_api": True,
+                        "deals_per_page": 25,
+                        "contacts_per_page": 50,
+                        "default_pipeline_stages": [
+                            "Prospecting",
+                            "Negotiation",
+                            "Closed-Won",
+                            "Closed-Lost",
+                        ],
+                    },
+                )
+            },
+            docker=DockerConfig(start=True, build=False),
+        )
+
+        yaml_output = generate_yaml(config)
+
+        assert "default_pipeline_stages" not in yaml_output
+        parsed = validate_config(yaml_output)
+        assert parsed.modules["crm"].options == {
+            "enable_api": True,
+            "deals_per_page": 25,
+            "contacts_per_page": 50,
+        }
 
 
 class TestDataclasses:

@@ -56,6 +56,39 @@ def auth_manifest() -> ModuleManifest:
 
 
 @pytest.fixture
+def crm_manifest() -> ModuleManifest:
+    """Create CRM module manifest for testing."""
+    return ModuleManifest(
+        name="crm",
+        version="0.73.0",
+        mutable_options={
+            "enable_api": ConfigOption(
+                name="enable_api",
+                option_type="boolean",
+                default=True,
+                django_setting="CRM_ENABLE_API",
+                mutability="mutable",
+            ),
+            "deals_per_page": ConfigOption(
+                name="deals_per_page",
+                option_type="integer",
+                default=25,
+                django_setting="CRM_DEALS_PER_PAGE",
+                mutability="mutable",
+            ),
+            "contacts_per_page": ConfigOption(
+                name="contacts_per_page",
+                option_type="integer",
+                default=50,
+                django_setting="CRM_CONTACTS_PER_PAGE",
+                mutability="mutable",
+            ),
+        },
+        immutable_options={},
+    )
+
+
+@pytest.fixture
 def base_config() -> QuickScaleConfig:
     """Create base config for testing"""
     return QuickScaleConfig(
@@ -243,6 +276,126 @@ class TestComputeDeltaWithManifests:
         delta = compute_delta(base_config, base_state)
 
         # Should not error, but won't detect config changes
+        assert delta.has_mutable_config_changes is False
+        assert delta.has_immutable_config_changes is False
+
+    def test_legacy_crm_default_pipeline_stages_is_pruned_before_comparison(
+        self,
+        crm_manifest: ModuleManifest,
+    ) -> None:
+        """Retired CRM keys should not show up as immutable drift."""
+        desired = QuickScaleConfig(
+            version="1",
+            project=ProjectConfig(
+                slug="testproject",
+                package="testproject",
+                theme="showcase_html",
+            ),
+            modules={
+                "crm": ModuleConfig(
+                    name="crm",
+                    options={
+                        "enable_api": True,
+                        "deals_per_page": 25,
+                        "contacts_per_page": 50,
+                        "default_pipeline_stages": [
+                            "Prospecting",
+                            "Negotiation",
+                            "Closed-Won",
+                            "Closed-Lost",
+                        ],
+                    },
+                )
+            },
+            docker=DockerConfig(start=False, build=False),
+        )
+        applied = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="testproject",
+                package="testproject",
+                theme="showcase_html",
+                created_at="2024-01-01T00:00:00",
+                last_applied="2024-01-01T00:00:00",
+            ),
+            modules={
+                "crm": ModuleState(
+                    name="crm",
+                    version="0.73.0",
+                    embedded_at="2024-01-01T00:00:00",
+                    options={
+                        "enable_api": True,
+                        "deals_per_page": 25,
+                        "contacts_per_page": 50,
+                        "default_pipeline_stages": [
+                            "Prospecting",
+                            "Negotiation",
+                            "Closed-Won",
+                            "Closed-Lost",
+                        ],
+                    },
+                )
+            },
+        )
+
+        delta = compute_delta(desired, applied, {"crm": crm_manifest})
+
+        assert delta.has_changes is False
+        assert delta.has_mutable_config_changes is False
+        assert delta.has_immutable_config_changes is False
+
+    def test_mixed_legacy_auth_keys_are_pruned_before_comparison(
+        self,
+        auth_manifest: ModuleManifest,
+    ) -> None:
+        """Legacy auth keys should not create mutable or immutable drift."""
+        desired = QuickScaleConfig(
+            version="1",
+            project=ProjectConfig(
+                slug="testproject",
+                package="testproject",
+                theme="showcase_html",
+            ),
+            modules={
+                "auth": ModuleConfig(
+                    name="auth",
+                    options={
+                        "registration_enabled": True,
+                        "allow_registration": False,
+                        "social_providers": ["google"],
+                        "session_cookie_age": 1209600,
+                        "authentication_method": "email_username",
+                    },
+                )
+            },
+            docker=DockerConfig(start=False, build=False),
+        )
+        applied = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="testproject",
+                package="testproject",
+                theme="showcase_html",
+                created_at="2024-01-01T00:00:00",
+                last_applied="2024-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.71.0",
+                    embedded_at="2024-01-01T00:00:00",
+                    options={
+                        "registration_enabled": True,
+                        "session_cookie_age": 1209600,
+                        "authentication_method": "email_username",
+                    },
+                )
+            },
+        )
+
+        delta = compute_delta(desired, applied, {"auth": auth_manifest})
+
+        assert delta.has_changes is False
         assert delta.has_mutable_config_changes is False
         assert delta.has_immutable_config_changes is False
 

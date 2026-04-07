@@ -177,17 +177,20 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 #### Phase 5: Auth, Forms, and CRM Option Contract Cleanup
 
-**Primary code grouping**: auth public option surface, forms runtime/schema behavior, CRM pipeline seeding behavior, related manifests/docs, and targeted module regressions.
+**Primary code grouping**: auth public option surface, forms runtime/schema behavior, CRM terminal-stage semantics, related manifests/docs, and targeted module regressions.
 
-- [ ] Confirm and document whether auth `social_providers` remains future-facing in v0.83.0 or graduates to a shipped public contract.
-- [ ] If auth `social_providers` remains future-facing, remove it from the public manifest/CLI/docs surface until provider apps, dependencies, and settings are actually wired.
-- [ ] If auth `social_providers` ships in v0.83.0, implement provider app installation, dependency sync, and settings wiring end to end and add direct regression coverage.
-- [ ] Make forms spam protection use one shared predicate between schema generation and submission handling.
-- [ ] Make `FORMS_DATA_RETENTION_DAYS` either drive the actual default retention behavior or remove it from the shipped mutable option surface.
-- [ ] Make CRM `default_pipeline_stages` either drive initial stage creation and stage lookup behavior or remove it from the shipped immutable contract until it is real.
-- [ ] Audit the remaining shipped mutable and immutable module options for other advertised-but-unused behavior beyond the audited auth, blog, crm, forms, and listings cases.
+**Current status (2026-04-07)**: Phase 5 implementation is complete in the current worktree. Auth keeps `social_providers` future-facing and out of the shipped public surface while tolerating legacy config reads. Forms now shares one spam-protection predicate between schema generation and submission handling, and new `Form` rows inherit `FORMS_DATA_RETENTION_DAYS` without rewriting existing per-row retention values. CRM removes `default_pipeline_stages` from the shipped contract, backfills hidden terminal won/lost semantics, enforces one semantic row per terminal state with a forward-safe follow-up migration, and keeps runtime `mark-won` / `mark-lost` self-healing for older datasets. Within the remaining shipped auth/forms/CRM option surface, no other advertised-but-unused option was verified in this pass: the remaining auth options map to live account/session settings, the remaining forms options map to runtime schema, submission, throttle, and staff API behavior, and the remaining CRM options map to runtime API toggles and pagination behavior.
+
+- [x] Confirm and document that auth `social_providers` remains future-facing in v0.83.0 rather than part of the shipped public contract.
+- [x] Because auth `social_providers` remains future-facing, remove it from the public manifest/CLI/docs surface while keeping legacy config reads and applies tolerant.
+- [x] Record that provider app installation, dependency sync, and settings wiring for auth social providers remain future work rather than part of the shipped v0.83.0 contract.
+- [x] Make forms spam protection use one shared predicate between schema generation and submission handling.
+- [x] Make `FORMS_DATA_RETENTION_DAYS` drive the actual default retention behavior for new forms while preserving existing per-row values.
+- [x] Remove CRM `default_pipeline_stages` from the shipped immutable contract until it is real.
+- [x] Enforce hidden CRM terminal-semantic uniqueness with a forward-safe migration, add MigrationExecutor coverage for exact-name backfill and duplicate canonicalization, and keep direct self-heal regression coverage for `mark-won` / `mark-lost`.
+- [x] Audit the remaining shipped auth/forms/CRM mutable and immutable options for other advertised-but-unused behavior and record the closeout outcome in this milestone.
 - [ ] Confirm whether any other shipped modules have CLI-written settings that are ignored by runtime code, and add the results of that verification to this milestone before closeout.
-- [ ] Add module-level regression coverage for forms retention defaults, forms spam-protection behavior, auth social-provider wiring, and CRM stage seeding behavior.
+- [x] Add module-level regression coverage for forms retention defaults, forms spam-protection behavior, tolerant auth legacy social-provider handling, and CRM terminal-stage migration/runtime behavior.
 
 #### Phase 6: Packaged Metadata Parity and Placeholder Leakage Cleanup
 

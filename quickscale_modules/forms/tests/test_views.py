@@ -11,6 +11,14 @@ from django.urls import reverse
 from quickscale_modules_forms.models import FormSubmission
 
 
+@pytest.fixture(autouse=True)
+def clear_forms_test_cache():
+    """Keep throttle-backed API tests isolated across the module."""
+    cache.clear()
+    yield
+    cache.clear()
+
+
 @pytest.mark.django_db
 class TestFormSchemaAPIView:
     """Tests for the public GET /api/forms/{slug}/ endpoint"""
@@ -41,6 +49,33 @@ class TestFormSchemaAPIView:
         assert response.status_code == 200
         field_names = [field["name"] for field in response.data["fields"]]
         assert "_hp_name" in field_names
+
+    @override_settings(FORMS_SPAM_PROTECTION=False)
+    def test_omits_honeypot_marker_when_global_spam_protection_disabled(
+        self, api_client, form, form_field
+    ):
+        """Schema should not advertise honeypot when global spam protection is off."""
+        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+
+        response = api_client.get(url)
+
+        assert response.status_code == 200
+        field_names = [field["name"] for field in response.data["fields"]]
+        assert "_hp_name" not in field_names
+
+    def test_omits_honeypot_marker_when_form_spam_protection_disabled(
+        self, api_client, form, form_field
+    ):
+        """Schema should not advertise honeypot when the form-level flag is off."""
+        form.spam_protection_enabled = False
+        form.save(update_fields=["spam_protection_enabled"])
+        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+
+        response = api_client.get(url)
+
+        assert response.status_code == 200
+        field_names = [field["name"] for field in response.data["fields"]]
+        assert "_hp_name" not in field_names
 
 
 @pytest.mark.django_db
@@ -78,6 +113,35 @@ class TestFormSubmitAPIView:
         # The submission is marked as spam in the DB
         submission = FormSubmission.objects.filter(form=form).latest("submitted_at")
         assert submission.is_spam is True
+
+    @override_settings(FORMS_SPAM_PROTECTION=False)
+    def test_honeypot_is_ignored_when_global_spam_protection_disabled(
+        self, api_client, form, form_field, email_field
+    ):
+        """Submission handling should ignore honeypot when global spam protection is off."""
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com", "_hp_name": "bot"}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        submission = FormSubmission.objects.filter(form=form).latest("submitted_at")
+        assert submission.is_spam is False
+
+    def test_honeypot_is_ignored_when_form_spam_protection_disabled(
+        self, api_client, form, form_field, email_field
+    ):
+        """Submission handling should ignore honeypot when the form-level flag is off."""
+        form.spam_protection_enabled = False
+        form.save(update_fields=["spam_protection_enabled"])
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com", "_hp_name": "bot"}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        submission = FormSubmission.objects.filter(form=form).latest("submitted_at")
+        assert submission.is_spam is False
 
     def test_returns_404_for_inactive_form(self, api_client, inactive_form):
         """Submit to inactive form returns 404"""
