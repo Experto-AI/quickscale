@@ -2,6 +2,7 @@
 
 import pytest
 from django.contrib import admin
+from django.test import RequestFactory
 
 from quickscale_modules_crm.admin import (
     CompanyAdmin,
@@ -71,6 +72,15 @@ class TestStageAdmin:
         """Test deal_count method"""
         stage_admin = StageAdmin(Stage, admin.site)
         assert stage_admin.deal_count(stage) == 1
+
+    def test_stage_form_hides_terminal_semantic_and_keeps_name_order_editable(self):
+        """Stage admin form should expose only the public editable fields."""
+        request = RequestFactory().get("/admin/")
+        stage_admin = StageAdmin(Stage, admin.site)
+        form_class = stage_admin.get_form(request)
+
+        assert list(form_class.base_fields) == ["name", "order"]
+        assert "terminal_semantic" not in form_class.base_fields
 
 
 @pytest.mark.django_db

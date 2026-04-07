@@ -3,6 +3,7 @@
 import pytest
 from rest_framework.test import APIRequestFactory
 
+from quickscale_modules_crm.models import Stage
 from quickscale_modules_crm.serializers import (
     CompanySerializer,
     ContactDetailSerializer,
@@ -93,6 +94,29 @@ class TestStageSerializer:
         """Test stage deal count is computed correctly"""
         serializer = StageSerializer(stage)
         assert serializer.data["deal_count"] == 1
+
+    def test_stage_serializer_hides_terminal_semantic(self):
+        """Stage serializer output should not expose terminal semantics."""
+        stage = Stage.objects.get(terminal_semantic=Stage.TERMINAL_SEMANTIC_WON)
+
+        serializer = StageSerializer(stage)
+
+        assert "terminal_semantic" not in serializer.data
+
+    def test_stage_serializer_does_not_allow_terminal_semantic_input(self):
+        """Stage serializer should ignore attempts to set hidden terminal semantics."""
+        serializer = StageSerializer(
+            data={
+                "name": "Closed-Won",
+                "order": 3,
+                "terminal_semantic": Stage.TERMINAL_SEMANTIC_WON,
+            }
+        )
+
+        assert serializer.is_valid(), serializer.errors
+        stage = serializer.save()
+
+        assert stage.terminal_semantic is None
 
 
 @pytest.mark.django_db

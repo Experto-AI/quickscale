@@ -14,7 +14,7 @@ config:
       type: boolean
       default: true
       django_setting: CRM_ENABLE_API
-      description: "Enable REST API endpoints at /api/crm/"
+      description: "Enable REST API endpoints at /crm/api/"
 
     deals_per_page:
       type: integer
@@ -28,16 +28,7 @@ config:
       django_setting: CRM_CONTACTS_PER_PAGE
       description: "Number of contacts per page in list views"
 
-  # Immutable options - locked at embed time, require remove + re-embed to change
-  immutable:
-    default_pipeline_stages:
-      type: list
-      default:
-        - Prospecting
-        - Negotiation
-        - Closed-Won
-        - Closed-Lost
-      description: "Default pipeline stages created during initial migration"
+  immutable: {}
 
 # Dependencies required by this module
 dependencies:

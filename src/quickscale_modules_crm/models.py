@@ -101,8 +101,23 @@ class Contact(models.Model):
 class Stage(models.Model):
     """Pipeline stage for deal tracking"""
 
+    TERMINAL_SEMANTIC_WON = "won"
+    TERMINAL_SEMANTIC_LOST = "lost"
+    TERMINAL_SEMANTIC_CHOICES = [
+        (TERMINAL_SEMANTIC_WON, "Won"),
+        (TERMINAL_SEMANTIC_LOST, "Lost"),
+    ]
+
     name = models.CharField(max_length=100)
     order = models.PositiveIntegerField(default=0)
+    terminal_semantic = models.CharField(
+        max_length=20,
+        choices=TERMINAL_SEMANTIC_CHOICES,
+        null=True,
+        blank=True,
+        editable=False,
+        unique=True,
+    )
 
     class Meta:
         app_label = "quickscale_modules_crm"
