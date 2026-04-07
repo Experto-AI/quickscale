@@ -4,6 +4,32 @@ from django.conf import settings
 from django.db import models
 
 
+DEFAULT_FORM_DATA_RETENTION_DAYS = 365
+HONEYPOT_FIELD_NAME = "_hp_name"
+
+
+def get_default_form_data_retention_days() -> int:
+    """Return the settings-backed default retention window for new forms."""
+    raw_value = getattr(
+        settings,
+        "FORMS_DATA_RETENTION_DAYS",
+        DEFAULT_FORM_DATA_RETENTION_DAYS,
+    )
+    try:
+        retention_days = int(raw_value)
+    except TypeError, ValueError:
+        return DEFAULT_FORM_DATA_RETENTION_DAYS
+    return retention_days if retention_days >= 0 else DEFAULT_FORM_DATA_RETENTION_DAYS
+
+
+def is_form_spam_protection_enabled(form: "Form") -> bool:
+    """Return whether honeypot handling is active for the given form."""
+    return bool(
+        getattr(settings, "FORMS_SPAM_PROTECTION", True)
+        and form.spam_protection_enabled
+    )
+
+
 class Form(models.Model):
     """Top-level form definition — defines structure, metadata, and notification settings"""
 
@@ -20,7 +46,7 @@ class Form(models.Model):
         help_text="Comma-separated email addresses to notify on every submission.",
     )
     data_retention_days = models.PositiveIntegerField(
-        default=365,
+        default=get_default_form_data_retention_days,
         help_text="Submissions older than this many days are eligible for anonymization.",
     )
     created_by = models.ForeignKey(

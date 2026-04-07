@@ -53,6 +53,8 @@ All settings have defaults and can be overridden in your Django settings:
 | `FORMS_DATA_RETENTION_DAYS` | `365` | Days before submission anonymization |
 | `FORMS_SUBMISSIONS_API` | `True` | Enable the staff admin REST endpoints under `/api/admin/forms/`; when disabled they return `404` |
 
+New `Form` rows created without an explicit `data_retention_days` value, including `forms_seed_presets` and the first-run seed migration, inherit `FORMS_DATA_RETENTION_DAYS`. Existing forms keep their stored retention window, and anonymization continues to use each form's per-row value.
+
 ## REST API Endpoints
 
 | Method | Path | Auth | Description |
@@ -108,7 +110,7 @@ See the generated project's `src/components/forms/` directory for the React `For
 
 ## Spam Protection
 
-Every form submission checks for a **honeypot field** (`_hp_name`). If it's populated, the submission is silently accepted and marked `is_spam=True` — preventing bot enumeration. Rate limiting (`ScopedRateThrottle`) adds a second layer of protection.
+When both the global `FORMS_SPAM_PROTECTION` setting and a form's `spam_protection_enabled` flag are true, the public schema includes a **honeypot field** (`_hp_name`) and submission handling treats a populated value as spam while still returning success — preventing bot enumeration. If either switch is off, `_hp_name` is ignored. Rate limiting (`ScopedRateThrottle`) adds a second layer of protection.
 
 ## Email Notifications
 
