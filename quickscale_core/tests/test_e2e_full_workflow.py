@@ -13,14 +13,23 @@ These tests verify the complete lifecycle:
 Run with: pytest -m e2e
 """
 
+import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MANIFEST_DEPENDENCY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+")
+STORAGE_CLOUD_BACKENDS = {"r2", "s3"}
+STORAGE_CLOUD_DEPENDENCIES = {"boto3", "django-storages"}
 
 
 def _is_network_failure(output: str) -> bool:
@@ -62,6 +71,81 @@ def _timeout_output(exc: subprocess.TimeoutExpired) -> str:
     return "\n".join(parts)
 
 
+def _module_manifest_path(module_name: str) -> Path:
+    """Return the maintainer-side manifest path for a shipped module."""
+    return REPO_ROOT / "quickscale_modules" / module_name / "module.yml"
+
+
+def _module_pyproject_path(module_name: str) -> Path:
+    """Return the maintainer-side pyproject path for a shipped module."""
+    return REPO_ROOT / "quickscale_modules" / module_name / "pyproject.toml"
+
+
+def _load_module_package_name(module_name: str) -> str:
+    """Return the distribution name declared by a shipped module package."""
+    pyproject_data = tomllib.loads(_module_pyproject_path(module_name).read_text())
+    package_name = pyproject_data["project"]["name"]
+    assert isinstance(package_name, str)
+    return package_name
+
+
+def _default_smoke_config(module_name: str) -> dict[str, object]:
+    """Return a non-interactive module config suitable for dependency smoke tests."""
+    from quickscale_cli.commands import module_config as module_config_commands
+
+    config_factory = getattr(
+        module_config_commands,
+        f"get_default_{module_name}_config",
+        None,
+    )
+    assert callable(config_factory), f"Missing default config factory for {module_name}"
+
+    config = dict(config_factory())
+    if module_name == "storage":
+        config["backend"] = "s3"
+    return config
+
+
+def _expected_distribution_names(
+    module_name: str, module_config: dict[str, object]
+) -> set[str]:
+    """Return the path and third-party distributions required for a module smoke."""
+    from quickscale_core.manifest.loader import load_manifest_from_path
+
+    manifest = load_manifest_from_path(_module_manifest_path(module_name))
+    expected_names = {_load_module_package_name(module_name)}
+    storage_backend = str(module_config.get("backend", "local")).strip().lower()
+
+    for dependency in manifest.dependencies:
+        if isinstance(dependency, dict):
+            dependency_spec = dependency.get("dependency_name") or dependency.get(
+                "name"
+            )
+        else:
+            dependency_spec = getattr(dependency, "dependency_name", dependency)
+
+        assert isinstance(dependency_spec, str), (
+            f"{module_name} manifest dependency must be string-like: {dependency!r}"
+        )
+        dependency_match = MANIFEST_DEPENDENCY_NAME_PATTERN.match(
+            dependency_spec.strip()
+        )
+        assert dependency_match is not None, (
+            f"{module_name} manifest dependency is missing a package name: {dependency_spec}"
+        )
+
+        dependency_name = dependency_match.group(0).lower()
+        if (
+            module_name == "storage"
+            and dependency_name in STORAGE_CLOUD_DEPENDENCIES
+            and storage_backend not in STORAGE_CLOUD_BACKENDS
+        ):
+            continue
+        expected_names.add(dependency_name)
+
+    return expected_names
+
+
 @pytest.fixture(scope="session")
 def docker_available() -> None:
     """Skip E2E tests if Docker daemon is unavailable in this environment."""
@@ -100,6 +184,192 @@ def e2e_postgres_url(docker_available, postgres_url: str) -> str:
 def e2e_page(playwright_browser_available, page):
     """Ensure browser is launchable before requesting Playwright page fixture."""
     return page
+
+
+@pytest.mark.e2e
+class TestGeneratedProjectDependencyInstallSmoke:
+    """Focused generated-project install smoke coverage for embedded modules."""
+
+    def test_generated_project_forms_module_cli_install_refreshes_existing_lock(
+        self, tmp_path
+    ):
+        """A generated project should install synced forms dependencies through the CLI path."""
+        from quickscale_cli.commands.module_commands import _install_module_dependencies
+        from quickscale_cli.commands.module_config import get_default_forms_config
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "forms_install_smoke"
+        project_path = tmp_path / project_name
+
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        assert (project_path / "poetry.lock").exists()
+
+        embedded_module_path = project_path / "modules" / "forms"
+        shutil.copytree(
+            REPO_ROOT / "quickscale_modules" / "forms", embedded_module_path
+        )
+
+        sync_result = sync_project_module_dependencies(
+            project_path,
+            {"forms": get_default_forms_config()},
+        )
+
+        assert sync_result.added_path_dependencies == ["quickscale-module-forms"]
+        assert sync_result.added_package_dependencies == [
+            "django-filter",
+            "djangorestframework",
+        ]
+
+        pyproject_content = (project_path / "pyproject.toml").read_text()
+        assert (
+            'quickscale-module-forms = {path = "./modules/forms", develop = true}'
+            in pyproject_content
+        )
+        assert 'django-filter = "^25.2"' in pyproject_content
+        assert 'djangorestframework = "^3.16.1"' in pyproject_content
+
+        assert _install_module_dependencies(project_path, "forms") is True
+
+        import_result = subprocess.run(
+            [
+                "poetry",
+                "run",
+                "python",
+                "-c",
+                "import django_filters, quickscale_modules_forms, rest_framework",
+            ],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert import_result.returncode == 0, (
+            "Generated project dependencies did not install correctly: "
+            f"{import_result.stderr}\n{import_result.stdout}"
+        )
+
+    def test_generated_project_ready_modules_install_required_dependencies(
+        self, tmp_path
+    ):
+        """A generated project should install required dependency distributions for every ready module."""
+        from quickscale_cli.commands.apply_command import (
+            _run_poetry_install,
+            _run_poetry_lock,
+        )
+        from quickscale_cli.module_catalog import get_module_entries
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "ready_modules_install_smoke"
+        project_path = tmp_path / project_name
+
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        assert (project_path / "poetry.lock").exists()
+
+        initial_pyproject = tomllib.loads((project_path / "pyproject.toml").read_text())
+        initial_dependencies = initial_pyproject["tool"]["poetry"]["dependencies"]
+        assert isinstance(initial_dependencies, dict)
+
+        module_options_by_name: dict[str, dict[str, object]] = {}
+        expected_distribution_names: set[str] = set()
+        expected_module_package_names: set[str] = set()
+        ready_module_names = [
+            entry.name for entry in get_module_entries(include_experimental=False)
+        ]
+
+        for module_name in ready_module_names:
+            shutil.copytree(
+                REPO_ROOT / "quickscale_modules" / module_name,
+                project_path / "modules" / module_name,
+            )
+            module_config = _default_smoke_config(module_name)
+            module_options_by_name[module_name] = module_config
+            expected_distribution_names.update(
+                _expected_distribution_names(module_name, module_config)
+            )
+            expected_module_package_names.add(_load_module_package_name(module_name))
+
+        expected_package_dependencies = (
+            expected_distribution_names - expected_module_package_names
+        )
+        expected_new_package_dependencies = {
+            dependency_name
+            for dependency_name in expected_package_dependencies
+            if dependency_name not in initial_dependencies
+        }
+        expected_new_path_dependencies = {
+            dependency_name
+            for dependency_name in expected_module_package_names
+            if dependency_name not in initial_dependencies
+        }
+
+        sync_result = sync_project_module_dependencies(
+            project_path,
+            module_options_by_name,
+        )
+
+        assert {
+            dependency_name.lower()
+            for dependency_name in sync_result.added_package_dependencies
+        } == expected_new_package_dependencies
+        assert (
+            set(sync_result.added_path_dependencies) == expected_new_path_dependencies
+        )
+
+        synced_pyproject = tomllib.loads((project_path / "pyproject.toml").read_text())
+        synced_dependencies = synced_pyproject["tool"]["poetry"]["dependencies"]
+        assert isinstance(synced_dependencies, dict)
+        normalized_synced_dependency_names = {
+            dependency_name.lower() for dependency_name in synced_dependencies
+        }
+
+        for dependency_name in sorted(expected_distribution_names):
+            assert dependency_name.lower() in normalized_synced_dependency_names, (
+                f"Expected generated project dependency '{dependency_name}' to be present"
+            )
+
+        storage_path_dependency = synced_dependencies["quickscale-module-storage"]
+        assert isinstance(storage_path_dependency, dict)
+        assert storage_path_dependency["extras"] == ["cloud"]
+
+        assert _run_poetry_lock(project_path) is True
+        assert _run_poetry_install(project_path) is True
+
+        verification_code = (
+            "import importlib.metadata, json, sys\n"
+            "expected = json.loads(sys.argv[1])\n"
+            "missing = []\n"
+            "for name in expected:\n"
+            "    try:\n"
+            "        importlib.metadata.version(name)\n"
+            "    except importlib.metadata.PackageNotFoundError:\n"
+            "        missing.append(name)\n"
+            "if missing:\n"
+            "    raise SystemExit('Missing distributions: ' + ', '.join(sorted(missing)))\n"
+        )
+        verification_result = subprocess.run(
+            [
+                "poetry",
+                "run",
+                "python",
+                "-c",
+                verification_code,
+                json.dumps(sorted(expected_distribution_names)),
+            ],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert verification_result.returncode == 0, (
+            "Generated project is missing synced shipped-module distributions: "
+            f"{verification_result.stderr}\n{verification_result.stdout}"
+        )
 
 
 @pytest.mark.e2e

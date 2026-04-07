@@ -44,10 +44,12 @@ from quickscale_cli.commands.apply_command import (
     _run_command,
     _run_migrations,
     _run_migrations_in_docker,
+    _run_poetry_lock,
     _run_poetry_install,
     _run_post_generation_steps,
     _render_analytics_env_example_block,
     _save_project_state,
+    _sync_project_module_dependencies_for_apply,
     _start_docker,
     _sync_analytics_env_example,
     _sync_notifications_env_example,
@@ -221,6 +223,8 @@ class TestEmbedModule:
             non_interactive=True,
             allow_unverifiable_auth_state=True,
             skip_auth_migration_check=False,
+            sync_dependencies=False,
+            install_dependencies=False,
         )
 
     @patch("quickscale_cli.commands.apply_command.embed_module")
@@ -241,6 +245,8 @@ class TestEmbedModule:
             non_interactive=True,
             allow_unverifiable_auth_state=True,
             skip_auth_migration_check=True,
+            sync_dependencies=False,
+            install_dependencies=False,
         )
 
     @patch("quickscale_cli.commands.apply_command.embed_module")
@@ -269,6 +275,12 @@ class TestPostGenerationHelpers:
         """Test poetry install wrapper"""
         mock_run.return_value = (True, "")
         assert _run_poetry_install(Path("/tmp/proj")) is True
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    def test_poetry_lock(self, mock_run):
+        """Test poetry lock wrapper"""
+        mock_run.return_value = (True, "")
+        assert _run_poetry_lock(Path("/tmp/proj")) is True
 
     @patch("quickscale_cli.commands.apply_command._run_command")
     def test_migrations(self, mock_run):
@@ -1212,39 +1224,101 @@ class TestEmbedModulesStep:
 class TestRunPostGenerationSteps:
     """Tests for _run_post_generation_steps"""
 
+    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_poetry_install")
-    def test_all_succeed(self, mock_poetry, mock_migrate):
+    def test_all_succeed(self, mock_poetry, mock_migrate, mock_lock):
         """Test when all steps succeed"""
+        mock_lock.return_value = True
         mock_poetry.return_value = True
         mock_migrate.return_value = True
-        _run_post_generation_steps(Path("/tmp"))
+        assert _run_post_generation_steps(Path("/tmp")) is True
 
+    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_poetry_install")
-    def test_poetry_fails(self, mock_poetry, mock_migrate):
+    def test_poetry_lock_fails(self, mock_poetry, mock_migrate, mock_lock):
+        """Test when poetry lock fails"""
+        mock_lock.return_value = False
+        mock_poetry.return_value = True
+        mock_migrate.return_value = True
+
+        assert _run_post_generation_steps(Path("/tmp")) is False
+        mock_poetry.assert_not_called()
+        mock_migrate.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
+    @patch("quickscale_cli.commands.apply_command._run_migrations")
+    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    def test_poetry_install_fails(self, mock_poetry, mock_migrate, mock_lock):
         """Test when poetry install fails"""
+        mock_lock.return_value = True
         mock_poetry.return_value = False
         mock_migrate.return_value = True
-        _run_post_generation_steps(Path("/tmp"))
-        # Should not raise
+        assert _run_post_generation_steps(Path("/tmp")) is False
+        mock_migrate.assert_not_called()
 
+    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_poetry_install")
-    def test_migrations_fail(self, mock_poetry, mock_migrate):
+    def test_migrations_fail(self, mock_poetry, mock_migrate, mock_lock):
         """Test when migrations fail"""
+        mock_lock.return_value = True
         mock_poetry.return_value = True
         mock_migrate.return_value = False
-        _run_post_generation_steps(Path("/tmp"))
-        # Should not raise
+        assert _run_post_generation_steps(Path("/tmp")) is True
 
+    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_poetry_install")
-    def test_skip_migrations(self, mock_poetry, mock_migrate):
+    def test_skip_migrations(self, mock_poetry, mock_migrate, mock_lock):
         """Test migration step can be deferred."""
+        mock_lock.return_value = True
         mock_poetry.return_value = True
-        _run_post_generation_steps(Path("/tmp"), run_migrations=False)
+        assert _run_post_generation_steps(Path("/tmp"), run_migrations=False) is True
         mock_migrate.assert_not_called()
+
+
+class TestSyncProjectModuleDependenciesForApply:
+    """Tests for apply-time batch dependency synchronization."""
+
+    @patch("quickscale_cli.commands.apply_command.sync_project_module_dependencies")
+    def test_syncs_all_configured_modules(self, mock_sync):
+        qs_config = Mock()
+        qs_config.modules = {
+            "auth": Mock(options={"registration_enabled": True}),
+            "storage": Mock(options={"backend": "local"}),
+        }
+        mock_sync.return_value = Mock(
+            changed=True,
+            added_package_dependencies=["django-allauth"],
+            added_path_dependencies=["quickscale-module-auth"],
+        )
+
+        result = _sync_project_module_dependencies_for_apply(
+            Path("/tmp/proj"), qs_config
+        )
+
+        assert result is True
+        mock_sync.assert_called_once_with(
+            Path("/tmp/proj"),
+            {
+                "auth": {"registration_enabled": True},
+                "storage": {"backend": "local"},
+            },
+        )
+
+    @patch("quickscale_cli.commands.apply_command.sync_project_module_dependencies")
+    def test_sync_failure_returns_false(self, mock_sync):
+        qs_config = Mock()
+        qs_config.modules = {"auth": Mock(options={})}
+        mock_sync.side_effect = ManifestError("bad manifest", "auth")
+
+        result = _sync_project_module_dependencies_for_apply(
+            Path("/tmp/proj"), qs_config
+        )
+
+        assert result is False
 
 
 # ============================================================================
@@ -1777,6 +1851,71 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_dependency_install_failure_aborts_apply(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Apply should abort if poetry lock/install fails after dependency sync."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"forms": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
+        mock_save_state.assert_called_once()
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
     @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
@@ -1853,6 +1992,9 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
     @patch("quickscale_cli.commands.apply_command._start_docker")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
@@ -1863,6 +2005,7 @@ class TestExecuteApplySteps:
         mock_init_git,
         mock_embed_modules_step,
         mock_regenerate_wiring,
+        mock_sync_module_dependencies,
         mock_run_post,
         mock_start_docker,
         mock_run_migrations_in_docker,
@@ -1877,6 +2020,7 @@ class TestExecuteApplySteps:
             failed_module=None,
         )
         mock_regenerate_wiring.return_value = True
+        mock_sync_module_dependencies.return_value = True
         mock_start_docker.return_value = True
         mock_run_migrations_in_docker.return_value = True
 
@@ -1907,6 +2051,10 @@ class TestExecuteApplySteps:
             False,
             None,
         )
+        mock_sync_module_dependencies.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+        )
         mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_start_docker.assert_called_once_with(ctx.output_path, True, False)
         mock_run_migrations_in_docker.assert_called_once_with(ctx.output_path)
@@ -1923,6 +2071,9 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
     @patch("quickscale_cli.commands.apply_command._start_docker")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
@@ -1933,6 +2084,7 @@ class TestExecuteApplySteps:
         mock_init_git,
         mock_embed_modules_step,
         mock_regenerate_wiring,
+        mock_sync_module_dependencies,
         mock_run_post,
         mock_start_docker,
         mock_run_migrations_in_docker,
@@ -1946,6 +2098,7 @@ class TestExecuteApplySteps:
             failed_module=None,
         )
         mock_regenerate_wiring.return_value = True
+        mock_sync_module_dependencies.return_value = True
 
         ctx = Mock()
         ctx.existing_state = None
@@ -1967,6 +2120,10 @@ class TestExecuteApplySteps:
             verbose_docker=False,
         )
 
+        mock_sync_module_dependencies.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+        )
         mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
         mock_start_docker.assert_not_called()
         mock_run_migrations_in_docker.assert_not_called()
@@ -1977,6 +2134,9 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
     @patch("quickscale_cli.commands.apply_command._start_docker")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
@@ -1987,6 +2147,7 @@ class TestExecuteApplySteps:
         mock_init_git,
         mock_embed_modules_step,
         mock_regenerate_wiring,
+        mock_sync_module_dependencies,
         mock_run_post,
         mock_start_docker,
         mock_run_migrations_in_docker,
@@ -2001,6 +2162,7 @@ class TestExecuteApplySteps:
             failed_module=None,
         )
         mock_regenerate_wiring.return_value = True
+        mock_sync_module_dependencies.return_value = True
         mock_start_docker.return_value = False
 
         ctx = Mock()
@@ -2036,6 +2198,9 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
     @patch("quickscale_cli.commands.apply_command._start_docker")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
@@ -2046,6 +2211,7 @@ class TestExecuteApplySteps:
         mock_init_git,
         mock_embed_modules_step,
         mock_regenerate_wiring,
+        mock_sync_module_dependencies,
         mock_run_post,
         mock_start_docker,
         mock_run_migrations_in_docker,
@@ -2060,6 +2226,7 @@ class TestExecuteApplySteps:
             failed_module=None,
         )
         mock_regenerate_wiring.return_value = True
+        mock_sync_module_dependencies.return_value = True
         mock_start_docker.return_value = True
         mock_run_migrations_in_docker.return_value = False
 

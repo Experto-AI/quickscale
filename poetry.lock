@@ -1668,7 +1668,7 @@ files = [
 
 [[package]]
 name = "quickscale"
-version = "0.80.0"
+version = "0.83.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 optional = false
 python-versions = "^3.14"
@@ -1677,8 +1677,8 @@ files = []
 develop = true
 
 [package.dependencies]
-quickscale-cli = "^0.80.0"
-quickscale-core = "^0.80.0"
+quickscale-cli = "^0.83.0"
+quickscale-core = "^0.83.0"
 
 [package.source]
 type = "directory"
@@ -1686,7 +1686,7 @@ url = "quickscale"
 
 [[package]]
 name = "quickscale-cli"
-version = "0.80.0"
+version = "0.83.0"
 description = "Command-line interface for QuickScale Django project generator"
 optional = false
 python-versions = "^3.14"
@@ -1704,7 +1704,7 @@ url = "quickscale_cli"
 
 [[package]]
 name = "quickscale-core"
-version = "0.80.0"
+version = "0.83.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
 python-versions = "^3.14"
@@ -1740,7 +1740,7 @@ url = "quickscale_modules/analytics"
 
 [[package]]
 name = "quickscale-module-auth"
-version = "0.63.0"
+version = "0.71.0"
 description = "QuickScale authentication module with django-allauth integration"
 optional = false
 python-versions = "^3.14"
@@ -1777,7 +1777,7 @@ url = "quickscale_modules/backups"
 
 [[package]]
 name = "quickscale-module-blog"
-version = "0.66.0"
+version = "0.73.0"
 description = "QuickScale blog module with Markdown support and RSS feeds"
 optional = false
 python-versions = "^3.14"
@@ -1834,7 +1834,7 @@ url = "quickscale_modules/forms"
 
 [[package]]
 name = "quickscale-module-listings"
-version = "0.67.0"
+version = "0.73.0"
 description = "QuickScale listings module with AbstractListing model for marketplace verticals"
 optional = false
 python-versions = "^3.14"
@@ -1898,10 +1898,13 @@ files = []
 develop = true
 
 [package.dependencies]
-boto3 = "^1.35.0"
+boto3 = {version = "^1.35.0", optional = true}
 Django = ">=6.0.3,<7.0.0"
-django-storages = "^1.14.4"
+django-storages = {version = "^1.14.4", optional = true}
 Pillow = ">=12.1.1,<13.0.0"
+
+[package.extras]
+cloud = ["boto3 (>=1.35.0,<2.0.0)", "django-storages (>=1.14.4,<2.0.0)"]
 
 [package.source]
 type = "directory"
@@ -2116,4 +2119,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.14"
-content-hash = "d941878f6445bc9869d6b1dae7ac59bc997dffc8d7aa0b029257ee9d02550097"
+content-hash = "f98142f0c742de074beded150a284261283fa5946e30da95f523d80e46e222c5"

@@ -619,6 +619,7 @@ config:
 **Constraints:**
 - ✅ Every module MUST have `module.yml` at package root
 - ✅ `module.yml` `version` is the canonical installed-version source after embed
+- ✅ `module.yml` dependency names MUST match the non-baseline runtime package names declared in the module `pyproject.toml`; `module.yml` defines the required package set and `pyproject.toml` carries the Poetry specs
 - ✅ Mutable options MUST specify `django_setting` key
 - ✅ Immutable options MUST NOT have `django_setting`
 - ✅ Package `pyproject.toml` version metadata and exported `__version__` values MUST match `module.yml` when present

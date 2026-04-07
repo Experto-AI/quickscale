@@ -157,12 +157,14 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Primary code grouping**: shared module dependency-sync logic, install/apply contract helpers, manifest/package dependency policy, storage dependency exceptions, and CI contract enforcement.
 
-- [ ] Create one shared dependency-sync path for module apply/install so per-module appliers do not drift from package or manifest requirements.
-- [ ] Audit all shipped modules for dependency parity across `module.yml`, package metadata, and the actual apply/install path instead of fixing blog and listings only.
-- [ ] Decide whether `module.yml` dependency declarations are meant to be authoritative runtime requirements or a narrower compatibility surface, then codify that rule in tests.
-- [ ] Fix the storage metadata drift by either declaring Pillow in `module.yml` or documenting and enforcing a deliberate exception policy.
-- [ ] Extend manifest contract checks so dependency parity regressions fail in CI rather than surfacing during later module releases.
-- [ ] Add generated-project smoke coverage that embeds each shipped module and verifies required third-party dependencies are present after apply.
+**Current status (2026-04-07)**: Phase 3 is implemented. Shared dependency sync now runs through one CLI-owned path with lock-refresh and fail-fast install semantics, ready shipped modules enforce manifest/package/version parity in tests and CI, storage keeps cloud packages optional behind an explicit cloud extra, and maintainer-side generated-project smoke coverage now verifies the required dependency surface across the ready shipped module set.
+
+- [x] Create one shared dependency-sync path for module apply/install so per-module appliers do not drift from package or manifest requirements.
+- [x] Audit all shipped modules for dependency parity across `module.yml`, package metadata, and the actual apply/install path instead of fixing blog and listings only.
+- [x] Decide whether `module.yml` dependency declarations are meant to be authoritative runtime requirements or a narrower compatibility surface, then codify that rule in tests.
+- [x] Fix the storage metadata drift by either declaring Pillow in `module.yml` or documenting and enforcing a deliberate exception policy.
+- [x] Extend manifest contract checks so dependency parity regressions fail in CI rather than surfacing during later module releases.
+- [x] Add generated-project smoke coverage that syncs and installs the ready shipped module set through the shared dependency path and verifies the required third-party distributions are present.
 
 #### Phase 4: Content Module Contract Fixes
 

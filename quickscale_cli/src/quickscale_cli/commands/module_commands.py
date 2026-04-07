@@ -8,6 +8,11 @@ import click
 
 from quickscale_cli.module_catalog import get_module_names, get_module_readiness_reason
 from quickscale_cli.schema.state_schema import StateError, StateManager
+from quickscale_cli.utils.module_dependency_sync import (
+    DependencySyncError,
+    resolve_embedded_module_install_path as _resolve_install_path_from_dependency_sync,
+    sync_project_module_dependencies,
+)
 
 from quickscale_core.config import (
     add_module,
@@ -176,18 +181,7 @@ def _resolve_embedded_module_install_path(
     module: str,
 ) -> Path | None:
     """Return the installable package path for an embedded module, if any."""
-    module_dir = project_path / "modules" / module
-    if not module_dir.exists():
-        return None
-
-    nested_path = module_dir / "quickscale_modules" / module
-    if nested_path.exists() and (nested_path / "pyproject.toml").exists():
-        return nested_path
-
-    if (module_dir / "pyproject.toml").exists():
-        return module_dir
-
-    return None
+    return _resolve_install_path_from_dependency_sync(project_path, module)
 
 
 def _read_embedded_module_version(project_path: Path, module: str) -> str:
@@ -230,6 +224,9 @@ def _perform_module_embed(
     remote: str,
     branch: str,
     config: dict[str, Any],
+    *,
+    sync_dependencies: bool = True,
+    install_dependencies: bool = True,
 ) -> bool:
     """Execute the actual module embedding.
 
@@ -271,7 +268,14 @@ def _perform_module_embed(
         _, applier = MODULE_CONFIGURATORS[module]
         applier(project_path, config)
 
-    if _resolve_embedded_module_install_path(project_path, module) is not None:
+    if sync_dependencies:
+        if not _sync_module_dependencies(project_path, module, config):
+            return False
+
+    if (
+        install_dependencies
+        and _resolve_embedded_module_install_path(project_path, module) is not None
+    ):
         if not _install_module_dependencies(project_path, module):
             return False
 
@@ -291,6 +295,8 @@ def embed_module(
     non_interactive: bool = True,
     allow_unverifiable_auth_state: bool = False,
     skip_auth_migration_check: bool = False,
+    sync_dependencies: bool = True,
+    install_dependencies: bool = True,
 ) -> bool:
     """
     Embed a QuickScale module into a project via git subtree.
@@ -307,6 +313,9 @@ def embed_module(
             cannot be verified (used by quickscale apply for fresh projects)
         skip_auth_migration_check: Skip auth migration guardrail entirely
             (used by quickscale apply for freshly generated projects)
+        sync_dependencies: Sync missing pyproject.toml dependency entries for the
+            embedded module
+        install_dependencies: Run `poetry install` after dependency sync
 
     Returns:
         True if embedding succeeded, False otherwise
@@ -356,7 +365,15 @@ def embed_module(
             config = configurator(non_interactive=non_interactive)
 
         # Perform embedding
-        return _perform_module_embed(project_path, module, remote, branch, config)
+        return _perform_module_embed(
+            project_path,
+            module,
+            remote,
+            branch,
+            config,
+            sync_dependencies=sync_dependencies,
+            install_dependencies=install_dependencies,
+        )
 
     except GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
@@ -405,32 +422,25 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
             )
             return True
 
-        if target_path != module_dir:
-            click.secho(
-                f"⚠️  Warning: Detected full repository in {module} module path.",
-                fg="yellow",
-            )
-            click.echo(f"   Using nested path: {target_path.relative_to(project_path)}")
-
-        # Install the module
-        click.echo(f"  • Installing {module} module...")
-        result = subprocess.run(
-            ["poetry", "add", f"./{target_path.relative_to(project_path)}"],
+        click.echo("  • Refreshing poetry.lock...")
+        lock_result = subprocess.run(
+            ["poetry", "lock"],
             cwd=project_path,
             capture_output=True,
             text=True,
         )
 
-        if result.returncode != 0:
-            _print_installation_error(project_path, module, result)
+        if lock_result.returncode != 0:
+            _print_installation_error(
+                project_path,
+                module,
+                lock_result,
+                command_name="poetry lock",
+            )
             return False
 
-        click.secho(
-            f"  ✅ {module.capitalize()} module installed successfully",
-            fg="green",
-        )
+        click.secho("  ✅ poetry.lock refreshed", fg="green")
 
-        # Install dependencies
         click.echo("  • Installing all dependencies...")
         result = subprocess.run(
             ["poetry", "install"],
@@ -440,27 +450,17 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
         )
 
         if result.returncode != 0:
-            click.secho(
-                "\n❌ Failed to install dependencies",
-                fg="red",
-                err=True,
-                bold=True,
+            _print_installation_error(
+                project_path,
+                module,
+                result,
             )
-            click.echo("\n📋 Error output (stderr):", err=True)
-            click.echo(result.stderr, err=True)
-            click.echo("\n📋 Standard output (stdout):", err=True)
-            click.echo(result.stdout, err=True)
-
-            click.echo("\n💡 To fix this manually:", err=True)
-            click.echo(f"   1. cd {project_path}", err=True)
-            click.echo("   2. poetry install", err=True)
-            click.echo("   3. poetry run python manage.py migrate", err=True)
             return False
 
         click.secho("  ✅ Dependencies installed successfully", fg="green")
         return True
 
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         click.secho(
             f"\n❌ Unexpected error during dependency installation: {e}",
             fg="red",
@@ -474,11 +474,15 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
 
 
 def _print_installation_error(
-    project_path: Path, module: str, result: subprocess.CompletedProcess[str]
+    project_path: Path,
+    module: str,
+    result: subprocess.CompletedProcess[str],
+    *,
+    command_name: str = "poetry install",
 ) -> None:
     """Print detailed installation error message."""
     click.secho(
-        f"\n❌ Failed to install {module} module",
+        f"\n❌ Failed to run {command_name} for {module} module",
         fg="red",
         err=True,
         bold=True,
@@ -490,9 +494,56 @@ def _print_installation_error(
 
     click.echo("\n💡 To fix this manually:", err=True)
     click.echo(f"   1. cd {project_path}", err=True)
-    click.echo(f"   2. poetry add ./modules/{module}", err=True)
+    click.echo("   2. poetry lock", err=True)
     click.echo("   3. poetry install", err=True)
     click.echo("   4. poetry run python manage.py migrate", err=True)
+
+
+def _sync_module_dependencies(
+    project_path: Path,
+    module: str,
+    config: dict[str, Any] | None = None,
+) -> bool:
+    """Sync missing project dependency entries for an embedded module."""
+    click.echo("\n📦 Syncing dependency entries...")
+
+    try:
+        sync_result = sync_project_module_dependencies(
+            project_path,
+            {module: config or {}},
+        )
+    except (DependencySyncError, ManifestError) as error:
+        click.secho(
+            f"\n❌ Failed to sync {module} dependency entries",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        click.echo(f"\n📋 Error: {error}", err=True)
+        click.echo("\n💡 To fix this manually:", err=True)
+        click.echo(f"   1. Ensure modules/{module}/module.yml is valid", err=True)
+        click.echo(
+            f"   2. Ensure modules/{module}/pyproject.toml contains matching Poetry dependency versions",
+            err=True,
+        )
+        click.echo("   3. Re-run the embed/apply command", err=True)
+        return False
+
+    if sync_result.added_package_dependencies:
+        click.echo(
+            "  • Added package dependencies: "
+            + ", ".join(sync_result.added_package_dependencies)
+        )
+    if sync_result.added_path_dependencies:
+        click.echo(
+            "  • Added module path dependencies: "
+            + ", ".join(sync_result.added_path_dependencies)
+        )
+    if not sync_result.changed:
+        click.echo("  • Dependency entries already in sync.")
+
+    click.secho("  ✅ Dependency entries synced", fg="green")
+    return True
 
 
 def _validate_update_environment() -> None:

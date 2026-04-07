@@ -27,12 +27,14 @@ from quickscale_cli.commands.module_config import (
     apply_backups_configuration,
     apply_blog_configuration,
     apply_crm_configuration,
+    apply_forms_configuration,
     apply_listings_configuration,
     apply_notifications_configuration,
     apply_social_configuration,
     apply_storage_configuration,
     configure_analytics_module,
     configure_backups_module,
+    configure_forms_module,
     configure_storage_module,
     configure_crm_module,
     configure_notifications_module,
@@ -40,9 +42,11 @@ from quickscale_cli.commands.module_config import (
     get_default_analytics_config,
     get_default_backups_config,
     get_default_crm_config,
+    get_default_forms_config,
     get_default_notifications_config,
     get_default_social_config,
     get_default_storage_config,
+    format_auth_migration_remediation,
     validate_backups_module_options,
 )
 from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
@@ -51,6 +55,19 @@ from quickscale_cli.social_contract import (
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINK_TREE_PATH,
+)
+from quickscale_cli.utils.module_dependency_sync import sync_project_module_dependencies
+from quickscale_cli.utils.module_dependency_sync import (
+    DependencySyncError,
+    ProjectDependencySyncResult,
+    _extract_dependency_name,
+    _extract_version_tuple,
+    _load_poetry_dependencies,
+    _load_project_name,
+    _load_toml_file,
+    _prefer_dependency_value,
+    _render_toml_literal,
+    resolve_embedded_module_install_path,
 )
 from quickscale_core.module_wiring import collect_wiring
 
@@ -86,6 +103,256 @@ def _make_project(tmp_path: Path, project_name: str = "myproject") -> Path:
         f"  start: false\n"
     )
     return project
+
+
+def _write_module_package(
+    project: Path,
+    module_name: str,
+    *,
+    manifest_content: str,
+    pyproject_content: str,
+) -> None:
+    """Create a minimal embedded module package for dependency-sync tests."""
+    module_dir = project / "modules" / module_name
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "module.yml").write_text(manifest_content)
+    (module_dir / "pyproject.toml").write_text(pyproject_content)
+
+
+class TestSharedModuleDependencySync:
+    """Tests for the shared CLI dependency-sync helper."""
+
+    def test_sync_adds_module_path_and_manifest_backed_dependency(self, tmp_path):
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=(
+                "name: auth\n"
+                'version: "0.83.0"\n'
+                "dependencies:\n"
+                "  - django-allauth>=0.63.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-auth"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-allauth = ">=65.14.1,<66.0.0"\n'
+            ),
+        )
+
+        result = sync_project_module_dependencies(project, {"auth": {}})
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert result.added_package_dependencies == ["django-allauth"]
+        assert result.added_path_dependencies == ["quickscale-module-auth"]
+        assert 'django-allauth = ">=65.14.1,<66.0.0"' in pyproject_content
+        assert (
+            'quickscale-module-auth = {path = "./modules/auth", develop = true}'
+            in pyproject_content
+        )
+
+    def test_sync_is_add_only_for_existing_project_dependency(self, tmp_path):
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'django-filter = "^99.0"\n'
+        )
+        _write_module_package(
+            project,
+            "listings",
+            manifest_content=(
+                "name: listings\n"
+                'version: "0.83.0"\n'
+                "dependencies:\n"
+                "  - django-filter>=25.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-listings"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-filter = "^25.2"\n'
+            ),
+        )
+
+        result = sync_project_module_dependencies(project, {"listings": {}})
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert result.added_package_dependencies == []
+        assert result.added_path_dependencies == ["quickscale-module-listings"]
+        assert 'django-filter = "^99.0"' in pyproject_content
+        assert (
+            'quickscale-module-listings = {path = "./modules/listings", develop = true}'
+            in pyproject_content
+        )
+
+    def test_storage_local_sync_skips_cloud_packages(self, tmp_path):
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "storage",
+            manifest_content=(
+                "name: storage\n"
+                'version: "0.83.0"\n'
+                "dependencies:\n"
+                "  - django-storages>=1.14.4\n"
+                "  - boto3>=1.35.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-storage"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-storages = "^1.14.4"\n'
+                'boto3 = "^1.35.0"\n'
+            ),
+        )
+
+        result = sync_project_module_dependencies(
+            project,
+            {"storage": {"backend": "local"}},
+        )
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert result.added_package_dependencies == []
+        assert result.added_path_dependencies == ["quickscale-module-storage"]
+        assert "django-storages" not in pyproject_content
+        assert "boto3" not in pyproject_content
+        assert (
+            'quickscale-module-storage = {path = "./modules/storage", develop = true}'
+            in pyproject_content
+        )
+
+    def test_storage_cloud_sync_adds_cloud_packages(self, tmp_path):
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "storage",
+            manifest_content=(
+                "name: storage\n"
+                'version: "0.83.0"\n'
+                "dependencies:\n"
+                "  - django-storages>=1.14.4\n"
+                "  - boto3>=1.35.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-storage"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-storages = "^1.14.4"\n'
+                'boto3 = "^1.35.0"\n'
+            ),
+        )
+
+        result = sync_project_module_dependencies(
+            project,
+            {"storage": {"backend": "s3"}},
+        )
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert result.added_package_dependencies == ["boto3", "django-storages"]
+        assert result.added_path_dependencies == ["quickscale-module-storage"]
+        assert 'django-storages = "^1.14.4"' in pyproject_content
+        assert 'boto3 = "^1.35.0"' in pyproject_content
+        assert (
+            'quickscale-module-storage = {path = "./modules/storage", develop = true, extras = ["cloud"]}'
+            in pyproject_content
+        )
+
+
+class TestSharedModuleDependencySyncHelpers:
+    """Focused coverage for pure dependency-sync helper branches."""
+
+    def test_project_dependency_sync_result_changed_property(self):
+        assert ProjectDependencySyncResult().changed is False
+        assert (
+            ProjectDependencySyncResult(
+                added_path_dependencies=["quickscale-module-auth"]
+            ).changed
+            is True
+        )
+        assert (
+            ProjectDependencySyncResult(
+                added_package_dependencies=["django-allauth"]
+            ).changed
+            is True
+        )
+
+    def test_resolve_embedded_module_install_path_returns_none_when_module_missing(
+        self,
+        tmp_path,
+    ):
+        assert resolve_embedded_module_install_path(tmp_path, "auth") is None
+
+    def test_load_toml_file_raises_for_invalid_toml(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("[tool.poetry\n")
+
+        with pytest.raises(DependencySyncError, match="Invalid TOML"):
+            _load_toml_file(pyproject)
+
+    def test_module_metadata_helpers_raise_meaningful_errors(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+
+        with pytest.raises(DependencySyncError, match=r"valid \[project\] table"):
+            _load_project_name(pyproject, {"project": []}, "auth")
+
+        with pytest.raises(
+            DependencySyncError,
+            match=r"missing \[project\]\.name",
+        ):
+            _load_project_name(pyproject, {"project": {}}, "auth")
+
+        with pytest.raises(
+            DependencySyncError,
+            match=r"Unable to locate \[tool\.poetry\.dependencies\]",
+        ):
+            _load_poetry_dependencies(pyproject, {"tool": []})
+
+        with pytest.raises(
+            DependencySyncError,
+            match=r"Unable to locate \[tool\.poetry\.dependencies\]",
+        ):
+            _load_poetry_dependencies(pyproject, {"tool": {"poetry": []}})
+
+        with pytest.raises(
+            DependencySyncError,
+            match="must be a mapping",
+        ):
+            _load_poetry_dependencies(
+                pyproject, {"tool": {"poetry": {"dependencies": []}}}
+            )
+
+        with pytest.raises(
+            DependencySyncError, match="Unable to parse dependency name"
+        ):
+            _extract_dependency_name("!!!", "auth")
+
+    def test_version_preference_and_toml_literal_helpers_cover_edge_cases(self):
+        assert _extract_version_tuple("git+https://example.com/pkg") is None
+        assert _prefer_dependency_value("^1.2.0", "^1.3.0") == "^1.3.0"
+        assert _prefer_dependency_value("^1.3.0", "^1.2.0") == "^1.3.0"
+        assert _prefer_dependency_value({"path": "./modules/auth"}, "^1.3.0") == {
+            "path": "./modules/auth"
+        }
+        assert _render_toml_literal(True) == "true"
+        assert _render_toml_literal(3) == "3"
+        assert _render_toml_literal(1.5) == "1.5"
+        assert _render_toml_literal(["auth", 2]) == '["auth", 2]'
+        assert (
+            _render_toml_literal({"path": "./modules/auth", "develop": True})
+            == '{path = "./modules/auth", develop = true}'
+        )
+
+        with pytest.raises(
+            DependencySyncError, match="Unsupported TOML dependency value"
+        ):
+            _render_toml_literal(object())
 
 
 # ============================================================================
@@ -436,8 +703,11 @@ class TestApplyListingsConfigurationFull:
         assert "quickscale_modules_listings.urls" in urls
         assert "markdownx.urls" in urls
 
-    def test_full_apply_listings_injects_django_markdownx_dependency(self, tmp_path):
-        """Listings apply injects django-markdownx dependency into project pyproject"""
+    def test_full_apply_listings_leaves_pyproject_dependency_sync_to_cli_helper(
+        self,
+        tmp_path,
+    ):
+        """Listings wiring should no longer mutate pyproject.toml directly."""
         project = _make_project(tmp_path)
         listings_dir = project / "modules" / "listings"
         listings_dir.mkdir(parents=True)
@@ -450,8 +720,8 @@ class TestApplyListingsConfigurationFull:
         apply_listings_configuration(project, {"listings_per_page": 20})
 
         pyproject_content = (project / "pyproject.toml").read_text()
-        assert "django-filter" in pyproject_content
-        assert "django-markdownx" in pyproject_content
+        assert "django-filter" not in pyproject_content
+        assert "django-markdownx" not in pyproject_content
 
     def test_listings_all_apps_already_present(self, tmp_path):
         """All required apps already in INSTALLED_APPS"""
@@ -882,6 +1152,80 @@ class TestModuleWiringSpecs:
             build_module_wiring_specs({"social": {}})
 
 
+class TestFormsModuleConfig:
+    """Tests for the forms module configurator and applier helpers."""
+
+    def test_format_auth_migration_remediation_falls_back_to_slug(self, tmp_path):
+        project = tmp_path / "demo-project"
+        project.mkdir()
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_config.resolve_project_identity",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch(
+                "quickscale_cli.commands.module_config.derive_package_from_slug",
+                return_value="demo_project",
+            ),
+        ):
+            remediation = format_auth_migration_remediation(project)
+
+        assert f"cd {project.resolve()}" in remediation
+        assert "demo_project_fresh" in remediation
+        assert "docker compose down -v" in remediation
+
+    def test_configure_forms_non_interactive_uses_defaults(self, capsys):
+        config = configure_forms_module(non_interactive=True)
+
+        output = capsys.readouterr().out
+
+        assert config == get_default_forms_config()
+        assert "Using default forms module configuration" in output
+        assert "Forms per page: 25" in output
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_forms_interactive(self, mock_confirm, mock_prompt):
+        mock_confirm.side_effect = [False, False]
+        mock_prompt.side_effect = [40, "10/minute", 30]
+
+        config = configure_forms_module(non_interactive=False)
+
+        assert config == {
+            "forms_per_page": 40,
+            "spam_protection_enabled": False,
+            "rate_limit": "10/minute",
+            "data_retention_days": 30,
+            "submissions_api_enabled": False,
+        }
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    def test_apply_forms_configuration_regenerates_wiring(
+        self,
+        mock_regenerate,
+        tmp_path,
+        capsys,
+    ):
+        project = _make_project(tmp_path)
+        config = {
+            "forms_per_page": 40,
+            "spam_protection_enabled": False,
+            "rate_limit": "10/minute",
+            "data_retention_days": 30,
+            "submissions_api_enabled": False,
+        }
+
+        apply_forms_configuration(project, config)
+
+        output = capsys.readouterr().out
+
+        mock_regenerate.assert_called_once_with(project, "forms", config)
+        assert "Forms per page: 40" in output
+        assert "Spam protection: Disabled" in output
+        assert "Submissions API: Disabled" in output
+
+
 class TestStorageModuleConfig:
     """Tests for storage module configurator registration and defaults."""
 
@@ -1076,14 +1420,12 @@ class TestStorageModuleConfig:
         assert "django-storages" not in pyproject.read_text()
 
     @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
-    @patch("quickscale_cli.commands.module_config._add_storage_dependencies")
-    def test_apply_storage_configuration_cloud_adds_dependencies(
+    def test_apply_storage_configuration_cloud_only_regenerates_wiring(
         self,
-        mock_add_storage_dependencies,
         mock_regenerate,
         tmp_path,
     ):
-        """Applying cloud storage config should install deps and regenerate wiring."""
+        """Cloud storage apply should leave dependency sync to the shared CLI helper."""
         project = _make_project(tmp_path)
 
         apply_storage_configuration(
@@ -1094,23 +1436,27 @@ class TestStorageModuleConfig:
             },
         )
 
-        mock_add_storage_dependencies.assert_called_once()
-        mock_regenerate.assert_called_once()
+        mock_regenerate.assert_called_once_with(
+            project,
+            "storage",
+            get_default_storage_config()
+            | {
+                "backend": "s3",
+                "bucket_name": "assets",
+            },
+        )
 
     @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
-    @patch("quickscale_cli.commands.module_config._add_storage_dependencies")
     def test_apply_storage_configuration_local_skips_dependency_install(
         self,
-        mock_add_storage_dependencies,
         mock_regenerate,
         tmp_path,
     ):
-        """Applying local storage config should regenerate wiring without cloud deps."""
+        """Applying local storage config should only regenerate wiring."""
         project = _make_project(tmp_path)
 
         apply_storage_configuration(project, {"backend": "local"})
 
-        mock_add_storage_dependencies.assert_not_called()
         mock_regenerate.assert_called_once_with(
             project,
             "storage",

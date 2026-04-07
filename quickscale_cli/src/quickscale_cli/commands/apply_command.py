@@ -53,6 +53,10 @@ from quickscale_cli.commands.module_config import (
     get_default_backups_config,
     validate_backups_module_options,
 )
+from quickscale_cli.utils.module_dependency_sync import (
+    DependencySyncError,
+    sync_project_module_dependencies,
+)
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
@@ -229,6 +233,8 @@ def _embed_module(
             non_interactive=True,
             allow_unverifiable_auth_state=True,
             skip_auth_migration_check=skip_auth_migration_check,
+            sync_dependencies=False,
+            install_dependencies=False,
         )
 
         if success:
@@ -248,6 +254,15 @@ def _run_poetry_install(project_path: Path) -> bool:
         ["poetry", "install"],
         project_path,
         "Installing dependencies (poetry install)",
+    )[0]
+
+
+def _run_poetry_lock(project_path: Path) -> bool:
+    """Refresh the generated project's Poetry lockfile."""
+    return _run_command(
+        ["poetry", "lock"],
+        project_path,
+        "Refreshing dependencies (poetry lock)",
     )[0]
 
 
@@ -1151,13 +1166,56 @@ def _embed_modules_step(
     return EmbedModulesResult(success=True, embedded_modules=embedded_modules)
 
 
-def _run_post_generation_steps(output_path: Path, run_migrations: bool = True) -> None:
-    """Run poetry install and optionally migrations."""
+def _run_post_generation_steps(output_path: Path, run_migrations: bool = True) -> bool:
+    """Refresh the lockfile, install dependencies, and optionally run migrations."""
+    if not _run_poetry_lock(output_path):
+        return False
+
     if not _run_poetry_install(output_path):
-        click.secho("⚠️  Poetry install failed, continuing...", fg="yellow")
+        return False
 
     if run_migrations and not _run_migrations(output_path):
         click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
+
+    return True
+
+
+def _sync_project_module_dependencies_for_apply(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Sync missing module dependency entries into the generated project pyproject."""
+    if not qs_config.modules:
+        return True
+
+    click.echo("\n⏳ Syncing module dependency entries...")
+    try:
+        sync_result = sync_project_module_dependencies(
+            output_path,
+            {
+                module_name: module_config.options or {}
+                for module_name, module_config in qs_config.modules.items()
+            },
+        )
+    except (DependencySyncError, ManifestError) as error:
+        click.secho(f"❌ Module dependency sync failed: {error}", fg="red", err=True)
+        return False
+
+    if sync_result.added_package_dependencies:
+        click.echo(
+            "  • Added package dependencies: "
+            + ", ".join(sync_result.added_package_dependencies)
+        )
+    if sync_result.added_path_dependencies:
+        click.echo(
+            "  • Added module path dependencies: "
+            + ", ".join(sync_result.added_path_dependencies)
+        )
+    if not sync_result.changed:
+        click.echo("  • Module dependency entries already in sync")
+
+    click.secho("✅ Module dependency entries synced", fg="green")
+    return True
 
 
 def _save_project_state(
@@ -1650,14 +1708,43 @@ def _execute_apply_steps(
         )
         raise click.Abort()
 
+    if not _sync_project_module_dependencies_for_apply(
+        ctx.output_path,
+        ctx.qs_config,
+    ):
+        _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+        _print_apply_failure_summary(
+            failed_step="module dependency sync",
+            reason="Unable to reconcile embedded-module Poetry dependency entries in pyproject.toml.",
+        )
+        raise click.Abort()
+
     should_auto_start_docker = not no_docker and ctx.qs_config.docker.start
 
     # Run post-generation steps. Defer migrations until after Docker startup
     # when auto-start is enabled, so PostgreSQL is reachable.
-    _run_post_generation_steps(
+    if not _run_post_generation_steps(
         ctx.output_path,
         run_migrations=not should_auto_start_docker,
-    )
+    ):
+        _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+        _print_apply_failure_summary(
+            failed_step="dependency installation",
+            reason="Poetry lock refresh or dependency installation failed after module dependency sync.",
+        )
+        raise click.Abort()
 
     # Apply mutable configuration changes
     if ctx.existing_state and ctx.delta.has_mutable_config_changes:
@@ -1775,7 +1862,7 @@ def apply(
       3. Initialize git + initial commit
       4. Embed modules (if configured, fail-fast on required module failure)
       5. Regenerate managed module wiring files
-      6. Run poetry install
+    6. Refresh poetry.lock + run poetry install
       7. Start Docker (if configured)
       8. Run migrations (after Docker auto-start when enabled)
     """

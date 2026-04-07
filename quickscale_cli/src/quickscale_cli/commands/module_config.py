@@ -513,11 +513,6 @@ def _regenerate_wiring_for_module(
 def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply auth module configuration via managed wiring files."""
     normalized_config = _normalize_auth_config(config)
-    pyproject_path = project_path / "pyproject.toml"
-
-    # Add django-allauth dependency to pyproject.toml
-    if pyproject_path.exists():
-        _add_django_allauth_dependency(project_path, pyproject_path)
 
     # Managed wiring includes django-allauth + auth module URL routes.
     _regenerate_wiring_for_module(project_path, "auth", normalized_config)
@@ -816,12 +811,6 @@ def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> N
 
 def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply listings module configuration via managed wiring files."""
-    pyproject_path = project_path / "pyproject.toml"
-
-    # Add listings runtime dependencies to pyproject.toml
-    if pyproject_path.exists():
-        _add_listings_dependencies(project_path, pyproject_path)
-
     _regenerate_wiring_for_module(project_path, "listings", config)
 
     # Show configuration summary
@@ -1023,14 +1012,6 @@ def _update_crm_urls(urls_path: Path) -> None:
 
 def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply CRM module configuration via managed wiring files."""
-    pyproject_path = project_path / "pyproject.toml"
-
-    # Add DRF and django-filter dependencies to pyproject.toml
-    if pyproject_path.exists():
-        _add_drf_and_filter_dependencies(
-            project_path, pyproject_path, source_module="crm"
-        )
-
     _regenerate_wiring_for_module(project_path, "crm", config)
 
     # Show configuration summary
@@ -1103,14 +1084,6 @@ def configure_forms_module(
 
 def apply_forms_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply forms module configuration to the project."""
-    pyproject_path = project_path / "pyproject.toml"
-
-    # Add DRF and django-filter dependencies to pyproject.toml
-    if pyproject_path.exists():
-        _add_drf_and_filter_dependencies(
-            project_path, pyproject_path, source_module="forms"
-        )
-
     _regenerate_wiring_for_module(project_path, "forms", config)
     click.echo("\n\U0001f4cb Configuration applied:")
     click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
@@ -1323,10 +1296,6 @@ def _add_storage_dependencies(project_path: Path, pyproject_path: Path) -> None:
 def apply_storage_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply storage module configuration via managed wiring files."""
     normalized = get_default_storage_config() | config
-
-    pyproject_path = project_path / "pyproject.toml"
-    if pyproject_path.exists() and normalized.get("backend") in {"s3", "r2"}:
-        _add_storage_dependencies(project_path, pyproject_path)
 
     _regenerate_wiring_for_module(project_path, "storage", normalized)
 

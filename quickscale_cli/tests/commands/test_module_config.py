@@ -316,9 +316,8 @@ class TestListingsModuleConfig:
         content = pyproject_path.read_text()
         assert "django-filter" in content
 
-    @patch("quickscale_cli.commands.module_config._add_listings_dependencies")
     @patch("quickscale_cli.commands.module_config.Path.exists")
-    def test_apply_listings_configuration(self, mock_exists, mock_add_dep, tmp_path):
+    def test_apply_listings_configuration(self, mock_exists, tmp_path):
         """Test applying listings configuration to project."""
         mock_exists.return_value = True
 
@@ -342,8 +341,6 @@ class TestListingsModuleConfig:
         except Exception:
             # Expected to fail on some operations
             pass
-
-        mock_add_dep.assert_called_once_with(tmp_path, tmp_path / "pyproject.toml")
 
 
 class TestModuleConfigurators:

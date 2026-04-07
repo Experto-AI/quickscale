@@ -167,8 +167,12 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
             return_value=True,
         ),
         patch(
+            "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+            return_value=True,
+        ),
+        patch(
             "quickscale_cli.commands.apply_command._run_post_generation_steps",
-            return_value=None,
+            return_value=True,
         ),
     ):
         apply_result = cli_runner.invoke(
@@ -226,8 +230,12 @@ def test_apply_backups_local_adds_private_gitignore_and_state() -> None:
                 return_value=True,
             ),
             patch(
+                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
                 "quickscale_cli.commands.apply_command._run_post_generation_steps",
-                return_value=None,
+                return_value=True,
             ),
         ):
             result = cli_runner.invoke(
@@ -303,8 +311,12 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
                 return_value=True,
             ),
             patch(
+                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
                 "quickscale_cli.commands.apply_command._run_post_generation_steps",
-                return_value=None,
+                return_value=True,
             ),
         ):
             result = cli_runner.invoke(

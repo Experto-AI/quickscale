@@ -1,6 +1,6 @@
 [project]
 name = "quickscale-module-auth"
-version = "0.63.0"
+version = "0.71.0"
 description = "QuickScale authentication module with django-allauth integration"
 requires-python = ">=3.14,<4.0"
 readme = "README.md"

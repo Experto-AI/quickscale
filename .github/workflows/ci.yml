@@ -63,9 +63,37 @@ jobs:
           poetry run pytest quickscale_modules/backups/tests -q --no-cov \
             -p pytest_django --ds=tests.settings
 
+  module-manifest-contract:
+    name: Fail Fast Ready Module Contract
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Run ready-module manifest contract tests
+      run: |
+        poetry run pytest quickscale_cli/tests/test_module_manifest_contract.py -q
+
   test:
     name: Run Tests (Unit + Integration)
-    needs: backups-validation
+    needs: [backups-validation, module-manifest-contract]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -164,7 +192,7 @@ jobs:
 
   lint-cli:
     name: Lint CLI Package
-    needs: backups-validation
+    needs: [backups-validation, module-manifest-contract]
     runs-on: ubuntu-latest
 
     steps:

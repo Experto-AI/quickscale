@@ -75,6 +75,7 @@ config:
 dependencies:
   - django-storages>=1.14.4
   - boto3>=1.35.0
+  - Pillow>=12.1.1,<13.0.0
 
 django_apps:
   - quickscale_modules_storage

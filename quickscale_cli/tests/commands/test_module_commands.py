@@ -241,14 +241,21 @@ class TestCheckAuthModuleMigrations:
 class TestPerformModuleEmbed:
     """Tests for _perform_module_embed function."""
 
+    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
     @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
     def test_successful_embed_without_configurator(
-        self, mock_subtree, mock_add_module, mock_install, tmp_path
+        self,
+        mock_subtree,
+        mock_add_module,
+        mock_install,
+        mock_sync_dependencies,
+        tmp_path,
     ):
         """Test successful module embedding without configurator."""
+        mock_sync_dependencies.return_value = True
         mock_install.return_value = True
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
@@ -272,15 +279,23 @@ class TestPerformModuleEmbed:
             version="0.82.0",
             project_path=tmp_path,
         )
+        mock_sync_dependencies.assert_called_once_with(tmp_path, "auth", {})
         mock_install.assert_called_once_with(tmp_path, "auth")
 
+    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
     def test_embed_with_configurator(
-        self, mock_subtree, mock_add_module, mock_install, tmp_path
+        self,
+        mock_subtree,
+        mock_add_module,
+        mock_install,
+        mock_sync_dependencies,
+        tmp_path,
     ):
         """Test embedding with module configurator."""
+        mock_sync_dependencies.return_value = True
         mock_install.return_value = True
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
@@ -304,15 +319,27 @@ class TestPerformModuleEmbed:
 
         assert result is True
         applier.assert_called_once_with(tmp_path, {"some": "config"})
+        mock_sync_dependencies.assert_called_once_with(
+            tmp_path,
+            "blog",
+            {"some": "config"},
+        )
 
+    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
     @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
     def test_embed_dependency_installation_fails(
-        self, mock_subtree, mock_add_module, mock_install, tmp_path
+        self,
+        mock_subtree,
+        mock_add_module,
+        mock_install,
+        mock_sync_dependencies,
+        tmp_path,
     ):
         """Test embedding fails when dependency installation fails."""
+        mock_sync_dependencies.return_value = True
         mock_install.return_value = False
         module_dir = tmp_path / "modules" / "listings"
         module_dir.mkdir(parents=True)
@@ -405,28 +432,35 @@ class TestInstallModuleDependencies:
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
 
-        # Mock successful subprocess calls
-        mock_run.return_value = Mock(returncode=0)
+        mock_run.side_effect = [
+            Mock(returncode=0, stderr="", stdout=""),
+            Mock(returncode=0, stderr="", stdout=""),
+        ]
 
         result = _install_module_dependencies(tmp_path, "auth")
 
         assert result is True
-        assert mock_run.call_count == 2  # poetry add + poetry install
+        assert mock_run.call_count == 2
+        assert mock_run.call_args_list[0][0][0] == ["poetry", "lock"]
+        assert mock_run.call_args_list[1][0][0] == ["poetry", "install"]
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
     def test_root_module_path_detection(self, mock_run, tmp_path):
-        """Root-package modules should install directly from their module path."""
+        """Root-package modules should still install successfully."""
         module_dir = tmp_path / "modules" / "analytics"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
 
-        mock_run.return_value = Mock(returncode=0)
+        mock_run.side_effect = [
+            Mock(returncode=0, stderr="", stdout=""),
+            Mock(returncode=0, stderr="", stdout=""),
+        ]
 
         result = _install_module_dependencies(tmp_path, "analytics")
 
         assert result is True
-        first_call_args = mock_run.call_args_list[0][0][0]
-        assert "./modules/analytics" in " ".join(first_call_args)
+        assert mock_run.call_args_list[0][0][0] == ["poetry", "lock"]
+        assert mock_run.call_args_list[1][0][0] == ["poetry", "install"]
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
     def test_skips_install_when_no_python_package_detected(self, mock_run, tmp_path):
@@ -446,13 +480,12 @@ class TestInstallModuleDependencies:
         assert result is False
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
-    def test_poetry_add_fails(self, mock_run, tmp_path):
-        """Test installation fails when poetry add fails."""
+    def test_poetry_lock_fails(self, mock_run, tmp_path):
+        """Test installation fails when poetry lock fails."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
 
-        # Mock failed poetry add
         mock_run.return_value = Mock(returncode=1, stderr="Error", stdout="")
 
         result = _install_module_dependencies(tmp_path, "auth")
@@ -466,12 +499,9 @@ class TestInstallModuleDependencies:
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
 
-        # First call (poetry add) succeeds, second (poetry install) fails
         mock_run.side_effect = [
-            Mock(returncode=0),  # poetry add success
-            Mock(
-                returncode=1, stderr="Install error", stdout=""
-            ),  # poetry install fails
+            Mock(returncode=0, stderr="", stdout=""),
+            Mock(returncode=1, stderr="Install error", stdout=""),
         ]
 
         result = _install_module_dependencies(tmp_path, "auth")
@@ -480,21 +510,23 @@ class TestInstallModuleDependencies:
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
     def test_nested_module_path_detection(self, mock_run, tmp_path):
-        """Test detection and use of nested module path."""
+        """Nested module layouts should still install successfully."""
         # Create nested module structure
         module_dir = tmp_path / "modules" / "auth"
         nested_dir = module_dir / "quickscale_modules" / "auth"
         nested_dir.mkdir(parents=True)
         (nested_dir / "pyproject.toml").touch()
 
-        mock_run.return_value = Mock(returncode=0)
+        mock_run.side_effect = [
+            Mock(returncode=0, stderr="", stdout=""),
+            Mock(returncode=0, stderr="", stdout=""),
+        ]
 
         result = _install_module_dependencies(tmp_path, "auth")
 
         assert result is True
-        # Verify nested path was used
-        first_call_args = mock_run.call_args_list[0][0][0]
-        assert "quickscale_modules/auth" in " ".join(first_call_args)
+        assert mock_run.call_args_list[0][0][0] == ["poetry", "lock"]
+        assert mock_run.call_args_list[1][0][0] == ["poetry", "install"]
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
     def test_subprocess_exception(self, mock_run, tmp_path):
