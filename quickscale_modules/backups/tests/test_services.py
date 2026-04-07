@@ -2642,3 +2642,200 @@ class TestBackupServiceHelpers:
 
             monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "false")
             assert backup_services._restore_execution_allowed() is False
+
+    def test_postgresql_tool_version_reports_errors_and_query_branches(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def failing_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
+            del args, kwargs
+            return SimpleNamespace(
+                returncode=1,
+                stdout="",
+                stderr="version probe failed",
+            )
+
+        monkeypatch.setattr(backup_services.subprocess, "run", failing_run)
+        with pytest.raises(BackupError, match="version probe failed"):
+            backup_services._get_postgresql_tool_version("pg_dump")
+
+        def empty_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
+            del args, kwargs
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", empty_run)
+        with pytest.raises(BackupError, match="command returned no output"):
+            backup_services._get_postgresql_tool_version("pg_restore")
+
+        assert (
+            backup_services._database_server_version_query("django.db.backends.sqlite3")
+            == "SELECT sqlite_version()"
+        )
+        assert (
+            backup_services._database_server_version_query("django.db.backends.mysql")
+            is None
+        )
+
+    def test_operator_archive_validation_wraps_io_and_pg_restore_failures(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        missing_source = backup_services.ResolvedRestoreSource(
+            confirmation_value="missing.dump",
+            local_path=tmp_path / "missing.dump",
+            backup_format="pg_dump_custom",
+        )
+        with pytest.raises(BackupRestoreBlocked, match="could not be inspected"):
+            backup_services._ensure_operator_supplied_custom_archive_valid(
+                missing_source
+            )
+
+        archive_path = tmp_path / "operator.dump"
+        archive_path.write_bytes(b"PGDMP\x01\x0e\x00archive bytes")
+        archive_source = backup_services.ResolvedRestoreSource(
+            confirmation_value=archive_path.name,
+            local_path=archive_path,
+            backup_format="pg_dump_custom",
+        )
+
+        def failing_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            del command, env
+            raise BackupError("corrupt archive")
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="not a valid PostgreSQL custom archive: corrupt archive",
+        ):
+            backup_services._ensure_operator_supplied_custom_archive_valid(
+                archive_source,
+                shell_runner=cast(ShellCommandRunner, failing_runner),
+            )
+
+    def test_resolve_restore_source_blocks_invalid_remote_fallback_paths(
+        self,
+        backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        with pytest.raises(
+            BackupRestoreBlocked, match="Choose exactly one restore source"
+        ):
+            with backup_services._resolve_restore_source(
+                artifact=backup_artifact,
+                file_path="artifact.dump",
+                snapshot_id=None,
+                resolution_mode=RestoreSourceResolutionMode.REMOTE_FALLBACK,
+                policy=None,
+                remote_materializer=None,
+            ):
+                pytest.fail("restore source resolution should have failed")
+
+        Path(backup_artifact.local_path).unlink()
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="does not allow private remote materialization",
+        ):
+            with backup_services._resolve_restore_source(
+                artifact=backup_artifact,
+                file_path=None,
+                snapshot_id=None,
+                resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
+                policy=None,
+                remote_materializer=None,
+            ):
+                pytest.fail("local-only restore should not materialize remotely")
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="no private remote artifact is available",
+        ):
+            with backup_services._resolve_restore_source(
+                artifact=backup_artifact,
+                file_path=None,
+                snapshot_id=None,
+                resolution_mode=RestoreSourceResolutionMode.REMOTE_FALLBACK,
+                policy=None,
+                remote_materializer=None,
+            ):
+                pytest.fail("missing remote key should block restore")
+
+        backup_artifact.remote_key = "private/backups/sample.dump"
+        policy = _private_remote_policy_snapshot(local_directory=str(tmp_path))
+
+        def exploding_materializer(
+            remote_key: str,
+            resolved_policy: BackupPolicySnapshot,
+            destination: Path,
+        ) -> None:
+            del remote_key, resolved_policy, destination
+            raise RuntimeError("object storage offline")
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="private remote materialization failed.*object storage offline",
+        ):
+            with backup_services._resolve_restore_source(
+                artifact=backup_artifact,
+                file_path=None,
+                snapshot_id=None,
+                resolution_mode=RestoreSourceResolutionMode.REMOTE_FALLBACK,
+                policy=policy,
+                remote_materializer=cast(RemoteMaterializer, exploding_materializer),
+            ):
+                pytest.fail("materializer failures should block restore")
+
+        def noop_materializer(
+            remote_key: str,
+            resolved_policy: BackupPolicySnapshot,
+            destination: Path,
+        ) -> None:
+            del remote_key, resolved_policy, destination
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="did not produce a local file",
+        ):
+            with backup_services._resolve_restore_source(
+                artifact=backup_artifact,
+                file_path=None,
+                snapshot_id=None,
+                resolution_mode=RestoreSourceResolutionMode.REMOTE_FALLBACK,
+                policy=policy,
+                remote_materializer=cast(RemoteMaterializer, noop_materializer),
+            ):
+                pytest.fail("missing materialized files should block restore")
+
+    def test_restore_runtime_and_engine_helpers_cover_non_default_branches(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def failing_contract(**kwargs: Any) -> tuple[str, int, str, int]:
+            del kwargs
+            raise BackupError("pg_restore 18 tooling missing")
+
+        monkeypatch.setattr(
+            backup_services,
+            "_require_postgresql_18_contract",
+            failing_contract,
+        )
+
+        with pytest.raises(BackupRestoreBlocked, match="pg_restore 18 tooling missing"):
+            backup_services._ensure_postgresql_18_restore_runtime(
+                "django.db.backends.postgresql"
+            )
+
+        backup_services._ensure_postgresql_18_restore_runtime(
+            "django.db.backends.sqlite3"
+        )
+        assert (
+            backup_services._database_engine_family("custom.database.backend")
+            == "custom.database.backend"
+        )
+        assert (
+            backup_services._expected_backup_format_for_engine(
+                "django.db.backends.sqlite3"
+            )
+            == "json"
+        )
