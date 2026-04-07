@@ -21,6 +21,10 @@ from quickscale_cli.analytics_contract import (
     resolve_analytics_module_options,
     validate_analytics_module_options,
 )
+from quickscale_cli.auth_contract import (
+    default_auth_module_options,
+    resolve_auth_module_options,
+)
 from quickscale_cli.backups_contract import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -28,6 +32,10 @@ from quickscale_cli.backups_contract import (
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     normalize_backups_module_options,
     validate_backups_env_var_reference,
+)
+from quickscale_cli.crm_contract import (
+    default_crm_module_options,
+    resolve_crm_module_options,
 )
 from quickscale_cli.notifications_contract import (
     DEFAULT_NOTIFICATIONS_ALLOWED_TAGS,
@@ -265,13 +273,7 @@ def format_auth_migration_remediation(project_path: Path) -> str:
 
 def get_default_auth_config() -> dict[str, Any]:
     """Get default configuration for auth module (non-interactive mode)"""
-    return {
-        "registration_enabled": True,
-        "email_verification": "none",
-        "authentication_method": "email",
-        "social_providers": [],
-        "session_cookie_age": 1209600,
-    }
+    return default_auth_module_options()
 
 
 def configure_auth_module(
@@ -279,12 +281,15 @@ def configure_auth_module(
     existing_config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Interactive configuration for auth module"""
-    defaults = _merge_existing_config(get_default_auth_config(), existing_config)
+    defaults = resolve_auth_module_options(existing_config)
 
     if non_interactive:
         click.echo("\n⚙️  Using default auth module configuration...")
         config = defaults
-        click.echo("  • Registration: Enabled")
+        click.echo(
+            "  • Registration: "
+            + ("Enabled" if config["registration_enabled"] else "Disabled")
+        )
         click.echo(f"  • Email verification: {config['email_verification']}")
         click.echo(f"  • Authentication: {config['authentication_method']}")
         return config
@@ -309,7 +314,6 @@ def configure_auth_module(
             default=str(defaults["authentication_method"]),
             show_choices=True,
         ),
-        "social_providers": list(defaults.get("social_providers", [])),
         "session_cookie_age": int(defaults.get("session_cookie_age", 1209600)),
     }
 
@@ -404,11 +408,9 @@ def _add_django_allauth_dependency(project_path: Path, pyproject_path: Path) -> 
 
 def _generate_auth_settings_addition(config: dict[str, Any]) -> str:
     """Generate the settings addition string for auth module."""
-    registration_enabled = config.get("registration_enabled")
-    if registration_enabled is None:
-        registration_enabled = config.get("allow_registration", True)
-
-    session_cookie_age = int(config.get("session_cookie_age", 1209600))
+    resolved_config = resolve_auth_module_options(config)
+    registration_enabled = resolved_config["registration_enabled"]
+    session_cookie_age = int(resolved_config["session_cookie_age"])
 
     settings_addition = """
 # QuickScale Auth Module - Added by quickscale embed
@@ -440,12 +442,12 @@ SITE_ID = 1
 """
 
     # Add configuration based on user choices (using new django-allauth 0.62+ format)
-    if config["authentication_method"] == "email":
+    if resolved_config["authentication_method"] == "email":
         settings_addition += 'ACCOUNT_LOGIN_METHODS = {"email"}\n'
         settings_addition += (
             'ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]\n'
         )
-    elif config["authentication_method"] == "username":
+    elif resolved_config["authentication_method"] == "username":
         settings_addition += 'ACCOUNT_LOGIN_METHODS = {"username"}\n'
         settings_addition += (
             'ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]\n'
@@ -455,7 +457,7 @@ SITE_ID = 1
         settings_addition += 'ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]\n'
 
     settings_addition += (
-        f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
+        f'ACCOUNT_EMAIL_VERIFICATION = "{resolved_config["email_verification"]}"\n'
     )
     settings_addition += f"ACCOUNT_ALLOW_REGISTRATION = {registration_enabled}\n"
     settings_addition += 'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
@@ -467,19 +469,6 @@ SITE_ID = 1
     settings_addition += f"SESSION_COOKIE_AGE = {session_cookie_age}  # 2 weeks\n"
 
     return settings_addition
-
-
-def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Normalize legacy auth config keys to manifest-aligned keys."""
-    normalized = dict(config)
-    if "registration_enabled" not in normalized and "allow_registration" in normalized:
-        normalized["registration_enabled"] = normalized["allow_registration"]
-    normalized.setdefault("registration_enabled", True)
-    normalized.setdefault("email_verification", "none")
-    normalized.setdefault("authentication_method", "email")
-    normalized.setdefault("social_providers", [])
-    normalized.setdefault("session_cookie_age", 1209600)
-    return normalized
 
 
 def _regenerate_wiring_for_module(
@@ -512,7 +501,7 @@ def _regenerate_wiring_for_module(
 
 def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply auth module configuration via managed wiring files."""
-    normalized_config = _normalize_auth_config(config)
+    normalized_config = resolve_auth_module_options(config)
 
     # Managed wiring includes django-allauth + auth module URL routes.
     _regenerate_wiring_for_module(project_path, "auth", normalized_config)
@@ -637,17 +626,7 @@ def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> 
 
 def get_default_crm_config() -> dict[str, Any]:
     """Get default configuration for CRM module (non-interactive mode)"""
-    return {
-        "enable_api": True,
-        "deals_per_page": 25,
-        "contacts_per_page": 50,
-        "default_pipeline_stages": [
-            "Prospecting",
-            "Negotiation",
-            "Closed-Won",
-            "Closed-Lost",
-        ],
-    }
+    return default_crm_module_options()
 
 
 def configure_crm_module(
@@ -655,7 +634,7 @@ def configure_crm_module(
     existing_config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Interactive configuration for CRM module"""
-    defaults = _merge_existing_config(get_default_crm_config(), existing_config)
+    defaults = resolve_crm_module_options(existing_config)
 
     if non_interactive:
         click.echo("\n⚙️  Using default CRM module configuration...")
@@ -670,23 +649,24 @@ def configure_crm_module(
         "The CRM module provides contact management, companies, and deal pipeline.\n"
     )
 
-    config = {
-        "enable_api": click.confirm(
-            "Enable REST API endpoints?",
-            default=bool(defaults["enable_api"]),
-        ),
-        "deals_per_page": click.prompt(
-            "Deals per page",
-            type=int,
-            default=int(defaults["deals_per_page"]),
-        ),
-        "contacts_per_page": click.prompt(
-            "Contacts per page",
-            type=int,
-            default=int(defaults["contacts_per_page"]),
-        ),
-        "default_pipeline_stages": list(defaults["default_pipeline_stages"]),
-    }
+    config = resolve_crm_module_options(
+        {
+            "enable_api": click.confirm(
+                "Enable REST API endpoints?",
+                default=bool(defaults["enable_api"]),
+            ),
+            "deals_per_page": click.prompt(
+                "Deals per page",
+                type=int,
+                default=int(defaults["deals_per_page"]),
+            ),
+            "contacts_per_page": click.prompt(
+                "Contacts per page",
+                type=int,
+                default=int(defaults["contacts_per_page"]),
+            ),
+        }
+    )
 
     return config
 
@@ -735,13 +715,14 @@ def _update_crm_urls(urls_path: Path) -> None:
 
 def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply CRM module configuration via managed wiring files."""
-    _regenerate_wiring_for_module(project_path, "crm", config)
+    resolved = resolve_crm_module_options(config)
+    _regenerate_wiring_for_module(project_path, "crm", resolved)
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • API: {'Enabled' if config['enable_api'] else 'Disabled'}")
-    click.echo(f"  • Deals per page: {config['deals_per_page']}")
-    click.echo(f"  • Contacts per page: {config['contacts_per_page']}")
+    click.echo(f"  • API: {'Enabled' if resolved['enable_api'] else 'Disabled'}")
+    click.echo(f"  • Deals per page: {resolved['deals_per_page']}")
+    click.echo(f"  • Contacts per page: {resolved['contacts_per_page']}")
 
 
 # ============================================================================

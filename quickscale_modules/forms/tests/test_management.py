@@ -2,6 +2,7 @@
 
 import pytest
 from django.core.management import call_command
+from django.test import override_settings
 from django.utils import timezone
 
 from quickscale_modules_forms.models import Form, FormField, FormSubmission
@@ -42,6 +43,26 @@ class TestFormsSeedPresets:
         call_command("forms_seed_presets", verbosity=0)
         call_command("forms_seed_presets", verbosity=0)
         assert Form.objects.filter(slug="contact").count() == 1
+
+    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    def test_seed_presets_use_settings_backed_data_retention_default(self):
+        """Preset-created forms should inherit the configured retention default."""
+        Form.objects.all().delete()
+
+        call_command("forms_seed_presets", verbosity=0)
+
+        assert set(Form.objects.values_list("data_retention_days", flat=True)) == {730}
+
+    @override_settings(FORMS_DATA_RETENTION_DAYS=730)
+    def test_seed_presets_preserve_existing_form_data_retention_days(self):
+        """Existing forms should keep their stored retention days when presets rerun."""
+        form = Form.objects.get(slug="contact")
+        form.data_retention_days = 14
+        form.save(update_fields=["data_retention_days"])
+
+        call_command("forms_seed_presets", verbosity=0)
+
+        assert Form.objects.get(slug="contact").data_retention_days == 14
 
     def test_feedback_preset_has_select_field(self):
         """Feedback preset includes a select (rating) field"""

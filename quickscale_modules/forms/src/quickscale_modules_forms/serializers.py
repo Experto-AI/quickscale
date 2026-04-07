@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from django.conf import settings
 from rest_framework import serializers
 
 from quickscale_modules_forms.models import (
@@ -13,6 +12,8 @@ from quickscale_modules_forms.models import (
     FormField,
     FormFieldValue,
     FormSubmission,
+    HONEYPOT_FIELD_NAME,
+    is_form_spam_protection_enabled,
 )
 from quickscale_modules_forms.validators import make_field_validator
 
@@ -58,12 +59,10 @@ class FormSchemaSerializer(serializers.ModelSerializer):
         active_fields = instance.fields.filter(is_active=True).order_by("order")
         serialized_fields = FormFieldSerializer(active_fields, many=True).data
 
-        spam_protection_enabled = bool(
-            getattr(settings, "FORMS_SPAM_PROTECTION", True)
-            and instance.spam_protection_enabled
-        )
+        spam_protection_enabled = is_form_spam_protection_enabled(instance)
         has_honeypot_marker = any(
-            field_data.get("name") == "_hp_name" for field_data in serialized_fields
+            field_data.get("name") == HONEYPOT_FIELD_NAME
+            for field_data in serialized_fields
         )
         if spam_protection_enabled and not has_honeypot_marker:
             max_existing_order = max(
@@ -72,7 +71,7 @@ class FormSchemaSerializer(serializers.ModelSerializer):
             )
             serialized_fields.append(
                 {
-                    "name": "_hp_name",
+                    "name": HONEYPOT_FIELD_NAME,
                     "field_type": FormField.FIELD_TYPE_HIDDEN,
                     "label": "",
                     "required": False,
@@ -172,7 +171,7 @@ class FormSubmissionCreateSerializer(serializers.Serializer):
         errors: dict[str, list[str]] = {}
 
         # Reject unknown field names (honeypot already handled in view)
-        submitted_keys = {k for k in data if k != "_hp_name"}
+        submitted_keys = {k for k in data if k != HONEYPOT_FIELD_NAME}
         unknown_keys = submitted_keys - known_names
         for key in unknown_keys:
             errors[key] = ["Unknown field."]

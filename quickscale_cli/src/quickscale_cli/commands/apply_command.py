@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, cast
 
 import click
+import yaml
 
 from quickscale_cli.analytics_contract import (
     ANALYTICS_POSTHOG_DEFAULT_HOST,
@@ -510,7 +511,7 @@ def _sync_legacy_module_config_versions(
 
 
 def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
-    """Normalize module configs so raw secrets never persist after apply."""
+    """Normalize module configs so legacy keys never persist after apply."""
     sanitized_modules: list[str] = []
     for module_name, module_config in qs_config.modules.items():
         normalized = sanitize_module_options(module_name, module_config.options or {})
@@ -537,11 +538,16 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
     try:
         yaml_content = config_path.read_text()
         qs_config = validate_config(yaml_content)
-        sanitized_modules = _sanitize_loaded_module_configs(qs_config)
-        if sanitized_modules:
-            config_path.write_text(generate_yaml(qs_config))
+        original_data = yaml.safe_load(yaml_content) or {}
+        original_modules = original_data.get("modules") or {}
+        _sanitize_loaded_module_configs(qs_config)
+        normalized_yaml = generate_yaml(qs_config)
+        normalized_data = yaml.safe_load(normalized_yaml) or {}
+        normalized_modules = normalized_data.get("modules") or {}
+        if normalized_modules != original_modules:
+            config_path.write_text(normalized_yaml)
             click.secho(
-                "✅ Sanitized module config to env-var references in quickscale.yml",
+                "✅ Sanitized legacy module config keys in quickscale.yml",
                 fg="green",
             )
         _validate_module_prerequisites(qs_config)

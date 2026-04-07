@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from quickscale_cli.backups_contract import sanitize_module_options
 from quickscale_cli.module_catalog import (
     get_module_names,
     get_module_readiness_reason,
@@ -47,6 +48,9 @@ class ModuleConfig:
 
     name: str
     options: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.options = sanitize_module_options(self.name, self.options)
 
 
 @dataclass
@@ -406,10 +410,11 @@ def generate_yaml(config: QuickScaleConfig) -> str:
     }
 
     if config.modules:
-        data["modules"] = {
-            name: module.options if module.options else None
-            for name, module in config.modules.items()
-        }
+        modules: dict[str, Any] = {}
+        for name, module in config.modules.items():
+            normalized_options = sanitize_module_options(name, module.options)
+            modules[name] = normalized_options or None
+        data["modules"] = modules
 
     data["docker"] = {
         "start": config.docker.start,

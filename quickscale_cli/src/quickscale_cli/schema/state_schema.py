@@ -33,6 +33,7 @@ class ModuleState:
 
     def __post_init__(self) -> None:
         self.version = normalize_installed_version(self.version)
+        self.options = sanitize_module_options(self.name, self.options)
 
 
 @dataclass

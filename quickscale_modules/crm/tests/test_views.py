@@ -5,6 +5,8 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 
+from quickscale_modules_crm.models import Deal, Stage
+
 
 @pytest.mark.django_db
 class TestTagViewSet:
@@ -257,12 +259,25 @@ class TestDealViewSet:
         deal.refresh_from_db()
         assert deal.stage == closed_won_stage
 
-    def test_mark_won(self, authenticated_client, deal):
-        """Test marking deals as won"""
-        # Ensure Closed-Won stage exists
-        from quickscale_modules_crm.models import Stage
-
-        Stage.objects.get_or_create(name="Closed-Won", defaults={"order": 3})
+    def test_mark_won_prefers_terminal_semantic_over_exact_name(
+        self, authenticated_client, contact, user
+    ):
+        """Mark-won should target the semantic stage even when names drift."""
+        Stage.objects.all().delete()
+        exact_name_stage = Stage.objects.create(name="Closed-Won", order=3)
+        semantic_stage = Stage.objects.create(
+            name="Deal Signed",
+            order=9,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+        )
+        deal = Deal.objects.create(
+            title="Enterprise Deal",
+            contact=contact,
+            amount="50000.00",
+            stage=exact_name_stage,
+            probability=75,
+            owner=user,
+        )
 
         data = {"deal_ids": [deal.id]}
         response = authenticated_client.post(
@@ -273,15 +288,29 @@ class TestDealViewSet:
 
         # Verify deal was marked won
         deal.refresh_from_db()
-        assert deal.stage.name == "Closed-Won"
+        assert deal.stage == semantic_stage
         assert deal.probability == 100
 
-    def test_mark_lost(self, authenticated_client, deal):
-        """Test marking deals as lost"""
-        # Ensure Closed-Lost stage exists
-        from quickscale_modules_crm.models import Stage
-
-        Stage.objects.get_or_create(name="Closed-Lost", defaults={"order": 4})
+    def test_mark_lost_prefers_terminal_semantic_over_exact_name(
+        self, authenticated_client, contact, user
+    ):
+        """Mark-lost should target the semantic stage even when names drift."""
+        Stage.objects.all().delete()
+        Stage.objects.create(name="Closed-Lost", order=4)
+        semantic_stage = Stage.objects.create(
+            name="No Decision",
+            order=10,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
+        )
+        open_stage = Stage.objects.create(name="Prospecting", order=1)
+        deal = Deal.objects.create(
+            title="Enterprise Deal",
+            contact=contact,
+            amount="50000.00",
+            stage=open_stage,
+            probability=75,
+            owner=user,
+        )
 
         data = {"deal_ids": [deal.id]}
         response = authenticated_client.post(
@@ -292,7 +321,73 @@ class TestDealViewSet:
 
         # Verify deal was marked lost
         deal.refresh_from_db()
-        assert deal.stage.name == "Closed-Lost"
+        assert deal.stage == semantic_stage
+        assert deal.probability == 0
+
+    def test_mark_won_self_heals_missing_terminal_semantic_with_canonical_stage(
+        self, authenticated_client, contact, user
+    ):
+        """Missing semantic rows should self-heal by creating the canonical won stage."""
+        Stage.objects.all().delete()
+        renamed_stage = Stage.objects.create(name="Deal Signed", order=9)
+        open_stage = Stage.objects.create(name="Prospecting", order=1)
+        deal = Deal.objects.create(
+            title="Enterprise Deal",
+            contact=contact,
+            amount="50000.00",
+            stage=open_stage,
+            probability=75,
+            owner=user,
+        )
+
+        response = authenticated_client.post(
+            reverse("quickscale_crm:deal-mark-won"),
+            {"deal_ids": [deal.id]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        deal.refresh_from_db()
+        renamed_stage.refresh_from_db()
+        healed_stage = Stage.objects.get(terminal_semantic=Stage.TERMINAL_SEMANTIC_WON)
+
+        assert renamed_stage.terminal_semantic is None
+        assert healed_stage.name == "Closed-Won"
+        assert healed_stage.order == 3
+        assert deal.stage == healed_stage
+        assert deal.probability == 100
+
+    def test_mark_lost_self_heals_missing_terminal_semantic_with_canonical_stage(
+        self, authenticated_client, contact, user
+    ):
+        """Missing semantic rows should self-heal by creating the canonical lost stage."""
+        Stage.objects.all().delete()
+        renamed_stage = Stage.objects.create(name="No Decision", order=10)
+        open_stage = Stage.objects.create(name="Prospecting", order=1)
+        deal = Deal.objects.create(
+            title="Enterprise Deal",
+            contact=contact,
+            amount="50000.00",
+            stage=open_stage,
+            probability=75,
+            owner=user,
+        )
+
+        response = authenticated_client.post(
+            reverse("quickscale_crm:deal-mark-lost"),
+            {"deal_ids": [deal.id]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        deal.refresh_from_db()
+        renamed_stage.refresh_from_db()
+        healed_stage = Stage.objects.get(terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST)
+
+        assert renamed_stage.terminal_semantic is None
+        assert healed_stage.name == "Closed-Lost"
+        assert healed_stage.order == 4
+        assert deal.stage == healed_stage
         assert deal.probability == 0
 
 

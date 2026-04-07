@@ -28,7 +28,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from quickscale_modules_forms.models import Form, FormFieldValue, FormSubmission
+from quickscale_modules_forms.models import (
+    Form,
+    FormFieldValue,
+    FormSubmission,
+    HONEYPOT_FIELD_NAME,
+    is_form_spam_protection_enabled,
+)
 from quickscale_modules_forms.notifications import notify_submission
 from quickscale_modules_forms.serializers import (
     AdminFormListSerializer,
@@ -151,8 +157,8 @@ class FormSubmitAPIView(CreateAPIView):
         data = request.data
 
         # Honeypot check — silently mark as spam, do NOT reveal detection
-        honeypot_value = data.get("_hp_name", "")
-        if honeypot_value:
+        honeypot_value = data.get(HONEYPOT_FIELD_NAME, "")
+        if is_form_spam_protection_enabled(form) and honeypot_value:
             with transaction.atomic():
                 submission = FormSubmission.objects.create(
                     form=form,

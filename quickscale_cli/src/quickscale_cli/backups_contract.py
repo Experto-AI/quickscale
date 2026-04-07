@@ -1,7 +1,7 @@
-"""Shared backups-module configuration helpers.
+"""Shared module configuration helpers.
 
 This module centralizes the non-secret configuration contract used by the
-planner, apply flow, and state persistence for the backups module.
+planner, apply flow, and state persistence for module compatibility helpers.
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ import re
 from typing import Any
 
 from quickscale_cli.analytics_contract import normalize_analytics_module_options
+from quickscale_cli.auth_contract import normalize_auth_module_options
+from quickscale_cli.crm_contract import normalize_crm_module_options
 from quickscale_cli.notifications_contract import normalize_notifications_module_options
 from quickscale_cli.social_contract import normalize_social_module_options
 
@@ -110,8 +112,12 @@ def sanitize_module_options(
     """Return module options safe for config/state persistence."""
     if module_name == "analytics":
         return normalize_analytics_module_options(options)
+    if module_name == "auth":
+        return normalize_auth_module_options(options)
     if module_name == "backups":
         return normalize_backups_module_options(options)
+    if module_name == "crm":
+        return normalize_crm_module_options(options)
     if module_name == "notifications":
         return normalize_notifications_module_options(options)
     if module_name == "social":

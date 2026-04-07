@@ -20,7 +20,7 @@ config:
       type: boolean
       default: true
       django_setting: FORMS_SPAM_PROTECTION
-      description: "Enable honeypot spam protection globally."
+      description: "Enable honeypot spam protection globally for forms that also keep their per-form flag enabled."
 
     rate_limit:
       type: string
@@ -32,7 +32,7 @@ config:
       type: integer
       default: 365
       django_setting: FORMS_DATA_RETENTION_DAYS
-      description: "Days to keep submission data before anonymization (0 = keep forever)."
+      description: "Default days assigned to newly created forms before anonymization (0 = keep forever); existing forms keep their stored value."
 
     submissions_api_enabled:
       type: boolean

@@ -594,9 +594,9 @@ config:
       default: true
       django_setting: ACCOUNT_ALLOW_REGISTRATION
   immutable:
-    social_providers:
-      type: list
-      default: []
+    authentication_method:
+      type: string
+      default: email
 ```
 
 **Configuration Rules:**
@@ -607,7 +607,7 @@ config:
 | **Storage** | Django `settings.py` | `.quickscale/state.yml` |
 | **Changes** | Auto-update settings.py on apply | Reject with error guidance |
 | **Code** | Read from settings (no hardcoding) | Configured at embed time |
-| **Example** | `ACCOUNT_ALLOW_REGISTRATION` | `social_providers` list |
+| **Example** | `ACCOUNT_ALLOW_REGISTRATION` | `authentication_method` |
 
 **Apply Behavior** (extends v0.68.0-v0.70.0 Plan/Apply):
 1. Load module manifest from embedded module

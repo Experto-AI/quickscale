@@ -33,6 +33,30 @@ from .serializers import (
 )
 
 
+_TERMINAL_STAGE_DEFAULTS = {
+    Stage.TERMINAL_SEMANTIC_WON: ("Closed-Won", 3),
+    Stage.TERMINAL_SEMANTIC_LOST: ("Closed-Lost", 4),
+}
+
+
+def _resolve_terminal_stage(terminal_semantic: str) -> Stage:
+    """Return the terminal stage for a semantic, creating the canonical row if needed."""
+    terminal_stage = (
+        Stage.objects.filter(terminal_semantic=terminal_semantic)
+        .order_by("order", "id")
+        .first()
+    )
+    if terminal_stage is not None:
+        return terminal_stage
+
+    stage_name, stage_order = _TERMINAL_STAGE_DEFAULTS[terminal_semantic]
+    terminal_stage, _ = Stage.objects.get_or_create(
+        terminal_semantic=terminal_semantic,
+        defaults={"name": stage_name, "order": stage_order},
+    )
+    return terminal_stage
+
+
 class CRMDashboardView(TemplateView):
     """Dashboard view for CRM module showing summary statistics"""
 
@@ -249,20 +273,13 @@ class DealViewSet(CRMModelViewSet):
         url_name="mark-won",
     )
     def mark_won(self, request: Request) -> Response:
-        """Mark multiple deals as won (Closed-Won stage)"""
+        """Mark multiple deals as won using the terminal won stage."""
         serializer = BulkMarkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         deal_ids = serializer.validated_data["deal_ids"]
 
-        # Find the Closed-Won stage
-        try:
-            won_stage = Stage.objects.get(name="Closed-Won")
-        except Stage.DoesNotExist:
-            return Response(
-                {"error": "Closed-Won stage not found"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        won_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_WON)
 
         updated = Deal.objects.filter(id__in=deal_ids).update(
             stage=won_stage, probability=100
@@ -277,20 +294,13 @@ class DealViewSet(CRMModelViewSet):
         url_name="mark-lost",
     )
     def mark_lost(self, request: Request) -> Response:
-        """Mark multiple deals as lost (Closed-Lost stage)"""
+        """Mark multiple deals as lost using the terminal lost stage."""
         serializer = BulkMarkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         deal_ids = serializer.validated_data["deal_ids"]
 
-        # Find the Closed-Lost stage
-        try:
-            lost_stage = Stage.objects.get(name="Closed-Lost")
-        except Stage.DoesNotExist:
-            return Response(
-                {"error": "Closed-Lost stage not found"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        lost_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_LOST)
 
         updated = Deal.objects.filter(id__in=deal_ids).update(
             stage=lost_stage, probability=0
