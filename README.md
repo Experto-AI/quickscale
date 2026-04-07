@@ -36,7 +36,6 @@ The auth module includes a `module.yml` manifest that defines configuration opti
 | Option | Default | Description |
 |--------|---------|-------------|
 | `authentication_method` | `email` | How users authenticate (email, username, or both) |
-| `social_providers` | `[]` | OAuth providers (Google, GitHub, etc.) |
 
 ### Changing Configuration
 
@@ -71,15 +70,15 @@ The auth module includes dynamic navigation that shows all available QuickScale 
 - **Automatic detection**: Uses QuickScale's module configuration system
 - **Responsive design**: Navigation adapts to mobile screens
 
-Available modules in navigation:
+Current documented navigation entry:
 - 👤 **Authentication** - Current module (always enabled when installed)
-- 💳 **Billing** - Links to billing dashboard when installed
-- 👥 **Teams** - Links to teams dashboard when installed
+
+Additional cross-module links should only be documented here once the corresponding shipped integration is part of the auth surface.
 
 ### 🚧 Still Evolving
 
 - **Email verification workflows**: Stronger production email flows may continue to evolve
-- **Social providers**: Google, GitHub, and similar integrations remain future-facing
+- **Social provider integrations**: Google, GitHub, and similar integrations remain future-facing and are not part of the current shipped configuration contract
 - **Additional theme variants**: HTML and React-specific auth experiences may expand over time
 
 ## Installation
@@ -376,4 +375,4 @@ Apache 2.0 License - Same as QuickScale project
 
 ---
 
-**Note**: This module is production-ready for basic authentication. Advanced capabilities such as email verification and social provider integrations may continue to evolve in later releases.
+**Note**: This module is production-ready for basic authentication. Advanced capabilities such as email verification and future social provider integrations may continue to evolve in later releases.
