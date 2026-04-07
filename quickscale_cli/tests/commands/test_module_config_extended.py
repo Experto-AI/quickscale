@@ -641,8 +641,7 @@ class TestApplyBlogConfigurationFull:
 
         urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_blog.urls" in urls
-        # markdownx URL should not be added when RSS disabled
-        assert "markdownx.urls" not in urls
+        assert "markdownx.urls" in urls
 
     def test_blog_urls_already_present(self, tmp_path):
         """Skip URL update when blog urls already present"""
@@ -881,6 +880,18 @@ class TestModuleWiringSpecs:
             ("listings/", "quickscale_modules_listings.urls"),
             ("markdownx/", "markdownx.urls"),
         )
+
+    def test_blog_wiring_without_rss_still_includes_markdownx_urls(self):
+        """Blog wiring should keep markdownx URLs even when RSS is disabled."""
+        specs = build_module_wiring_specs(
+            {"blog": {"posts_per_page": 10, "enable_rss": False}}
+        )
+
+        _, _, settings, urls = collect_wiring(specs)
+
+        assert settings["BLOG_ENABLE_RSS"] is False
+        assert ("blog/", "quickscale_modules_blog.urls") in urls
+        assert ("markdownx/", "markdownx.urls") in urls
 
     def test_storage_wiring_local_keeps_filesystem_defaults(self):
         """Storage wiring should not force STORAGES override for local backend."""

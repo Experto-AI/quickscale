@@ -7,6 +7,29 @@ from PIL import Image
 from quickscale_modules_blog.models import Category, Post, Tag
 
 
+def _create_published_posts(
+    author_user,
+    *,
+    count: int,
+    category: Category | None = None,
+    tag: Tag | None = None,
+    title_prefix: str = "Post",
+) -> list[Post]:
+    posts: list[Post] = []
+    for index in range(count):
+        post = Post.objects.create(
+            title=f"{title_prefix} {index}",
+            author=author_user,
+            content="Content",
+            status="published",
+            category=category,
+        )
+        if tag is not None:
+            post.tags.add(tag)
+        posts.append(post)
+    return posts
+
+
 @pytest.mark.django_db
 class TestPostListView:
     """Tests for PostListView"""
@@ -30,6 +53,38 @@ class TestPostListView:
         assert response.status_code == 200
         assert "Published Post" in str(response.content)
         assert "Draft Post" not in str(response.content)
+
+    def test_post_list_uses_runtime_posts_per_page_setting(
+        self,
+        client,
+        author_user,
+        settings,
+    ):
+        """Test post list pagination reads BLOG_POSTS_PER_PAGE at runtime."""
+        settings.BLOG_POSTS_PER_PAGE = 2
+        _create_published_posts(author_user, count=3)
+
+        response = client.get(reverse("quickscale_blog:post_list"))
+
+        assert response.status_code == 200
+        assert response.context["paginator"].per_page == 2
+        assert len(response.context["page_obj"].object_list) == 2
+        assert response.context["is_paginated"] is True
+
+    def test_post_list_invalid_posts_per_page_falls_back_to_default(
+        self,
+        client,
+        author_user,
+        settings,
+    ):
+        """Test invalid BLOG_POSTS_PER_PAGE values fall back to the default."""
+        settings.BLOG_POSTS_PER_PAGE = "invalid"
+        _create_published_posts(author_user, count=11)
+
+        response = client.get(reverse("quickscale_blog:post_list"))
+
+        assert response.status_code == 200
+        assert response.context["paginator"].per_page == 10
 
 
 @pytest.mark.django_db
@@ -215,6 +270,30 @@ class TestCategoryListView:
         assert "Draft Tech Post" not in str(response.content)
         assert response.context["category"] == category
 
+    def test_category_list_uses_runtime_posts_per_page_setting(
+        self,
+        client,
+        author_user,
+        settings,
+    ):
+        """Test category list pagination reads BLOG_POSTS_PER_PAGE at runtime."""
+        settings.BLOG_POSTS_PER_PAGE = 2
+        category = Category.objects.create(name="Paginated Tech")
+        _create_published_posts(
+            author_user,
+            count=3,
+            category=category,
+            title_prefix="Category Post",
+        )
+
+        response = client.get(
+            reverse("quickscale_blog:category_list", args=[category.slug])
+        )
+
+        assert response.status_code == 200
+        assert response.context["paginator"].per_page == 2
+        assert len(response.context["page_obj"].object_list) == 2
+
     def test_category_list_view_nonexistent(self, client):
         """Test category list with nonexistent slug returns 404"""
         response = client.get(
@@ -252,6 +331,28 @@ class TestTagListView:
         assert "Python Post" in str(response.content)
         assert "Draft Python" not in str(response.content)
         assert response.context["tag"] == tag
+
+    def test_tag_list_uses_runtime_posts_per_page_setting(
+        self,
+        client,
+        author_user,
+        settings,
+    ):
+        """Test tag list pagination reads BLOG_POSTS_PER_PAGE at runtime."""
+        settings.BLOG_POSTS_PER_PAGE = 2
+        tag = Tag.objects.create(name="Paginated Python")
+        _create_published_posts(
+            author_user,
+            count=3,
+            tag=tag,
+            title_prefix="Tag Post",
+        )
+
+        response = client.get(reverse("quickscale_blog:tag_list", args=[tag.slug]))
+
+        assert response.status_code == 200
+        assert response.context["paginator"].per_page == 2
+        assert len(response.context["page_obj"].object_list) == 2
 
     def test_tag_list_view_nonexistent(self, client):
         """Test tag list with nonexistent slug returns 404"""

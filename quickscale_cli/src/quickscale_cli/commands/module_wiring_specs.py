@@ -109,9 +109,8 @@ def _blog_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
 
     url_includes: list[tuple[str, str]] = [
         ("blog/", "quickscale_modules_blog.urls"),
+        ("markdownx/", "markdownx.urls"),
     ]
-    if enable_rss:
-        url_includes.append(("markdownx/", "markdownx.urls"))
 
     settings = {
         "BLOG_POSTS_PER_PAGE": posts_per_page,

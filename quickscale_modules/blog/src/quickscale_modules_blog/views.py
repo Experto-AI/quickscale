@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
 DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+DEFAULT_BLOG_POSTS_PER_PAGE = 10
 
 ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
 
@@ -52,6 +53,20 @@ ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
 def _typed_csrf_exempt(view_func: ViewFunc) -> ViewFunc:
     """Preserve view typing when applying Django's `csrf_exempt` decorator."""
     return csrf_exempt(view_func)
+
+
+def _get_positive_int_setting(setting_name: str, default: int) -> int:
+    """Return a positive integer setting value or the provided default."""
+    value = getattr(settings, setting_name, default)
+    if isinstance(value, bool):
+        return default
+
+    try:
+        parsed_value = int(value)
+    except TypeError, ValueError:
+        return default
+
+    return parsed_value if parsed_value > 0 else default
 
 
 def _build_media_response_url(request: HttpRequest, stored_reference: str) -> str:
@@ -502,7 +517,15 @@ class PostListView(ListView):
     model = Post
     template_name = "quickscale_modules_blog/blog/post_list.html"
     context_object_name = "posts"
-    paginate_by = 10
+    paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
+
+    def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
+        """Return the runtime-configured posts-per-page value."""
+        del queryset
+        return _get_positive_int_setting(
+            "BLOG_POSTS_PER_PAGE",
+            DEFAULT_BLOG_POSTS_PER_PAGE,
+        )
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return only published posts, ordered by publish date"""
@@ -541,7 +564,15 @@ class CategoryListView(ListView):
     model = Post
     template_name = "quickscale_modules_blog/blog/category_list.html"
     context_object_name = "posts"
-    paginate_by = 10
+    paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
+
+    def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
+        """Return the runtime-configured posts-per-page value."""
+        del queryset
+        return _get_positive_int_setting(
+            "BLOG_POSTS_PER_PAGE",
+            DEFAULT_BLOG_POSTS_PER_PAGE,
+        )
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts in the specified category"""
@@ -565,7 +596,15 @@ class TagListView(ListView):
     model = Post
     template_name = "quickscale_modules_blog/blog/tag_list.html"
     context_object_name = "posts"
-    paginate_by = 10
+    paginate_by = DEFAULT_BLOG_POSTS_PER_PAGE
+
+    def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
+        """Return the runtime-configured posts-per-page value."""
+        del queryset
+        return _get_positive_int_setting(
+            "BLOG_POSTS_PER_PAGE",
+            DEFAULT_BLOG_POSTS_PER_PAGE,
+        )
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts with the specified tag"""

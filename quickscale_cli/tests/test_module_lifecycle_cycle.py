@@ -10,7 +10,11 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.apply_command import EmbedModulesResult, apply  # type: ignore[import-untyped]
+from quickscale_cli.commands.apply_command import (  # type: ignore[import-untyped]
+    EmbedModulesResult,
+    _embed_modules_step,
+    apply,
+)
 from quickscale_cli.commands.module_commands import update  # type: ignore[import-untyped]
 from quickscale_cli.commands.remove_command import remove  # type: ignore[import-untyped]
 
@@ -80,6 +84,59 @@ def _write_backups_quickscale_config(
     (base_path / "quickscale.yml").write_text(
         yaml.safe_dump(config_data, sort_keys=False)
     )
+
+
+def _write_blog_quickscale_config(base_path: Path, *, enable_rss: bool) -> None:
+    """Write a quickscale.yml containing the blog module configuration."""
+    config_data = {
+        "version": "1",
+        "project": {
+            "slug": "myproject",
+            "package": "myproject",
+            "theme": "showcase_html",
+        },
+        "modules": {"blog": {"enable_rss": enable_rss}},
+        "docker": {"start": False},
+    }
+    (base_path / "quickscale.yml").write_text(
+        yaml.safe_dump(config_data, sort_keys=False)
+    )
+
+
+def _write_blog_state(project_path: Path, *, enable_rss: bool) -> None:
+    """Write .quickscale/state.yml with blog installed and configured."""
+    state_data = {
+        "version": "1",
+        "project": {
+            "slug": "myproject",
+            "package": "myproject",
+            "theme": "showcase_html",
+            "created_at": "2025-01-01T00:00:00",
+            "last_applied": "2025-01-01T00:00:00",
+        },
+        "modules": {
+            "blog": {
+                "name": "blog",
+                "version": "0.73.0",
+                "commit_sha": "abc123",
+                "embedded_at": "2025-01-01T00:00:00",
+                "options": {"enable_rss": enable_rss},
+            }
+        },
+    }
+    state_dir = project_path / ".quickscale"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
+
+
+def _write_embedded_blog_manifest(project_path: Path) -> None:
+    """Copy the current blog manifest into the embedded project module tree."""
+    repo_root = Path(__file__).resolve().parents[2]
+    manifest_source = repo_root / "quickscale_modules" / "blog" / "module.yml"
+    module_dir = project_path / "modules" / "blog"
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "__init__.py").write_text("")
+    (module_dir / "module.yml").write_text(manifest_source.read_text())
 
 
 def _generate_minimal_project(
@@ -357,6 +414,60 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
             backups_options["remote_endpoint_url"] == "https://account.r2.example.com"
         )
         assert backups_options["remote_region_name"] == "auto"
+
+
+def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
+    """Repeat apply should treat blog.enable_rss as mutable and avoid re-embed."""
+    cli_runner = CliRunner()
+
+    with cli_runner.isolated_filesystem():
+        workspace = Path.cwd()
+        project_path = workspace / "myproject"
+        project_path.mkdir()
+
+        package_dir = project_path / "myproject"
+        (package_dir / "settings").mkdir(parents=True, exist_ok=True)
+        (package_dir / "__init__.py").write_text("")
+        (package_dir / "urls.py").write_text("urlpatterns = []\n")
+        (project_path / "manage.py").write_text("# manage\n")
+
+        _write_blog_quickscale_config(project_path, enable_rss=False)
+        _write_blog_state(project_path, enable_rss=True)
+        _write_embedded_blog_manifest(project_path)
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                wraps=_embed_modules_step,
+            ) as mock_embed_modules_step,
+            patch(
+                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                return_value=True,
+            ),
+        ):
+            result = cli_runner.invoke(
+                apply,
+                ["myproject/quickscale.yml", "--no-docker"],
+                input="y\n",
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0
+        assert "Mutable config changes (1)" in result.output
+        assert "blog.enable_rss:" in result.output
+        assert "Immutable config changes" not in result.output
+        assert "No new modules to embed" in result.output
+        assert mock_embed_modules_step.call_args.args[1] == []
+
+        settings_modules = (package_dir / "settings" / "modules.py").read_text()
+        assert "'BLOG_ENABLE_RSS': False" in settings_modules
+
+        state = yaml.safe_load((project_path / ".quickscale" / "state.yml").read_text())
+        assert state["modules"]["blog"]["options"]["enable_rss"] is False
 
 
 def test_update_after_removal_only_targets_remaining_modules() -> None:
