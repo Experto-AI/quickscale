@@ -13,11 +13,13 @@ config:
       django_setting: BLOG_POSTS_PER_PAGE
       description: "Number of blog posts per page"
 
-  immutable:
     enable_rss:
       type: boolean
       default: true
-      description: "Enable RSS-related URL wiring at embed time"
+      django_setting: BLOG_ENABLE_RSS
+      description: "Enable RSS routes at runtime"
+
+  immutable: {}
 
 dependencies:
   - django-markdownx>=4.0
