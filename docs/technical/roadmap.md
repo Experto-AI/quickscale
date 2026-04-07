@@ -170,7 +170,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Primary code grouping**: blog and listings runtime behavior, their apply/install paths, pagination/feed settings, related manifests, and targeted module regressions.
 
-**Current status (2026-04-07)**: The shipped dependency/install contract for blog and listings now runs through the shared Phase 3 manifest-driven sync path rather than through module-specific dependency mutation, and the remaining content-module runtime contract fixes in this slice have landed in the current worktree. Blog pagination now reads `BLOG_POSTS_PER_PAGE`, the blog feed route is gated by runtime `BLOG_ENABLE_RSS`, listings pagination now reads `LISTINGS_PER_PAGE`, and targeted module plus CLI regression coverage exists for the changed behavior. No further unimplemented blog/listings runtime contract gap was verified in this pass; the remaining open item is a closeout decision on whether stale legacy listings dependency-helper code should be cleaned up here or tracked separately.
+**Current status (2026-04-07)**: The shipped dependency/install contract for blog and listings now runs through the shared Phase 3 manifest-driven sync path rather than through module-specific dependency mutation, and the remaining content-module runtime and cleanup work in this slice has landed in the current worktree. Blog pagination now reads `BLOG_POSTS_PER_PAGE`, the blog feed route is gated by runtime `BLOG_ENABLE_RSS`, listings pagination now reads `LISTINGS_PER_PAGE`, targeted module plus CLI regression coverage exists for the changed behavior, and the stale pre-Phase-3 listings direct-dependency helper path is removed. No further unimplemented blog/listings contract gap was verified in this pass, so Phase 4 is closed.
 
 - [x] Confirm that the blog module now inherits runtime dependency installation from the shared Phase 3 manifest-driven apply/install sync, including its current markdown and image-related dependencies where they remain part of the shipped contract.
 - [x] Confirm that the listings module now inherits runtime dependency installation from the shared Phase 3 manifest-driven apply/install sync, including its current image-support dependencies where they remain part of the shipped contract.
@@ -179,16 +179,12 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [x] Make listings pagination read `LISTINGS_PER_PAGE` from settings instead of using a hardcoded runtime page size.
 - [x] Add module-level regression coverage for blog pagination, blog RSS toggling, and listings pagination.
 - [x] Record that `blog.enable_rss` is now a mutable runtime option backed by `BLOG_ENABLE_RSS`, so re-apply updates the managed setting and feed-route behavior without forcing a re-embed.
-- [ ] Decide whether the stale listings direct-dependency helper path should be removed as part of Phase 4 closeout or tracked as separate general cleanup after the content-module contract work closes.
+- [x] Remove the stale listings direct-dependency helper path now that the shared Phase 3 manifest-driven sync owns dependency installation.
 
-**Decision recorded in this handoff**
+**Phase 4 closeout notes**
 
 - Dependency installation ownership for blog and listings now lives in the shared Phase 3 manifest-driven sync path rather than in blog/listings-specific appliers.
 - `blog.enable_rss` is now a mutable runtime contract option. The feed route is gated at runtime, while `markdownx` URL wiring remains part of the base blog wiring regardless of RSS state.
-
-**Open closeout question**
-
-- Listings still carries stale direct-dependency helper code from the pre-Phase-3 architecture. Decide whether that cleanup belongs in Phase 4 because it touches the content-module apply surface, or whether it should move to a separate cleanup follow-up to keep Phase 4 scoped to shipped contract behavior.
 
 #### Phase 5: Auth, Forms, and CRM Option Contract Cleanup
 
