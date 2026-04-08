@@ -229,6 +229,7 @@ poetry run python manage.py runserver
 
 ✅ **Services auto-start** (no `quickscale up` needed):
 - First-time project generation
+- Existing-project re-applies, including incremental module adds
 - When `docker.start: true` in quickscale.yml (**default**)
 - When `--no-docker` flag is NOT used
 
@@ -236,7 +237,6 @@ poetry run python manage.py runserver
 - You set `docker.start: false` during `quickscale plan` wizard
 - After stopping services with `quickscale down`
 - When running `quickscale apply --no-docker`
-- Adding modules to existing project (incremental apply)
 
 **Example - No manual start needed:**
 ```bash
@@ -298,10 +298,10 @@ quickscale apply
 ### Option 1: Docker (Recommended for production parity)
 
 ```bash
-# Start all services (backend + database)
-quickscale up
+# Verify services started during quickscale apply
+quickscale ps
 
-# Migrations run automatically on quickscale up (safe to run repeatedly)
+# Migrations run automatically when quickscale apply starts Docker (safe to run repeatedly)
 # Optional manual run:
 quickscale manage migrate
 
@@ -317,6 +317,8 @@ quickscale shell
 # Stop services
 quickscale down
 ```
+
+Run `quickscale up` only if you disabled Docker auto-start (`docker.start: false`), used `quickscale apply --no-docker`, or previously stopped services with `quickscale down`.
 
 **Visit http://localhost:8000** - Your app is running in Docker with PostgreSQL!
 

@@ -48,7 +48,7 @@ quickscale apply
 ```bash
 git clone https://github.com/Experto-AI/quickscale.git
 cd quickscale
-./scripts/install_global.sh
+make install
 ```
 
 **What this does:**
@@ -69,13 +69,13 @@ quickscale apply
 
 ### For Contributors
 
-If you're contributing to QuickScale development (modifying source code), see the [Development Guide](./development.md) for setup instructions with `./scripts/bootstrap.sh` and `poetry install`.
+If you're contributing to QuickScale development (modifying source code), see the [Development Guide](./development.md) for setup instructions with `make bootstrap` and the shared repository workflows.
 
 ---
 
 ## Quick orientation
 
-- Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test_unit.sh`, `./scripts/lint.sh`, `./scripts/publish_module.sh`). Inspect them if you need to confirm exact actions.
+- The repository `Makefile` is the standard entrypoint for shared bootstrap, lint, test, CI, and version-check workflows. The `scripts/` directory contains lower-level helpers used by those targets.
 - The primary CLI provided by this repository is the `quickscale` command (installed by the `quickscale_cli` package).
 - For dependency management we recommend Poetry — see `docs/technical/poetry_user_manual.md` for full Poetry usage. This manual focuses on QuickScale commands, not Poetry details.
 
@@ -86,40 +86,40 @@ Purpose: get a development environment ready to run tests and use the CLI.
 Recommended sequence:
 
 ```bash
-# 1. Ensure prerequisites are installed (Python 3.14+, Git, and Poetry)
-# 2. Run the repository bootstrap script
-./scripts/bootstrap.sh
+# Ensure prerequisites are installed (Python 3.14+, Git, and Poetry)
+make bootstrap
 
-# 3. Use Poetry to install all dependencies from repository root
-poetry install
+# If Poetry is already configured and you only need dependencies:
+make setup
 ```
 
-**Note**: QuickScale uses a monorepo with centralized dev dependencies. Running `poetry install` from the root installs all packages (core, cli, modules) plus shared dev tools (pytest, ruff, mypy).
+**Note**: QuickScale uses a monorepo with centralized dev dependencies. `make bootstrap` and `make setup` install all packages (core, cli, modules) plus shared dev tools (pytest, ruff, mypy) from the repository root.
 
 Notes:
-- Inspect `./scripts/bootstrap.sh` before running if you want to know exactly what it does on your system.
+- Inspect `Makefile` or `scripts/bootstrap.sh` before running if you want to know exactly what the bootstrap path does on your system.
 - If you configured Poetry to create an in-project virtualenv, the bootstrap step may create `.venv/` in the repo root.
 
 ## 2) Running tests (local)
 
-You can run the unit and integration test suite using the repository script or Poetry:
+Use the Makefile as the shared entrypoint for local test workflows:
 
 ```bash
-# Run unit and integration tests (script)
-./scripts/test_unit.sh
+# Run the full unit + integration suite
+make test
 
-# Or run pytest via Poetry
-poetry run pytest
+# Run unit tests only
+make test-unit
 
-# Run package-specific tests
-poetry run pytest quickscale_core/tests/
-poetry run pytest quickscale_cli/tests/
+# Run unit tests for one module
+make MODULE=blog test-unit -- --modules
 ```
 
-If you prefer to run a single test file or test function, use pytest patterns, for example:
+For one-off debugging, run pytest directly through Poetry, for example:
 
 ```bash
-poetry run pytest tests/test_cli.py -q
+poetry run pytest quickscale_core/tests/ -q
+poetry run pytest quickscale_cli/tests/ -q
+poetry run pytest <path/to/test_file.py> -q
 ```
 
 ### 2.1) End-to-End (E2E) Tests
@@ -142,18 +142,16 @@ poetry run playwright install chromium --with-deps
 **Running E2E tests**:
 ```bash
 # Run E2E tests only
-pytest -m e2e
+make test-e2e
+
+# Run the CI-parity release gate (includes E2E)
+make ci-e2e
 
 # Run E2E with visible browser (for debugging)
-pytest -m e2e --headed
+poetry run pytest -m e2e --headed
 
 # Run all tests EXCEPT E2E (fast, for daily development)
-pytest -m "not e2e"
-
-# Use helper script
-./scripts/test_e2e.sh              # Standard run
-./scripts/test_e2e.sh --headed     # Show browser
-./scripts/test_e2e.sh --verbose    # Detailed output
+poetry run pytest -m "not e2e"
 ```
 
 **When to run E2E tests**:
@@ -166,11 +164,18 @@ E2E tests are excluded from fast CI and run separately on release workflows.
 
 ## 3) Linters and code quality checks
 
-Use the repository lint script to run all code quality checks:
+Use the repository Makefile targets for code quality checks:
 
 ```bash
-# Run lint script (includes ruff format, ruff check, and mypy)
-./scripts/lint.sh
+# Lint and type-check with the shared repo configuration
+make lint
+make typecheck
+
+# Apply formatting changes
+make format
+
+# Combined quality gate
+make check
 ```
 
 **Note**: Linting rules are centralized in `ruff.toml` and `mypy.ini` at the repository root. All packages share these configurations automatically.
@@ -276,19 +281,23 @@ quickscale manage collectstatic
 quickscale plan myapp
 cd myapp
 quickscale apply
-# ↑ Docker services auto-start here (if docker.start: true, the default)
+# ↑ If docker.start: true (the default) and you did not pass --no-docker,
+#   apply runs Docker startup here
 
 # Services already running - check status:
 quickscale ps                    # Check services
 quickscale logs backend              # View logs
 
 # OR if you need to start manually:
-# (e.g., after 'quickscale down' or if docker.start: false)
+# (e.g., after 'quickscale down', on a fresh project with docker.start: false,
+#  or after --no-docker)
 quickscale up
-# ↑ Runs Django migrations automatically (idempotent)
+# ↑ Use this when Docker was not auto-started or needs a restart
+
+# If apply did not already run migrations for your path:
+quickscale manage migrate
 
 # Development
-quickscale manage migrate        # Optional manual migration run
 quickscale manage createsuperuser  # Create admin user
 quickscale shell                 # Access container shell
 quickscale manage test           # Run tests
@@ -298,9 +307,10 @@ quickscale down                  # Stop services
 ```
 
 **Note on Docker auto-start:**
-- First `quickscale apply` with `docker.start: true` (default) → services start automatically
-- After `quickscale down` → must run `quickscale up` manually
-- Incremental applies (adding modules) → services keep running, no restart
+- Any `quickscale apply` with `docker.start: true` and no `--no-docker` flag → QuickScale runs Docker startup and then migrations in the backend container
+- Existing-project `quickscale apply` with `docker.start: false` → QuickScale skips Docker startup but still runs local migrations after dependency refresh
+- Fresh-project `quickscale apply` with `docker.start: false`, and any `quickscale apply --no-docker` run, leave startup as a manual step
+- After `quickscale down`, services stay stopped until you run `quickscale up` or another qualifying `quickscale apply`
 
 See [roadmap.md](./roadmap.md) for historical implementation context and follow-on enhancements.
 
@@ -519,9 +529,10 @@ quickscale apply --force
 4. Create initial commit
 5. Auto-commit pending `quickscale.yml` / `.quickscale/` changes in existing projects so git subtree embed runs from a clean tree
 6. Embed selected modules (via git subtree)
-7. Install Poetry dependencies
-8. Run Django migrations
-9. Start Docker services (if configured)
+7. Refresh the Poetry lockfile and install dependencies
+8. If this is an existing project and `docker.start: false`, run local migrations after the dependency refresh
+9. If Docker auto-start is enabled (`docker.start: true` and not `--no-docker`), start Docker services and run migrations in the backend container
+10. Otherwise leave startup as a manual next step; fresh projects without Docker auto-start and `--no-docker` applies also keep migrations as operator-managed steps
 
 For existing projects, that pre-embed auto-commit is limited to QuickScale-managed config/state files. User-owned code changes are not swept into the commit.
 
@@ -547,9 +558,16 @@ cat quickscale.yml
 quickscale apply
 
 # Step 5: Start development
+quickscale ps                    # If Docker auto-start was enabled
+quickscale manage createsuperuser
+
+# If Docker auto-start was disabled on a fresh project, or you used --no-docker:
 quickscale up
 quickscale manage migrate
-quickscale manage createsuperuser
+# or: poetry run python manage.py migrate
+
+# Existing-project apply with docker.start: false already ran local migrations;
+# use quickscale up only if you want Docker services running afterward.
 ```
 
 **Benefits over `init`**:
@@ -580,7 +598,7 @@ quickscale apply
 - **Recommended** even after remove-only operations to ensure no config drift remains.
 
 **Do you need `quickscale down` / `quickscale up`?**
-- **Usually no** for incremental module changes while services are already running.
+- **Usually no manual restart step is required.** Existing-project `quickscale apply` still honors `docker.start`: it reruns Docker startup when `docker.start: true`, or runs local migrations when `docker.start: false`.
 - Use `quickscale down` + `quickscale up` only if:
   - you already stopped services,
   - you changed Docker/runtime settings and want a clean restart,
@@ -617,30 +635,39 @@ docker run -p 8000:8000 \
 
 The `Dockerfile` uses multi-stage builds (builder + runtime) for production efficiency. The `docker-compose.yml` includes PostgreSQL and is configured for local development.
 
-## 5) Development helper scripts
+## 5) Repository Make Targets
 
-- `./scripts/bootstrap.sh` — initial environment/setup steps (inspect to confirm behavior)
-- `./scripts/test_unit.sh` — runs the unit and integration test matrix for the repo
-- `./scripts/lint.sh` — runs configured linters and formatters
-- `./scripts/publish_module.sh` — publishes module changes to split branches
+Use these from the repository root:
 
-Run these scripts from the repository root.
+- `make bootstrap` — bootstrap checks plus dependency install
+- `make setup` — dependency install only
+- `make test` / `make test-unit` — shared test entrypoints
+- `make test-e2e` / `make ci-e2e` — E2E and release-gate validation
+- `make lint` / `make format` / `make typecheck` — shared quality checks
+- `make publish-module MODULE=<name>` — publish module changes to split branches
+- `make version-check` — verify `VERSION` alignment across packages
+
+Lower-level helpers still live in `scripts/` if you need to inspect the underlying implementation.
 
 ## 6) Troubleshooting common issues
 
 - Missing `quickscale` command after install: ensure you installed the `quickscale_cli` package (e.g., `poetry install` in repo root) and that your PATH points to the virtualenv bin directory or use `poetry run quickscale ...`.
 - Poetry missing: install Poetry (https://python-poetry.org/docs/#installation) or run bootstrap script to learn what's required.
-- Permission errors running scripts: check `chmod +x scripts/*.sh` and run scripts from the project root.
+- Permission errors from Makefile-backed helpers: check `chmod +x scripts/*.sh`, since some repository targets shell out to scripts in that directory.
 - Pre-commit failures: run `pre-commit run --all-files` to see failing hooks and fix code formatting/lint issues.
 
 ## 7) Commands quick reference
 
 **Repository Commands**:
-- Bootstrapping: `./scripts/bootstrap.sh`
-- Install deps (Poetry): `poetry install`
-- Tests: `./scripts/test_unit.sh`
-- E2E tests: `./scripts/test_e2e.sh`
-- Lint: `./scripts/lint.sh`
+- Bootstrapping: `make bootstrap`
+- Install deps only: `make setup`
+- Tests: `make test`
+- Unit tests only: `make test-unit`
+- E2E tests: `make test-e2e`
+- CI parity + E2E: `make ci-e2e`
+- Lint: `make lint`
+- Format: `make format`
+- Version parity: `make version-check`
 
 **CLI Commands (Current)**:
 - CLI help: `quickscale --help`
@@ -673,7 +700,7 @@ Minimal, project-focused Poetry commands you will use with this repo:
 
 First-time / bootstrap
 ```bash
-# From repo root (after ./scripts/bootstrap.sh)
+# From repo root (after make bootstrap or make setup)
 # Installs all packages + centralized dev dependencies
 poetry install
 ```

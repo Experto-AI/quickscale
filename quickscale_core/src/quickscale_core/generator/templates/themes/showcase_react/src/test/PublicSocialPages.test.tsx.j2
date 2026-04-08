@@ -5,10 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SocialEmbedsPublicPage } from '@/pages/SocialEmbedsPublicPage'
 import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
 import type { QuickScaleConfig } from '@/hooks/useModules'
-import type {
-  SocialEmbedsPayload,
-  SocialLinkTreePayload,
-} from '@/hooks/usePublicSocialSurface'
+import type { SocialEmbedsPayload, SocialLinkTreePayload } from '@/hooks/usePublicSocialSurface'
 
 const fetchMock = vi.fn()
 
@@ -54,9 +51,7 @@ function renderPublicPage(surface: 'link_tree' | 'embeds', element: React.ReactE
     },
   })
 
-  return render(
-    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
-  )
+  return render(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>)
 }
 
 function mockFetch(payload: unknown, status = 200) {
@@ -267,7 +262,8 @@ describe('public social pages', () => {
       integration_embeds_path: '/_quickscale/social/embeds/',
       provider_allowlist: ['facebook', 'instagram'],
       embed_provider_allowlist: ['youtube', 'tiktok'],
-      error: 'QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST must include TikTok or YouTube when embeds are enabled',
+      error:
+        'QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST must include TikTok or YouTube when embeds are enabled',
       cache_ttl_seconds: 300,
       embeds_per_page: 12,
       total_embeds: 0,

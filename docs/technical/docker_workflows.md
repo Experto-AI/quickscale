@@ -63,9 +63,10 @@ Controls whether to rebuild Docker images during auto-start.
 
 `quickscale apply` automatically starts Docker services when:
 
-1. ✅ **First-time project generation**
-2. ✅ **`docker.start: true` in quickscale.yml** (default)
-3. ✅ **`--no-docker` flag NOT used**
+1. ✅ **`docker.start: true` in quickscale.yml** (default)
+2. ✅ **`--no-docker` flag NOT used**
+
+This applies to both first-time generations and existing-project re-applies.
 
 ### When Services DO NOT Auto-Start
 
@@ -73,8 +74,8 @@ Services require manual `quickscale up` when:
 
 1. ❌ **`docker.start: false` in config**
 2. ❌ **Using `quickscale apply --no-docker`**
-3. ❌ **Incremental apply** (adding modules to existing project)
-4. ❌ **After `quickscale down`**
+
+After `quickscale down`, services stay stopped until you run `quickscale up` or a later `quickscale apply` that qualifies for auto-start.
 
 ### Execution Order During Apply
 
@@ -86,9 +87,11 @@ quickscale apply executes in this order:
 3. Initialize git repository (first time only)
 4. Create initial commit (first time only)
 5. Embed modules via git subtree
-6. Run poetry install
-7. Run Django migrations
-8. Start Docker services (if docker.start: true)  ← Auto-start here
+6. Refresh the Poetry lockfile and run poetry install
+7. If this is an existing project and docker.start: false, run local migrations
+8. If docker.start: true and --no-docker is not set, start Docker services  ← Auto-start here
+9. When Docker auto-start runs, QuickScale then runs migrations in the backend container
+10. Fresh projects without Docker auto-start, and any --no-docker run, leave startup as a manual next step
 ```
 
 ---
@@ -141,7 +144,7 @@ quickscale plan myapp
 # Wizard defaults: docker.start=true, docker.build=true
 cd myapp
 quickscale apply
-# ✅ Services auto-start
+# ✅ Services auto-start and the Docker startup path handles migrations
 
 # Verify immediately:
 quickscale ps
@@ -160,9 +163,14 @@ quickscale plan myapp
 cd myapp
 quickscale apply
 # ❌ Services do NOT start
+# ❌ Migrations are left as a manual next step
 
 # Start manually:
 quickscale up
+
+# Or stay outside Docker:
+poetry run python manage.py migrate
+poetry run python manage.py runserver
 ```
 
 ---
@@ -191,11 +199,14 @@ cd myapp
 vim quickscale.yml  # Add 'crm' module
 quickscale apply
 # ✅ Embeds crm module
-# ✅ Runs poetry install
-# ✅ Runs migrations
-# ❌ Does NOT restart Docker
+# ✅ Refreshes dependencies and managed wiring
+# ✅ If docker.start: true, reruns Docker startup and container migrations
+# ✅ If docker.start: false, keeps Docker stopped but still runs local migrations
 
-# Restart manually to load new module:
+# Manual startup is only needed when auto-start is disabled or you used --no-docker:
+quickscale up
+
+# Restart only if your workflow needs a fresh container start:
 quickscale down
 quickscale up
 ```
@@ -370,17 +381,18 @@ quickscale up  # No rebuild needed
 ├─ docker.start: true (default)
 │  ├─ cd myapp
 │  ├─ quickscale apply
-│  └─ ✅ Services auto-start (no 'quickscale up' needed)
+│  └─ ✅ Fresh and existing applies auto-start Docker and run migrations in the backend container
 │
 ├─ docker.start: false
 │  ├─ cd myapp
 │  ├─ quickscale apply
-│  └─ ❌ Services do NOT start (run 'quickscale up' manually)
+│  ├─ Fresh project → ❌ no auto-start; startup and migrations stay manual
+│  └─ Existing project → ✅ local migrations run, but Docker stays stopped
 │
 └─ --no-docker flag
    ├─ cd myapp
    ├─ quickscale apply --no-docker
-   └─ ❌ Skip Docker (use 'poetry run python manage.py runserver')
+  └─ ❌ Skip Docker (startup stays manual; migrations are manual unless this is an existing project with docker.start: false)
 ```
 
 ---
@@ -449,9 +461,9 @@ docker run -d \
 
 | Situation | Command | Auto-start? |
 |-----------|---------|-------------|
-| First `quickscale apply` | `cd myapp && quickscale apply` | ✅ Yes (if docker.start: true) |
-| After `quickscale down` | `quickscale up` | ❌ No (manual) |
-| Adding module | `quickscale apply` then `quickscale up` | ❌ No (manual restart) |
+| `quickscale apply` with `docker.start: true` | `cd myapp && quickscale apply` | ✅ Yes (fresh and existing projects; backend-container migrations run too) |
+| After `quickscale down` | `quickscale up` | ❌ No (manual start) |
+| Existing-project apply with `docker.start: false` | `quickscale apply` | ❌ No Docker auto-start, but local migrations still run |
 | Changed dependencies | `quickscale up --build` | ❌ No (manual with rebuild) |
 | Fresh install | Follow quickstart in README | ✅ Yes (on first apply) |
 
@@ -466,5 +478,5 @@ docker run -d \
 
 ---
 
-**Last Updated**: 2025-12-11
-**QuickScale Version**: v0.73.0
+**Last Updated**: 2026-04-08
+**QuickScale Version**: current v0.83.0 implementation line (unreleased)

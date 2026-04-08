@@ -1689,7 +1689,9 @@ def _display_next_steps(
             click.echo("  quickscale ps        # Check status")
     else:
         click.echo("  quickscale up        # Start Docker services")
+        click.echo("  quickscale manage migrate  # Run migrations after services start")
         click.echo("  # Or run without Docker:")
+        click.echo("  poetry run python manage.py migrate")
         click.echo("  poetry run python manage.py runserver")
 
     modules = qs_config.modules if isinstance(qs_config.modules, Mapping) else {}
@@ -2085,6 +2087,9 @@ def _execute_apply_steps(
     click.echo("=" * 50)
 
     has_pending_post_embed_recovery = _context_has_pending_post_embed_recovery(ctx)
+    existing_project = _context_had_existing_state(ctx) or (
+        ctx.existing_state is not None and not has_pending_post_embed_recovery
+    )
 
     # Generate project (only for new projects)
     project_generated = False
@@ -2186,12 +2191,15 @@ def _execute_apply_steps(
         )
 
     should_auto_start_docker = not no_docker and ctx.qs_config.docker.start
+    should_run_local_migrations = existing_project and not ctx.qs_config.docker.start
 
-    # Run post-generation steps. Defer migrations until after Docker startup
-    # when auto-start is enabled, so PostgreSQL is reachable.
+    # Fresh scaffolds without Docker auto-start stop after dependency install and
+    # hand database setup to the manual next steps. Existing projects still run
+    # local migrations when Docker auto-start is off so apply materializes
+    # config/module changes against the already-managed database.
     if not _run_post_generation_steps(
         ctx.output_path,
-        run_migrations=not should_auto_start_docker,
+        run_migrations=should_run_local_migrations,
     ):
         _abort_after_post_embed_failure(
             ctx,
@@ -2242,10 +2250,7 @@ def _execute_apply_steps(
         ctx.qs_config,
         no_docker,
         docker_started,
-        existing_project=(
-            _context_had_existing_state(ctx)
-            or (ctx.existing_state is not None and not has_pending_post_embed_recovery)
-        ),
+        existing_project=existing_project,
     )
 
 
@@ -2301,9 +2306,10 @@ def apply(
       3. Initialize git + initial commit
       4. Embed modules (if configured, fail-fast on required module failure)
       5. Regenerate managed module wiring files
-    6. Refresh poetry.lock + run poetry install
+            6. Refresh poetry.lock + run poetry install
       7. Start Docker (if configured)
-      8. Run migrations (after Docker auto-start when enabled)
+            8. Run migrations when Docker auto-start is enabled or when applying
+                 to an existing project without Docker auto-start
     """
     # Prepare context
     ctx = _prepare_apply_context(Path(config))

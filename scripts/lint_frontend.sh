@@ -57,8 +57,8 @@ render_template() {
 
 	# Strip Jinja2 directives and replace template variables
 	sed \
-		-e 's/{%[[:space:]]*raw[[:space:]]*%}//g' \
-		-e 's/{%[[:space:]]*endraw[[:space:]]*%}//g' \
+		-e 's/{%-\{0,1\}[[:space:]]*raw[[:space:]]*-\{0,1\}%}//g' \
+		-e 's/{%-\{0,1\}[[:space:]]*endraw[[:space:]]*-\{0,1\}%}//g' \
 		-e 's/{{[[:space:]]*project_name[[:space:]]*}}/myapp/g' \
 		-e 's/{{[[:space:]]*package_name[[:space:]]*}}/myapp/g' \
 		-e 's/{{[[:space:]]*project_description[[:space:]]*}}/A QuickScale project/g' \

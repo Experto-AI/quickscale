@@ -5,10 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PublicSocialShell } from '@/components/social/PublicSocialShell'
 import { trackSocialLinkClick } from '@/lib/analytics'
-import {
-  usePublicSocialSurface,
-  type SocialEmbedsPayload,
-} from '@/hooks/usePublicSocialSurface'
+import { usePublicSocialSurface, type SocialEmbedsPayload } from '@/hooks/usePublicSocialSurface'
 
 function embedFrameStyle(
   record: SocialEmbedsPayload['embeds'][number],
@@ -26,9 +23,8 @@ function embedFrameStyle(
 }
 
 export function SocialEmbedsPublicPage() {
-  const { data, error, isError, isLoading, navigation, projectName } = usePublicSocialSurface(
-    'embeds',
-  )
+  const { data, error, isError, isLoading, navigation, projectName } =
+    usePublicSocialSurface('embeds')
 
   const status = isLoading ? 'loading' : isError || data == null ? 'error' : data.status
   const description = isLoading
@@ -41,8 +37,8 @@ export function SocialEmbedsPublicPage() {
           ? 'The embed route is live and ready for the first curated clip, reel, or video without moving ownership into the SPA router.'
           : data.status === 'disabled'
             ? 'The route is still reserved by Django, but curated embeds are currently paused in the managed social settings.'
-            : data.error ??
-              'The managed social contract reported an error while preparing the public embed gallery.'
+            : (data.error ??
+              'The managed social contract reported an error while preparing the public embed gallery.')
 
   const stats = [
     {

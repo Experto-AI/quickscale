@@ -100,6 +100,37 @@
 			],
 			"isBackground": false,
 			"group": "test"
+		},
+		{
+			"label": "quality-gate: make ci-e2e",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"ci-e2e"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: make ci-e2e (captured bash)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"set -o pipefail && make ci-e2e > /tmp/quickscale-quality-gate-make-ci-e2e.log 2>&1; status=$?; tail -n 200 /tmp/quickscale-quality-gate-make-ci-e2e.log; exit $status"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "quality-gate: make version-check",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"version-check"
+			],
+			"isBackground": false,
+			"group": "test"
 		}
 	]
 }

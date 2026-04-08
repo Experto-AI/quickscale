@@ -1,6 +1,6 @@
 # QuickScale Blog Module
 
-Production-ready blog module for Django projects with Markdown support, featured images, categories, tags, and RSS feeds.
+Production-ready blog module for Django projects with Markdown support, featured images, categories, tags, and optional RSS feeds.
 
 ## Features
 
@@ -12,9 +12,9 @@ Production-ready blog module for Django projects with Markdown support, featured
 - **Author Profiles**: Extended user profiles with bio and avatar
 - **Featured Images**: Auto-generated thumbnails (300x200, 800x450)
 - **Automation API**: Upload images over API, then publish Markdown posts with a featured image reference
-- **RSS Feed**: Latest 20 published posts with full metadata
+- **RSS Feed**: Latest 20 published posts with full metadata when `BLOG_ENABLE_RSS` is enabled
 - **Zero-Style Templates**: Semantic HTML base templates (no CSS classes)
-- **Pagination**: 10 posts per page (configurable)
+- **Pagination**: `BLOG_POSTS_PER_PAGE` controls the page size (default: 10)
 - **SEO-Friendly**: Slugs, meta tags, semantic HTML structure
 
 ## Installation
@@ -36,12 +36,10 @@ This will:
 
 ### Configuration Options
 
-When configuring the module, review these options in `quickscale.yml`:
+The shipped `quickscale.yml` options for this module are:
 
-1. **Posts per page** (default: 10)
-2. **Excerpt length** (default: 300 characters)
-3. **Enable categories/tags** (default: yes)
-4. **Enable RSS feed** (default: yes)
+1. **Posts per page** (`BLOG_POSTS_PER_PAGE`, default: 10)
+2. **Enable RSS feed** (`BLOG_ENABLE_RSS`, default: yes)
 
 ### Manual Installation
 
@@ -97,7 +95,7 @@ After embedding, these URLs are available:
 - `/blog/post/<slug>/` - Post detail
 - `/blog/category/<slug>/` - Posts by category
 - `/blog/tag/<slug>/` - Posts by tag
-- `/blog/feed/` - RSS feed
+- `/blog/feed/` - RSS feed when `BLOG_ENABLE_RSS = True`
 - `/blog/api/media/` - Staff upload endpoint for blog images
 - `/blog/api/publish/` - Staff publish endpoint for Markdown blog posts
 
@@ -315,6 +313,8 @@ To add custom fields to the Post model:
 
 ### RSS Feed Customization
 
+The default `/blog/feed/` route exists only when `BLOG_ENABLE_RSS` is true. If you replace it, keep that setting gate in your project URLs.
+
 To customize the RSS feed:
 
 ```python
@@ -348,6 +348,7 @@ Add these to your `settings.py` to customize blog behavior:
 ```python
 # Blog pagination
 BLOG_POSTS_PER_PAGE = 10  # Posts per page
+BLOG_ENABLE_RSS = True    # Enable the /blog/feed/ route at runtime
 
 # Markdownx configuration
 MARKDOWNX_MARKDOWN_EXTENSIONS = [

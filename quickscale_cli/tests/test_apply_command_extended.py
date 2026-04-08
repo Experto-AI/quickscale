@@ -1934,12 +1934,16 @@ class TestDisplayNextSteps:
         config.docker.start = True
         _display_next_steps(tmp_path / "myapp", config, False)
 
-    def test_without_docker(self, monkeypatch, tmp_path):
+    def test_without_docker(self, monkeypatch, tmp_path, capsys):
         """Test next steps display without Docker"""
         config = Mock()
         config.project.slug = "myapp"
         config.docker.start = False
         _display_next_steps(Path.cwd(), config, True)
+        output = capsys.readouterr().out
+
+        assert "quickscale manage migrate" in output
+        assert "poetry run python manage.py migrate" in output
 
     def test_with_docker_start_failure(self, monkeypatch, tmp_path, capsys):
         """Test next steps display when Docker auto-start fails."""
@@ -2615,7 +2619,7 @@ class TestExecuteApplySteps:
                     verbose_docker=False,
                 )
 
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once_with(
             ctx.output_path,
@@ -2939,7 +2943,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
-    def test_new_project_without_docker_autostart_runs_migrations_in_post_step(
+    def test_new_project_without_docker_autostart_defers_migrations_in_post_step(
         self,
         mock_generate_new_project,
         mock_init_git,
@@ -2952,7 +2956,7 @@ class TestExecuteApplySteps:
         mock_save_state,
         mock_display_next_steps,
     ):
-        """When Docker auto-start is off, migrations stay in post-generation step."""
+        """Fresh scaffolds without Docker auto-start should defer migrations."""
         mock_embed_modules_step.return_value = EmbedModulesResult(
             success=True,
             embedded_modules=[],
@@ -2985,9 +2989,75 @@ class TestExecuteApplySteps:
             ctx.output_path,
             ctx.qs_config,
         )
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_start_docker.assert_not_called()
         mock_run_migrations_in_docker.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
+    @patch("quickscale_cli.commands.apply_command._start_docker")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_new_project_no_docker_with_docker_autostart_skips_all_migrations(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_start_docker,
+        mock_run_migrations_in_docker,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """--no-docker should not fall back to local migrations for Docker-first projects."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = True
+        ctx.qs_config.docker.build = True
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=True,
+            no_modules=False,
+            verbose_docker=False,
+        )
+
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_start_docker.assert_not_called()
+        mock_run_migrations_in_docker.assert_not_called()
+        mock_display_next_steps.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            True,
+            None,
+            existing_project=False,
+        )
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
@@ -3004,7 +3074,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
-    def test_local_migrations_failure_aborts_apply_and_saves_recovery(
+    def test_existing_project_local_migrations_failure_aborts_apply_and_saves_recovery(
         self,
         mock_generate_new_project,
         mock_init_git,
@@ -3020,7 +3090,7 @@ class TestExecuteApplySteps:
         mock_save_state,
         mock_display_next_steps,
     ):
-        """Non-Docker migration failures must take the same recovery-gated abort path."""
+        """Existing-project local migration failures must take the recovery-gated abort path."""
         mock_embed_modules_step.return_value = EmbedModulesResult(
             success=True,
             embedded_modules=[],
@@ -3036,7 +3106,8 @@ class TestExecuteApplySteps:
         mock_run_migrations.return_value = False
 
         ctx = Mock()
-        ctx.existing_state = None
+        ctx.existing_state = Mock()
+        ctx.had_existing_state = True
         ctx.output_path = Path("/tmp/proj")
         ctx.manifests = {}
         ctx.delta = Mock()

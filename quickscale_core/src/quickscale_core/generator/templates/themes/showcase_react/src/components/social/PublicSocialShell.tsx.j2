@@ -1,20 +1,9 @@
 {% raw -%}
-import {
-  ArrowRight,
-  Compass,
-  ExternalLink,
-  Home,
-  Link2,
-  PlaySquare,
-  Sparkles,
-} from 'lucide-react'
+import { ArrowRight, Compass, ExternalLink, Home, Link2, PlaySquare, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { PublicSocialSurface } from '@/hooks/useModules'
-import type {
-  PublicSocialNavigation,
-  SocialPayloadStatus,
-} from '@/hooks/usePublicSocialSurface'
+import type { PublicSocialNavigation, SocialPayloadStatus } from '@/hooks/usePublicSocialSurface'
 import { cn } from '@/lib/utils'
 
 type PublicSocialShellProps = {
@@ -179,15 +168,15 @@ export function PublicSocialShell({
                 Route ownership
               </CardTitle>
               <CardDescription>
-                Django keeps these public URLs canonical while the shared React bundle hydrates
-                the page content.
+                Django keeps these public URLs canonical while the shared React bundle hydrates the
+                page content.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-slate-600">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                Full-document navigation from the dashboard preserves <strong>/social</strong>{' '}
-                and <strong>/social/embeds</strong> as Django-owned public routes instead of
-                routing them through the SPA.
+                Full-document navigation from the dashboard preserves <strong>/social</strong> and{' '}
+                <strong>/social/embeds</strong> as Django-owned public routes instead of routing
+                them through the SPA.
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 The page content comes from the frozen managed JSON transport, so enabled, empty,

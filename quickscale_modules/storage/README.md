@@ -12,10 +12,16 @@ Shared media-storage infrastructure for QuickScale modules.
 ## Canonical contract for v0.76.0
 
 - Local filesystem remains the default
-- Cloud storage is opt-in through module configuration
+- Cloud storage is opt-in through module configuration and the package's `cloud` extra
 - `public_base_url` is the only supported public media URL setting
 - If `public_base_url` is blank, helper-built URLs fall back to `MEDIA_URL`
 - S3-compatible backends cover AWS S3 and Cloudflare R2
+
+## Package dependency contract
+
+- Pillow remains part of the base package because shared upload validation and image helpers are part of the default storage contract.
+- Cloud-provider dependencies stay optional behind the `cloud` extra (`django-storages` and `boto3`) and are only required for `backend: s3` or `backend: r2`.
+- Local-only installs keep working without the `cloud` extra.
 
 ## Planner and apply workflow
 
@@ -49,6 +55,8 @@ modules:
 ```
 
 ## Provider setup
+
+If you install the package outside QuickScale's managed apply flow, enable the `cloud` extra before using `backend: s3` or `backend: r2`.
 
 ### AWS S3
 

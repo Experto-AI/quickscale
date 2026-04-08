@@ -859,22 +859,25 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ❌ SQLite is unsupported
 - ❌ No backward compatibility layer, migration shim, or fallback mode for SQLite-based setups
 
-**Scripts Reference (AI Assistant Guidance):**
-- `./scripts/install_global.sh` - **Install Poetry globally** - use official installer (REQUIRED FIRST: avoids version conflicts, DO NOT use pip/pipx)
-- `./scripts/bootstrap.sh` - **Initial setup** - installs all dependencies and configures pre-commit hooks (run after install_global.sh)
-- `./scripts/lint.sh` - **Format and lint** - runs Ruff format + check across all packages (replaces Black + Flake8)
-- `./scripts/test_all.sh` - **Test all packages** - executes full test suite across quickscale_core, quickscale_cli, and modules
-- `./scripts/test_e2e.sh` - **End-to-end tests** - runs E2E tests with PostgreSQL container and browser automation (slow, for release validation)
-- `./scripts/publish.sh` - **Publish to PyPI** - internal packaging helper; not part of the current module distribution contract
-- `./scripts/version_tool.sh` - **Version management** - bumps version numbers across all packages consistently
-- `./scripts/quickscale_legacy_symlink.sh` - **Legacy compatibility** - manages symlinks for legacy QuickScale installations
+**Repository Command Reference (AI Assistant Guidance):**
+- `make bootstrap` - Full repository bootstrap after Poetry is available
+- `make setup` - Install repository dependencies without rerunning bootstrap checks
+- `make lint` - Shared lint-check entrypoint
+- `make format` - Shared formatting entrypoint
+- `make test` - Shared unit + integration test entrypoint
+- `make test-unit` - Shared unit-only entrypoint with section and module scoping
+- `make test-e2e` - End-to-end validation with PostgreSQL and browser automation
+- `make ci-e2e` - CI-parity release-gate validation including E2E
+- `make version-check` - Verify `VERSION` parity across the versioned packages
+- `make publish-module MODULE=<name>` - Maintainer helper for split-branch publishing
 
 **AI Assistant Rules:**
-- ✅ ALWAYS use `./scripts/install_global.sh` FIRST (never pip install poetry / pipx install poetry)
-- ✅ Use `./scripts/lint.sh` for formatting (DO NOT use black or flake8 directly)
-- ✅ Use `./scripts/test_all.sh` for running tests (DO NOT use pytest directly on individual packages without coordination)
-- ✅ Use `./scripts/test_e2e.sh` for E2E validation before releases (DO NOT skip for production releases)
-- ❌ NEVER install Poetry via pip/pipx (causes version conflicts with system Poetry)
+- ✅ Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly
+- ✅ Use `make lint` and `make format` for repo-wide lint/format guidance
+- ✅ Use `make test` or targeted `make test-unit` invocations for shared test runs
+- ✅ Use `make ci-e2e` for release-gate validation when the full hardening/release path needs E2E coverage
+- ✅ Use `make version-check` when verifying repo package/version parity
+- ❌ Do not invent or document nonexistent helper scripts such as `./scripts/test_all.sh`
 
 ### CLI Commands {#cli-command-matrix}
 
@@ -893,6 +896,12 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 **Deployment Commands:**
 - ✅ `quickscale deploy railway` - Automated Railway deployment with PostgreSQL setup
 - ✅ `quickscale deploy railway --project-name <name>` - Specify project name
+
+**Disaster Recovery & Promotion Commands:**
+- ✅ `quickscale dr capture` - Capture and store a route snapshot
+- ✅ `quickscale dr plan` - Build and validate a stored route plan
+- ✅ `quickscale dr execute` - Execute one or more recovery or promotion surfaces for a stored snapshot
+- ✅ `quickscale dr report` - Review stored plan and execute records for a route snapshot
 
 **Module Management Commands:**
 - ✅ `quickscale status` - Show project and module status

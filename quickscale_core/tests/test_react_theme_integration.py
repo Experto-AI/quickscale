@@ -10,6 +10,8 @@ These tests verify the complete React theme generation workflow including:
 
 import json
 import re
+import sys
+import types
 
 import pytest
 
@@ -948,6 +950,62 @@ class TestReactThemeModuleActivationMatrix:
         assert "frontend/assets/index.js" in embeds_template
         assert "surface: 'embeds'" in embeds_template
         assert "endpoint: '/_quickscale/social/embeds/'" in embeds_template
+
+    def test_react_public_social_embeds_render_site_root_static_asset_urls(
+        self, tmp_path, monkeypatch
+    ):
+        """Nested public social pages should render static asset URLs from site root."""
+        from django.conf import settings as django_settings
+        from django.template import Context, Engine, Library
+
+        project_name = "react_social_static_assets"
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / project_name
+        generator.generate(project_name, output_path)
+
+        if not django_settings.configured:
+            django_settings.configure(
+                DEBUG=False,
+                SECRET_KEY="quickscale-test-key",
+                USE_I18N=False,
+                USE_TZ=False,
+            )
+
+        settings_base = (
+            output_path / project_name / "settings" / "base.py"
+        ).read_text()
+        assert 'STATIC_URL = "/static/"' in settings_base
+        assert 'MEDIA_URL = "/media/"' in settings_base
+
+        static_tags = Library()
+
+        @static_tags.simple_tag
+        def static(path):
+            return f"/static/{path}"
+
+        static_module = types.ModuleType("_quickscale_test_static_tags")
+        static_module.register = static_tags
+        monkeypatch.setitem(sys.modules, static_module.__name__, static_module)
+
+        engine = Engine(
+            dirs=[str(output_path / "templates")],
+            libraries={"static": static_module.__name__},
+        )
+        rendered = engine.get_template("social/embeds.html").render(
+            Context(
+                {
+                    "messages": [],
+                    "settings": types.SimpleNamespace(
+                        QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=True,
+                        QUICKSCALE_SOCIAL_EMBEDS_ENABLED=True,
+                    ),
+                }
+            )
+        )
+
+        assert 'href="/static/frontend/assets/index.css"' in rendered
+        assert 'src="/static/frontend/assets/index.js"' in rendered
+        assert "/social/static/" not in rendered
 
     def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):
         """React router should include routes for every module link exposed by the UI."""

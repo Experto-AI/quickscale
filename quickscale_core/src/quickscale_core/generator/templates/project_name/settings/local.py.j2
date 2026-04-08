@@ -54,7 +54,7 @@ if "EMAIL_BACKEND" not in globals():
 
 # Simplified static file serving in development while preserving the selected
 # default media storage backend from base settings/module wiring.
-STORAGES["staticfiles"] = {
+STORAGES["staticfiles"] = {  # noqa: F405
     "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
 }
 

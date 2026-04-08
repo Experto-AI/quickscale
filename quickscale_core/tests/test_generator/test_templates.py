@@ -2,6 +2,9 @@
 
 import ast
 from pathlib import Path
+import sys
+import types
+from collections.abc import Callable
 
 import pytest
 from jinja2 import Environment, FileSystemLoader
@@ -10,7 +13,9 @@ from jinja2 import Environment, FileSystemLoader
 @pytest.fixture
 def template_dir() -> Path:
     """Locate and return the templates directory path."""
-    core_dir = Path(__file__).parent.parent.parent / "src" / "quickscale_core"
+    import quickscale_core
+
+    core_dir = Path(quickscale_core.__file__).resolve().parent
     templates_dir = core_dir / "generator" / "templates"
     assert templates_dir.exists(), f"Templates directory not found: {templates_dir}"
     return templates_dir
@@ -29,6 +34,56 @@ def test_context() -> dict[str, str]:
         "project_name": "testproject",
         "package_name": "testproject",
     }
+
+
+class TestQuickScaleCorePackageMetadata:
+    """Verify package metadata helpers used by the template tests."""
+
+    def test_version_module_falls_back_to_repo_version_file(self) -> None:
+        """Development version metadata should fall back to the repo VERSION file."""
+        import builtins
+
+        import quickscale_core
+
+        version_path = Path(quickscale_core.__file__).resolve().parent / "version.py"
+        repo_version = (
+            version_path.parents[3]
+            .joinpath("VERSION")
+            .read_text(encoding="utf8")
+            .strip()
+        )
+        version_source = version_path.read_text(encoding="utf8")
+        real_import = builtins.__import__
+
+        def fake_import(
+            name: str,
+            globals_: dict[str, object] | None = None,
+            locals_: dict[str, object] | None = None,
+            fromlist: tuple[str, ...] = (),
+            level: int = 0,
+        ) -> object:
+            if (
+                name == "_version"
+                and level == 1
+                and globals_ is not None
+                and globals_.get("__package__") == "quickscale_core"
+            ):
+                raise ImportError("exercise repository VERSION fallback")
+            return real_import(name, globals_, locals_, fromlist, level)
+
+        namespace: dict[str, object] = {
+            "__builtins__": {**builtins.__dict__, "__import__": fake_import},
+            "__file__": str(version_path),
+            "__name__": "quickscale_core.version",
+            "__package__": "quickscale_core",
+        }
+
+        exec(compile(version_source, str(version_path), "exec"), namespace)
+
+        assert namespace["__version__"] == repo_version
+        assert namespace["VERSION"] == tuple(
+            int(part) for part in repo_version.split(".")
+        )
 
 
 class TestTemplateLoading:
@@ -381,11 +436,23 @@ class TestProductionReadyFeatures:
         output = template.render(test_context)
 
         storages_index = output.index("STORAGES = {")
-        media_index = output.index('MEDIA_URL = "media/"')
+        media_index = output.index('MEDIA_URL = "/media/"')
         module_settings_index = output.index("globals().update(MODULE_SETTINGS)")
 
         assert storages_index < module_settings_index
         assert media_index < module_settings_index
+
+    def test_base_settings_use_site_root_static_and_media_urls(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Base settings should use absolute static/media prefixes for nested pages."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        assert 'STATIC_URL = "/static/"' in output
+        assert 'MEDIA_URL = "/media/"' in output
+        assert 'STATIC_URL = "static/"' not in output
+        assert 'MEDIA_URL = "media/"' not in output
 
     def test_local_settings_preserve_default_storage_backend(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -406,9 +473,63 @@ class TestProductionReadyFeatures:
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
 
-        assert 'if EMAIL_BACKEND == "anymail.backends.resend.EmailBackend":' in output
+        assert (
+            'if globals().get("EMAIL_BACKEND") '
+            '== "anymail.backends.resend.EmailBackend":' in output
+        )
         assert "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR" in output
         assert 'ANYMAIL["RESEND_API_KEY"]' in output
+
+    def test_base_settings_allow_unmanaged_email_backend_when_notifications_disabled(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Base settings should stay importable when no module manages email."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        package_name = test_context["package_name"]
+        settings_package_name = f"{package_name}.settings"
+        modules_name = f"{settings_package_name}.modules"
+
+        package_module = types.ModuleType(package_name)
+        package_module.__dict__["__path__"] = []
+        settings_package_module = types.ModuleType(settings_package_name)
+        settings_package_module.__dict__["__path__"] = []
+        modules_module = types.ModuleType(modules_name)
+        modules_module.MODULE_INSTALLED_APPS = []
+        modules_module.MODULE_MIDDLEWARE = []
+        modules_module.MODULE_SETTINGS = {}
+
+        def fake_config(
+            _key: str,
+            default: object = "",
+            cast: Callable[[object], object] | None = None,
+        ) -> object:
+            if cast is None:
+                return default
+            return cast(default)
+
+        decouple_module = types.ModuleType("decouple")
+        decouple_module.config = fake_config
+
+        monkeypatch.setitem(sys.modules, package_name, package_module)
+        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
+        monkeypatch.setitem(sys.modules, modules_name, modules_module)
+        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
+
+        namespace: dict[str, object] = {
+            "__file__": f"/tmp/{package_name}/settings/base.py",
+            "__name__": f"{settings_package_name}.base",
+            "__package__": settings_package_name,
+        }
+
+        exec(output, namespace)
+
+        assert "EMAIL_BACKEND" not in namespace
+        assert "ANYMAIL" not in namespace
 
     def test_local_settings_email_backend_is_fallback_only(
         self, jinja_env: Environment, test_context: dict[str, str]

@@ -30,6 +30,48 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_DEPENDENCY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+")
 STORAGE_CLOUD_BACKENDS = {"r2", "s3"}
 STORAGE_CLOUD_DEPENDENCIES = {"boto3", "django-storages"}
+REPO_LOCAL_ARTIFACT_NAMES = frozenset(
+    {
+        ".mypy_cache",
+        ".nox",
+        ".pnpm-store",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        "__pycache__",
+        "build",
+        "coverage.json",
+        "coverage.xml",
+        "dist",
+        "htmlcov",
+        "node_modules",
+    }
+)
+REPO_LOCAL_ARTIFACT_SUFFIXES = (".egg-info", ".pyc", ".pyo")
+
+
+def _is_repo_local_artifact(entry_name: str) -> bool:
+    """Return whether a copied repo entry is a local-only artifact."""
+    return (
+        entry_name in REPO_LOCAL_ARTIFACT_NAMES
+        or entry_name == ".coverage"
+        or entry_name.startswith(".coverage.")
+        or entry_name.endswith(REPO_LOCAL_ARTIFACT_SUFFIXES)
+    )
+
+
+def _ignore_repo_local_artifacts(_directory: str, entries: list[str]) -> list[str]:
+    """Filter repo-local caches and coverage artifacts out of smoke-test copies."""
+    return [entry for entry in entries if _is_repo_local_artifact(entry)]
+
+
+def _copytree_for_generated_project_smoke(source: Path, destination: Path) -> None:
+    """Copy shipped module content without repo-local test and cache artifacts."""
+    shutil.copytree(
+        source,
+        destination,
+        ignore=_ignore_repo_local_artifacts,
+    )
 
 
 def _is_network_failure(output: str) -> bool:
@@ -146,6 +188,39 @@ def _expected_distribution_names(
     return expected_names
 
 
+def test_generated_project_copytree_ignores_repo_local_artifacts(tmp_path):
+    """Smoke-copy helper should not carry repo-local caches into generated projects."""
+    source = tmp_path / "source_module"
+    source.mkdir()
+    (source / "module.py").write_text('print("ok")\n')
+    (source / "README.md").write_text("module docs\n")
+    (source / ".ruff_cache").mkdir()
+    (source / ".ruff_cache" / "cache.db").write_text("ignored\n")
+    (source / ".pytest_cache").mkdir()
+    (source / ".pytest_cache" / "README").write_text("ignored\n")
+    (source / "htmlcov").mkdir()
+    (source / "htmlcov" / "index.html").write_text("ignored\n")
+    (source / "__pycache__").mkdir()
+    (source / "__pycache__" / "module.cpython-314.pyc").write_bytes(b"cache")
+    (source / "build").mkdir()
+    (source / "build" / "artifact.txt").write_text("ignored\n")
+    (source / ".coverage").write_text("ignored\n")
+    (source / ".coverage.unit").write_text("ignored\n")
+
+    destination = tmp_path / "copied_module"
+    _copytree_for_generated_project_smoke(source, destination)
+
+    assert (destination / "module.py").exists()
+    assert (destination / "README.md").exists()
+    assert not (destination / ".ruff_cache").exists()
+    assert not (destination / ".pytest_cache").exists()
+    assert not (destination / "htmlcov").exists()
+    assert not (destination / "__pycache__").exists()
+    assert not (destination / "build").exists()
+    assert not (destination / ".coverage").exists()
+    assert not (destination / ".coverage.unit").exists()
+
+
 @pytest.fixture(scope="session")
 def docker_available() -> None:
     """Skip E2E tests if Docker daemon is unavailable in this environment."""
@@ -208,8 +283,9 @@ class TestGeneratedProjectDependencyInstallSmoke:
         assert (project_path / "poetry.lock").exists()
 
         embedded_module_path = project_path / "modules" / "forms"
-        shutil.copytree(
-            REPO_ROOT / "quickscale_modules" / "forms", embedded_module_path
+        _copytree_for_generated_project_smoke(
+            REPO_ROOT / "quickscale_modules" / "forms",
+            embedded_module_path,
         )
 
         sync_result = sync_project_module_dependencies(
@@ -283,7 +359,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
         ]
 
         for module_name in ready_module_names:
-            shutil.copytree(
+            _copytree_for_generated_project_smoke(
                 REPO_ROOT / "quickscale_modules" / module_name,
                 project_path / "modules" / module_name,
             )

@@ -144,10 +144,7 @@ function isSocialEmbedRecord(value: unknown): value is SocialEmbedRecord {
   )
 }
 
-function hasBasePayload(
-  value: unknown,
-  surface: PublicSocialSurface,
-): value is SocialBasePayload {
+function hasBasePayload(value: unknown, surface: PublicSocialSurface): value is SocialBasePayload {
   if (value == null || typeof value !== 'object') {
     return false
   }
@@ -233,9 +230,7 @@ async function fetchPublicSocialPayload<TSurface extends PublicSocialSurface>(
   )
 }
 
-export function usePublicSocialSurface<TSurface extends PublicSocialSurface>(
-  surface: TSurface,
-) {
+export function usePublicSocialSurface<TSurface extends PublicSocialSurface>(surface: TSurface) {
   const config = useProjectConfig()
   const publicPage = config.publicPage?.surface === surface ? config.publicPage : undefined
   const endpoint = publicPage?.endpoint ?? DEFAULT_ENDPOINTS[surface]

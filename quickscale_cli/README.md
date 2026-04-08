@@ -2,11 +2,12 @@
 
 Command-line interface package for QuickScale.
 
-This package exposes the `quickscale` command used to plan, apply, inspect, and operate generated projects.
+This package exposes the `quickscale` command used to plan, apply, inspect, recover, and operate generated projects.
 
 ## Command groups
 
 - Project lifecycle: `plan`, `apply`, `status`, `remove`
+- Disaster recovery & promotion: `dr capture`, `dr plan`, `dr execute`, `dr report`
 - Local development: `up`, `down`, `ps`, `logs`, `shell`, `manage`
 - Deployment: `deploy`
 - Module workflows: `update`, `push`

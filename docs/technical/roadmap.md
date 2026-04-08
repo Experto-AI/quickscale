@@ -50,18 +50,19 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.80.0 | ✅ Released | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
 | v0.81.0 | ✅ Released | Beta-site migration maintainer tooling | Maintainer-only fresh-first and checkpoint-first in-place beta-site migration workflows; archived in release note and changelog |
 | v0.82.0 | ✅ Released | Disaster recovery & environment promotion | Public `quickscale dr` capture/plan/execute/report workflows with `snapshot_id` lookup, resumable capture/execute, rollback pins, conservative env-var sync, and source-side media sync; archived in release note and changelog |
-| v0.83.0 | 📋 Planned | Hardening release | Repo-wide contract, explicit-failure, dependency, theme, and test hardening before the next new public module release |
+| v0.83.0 | ✅ Closeout complete (unreleased) | Hardening release | Repo-wide hardening, SSOT reconciliation, and final validation are complete in-repo; publish-time artifacts remain deferred until tag/release |
 | v0.84.0 | 📋 Planned | Billing module | Stripe integration after v0.83.0 hardening closes the current platform and module contract gaps |
 | v0.85.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
 | v0.86.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and teams milestones |
 
 **Legend:**
-- ✅ = Completed, released, or internally baselined
+- ✅ = Completed, released, internally baselined, or unreleased closeout complete
 - 📋 = Planned/Not Started
 
 **Status:**
 - **Current release:** v0.82.0 is the published release
-- **Active next milestone:** v0.83.0 hardening release is the current planning scope
+- **Current in-repo closeout:** v0.83.0 hardening is complete and awaits tag/release-time artifacts
+- **Next planned feature milestone:** v0.84.0 billing module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.85.0 - auth, billing, teams modules complete on top of the notifications foundation
 
@@ -89,9 +90,11 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ### v0.83.0: Hardening Release
 
-**Status**: 📋 Planned
+**Status**: ✅ Closeout complete in repo (unreleased)
 
 **Goal**: Close the repo-wide audit findings before shipping the next new public module release. This milestone hardens the current plan/apply surface, managed wiring behavior, shipped starter themes, module contract fidelity, metadata parity, and regression coverage so later billing and teams work lands on a stable documented base.
+
+**Current status (2026-04-08)**: The hardening implementation, SSOT reconciliation, and final validation are complete in-repo. Final validation passed via `make ci-e2e` and `make version-check`. Publish-time artifacts remain deferred until a tag/release exists, so v0.82.0 remains the current published release.
 
 **Implementation Review**: The original checklist covers the right hardening surface, but it mixes platform, generator, module-runtime, metadata, and closeout work into one flat milestone. For handoff, v0.83.0 should run as phased slices grouped by related code so each implementation pass can stay localized, testable, and reviewable.
 
@@ -179,7 +182,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Primary code grouping**: auth public option surface, forms runtime/schema behavior, CRM terminal-stage semantics, related manifests/docs, and targeted module regressions.
 
-**Current status (2026-04-07)**: Phase 5 implementation is complete in the current worktree. Auth keeps `social_providers` future-facing and out of the shipped public surface while tolerating legacy config reads. Forms now shares one spam-protection predicate between schema generation and submission handling, and new `Form` rows inherit `FORMS_DATA_RETENTION_DAYS` without rewriting existing per-row retention values. CRM removes `default_pipeline_stages` from the shipped contract, backfills hidden terminal won/lost semantics, enforces one semantic row per terminal state with a forward-safe follow-up migration, and keeps runtime `mark-won` / `mark-lost` self-healing for older datasets. Within the remaining shipped auth/forms/CRM option surface, no other advertised-but-unused option was verified in this pass: the remaining auth options map to live account/session settings, the remaining forms options map to runtime schema, submission, throttle, and staff API behavior, and the remaining CRM options map to runtime API toggles and pagination behavior.
+**Current status (2026-04-07)**: Phase 5 implementation is complete in the current worktree. Auth keeps `social_providers` future-facing and out of the shipped public surface while tolerating legacy config reads. Forms now shares one spam-protection predicate between schema generation and submission handling, and new `Form` rows inherit `FORMS_DATA_RETENTION_DAYS` without rewriting existing per-row retention values. CRM removes `default_pipeline_stages` from the shipped contract, backfills hidden terminal won/lost semantics, enforces one semantic row per terminal state with a forward-safe follow-up migration, and keeps runtime `mark-won` / `mark-lost` self-healing for older datasets. Within the remaining shipped auth/forms/CRM option surface, no other advertised-but-unused option was verified in this pass: the remaining auth options map to live account/session settings, the remaining forms options map to runtime schema, submission, throttle, and staff API behavior, and the remaining CRM options map to runtime API toggles and pagination behavior. The former audit follow-up is now resolved: no shipped module in scope has confirmed CLI-written mutable settings ignored by runtime code.
 
 - [x] Confirm and document that auth `social_providers` remains future-facing in v0.83.0 rather than part of the shipped public contract.
 - [x] Because auth `social_providers` remains future-facing, remove it from the public manifest/CLI/docs surface while keeping legacy config reads and applies tolerant.
@@ -189,7 +192,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [x] Remove CRM `default_pipeline_stages` from the shipped immutable contract until it is real.
 - [x] Enforce hidden CRM terminal-semantic uniqueness with a forward-safe migration, add MigrationExecutor coverage for exact-name backfill and duplicate canonicalization, and keep direct self-heal regression coverage for `mark-won` / `mark-lost`.
 - [x] Audit the remaining shipped auth/forms/CRM mutable and immutable options for other advertised-but-unused behavior and record the closeout outcome in this milestone.
-- [ ] Confirm whether any other shipped modules have CLI-written settings that are ignored by runtime code, and add the results of that verification to this milestone before closeout.
+- [x] Confirm whether any other shipped modules have CLI-written settings that are ignored by runtime code, and add the results of that verification to this milestone before closeout.
 - [x] Add module-level regression coverage for forms retention defaults, forms spam-protection behavior, tolerant auth legacy social-provider handling, and CRM terminal-stage migration/runtime behavior.
 
 #### Phase 6: Packaged Metadata Parity and Placeholder Leakage Cleanup
@@ -213,9 +216,17 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Primary code grouping**: repo-wide validation, SSOT reconciliation, package/module documentation alignment, and milestone closeout tracking.
 
-- [ ] Run and record the final repo-wide regression pass for the hardening milestone, including the generated-project smoke suite and any release gates added in earlier phases.
-- [ ] Update `decisions.md`, `scaffolding.md`, `user_manual.md`, package/module READMEs, and related release notes as fixes land so shipped behavior and public documentation match again.
-- [ ] Close the milestone only after the blocking audit items are fixed or explicitly removed from the shipped contract and the remaining advisory drifts are either resolved or documented with owner-approved follow-up.
+**Current status (2026-04-08)**: Phase 7 closeout is complete in-repo. Final validation passed via `make ci-e2e` and `make version-check`, the scoped SSOT and operator docs now match the validated v0.83.0 hardening state, and `docs/technical/scaffolding.md` was re-verified without any required wording change. Publish-time artifacts remain deferred until a real tag/release exists.
+
+- [x] Run and record the final repo-wide regression pass for the hardening milestone, including the generated-project smoke suite and any release gates added in earlier phases.
+- [x] Update `decisions.md`, `user_manual.md`, `docker_workflows.md`, and the scoped package/module READMEs so shipped behavior and public documentation match again, while re-verifying `scaffolding.md` and leaving it unchanged because no verified drift remained.
+- [x] Close the milestone now that the blocking audit items are fixed or removed from the shipped contract; tag/release-note/publish artifacts remain intentionally deferred until a real v0.83.0 release exists.
+
+**Phase 7 closeout notes**
+
+- Final validation evidence recorded for closeout: `make ci-e2e` and `make version-check`
+- `docs/technical/scaffolding.md` was verified as already aligned, so no edit was forced there
+- The current published release pointer stays at v0.82.0 until a v0.83.0 tag/release exists
 
 ---
 

@@ -675,9 +675,19 @@ def configure_listings_module(
     return config
 
 
-def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> None:
+def apply_listings_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
     """Apply listings module configuration via managed wiring files."""
-    _regenerate_wiring_for_module(project_path, "listings", config)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "listings",
+        config,
+        execution_mode=execution_mode,
+    )
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
