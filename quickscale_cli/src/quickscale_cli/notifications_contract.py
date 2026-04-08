@@ -20,7 +20,6 @@ DEFAULT_NOTIFICATIONS_ALLOWED_TAGS = (
     "auth",
     "forms",
     "ops",
-    "billing",
     "testing",
 )
 

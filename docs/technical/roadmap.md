@@ -50,7 +50,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.80.0 | ✅ Released | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
 | v0.81.0 | ✅ Released | Beta-site migration maintainer tooling | Maintainer-only fresh-first and checkpoint-first in-place beta-site migration workflows; archived in release note and changelog |
 | v0.82.0 | ✅ Released | Disaster recovery & environment promotion | Public `quickscale dr` capture/plan/execute/report workflows with `snapshot_id` lookup, resumable capture/execute, rollback pins, conservative env-var sync, and source-side media sync; archived in release note and changelog |
-| v0.83.0 | ✅ Closeout complete (unreleased) | Hardening release | Repo-wide hardening, SSOT reconciliation, and final validation are complete in-repo; publish-time artifacts remain deferred until tag/release |
+| v0.83.0 | ✅ Closeout complete (unreleased) | Hardening release | Repo-wide hardening complete in-repo; post-closeout self-consistency review added pre-tag fixes to Phases 5–7; publish-time artifacts deferred until tag/release |
 | v0.84.0 | 📋 Planned | Billing module | Stripe integration after v0.83.0 hardening closes the current platform and module contract gaps |
 | v0.85.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
 | v0.86.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and teams milestones |
@@ -95,6 +95,8 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 **Goal**: Close the repo-wide audit findings before shipping the next new public module release. This milestone hardens the current plan/apply surface, managed wiring behavior, shipped starter themes, module contract fidelity, metadata parity, and regression coverage so later billing and teams work lands on a stable documented base.
 
 **Current status (2026-04-08)**: The hardening implementation, SSOT reconciliation, and final validation are complete in-repo. Final validation passed via `make ci-e2e` and `make version-check`. Publish-time artifacts remain deferred until a tag/release exists, so v0.82.0 remains the current published release.
+
+**Post-closeout self-consistency review (2026-04-08)**: A targeted review identified four additional pre-tag items: analytics settings default drift, a billing tag residual in notifications `allowed_tags`, bare `except A, B:` multi-exception style across several modules, and the forms seed migration's overly-broad exception guard. These are tracked as `[ ]` items in their respective phases below.
 
 **Implementation Review**: The original checklist covers the right hardening surface, but it mixes platform, generator, module-runtime, metadata, and closeout work into one flat milestone. For handoff, v0.83.0 should run as phased slices grouped by related code so each implementation pass can stay localized, testable, and reviewable.
 
@@ -194,6 +196,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [x] Audit the remaining shipped auth/forms/CRM mutable and immutable options for other advertised-but-unused behavior and record the closeout outcome in this milestone.
 - [x] Confirm whether any other shipped modules have CLI-written settings that are ignored by runtime code, and add the results of that verification to this milestone before closeout.
 - [x] Add module-level regression coverage for forms retention defaults, forms spam-protection behavior, tolerant auth legacy social-provider handling, and CRM terminal-stage migration/runtime behavior.
+- [x] Narrow the forms seed migration exception guard in `quickscale_modules/forms/migrations/0002_seed_forms.py` from `except Exception:` to `except (CommandError, SystemExit):` so database failures and other unexpected errors propagate instead of being silently swallowed.
 
 #### Phase 6: Packaged Metadata Parity and Placeholder Leakage Cleanup
 
@@ -205,22 +208,26 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [x] Audit every packaged module for `module.yml`, `pyproject.toml`, and exported version parity and fix any drift found during the pass.
 - [x] Confirm that placeholder-only modules do not leak into generated starter metadata, app-label flags, or user-facing navigation before billing and teams actually ship.
 - [x] Add a release gate proving billing and teams stay rejected by `quickscale plan`, `quickscale.yml` validation, `quickscale apply`, and starter-theme output until their own release milestones ship.
+- [x] Remove `"billing"` from the notifications `allowed_tags` default in `quickscale_modules/notifications/module.yml` and `quickscale_cli/src/quickscale_cli/notifications_contract.py` — billing is not a shipped module and the tag survived the Phase 6 placeholder audit.
 
 **Phase 6 closeout notes**
 
 - `module.yml` remains the canonical packaged-module version source; the ready shipped-module audit continues to keep `pyproject.toml` and exported `__version__` aligned to it.
 - No packaged-module metadata drift was found in this pass, so no module-local version files needed updates.
-- The remaining billing/teams placeholder leakage was limited to the core context-processor helper and is now closed.
+- The remaining billing/teams placeholder leakage was limited to the core context-processor helper in this pass; a post-closeout review identified `"billing"` still present in the notifications `allowed_tags` default — tracked as a pre-tag `[ ]` item above.
 
 #### Phase 7: Cross-Cutting Release Gates and Docs Closeout
 
 **Primary code grouping**: repo-wide validation, SSOT reconciliation, package/module documentation alignment, and milestone closeout tracking.
 
-**Current status (2026-04-08)**: Phase 7 closeout is complete in-repo. Final validation passed via `make ci-e2e` and `make version-check`, the scoped SSOT and operator docs now match the validated v0.83.0 hardening state, and `docs/technical/scaffolding.md` was re-verified without any required wording change. Publish-time artifacts remain deferred until a real tag/release exists.
+**Current status (2026-04-08)**: Phase 7 closeout was complete in-repo; a subsequent self-consistency review reopened the phase with three pre-tag items: analytics settings default drift, bare multi-exception syntax in shipped modules, and a notifications `sender_email` production warning. Publish-time artifacts remain deferred until a real tag/release exists.
 
 - [x] Run and record the final repo-wide regression pass for the hardening milestone, including the generated-project smoke suite and any release gates added in earlier phases.
 - [x] Update `decisions.md`, `user_manual.md`, `docker_workflows.md`, and the scoped package/module READMEs so shipped behavior and public documentation match again, while re-verifying `scaffolding.md` and leaving it unchanged because no verified drift remained.
 - [x] Close the milestone now that the blocking audit items are fixed or removed from the shipped contract; tag/release-note/publish artifacts remain intentionally deferred until a real v0.83.0 release exists.
+- [x] Fix analytics `QUICKSCALE_ANALYTICS_ENABLED` runtime fallback: `quickscale_modules/analytics/src/quickscale_modules_analytics/services.py:62` uses `getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", False)` but `module.yml` declares `default: true` — align the getattr default to `True` so runtime behavior matches the manifest when the setting is absent.
+- [x] Replace bare `except A, B:` multi-exception syntax with `except (A, B):` throughout shipped modules and CLI: `quickscale_modules/forms/models.py:20`, `quickscale_modules/blog/views.py:66`, `quickscale_modules/listings/views.py:33,77`, `quickscale_cli/social_contract.py:308`, `quickscale_core/settings_manager.py:210`, and any remaining instances surfaced by `ruff check --select UP`. Four additional instances found and fixed: `backups/admin.py:431`, `notifications_contract.py:267`, `commands/module_config.py:1166`, `commands/status_command.py:59`.
+- [x] Strengthen the notifications `sender_email` manifest description in `quickscale_modules/notifications/module.yml` to flag that `noreply@example.com` is a placeholder that must be overridden before live email delivery is configured.
 
 **Phase 7 closeout notes**
 
