@@ -36,7 +36,6 @@ _DEFAULT_ALLOWED_TAGS = (
     "auth",
     "forms",
     "ops",
-    "billing",
     "testing",
 )
 _DEFAULT_DEFAULT_TAGS = ("quickscale", "transactional")

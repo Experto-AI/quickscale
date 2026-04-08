@@ -92,7 +92,6 @@ QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
     "auth",
     "forms",
     "ops",
-    "billing",
     "testing",
 ]
 QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS = 300

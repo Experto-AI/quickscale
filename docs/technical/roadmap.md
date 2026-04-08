@@ -197,6 +197,8 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [x] Confirm whether any other shipped modules have CLI-written settings that are ignored by runtime code, and add the results of that verification to this milestone before closeout.
 - [x] Add module-level regression coverage for forms retention defaults, forms spam-protection behavior, tolerant auth legacy social-provider handling, and CRM terminal-stage migration/runtime behavior.
 - [x] Narrow the forms seed migration exception guard in `quickscale_modules/forms/migrations/0002_seed_forms.py` from `except Exception:` to `except (CommandError, SystemExit):` so database failures and other unexpected errors propagate instead of being silently swallowed.
+- [x] Fix `QUICKSCALE_ANALYTICS_ENABLED` getattr fallback in `quickscale_modules/forms/src/quickscale_modules_forms/views.py` from `False` to `True` to match the analytics `module.yml` default and keep cross-module behavior consistent with `analytics/services.py`.
+- [x] Fix `FORMS_RATE_LIMIT` getattr fallback in `quickscale_modules/forms/src/quickscale_modules_forms/throttles.py` from `None` to `"5/hour"` so the runtime fallback matches the `forms/module.yml` documented default when the setting is absent.
 
 #### Phase 6: Packaged Metadata Parity and Placeholder Leakage Cleanup
 
@@ -208,7 +210,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [x] Audit every packaged module for `module.yml`, `pyproject.toml`, and exported version parity and fix any drift found during the pass.
 - [x] Confirm that placeholder-only modules do not leak into generated starter metadata, app-label flags, or user-facing navigation before billing and teams actually ship.
 - [x] Add a release gate proving billing and teams stay rejected by `quickscale plan`, `quickscale.yml` validation, `quickscale apply`, and starter-theme output until their own release milestones ship.
-- [x] Remove `"billing"` from the notifications `allowed_tags` default in `quickscale_modules/notifications/module.yml` and `quickscale_cli/src/quickscale_cli/notifications_contract.py` — billing is not a shipped module and the tag survived the Phase 6 placeholder audit.
+- [x] Remove `"billing"` from the notifications `allowed_tags` default in `quickscale_modules/notifications/module.yml`, `quickscale_cli/src/quickscale_cli/notifications_contract.py`, and `quickscale_modules/notifications/src/quickscale_modules_notifications/services.py` (`_DEFAULT_ALLOWED_TAGS`) — billing is not a shipped module and the tag survived the Phase 6 placeholder audit across all three locations.
 
 **Phase 6 closeout notes**
 

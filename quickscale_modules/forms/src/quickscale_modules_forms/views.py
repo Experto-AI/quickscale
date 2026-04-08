@@ -51,7 +51,7 @@ def _capture_submission_analytics(submission: FormSubmission, request: Request) 
     """Best-effort analytics hook for successful public form submissions."""
     if not apps.is_installed("quickscale_modules_analytics"):
         return
-    if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", False)):
+    if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", True)):
         return
 
     try:
