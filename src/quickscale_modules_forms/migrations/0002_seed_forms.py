@@ -1,14 +1,15 @@
 """Seed initial forms migration."""
 
-from django.db import migrations
 from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db import migrations
 
 
 def seed_forms(apps, schema_editor):
     try:
         call_command("forms_seed_presets")
-    except Exception:
-        # In testing or unexpected environments where command doesn't exist, fail gracefully
+    except CommandError, SystemExit:
+        # Tolerate missing or no-op preset command in test/minimal environments
         pass
 
 
