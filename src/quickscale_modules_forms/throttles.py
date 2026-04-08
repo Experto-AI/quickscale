@@ -13,7 +13,7 @@ class FormSubmitThrottle(ScopedRateThrottle):
 
     def get_rate(self) -> str | None:
         """Return throttle rate from FORMS_RATE_LIMIT when configured"""
-        configured_rate = getattr(settings, "FORMS_RATE_LIMIT", None)
+        configured_rate = getattr(settings, "FORMS_RATE_LIMIT", "5/hour")
         if configured_rate:
             return str(configured_rate)
         return super().get_rate()
