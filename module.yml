@@ -20,7 +20,7 @@ config:
       type: string
       default: "noreply@example.com"
       django_setting: QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL
-      description: "Authoritative sender email address used for outbound transactional email."
+      description: "Authoritative sender email address used for outbound transactional email. The default placeholder must be overridden before live delivery is configured."
 
     reply_to_email:
       type: string
@@ -54,7 +54,7 @@ config:
 
     allowed_tags:
       type: list
-      default: ["quickscale", "transactional", "notifications", "auth", "forms", "ops", "billing", "testing"]
+      default: ["quickscale", "transactional", "notifications", "auth", "forms", "ops", "testing"]
       django_setting: QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS
       description: "Tiny non-sensitive allowlist for provider-visible tags."
 
