@@ -22,7 +22,7 @@ def is_git_repo(path: Path | None = None) -> bool:
             text=True,
         )
         return True
-    except subprocess.CalledProcessError, FileNotFoundError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
 

@@ -1163,7 +1163,7 @@ def validate_backups_module_options(config: Mapping[str, Any]) -> list[str]:
         retention_days = int(resolved["retention_days"])
         if retention_days < 1:
             issues.append("modules.backups.retention_days must be at least 1")
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         issues.append("modules.backups.retention_days must be an integer")
 
     naming_prefix = str(resolved["naming_prefix"]).strip()

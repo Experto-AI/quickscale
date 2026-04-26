@@ -364,7 +364,7 @@ The wizard guides you through:
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: 0.83.0
+version: "1"
 project:
   slug: myapp
   package: myapp
@@ -377,6 +377,20 @@ docker:
   start: true
   create_superuser: false
 ```
+
+`version` is the plan/apply schema version string, not the CLI release number.
+Use `"1"` in `quickscale.yml`.
+
+For `auth`, `quickscale.yml` accepts only the canonical desired-config keys
+`registration_enabled`, `email_verification`, `authentication_method`, and
+optional `session_cookie_age`. Legacy keys such as `allow_registration` and
+`social_providers` are rejected during desired-config validation.
+
+For `notifications`, local development keeps the default placeholder sender
+`noreply@example.com` on the console email backend. If you set
+`modules.notifications.resend_domain`, also set a real sender email plus the
+API-key env-var reference before re-running `quickscale apply`; otherwise apply
+stops instead of leaving a live-delivery target on the console backend.
 
 In the current release line, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax.
 

@@ -3,8 +3,8 @@
 **Technical Specification for Terraform-style Project Configuration**
 
 **Version**: 1.0
-**Status**: Planned (v0.68.0-v0.71.0)
-**Last Updated**: 2025-11-28
+**Status**: Current shipped contract
+**Last Updated**: 2026-04-08
 
 ---
 
@@ -94,7 +94,7 @@ myapp/
 ### `quickscale.yml` (Desired State)
 
 ```yaml
-version: 0.83.0
+version: "1"
 
 project:
   slug: myapp
@@ -104,10 +104,10 @@ project:
 modules:
   auth:
     registration_enabled: true   # Mutable
-    email_verification: false    # Mutable
-    custom_user_model: true      # Immutable
+    email_verification: optional # Mutable
+    session_cookie_age: 1209600  # Mutable
+    authentication_method: email # Immutable
   blog:
-    comments: true
     posts_per_page: 20
 
 docker:
@@ -115,27 +115,39 @@ docker:
   build: true
 ```
 
+`version` is the desired-state schema version, not the QuickScale release
+number. The current desired-state contract requires the string `"1"`.
+
+Auth desired config fails hard at the `quickscale.yml` boundary before
+sanitize/normalize compatibility helpers run. Only the canonical desired-config
+keys are accepted: `registration_enabled`, `email_verification`,
+`authentication_method`, and optional `session_cookie_age`. Already-written
+`.quickscale/state.yml` snapshots and state-derived wiring remain tolerant of
+legacy auth keys so older projects can re-apply without rewriting historical
+state first.
+
 ### `.quickscale/state.yml` (Applied State)
 
 ```yaml
-version: 0.83.0
-last_applied: "2025-11-28T10:30:00Z"
+version: "1"
 
 project:
   slug: myapp
   package: myapp
   theme: showcase_html
-  created_at: "2025-11-28T10:00:00Z"
+  created_at: "2025-11-28T10:00:00"
+  last_applied: "2025-11-28T10:30:00"
 
 modules:
   auth:
-    embedded_at: "2025-11-28T10:05:00Z"
+    version: 0.83.0
     commit_sha: "abc1234"
-    immutable:
-      custom_user_model: true
-    mutable:
+    embedded_at: "2025-11-28T10:05:00"
+    options:
       registration_enabled: true
-      email_verification: false
+      email_verification: optional
+      session_cookie_age: 1209600
+      authentication_method: email
 ```
 
 ### Module Manifest (`module.yml`)
@@ -149,17 +161,24 @@ config:
     registration_enabled:
       type: boolean
       default: true
-      setting: AUTH_REGISTRATION_ENABLED
+      django_setting: ACCOUNT_ALLOW_REGISTRATION
     email_verification:
-      type: boolean
-      default: false
-      setting: AUTH_EMAIL_VERIFICATION
+      type: string
+      default: none
+      django_setting: ACCOUNT_EMAIL_VERIFICATION
+      validation:
+        choices: [none, optional, mandatory]
+    session_cookie_age:
+      type: integer
+      default: 1209600
+      django_setting: SESSION_COOKIE_AGE
 
   immutable:                     # Cannot change after embed
-    custom_user_model:
-      type: boolean
-      default: true
-      warning: "Affects database schema"
+    authentication_method:
+      type: string
+      default: email
+      validation:
+        choices: [email, username, both]
 ```
 
 ---
@@ -191,15 +210,15 @@ Following Terraform's pattern:
 **Mutable config update**:
 ```
 quickscale apply
-→ Detects email_verification: false → true
-→ Updates settings.py: AUTH_EMAIL_VERIFICATION = True
+→ Detects email_verification: none → mandatory
+→ Updates settings.py: ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 → Restarts Docker
 ```
 
 **Immutable config change attempt**:
 ```
 quickscale apply
-→ Detects custom_user_model: true → false (IMMUTABLE)
+→ Detects authentication_method: email → username (IMMUTABLE)
 → Error: "Cannot change immutable config"
 → Suggests: quickscale remove auth → edit YAML → apply
 ```
@@ -230,6 +249,8 @@ When `quickscale apply` runs on a new project:
 | Directory exists | Error + suggest `--force` or different name |
 | Module already embedded | Skip (no change) |
 | Immutable config changed | Error + suggest remove/re-embed |
+| Legacy or non-canonical auth keys in `quickscale.yml` | Error + show the canonical auth desired-config contract before sanitization |
+| `notifications` targets live Resend delivery with the placeholder sender or a missing API-key env-var reference | Error + refuse apply rather than silently keep production on the console backend |
 | Git has uncommitted changes | Warning + ask to continue |
 | Docker not running | Skip restart + show instructions |
 

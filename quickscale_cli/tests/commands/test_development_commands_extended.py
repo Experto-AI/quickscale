@@ -20,6 +20,7 @@ from quickscale_cli.commands.development_commands import (
     shell,
     up,
 )
+from quickscale_cli.utils.project_manager import ProjectConfigLoadError
 
 
 # ============================================================================
@@ -308,6 +309,32 @@ class TestUpdateLastBuildTimestamp:
 
 class TestUpCommandExtended:
     """Extended tests for up command"""
+
+    def test_up_aborts_when_quickscale_yml_is_invalid(self):
+        """Development up should fail hard when strict config loading fails."""
+        runner = CliRunner()
+
+        with patch(
+            "quickscale_cli.commands.development_commands.is_in_quickscale_project",
+            return_value=True,
+        ):
+            with patch(
+                "quickscale_cli.commands.development_commands.is_docker_running",
+                return_value=True,
+            ):
+                with patch(
+                    "quickscale_cli.commands.development_commands.get_project_config",
+                    side_effect=ProjectConfigLoadError(
+                        "Invalid quickscale.yml: Line 8: Legacy auth desired-config key 'modules.auth.allow_registration' is no longer supported\n"
+                        "  Suggestion: Use modules.auth.registration_enabled: true|false."
+                    ),
+                ):
+                    result = runner.invoke(up)
+
+        assert result.exit_code == 1
+        assert "quickscale.yml is invalid" in result.output
+        assert "allow_registration" in result.output
+        assert "registration_enabled" in result.output
 
     def test_up_port_conflict(self):
         """Test up command when port is in use"""

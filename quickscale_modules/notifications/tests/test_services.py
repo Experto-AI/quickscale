@@ -382,6 +382,46 @@ def test_dispatch_notification_message_fails_loudly_for_live_backend_without_api
 
 
 @pytest.mark.django_db
+def test_dispatch_notification_message_fails_loudly_for_live_backend_with_placeholder_sender(
+    queued_message,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RESEND_API_KEY", "configured-live-key")
+
+    with override_settings(EMAIL_BACKEND="anymail.backends.resend.EmailBackend"):
+        dispatch_notification_message(queued_message.pk)
+
+    queued_message.refresh_from_db()
+    assert queued_message.status == NotificationMessage.STATUS_FAILED
+    assert "placeholder sender email noreply@example.com" in queued_message.last_error
+    assert (
+        queued_message.deliveries.filter(
+            status=NotificationDelivery.STATUS_FAILED
+        ).count()
+        == 2
+    )
+
+
+@pytest.mark.django_db
+def test_dispatch_notification_message_allows_placeholder_sender_on_console_backend(
+    queued_message,
+) -> None:
+    dispatch_notification_message(
+        queued_message.pk,
+        mailer=lambda message: f"console::{message.to[0]}",
+    )
+
+    queued_message.refresh_from_db()
+    deliveries = list(queued_message.deliveries.order_by("recipient_email"))
+
+    assert queued_message.status == NotificationMessage.STATUS_SENT
+    assert [delivery.provider_message_id for delivery in deliveries] == [
+        "console::alpha@example.com",
+        "console::beta@example.com",
+    ]
+
+
+@pytest.mark.django_db
 def test_dispatch_notification_message_rejects_when_runtime_disabled(
     queued_message,
 ) -> None:

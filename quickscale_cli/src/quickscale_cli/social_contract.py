@@ -305,7 +305,7 @@ def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
             value = int(resolved.get(option_name, 0))
             if value < 1:
                 issues.append(f"modules.social.{option_name} must be at least 1")
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             issues.append(f"modules.social.{option_name} must be an integer")
 
     return issues

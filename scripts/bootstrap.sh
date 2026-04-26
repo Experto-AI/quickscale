@@ -61,6 +61,22 @@ if [[ -d ".venv" ]]; then
         fi
         echo ""
     fi
+
+    if [[ ! -x ".venv/bin/python" ]]; then
+        backup_path=".venv.incomplete.backup.$(date +%Y%m%d-%H%M%S)"
+        echo "⚠️  Found .venv without a working .venv/bin/python launcher."
+        echo "   This usually means the project was moved or copied without the virtualenv interpreter files."
+        echo "   Moving broken .venv to $backup_path so Poetry can recreate it..."
+
+        if mv .venv "$backup_path"; then
+            echo "✓ Moved incomplete .venv to $backup_path"
+        else
+            echo "❌ Could not move incomplete .venv automatically."
+            echo "Move or remove .venv, then re-run bootstrap."
+            exit 1
+        fi
+        echo ""
+    fi
 fi
 
 # Check if Poetry is installed

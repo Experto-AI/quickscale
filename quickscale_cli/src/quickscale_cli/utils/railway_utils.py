@@ -233,7 +233,7 @@ def get_railway_project_info() -> dict[str, Any] | None:
         # Parse status output for project information
         info = {"status": result.stdout.strip()}
         return info
-    except subprocess.SubprocessError, subprocess.TimeoutExpired:
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
         return None
 
 
@@ -756,7 +756,7 @@ def _get_railway_variables_json(
                     variables[item["name"]] = str(item["value"])
             return variables if variables else None
         return None
-    except json.JSONDecodeError, TimeoutError, Exception:
+    except (json.JSONDecodeError, TimeoutError, Exception):
         return None
 
 

@@ -67,10 +67,17 @@ Every module does **not** need to implement every surface.
 | --- | --- | --- |
 | Foundation/auth | Project-owned foundational model plus module integration surfaces | `auth` |
 | Domain/content | Optional abstract models and admin bases, templates, settings | `listings`, parts of `blog`, future vertical modules |
-| Data-driven | Configuration, admin, API, settings, selected signals | `forms`, parts of `crm` |
-| Integration/service | Settings plus helper/service APIs | `storage`, `notifications`, `analytics` |
+| Data-driven | Configuration, admin, documented routed/admin/public APIs, settings, selected signals | `forms`, parts of `crm` |
+| Integration/service | Settings plus helper/service APIs, with tightly scoped operational routes when explicitly documented | `storage`, `notifications`, `analytics` |
 | Operational | Settings, commands, services, admin actions | `backups` |
 | Theme/frontend | User-owned generated code | showcase themes |
+
+Some modules also ship QuickScale-owned routed surfaces as part of their
+documented contract. Current shipped examples include blog and listings public
+pages plus publish/media endpoints, the CRM dashboard and API router, forms
+public/admin endpoints, and the notifications webhook endpoint. These are
+narrow, module-owned surfaces wired by QuickScale, not a blanket allowance for
+arbitrary new module HTTP APIs.
 
 ## Two Support Tiers
 
@@ -131,12 +138,12 @@ Every module README should include a required section using this taxonomy:
 | `auth` | Move toward project-owned user model; keep templates, settings, adapters, and signals as module surfaces; direct model edits are outside the supported extension contract |
 | `blog` | Keep template overrides and feed subclassing; add clearer documented service/template contract; avoid ambiguous model-extension examples |
 | `listings` | Keep `AbstractListing` and `AbstractListingAdmin` as the model example for structured subclassing |
-| `crm` | Add documented service/admin/template/settings extension surfaces; avoid implying subclassing unless a real abstract contract is introduced |
-| `forms` | Keep admin/data-driven configuration as primary model; document signals/service hooks for custom submission workflows |
+| `crm` | Add documented dashboard/API/admin/template/settings surfaces; avoid implying subclassing unless a real abstract contract is introduced |
+| `forms` | Keep admin/data-driven configuration and documented public/admin endpoints as the primary model; document signals/service hooks for custom submission workflows |
 | `storage` | Keep helper/service API and settings contract; do not force inheritance |
 | `backups` | Keep operational settings and commands; document service layer and explicit non-goals for subclassing |
 | `analytics` | Service-style integration module: flat settings plus helper/service APIs; no generated extension-app requirement for v0.80.0; forms use a guarded optional import and social click tracking stays limited to QuickScale-owned generated public pages/templates |
-| `notifications` | Promote `send_notification`-style service contract and template override paths; document stable versus internal APIs |
+| `notifications` | Promote `send_notification`-style service contract, template override paths, and the documented webhook endpoint; document stable versus internal APIs |
 | `social` | Define the extension contract before the full runtime implementation ships |
 
 ## Rollout Plan

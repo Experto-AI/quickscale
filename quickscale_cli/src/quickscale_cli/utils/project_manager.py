@@ -7,14 +7,20 @@ from quickscale_cli.schema.config_schema import QuickScaleConfig, validate_confi
 from .docker_utils import find_docker_compose, get_running_containers
 
 
-def get_project_config() -> QuickScaleConfig | None:
+class ProjectConfigLoadError(ValueError):
+    """Raised when a strict quickscale.yml read must fail explicitly."""
+
+
+def get_project_config(*, strict: bool = False) -> QuickScaleConfig | None:
     """Load and validate quickscale.yml from current directory if it exists."""
     config_path = Path.cwd() / "quickscale.yml"
     if not config_path.exists():
         return None
     try:
         return validate_config(config_path.read_text())
-    except Exception:
+    except Exception as error:
+        if strict:
+            raise ProjectConfigLoadError(f"Invalid quickscale.yml: {error}") from error
         return None
 
 

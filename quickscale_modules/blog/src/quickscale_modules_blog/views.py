@@ -63,7 +63,7 @@ def _get_positive_int_setting(setting_name: str, default: int) -> int:
 
     try:
         parsed_value = int(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return default
 
     return parsed_value if parsed_value > 0 else default

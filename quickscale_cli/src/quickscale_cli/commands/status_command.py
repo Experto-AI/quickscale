@@ -56,7 +56,7 @@ def _format_datetime(iso_string: str) -> str:
 
         dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
         return dt.strftime("%Y-%m-%d %H:%M")
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return iso_string
 
 

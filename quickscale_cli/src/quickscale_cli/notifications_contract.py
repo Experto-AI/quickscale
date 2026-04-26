@@ -29,6 +29,7 @@ NOTIFICATIONS_CONSOLE_EMAIL_BACKEND = "django.core.mail.backends.console.EmailBa
 _NOTIFICATIONS_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _DOMAIN_PATTERN = re.compile(r"^[A-Za-z0-9.-]+$")
+_DEFAULT_PLACEHOLDER_SENDER_EMAIL = "noreply@example.com"
 _LEGACY_NOTIFICATIONS_SECRET_OPTIONS = {
     "resend_api_key": DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     "webhook_secret": DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
@@ -40,7 +41,7 @@ def default_notifications_module_options() -> dict[str, Any]:
     return {
         "enabled": True,
         "sender_name": "QuickScale",
-        "sender_email": "noreply@example.com",
+        "sender_email": _DEFAULT_PLACEHOLDER_SENDER_EMAIL,
         "reply_to_email": "",
         "resend_domain": "",
         NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION: (
@@ -141,6 +142,13 @@ def _is_valid_email(value: str) -> bool:
     return bool(_EMAIL_PATTERN.fullmatch(value))
 
 
+def _uses_placeholder_sender_email(value: Any) -> bool:
+    return (
+        str(value).strip().casefold()
+        == _DEFAULT_PLACEHOLDER_SENDER_EMAIL.casefold()
+    )
+
+
 def _is_valid_domain(value: str) -> bool:
     candidate = value.strip()
     if not candidate or "://" in candidate or "/" in candidate:
@@ -175,6 +183,7 @@ def notifications_live_delivery_configured(
     return (
         bool(sender_name)
         and _is_valid_email(sender_email)
+        and not _uses_placeholder_sender_email(sender_email)
         and _is_valid_domain(resend_domain)
         and not validate_notifications_env_var_reference(
             NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
@@ -263,10 +272,15 @@ def validate_notifications_module_options(
             issues.append(
                 "modules.notifications.webhook_ttl_seconds must be at least 1"
             )
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         issues.append("modules.notifications.webhook_ttl_seconds must be an integer")
 
     if notifications_production_targeted(resolved):
+        if _uses_placeholder_sender_email(sender_email):
+            issues.append(
+                "modules.notifications.sender_email cannot use the default "
+                "placeholder noreply@example.com when resend_domain is set"
+            )
         if not resend_api_key_env_var:
             issues.append(
                 "modules.notifications.resend_api_key_env_var is required when resend_domain is set"

@@ -18,9 +18,10 @@ from quickscale_cli.utils.docker_utils import (
     wait_for_port_release,
 )
 from quickscale_cli.utils.project_manager import (
-    get_project_config,
     get_backend_container_name,
+    get_project_config,
     is_in_quickscale_project,
+    ProjectConfigLoadError,
 )
 
 
@@ -243,7 +244,17 @@ def up(build: bool, no_cache: bool) -> None:
     _validate_project_and_docker()
 
     # Load config to check for default build behavior
-    config = get_project_config()
+    try:
+        config = get_project_config(strict=True)
+    except ProjectConfigLoadError as error:
+        click.secho("❌ Error: quickscale.yml is invalid", fg="red", err=True)
+        click.echo(str(error), err=True)
+        click.echo(
+            "💡 Tip: Fix quickscale.yml before running 'quickscale up'.",
+            err=True,
+        )
+        sys.exit(1)
+
     should_build = build
     if not build and config and config.docker:
         should_build = config.docker.build
@@ -548,7 +559,7 @@ def _dependencies_changed_since_last_build() -> bool:
         )
         return changed
 
-    except json.JSONDecodeError, KeyError, OSError:
+    except (json.JSONDecodeError, KeyError, OSError):
         # If we can't read state, don't warn (fail safe)
         return False
 

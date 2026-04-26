@@ -8,6 +8,14 @@
 
 set -e
 
+SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+VENV_BIN="$REPO_ROOT/.venv/bin"
+# shellcheck source=./_python_requirement.sh
+source "$REPO_ROOT/scripts/_python_requirement.sh"
+REQUIRED_PYTHON_VERSION="$(quickscale_min_python_version "$REPO_ROOT")"
+POETRY_AVAILABLE=false
+
 SHOW_FULL_OUTPUT=false
 # Repository policy is dual-threshold: protect floor quality per file while
 # enforcing a 90% overall mean across the maintained test matrix.
@@ -21,6 +29,64 @@ cleanup_temp_files() {
 }
 
 trap cleanup_temp_files EXIT
+
+if command -v poetry >/dev/null 2>&1; then
+  POETRY_AVAILABLE=true
+fi
+
+get_repo_venv_python() {
+  if [ -x "$VENV_BIN/python" ]; then
+    printf '%s\n' "$VENV_BIN/python"
+    return 0
+  fi
+
+  echo "❌ The repo-local .venv is incomplete: $VENV_BIN/python is missing or not executable." >&2
+  echo "   This usually means the project was moved or copied without its virtualenv interpreter files." >&2
+
+  local compatible_python
+  compatible_python="$(quickscale_find_compatible_python "$REPO_ROOT" || true)"
+  if [ -n "$compatible_python" ]; then
+    echo "   Run ./scripts/bootstrap.sh to recreate .venv with $compatible_python." >&2
+  else
+    echo "   Install Python ${REQUIRED_PYTHON_VERSION}+ and then run ./scripts/bootstrap.sh to recreate .venv." >&2
+  fi
+
+  return 1
+}
+
+run_repo_tool() {
+  local tool_name="$1"
+  shift
+
+  if [ "$POETRY_AVAILABLE" = true ]; then
+    poetry run "$tool_name" "$@"
+    return
+  fi
+
+  local venv_python
+  venv_python="$(get_repo_venv_python)" || return 1
+  "$venv_python" -m "$tool_name" "$@"
+}
+
+run_with_pythonpath() {
+  local pythonpath="$1"
+  shift
+  local original_pythonpath="${PYTHONPATH-}"
+
+  export PYTHONPATH="$pythonpath"
+  "$@"
+  local command_exit=$?
+
+  if [ -n "$original_pythonpath" ]; then
+    export PYTHONPATH="$original_pythonpath"
+  else
+    unset PYTHONPATH
+  fi
+
+  return $command_exit
+}
+
+cd "$REPO_ROOT"
 
 persist_coverage_xml() {
   local stage_name="$1"
@@ -212,7 +278,7 @@ run_pytest_stage() {
   fi
 
   set +e
-  poetry run coverage report -m --fail-under=0 > "$coverage_report"
+  run_repo_tool coverage report -m --fail-under=0 > "$coverage_report"
   coverage_report_exit=$?
   set -e
 
@@ -244,7 +310,14 @@ else
   echo "Output mode: dots"
 fi
 echo "Coverage policy: ${COVERAGE_MEAN_THRESHOLD}% overall mean, ${FILE_COVERAGE_THRESHOLD}% per file"
+if [ "$POETRY_AVAILABLE" = false ] && [ -x "$VENV_BIN/python" ]; then
+  echo "Execution environment: repo-local .venv (Poetry not found on PATH)"
+fi
 echo ""
+
+if [ "$POETRY_AVAILABLE" = false ]; then
+  get_repo_venv_python >/dev/null || exit 1
+fi
 
 # Track exit codes
 EXIT_CODE=0
@@ -257,7 +330,7 @@ if ! run_pytest_stage \
   "quickscale_core" \
   "quickscale_core" \
   true \
-  poetry run pytest quickscale_core/tests/ -m "not e2e"; then
+  run_repo_tool pytest quickscale_core/tests/ -m "not e2e"; then
   EXIT_CODE=1
 fi
 
@@ -270,7 +343,7 @@ if ! run_pytest_stage \
   "quickscale_cli" \
   "quickscale_cli" \
   true \
-  poetry run pytest quickscale_cli/tests/ -m "not e2e"; then
+  run_repo_tool pytest quickscale_cli/tests/ -m "not e2e"; then
   EXIT_CODE=1
 fi
 
@@ -294,7 +367,7 @@ if [ -d "quickscale_modules" ]; then
           "module ${mod_name}" \
           "$pkg_name" \
           false \
-          env "PYTHONPATH=$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" poetry run pytest "$mod/tests/" \
+          run_with_pythonpath "$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" run_repo_tool pytest "$mod/tests/" \
             -p pytest_django --ds=tests.settings; then
           EXIT_CODE=1
         fi

@@ -42,6 +42,35 @@ class TestPlanReconfigureBasic:
         assert package_name == "fallback_project"
         assert theme == "showcase_react"
 
+    def test_plan_reconfigure_aborts_for_invalid_auth_desired_config(self):
+        """Reconfigure should fail hard on stale auth desired config in quickscale.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+    social_providers:
+      - google
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--reconfigure"])
+
+            assert result.exit_code != 0
+            assert "quickscale.yml is invalid" in result.output
+            assert "social_providers" in result.output
+            assert "registration_enabled" in result.output
+            assert "email_verification" in result.output
+
 
 class TestPlanReconfigureWithState:
     """Tests for --reconfigure with state file"""

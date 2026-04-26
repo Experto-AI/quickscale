@@ -55,6 +55,34 @@ docker:
             if result.exit_code == 0:
                 assert "auth" in result.output
 
+    def test_plan_add_aborts_for_invalid_auth_desired_config(self) -> None:
+        """Add flow should fail hard on stale auth desired config in quickscale.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+    allow_registration: false
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--add"])
+
+            assert result.exit_code != 0
+            assert "quickscale.yml is invalid" in result.output
+            assert "allow_registration" in result.output
+            assert "registration_enabled" in result.output
+            assert "authentication_method" in result.output
+
     def test_plan_add_with_state_only(self) -> None:
         """Test plan --add when only state exists (no config)"""
         runner = CliRunner()

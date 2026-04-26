@@ -1781,7 +1781,24 @@ class TestNotificationsModuleConfig:
         config = configure_notifications_module(non_interactive=True)
 
         assert config["enabled"] is True
+        assert config["sender_email"] == "noreply@example.com"
+        assert config["resend_domain"] == ""
         assert config["default_tags"] == ["quickscale", "transactional"]
+
+    def test_configure_notifications_non_interactive_rejects_live_placeholder_sender(
+        self,
+    ):
+        """Configurator should fail when existing config targets live Resend with the placeholder sender."""
+        with pytest.raises(click.Abort):
+            configure_notifications_module(
+                non_interactive=True,
+                existing_config={
+                    "enabled": True,
+                    "sender_name": "QuickScale",
+                    "sender_email": "noreply@example.com",
+                    "resend_domain": "mg.example.com",
+                },
+            )
 
     @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
     def test_apply_notifications_configuration_regenerates_managed_wiring(

@@ -11,6 +11,7 @@ from typing import Any
 
 import click
 
+from quickscale_cli.auth_contract import format_auth_desired_config_contract
 from quickscale_cli.backups_contract import sanitize_module_options
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATORS
 from quickscale_cli.module_catalog import (
@@ -19,6 +20,7 @@ from quickscale_cli.module_catalog import (
     get_module_readiness_reason,
 )
 from quickscale_cli.schema.config_schema import (
+    ConfigValidationError,
     DockerConfig,
     ModuleConfig,
     ProjectConfig,
@@ -310,7 +312,52 @@ def _configure_selected_modules(
     return configured
 
 
-def _detect_existing_project() -> tuple[Path | None, QuickScaleConfig | None]:
+def _is_auth_config_validation_error(error: Exception) -> bool:
+    """Return whether a config validation failure came from auth desired config."""
+    message = str(error)
+    return "modules.auth" in message or any(
+        marker in message
+        for marker in (
+            "allow_registration",
+            "social_providers",
+            "registration_enabled",
+            "email_verification",
+            "authentication_method",
+        )
+    )
+
+
+def _abort_for_invalid_existing_config(config_path: Path, error: Exception) -> None:
+    """Abort planner existing-project flows with actionable config remediation."""
+    click.secho(
+        "\n❌ Cannot continue because quickscale.yml is invalid.",
+        fg="red",
+        err=True,
+        bold=True,
+    )
+    click.echo(f"  • {error}", err=True)
+
+    if _is_auth_config_validation_error(error):
+        click.echo(
+            "\n💡 Fix the auth desired config in quickscale.yml before re-running "
+            "this planner command.",
+            err=True,
+        )
+        for line in format_auth_desired_config_contract().splitlines():
+            click.echo(f"   {line}", err=True)
+    else:
+        click.echo(
+            f"\n💡 Fix {config_path} and re-run this planner command.",
+            err=True,
+        )
+
+    raise click.Abort()
+
+
+def _detect_existing_project(
+    *,
+    strict_config_validation: bool = False,
+) -> tuple[Path | None, QuickScaleConfig | None]:
     """Detect if we're in an existing QuickScale project
 
     Returns:
@@ -330,6 +377,8 @@ def _detect_existing_project() -> tuple[Path | None, QuickScaleConfig | None]:
             return cwd, config
         except Exception:
             # Config exists but is invalid - treat as existing project anyway
+            if strict_config_validation:
+                raise
             return cwd, None
     elif state_path.exists():
         # State exists but no config - project exists but config is missing
@@ -779,7 +828,15 @@ def _handle_existing_project_mode(
     if not add_modules and not reconfigure:
         return False
 
-    project_path, existing_config = _detect_existing_project()
+    try:
+        project_path, existing_config = _detect_existing_project(
+            strict_config_validation=True,
+        )
+    except ConfigValidationError as error:
+        _abort_for_invalid_existing_config(Path.cwd() / "quickscale.yml", error)
+    except Exception as error:
+        _abort_for_invalid_existing_config(Path.cwd() / "quickscale.yml", error)
+
     if project_path is None:
         click.secho(
             "\n❌ Not in a QuickScale project directory",

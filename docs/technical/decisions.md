@@ -346,7 +346,7 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: 0.83.0
+version: "1"
 project:
   slug: myapp
   package: myapp
@@ -364,6 +364,7 @@ docker:
 
 **Constraints**:
 - ✅ Version-controllable (stored in git)
+- ✅ `version` is the plan/apply schema version and is currently the string `"1"`
 - ✅ User-editable and reviewable
 - ✅ One file per project
 - ✅ `project.slug` is the filesystem/service identity
@@ -375,30 +376,33 @@ docker:
 System-managed state file tracking what has been applied:
 
 ```yaml
-version: 0.83.0
+version: "1"
 project:
   slug: myapp
   package: myapp
   theme: showcase_react
-applied_modules:
-  - name: auth
+  created_at: 2025-12-03T14:30:00
+  last_applied: 2025-12-03T14:32:00
+modules:
+  auth:
     version: 0.83.0
-    commit: abc123def456
-    applied_at: 2025-12-03T14:30:00Z
-  - name: listings
+    commit_sha: abc123def456
+    embedded_at: 2025-12-03T14:30:00
+    options:
+      registration_enabled: true
+      email_verification: none
+      authentication_method: email
+  listings:
     version: 0.83.0
-    commit: xyz789uvw012
-    applied_at: 2025-12-03T14:31:00Z
-docker:
-  build: true
-  start: true
-generated_by_version: 0.68.0
-last_apply_at: 2025-12-03T14:32:00Z
+    commit_sha: xyz789uvw012
+    embedded_at: 2025-12-03T14:31:00
+    options: null
 ```
 
 **Constraints**:
 - ✅ Auto-generated and auto-updated by `quickscale apply`
 - ✅ Do NOT edit manually (system will overwrite)
+- ✅ Uses the same schema version string `"1"`; installed module versions stay as per-module metadata inside state
 - ✅ One file per project
 - ✅ Preserve explicit `project.slug` and `project.package` identity in state
 - ✅ Location: `.quickscale/state.yml`
@@ -437,7 +441,7 @@ last_apply_at: 2025-12-03T14:32:00Z
 
 **State Integrity**:
 - ✅ Write state file atomically (no partial writes)
-- ✅ Include timestamp and generator version for auditing
+- ✅ Include timestamps plus canonical installed module version/commit metadata for auditing
 - ✅ Never corrupt state from manual edits (reject if format invalid)
 
 #### **Related Files**
@@ -511,7 +515,7 @@ Automatic changes made:
 **Current workflow**:
 ```yaml
 # quickscale.yml (v0.68.0+)
-version: 0.83.0
+version: "1"
 project:
   slug: myproject
   package: myproject
@@ -530,6 +534,22 @@ docker:
 #        edit quickscale.yml module values as needed
 #        quickscale apply → executes configuration
 ```
+
+**Auth desired-config validation rule (v0.83.0):** `quickscale.yml` is
+validated against the canonical auth desired-config contract before
+sanitize/post-init normalization runs. Legacy desired-config keys such as
+`modules.auth.allow_registration` and `modules.auth.social_providers`, plus any
+other non-canonical auth keys, are rejected at the `quickscale.yml` boundary.
+The accepted desired-config contract is:
+
+- `modules.auth.registration_enabled: true|false`
+- `modules.auth.email_verification: none|optional|mandatory`
+- `modules.auth.authentication_method: email|username|both`
+- `modules.auth.session_cookie_age: <positive integer seconds>` (optional)
+
+Already-written `.quickscale/state.yml` snapshots and state-derived managed
+wiring remain tolerant of legacy auth keys during load/reapply so older
+projects can preserve historical state while new desired config fails hard.
 
 **Storage URL rule (v0.76.0):** `modules.storage.public_base_url` is the sole
 public media URL setting for storage-backed assets. Helper-built blog/storage
@@ -1049,6 +1069,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ `quickscale_core`: scaffolding, templates, and shared generator/runtime support
 - ✅ Directory-based frontends: scaffolded templates and starter-theme assets
 - ✅ `quickscale_modules/*`: first-party module workspace inside the repository, with released modules documented per version
+- ✅ Some first-party modules ship documented module-owned routed surfaces that QuickScale wires into generated projects, currently including blog, listings, CRM, forms, and notifications routes/webhooks
 - ❌ Independent package-registry distribution is not part of the current contract unless a release note and this file explicitly say so
 
 **See:** [scaffolding.md §2-3](./scaffolding.md#mvp-structure) for layouts
@@ -1156,9 +1177,12 @@ See [docs/technical/module-extension.md](module-extension.md) for the full contr
 - ✅ Django email delivery for notifications uses `django-anymail` as the approved delivery layer with Resend as the current first-class provider for v0.78.0
 - ✅ Version pinning (predictable compatibility for Django foundations)
 
-### Notifications Contract (v0.78.0 Planning Baseline)
+### Notifications Contract (v0.83.0 behavior)
 
 - Authoritative notifications configuration lives in `quickscale.yml`, generated Django settings, and environment variables. Any `NotificationSettings` admin surface is a read-only operational snapshot only, with no secrets and no alternate mutable config path.
+- `modules.notifications.sender_email` defaults to `noreply@example.com` as a local-development placeholder only.
+- When `modules.notifications.resend_domain` is set, `quickscale apply` requires a non-placeholder sender email plus a valid `modules.notifications.resend_api_key_env_var` reference; apply fails hard instead of silently leaving live delivery on the console backend.
+- Runtime backend selection stays on Django's console email backend until live Resend delivery is fully configured. If the live Resend backend is active anyway and the placeholder sender or resolved API key is still missing, queued deliveries fail explicitly rather than degrading silently.
 - Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
 - Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
 
@@ -1185,7 +1209,7 @@ See [docs/technical/module-extension.md](module-extension.md) for the full contr
 - ❌ DI frameworks or service registries (direct imports in production)
 - ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
-- ❌ HTTP APIs from modules (expose Python service layer only)
+- ❌ Ad hoc or undocumented module HTTP APIs beyond the documented module-owned routes and webhooks QuickScale wires today
 - ❌ Tight coupling themes to modules
 
 **Configuration:**

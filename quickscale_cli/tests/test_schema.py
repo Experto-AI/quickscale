@@ -46,8 +46,8 @@ project:
   theme: showcase_html
 modules:
   auth:
-    registration: true
-    email_verification: false
+    registration_enabled: true
+    email_verification: optional
   blog:
     posts_per_page: 10
 docker:
@@ -59,7 +59,8 @@ docker:
         assert config.project.slug == "myproject"
         assert "auth" in config.modules
         assert "blog" in config.modules
-        assert config.modules["auth"].options["registration"] is True
+        assert config.modules["auth"].options["registration_enabled"] is True
+        assert config.modules["auth"].options["email_verification"] == "optional"
         assert config.modules["blog"].options["posts_per_page"] == 10
         assert config.docker.start is True
         assert config.docker.build is False
@@ -93,8 +94,41 @@ modules:
             "contacts_per_page": 60,
         }
 
-    def test_validate_config_prunes_legacy_auth_keys(self):
-        """Mixed legacy/current auth keys should parse to the canonical contract."""
+    @pytest.mark.parametrize(
+        ("invalid_option", "option_value", "expected_marker"),
+        [
+            ("allow_registration", " false", "registration_enabled"),
+            ("social_providers", "\n      - google", "social_providers"),
+            ("registration", " true", "registration_enabled"),
+        ],
+    )
+    def test_validate_config_rejects_non_canonical_auth_keys(
+        self,
+        invalid_option,
+        option_value,
+        expected_marker,
+    ):
+        """Desired-config auth must reject stale or unknown keys before sanitize."""
+        yaml_content = f"""
+version: "1"
+project:
+  slug: myproject
+  package: myproject
+  theme: showcase_html
+modules:
+  auth:
+    {invalid_option}:{option_value}
+"""
+
+        with pytest.raises(ConfigValidationError) as exc:
+            validate_config(yaml_content)
+
+        message = str(exc.value)
+        assert invalid_option in message
+        assert expected_marker in message
+
+    def test_validate_config_rejects_invalid_auth_value_shapes(self):
+        """Desired-config auth must enforce canonical value shapes."""
         yaml_content = """
 version: "1"
 project:
@@ -103,17 +137,15 @@ project:
   theme: showcase_html
 modules:
   auth:
-    registration_enabled: true
-    allow_registration: false
-    social_providers:
-      - google
+    email_verification: false
 """
 
-        config = validate_config(yaml_content)
+        with pytest.raises(ConfigValidationError) as exc:
+            validate_config(yaml_content)
 
-        assert config.modules["auth"].options == {
-            "registration_enabled": True,
-        }
+        message = str(exc.value)
+        assert "modules.auth.email_verification" in message
+        assert "none, optional, mandatory" in message
 
     def test_config_with_empty_modules(self):
         """Test config with modules section but empty options"""
@@ -583,7 +615,10 @@ class TestGenerateYaml:
             version="1",
             project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
-                "auth": ModuleConfig(name="auth", options={"registration": True}),
+                "auth": ModuleConfig(
+                    name="auth",
+                    options={"registration_enabled": True},
+                ),
                 "blog": ModuleConfig(name="blog", options={}),
             },
             docker=DockerConfig(start=False, build=False),
@@ -606,7 +641,10 @@ class TestGenerateYaml:
                 theme="showcase_react",
             ),
             modules={
-                "auth": ModuleConfig(name="auth", options={"key": "value"}),
+                "auth": ModuleConfig(
+                    name="auth",
+                    options={"registration_enabled": False},
+                ),
             },
             docker=DockerConfig(start=True, build=False),
         )

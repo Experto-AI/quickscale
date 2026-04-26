@@ -666,8 +666,8 @@ class TestLoadAndValidateConfig:
             in rewritten
         )
 
-    def test_auth_legacy_keys_are_sanitized_on_load(self, tmp_path):
-        """Legacy auth keys should be pruned from quickscale.yml during apply load."""
+    def test_auth_legacy_keys_fail_before_sanitize_on_load(self, tmp_path):
+        """Desired-config auth must fail before apply load tries to sanitize it."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -685,13 +685,14 @@ class TestLoadAndValidateConfig:
             "  start: false\n"
         )
 
-        result = _load_and_validate_config(config)
-        rewritten = config.read_text()
+        original = config.read_text()
 
-        assert result.modules["auth"].options == {"registration_enabled": True}
-        assert "allow_registration" not in rewritten
-        assert "social_providers" not in rewritten
-        assert "registration_enabled: true" in rewritten
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+        assert config.read_text() == original
+        assert "allow_registration" in original
+        assert "social_providers" in original
 
     def test_legacy_notifications_secrets_are_sanitized_on_load(self, tmp_path):
         """Legacy notification secrets should be rewritten to env-var references."""
@@ -704,6 +705,7 @@ class TestLoadAndValidateConfig:
             "  theme: showcase_html\n"
             "modules:\n"
             "  notifications:\n"
+            "    sender_email: ops@example.com\n"
             "    resend_domain: mg.example.com\n"
             "    resend_api_key: raw-secret\n"
             "    webhook_secret: webhook-secret\n"
@@ -754,6 +756,62 @@ class TestLoadAndValidateConfig:
 
         with pytest.raises(click.Abort):
             _load_and_validate_config(config)
+
+    def test_live_targeted_notifications_reject_placeholder_sender_email(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        """Apply should reject the default placeholder sender for live Resend targets."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  notifications:\n"
+            "    sender_name: QuickScale\n"
+            "    sender_email: noreply@example.com\n"
+            "    resend_domain: mg.example.com\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+        error_output = capsys.readouterr().err
+        assert "noreply@example.com" in error_output
+        assert "sender_email" in error_output
+
+    def test_console_safe_notifications_allow_placeholder_sender_email(
+        self,
+        tmp_path,
+    ):
+        """Console-safe notifications should still allow the default placeholder sender."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  notifications:\n"
+            "    sender_name: QuickScale\n"
+            "    sender_email: noreply@example.com\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+
+        assert result.modules["notifications"].options["sender_email"] == (
+            "noreply@example.com"
+        )
+        assert result.modules["notifications"].options.get("resend_domain", "") == ""
 
     def test_analytics_module_options_are_normalized_on_load(self, tmp_path):
         """Analytics provider and host values should be canonicalized on apply load."""
