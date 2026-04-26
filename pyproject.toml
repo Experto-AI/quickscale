@@ -2,7 +2,7 @@
 name = "quickscale-module-social"
 version = "0.79.0"
 description = "QuickScale curated social links and embeds module"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.12,<3.14"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -12,7 +12,7 @@ dynamic = ["dependencies"]
 packages = [{include = "quickscale_modules_social", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.14"
 Django = ">=6.0.3,<7.0.0"
 
 [tool.poetry.group.dev.dependencies]
