@@ -2,7 +2,7 @@
 name = "quickscale-module-backups"
 version = "0.77.0"
 description = "QuickScale operational backups module with private local and remote artifact workflows"
-requires-python = ">=3.14,<4.0"
+requires-python = ">=3.12,<4.0"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -12,7 +12,7 @@ dynamic = ["dependencies"]
 packages = [{include = "quickscale_modules_backups", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.14"
+python = "^3.12"
 Django = ">=6.0.3,<7.0.0"
 django-storages = "^1.14.6"
 boto3 = "^1.40.46"
