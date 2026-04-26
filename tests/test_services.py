@@ -204,14 +204,15 @@ def test_configure_analytics_client_disables_when_runtime_is_off() -> None:
     assert services._ANALYTICS_DISABLED_REASON == "disabled"
 
 
-def test_configure_analytics_client_defaults_missing_enabled_setting_to_disabled(
+def test_configure_analytics_client_defaults_missing_enabled_setting_to_enabled(
     monkeypatch,
 ) -> None:
-    """Missing analytics wiring should stay disabled even if env vars are present."""
+    """Missing analytics wiring should preserve the shipped enabled-by-default runtime."""
     runtime_settings = SimpleNamespace(
         DEBUG=False,
         QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
     )
+    fake_posthog = DummyPosthogModule()
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with (
@@ -221,16 +222,14 @@ def test_configure_analytics_client_defaults_missing_enabled_setting_to_disabled
         ),
         patch(
             "quickscale_modules_analytics.services.import_module",
-            side_effect=AssertionError(
-                "posthog should not import when analytics wiring is absent"
-            ),
+            return_value=fake_posthog,
         ),
     ):
-        assert services.get_analytics_runtime_settings().enabled is False
-        assert services.configure_analytics_client() is False
-        assert services.is_analytics_active() is False
+        assert services.get_analytics_runtime_settings().enabled is True
+        assert services.configure_analytics_client() is True
+        assert services.is_analytics_active() is True
 
-    assert services._ANALYTICS_DISABLED_REASON == "disabled"
+    assert len(fake_posthog.clients) == 1
 
 
 @override_settings(
