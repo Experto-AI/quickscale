@@ -41,6 +41,7 @@ _DEFAULT_ALLOWED_TAGS = (
 _DEFAULT_DEFAULT_TAGS = ("quickscale", "transactional")
 _ALLOWED_METADATA_KEYS = {"template", "project", "workflow"}
 _LIVE_RESEND_BACKEND = "anymail.backends.resend.EmailBackend"
+_PLACEHOLDER_SENDER_EMAIL = "noreply@example.com"
 _EVENT_STATUS_MAP = {
     "sent": NotificationDelivery.STATUS_SENT,
     "email.sent": NotificationDelivery.STATUS_SENT,
@@ -854,13 +855,19 @@ def _validate_dispatch_settings(
     issues: list[str] = []
     if not settings_snapshot.sender_email.strip():
         issues.append("sender_email is required for notification delivery")
-    if (
-        settings_snapshot.live_delivery_enabled()
-        and not settings_snapshot.resolve_resend_api_key()
-    ):
-        issues.append(
-            "live Resend delivery requires the configured API key environment variable"
-        )
+    if settings_snapshot.live_delivery_enabled():
+        if (
+            settings_snapshot.sender_email.strip().casefold()
+            == _PLACEHOLDER_SENDER_EMAIL.casefold()
+        ):
+            issues.append(
+                "live Resend delivery cannot use the default placeholder sender "
+                "email noreply@example.com"
+            )
+        if not settings_snapshot.resolve_resend_api_key():
+            issues.append(
+                "live Resend delivery requires the configured API key environment variable"
+            )
     return issues
 
 
