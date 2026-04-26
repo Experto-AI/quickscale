@@ -2,7 +2,7 @@
 name = "quickscale-core"
 version = "0.83.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
-requires-python = ">=3.14,<4.0"
+requires-python = ">=3.12,<4.0"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -29,7 +29,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.14"
+python = "^3.12"
 Jinja2 = "^3.1.6"
 pyyaml = "^6.0.3"
 

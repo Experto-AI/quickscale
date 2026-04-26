@@ -3,14 +3,14 @@ name = "quickscale-monorepo"
 version = "0.0.0"
 description = "Repository-level helper project for local development with centralized dependencies"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
-requires-python = ">=3.14,<4.0"
+requires-python = ">=3.12,<4.0"
 dynamic = ["dependencies"]
 
 [tool.poetry]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.14"
+python = "^3.12"
 quickscale = {path = "./quickscale", develop = true}
 quickscale-core = {path = "./quickscale_core", develop = true}
 quickscale-cli = {path = "./quickscale_cli", develop = true}
