@@ -1683,7 +1683,7 @@ name = "quickscale"
 version = "0.83.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1701,7 +1701,7 @@ name = "quickscale-cli"
 version = "0.83.0"
 description = "Command-line interface for QuickScale Django project generator"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1719,7 +1719,7 @@ name = "quickscale-core"
 version = "0.83.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1737,7 +1737,7 @@ name = "quickscale-module-analytics"
 version = "0.80.0"
 description = "QuickScale PostHog analytics module with service-style capture helpers"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1755,7 +1755,7 @@ name = "quickscale-module-auth"
 version = "0.71.0"
 description = "QuickScale authentication module with django-allauth integration"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1773,7 +1773,7 @@ name = "quickscale-module-backups"
 version = "0.77.0"
 description = "QuickScale operational backups module with private local and remote artifact workflows"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1792,7 +1792,7 @@ name = "quickscale-module-blog"
 version = "0.73.0"
 description = "QuickScale blog module with Markdown support and RSS feeds"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1811,7 +1811,7 @@ name = "quickscale-module-crm"
 version = "0.73.0"
 description = "QuickScale CRM module with contacts, companies, deals, and pipeline management"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1830,7 +1830,7 @@ name = "quickscale-module-forms"
 version = "0.75.0"
 description = "QuickScale generic form-builder module with admin management and React frontend renderer"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1849,7 +1849,7 @@ name = "quickscale-module-listings"
 version = "0.73.0"
 description = "QuickScale listings module with AbstractListing model for marketplace verticals"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1869,7 +1869,7 @@ name = "quickscale-module-notifications"
 version = "0.78.0"
 description = "QuickScale transactional notifications module with Resend-first Anymail delivery"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1887,7 +1887,7 @@ name = "quickscale-module-social"
 version = "0.79.0"
 description = "QuickScale curated social links and embeds module"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1904,7 +1904,7 @@ name = "quickscale-module-storage"
 version = "0.76.0"
 description = "QuickScale storage infrastructure module with local/S3-compatible helpers"
 optional = false
-python-versions = "^3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -2130,5 +2130,5 @@ files = [
 
 [metadata]
 lock-version = "2.1"
-python-versions = "^3.12"
-content-hash = "5526268a36f23af6500feb1952c1f17138936916ba307142c7904b72e450ed4e"
+python-versions = ">=3.12,<3.14"
+content-hash = "e4e447f150517e29ff860c4a8276f9078f862f8456f0d3b3189917c26b61b063"

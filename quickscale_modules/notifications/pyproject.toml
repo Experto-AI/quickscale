@@ -2,7 +2,7 @@
 name = "quickscale-module-notifications"
 version = "0.78.0"
 description = "QuickScale transactional notifications module with Resend-first Anymail delivery"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.12,<3.14"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -12,7 +12,7 @@ dynamic = ["dependencies"]
 packages = [{include = "quickscale_modules_notifications", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.14"
 Django = ">=6.0.3,<7.0.0"
 django-anymail = ">=13.0,<14.0"
 

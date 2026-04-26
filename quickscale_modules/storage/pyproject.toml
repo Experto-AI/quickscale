@@ -2,7 +2,7 @@
 name = "quickscale-module-storage"
 version = "0.76.0"
 description = "QuickScale storage infrastructure module with local/S3-compatible helpers"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.12,<3.14"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -12,7 +12,7 @@ dynamic = ["dependencies"]
 packages = [{include = "quickscale_modules_storage", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.14"
 Django = ">=6.0.3,<7.0.0"
 django-storages = {version = "^1.14.4", optional = true}
 boto3 = {version = "^1.35.0", optional = true}
