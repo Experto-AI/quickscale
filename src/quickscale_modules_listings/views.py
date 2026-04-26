@@ -30,7 +30,7 @@ def _get_positive_int_setting(setting_name: str, default: int) -> int:
 
     try:
         parsed_value = int(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return default
 
     return parsed_value if parsed_value > 0 else default
@@ -74,7 +74,7 @@ def create_published_listing_from_payload(payload: dict[str, Any]) -> Listing:
         else:
             try:
                 parsed_price = Decimal(str(price))
-            except InvalidOperation, TypeError, ValueError:
+            except (InvalidOperation, TypeError, ValueError):
                 errors["price"] = "Must be a number or numeric string"
 
     if errors:
