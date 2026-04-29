@@ -67,7 +67,7 @@ The `quickscale deploy railway` command automatically:
 - ✅ Deploys using railway.json config (handles migrations + static files automatically)
 - ✅ Provides deployment URL and next steps
 
-**Config-First Approach**: QuickScale v0.60.0+ uses Railway's config-as-code (railway.json) for deployment. Migrations and static file collection run automatically on every deployment via the startCommand configuration.
+**Config-First Approach**: QuickScale v0.60.0+ uses Railway's config-as-code (railway.json) for deployment. Generated projects delegate startup to `./start.sh`, which runs migrations at deploy time and then starts Gunicorn; static files are collected during the Docker build.
 
 **Note**: Railway projects support multiple services (your app + PostgreSQL). The CLI automatically handles service creation and configuration.
 
@@ -164,8 +164,10 @@ The `quickscale deploy railway` command follows this config-first workflow:
    - ALLOWED_HOSTS (using generated domain)
 7. **Deploy Application**: Deploys using railway.json config via `railway up --service <app-name>`
    - railway.json defines Dockerfile builder
-   - Dockerfile builds the image (collectstatic runs at build time)
-   - startCommand runs migrations at runtime (when DATABASE_URL is available) + starts gunicorn
+  - Dockerfile builds the image (collectstatic runs at build time)
+  - railway.json delegates startup to `./start.sh`
+  - `start.sh` runs migrations at runtime (when DATABASE_URL is available) and starts Gunicorn
+  - Gunicorn defaults to 1 worker for the low-cost baseline unless `GUNICORN_WORKERS` or `WEB_CONCURRENCY` is set
    - No separate migration or static file steps needed
 
 **Important Notes**:
@@ -173,8 +175,9 @@ The `quickscale deploy railway` command follows this config-first workflow:
 - **Optimized Variable Setting**: QuickScale sets all environment variables in a single batch command to trigger only ONE deployment instead of multiple deployments.
 - Railway CLI v4+ requires explicit service creation with `railway add --service` before deployment.
 - **Config-as-Code**: railway.json is generated with every `quickscale apply` and handles build/deploy configuration.
-- **Automatic Migrations**: Migrations run on every deployment via startCommand (at runtime with DATABASE_URL available), eliminating manual migration steps.
+- **Automatic Migrations**: The generated `./start.sh` runs on every deployment via `startCommand`, so migrations happen at runtime with `DATABASE_URL` available.
 - **DATABASE_URL Validation**: Production settings now validate DATABASE_URL is set and provide clear error messages if missing.
+- **Default Scaling Baseline**: Generated projects start with one Railway replica and one Gunicorn worker. Increase replicas in Railway if you want more containers; set `GUNICORN_WORKERS` or `WEB_CONCURRENCY` if you want more workers inside each container. These controls are independent.
 
 ## Database Setup
 
@@ -442,10 +445,11 @@ Railway supports infrastructure-as-code through `railway.json` or `railway.toml`
 
 All QuickScale projects generated with `quickscale apply` include a railway.json file that:
 - Uses Dockerfile for consistent builds
-- Automatically runs migrations on deployment
-- Collects static files automatically
-- Starts Gunicorn with proper configuration
-- Implements health checks via /admin/ endpoint
+- Delegates runtime startup to `./start.sh`
+- Runs migrations automatically on deployment
+- Collects static files during the Docker build
+- Starts Gunicorn with environment-driven worker defaults
+- Implements health checks via `/healthcheck/`
 - Configures restart policy for reliability
 
 #### Benefits of Config as Code
@@ -468,21 +472,24 @@ QuickScale generates this railway.json configuration automatically:
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn myapp.wsgi --bind 0.0.0.0:$PORT",
+    "startCommand": "./start.sh",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/admin/",
-    "healthcheckTimeout": 300
+    "healthcheckPath": "/healthcheck/",
+    "healthcheckTimeout": 100
   }
 }
 ```
 
 **Key Features**:
-- **Automatic Migrations**: Runs on every deployment before server starts
-- **Static Files**: Collected automatically (even though WhiteNoise handles serving)
-- **Proper Binding**: Gunicorn binds to Railway's PORT environment variable
-- **Health Checks**: Railway monitors /admin/ endpoint for service health
+- **Automatic Migrations**: `./start.sh` runs on every deployment before Gunicorn starts
+- **Static Files**: The Docker build runs `collectstatic`, so runtime startup stays focused on migrations and app boot
+- **Low-Cost Baseline**: Generated projects default to one Gunicorn worker unless you set `GUNICORN_WORKERS` or `WEB_CONCURRENCY`
+- **Worker Precedence**: `GUNICORN_WORKERS` overrides `WEB_CONCURRENCY`; if neither is set, the generated startup uses `1`
+- **Health Checks**: Railway monitors `/healthcheck/` for service health
 - **Auto-Restart**: Restarts up to 10 times on failure
+
+`numReplicas` is a separate Railway platform setting. If you add it later, it changes how many containers Railway runs, not how many Gunicorn workers each container starts.
 
 #### Available Configuration Fields
 
@@ -498,7 +505,7 @@ QuickScale generates this railway.json configuration automatically:
 - `restartPolicyMaxRetries`: Max restart attempts (default: 10)
 - `healthcheckPath`: Health check endpoint (e.g., `"/health/"`)
 - `healthcheckTimeout`: Health check timeout in seconds
-- `numReplicas`: Number of replicas (default: 1)
+- `numReplicas`: Number of replicas (default: 1). QuickScale does not generate this field today; replicas scale container count and are separate from Gunicorn worker count inside each container.
 
 #### Configuration Priority
 
@@ -540,7 +547,7 @@ railway variables --set \
 ```bash
 railway up --service myapp        # Uses railway.json automatically
 # Dockerfile: collectstatic runs at build time
-# railway.json startCommand: migrations run at runtime + gunicorn starts
+# railway.json startCommand: ./start.sh runs migrations + gunicorn starts
 ```
 
 **Benefits**:
@@ -557,13 +564,14 @@ railway up --service myapp        # Uses railway.json automatically
 ```json
 {
   "deploy": {
-    "startCommand": "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn myapp.wsgi --bind 0.0.0.0:$PORT"
+    "startCommand": "./start.sh"
   }
 }
 ```
 - ✅ No separate migration step needed
 - ✅ Runs in container environment (not locally)
 - ✅ Migrations guaranteed to run before server starts
+- ✅ Generated startup keeps the low-cost baseline at 1 Gunicorn worker unless `GUNICORN_WORKERS` or `WEB_CONCURRENCY` is set
 - ✅ Handles redeployments automatically
 - ⚠️  May delay server start for large migrations (acceptable for most use cases)
 
@@ -759,7 +767,7 @@ Configure migrations in railway.json to run automatically:
 ```json
 {
   "deploy": {
-    "startCommand": "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn myapp.wsgi --bind 0.0.0.0:$PORT"
+    "startCommand": "./start.sh"
   }
 }
 ```
@@ -965,7 +973,8 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - [ ] Generate public domain: `railway domain --service myapp`
 - [ ] Set ALLOWED_HOSTS with domain: `railway variables --set ALLOWED_HOSTS=<domain> --service myapp`
 - [ ] Deploy to Railway: `railway up --service myapp`
-  - ✅ railway.json automatically runs migrations + collectstatic + gunicorn
+  - ✅ railway.json delegates runtime startup to `./start.sh` for migrations + gunicorn
+  - ✅ Dockerfile handles `collectstatic` during the build
 - [ ] Wait for deployment to complete (5-10 minutes)
 - [ ] Create superuser account (choose one option):
   - **Automatic (recommended)**: Set `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` in Railway dashboard variables — start.sh creates it on next deploy
@@ -987,7 +996,7 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - ✅ Automatic domain generation functional
 - ✅ Auto-ALLOWED_HOSTS configuration working
 - ✅ Environment variable management functional
-- ✅ Database migrations execute automatically via railway.json startCommand
+- ✅ Database migrations execute automatically via the generated `./start.sh` entrypoint
 - ✅ Static files collected and served via WhiteNoise without issues
 - ✅ SSL/HTTPS auto-provisioned by Railway
 - ✅ Deployment completes in ~5-10 minutes for first deploy

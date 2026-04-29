@@ -160,4 +160,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Note: Migrations should run via railway.json startCommand at deployment time
 # This ensures DATABASE_URL is available when migrations run
 # Run gunicorn
-CMD gunicorn {{ package_name }}.wsgi:application --bind 0.0.0.0:${PORT} --workers 4 --timeout 60 --access-logfile - --error-logfile -
+CMD gunicorn_workers="${GUNICORN_WORKERS:-${WEB_CONCURRENCY:-1}}" && \
+    exec gunicorn {{ package_name }}.wsgi:application \
+        --bind "0.0.0.0:${PORT}" \
+        --workers "${gunicorn_workers}" \
+        --timeout 60 \
+        --access-logfile - \
+        --error-logfile -

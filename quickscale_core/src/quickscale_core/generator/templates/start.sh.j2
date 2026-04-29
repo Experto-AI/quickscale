@@ -60,8 +60,10 @@ echo "📋 Step 5/6: WSGI application check"
 python -c "from {{ package_name }}.wsgi import application; print(f'✅ WSGI app loaded: {type(application).__name__}')"
 echo ""
 
+gunicorn_workers="${GUNICORN_WORKERS:-${WEB_CONCURRENCY:-1}}"
+
 echo "📋 Step 6/6: Starting Gunicorn"
-echo "Binding to 0.0.0.0:${PORT:-8000} with 4 workers"
+echo "Binding to 0.0.0.0:${PORT:-8000} with ${gunicorn_workers} workers"
 echo "Gunicorn will log all requests below..."
 echo "========================================"
 echo ""
@@ -69,7 +71,7 @@ echo ""
 # Start Gunicorn with detailed logging
 exec gunicorn {{ package_name }}.wsgi:application \
     --bind "0.0.0.0:${PORT:-8000}" \
-    --workers 4 \
+  --workers "${gunicorn_workers}" \
     --timeout 60 \
     --log-level info \
     --access-logfile - \

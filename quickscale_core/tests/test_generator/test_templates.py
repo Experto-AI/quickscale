@@ -499,9 +499,9 @@ class TestProductionReadyFeatures:
         settings_package_module = types.ModuleType(settings_package_name)
         settings_package_module.__dict__["__path__"] = []
         modules_module = types.ModuleType(modules_name)
-        modules_module.MODULE_INSTALLED_APPS = []
-        modules_module.MODULE_MIDDLEWARE = []
-        modules_module.MODULE_SETTINGS = {}
+        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
+        setattr(modules_module, "MODULE_MIDDLEWARE", [])
+        setattr(modules_module, "MODULE_SETTINGS", {})
 
         def fake_config(
             _key: str,
@@ -513,7 +513,7 @@ class TestProductionReadyFeatures:
             return cast(default)
 
         decouple_module = types.ModuleType("decouple")
-        decouple_module.config = fake_config
+        setattr(decouple_module, "config", fake_config)
 
         monkeypatch.setitem(sys.modules, package_name, package_module)
         monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
@@ -912,6 +912,17 @@ class TestDevOpsTemplateRendering:
         output = template.render(test_context)
         assert "gunicorn testproject.wsgi:application" in output
 
+    def test_start_sh_gunicorn_worker_precedence(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """start.sh should prefer GUNICORN_WORKERS, then WEB_CONCURRENCY, then 1."""
+        template = jinja_env.get_template("start.sh.j2")
+        output = template.render(test_context)
+
+        assert 'gunicorn_workers="${GUNICORN_WORKERS:-${WEB_CONCURRENCY:-1}}"' in output
+        assert '--workers "${gunicorn_workers}"' in output
+        assert "--workers 4" not in output
+
 
 class TestPyprojectTomlContent:
     """Verify pyproject.toml contains required production dependencies and configuration."""
@@ -1066,6 +1077,17 @@ class TestDockerfileContent:
         output = template.render(test_context)
         assert "gunicorn" in output
         assert "testproject.wsgi:application" in output
+
+    def test_dockerfile_gunicorn_worker_precedence(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Dockerfile runtime startup should match the generated worker fallback order."""
+        template = jinja_env.get_template("Dockerfile.j2")
+        output = template.render(test_context)
+
+        assert 'gunicorn_workers="${GUNICORN_WORKERS:-${WEB_CONCURRENCY:-1}}"' in output
+        assert '--workers "${gunicorn_workers}"' in output
+        assert "--workers 4" not in output
 
 
 class TestDockerComposeContent:
