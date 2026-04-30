@@ -29,6 +29,10 @@ MANIFEST
 !.agent/adapters/lib/
 !.agent/adapters/lib/*.sh
 
+# React theme template lib/ (shadcn utils, analytics) must be tracked
+!quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/lib/
+!quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/lib/*
+
 # Poetry
 # Only root poetry.lock is tracked - individual packages use centralized deps
 quickscale_core/poetry.lock
