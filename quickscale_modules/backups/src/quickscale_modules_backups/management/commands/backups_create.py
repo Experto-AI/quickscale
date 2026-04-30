@@ -39,11 +39,14 @@ class Command(BaseCommand):
         resume_snapshot_id = (
             str(options.get("resume_snapshot_id") or "").strip() or None
         )
-        create_kwargs: dict[str, str] = {"trigger": trigger}
-        if resume_snapshot_id is not None:
-            create_kwargs["resume_snapshot_id"] = resume_snapshot_id
         try:
-            artifact = create_backup(**create_kwargs)
+            if resume_snapshot_id is None:
+                artifact = create_backup(trigger=trigger)
+            else:
+                artifact = create_backup(
+                    trigger=trigger,
+                    resume_snapshot_id=resume_snapshot_id,
+                )
         except BackupError as exc:
             raise CommandError(str(exc)) from exc
 

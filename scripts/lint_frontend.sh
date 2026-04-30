@@ -99,20 +99,46 @@ done < <(find "$THEME_DIR" -type f -print0)
 echo "  ✅ Templates rendered to cache directory"
 echo ""
 
+install_signature() {
+	if [ -f "$WORK_DIR/pnpm-lock.yaml" ]; then
+		md5sum "$WORK_DIR/package.json" "$WORK_DIR/pnpm-lock.yaml" | md5sum | cut -d' ' -f1
+	else
+		md5sum "$WORK_DIR/package.json" | cut -d' ' -f1
+	fi
+}
+
+frontend_toolchain_ready() {
+	[ -d "$WORK_DIR/node_modules" ] &&
+	[ -e "$WORK_DIR/node_modules/.bin/eslint" ] &&
+	[ -e "$WORK_DIR/node_modules/.bin/tsc" ] &&
+	[ -e "$WORK_DIR/node_modules/eslint/package.json" ] &&
+	[ -e "$WORK_DIR/node_modules/typescript/package.json" ]
+}
+
 # Install dependencies (cached via node_modules)
 echo "📦 Installing dependencies (cached)..."
 cd "$WORK_DIR"
 
-# Only reinstall if package.json changed
-PACKAGE_HASH=$(md5sum "$WORK_DIR/package.json" 2>/dev/null | cut -d' ' -f1)
+# Reinstall if the manifest changed or the cached pnpm layout is incomplete.
+PACKAGE_HASH=$(install_signature)
 CACHED_HASH=""
 if [ -f "$CACHE_DIR/.package_hash" ]; then
 	CACHED_HASH=$(cat "$CACHE_DIR/.package_hash")
 fi
 
-if [ "$PACKAGE_HASH" != "$CACHED_HASH" ] || [ ! -d "$WORK_DIR/node_modules" ]; then
-	echo "  → Dependencies changed, installing..."
+
+if [ "$PACKAGE_HASH" != "$CACHED_HASH" ] || ! frontend_toolchain_ready; then
+	if [ "$PACKAGE_HASH" != "$CACHED_HASH" ]; then
+		echo "  → Dependencies changed, installing..."
+	else
+		echo "  → Cached dependencies look incomplete, reinstalling..."
+	fi
+	rm -rf "$WORK_DIR/node_modules"
 	pnpm install
+	if ! frontend_toolchain_ready; then
+		echo "  ❌ pnpm install completed but eslint/tsc are still unavailable"
+		exit 1
+	fi
 	echo "$PACKAGE_HASH" > "$CACHE_DIR/.package_hash"
 	echo "  ✅ Dependencies installed"
 else

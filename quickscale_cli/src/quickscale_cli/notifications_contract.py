@@ -143,10 +143,7 @@ def _is_valid_email(value: str) -> bool:
 
 
 def _uses_placeholder_sender_email(value: Any) -> bool:
-    return (
-        str(value).strip().casefold()
-        == _DEFAULT_PLACEHOLDER_SENDER_EMAIL.casefold()
-    )
+    return str(value).strip().casefold() == _DEFAULT_PLACEHOLDER_SENDER_EMAIL.casefold()
 
 
 def _is_valid_domain(value: str) -> bool:

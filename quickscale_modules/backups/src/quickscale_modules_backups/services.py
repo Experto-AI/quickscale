@@ -18,7 +18,7 @@ from importlib import import_module
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any, Callable, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Protocol, Sequence, cast
 from uuid import uuid4
 
 import django
@@ -123,6 +123,29 @@ class RemoteMaterializer(Protocol):
         policy: "BackupPolicySnapshot",
         destination: Path,
     ) -> None: ...
+
+
+class StorageBackendSelectionLike(Protocol):
+    """Typed shape used from the storage helper module."""
+
+    backend: str
+    django_backend: str
+    use_s3_compatible: bool
+    options: dict[str, Any]
+
+
+class StorageHelpersModule(Protocol):
+    """Typed subset of the storage helper module used by backups."""
+
+    def list_s3_compatible_media_inventory(
+        self,
+        settings_obj: Any,
+    ) -> list[dict[str, Any]]: ...
+
+    def select_storage_backend(
+        self,
+        settings_obj: Any,
+    ) -> StorageBackendSelectionLike: ...
 
 
 @dataclass(frozen=True)
@@ -625,6 +648,13 @@ def _get_git_revision() -> str | None:
     return revision or None
 
 
+def _load_storage_helpers() -> StorageHelpersModule:
+    """Load the storage helper module behind a typed local boundary."""
+    return cast(
+        StorageHelpersModule, import_module("quickscale_modules_storage.helpers")
+    )
+
+
 def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
     """Capture private media inventory or fail closed with explicit provider metadata."""
     base_payload: dict[str, Any] = {
@@ -634,10 +664,8 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
         "source_environment": _get_source_environment(),
     }
     try:
-        from quickscale_modules_storage.helpers import (
-            list_s3_compatible_media_inventory,
-            select_storage_backend,
-        )
+        storage_helpers = _load_storage_helpers()
+        selection = storage_helpers.select_storage_backend(settings)
     except Exception as exc:
         return {
             **base_payload,
@@ -655,7 +683,6 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
             "inventory": [],
         }
 
-    selection = select_storage_backend(settings)
     storage_payload: dict[str, Any] = {
         "backend": selection.backend,
         "django_backend": selection.django_backend,
@@ -679,7 +706,9 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
             }
         )
         try:
-            inventory = list_s3_compatible_media_inventory(settings)
+            remote_inventory = storage_helpers.list_s3_compatible_media_inventory(
+                settings
+            )
         except Exception as exc:
             return {
                 **base_payload,
@@ -693,7 +722,7 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
             **base_payload,
             "status": "ready",
             "storage": storage_payload,
-            "inventory": inventory,
+            "inventory": remote_inventory,
         }
 
     media_root_text = str(getattr(settings, "MEDIA_ROOT", "")).strip()
@@ -722,10 +751,10 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
             "inventory": [],
         }
 
-    inventory: list[dict[str, Any]] = []
+    local_inventory: list[dict[str, Any]] = []
     for file_path in sorted(path for path in media_root.rglob("*") if path.is_file()):
         file_stats = file_path.stat()
-        inventory.append(
+        local_inventory.append(
             {
                 "relative_path": file_path.relative_to(media_root).as_posix(),
                 "size_bytes": file_stats.st_size,
@@ -741,7 +770,7 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
         **base_payload,
         "status": "ready",
         "storage": storage_payload,
-        "inventory": inventory,
+        "inventory": local_inventory,
     }
 
 
@@ -2295,13 +2324,12 @@ def _resolve_media_runtime(
 ) -> dict[str, Any]:
     """Resolve local or s3-compatible media runtime settings."""
     try:
-        from quickscale_modules_storage.helpers import select_storage_backend
+        selection = _load_storage_helpers().select_storage_backend(settings_obj)
     except Exception as exc:
         raise BackupConfigurationError(
             "Media sync requires quickscale_modules_storage.helpers to resolve storage backends."
         ) from exc
 
-    selection = select_storage_backend(settings_obj)
     if require_s3_compatible and not selection.use_s3_compatible:
         raise BackupConfigurationError(
             "Railway-target media sync requires an s3-compatible target media backend; "

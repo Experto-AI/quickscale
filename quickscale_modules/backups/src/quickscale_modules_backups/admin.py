@@ -428,7 +428,9 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             return None
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError:
+            return None
+        except ValueError:
             return None
 
     def change_view(

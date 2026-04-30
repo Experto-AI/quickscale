@@ -1,6 +1,6 @@
 # Code Quality Analysis Tools
 
-QuickScale provides a comprehensive code quality analysis script that goes beyond basic linting and type checking.
+QuickScale provides a comprehensive, baseline-aware quality gate that goes beyond basic linting and type checking. `make quality` preserves the raw findings in its report artifacts, then compares those findings against the tracked accepted-debt baseline in `scripts/quality_baseline.json`.
 
 ## Running Quality Analysis
 
@@ -64,8 +64,8 @@ quickscale_core/src/models.py:15: unused import 'datetime' (100% confidence)
 ### 3. Large File Detection
 
 Identifies files that may benefit from splitting:
-- **Warning:** 500-1000 lines
-- **Critical:** >1000 lines
+- **Warning:** 500-799 lines
+- **Critical:** >=800 lines
 
 **Why it matters:**
 - Large files are harder to understand and navigate
@@ -108,6 +108,7 @@ Machine-readable format for:
 - CI/CD integration
 - Automated tooling
 - Trend analysis over time
+- Raw finding preservation, even when the gate passes against baseline
 
 ```json
 {
@@ -120,6 +121,8 @@ Machine-readable format for:
     "duplication_blocks": 4,
     "total_issues": 15
   },
+  "baseline": { ... },
+  "regressions": { ... },
   "dead_code": { ... },
   "complexity": { ... },
   "large_files": { ... },
@@ -140,11 +143,19 @@ Contains:
 - Actionable recommendations
 - Priority-ranked action items
 
+### Gate Status Output (.quickscale/quality_gate_status.json)
+
+Compact machine-readable summary of the baseline gate result:
+- Baseline load status and any baseline error
+- Warning regression count
+- Critical regression count
+- Total regression count
+
 ## Exit Codes
 
-- **0:** All quality checks passed
-- **1:** Warnings found (review recommended)
-- **2:** Critical issues found (action required - files >1000 lines)
+- **0:** No warning or critical regressions beyond the tracked baseline
+- **1:** Warning regressions found, or the baseline file could not be loaded
+- **2:** Critical regressions found
 
 ## Integration with Existing Tools
 
@@ -168,12 +179,12 @@ The quality analysis script complements existing tools:
 ### When to Refactor
 
 **Immediate action required:**
-- Files >1000 lines
+- Files >=800 lines
 - Functions with CC >20
 - Duplicate code in critical paths
 
 **Plan for next sprint:**
-- Files 500-1000 lines
+- Files 500-799 lines
 - Functions with CC 11-20
 - Confirmed dead code (not framework-related)
 

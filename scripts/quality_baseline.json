@@ -1,0 +1,510 @@
+{
+  "complexity": {
+    "allowed_functions": {
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::_check_clean_git_worktree": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 11,
+        "symbol": "_check_clean_git_worktree",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::_execute_copy_post_apply_react_surfaces": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 12,
+        "symbol": "_execute_copy_post_apply_react_surfaces",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::_execute_identity_reconciliation": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 14,
+        "symbol": "_execute_identity_reconciliation",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::_execute_merge_pyproject_and_frontend_package": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 14,
+        "symbol": "_execute_merge_pyproject_and_frontend_package",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::_insert_missing_path_dependencies": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 11,
+        "symbol": "_insert_missing_path_dependencies",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::_prepare_beta_migration_report": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 45,
+        "symbol": "_prepare_beta_migration_report",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::_replace_toml_section": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 12,
+        "symbol": "_replace_toml_section",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/beta_migration.py::render_report_summary": {
+        "file": "quickscale_cli/src/quickscale_cli/beta_migration.py",
+        "max_complexity": 21,
+        "symbol": "render_report_summary",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_display_next_steps": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+        "max_complexity": 26,
+        "symbol": "_display_next_steps",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_ensure_backups_gitignore_rules": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+        "max_complexity": 13,
+        "symbol": "_ensure_backups_gitignore_rules",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_execute_apply_steps": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+        "max_complexity": 25,
+        "symbol": "_execute_apply_steps",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_normalize_backups_gitignore_entry": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+        "max_complexity": 21,
+        "symbol": "_normalize_backups_gitignore_entry",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_sync_analytics_env_example": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+        "max_complexity": 16,
+        "symbol": "_sync_analytics_env_example",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_validate_module_prerequisites": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+        "max_complexity": 18,
+        "symbol": "_validate_module_prerequisites",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/deployment_commands.py::_verify_deployment_step": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/deployment_commands.py",
+        "max_complexity": 11,
+        "symbol": "_verify_deployment_step",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/development_commands.py::up": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/development_commands.py",
+        "max_complexity": 14,
+        "symbol": "up",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::_build_env_sync_plan": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+        "max_complexity": 14,
+        "symbol": "_build_env_sync_plan",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::_classify_env_var": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+        "max_complexity": 14,
+        "symbol": "_classify_env_var",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::_resolve_execute_surface_selection": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+        "max_complexity": 11,
+        "symbol": "_resolve_execute_surface_selection",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::execute": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+        "max_complexity": 35,
+        "symbol": "execute",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_perform_module_embed": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+        "max_complexity": 18,
+        "symbol": "_perform_module_embed",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::embed_module": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+        "max_complexity": 12,
+        "symbol": "embed_module",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::update": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+        "max_complexity": 13,
+        "symbol": "update",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_config.py::_add_storage_dependencies": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
+        "max_complexity": 13,
+        "symbol": "_add_storage_dependencies",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_config.py::assess_auth_migration_state": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
+        "max_complexity": 14,
+        "symbol": "assess_auth_migration_state",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_config.py::configure_backups_module": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
+        "max_complexity": 11,
+        "symbol": "configure_backups_module",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_config.py::validate_backups_module_options": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
+        "max_complexity": 16,
+        "symbol": "validate_backups_module_options",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py::_storage_wiring": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py",
+        "max_complexity": 15,
+        "symbol": "_storage_wiring",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/plan_command.py::_handle_add_modules": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
+        "max_complexity": 11,
+        "symbol": "_handle_add_modules",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/plan_command.py::_parse_add_module_selection": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
+        "max_complexity": 11,
+        "symbol": "_parse_add_module_selection",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/status_command.py::status": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/status_command.py",
+        "max_complexity": 12,
+        "symbol": "status",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/notifications_contract.py::validate_notifications_module_options": {
+        "file": "quickscale_cli/src/quickscale_cli/notifications_contract.py",
+        "max_complexity": 20,
+        "symbol": "validate_notifications_module_options",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/schema/config_schema.py::_validate_auth_module_options": {
+        "file": "quickscale_cli/src/quickscale_cli/schema/config_schema.py",
+        "max_complexity": 18,
+        "symbol": "_validate_auth_module_options",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/schema/state_schema.py::StateManager.load": {
+        "file": "quickscale_cli/src/quickscale_cli/schema/state_schema.py",
+        "max_complexity": 19,
+        "symbol": "StateManager.load",
+        "type": "method"
+      },
+      "quickscale_cli/src/quickscale_cli/social_contract.py::resolve_social_target": {
+        "file": "quickscale_cli/src/quickscale_cli/social_contract.py",
+        "max_complexity": 11,
+        "symbol": "resolve_social_target",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/social_contract.py::validate_social_module_options": {
+        "file": "quickscale_cli/src/quickscale_cli/social_contract.py",
+        "max_complexity": 17,
+        "symbol": "validate_social_module_options",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py::_append_dependency_entries": {
+        "file": "quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py",
+        "max_complexity": 11,
+        "symbol": "_append_dependency_entries",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py::sync_project_module_dependencies": {
+        "file": "quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py",
+        "max_complexity": 14,
+        "symbol": "sync_project_module_dependencies",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py::regenerate_managed_wiring": {
+        "file": "quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py",
+        "max_complexity": 12,
+        "symbol": "regenerate_managed_wiring",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/utils/railway_utils.py::_get_railway_variables_json": {
+        "file": "quickscale_cli/src/quickscale_cli/utils/railway_utils.py",
+        "max_complexity": 11,
+        "symbol": "_get_railway_variables_json",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/utils/railway_utils.py::link_database_to_service": {
+        "file": "quickscale_cli/src/quickscale_cli/utils/railway_utils.py",
+        "max_complexity": 19,
+        "symbol": "link_database_to_service",
+        "type": "function"
+      },
+      "quickscale_core/src/quickscale_core/settings_manager.py::_resolve_package_name": {
+        "file": "quickscale_core/src/quickscale_core/settings_manager.py",
+        "max_complexity": 13,
+        "symbol": "_resolve_package_name",
+        "type": "function"
+      },
+      "quickscale_modules/analytics/src/quickscale_modules_analytics/services.py::configure_analytics_client": {
+        "file": "quickscale_modules/analytics/src/quickscale_modules_analytics/services.py",
+        "max_complexity": 15,
+        "symbol": "configure_analytics_client",
+        "type": "function"
+      },
+      "quickscale_modules/analytics/src/quickscale_modules_analytics/services.py::get_distinct_id": {
+        "file": "quickscale_modules/analytics/src/quickscale_modules_analytics/services.py",
+        "max_complexity": 13,
+        "symbol": "get_distinct_id",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/admin.py::BackupPolicyAdmin.restore_backup_view": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/admin.py",
+        "max_complexity": 20,
+        "symbol": "BackupPolicyAdmin.restore_backup_view",
+        "type": "method"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/backups_create.py::Command.handle": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/backups_create.py",
+        "max_complexity": 11,
+        "symbol": "Command.handle",
+        "type": "method"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/backups_pin.py::Command.handle": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/backups_pin.py",
+        "max_complexity": 12,
+        "symbol": "Command.handle",
+        "type": "method"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_build_media_sync_manifest": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 11,
+        "symbol": "_build_media_sync_manifest",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_build_pg_dump_command": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 11,
+        "symbol": "_build_pg_dump_command",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_build_pg_restore_command": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 11,
+        "symbol": "_build_pg_restore_command",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_capture_snapshot_sidecars": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 12,
+        "symbol": "_capture_snapshot_sidecars",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_delete_snapshot_storage": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 18,
+        "symbol": "_delete_snapshot_storage",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_persist_snapshot_sidecar_payload": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 11,
+        "symbol": "_persist_snapshot_sidecar_payload",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_resolve_restore_source": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 16,
+        "symbol": "_resolve_restore_source",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_resume_backup_capture": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 36,
+        "symbol": "_resume_backup_capture",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::_snapshot_capture_is_complete": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 17,
+        "symbol": "_snapshot_capture_is_complete",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::build_backup_snapshot_report": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 15,
+        "symbol": "build_backup_snapshot_report",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::create_backup": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 23,
+        "symbol": "create_backup",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::restore_backup_source": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 14,
+        "symbol": "restore_backup_source",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::sync_backup_snapshot_media": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 13,
+        "symbol": "sync_backup_snapshot_media",
+        "type": "function"
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::validate_policy_snapshot": {
+        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
+        "max_complexity": 13,
+        "symbol": "validate_policy_snapshot",
+        "type": "function"
+      },
+      "quickscale_modules/blog/src/quickscale_modules_blog/views.py::_build_media_response_url": {
+        "file": "quickscale_modules/blog/src/quickscale_modules_blog/views.py",
+        "max_complexity": 12,
+        "symbol": "_build_media_response_url",
+        "type": "function"
+      },
+      "quickscale_modules/blog/src/quickscale_modules_blog/views.py::create_published_post_from_payload": {
+        "file": "quickscale_modules/blog/src/quickscale_modules_blog/views.py",
+        "max_complexity": 37,
+        "symbol": "create_published_post_from_payload",
+        "type": "function"
+      },
+      "quickscale_modules/forms/src/quickscale_modules_forms/serializers.py::FormSubmissionCreateSerializer.validate": {
+        "file": "quickscale_modules/forms/src/quickscale_modules_forms/serializers.py",
+        "max_complexity": 13,
+        "symbol": "FormSubmissionCreateSerializer.validate",
+        "type": "method"
+      },
+      "quickscale_modules/listings/src/quickscale_modules_listings/views.py::create_published_listing_from_payload": {
+        "file": "quickscale_modules/listings/src/quickscale_modules_listings/views.py",
+        "max_complexity": 18,
+        "symbol": "create_published_listing_from_payload",
+        "type": "function"
+      },
+      "quickscale_modules/listings/src/quickscale_modules_listings/views.py::publish_listing_api": {
+        "file": "quickscale_modules/listings/src/quickscale_modules_listings/views.py",
+        "max_complexity": 11,
+        "symbol": "publish_listing_api",
+        "type": "function"
+      },
+      "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py::_refresh_message_status": {
+        "file": "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py",
+        "max_complexity": 15,
+        "symbol": "_refresh_message_status",
+        "type": "function"
+      },
+      "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py::ingest_webhook_event": {
+        "file": "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py",
+        "max_complexity": 17,
+        "symbol": "ingest_webhook_event",
+        "type": "function"
+      },
+      "quickscale_modules/social/src/quickscale_modules_social/contracts.py::get_social_runtime_settings": {
+        "file": "quickscale_modules/social/src/quickscale_modules_social/contracts.py",
+        "max_complexity": 11,
+        "symbol": "get_social_runtime_settings",
+        "type": "function"
+      },
+      "quickscale_modules/social/src/quickscale_modules_social/contracts.py::resolve_social_target": {
+        "file": "quickscale_modules/social/src/quickscale_modules_social/contracts.py",
+        "max_complexity": 11,
+        "symbol": "resolve_social_target",
+        "type": "function"
+      },
+      "quickscale_modules/social/src/quickscale_modules_social/migrations/0002_socialembed_resolution_metadata.py::_populate_embed_resolution_metadata": {
+        "file": "quickscale_modules/social/src/quickscale_modules_social/migrations/0002_socialembed_resolution_metadata.py",
+        "max_complexity": 13,
+        "symbol": "_populate_embed_resolution_metadata",
+        "type": "function"
+      },
+      "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py::list_s3_compatible_media_inventory": {
+        "file": "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py",
+        "max_complexity": 18,
+        "symbol": "list_s3_compatible_media_inventory",
+        "type": "function"
+      },
+      "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py::validate_file_upload": {
+        "file": "quickscale_modules/storage/src/quickscale_modules_storage/helpers.py",
+        "max_complexity": 11,
+        "symbol": "validate_file_upload",
+        "type": "function"
+      }
+    }
+  },
+  "dead_code": {
+    "allowed_messages": [
+      "quickscale_modules/auth/src/quickscale_modules_auth/signals.py: unused variable 'sender'",
+      "quickscale_modules/blog/src/quickscale_modules_blog/views.py: unused variable 'req'",
+      "quickscale_modules/blog/src/quickscale_modules_blog/views.py: unused variable 'req'"
+    ]
+  },
+  "duplication": {
+    "allowed_blocks": 0
+  },
+  "large_files": {
+    "allowed_files": {
+      "quickscale_cli/src/quickscale_cli/beta_migration.py": {
+        "max_lines": 2451
+      },
+      "quickscale_cli/src/quickscale_cli/commands/apply_command.py": {
+        "max_lines": 2349
+      },
+      "quickscale_cli/src/quickscale_cli/commands/deployment_commands.py": {
+        "max_lines": 555
+      },
+      "quickscale_cli/src/quickscale_cli/commands/development_commands.py": {
+        "max_lines": 589
+      },
+      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py": {
+        "max_lines": 1319
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
+        "max_lines": 927
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_config.py": {
+        "max_lines": 1866
+      },
+      "quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py": {
+        "max_lines": 638
+      },
+      "quickscale_cli/src/quickscale_cli/commands/plan_command.py": {
+        "max_lines": 1128
+      },
+      "quickscale_cli/src/quickscale_cli/commands/remove_command.py": {
+        "max_lines": 704
+      },
+      "quickscale_cli/src/quickscale_cli/schema/config_schema.py": {
+        "max_lines": 540
+      },
+      "quickscale_cli/src/quickscale_cli/utils/railway_utils.py": {
+        "max_lines": 872
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/admin.py": {
+        "max_lines": 799
+      },
+      "quickscale_modules/backups/src/quickscale_modules_backups/services.py": {
+        "max_lines": 3615
+      },
+      "quickscale_modules/blog/src/quickscale_modules_blog/views.py": {
+        "max_lines": 624
+      },
+      "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py": {
+        "max_lines": 960
+      },
+      "quickscale_modules/social/src/quickscale_modules_social/contracts.py": {
+        "max_lines": 595
+      }
+    }
+  },
+  "schema_version": 1
+}

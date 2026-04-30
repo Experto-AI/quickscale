@@ -345,20 +345,23 @@ QuickScale includes comprehensive code quality checks:
 
 ```bash
 # Run quality analysis
-./scripts/check_quality.sh
+make quality
 
 # View reports
 cat .quickscale/quality_report.md     # Human-readable
 cat .quickscale/quality_report.json   # Machine-readable
+cat .quickscale/quality_gate_status.json  # Baseline gate summary
 ```
+
+`make quality` always preserves the raw findings in the report artifacts above. The gate compares current findings against the tracked accepted-debt baseline in `scripts/quality_baseline.json` and passes when there are no warning or critical regressions beyond that baseline.
 
 **Detects:**
 - Dead code (unused imports, functions, variables)
 - High complexity (cyclomatic complexity >10)
-- Large files (>500 lines warning, >1000 error)
+- Large files (500-799 lines warning, >=800 critical)
 - Code duplication (>6 similar lines)
 
-**Exit codes:** 0 (clean), 1 (warnings), 2 (critical)
+**Exit codes:** 0 (no warning or critical regressions beyond baseline), 1 (warning regressions, including baseline-load failures), 2 (critical regressions)
 
 ## Learn More
 
