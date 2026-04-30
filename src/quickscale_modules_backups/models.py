@@ -1,10 +1,12 @@
 """Data models for QuickScale backups."""
 
+from collections.abc import Iterable
 from datetime import datetime
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models.base import ModelBase
 from django.utils import timezone as django_timezone
 
 
@@ -248,7 +250,14 @@ class BackupSnapshot(models.Model):
     def __str__(self) -> str:
         return self.snapshot_id
 
-    def save(self, *args: object, **kwargs: object) -> None:
+    def save(
+        self,
+        *,
+        force_insert: bool | tuple[ModelBase, ...] = False,
+        force_update: bool = False,
+        using: str | None = None,
+        update_fields: Iterable[str] | None = None,
+    ) -> None:
         """Prevent snapshot identifiers from being reassigned after creation."""
         if self.pk is not None:
             original_snapshot_id = (
@@ -265,7 +274,12 @@ class BackupSnapshot(models.Model):
                 and original_snapshot_id != self.snapshot_id
             ):
                 raise ValueError("snapshot_id is immutable")
-        super().save(*args, **kwargs)
+        super().save(
+            force_insert=force_insert,
+            force_update=force_update,
+            using=using,
+            update_fields=update_fields,
+        )
 
     def has_active_rollback_pin(self, *, now: datetime | None = None) -> bool:
         """Return whether this snapshot is protected from pruning right now."""

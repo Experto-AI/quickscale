@@ -2417,6 +2417,27 @@ class TestBackupLifecycle:
 class TestBackupServiceHelpers:
     """Focused tests for helper branches that underpin coverage policy enforcement."""
 
+    def test_build_media_sync_manifest_fails_closed_for_malformed_storage_helpers(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            backup_services,
+            "import_module",
+            lambda _module_name: SimpleNamespace(
+                list_s3_compatible_media_inventory=lambda _settings_obj: []
+            ),
+        )
+
+        manifest = backup_services._build_media_sync_manifest(
+            captured_at=datetime(2026, 4, 30, tzinfo=timezone.utc)
+        )
+
+        assert manifest["status"] == "unsupported"
+        assert manifest["reason"] == "storage helper is unavailable in this runtime"
+        assert manifest["error_type"] == "AttributeError"
+        assert manifest["inventory"] == []
+
     def test_collect_local_backup_validation_issues_and_restore_source_checks(
         self,
         tmp_path: Path,
