@@ -17,7 +17,9 @@ def get_default_form_data_retention_days() -> int:
     )
     try:
         retention_days = int(raw_value)
-    except (TypeError, ValueError):
+    except TypeError:
+        return DEFAULT_FORM_DATA_RETENTION_DAYS
+    except ValueError:
         return DEFAULT_FORM_DATA_RETENTION_DAYS
     return retention_days if retention_days >= 0 else DEFAULT_FORM_DATA_RETENTION_DAYS
 

@@ -8,7 +8,10 @@ from django.db import migrations
 def seed_forms(apps, schema_editor):
     try:
         call_command("forms_seed_presets")
-    except (CommandError, SystemExit):
+    except CommandError:
+        # Tolerate missing or no-op preset command in test/minimal environments
+        pass
+    except SystemExit:
         # Tolerate missing or no-op preset command in test/minimal environments
         pass
 
