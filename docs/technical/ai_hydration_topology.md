@@ -10,23 +10,23 @@ This companion owns the current `adaptive.rules.md` topology, the rationale for 
 
 Expanded hydrated includes captured in MCP payload line and size metrics:
 
-| Input | Included by | Why it stays in hydration |
-|---|---|---|
-| [docs/technical/ai_context.md](./ai_context.md) | Root `# Shared` for every role | Keeps the universal authority order, workflow baseline, stack baseline, validation entrypoints, generated-project ownership rules, and derivative-summary maintenance policy in one compact file. |
-| [docs/technical/generated_project_structure.md](./generated_project_structure.md) | `plan`, `codebase-discovery`, `implement` | These roles reason about generated-project output, managed-versus-user-owned boundaries, and generation guardrails. |
-| [docs/technical/repository_layout.md](./repository_layout.md) | `plan`, `codebase-discovery`, `implement` | These roles need the maintainer-side package layout and naming/import matrix; other roles do not. |
-| [docs/contrib/plan.md](../contrib/plan.md) | `plan` only | Keeps planning questions, scope discipline, and validation-planning reminders local to planning work. |
-| [docs/contrib/code.md](../contrib/code.md) | `implement` only | Keeps implementation checklist and scope guardrails local to implementation work. |
-| [docs/technical/validation_policy.md](./validation_policy.md) | `quality-gate` only | Keeps repository validation commands, coverage rules, isolation rules, and E2E policy local to validation work. |
-| [docs/contrib/testing.md](../contrib/testing.md) | `quality-gate` only | Keeps QuickScale-specific test selection, locations, fixtures, and contamination reminders local to validation work. |
-| [docs/contrib/debug.md](../contrib/debug.md) | `quality-gate` only | Keeps the debugging loop and failure-isolation workflow local to validation work. |
-| [docs/contrib/review.md](../contrib/review.md) | `change-review` only | Keeps review checklist, evidence standards, and outcome language local to review work. |
+| Input | Included by | Why it stays in hydration | Mechanism |
+|---|---|---|---|
+| [docs/technical/ai_context.md](./ai_context.md) | Root `# Shared` for every role | Keeps the universal authority order, workflow baseline, stack baseline, validation entrypoints, generated-project ownership rules, and derivative-summary maintenance policy in one compact file. | `[include]` |
+| [docs/technical/generated_project_structure.md](./generated_project_structure.md) | `plan`, `codebase-discovery`, `implement` | These roles reason about generated-project output, managed-versus-user-owned boundaries, and generation guardrails. | `[include]` |
+| [docs/technical/repository_layout.md](./repository_layout.md) | `plan`, `codebase-discovery`, `implement` | These roles need the maintainer-side package layout and naming/import matrix; other roles do not. | `[include]` |
+| [docs/contrib/plan.md](../contrib/plan.md) | `plan` only | Keeps planning questions, scope discipline, and validation-planning reminders local to planning work. | `[include]` |
+| [docs/contrib/code.md](../contrib/code.md) | `implement` only | Keeps implementation checklist and scope guardrails local to implementation work. | `[include]` |
+| [docs/technical/validation_policy.md](./validation_policy.md) | `quality-gate` only | Keeps repository validation commands, coverage rules, isolation rules, and E2E policy local to validation work. | `[include]` |
+| [docs/contrib/testing.md](../contrib/testing.md) | `quality-gate` only | Keeps QuickScale-specific test selection, locations, fixtures, and contamination reminders local to validation work. | `[include]` |
+| [docs/contrib/debug.md](../contrib/debug.md) | `quality-gate` only | Keeps the debugging loop and failure-isolation workflow local to validation work. | `[include]` |
+| [docs/contrib/review.md](../contrib/review.md) | `change-review` only | Keeps review checklist, evidence standards, and outcome language local to review work. | `[include]` |
 
 Docs-local always-read pointers surfaced by MCP metadata, but not expanded into the measured hydrated payload:
 
-| Pointer | Surfaced by | Why it stays available |
-|---|---|---|
-| [docs/index.md](../index.md) | Local `docs/adaptive.rules.md` important-context pointer for docs-scoped work | Preserves the minimal docs-local map that helps docs-relative work without reintroducing broad human-router content into the root shared baseline. |
+| Pointer | Surfaced by | Why it stays available | Mechanism |
+|---|---|---|---|
+| [docs/index.md](../index.md) | Local `docs/adaptive.rules.md` important-context pointer for docs-scoped work | Preserves the minimal docs-local map that helps docs-relative work without reintroducing broad human-router content into the root shared baseline. | always-read |
 
 Inputs intentionally excluded from the root shared baseline:
 
@@ -46,6 +46,23 @@ Inputs intentionally excluded from the root shared baseline:
 | `implement` | [docs/technical/ai_context.md](./ai_context.md), [docs/technical/generated_project_structure.md](./generated_project_structure.md), [docs/technical/repository_layout.md](./repository_layout.md), [docs/contrib/code.md](../contrib/code.md) | [docs/index.md](../index.md) | Implementation gets structure context plus only the implementation-stage checklist. |
 | `quality-gate` | [docs/technical/ai_context.md](./ai_context.md), [docs/technical/validation_policy.md](./validation_policy.md), [docs/contrib/testing.md](../contrib/testing.md), [docs/contrib/debug.md](../contrib/debug.md) | [docs/index.md](../index.md) | Validation gets the compact baseline plus validation policy, testing, and debugging only. |
 | `change-review` | [docs/technical/ai_context.md](./ai_context.md), [docs/contrib/review.md](../contrib/review.md) | [docs/index.md](../index.md) | Review gets the compact baseline plus evidence and review guidance only. |
+
+<a id="mechanism-reference"></a>
+## Mechanism Reference
+
+Two distinct hydration mechanisms appear in the tables above. They have different cost profiles and are not interchangeable.
+
+| Mechanism | Syntax | When content is loaded | Counted in hydration metrics |
+|---|---|---|---|
+| Inline include | `[include](path)` in `adaptive.rules.md` | At hydration time — content is expanded and inlined into the measured payload before the agent receives it | Yes — lines and size appear in the validation snapshot |
+| Always-read pointer | A named item under `- **Important context (always read)**:` in a sub-package `adaptive.rules.md` | On demand — the agent receives a read hint alongside the payload and fetches the file when the task warrants it | No — content is not expanded at hydration time and does not appear in inline metrics |
+
+**When to use each mechanism:**
+
+- Use `[include]` for files where the content is unconditionally needed by that role — policy authorities, structure contracts, stage-specific guidance. If a role cannot function correctly without the file, inline it and count it in the budget.
+- Use an always-read pointer for supplementary local context that is relevant in some tasks but not all, or for files that are too volatile or large to include inline. The agent fetches only when the task warrants it; the content never inflates the baseline payload.
+
+**Why this matters for governance:** The hydration metrics in the validation snapshot only count `[include]` content. A role that relies heavily on always-read pointers may appear compact in the metrics while actually pulling in substantial context on demand. When auditing a role's true context footprint, account for both mechanisms.
 
 <a id="must-have-facts-checklist"></a>
 ## Must-Have Facts Checklist

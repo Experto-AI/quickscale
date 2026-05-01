@@ -2,6 +2,8 @@
 
 Compact baseline for AI hydration in QuickScale. This file is derivative and intentionally non-navigational. It summarizes repository-wide facts that every AI role should share; it does not replace the authoritative sources.
 
+> **Drift notice**: This file is a best-effort derivative of `decisions.md` and the companion technical docs. It may lag behind those canonical sources. If any fact here conflicts with `decisions.md`, `implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, `repository_layout.md`, or `scaffolding.md`, treat those documents as authoritative immediately — before this file is corrected.
+
 ## Authority Order
 
 1. [decisions.md](./decisions.md) owns repo-wide policy, tie-breakers, prohibitions, and the document ownership map.
