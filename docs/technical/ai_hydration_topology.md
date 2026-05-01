@@ -47,6 +47,21 @@ Inputs intentionally excluded from the root shared baseline:
 | `quality-gate` | [docs/technical/ai_context.md](./ai_context.md), [docs/technical/validation_policy.md](./validation_policy.md), [docs/contrib/testing.md](../contrib/testing.md), [docs/contrib/debug.md](../contrib/debug.md) | [docs/index.md](../index.md) | Validation gets the compact baseline plus validation policy, testing, and debugging only. |
 | `change-review` | [docs/technical/ai_context.md](./ai_context.md), [docs/contrib/review.md](../contrib/review.md) | [docs/index.md](../index.md) | Review gets the compact baseline plus evidence and review guidance only. |
 
+<a id="must-have-facts-checklist"></a>
+## Must-Have Facts Checklist
+
+Before trimming, swapping, or widening any role input in [adaptive.rules.md](../../adaptive.rules.md) or [docs/adaptive.rules.md](../adaptive.rules.md), confirm that the affected role still hydrates the decision-critical facts below. This promotes the preservation checklist from [Context Hydration Refactor](../planning/context-refactor.md) into the maintained topology contract for future include-graph edits.
+
+| Role | Must-have facts to preserve |
+|---|---|
+| `adaptive` | Authority order, conflict policy, workflow baseline, repo stack baseline, validation entrypoints, and generated-project ownership model. |
+| `plan` | `adaptive` baseline plus structure authority, generated-project contract, scope discipline, and validation-planning expectations. |
+| `codebase-discovery` | `adaptive` baseline plus structure authority, maintainer-repository layout context, and generated-project-versus-maintainer boundary guidance. |
+| `external-research` | `adaptive` baseline only; do not add structure or stage-guide payload unless a concrete research workflow proves a missing fact. |
+| `implement` | `adaptive` baseline plus structure authority, implementation guardrails, `make`/pytest entrypoints, and ownership boundaries for generated code. |
+| `quality-gate` | `adaptive` baseline plus validation policy, coverage expectations, narrow-first validation commands, debug workflow, and review-handoff evidence expectations. |
+| `change-review` | `adaptive` baseline plus evidence expectations, authority order, scope protection, and regression-review discipline. |
+
 <a id="post-refactor-validation-snapshot"></a>
 ## Post-Refactor Validation Snapshot (2026-05-01)
 
