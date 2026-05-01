@@ -5,22 +5,7 @@ merge_strategy: append
 
 # Shared
 
-[include](docs/technical/decisions.md)
-[include](docs/technical/scaffolding.md)
-[include](README.md)
-[include](START_HERE.md)
-[include](docs/contrib/contributing.md)
-[include](docs/contrib/shared/README.md)
-
-- **Contrib authority model**:
-    - `docs/contrib/shared/` owns workflow-agnostic QuickScale engineering rules.
-    - `docs/contrib/*.md` stage guides apply those rules in a situation-specific way and do not prescribe a required workflow order.
-    - If a stage guide conflicts with a `docs/contrib/shared/` rule source, the shared document wins.
-- **Documentation precedence**:
-    - Package README files are informational context only; repository SSOT documents win any conflict.
-    - `docs/technical/decisions.md` wins on conflicts over `README.md` and `START_HERE.md`.
-- **Tooling**:
-    - `Makefile` is the standard entrypoint for shared test and workflow commands.
+[include](docs/technical/ai_context.md)
 
 # Adaptive
 [include](#shared)
@@ -28,10 +13,14 @@ merge_strategy: append
 
 # Plan
 [include](#shared)
+[include](docs/technical/generated_project_structure.md)
+[include](docs/technical/repository_layout.md)
 [include](docs/contrib/plan.md)
 
 # Codebase Discovery
 [include](#shared)
+[include](docs/technical/generated_project_structure.md)
+[include](docs/technical/repository_layout.md)
 
 
 # External Research
@@ -39,10 +28,13 @@ merge_strategy: append
 
 # Implement
 [include](#shared)
+[include](docs/technical/generated_project_structure.md)
+[include](docs/technical/repository_layout.md)
 [include](docs/contrib/code.md)
 
 # Quality Gate
 [include](#shared)
+[include](docs/technical/validation_policy.md)
 [include](docs/contrib/testing.md)
 [include](docs/contrib/debug.md)
 

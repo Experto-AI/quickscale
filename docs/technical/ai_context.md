@@ -4,10 +4,16 @@ Compact baseline for AI hydration in QuickScale. This file is derivative and int
 
 ## Authority Order
 
-1. [decisions.md](./decisions.md) owns repo-wide policy, scope, command baselines, and conflict resolution.
-2. [scaffolding.md](./scaffolding.md) owns repository and generated-project structure, naming, and placement.
-3. Role-specific guides in `docs/contrib/*.md` add stage-local execution guidance when they do not conflict with the two files above.
-4. Package README files plus human router docs such as root `README.md`, `START_HERE.md`, and `docs/contrib/contributing.md` are informational and human-first.
+1. [decisions.md](./decisions.md) owns repo-wide policy, tie-breakers, prohibitions, and the document ownership map.
+2. [implementation_contract.md](./implementation_contract.md) owns the current shipped contract, feature matrix, CLI surface summary, and architecture-boundary notes.
+3. [validation_policy.md](./validation_policy.md) owns validation entrypoints, testing standards, coverage expectations, and E2E guidance.
+4. [generated_project_structure.md](./generated_project_structure.md) owns generated-project structure, generated artifact placement, and generation guardrails.
+5. [repository_layout.md](./repository_layout.md) owns maintainer-repository layout plus naming and import guidance.
+6. [scaffolding.md](./scaffolding.md) is the concise structure hub that preserves backlinks and compatibility anchors into the companion docs.
+7. Role-specific guides in `docs/contrib/*.md` add stage-local execution guidance when they do not conflict with the technical authorities above.
+
+Shared rule sources in `docs/contrib/shared/` remain the normative workflow-agnostic contributor guidance. Stage guides in `docs/contrib/*.md` apply that guidance stage-locally and do not prescribe a required workflow order.
+Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs are informational or human-first references and do not override the technical authorities above.
 
 ## Workflow Baseline
 
@@ -46,8 +52,8 @@ Compact baseline for AI hydration in QuickScale. This file is derivative and int
 
 ## Maintenance Rule
 
-Update [decisions.md](./decisions.md) and [scaffolding.md](./scaffolding.md) first when a covered fact changes. Update this file in the same change only to keep the derivative AI baseline aligned and concise.
+Update the authoritative companion doc first when a covered fact changes. Update [decisions.md](./decisions.md) in the same change when the repository-wide ownership map, policy, or tie-breakers change. Update this file only to keep the derivative AI baseline aligned and concise.
 
 ## Conflict Policy
 
-If this summary drifts from [decisions.md](./decisions.md) or [scaffolding.md](./scaffolding.md), those two files win immediately and this file must be corrected. If a role-specific guide conflicts with them, follow the authoritative technical docs and fix the guide.
+If this summary drifts from the authoritative technical docs, those technical docs win immediately and this file must be corrected. If a role-specific guide conflicts with them, follow the authoritative technical docs and fix the guide.

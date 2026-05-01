@@ -7,9 +7,11 @@
 
 Review the current MCP hydration inputs defined in [adaptive.rules.md](../../adaptive.rules.md), identify what should be preserved versus trimmed, and define a phased implementation and hardening plan to make AI context smaller, clearer, safer, and more DRY.
 
-## Current State Snapshot
+Unless a later section says otherwise, the opening review below records the Phase 0 pre-refactor baseline captured on 2026-05-01. The phase sections later in this document track the current post-phase-2/3/4 source state separately.
 
-The current root `# Shared` section in [adaptive.rules.md](../../adaptive.rules.md) includes:
+## Phase 0 Pre-Refactor Baseline Snapshot
+
+At the start of this refactor, the root `# Shared` section in [adaptive.rules.md](../../adaptive.rules.md) included:
 
 - [docs/technical/decisions.md](../technical/decisions.md)
 - [docs/technical/scaffolding.md](../technical/scaffolding.md)
@@ -18,7 +20,7 @@ The current root `# Shared` section in [adaptive.rules.md](../../adaptive.rules.
 - [docs/contrib/contributing.md](../contrib/contributing.md)
 - [docs/contrib/shared/README.md](../contrib/shared/README.md)
 
-The stage sections then add:
+The stage sections then added:
 
 - [docs/contrib/plan.md](../contrib/plan.md)
 - [docs/contrib/code.md](../contrib/code.md)
@@ -26,7 +28,7 @@ The stage sections then add:
 - [docs/contrib/debug.md](../contrib/debug.md)
 - [docs/contrib/review.md](../contrib/review.md)
 
-Observed costs from the current setup:
+Observed Phase 0 costs from that setup:
 
 - The current referenced source set is about 3,133 lines before hydration.
 - Current measured role baselines captured on 2026-05-01 range from 2,507 lines / 117.0 KB (`adaptive`) to 2,875 lines / 128.6 KB (`quality-gate`).
@@ -35,9 +37,9 @@ Observed costs from the current setup:
 
 ## Executive Summary
 
-The current include-driven hydration model is directionally correct and much better than path-only reminders. It gives the coding assistant the actual text instead of requiring iterative follow-up reads.
+The pre-refactor include-driven hydration model was directionally correct and much better than path-only reminders. It gave the coding assistant the actual text instead of requiring iterative follow-up reads.
 
-The problem is that the current refactor overshot into broad whole-file inclusion. The result is that each role now receives a mix of authoritative rules, human onboarding material, duplicated authority statements, and repeated stage-guide framing. That increases token cost, expands latency, and raises drift risk without adding proportional decision value.
+The problem at that baseline was that the include graph had overshot into broad whole-file inclusion. The result was that each role received a mix of authoritative rules, human onboarding material, duplicated authority statements, and repeated stage-guide framing. That increased token cost, expanded latency, and raised drift risk without adding proportional decision value.
 
 The target state should preserve the strengths of the current documentation system while narrowing default AI context to the smallest set of decision-critical facts. Human navigation documents should remain valuable for contributors, but they should not be part of the default hydration baseline for coding assistants.
 
@@ -546,35 +548,37 @@ This implementation plan is designed for phased handoff. Each item references th
 
 ### Phase 2 - Reduce Shared-Context Over-Inclusion
 
-- [ ] Remove [README.md](../../README.md), [START_HERE.md](../../START_HERE.md), and [docs/contrib/contributing.md](../contrib/contributing.md) from the default `# Shared` include set after the compact baseline exists. See [Shared Includes Are Too Broad](#1-shared-includes-are-too-broad).
-- [ ] Decide whether [docs/contrib/shared/README.md](../contrib/shared/README.md) still belongs in default AI context or whether its useful content should be summarized in the compact AI baseline. See [Ownership Cleanup Model](#ownership-cleanup-model).
-- [ ] Keep only the minimal shared notes directly in [adaptive.rules.md](../../adaptive.rules.md) once the external shared baseline is in place. See [Include-Driven MCP Hydration](#1-include-driven-mcp-hydration).
-- [ ] For each removed shared document, record which facts were preserved elsewhere so trimming is explicit rather than assumed. See [Coverage Controls](#2-coverage-controls).
+- [x] Remove [README.md](../../README.md), [START_HERE.md](../../START_HERE.md), and [docs/contrib/contributing.md](../contrib/contributing.md) from the default `# Shared` include set after the compact baseline exists. See [Shared Includes Are Too Broad](#1-shared-includes-are-too-broad).
+- [x] Decide whether [docs/contrib/shared/README.md](../contrib/shared/README.md) still belongs in default AI context or whether its useful content should be summarized in the compact AI baseline. See [Ownership Cleanup Model](#ownership-cleanup-model).
+- [x] Keep only the minimal shared notes directly in [adaptive.rules.md](../../adaptive.rules.md) once the external shared baseline is in place. See [Include-Driven MCP Hydration](#1-include-driven-mcp-hydration).
+- [x] For each removed shared document, record which facts were preserved elsewhere so trimming is explicit rather than assumed. See [Coverage Controls](#2-coverage-controls).
 
 ### Phase 3 - Split Or Extract Large Technical Inputs
 
-- [ ] Review [docs/technical/decisions.md](../technical/decisions.md) and identify the specific AI-critical material that is needed frequently: authority rules, current workflow, stack, testing policy, document responsibilities, and core contract. See [Strong Points To Preserve](#strong-points-to-preserve).
-- [ ] Decide whether to split `decisions.md` into smaller authoritative companion documents or to create smaller extracted files that `decisions.md` links to while remaining the top-level SSOT. See [Whole-File Includes Make Large Docs Expensive](#3-whole-file-includes-make-large-docs-expensive).
-- [ ] Do the same analysis for [docs/technical/scaffolding.md](../technical/scaffolding.md), extracting only the structure-critical portions that planning, discovery, and implementation actually need. See [scaffolding.md As The Structure Authority](#3-scaffoldingmd-as-the-structure-authority).
-- [ ] Preserve one clear owner for every moved rule. Do not create two competing copies of the same policy in the new smaller files. See [Authority And Precedence Statements Are Repeated Too Many Times](#2-authority-and-precedence-statements-are-repeated-too-many-times).
-- [ ] Add backlinks or ownership notes so extracted files remain traceable to their canonical parent or canonical rule owner. See [Governance Controls](#4-governance-controls).
+- [x] Review [docs/technical/decisions.md](../technical/decisions.md) and identify the specific AI-critical material that is needed frequently: authority rules, current workflow, stack, testing policy, document responsibilities, and core contract. See [Strong Points To Preserve](#strong-points-to-preserve).
+- [x] Decide whether to split `decisions.md` into smaller authoritative companion documents or to create smaller extracted files that `decisions.md` links to while remaining the top-level SSOT. See [Whole-File Includes Make Large Docs Expensive](#3-whole-file-includes-make-large-docs-expensive).
+- [x] Do the same analysis for [docs/technical/scaffolding.md](../technical/scaffolding.md), extracting only the structure-critical portions that planning, discovery, and implementation actually need. See [scaffolding.md As The Structure Authority](#3-scaffoldingmd-as-the-structure-authority).
+- [x] Preserve one clear owner for every moved rule. Do not create two competing copies of the same policy in the new smaller files. See [Authority And Precedence Statements Are Repeated Too Many Times](#2-authority-and-precedence-statements-are-repeated-too-many-times).
+- [x] Add backlinks or ownership notes so extracted files remain traceable to their canonical parent or canonical rule owner. See [Governance Controls](#4-governance-controls).
 
 ### Phase 4 - Normalize Contrib Shared And Stage Guides
 
-- [ ] Reduce [docs/contrib/shared/README.md](../contrib/shared/README.md) to the smallest useful authority-map explanation if that document remains user-facing. See [Ownership Cleanup Model](#ownership-cleanup-model).
-- [ ] Remove duplicated framing from [docs/contrib/plan.md](../contrib/plan.md), [docs/contrib/code.md](../contrib/code.md), [docs/contrib/testing.md](../contrib/testing.md), [docs/contrib/debug.md](../contrib/debug.md), and [docs/contrib/review.md](../contrib/review.md) when the shared AI baseline already carries the same orientation. See [Stage-Guide Boilerplate Repeats Across Files](#4-stage-guide-boilerplate-repeats-across-files).
-- [ ] Keep only the parts of each stage guide that are genuinely stage-specific. See [Repo-Specific Applied Guidance In Stage Guides](#5-repo-specific-applied-guidance-in-stage-guides).
-- [ ] Replace or move generic educational examples in [docs/contrib/code.md](../contrib/code.md) if they do not teach QuickScale-specific implementation practice. See [Generic Educational Examples Compete With Real Repo Constraints](#6-generic-educational-examples-compete-with-real-repo-constraints).
-- [ ] Clarify the boundary between normative testing/debugging policy and repo-specific execution guidance so the same rule is not repeated across `decisions.md`, shared docs, and stage docs. See [Testing And Debugging Guidance Is Split In Ways That Invite Duplication](#5-testing-and-debugging-guidance-is-split-in-ways-that-invite-duplication).
-- [ ] Ensure each stage guide can justify its presence in hydration with role-specific value, not just historical structure. See [Role-Specific Context Model](#role-specific-context-model).
+- [x] Reduce [docs/contrib/shared/README.md](../contrib/shared/README.md) to the smallest useful authority-map explanation if that document remains user-facing. See [Ownership Cleanup Model](#ownership-cleanup-model).
+- [x] Remove duplicated framing from [docs/contrib/plan.md](../contrib/plan.md), [docs/contrib/code.md](../contrib/code.md), [docs/contrib/testing.md](../contrib/testing.md), [docs/contrib/debug.md](../contrib/debug.md), and [docs/contrib/review.md](../contrib/review.md) when the shared AI baseline already carries the same orientation. See [Stage-Guide Boilerplate Repeats Across Files](#4-stage-guide-boilerplate-repeats-across-files).
+- [x] Keep only the parts of each stage guide that are genuinely stage-specific. See [Repo-Specific Applied Guidance In Stage Guides](#5-repo-specific-applied-guidance-in-stage-guides).
+- [x] Replace or move generic educational examples in [docs/contrib/code.md](../contrib/code.md) if they do not teach QuickScale-specific implementation practice. See [Generic Educational Examples Compete With Real Repo Constraints](#6-generic-educational-examples-compete-with-real-repo-constraints).
+- [x] Clarify the boundary between normative testing/debugging policy and repo-specific execution guidance so the same rule is not repeated across `decisions.md`, shared docs, and stage docs. See [Testing And Debugging Guidance Is Split In Ways That Invite Duplication](#5-testing-and-debugging-guidance-is-split-in-ways-that-invite-duplication).
+- [x] Ensure each stage guide can justify its presence in hydration with role-specific value, not just historical structure. See [Role-Specific Context Model](#role-specific-context-model).
 
 ### Phase 5 - Rewire `adaptive.rules.md`
 
-- [ ] Replace the current broad `# Shared` include list with the new compact AI baseline and only the smallest necessary inline notes. See [Shared Baseline For All AI Roles](#shared-baseline-for-all-ai-roles).
-- [ ] Restrict structure-heavy context to `plan`, `codebase-discovery`, and `implement`. See [Role-Specific Context Model](#role-specific-context-model).
-- [ ] Keep `external-research` on the compact baseline unless a concrete research workflow proves it needs more. See [Human Router Documents Are Valuable, But Not As Default AI Inputs](#7-human-router-documents-are-valuable-but-not-as-default-ai-inputs).
-- [ ] Keep `quality-gate` on the compact baseline plus testing and debugging guidance only. See [Role-Specific Context Model](#role-specific-context-model).
-- [ ] Keep `change-review` on the compact baseline plus review guidance only. See [Role-Specific Context Model](#role-specific-context-model).
+Source state note as of 2026-05-01: the shared-baseline swap and most role rewiring landed during phases 2-4 while those include trims were being applied, so the checklist below reflects the current source state rather than only work deferred to a future phase-5 pass.
+
+- [x] Replace the current broad `# Shared` include list with the new compact AI baseline and only the smallest necessary inline notes. See [Shared Baseline For All AI Roles](#shared-baseline-for-all-ai-roles).
+- [x] Restrict structure-heavy context to `plan`, `codebase-discovery`, and `implement`. See [Role-Specific Context Model](#role-specific-context-model).
+- [x] Keep `external-research` on the compact baseline unless a concrete research workflow proves it needs more. See [Human Router Documents Are Valuable, But Not As Default AI Inputs](#7-human-router-documents-are-valuable-but-not-as-default-ai-inputs).
+- [x] Keep `quality-gate` on the compact baseline plus `validation_policy.md`, testing, and debugging guidance only. See [Role-Specific Context Model](#role-specific-context-model).
+- [x] Keep `change-review` on the compact baseline plus review guidance only. See [Role-Specific Context Model](#role-specific-context-model).
 - [ ] Record the final include rationale in comments or in a short companion note so future edits do not drift back toward broad whole-file inclusion. See [Best-Practice Constraints For This Refactor](#best-practice-constraints-for-this-refactor).
 - [ ] Create a simple role-to-input inventory after rewiring so future edits can be reviewed against the intended topology. See [Topology Controls](#3-topology-controls).
 

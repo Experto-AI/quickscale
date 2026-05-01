@@ -1,9 +1,9 @@
 # decisions.md
 
 <!--
-decisions.md - Authoritative Technical Specification
+decisions.md - Authoritative Technical Policy Hub
 
-PURPOSE: This document is the single source of truth for all architectural decisions, technical implementation rules, and development standards for QuickScale.
+PURPOSE: This document is the repository-wide source of truth for cross-cutting architectural decisions, tie-breakers, prohibitions, and technical document ownership for QuickScale.
 
 CONTENT GUIDELINES:
 - Record all authoritative architectural decisions with rationale
@@ -35,7 +35,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Decisions** (Authoritative)
 > **Related docs**: [Scaffolding](scaffolding.md) | [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
 
-**Purpose:** Single source of truth for QuickScale architecture, technical rules, and development standards for AI coding assistants and maintainers.
+**Purpose:** Repository-wide policy and tie-breaker hub for QuickScale architecture and development standards. Narrow companion docs under `docs/technical/` own the current implementation contract, validation policy, and structure references.
 
 **Scope:** All first-party packages (core, CLI, themes, modules). Experto-AI and core contributors own these decisions.
 
@@ -55,7 +55,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 **Key Constraints:**
 - 90% overall mean + 80% per file minimum test coverage (CI enforced)
-- decisions.md is authoritative (update FIRST, never contradict)
+- decisions.md is the repo-wide tie-breaker; narrow companion docs in `docs/technical/` own current contract, validation, and structure slices
 - Package README.md files are informational context only; they MUST defer to root docs
 - Settings: Standalone by default (NO automatic inheritance)
 
@@ -63,6 +63,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 **Documentation Hierarchy:**
 - ✅ decisions.md is authoritative - always wins conflicts
+- ✅ `docs/technical/implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, and `repository_layout.md` are the narrow-owner companion docs for current contract, validation, and structure detail
 - ✅ Update decisions.md FIRST, then other docs
 - ✅ Contributing guides: `docs/contrib/*.md`
 - ✅ `CHANGELOG.md` is the canonical release history index for all versions
@@ -800,54 +801,9 @@ disable_error_code = var-annotated
 <a id="mvp-feature-matrix-authoritative"></a>
 ## Implementation Surface Matrix (authoritative)
 
-This matrix is the authoritative source of truth for **what is shipped, optional, or not part of the current QuickScale contract** at the feature level.
+The authoritative shipped-surface matrix now lives in [implementation_contract.md](./implementation_contract.md#mvp-feature-matrix-authoritative).
 
-**Scope**: High-level features and capabilities (e.g., "Docker support", "Testing infrastructure")
-
-**Not in scope**: Implementation details (e.g., specific template files, task breakdowns)
-
-**For implementation details**: See [roadmap.md](./roadmap.md) which implements the features defined in this matrix.
-
-**Tie-breaker rule**: If roadmap.md conflicts with this matrix on implementation scope, this matrix wins. Update ROADMAP to match.
-
-Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST reference this section when describing current implementation scope; decisions.md is the tie-breaker for any ambiguity.
-
-| Feature / Area | Current Status | Notes / Decision Reference |
-|---|---:|---|
-| **CORE CLI & SCAFFOLDING** |
-| `quickscale plan <project>` and `quickscale apply` | IN (v0.68.0+) | Primary workflow. Terraform-style declarative configuration. Creates `quickscale.yml`, then executes it. |
-| Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
-| `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in the current implementation (explicit `__init__.py`). See Section: "Core package shape" in this file. |
-| `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
-| CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
-| CLI module management commands (`update`, `push`) | IN (v0.62.0) | Module update/push via split branches. Module embedding now handled by `quickscale apply`. |
-| Module configuration (plan/apply + declarative options) | IN (v0.63.0+) | Modules are configured through `quickscale plan` and `quickscale.yml`, then materialized by `quickscale apply`. Current planner behavior selects modules and writes configuration; module-specific values are edited in `quickscale.yml` before apply. See [§Module Configuration Strategy](#module-configuration-strategy). |
-| Module manifests (`module.yml`) with mutable/immutable config | IN (v0.71.0+) | **v0.71.0**: Each module includes `module.yml` declaring config options as mutable or immutable. `quickscale apply` updates settings.py for mutable changes. See [§Module Manifest Architecture](#module-manifest-architecture). |
-| `quickscale remove <module>` command | IN (v0.71.0+) | **v0.71.0**: Remove embedded modules with cleanup. Data loss warning required. Re-embed for new config. |
-| Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
-| **PRODUCTION-READY FOUNDATIONS** | | **See [competitive_analysis.md](../overview/competitive_analysis.md)** |
-| Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
-| PostgreSQL configuration (dev + production) | IN | PostgreSQL only for all environments. `DATABASE_URL` is required in local settings; no SQLite fallback or compatibility mode. |
-| Environment-based configuration (.env + split settings) | IN | settings/base.py, settings/local.py, settings/production.py pattern. Secure SECRET_KEY loading from environment. |
-| Security best practices | IN | ALLOWED_HOSTS, security middleware, SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE in production settings. Sentry scaffolding (commented). |
-| WhiteNoise static files configuration | IN | Production static file serving without CDN complexity. |
-| Gunicorn WSGI server | IN | Production-ready WSGI server declared in `pyproject.toml` (Poetry). |
-| pytest + factory_boy test setup | IN | Modern testing with pytest-django, factory_boy for fixtures. Sample tests demonstrating patterns. |
-| GitHub Actions CI/CD pipeline | IN | .github/workflows/ci.yml for automated testing on push/PR. Test matrix: Python 3.14, Django 6.0. |
-| Pre-commit hooks (ruff) | IN | .pre-commit-config.yaml for code quality enforcement before commits. |
-| Comprehensive README with setup instructions | IN | README.md.j2 with Docker setup, local dev, testing, deployment instructions. |
-| **MODULES & DISTRIBUTION** |
-| `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distributed via git subtree split branches. Embed via `quickscale plan --add <name>` + `quickscale apply`. |
-| Themes (React default + HTML secondary option) | IN (v0.61.0+) | `showcase_react` and `showcase_html` ship as generator templates with one-time copy during apply. |
-| `quickscale_themes/` packaged themes | NOT CURRENT | Themes ship today as generator templates only; treat package distribution as out of contract unless a later release documents it. |
-| YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | **v0.68.0**: Shipped as part of Plan/Apply system. `quickscale plan` creates `quickscale.yml`, `quickscale apply` executes it. Terraform-style workflow. See [§Plan/Apply Architecture](#planapply-architecture). |
-| State tracking (`.quickscale/state.yml`) | IN (v0.69.0+) | **v0.69.0**: Applied state tracking for incremental applies. Distinguishes desired state (`quickscale.yml`) from applied state (`.quickscale/state.yml`). |
-| PyPI / private-registry distribution for commercial modules | NOT CURRENT | Commercial distribution is not part of the current shipped contract (see commercial.md for non-authoritative background). |
-
-**Notes:**
-- This table is authoritative for release planning
-- Production foundations (Docker, PostgreSQL, pytest, CI/CD) are P0 - table stakes for professional tool
-- See [competitive_analysis.md](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors)
+Keep this anchor in place for compatibility. Update the companion doc when the shipped feature surface changes.
 
 ## Authoritative Policies
 
@@ -879,60 +835,11 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ❌ SQLite is unsupported
 - ❌ No backward compatibility layer, migration shim, or fallback mode for SQLite-based setups
 
-**Repository Command Reference (AI Assistant Guidance):**
-- `make bootstrap` - Full repository bootstrap after Poetry is available
-- `make setup` - Install repository dependencies without rerunning bootstrap checks
-- `make lint` - Shared lint-check entrypoint
-- `make format` - Shared formatting entrypoint
-- `make test` - Shared unit + integration test entrypoint
-- `make test-unit` - Shared unit-only entrypoint with section and module scoping
-- `make test-e2e` - End-to-end validation with PostgreSQL and browser automation
-- `make ci-e2e` - CI-parity release-gate validation including E2E
-- `make version-check` - Verify `VERSION` parity across the versioned packages
-- `make publish-module MODULE=<name>` - Maintainer helper for split-branch publishing
-
-**AI Assistant Rules:**
-- ✅ Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly
-- ✅ Use `make lint` and `make format` for repo-wide lint/format guidance
-- ✅ Use `make test` or targeted `make test-unit` invocations for shared test runs
-- ✅ Use `make ci-e2e` for release-gate validation when the full hardening/release path needs E2E coverage
-- ✅ Use `make version-check` when verifying repo package/version parity
-- ❌ Do not invent or document nonexistent helper scripts such as `./scripts/test_all.sh`
+**Validation and Automation Entry Points:** See [validation_policy.md](./validation_policy.md#repository-command-reference) for the authoritative repository command baseline and assistant guidance.
 
 ### CLI Commands {#cli-command-matrix}
 
-**Primary Workflow (v0.72.0+):**
-- ✅ `quickscale plan <project>` - Create configuration interactively
-- ✅ `quickscale apply [config.yml]` - Execute configuration to generate project
-
-**Development Commands:**
-- ✅ `quickscale up` - Start Docker services (wrapper for docker-compose up)
-- ✅ `quickscale down` - Stop Docker services (wrapper for docker-compose down)
-- ✅ `quickscale shell` - Interactive bash shell in container
-- ✅ `quickscale manage <cmd>` - Run Django management commands
-- ✅ `quickscale logs [service]` - View Docker logs
-- ✅ `quickscale ps` - Show service status
-
-**Deployment Commands:**
-- ✅ `quickscale deploy railway` - Automated Railway deployment with PostgreSQL setup
-- ✅ `quickscale deploy railway --project-name <name>` - Specify project name
-
-**Disaster Recovery & Promotion Commands:**
-- ✅ `quickscale dr capture` - Capture and store a route snapshot
-- ✅ `quickscale dr plan` - Build and validate a stored route plan
-- ✅ `quickscale dr execute` - Execute one or more recovery or promotion surfaces for a stored snapshot
-- ✅ `quickscale dr report` - Review stored plan and execute records for a route snapshot
-
-**Module Management Commands:**
-- ✅ `quickscale status` - Show project and module status
-- ✅ `quickscale update` - Update installed modules
-- ✅ `quickscale remove <module>` - Remove embedded module
-- ✅ `quickscale push --module <name>` - Contribute module improvements
-
-**Not currently shipped:**
-- ❌ `quickscale validate` - YAML configuration validation (requires config system)
-- ❌ `quickscale generate` - Generate from config (requires config system)
-- 📋 `quickscale plan --add auth@v0.63.0` - Pin specific module versions
+The authoritative current CLI command surface now lives in [implementation_contract.md](./implementation_contract.md#cli-command-matrix). Keep this legacy anchor in place for inbound links.
 
 ---
 
@@ -975,194 +882,35 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 ## Document Responsibilities
 
-- **decisions.md**: Technical decisions, implementation surface matrix, tie-breakers (authoritative)
+- **decisions.md**: Repo-wide policy, tie-breakers, prohibitions, and document ownership map (authoritative)
+- **implementation_contract.md**: Current shipped implementation contract, CLI surface, and architecture-boundary reference
+- **validation_policy.md**: Validation entrypoints, testing standards, coverage expectations, and E2E guidance
+- **generated_project_structure.md**: Generated-project layout, artifact placement, and generation guardrails
+- **repository_layout.md**: Maintainer-repository layout and naming/import matrix
+- **scaffolding.md**: Concise structure hub plus compatibility anchors and backlinks into the structure companions
 - **CHANGELOG.md**: Canonical all-version release history index
 - **docs/releases/**: Official published release notes linked from GitHub tags and release PRs
 - **docs/technical/release_summary_template.md**: Template for official published release notes
 - **roadmap.md**: Timeline, phases, tasks, and active or unreleased release closeout status
-- **scaffolding.md**: Layout examples
 - **README.md**: Project overview, user guide, repo-level navigation
 - **package README.md files**: Package-local installation and responsibility summaries (informational only)
 - **commercial.md**: Commercial distribution background and constraints
 
-**Rule:** Update decisions.md FIRST when changing scope.
+**Rule:** Update the narrow owner first when changing its slice. Update decisions.md in the same change when the repository-wide ownership map, policy, or tie-breakers change.
 
 ## Testing Standards
 
-**Coverage Targets:**
-- ✅ 90% overall mean coverage + 80% minimum per file: `quickscale_core`, `quickscale_cli`, modules, themes
-- ✅ CI fails if overall mean < 90% or any file falls below 80%
-- ✅ Coverage reports on every CI run
-- ℹ️ Note: Thresholds apply to unit tests only; dual enforcement (overall mean + per file)
-
-**Test Requirements:**
-- ✅ New features: Tests required
-- ✅ Bug fixes: Regression tests required
-- ✅ CLI: Integration tests
-- ✅ Business logic: Unit tests
-- ✅ Critical paths: E2E tests
-
-**Test Stack:**
-- ✅ pytest + pytest-django: Test framework
-- ✅ factory_boy: Test fixtures
-- ✅ pytest-cov: Coverage measurement
-- ✅ GitHub Actions: CI/CD
-
-**Generated Projects Include:**
-- Sample pytest-django test (demonstrates patterns)
-- factory_boy configuration (for model factories)
-- pytest.ini (test configuration)
-- .github/workflows/ci.yml (automated testing)
-
-### Test Isolation Policy (CRITICAL)
-
-**Policy (MANDATORY):**
-- ❌ **NEVER create test artifacts in the codebase directory**
-- ✅ **ALWAYS use isolated filesystems for tests that create files**
-- ✅ CLI tests: Use `CliRunner.isolated_filesystem()` context manager
-- ✅ File generation tests: Use `pytest.tmp_path` or `pytest.tmpdir` fixtures
-- ✅ Integration tests: Use temporary directories (`tempfile.mkdtemp()`)
-
-### E2E Testing Policy
-
-**Purpose**: Validate complete user workflows with real database and browser automation before releases.
-
-**Requirements:**
-- ✅ PostgreSQL 18 container via pytest-docker
-- ✅ Playwright browser automation (Chromium)
-- ✅ Full project lifecycle testing (generate → install → migrate → serve → browse)
-- ✅ Separate from fast CI using pytest markers (`@pytest.mark.e2e`)
-
-**When Required:**
-- Pre-release validation
-- Production-readiness verification
-- Frontend regression testing
-- Docker/database integration verification
-- After generator template changes
-
-**Tech Stack:**
-- `pytest-docker`: Container orchestration for PostgreSQL
-- `pytest-playwright`: Browser automation for frontend testing
-- `docker-compose.test.yml`: Test infrastructure definition (PostgreSQL 18 with health checks)
-- Playwright Chromium: Headless/headed browser for UI testing
-
-**Execution Time**: 5-10 minutes for full suite (acceptable for release gates, excludes from fast CI)
-
-**CI Strategy:**
-- ✅ Fast CI (daily): Excludes E2E (`pytest -m "not e2e"`)
-- ✅ Release CI (pre-release): Includes E2E (`pytest -m e2e`)
-- ✅ Separate workflows ensure fast feedback for daily development
-
-**Test Organization**: See [scaffolding.md §13](./scaffolding.md#13-e2e-test-infrastructure) for structure details.
-
-**Usage**: See [user_manual.md §2.1](./user_manual.md#21-end-to-end-e2e-tests) for running instructions.
+The authoritative validation rules, coverage expectations, and E2E policy now live in [validation_policy.md](./validation_policy.md#testing-standards). Keep this section as a compatibility hub for older links.
 
 ## Current Architecture Boundaries
 
-**Library-Style Boundaries:**
-- ✅ Backend modules are reusable Django apps embedded into generated projects and updated through the current git-subtree workflow
-- ✅ Themes are starting points that users own after generation
-- ✅ Frontends remain directory-based presentation layers
-- ✅ Proven Django foundations stay preferred over custom abstractions
+The authoritative architecture-boundary reference now lives in [implementation_contract.md](./implementation_contract.md#current-architecture-boundaries).
 
-**Current Shipped Surfaces:**
-- ✅ `quickscale_core`: scaffolding, templates, and shared generator/runtime support
-- ✅ Directory-based frontends: scaffolded templates and starter-theme assets
-- ✅ `quickscale_modules/*`: first-party module workspace inside the repository, with released modules documented per version
-- ✅ Some first-party modules ship documented module-owned routed surfaces that QuickScale wires into generated projects, currently including blog, listings, CRM, forms, and notifications routes/webhooks
-- ❌ Independent package-registry distribution is not part of the current contract unless a release note and this file explicitly say so
-
-**See:** [scaffolding.md §2-3](./scaffolding.md#mvp-structure) for layouts
-
-### Module Boundaries
-
-**Admin Module (`quickscale_modules.admin`):**
-- ✅ Enhanced Django admin interface
-- ✅ System configuration, feature flags
-- ✅ Monitoring dashboards
-- ✅ Audit logging
-- ❌ NOT authentication/authorization (use `auth` module)
-
-**Auth Module (`quickscale_modules.auth`):**
-- ✅ User identity, authentication, authorization
-- ✅ User registration, profile management
-- ❌ NOT admin interface enhancements
-
-**Dependency Injection (Testing Only):**
-- ✅ Production: Direct imports
-- ✅ Tests: Constructor injection for mocking
-- ❌ No DI frameworks or service registries
-
-```python
-class OrderProcessor:
-    def __init__(self, payment_service=None):
-        from quickscale_modules.payments import services
-        self.payment_service = payment_service or services.DefaultPaymentService()
-```
-
-### Configuration Boundaries
-
-**Current workflow:**
-- ✅ Standard Django `settings.py` generated from `quickscale.yml`
-- ✅ Declarative desired state in `quickscale.yml`
-- ✅ Applied state tracking in `.quickscale/state.yml`
-- ✅ Standalone generated projects after `quickscale apply`
-
-**Not currently shipped:**
-- `quickscale validate` - Validate config
-- `quickscale generate` - Generate from config
-- ❌ Not part of the current command surface
-
-### Distribution Strategy
-
-**Current - Git Subtree:**
-- ✅ Primary distribution mechanism
-- ✅ CLI workflow: `quickscale plan myapp`, enter the generated directory, then run `quickscale apply`
-- ✅ Manual git subtree commands (documented)
-- ✅ No package registries, offline development
-
-**Not part of the current contract:**
-- ❌ PyPI or private-registry distribution for modules/themes
-- ❌ Third-party registry or storefront workflows
-
-**Backward Compatibility:**
-- ❌ Intentionally breaking from legacy QuickScale
-- ❌ No automated migration
+See [implementation_contract.md](./implementation_contract.md#backend-extensions-policy) for the current module extension contract and [generated_project_structure.md](./generated_project_structure.md#mvp-structure) for generated-project layout context.
 
 ### Module Extension Contract {#backend-extensions-policy}
 
-QuickScale uses a layered Django-native extension model. Each module declares which extension surfaces it supports from a standard approved set. Projects extend modules through a project-owned extension app when project-owned glue is required, never by editing module source directly. Service-style integration modules may intentionally expose Tier 1 support only through settings, helper/service APIs, and QuickScale-owned generated files when that narrower contract is documented explicitly.
-
-**Approved extension surfaces:**
-- Settings contract
-- Template overrides
-- Signals/events
-- Helper/service APIs
-- Admin base classes
-- Abstract base models (domain modules only)
-- Managed integration files (QuickScale-owned, never user-edited)
-
-**Two support tiers:**
-- **Tier 1 (Stable):** Project-owned app, settings, template overrides, documented service APIs, documented signals. Survives module updates with minimal merge work.
-- **Tier 2 (Structured):** Module-specific subclassing (abstract models, admin bases). Survives minor updates when the contract is documented and versioned.
-
-See [docs/technical/module-extension.md](module-extension.md) for the full contract, per-module surface declarations, and rollout plan.
-
-**Current Frontend Boundaries:**
-- ✅ Optional `custom_frontend/` directory
-- ✅ Basic variant support
-- ✅ Standard Django templates
-- ❌ No advanced tooling
-
-**See:** [scaffolding.md §5](./scaffolding.md#5-generated-project-output)
-
-### Database Architecture
-
-**Current database rules:**
-- ✅ Embedded modules remain standard Django apps with `app_label`
-- ✅ Tables follow Django defaults (`{app_label}_{model_name}`)
-- ✅ Standard migrations handle dependencies
-- ✅ Do not invent custom table-naming schemes to simulate a plugin system
+This legacy anchor now routes to [implementation_contract.md](./implementation_contract.md#backend-extensions-policy).
 
 ## Operational Decisions
 

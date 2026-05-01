@@ -1,28 +1,8 @@
 # DEBUG - Debugging and Bug-Fix Guide
 
-This is a debugging application guide. It applies the shared debugging,
-testing, scope, and architecture rules while you diagnose failures and fix
-verified root causes.
-
-Shared documents in [shared/](shared/) remain authoritative when guidance
-overlaps. This guide owns repo-specific debugging commands and AI-assisted
-failure-analysis workflow.
-
-## Use This Guide When
-
-- diagnosing failing tests, regressions, or production bugs
-- deciding whether a failure belongs in code, tests, or environment setup
-- checking that a proposed bug fix is narrow, validated, and not masking the real issue
-
-## Authoritative Sources for Debugging
-
-Use these rule sources while debugging:
-
-- [Debugging Standards](shared/debugging_standards.md)
-- [Code Principles](shared/code_principles.md)
-- [Testing Standards](shared/testing_standards.md)
-- [Task Focus Guidelines](shared/task_focus_guidelines.md)
-- [Architecture Guidelines](shared/architecture_guidelines.md)
+Use this guide for QuickScale-specific debugging flow, failure-analysis inputs,
+and command selection. Shared debugging, testing, scope, and architecture
+rules remain authoritative.
 
 ## Suggested Debugging Loop
 
@@ -64,26 +44,6 @@ When using an AI assistant or LLM to analyze failures:
 - prefer one failing test or `--exitfirst` output before pasting broader suite logs
 - treat suggestions as hypotheses until they are verified against the code and reruns
 
-**Prompt template**:
-
-```text
-Here are the failing tests from my QuickScale project:
-
-[paste targeted failure output here]
-
-Recent changes:
-[describe what changed]
-
-Expected behavior:
-[describe what should happen]
-
-Testing context:
-[unit/integration/e2e, command used]
-
-Please identify the most likely root cause, whether the code or the test is
-wrong, and the smallest safe next check or fix.
-```
-
 ## Scope Guardrails While Debugging
 
 - fix the verified root cause, not the symptom
@@ -98,9 +58,3 @@ Before considering a bug fix complete, confirm that:
 - no workaround was substituted for a real fix
 - the change stayed inside the approved scope
 - the relevant regression path is covered or the remaining gap is explicit
-
-## Related Guidance
-
-- [testing.md](testing.md) for repo-specific test commands and locations
-- [review.md](review.md) for post-fix quality review
-- [code.md](code.md) for implementation application
