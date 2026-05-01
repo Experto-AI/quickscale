@@ -29,7 +29,7 @@ The stage sections then add:
 Observed costs from the current setup:
 
 - The current referenced source set is about 3,133 lines before hydration.
-- A hydrated `implement` section is about 2,655 lines / 122.1 KB.
+- Current measured role baselines captured on 2026-05-01 range from 2,507 lines / 117.0 KB (`adaptive`) to 2,875 lines / 128.6 KB (`quality-gate`).
 - The MCP include mechanism expands whole files, not file fragments, so large documents amplify context size quickly.
 - Human-facing navigation and onboarding content is now being injected into every agent role, including roles that do not need it.
 
@@ -452,25 +452,97 @@ Success should mean all of the following:
 - Rollout is reversible without reopening the entire documentation strategy.
 - Future contributors have a maintenance contract for AI-facing summary files and includes.
 
+## Phase 0 Baseline Capture (Completed 2026-05-01)
+
+Hydration metrics were captured before any file edits in this phase using the current MCP include graph and the major role sections.
+
+| Role | Lines | Size | Baseline note |
+|---|---:|---:|---|
+| `adaptive` | 2,507 | 117.0 KB | Shared payload is still dominated by universal whole-file includes. |
+| `plan` | 2,585 | 120.6 KB | Adds planning guidance on top of the broad shared baseline. |
+| `implement` | 2,661 | 122.2 KB | Adds implementation guidance on top of the broad shared baseline. |
+| `quality-gate` | 2,875 | 128.6 KB | Largest current payload because testing and debug guidance stack onto shared docs. |
+| `change-review` | 2,572 | 119.7 KB | Review guidance is still overshadowed by shared-context overhead. |
+
+Explicit target outcomes for the refactor:
+
+| Outcome | Target state |
+|---|---|
+| Shared default AI input | Replace the mixed human/router `# Shared` payload with one compact derivative AI baseline file. |
+| Authority handling | Keep [decisions.md](../technical/decisions.md) authoritative for policy and [scaffolding.md](../technical/scaffolding.md) authoritative for structure; derivative summaries must defer on conflict. |
+| Human-doc preservation | Keep [README.md](../../README.md), [START_HERE.md](../../START_HERE.md), and [docs/contrib/contributing.md](../contrib/contributing.md) human-first and out of default shared AI hydration. |
+| Role isolation | Limit each role to the compact baseline plus only the role-specific docs that materially change behavior. |
+| Change safety | Require before/after hydration metrics and a must-have-facts check whenever the include graph changes. |
+
+Human-first versus AI-default classification to preserve during later phases:
+
+| Document | Primary responsibility | Default AI role after refactor | Note |
+|---|---|---|---|
+| [docs/technical/decisions.md](../technical/decisions.md) | Repo-wide policy and tie-breakers | Referenced via compact baseline, not broad shared whole-file include | Remains the top authority. |
+| [docs/technical/scaffolding.md](../technical/scaffolding.md) | Structure and placement authority | `plan`, `codebase-discovery`, `implement` only | Structural context, not universal default. |
+| [README.md](../../README.md) | Human overview and orientation | No | Keep human-first. |
+| [START_HERE.md](../../START_HERE.md) | Human repo entry point | No | Keep human-first. |
+| [docs/contrib/contributing.md](../contrib/contributing.md) | Human contributor router | No | Keep human-first. |
+| [docs/contrib/shared/README.md](../contrib/shared/README.md) | Human explanation of the shared/stage-doc model | Not by default | Only re-include if a later phase finds a unique AI-critical fact. |
+| [docs/contrib/plan.md](../contrib/plan.md) | Planning workflow | `plan` only | Role-specific applied guidance. |
+| [docs/contrib/code.md](../contrib/code.md) | Implementation workflow | `implement` only | Role-specific applied guidance. |
+| [docs/contrib/testing.md](../contrib/testing.md) | Validation workflow | `quality-gate` only | Role-specific applied guidance. |
+| [docs/contrib/debug.md](../contrib/debug.md) | Debug workflow | `quality-gate` only | Role-specific applied guidance. |
+| [docs/contrib/review.md](../contrib/review.md) | Review workflow | `change-review` only | Role-specific applied guidance. |
+| [docs/technical/ai_context.md](../technical/ai_context.md) | Compact AI baseline | All AI roles | Derivative, concise, and intentionally non-navigational. |
+
+Provisional size budgets for later phases:
+
+| Payload | Provisional budget | Rationale |
+|---|---|---|
+| Compact shared AI baseline | <= 12 KB and <= 250 lines | Small enough to hydrate everywhere without crowding role-local facts. |
+| `adaptive` | <= 15 KB and <= 350 lines | Needs authority, workflow, and stack only. |
+| `plan` | <= 50 KB and <= 900 lines | Needs structure plus planning workflow, but not the full human-router set. |
+| `implement` | <= 50 KB and <= 900 lines | Needs structure plus implementation guardrails. |
+| `quality-gate` | <= 50 KB and <= 950 lines | Needs validation and debug guidance, but should still drop most shared prose. |
+| `change-review` | <= 35 KB and <= 750 lines | Needs authority, evidence standards, and review checklist only. |
+| Any single whole-file include | More than 20 KB requires explicit rationale | Prevent convenience-driven shared-context relapse. |
+
+Must-have facts to preserve before trimming any current include:
+
+| Role | Must-have facts |
+|---|---|
+| `adaptive` | Authority order, conflict policy, workflow baseline, repo stack baseline, validation entrypoints, and generated-project ownership model. |
+| `plan` | `adaptive` baseline plus structure authority, generated-project contract, scope discipline, and validation-planning expectations. |
+| `implement` | `adaptive` baseline plus structure authority, implementation guardrails, make/pytest entrypoints, and ownership boundaries for generated code. |
+| `quality-gate` | `adaptive` baseline plus test policy, coverage expectations, narrow-first validation commands, and debug workflow. |
+| `change-review` | `adaptive` baseline plus evidence expectations, authority order, scope protection, and regression-review discipline. |
+
+## Phase 1 Compact AI Baseline (Completed 2026-05-01)
+
+Phase 1 delivers [docs/technical/ai_context.md](../technical/ai_context.md) as the compact AI-default baseline.
+
+Current phase-1 decisions:
+
+- The file is derivative and AI-focused, not a new SSOT.
+- It keeps only shared decision-critical facts: authority order, workflow baseline, stack baseline, validation entrypoints, generated-project ownership, maintenance rule, and conflict policy.
+- It is intentionally non-navigational: no reader tours, onboarding paths, FAQ sections, or contributor walkthroughs.
+- [adaptive.rules.md](../../adaptive.rules.md) remains unchanged in this phase; include rewiring starts in Phase 2.
+
 ## Detailed Implementation Plan
 
 This implementation plan is designed for phased handoff. Each item references the findings above so the work stays anchored to the intended outcomes.
 
 ### Phase 0 - Baseline, Scope, And Success Criteria
 
-- [ ] Capture current hydration metrics for at least `adaptive`, `plan`, `implement`, `quality-gate`, and `change-review`. Record line count and size before editing anything. See [Current State Snapshot](#current-state-snapshot).
-- [ ] Define explicit target outcomes for the refactor, including a smaller shared baseline and smaller role-specific payloads. See [What Good Looks Like After The Refactor](#what-good-looks-like-after-the-refactor).
-- [ ] Confirm which docs are human-first versus AI-default so the refactor does not accidentally damage contributor navigation. See [Document-By-Document Assessment](#document-by-document-assessment).
-- [ ] Define provisional hardening budgets for shared and role-specific context sizes so the refactor has an explicit performance target. See [Budget Controls](#1-budget-controls).
-- [ ] Define a must-have-facts checklist per role before removing any currently included document. See [Coverage Controls](#2-coverage-controls).
+- [x] Capture current hydration metrics for at least `adaptive`, `plan`, `implement`, `quality-gate`, and `change-review`. Record line count and size before editing anything. See [Current State Snapshot](#current-state-snapshot).
+- [x] Define explicit target outcomes for the refactor, including a smaller shared baseline and smaller role-specific payloads. See [What Good Looks Like After The Refactor](#what-good-looks-like-after-the-refactor).
+- [x] Confirm which docs are human-first versus AI-default so the refactor does not accidentally damage contributor navigation. See [Document-By-Document Assessment](#document-by-document-assessment).
+- [x] Define provisional hardening budgets for shared and role-specific context sizes so the refactor has an explicit performance target. See [Budget Controls](#1-budget-controls).
+- [x] Define a must-have-facts checklist per role before removing any currently included document. See [Coverage Controls](#2-coverage-controls).
 
 ### Phase 1 - Create The Compact AI Baseline
 
-- [ ] Create a new compact AI baseline file such as `docs/technical/ai_context.md`. It should contain only decision-critical repository facts. See [Recommended Target State](#recommended-target-state).
-- [ ] Move concise authority order, workflow baseline, stack baseline, validation entrypoints, and generated-project ownership rules into that file. See [Shared Baseline For All AI Roles](#shared-baseline-for-all-ai-roles).
-- [ ] Keep the new file short and intentionally non-navigational. Do not add reading paths, FAQ sections, or contributor walkthroughs. See [Best-Practice Constraints For This Refactor](#best-practice-constraints-for-this-refactor).
-- [ ] Decide whether the compact AI baseline becomes authoritative for AI hydration only or whether it also becomes a human-maintained summary that is updated alongside `decisions.md`. Record that maintenance rule in the file itself. See [Ownership Cleanup Model](#ownership-cleanup-model).
-- [ ] Add an explicit conflict rule inside the new baseline file stating which source documents win if the summary drifts. See [Governance Controls](#4-governance-controls).
+- [x] Create a new compact AI baseline file such as `docs/technical/ai_context.md`. It should contain only decision-critical repository facts. See [Recommended Target State](#recommended-target-state).
+- [x] Move concise authority order, workflow baseline, stack baseline, validation entrypoints, and generated-project ownership rules into that file. See [Shared Baseline For All AI Roles](#shared-baseline-for-all-ai-roles).
+- [x] Keep the new file short and intentionally non-navigational. Do not add reading paths, FAQ sections, or contributor walkthroughs. See [Best-Practice Constraints For This Refactor](#best-practice-constraints-for-this-refactor).
+- [x] Decide whether the compact AI baseline becomes authoritative for AI hydration only or whether it also becomes a human-maintained summary that is updated alongside `decisions.md`. Record that maintenance rule in the file itself. See [Ownership Cleanup Model](#ownership-cleanup-model).
+- [x] Add an explicit conflict rule inside the new baseline file stating which source documents win if the summary drifts. See [Governance Controls](#4-governance-controls).
 
 ### Phase 2 - Reduce Shared-Context Over-Inclusion
 
