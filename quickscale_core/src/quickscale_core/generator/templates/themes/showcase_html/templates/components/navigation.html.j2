@@ -49,7 +49,11 @@
             <li class="nav-section">
                 <span class="nav-section-title">CRM</span>
                 <ul class="nav-submenu">
+                    {% if user.is_staff %}
                     <li><a href="{% url 'quickscale_crm:dashboard' %}">Dashboard</a></li>
+                    {% else %}
+                    <li><span class="nav-disabled-link">CRM dashboard access is limited to staff users.</span></li>
+                    {% endif %}
                 </ul>
             </li>
             {% endif %}

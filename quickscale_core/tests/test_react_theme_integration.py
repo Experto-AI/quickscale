@@ -827,6 +827,9 @@ class TestReactThemeModuleActivationMatrix:
         sidebar = (
             output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
         ).read_text()
+        crm_page = (
+            output_path / "frontend" / "src" / "pages" / "CrmPage.tsx"
+        ).read_text()
         settings_page = (
             output_path / "frontend" / "src" / "pages" / "SettingsPage.tsx"
         ).read_text()
@@ -848,11 +851,14 @@ class TestReactThemeModuleActivationMatrix:
         assert "key: 'social'" in dashboard
         assert "name: 'Social'" in dashboard
         assert "modulePaths.social" in dashboard
+        assert "href: '/crm-workspace'" in dashboard
+        assert "actionLabel: 'Open workspace'" in dashboard
         assert "key: 'billing'" not in dashboard
         assert "key: 'teams'" not in dashboard
         assert "reloadDocument={mod.reloadDocument}" in dashboard
         assert "lg:grid-cols-4" in dashboard
 
+        assert "href: '/crm-workspace'" in sidebar
         assert "name: 'Social'" in sidebar
         assert "modulePaths.social" in sidebar
         assert "name: 'Billing'" not in sidebar
@@ -860,6 +866,10 @@ class TestReactThemeModuleActivationMatrix:
         assert "name: 'Notifications'" not in sidebar
         assert "name: 'Backups'" not in sidebar
         assert "reloadDocument={item.reloadDocument}" in sidebar
+
+        assert "CRM Workspace" in crm_page
+        assert "The Django dashboard at /crm/ remains staff-only." in crm_page
+        assert "Staff CRM Dashboard" in crm_page
 
         assert "Storage & CDN" in settings_page
         assert "No admin config surface" in settings_page
@@ -1015,8 +1025,9 @@ class TestReactThemeModuleActivationMatrix:
 
         app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
 
-        for path in ["/blog", "/listings", "/crm", "/profile"]:
+        for path in ["/blog", "/listings", "/crm-workspace", "/profile"]:
             assert f'path="{path}"' in app_tsx, f"Missing route for {path}"
+        assert 'path="/crm"' not in app_tsx
         assert 'path="/billing"' not in app_tsx
         assert 'path="/teams"' not in app_tsx
 

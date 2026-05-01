@@ -50,7 +50,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.80.0 | ✅ Released | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
 | v0.81.0 | ✅ Released | Beta-site migration maintainer tooling | Maintainer-only fresh-first and checkpoint-first in-place beta-site migration workflows; archived in release note and changelog |
 | v0.82.0 | ✅ Released | Disaster recovery & environment promotion | Public `quickscale dr` capture/plan/execute/report workflows with `snapshot_id` lookup, resumable capture/execute, rollback pins, conservative env-var sync, and source-side media sync; archived in release note and changelog |
-| v0.83.0 | 🟡 In progress (unreleased) | Hardening release | Phases 1-7 are complete in repo; Phase 8 and Phase 9 are the remaining pre-tag hardening backlog before tag/release artifacts |
+| v0.83.0 | 🟡 In progress (unreleased) | Hardening release | Phases 1-8 are complete in repo; Phase 9 is the remaining pre-tag hardening backlog before tag/release artifacts |
 | v0.84.0 | 📋 Planned | Billing module | Stripe integration after v0.83.0 hardening closes the current platform and module contract gaps |
 | v0.85.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
 | v0.86.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and teams milestones |
@@ -62,7 +62,7 @@ This table is the single milestone summary for shipped history and the active fo
 
 **Status:**
 - **Current release:** v0.82.0 is the published release
-- **Current in-repo milestone:** v0.83.0 hardening has Phases 1-7 complete in repo; Phase 8 and Phase 9 are the remaining pre-tag backlog before tag/release-time artifacts
+- **Current in-repo milestone:** v0.83.0 hardening has Phases 1-8 complete in repo; Phase 9 is the remaining pre-tag backlog before tag/release-time artifacts
 - **Next planned feature milestone:** v0.84.0 billing module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.85.0 - auth, billing, teams modules complete on top of the notifications foundation
@@ -91,11 +91,11 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ### v0.83.0: Hardening Release
 
-**Status**: 🟡 Phases 1-7 complete in repo; Phase 8 and Phase 9 remain (unreleased)
+**Status**: 🟡 Phases 1-8 complete in repo; Phase 9 remains (unreleased)
 
 **Goal**: Close the repo-wide audit findings before shipping the next new public module release. This milestone hardens the current plan/apply surface, managed wiring behavior, shipped starter themes, module contract fidelity, metadata parity, and regression coverage so later billing and teams work lands on a stable documented base.
 
-**Current status (2026-05-01)**: The hardening implementation now has Phases 1-7 complete in repo. Phase 7 closeout finished with the planner notifications rejection fix plus the already-landed docs, SSOT, test, and syntax follow-ups recorded below. Phase 8 and Phase 9 are now the remaining pre-tag hardening backlog, and publish-time artifacts remain deferred until a real tag/release exists, so v0.82.0 remains the current published release.
+**Current status (2026-05-01)**: The hardening implementation now has Phases 1-8 complete in repo. Phase 8 closeout finished with generated production-settings fail-hard behavior, CRM dashboard access-control parity, forms/backups operator-surface hardening, and blog upload resource guards recorded below. Phase 9 is now the remaining pre-tag hardening backlog, and publish-time artifacts remain deferred until a real tag/release exists, so v0.82.0 remains the current published release.
 
 **Completed scope retained as a pointer**
 
@@ -112,7 +112,7 @@ Detailed completed checklists for Phases 1-6 were removed from this section to k
 
 **Primary code grouping**: repo-wide validation, SSOT reconciliation, package/module documentation alignment, and milestone closeout tracking.
 
-**Current status (2026-05-01)**: Phase 7 is complete in repo. The final planner follow-up now hard-rejects invalid live notifications settings before existing-project add/reconfigure writes, including the state-only reconfigure path, and the previously landed schema/auth/docs/SSOT/test/syntax cleanup work remains in place. Phase 8 and Phase 9 are the remaining v0.83.0 pre-tag hardening backlog.
+**Current status (2026-05-01)**: Phase 7 is complete in repo. The final planner follow-up now hard-rejects invalid live notifications settings before existing-project add/reconfigure writes, including the state-only reconfigure path, and the previously landed schema/auth/docs/SSOT/test/syntax cleanup work remains in place. Phase 9 is now the remaining v0.83.0 pre-tag hardening backlog.
 
 **Resolved planning decisions retained here**
 
@@ -130,14 +130,14 @@ Detailed completed checklists for Phases 1-6 were removed from this section to k
 
 **Phase 7 completion record (2026-05-01)**
 
-Phase 7 no longer has an execution handoff. The remaining unreleased v0.83.0 backlog now starts at Phase 8.
+Phase 7 no longer has an execution handoff. The remaining unreleased v0.83.0 backlog now starts at Phase 9.
 
 1. Existing-project planner add/reconfigure flows now abort before rewriting `quickscale.yml` when live notifications config is incomplete or still using the production placeholder, including the state-only reconfigure path.
 2. Planner regression coverage now includes `quickscale_cli/tests/test_plan_add.py::test_plan_add_aborts_before_rewrite_for_invalid_live_notifications_config` and `quickscale_cli/tests/test_plan_reconfigure.py::test_plan_reconfigure_state_only_aborts_before_write_for_invalid_live_notifications`; apply/module-config notifications parity coverage also passed.
 3. `docs/technical/plan-apply-system.md` and `docs/technical/user_manual.md` already reflect schema version `"1"` and canonical auth guidance, so the docs/SSOT cleanup tracked in this phase is closed.
 4. `docs/technical/decisions.md` already carries the narrowed module-API wording, and `quickscale_modules/analytics/tests/test_services.py` now matches the shipped enabled-by-default analytics behavior when the setting is absent.
 5. A refreshed active-source sweep no longer finds comma-form `except A, B:` syntax in `quickscale_cli/src`, `quickscale_core/src`, or `quickscale_modules/*/src`.
-6. v0.82.0 remains the current published release; Phase 8 and Phase 9 are now the remaining v0.83.0 pre-tag backlog.
+6. v0.82.0 remains the current published release; Phase 9 is now the remaining v0.83.0 pre-tag backlog.
 
 **Recorded validation context**
 
@@ -149,39 +149,29 @@ Phase 7 no longer has an execution handoff. The remaining unreleased v0.83.0 bac
 
 **Primary code grouping**: generated production settings, privileged operator surfaces, exported-data hygiene, module access-control parity, and upload resource guards.
 
-**Current status (2026-04-08)**: This slice was added from a repo hardening review performed after the preserved Phase 7 handoff. The findings below are confirmed in source, but no fixes, docs updates, or regression additions have started yet. Treat this as the next pre-tag backlog after the existing Phase 7 contract/docs work unless an overlapping slice is already touching the same files.
+**Current status (2026-05-01)**: Phase 8 is complete in repo. Generated production settings now fail hard for blank or shipped-placeholder `SECRET_KEY` values while local startup remains valid; the CRM HTML dashboard is staff-only with README parity; forms CSV exports neutralize formula-prefixed headers and values; backup admin downloads enforce authoritative-root containment with symlink rejection; and blog automation uploads enforce max dimensions plus normalized decompression-bomb failures across helper-backed and fallback paths. Phase 9 is now the remaining unreleased v0.83.0 hardening backlog.
 
-- [ ] Make generated production settings fail hard when `SECRET_KEY` is unset or still using the shipped placeholder. `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2:21` currently falls back to the known insecure value `"django-insecure-change-this-in-production"`, and `quickscale_core/src/quickscale_core/generator/templates/.env.example.j2:4-7` still presents a copy-forward placeholder/debug path that is too easy to ship accidentally. The hardening target is: blank or placeholder production `SECRET_KEY` must raise loudly, local/dev examples must stay convenient without implying production safety, and generator template regressions must cover both empty and placeholder env cases.
-- [ ] Require explicit authentication for the CRM dashboard and decide whether the HTML surface is staff-only or general authenticated-only. `quickscale_modules/crm/src/quickscale_modules_crm/views.py:60-95` currently assembles live CRM aggregates plus recent contacts/deals for every request, and `quickscale_modules/crm/src/quickscale_modules_crm/templates/quickscale_modules_crm/crm/dashboard.html:51-95` renders contact names/emails and deal metadata without any login guard. The fix must add the chosen access-control mixin/decorator, align the README/runtime contract, and add anonymous/non-staff/staff regressions so this surface cannot drift public again.
-- [ ] Neutralize spreadsheet formula injection in forms CSV exports. `quickscale_modules/forms/src/quickscale_modules_forms/views.py:296-347` writes raw submission values directly into CSV cells; values beginning with `=`, `+`, `-`, or `@` can execute as formulas when operators open exports in Excel/Sheets. Add a small shared CSV-cell sanitizer, apply it to exported field values and any dynamic headers that can originate from form definitions, and add regression coverage for formula-prefixed payloads.
-- [ ] Constrain backup admin downloads to authoritative backup roots instead of trusting `artifact.local_path` blindly. `quickscale_modules/backups/src/quickscale_modules_backups/services.py:2548-2556` returns any existing row-backed path, and `quickscale_modules/backups/src/quickscale_modules_backups/admin.py:781-796` streams that path directly once the row exists. Harden this by resolving against the active backup policy/snapshot roots (or another explicit allowlist), rejecting symlinks and out-of-tree paths, and adding service/admin regressions proving a tampered or drifted row cannot be turned into arbitrary file download for staff users.
-- [ ] Add pixel-dimension and decompression-bomb guards to the blog automation upload path. `quickscale_modules/blog/src/quickscale_modules_blog/views.py:226-265` and `quickscale_modules/storage/src/quickscale_modules_storage/helpers.py:272-308` enforce byte size and format, but the automation path does not pass any explicit width/height ceiling even though the shared helper supports them. Introduce configurable max dimensions for the automation API, reject pathological images before accepting them, and add upload regressions covering oversized dimensions and Pillow bomb-protection paths.
+- [x] Generated production settings now fail hard when `SECRET_KEY` is blank or still using the shipped placeholder. `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2` no longer falls back to `"django-insecure-change-this-in-production"`, local/dev examples stay convenient without implying production safety, and generator template regressions cover both empty and placeholder env cases.
+- [x] The CRM dashboard now requires staff authentication. `quickscale_modules/crm/src/quickscale_modules_crm/views.py` guards the HTML surface, the README/runtime contract is aligned to the staff-only boundary, and anonymous/non-staff/staff regressions keep this surface from drifting public again.
+- [x] Forms CSV exports now neutralize spreadsheet formula injection. `quickscale_modules/forms/src/quickscale_modules_forms/views.py` applies a shared CSV-cell sanitizer to exported field values and dynamic headers that can originate from form definitions, with regression coverage for formula-prefixed payloads.
+- [x] Backup admin downloads are now constrained to authoritative backup roots instead of trusting `artifact.local_path` blindly. `quickscale_modules/backups/src/quickscale_modules_backups/services.py` and `quickscale_modules/backups/src/quickscale_modules_backups/admin.py` resolve against the active backup roots, reject symlinks and out-of-tree paths, and include service/admin regressions proving tampered or drifted rows cannot become arbitrary staff downloads.
+- [x] Blog automation uploads now enforce pixel-dimension and decompression-bomb guards. `quickscale_modules/blog/src/quickscale_modules_blog/views.py` and `quickscale_modules/storage/src/quickscale_modules_storage/helpers.py` apply explicit width/height ceilings and normalize pathological-image failures across helper-backed and fallback paths, with upload regressions covering oversized dimensions and Pillow bomb-protection paths.
 
-**Phase 8 execution handoff plan (2026-04-08)**
+**Phase 8 completion record (2026-05-01)**
 
-Resume this review-generated backlog in the following slices so the next implementation pass can close the highest-risk hardening gaps first without redoing discovery:
+Phase 8 no longer has an execution handoff. The remaining unreleased v0.83.0 hardening backlog now starts at Phase 9.
 
-1. **Generated production settings fail-hard**
-   - Remove the production-safe fallback behavior for `SECRET_KEY`; keep local ergonomics without leaving a known secret as a runnable production default.
-   - Update the generated examples and template expectations together so docs/examples do not continue to advertise the placeholder path after runtime hard-fails land.
-   - Validation: targeted generator/template tests plus a rendered-settings assertion that placeholder or blank `SECRET_KEY` fails in production mode.
-2. **CRM HTML surface access control**
-   - Decide and document whether `/crm/` is staff-only or any authenticated user.
-   - Add the access-control guard in the view layer before changing template copy or README language.
-   - Validation: CRM view tests for anonymous redirect/403 behavior and authenticated success behavior for the chosen contract.
-3. **Operator/export surface hardening**
-   - Implement the CSV formula neutralization and the backup-download path-containment guard as one slice because both are staff/operator-facing trust-boundary fixes.
-   - Keep the implementations small and explicit: exported cells should be normalized at write time, and backup download paths should be resolved/validated before file open.
-   - Validation: forms export regressions for formula-prefixed values plus backup admin/service tests for out-of-tree, symlinked, and valid in-tree artifacts.
-4. **Blog automation upload resource guards**
-   - Reuse the shared storage helper seam so max-dimension enforcement is consistent between the blog API and any future storage-backed upload surfaces.
-   - Prefer configurable defaults with safe ceilings rather than a hardcoded one-off in the view.
-   - Validation: blog API upload tests for allowed images, over-dimension images, and decompression-bomb rejection behavior.
-5. **Final review sweep**
-   - After slices 1-4 land, rerun a narrow trust-boundary audit over generated settings, staff-only download/export endpoints, and module HTML dashboards to catch any adjacent regressions before tag/release.
-   - Validation: touched pytest targets first, then `make test`, `make lint`, `make typecheck`, and `make ci-e2e` when the environment is available.
+1. Generated production settings now hard-fail for blank or shipped-placeholder `SECRET_KEY` values while local startup remains valid. Focused generator template coverage passed via `poetry run pytest quickscale_core/tests/test_generator/test_templates.py`.
+2. The CRM HTML dashboard now matches the staff-only runtime contract, and README wording is aligned. Focused CRM view coverage passed via `poetry run pytest quickscale_modules/crm/tests/test_views.py`.
+3. Forms CSV exports now neutralize formula-prefixed headers and values, and backup admin downloads now enforce authoritative-root containment with symlink rejection. Focused validations passed via `poetry run pytest quickscale_modules/forms/tests` and `make MODULE=backups test-unit -- --modules`.
+4. Blog automation uploads now enforce width/height ceilings and normalize decompression-bomb failures across both helper-backed and fallback paths. Focused validations passed via `poetry run pytest quickscale_modules/storage/tests/test_helpers.py` and `poetry run pytest -o addopts='-v --cov=quickscale_modules_blog --cov-report=term-missing --cov-fail-under=90' quickscale_modules/blog/tests`.
+5. Phase 9 is now the remaining unreleased v0.83.0 hardening backlog, and v0.82.0 remains the current published release.
 
-**Dependency note**: Slice 1 should land before any v0.83.0 release/tag because it removes a production fail-open. Slice 2 is the most urgent runtime data-exposure fix. Slice 3 can proceed in parallel with Slice 2 if write scopes stay disjoint. Slice 4 should reuse the shared storage-validation seam instead of duplicating upload guards in the blog view.
+**Recorded validation context**
+
+- Focused validations for the generator, CRM, forms, backups, storage-helper, and blog slices passed as listed above.
+- Combined `forms` + `backups` and combined `blog` + `storage` pytest invocations are intentionally not recorded here because module-local Django harness separation and cross-module import-path mismatch make those mixed commands unreliable in this repo.
+- Publish-time artifacts remain deferred until a real v0.83.0 tag/release exists.
 
 ---
 

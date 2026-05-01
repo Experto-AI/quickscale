@@ -76,8 +76,13 @@
                     <span class="module-badge">Active</span>
                 </div>
                 <p>Contact management, companies, deals, and notes for customer workflows.</p>
+                <p class="module-note">The CRM dashboard is limited to staff users.</p>
                 <div class="module-card-actions">
+                    {% if user.is_staff %}
                     <a class="module-link" href="{% url 'quickscale_crm:dashboard' %}">Open CRM</a>
+                    {% else %}
+                    <span class="module-note">Sign in with a staff account to open the CRM dashboard.</span>
+                    {% endif %}
                 </div>
             </article>
             {% endif %}
