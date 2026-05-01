@@ -18,6 +18,28 @@ from quickscale_modules_blog.views import (
     _get_blog_api_tokens,
     authenticate_blog_api_request,
 )
+from quickscale_modules_storage.helpers import (
+    validate_file_upload as storage_validate_file_upload,
+)
+
+
+UPLOAD_VALIDATION_PATHS = (
+    pytest.param(storage_validate_file_upload, id="helper-backed"),
+    pytest.param(None, id="helper-absent"),
+)
+
+DECOMPRESSION_BOMB_PATHS = (
+    pytest.param(
+        storage_validate_file_upload,
+        "quickscale_modules_storage.helpers.Image.open",
+        id="helper-backed",
+    ),
+    pytest.param(
+        None,
+        "quickscale_modules_blog.views.Image.open",
+        id="helper-absent",
+    ),
+)
 
 
 def make_uploaded_test_image(
@@ -705,25 +727,33 @@ class TestUploadMediaApi:
 
         assert response.status_code == 403
 
+    @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
     def test_upload_media_api_valid_png_returns_metadata(
         self,
         client,
         staff_user,
         tmp_path,
         settings,
+        storage_validator,
     ):
         """Test upload API stores the file and returns stable metadata."""
         settings.MEDIA_ROOT = str(tmp_path)
+        settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
+        settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
         client.force_login(staff_user)
 
-        response = client.post(
-            reverse("quickscale_blog:api_upload_media"),
-            data={
-                "file": make_uploaded_test_image(size=(1600, 900)),
-                "alt": "Pep Martorell interview diagram",
-                "kind": BlogMediaAsset.Kind.INLINE,
-            },
-        )
+        with patch(
+            "quickscale_modules_blog.views.storage_validate_file_upload",
+            storage_validator,
+        ):
+            response = client.post(
+                reverse("quickscale_blog:api_upload_media"),
+                data={
+                    "file": make_uploaded_test_image(size=(1600, 900)),
+                    "alt": "Pep Martorell interview diagram",
+                    "kind": BlogMediaAsset.Kind.INLINE,
+                },
+            )
 
         assert response.status_code == 201
         payload = response.json()
@@ -733,6 +763,60 @@ class TestUploadMediaApi:
         assert payload["height"] == 900
         assert payload["url"].startswith("http://testserver/media/blog/uploads/")
         assert BlogMediaAsset.objects.filter(pk=payload["id"]).exists()
+
+    @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
+    def test_upload_media_api_rejects_excessive_width_with_or_without_helper(
+        self,
+        client,
+        staff_user,
+        settings,
+        storage_validator,
+    ):
+        """Upload API should apply the same width ceiling in both validation paths."""
+        settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
+        settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
+        client.force_login(staff_user)
+
+        with patch(
+            "quickscale_modules_blog.views.storage_validate_file_upload",
+            storage_validator,
+        ):
+            response = client.post(
+                reverse("quickscale_blog:api_upload_media"),
+                data={"file": make_uploaded_test_image(size=(1601, 900))},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "file": "Image width exceeds maximum of 1600 pixels"
+        }
+
+    @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
+    def test_upload_media_api_rejects_excessive_height_with_or_without_helper(
+        self,
+        client,
+        staff_user,
+        settings,
+        storage_validator,
+    ):
+        """Upload API should apply the same height ceiling in both validation paths."""
+        settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
+        settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
+        client.force_login(staff_user)
+
+        with patch(
+            "quickscale_modules_blog.views.storage_validate_file_upload",
+            storage_validator,
+        ):
+            response = client.post(
+                reverse("quickscale_blog:api_upload_media"),
+                data={"file": make_uploaded_test_image(size=(1600, 901))},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "file": "Image height exceeds maximum of 900 pixels"
+        }
 
     def test_upload_media_api_uses_public_base_url_when_configured(
         self,
@@ -879,6 +963,39 @@ class TestUploadMediaApi:
         assert response.json()["errors"] == {
             "file": "Unsupported or invalid image file"
         }
+
+    @pytest.mark.parametrize(
+        ("storage_validator", "image_open_target"),
+        DECOMPRESSION_BOMB_PATHS,
+    )
+    def test_upload_media_api_rejects_decompression_bombs_with_or_without_helper(
+        self,
+        client,
+        staff_user,
+        settings,
+        storage_validator,
+        image_open_target,
+    ):
+        """Upload API should normalize Pillow bomb protection failures in both paths."""
+        client.force_login(staff_user)
+
+        with (
+            patch(
+                "quickscale_modules_blog.views.storage_validate_file_upload",
+                storage_validator,
+            ),
+            patch(
+                image_open_target,
+                side_effect=Image.DecompressionBombError("too many pixels"),
+            ),
+        ):
+            response = client.post(
+                reverse("quickscale_blog:api_upload_media"),
+                data={"file": make_uploaded_test_image(size=(900, 600))},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {"file": "Image exceeds safe pixel limit"}
 
     def test_upload_media_api_token_auth_bypasses_csrf(
         self,
