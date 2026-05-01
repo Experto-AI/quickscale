@@ -4,20 +4,21 @@ merge_strategy: append
 ---
 
 # Shared
-- **Repository SSOT (wins on conflicts, always read)**:
-    - `docs/technical/decisions.md` for scope rulings, approved stack, and tie-breakers.
-    - `docs/technical/scaffolding.md` for repository, package, and generated-project structure.
+
+[include](docs/technical/decisions.md)
+[include](docs/technical/scaffolding.md)
+[include](README.md)
+[include](START_HERE.md)
+[include](docs/contrib/contributing.md)
+[include](docs/contrib/shared/README.md)
+
 - **Contrib authority model**:
     - `docs/contrib/shared/` owns workflow-agnostic QuickScale engineering rules.
     - `docs/contrib/*.md` stage guides apply those rules in a situation-specific way and do not prescribe a required workflow order.
     - If a stage guide conflicts with a `docs/contrib/shared/` rule source, the shared document wins.
 - **Documentation precedence**:
     - Package README files are informational context only; repository SSOT documents win any conflict.
-    - `README.md` and `START_HERE.md` provide orientation and current product surface but do not override `docs/technical/decisions.md`.
-- **Important context (always read)**:
-    - `README.md`
-    - `START_HERE.md`
-    - `docs/contrib/contributing.md`
+    - `docs/technical/decisions.md` wins on conflicts over `README.md` and `START_HERE.md`.
 - **Tooling**:
     - `Makefile` is the standard entrypoint for shared test and workflow commands.
 
@@ -27,8 +28,7 @@ merge_strategy: append
 
 # Plan
 [include](#shared)
-- **Secondary applied guidance (always read)**:
-    - `docs/contrib/plan.md` for planning checklists, prompts, and examples.
+[include](docs/contrib/plan.md)
 
 # Codebase Discovery
 [include](#shared)
@@ -39,16 +39,13 @@ merge_strategy: append
 
 # Implement
 [include](#shared)
-- **Secondary applied guidance (always read)**:
-    - `docs/contrib/code.md` for implementation checklists, examples, and repo-specific reminders.
+[include](docs/contrib/code.md)
 
 # Quality Gate
 [include](#shared)
-- **Secondary applied guidance (always read)**:
-    - `docs/contrib/testing.md` for test placement, fixtures, and commands.
-    - `docs/contrib/debug.md` for root-cause-first failure diagnosis and debug loops.
+[include](docs/contrib/testing.md)
+[include](docs/contrib/debug.md)
 
 # Change Review
 [include](#shared)
-- **Secondary applied guidance (always read)**:
-    - `docs/contrib/review.md` for review checklists and evidence prompts.
+[include](docs/contrib/review.md)
