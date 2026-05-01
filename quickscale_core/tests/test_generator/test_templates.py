@@ -36,6 +36,114 @@ def test_context() -> dict[str, str]:
     }
 
 
+def _render_template(
+    jinja_env: Environment,
+    template_name: str,
+    context: dict[str, str],
+) -> str:
+    """Render a template with the shared sample context."""
+    return jinja_env.get_template(template_name).render(context)
+
+
+def _extract_env_value(rendered_env: str, key: str) -> str:
+    """Return a rendered env var value from the generated .env.example content."""
+    prefix = f"{key}="
+    for line in rendered_env.splitlines():
+        if line.startswith(prefix):
+            return line.removeprefix(prefix)
+    raise AssertionError(f"{key} not found in rendered .env.example")
+
+
+def _build_fake_config(
+    values: dict[str, object],
+) -> Callable[[str, object, Callable[[object], object] | None], object]:
+    """Create a decouple.config stub backed by explicit test values."""
+
+    def fake_config(
+        key: str,
+        default: object = "",
+        cast: Callable[[object], object] | None = None,
+    ) -> object:
+        value = values.get(key, default)
+        if cast is None:
+            return value
+        return cast(value)
+
+    return fake_config
+
+
+def _execute_rendered_settings(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    package_name: str,
+    base_output: str,
+    target_output: str,
+    target_module_name: str,
+    config_values: dict[str, object],
+) -> dict[str, object]:
+    """Execute rendered settings modules with lightweight import stubs."""
+    settings_package_name = f"{package_name}.settings"
+    modules_name = f"{settings_package_name}.modules"
+    base_module_name = f"{settings_package_name}.base"
+
+    package_module = types.ModuleType(package_name)
+    package_module.__dict__["__path__"] = []
+    settings_package_module = types.ModuleType(settings_package_name)
+    settings_package_module.__dict__["__path__"] = []
+    modules_module = types.ModuleType(modules_name)
+    setattr(modules_module, "MODULE_INSTALLED_APPS", [])
+    setattr(modules_module, "MODULE_MIDDLEWARE", [])
+    setattr(modules_module, "MODULE_SETTINGS", {})
+
+    decouple_module = types.ModuleType("decouple")
+    setattr(decouple_module, "config", _build_fake_config(config_values))
+
+    dj_database_url_module = types.ModuleType("dj_database_url")
+    setattr(
+        dj_database_url_module,
+        "parse",
+        lambda url, conn_max_age=0, ssl_require=False: {
+            "URL": url,
+            "CONN_MAX_AGE": conn_max_age,
+            "SSL_REQUIRE": ssl_require,
+        },
+    )
+    setattr(
+        dj_database_url_module,
+        "config",
+        lambda default, conn_max_age=0, conn_health_checks=False: {
+            "URL": default,
+            "CONN_MAX_AGE": conn_max_age,
+            "CONN_HEALTH_CHECKS": conn_health_checks,
+        },
+    )
+
+    monkeypatch.setitem(sys.modules, package_name, package_module)
+    monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
+    monkeypatch.setitem(sys.modules, modules_name, modules_module)
+    monkeypatch.setitem(sys.modules, "decouple", decouple_module)
+    monkeypatch.setitem(sys.modules, "dj_database_url", dj_database_url_module)
+
+    base_module = types.ModuleType(base_module_name)
+    base_module.__dict__.update(
+        {
+            "__file__": f"/tmp/{package_name}/settings/base.py",
+            "__name__": base_module_name,
+            "__package__": settings_package_name,
+        }
+    )
+    exec(base_output, base_module.__dict__)
+    monkeypatch.setitem(sys.modules, base_module_name, base_module)
+
+    target_namespace: dict[str, object] = {
+        "__file__": f"/tmp/{package_name}/settings/{target_module_name}.py",
+        "__name__": f"{settings_package_name}.{target_module_name}",
+        "__package__": settings_package_name,
+    }
+    exec(target_output, target_namespace)
+    return target_namespace
+
+
 class TestQuickScaleCorePackageMetadata:
     """Verify package metadata helpers used by the template tests."""
 
@@ -553,6 +661,115 @@ class TestProductionReadyFeatures:
         assert 'if "EMAIL_BACKEND" not in globals():' in output
         assert 'if "DEFAULT_FROM_EMAIL" not in globals():' in output
         assert 'if "SERVER_EMAIL" not in globals():' in output
+
+
+class TestGeneratedSecretKeyGuards:
+    """Verify shipped SECRET_KEY defaults stay local-only and fail in production."""
+
+    def test_local_settings_accept_shipped_dev_secret_key(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Local settings should import successfully with the shipped .env placeholder."""
+        base_output = _render_template(
+            jinja_env,
+            "project_name/settings/base.py.j2",
+            test_context,
+        )
+        local_output = _render_template(
+            jinja_env,
+            "project_name/settings/local.py.j2",
+            test_context,
+        )
+        env_output = _render_template(jinja_env, ".env.example.j2", test_context)
+        shipped_secret_key = _extract_env_value(env_output, "SECRET_KEY")
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=local_output,
+            target_module_name="local",
+            config_values={
+                "SECRET_KEY": shipped_secret_key,
+                "DATABASE_URL": (
+                    "postgresql://postgres:postgres@localhost:5432/testproject"
+                ),
+            },
+        )
+
+        assert namespace["SECRET_KEY"] == shipped_secret_key
+        assert namespace["DEBUG"] is True
+
+    def test_production_settings_reject_blank_secret_key(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Production settings should fail fast when SECRET_KEY is blank."""
+        base_output = _render_template(
+            jinja_env,
+            "project_name/settings/base.py.j2",
+            test_context,
+        )
+        production_output = _render_template(
+            jinja_env,
+            "project_name/settings/production.py.j2",
+            test_context,
+        )
+
+        with pytest.raises(ValueError, match="SECRET_KEY must be set"):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=production_output,
+                target_module_name="production",
+                config_values={
+                    "SECRET_KEY": "",
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
+                },
+            )
+
+    def test_production_settings_reject_shipped_placeholder_secret_key(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Production settings should fail fast on the shipped .env placeholder."""
+        base_output = _render_template(
+            jinja_env,
+            "project_name/settings/base.py.j2",
+            test_context,
+        )
+        production_output = _render_template(
+            jinja_env,
+            "project_name/settings/production.py.j2",
+            test_context,
+        )
+        env_output = _render_template(jinja_env, ".env.example.j2", test_context)
+        shipped_secret_key = _extract_env_value(env_output, "SECRET_KEY")
+
+        with pytest.raises(ValueError, match="SECRET_KEY must be set"):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=production_output,
+                target_module_name="production",
+                config_values={
+                    "SECRET_KEY": shipped_secret_key,
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
+                },
+            )
 
 
 class TestHTMLTemplateStructure:

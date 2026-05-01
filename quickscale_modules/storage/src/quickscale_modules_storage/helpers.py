@@ -17,6 +17,9 @@ from django.utils.text import slugify
 from PIL import Image, UnidentifiedImageError
 
 
+IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
+
+
 @dataclass(frozen=True)
 class StorageBackendSelection:
     """Resolved storage backend selection and optional provider options."""
@@ -286,6 +289,8 @@ def validate_file_upload(
         uploaded_file.seek(0)
         image = Image.open(uploaded_file)
         image.load()
+    except Image.DecompressionBombError as exc:
+        raise ValueError(IMAGE_BOMB_VALIDATION_ERROR) from exc
     except (UnidentifiedImageError, OSError) as exc:
         raise ValueError("Unsupported or invalid image file") from exc
     finally:

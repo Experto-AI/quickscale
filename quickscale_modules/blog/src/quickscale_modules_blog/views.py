@@ -45,6 +45,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
 DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH = 4096
+DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
+IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 DEFAULT_BLOG_POSTS_PER_PAGE = 10
 
 ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
@@ -235,6 +238,14 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
     max_upload_bytes = int(
         max_upload_bytes_setting or DEFAULT_BLOG_API_UPLOAD_MAX_BYTES
     )
+    max_upload_width = _get_positive_int_setting(
+        "BLOG_API_UPLOAD_MAX_WIDTH",
+        DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH,
+    )
+    max_upload_height = _get_positive_int_setting(
+        "BLOG_API_UPLOAD_MAX_HEIGHT",
+        DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT,
+    )
     allowed_formats = {
         str(image_format).upper()
         for image_format in getattr(
@@ -256,6 +267,8 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
                 uploaded_file,
                 max_size_bytes=max_upload_bytes,
                 allowed_image_formats=allowed_formats,
+                max_width=max_upload_width,
+                max_height=max_upload_height,
             )
         except ValueError as exc:
             raise BlogMediaUploadValidationError({"file": str(exc)}) from None
@@ -265,6 +278,10 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
         uploaded_file.seek(0)
         image = Image.open(uploaded_file)
         image.load()
+    except Image.DecompressionBombError as exc:
+        raise BlogMediaUploadValidationError(
+            {"file": IMAGE_BOMB_VALIDATION_ERROR}
+        ) from exc
     except (UnidentifiedImageError, OSError) as exc:
         raise BlogMediaUploadValidationError(
             {"file": "Unsupported or invalid image file"}
@@ -279,7 +296,20 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
             {"file": f"Unsupported image format. Allowed formats: {allowed_list}"}
         )
 
-    return image.width, image.height
+    width = int(image.width)
+    height = int(image.height)
+
+    if width > max_upload_width:
+        raise BlogMediaUploadValidationError(
+            {"file": f"Image width exceeds maximum of {max_upload_width} pixels"}
+        )
+
+    if height > max_upload_height:
+        raise BlogMediaUploadValidationError(
+            {"file": f"Image height exceeds maximum of {max_upload_height} pixels"}
+        )
+
+    return width, height
 
 
 def create_blog_media_asset_from_request(

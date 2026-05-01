@@ -5,8 +5,8 @@ import os
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.module_catalog import get_module_names  # type: ignore[import-untyped]
-from quickscale_cli.commands.plan_command import plan  # type: ignore[import-untyped]
+from quickscale_cli.commands.plan_command import plan
+from quickscale_cli.module_catalog import get_module_names
 
 
 class TestPlanAddBasic:
@@ -82,6 +82,38 @@ docker:
             assert "allow_registration" in result.output
             assert "registration_enabled" in result.output
             assert "authentication_method" in result.output
+
+    def test_plan_add_aborts_before_rewrite_for_invalid_live_notifications_config(
+        self,
+    ) -> None:
+        """Add flow should not rewrite quickscale.yml with invalid live notifications."""
+        runner = CliRunner()
+        original_content = """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  notifications:
+    sender_name: QuickScale
+    sender_email: noreply@example.com
+    resend_domain: mail.example.com
+docker:
+  start: false
+"""
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(original_content)
+
+            result = runner.invoke(plan, ["--add"], input="auth\n")
+
+            assert result.exit_code != 0
+            assert "Notifications module configuration is incomplete" in result.output
+            assert "sender_email cannot use the default placeholder" in result.output
+            assert "planner refuses to rewrite quickscale.yml" in result.output
+            with open("quickscale.yml") as f:
+                assert f.read() == original_content
 
     def test_plan_add_with_state_only(self) -> None:
         """Test plan --add when only state exists (no config)"""

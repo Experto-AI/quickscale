@@ -50,18 +50,19 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.80.0 | ✅ Released | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
 | v0.81.0 | ✅ Released | Beta-site migration maintainer tooling | Maintainer-only fresh-first and checkpoint-first in-place beta-site migration workflows; archived in release note and changelog |
 | v0.82.0 | ✅ Released | Disaster recovery & environment promotion | Public `quickscale dr` capture/plan/execute/report workflows with `snapshot_id` lookup, resumable capture/execute, rollback pins, conservative env-var sync, and source-side media sync; archived in release note and changelog |
-| v0.83.0 | ✅ Closeout complete (unreleased) | Hardening release | Repo-wide hardening complete in-repo; post-closeout self-consistency review left narrow pre-tag follow-ups now tracked in Phase 7; publish-time artifacts deferred until tag/release |
+| v0.83.0 | 🟡 In progress (unreleased) | Hardening release | Phases 1-7 are complete in repo; Phase 8 and Phase 9 are the remaining pre-tag hardening backlog before tag/release artifacts |
 | v0.84.0 | 📋 Planned | Billing module | Stripe integration after v0.83.0 hardening closes the current platform and module contract gaps |
 | v0.85.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
 | v0.86.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and teams milestones |
 
 **Legend:**
-- ✅ = Completed, released, internally baselined, or unreleased closeout complete
+- ✅ = Completed, released, or internally baselined
+- 🟡 = In progress in repo but not yet tagged/released
 - 📋 = Planned/Not Started
 
 **Status:**
 - **Current release:** v0.82.0 is the published release
-- **Current in-repo closeout:** v0.83.0 hardening is complete in-repo, with narrow pre-tag follow-ups still tracked in Phase 7 before tag/release-time artifacts
+- **Current in-repo milestone:** v0.83.0 hardening has Phases 1-7 complete in repo; Phase 8 and Phase 9 are the remaining pre-tag backlog before tag/release-time artifacts
 - **Next planned feature milestone:** v0.84.0 billing module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.85.0 - auth, billing, teams modules complete on top of the notifications foundation
@@ -90,11 +91,11 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ### v0.83.0: Hardening Release
 
-**Status**: ✅ Closeout complete in repo; narrow pre-tag follow-ups remain (unreleased)
+**Status**: 🟡 Phases 1-7 complete in repo; Phase 8 and Phase 9 remain (unreleased)
 
 **Goal**: Close the repo-wide audit findings before shipping the next new public module release. This milestone hardens the current plan/apply surface, managed wiring behavior, shipped starter themes, module contract fidelity, metadata parity, and regression coverage so later billing and teams work lands on a stable documented base.
 
-**Current status (2026-04-08)**: The hardening implementation is complete in-repo, with Phases 1-6 finished and final validation already recorded via `make ci-e2e` and `make version-check`. The remaining work still tracked here is the narrow pre-tag Phase 7 follow-up ledger plus the Phase 8 hardening-review follow-ups added below; publish-time artifacts remain deferred until a real tag/release exists, so v0.82.0 remains the current published release.
+**Current status (2026-05-01)**: The hardening implementation now has Phases 1-7 complete in repo. Phase 7 closeout finished with the planner notifications rejection fix plus the already-landed docs, SSOT, test, and syntax follow-ups recorded below. Phase 8 and Phase 9 are now the remaining pre-tag hardening backlog, and publish-time artifacts remain deferred until a real tag/release exists, so v0.82.0 remains the current published release.
 
 **Completed scope retained as a pointer**
 
@@ -111,7 +112,7 @@ Detailed completed checklists for Phases 1-6 were removed from this section to k
 
 **Primary code grouping**: repo-wide validation, SSOT reconciliation, package/module documentation alignment, and milestone closeout tracking.
 
-**Current status (2026-04-08)**: Phase 7 remains plan-only, and no implementation has started from this preserved handoff state. The schema version contract is already fixed in code at `"1"`, the existing-project legacy-auth direction is resolved to fail hard, and the pending work below is the approved implementation/docs/test follow-up ledger. Phase 8 captures additional hardening-review findings from the original closeout pass. Phase 9 captures deep-review findings discovered in a subsequent systematic audit.
+**Current status (2026-05-01)**: Phase 7 is complete in repo. The final planner follow-up now hard-rejects invalid live notifications settings before existing-project add/reconfigure writes, including the state-only reconfigure path, and the previously landed schema/auth/docs/SSOT/test/syntax cleanup work remains in place. Phase 8 and Phase 9 are the remaining v0.83.0 pre-tag hardening backlog.
 
 **Resolved planning decisions retained here**
 
@@ -119,52 +120,29 @@ Detailed completed checklists for Phases 1-6 were removed from this section to k
 - Existing-project planner handling for config-only legacy auth desired config is a deliberate breaking change: reject it hard with remediation instead of adding planner-side canonicalization or backward-compatible prefills.
 - Desired-config rejection must happen at raw `validate_config` / module-option boundaries for every `quickscale.yml` consumer before `ModuleConfig` sanitization. Tolerance for legacy auth shapes remains only when loading already-written applied state and state-derived wiring.
 
-- [ ] Make existing-project planner reconfigure and add-modules flows fail hard for config-only legacy auth snapshots. `quickscale_cli/commands/plan_command.py` must reject those snapshots before module planning continues, emit actionable remediation telling operators which auth keys/value shapes to rewrite in `quickscale.yml`, and add dedicated regression coverage for the breaking path.
-- [ ] Fix the remaining analytics regression expectation drift in `quickscale_modules/analytics/tests/test_services.py`, which still asserts that the missing-setting path disables analytics even though runtime defaults now align on enabled-by-default.
-- [ ] Finish CLI desired-config auth boundary enforcement for shipped auth/module options at the raw validation boundary instead of relying on `ModuleConfig` sanitization or managed-wiring defaults. `quickscale.yml` schema validation still accepts stale or non-canonical auth inputs such as `registration: true` and boolean `email_verification: false`, while the shipped auth contract is `registration_enabled`, string-valued `email_verification`, `session_cookie_age`, and immutable `authentication_method`; reject unsupported keys and invalid contract values across all `quickscale.yml` consumers, including the explicit utility readers in `quickscale_cli/utils/project_identity.py`, `quickscale_cli/utils/module_wiring_manager.py`, and `quickscale_cli/utils/project_manager.py`, before sanitization can hide the drift, and add regression coverage so stale config snapshots cannot silently fall back to defaults.
-- [ ] Make the notifications planner/apply boundary reject the `noreply@example.com` `sender_email` placeholder whenever live Resend delivery is targeted. The manifest description is already correct, but the current validation path accepts any syntactically valid email, so production-targeted config can still fall through to provider/runtime failure and the current tests preserve that gap.
-- [ ] Align docs and SSOT to the fixed schema-version contract `"1"` and the resolved fail-hard auth boundary. The remaining drift is documentation/examples only; stale technical docs that still need explicit alignment include `docs/technical/plan-apply-system.md` and `docs/technical/user_manual.md`.
-- [ ] Reconcile `docs/technical/decisions.md` with the shipped module API surface. The architecture SSOT still says modules must not expose HTTP APIs, but forms, blog, listings, and notifications ship routed endpoints and CRM docs advertise session-authenticated module APIs; narrow or replace the blanket prohibition so review guidance matches the approved shipped contract.
-- [ ] Replace the remaining comma-form `except A, B:` multi-exception syntax across active CLI/core/module files. A refreshed active-source sweep now identifies at least 17 syntax-error sites, not the older 11-file list alone: `quickscale_modules/blog/src/quickscale_modules_blog/views.py:66`, `quickscale_core/src/quickscale_core/utils/git_utils.py:25`, `quickscale_core/src/quickscale_core/settings_manager.py:210`, `quickscale_modules/forms/src/quickscale_modules_forms/models.py:20`, `quickscale_modules/forms/src/quickscale_modules_forms/migrations/0002_seed_forms.py:11`, `quickscale_modules/backups/src/quickscale_modules_backups/admin.py:431`, `quickscale_cli/src/quickscale_cli/utils/docker_utils.py:74`, `quickscale_cli/src/quickscale_cli/utils/docker_utils.py:107`, `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:236`, `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:759`, `quickscale_cli/src/quickscale_cli/notifications_contract.py:266`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:33`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:77`, `quickscale_cli/src/quickscale_cli/social_contract.py:308`, `quickscale_cli/src/quickscale_cli/commands/development_commands.py:550`, `quickscale_cli/src/quickscale_cli/commands/module_config.py:1166`, `quickscale_cli/src/quickscale_cli/commands/status_command.py:59`.
+- [x] Existing-project planner reconfigure and add-modules flows now fail hard for config-only legacy auth snapshots instead of rewriting `quickscale.yml`, with actionable remediation and dedicated regression coverage in place.
+- [x] The analytics regression expectation in `quickscale_modules/analytics/tests/test_services.py` now matches the shipped enabled-by-default behavior when the setting is missing.
+- [x] CLI desired-config auth boundary enforcement for shipped auth/module options now happens at the raw validation boundary across `quickscale.yml` consumers before `ModuleConfig` sanitization can hide drift, with regression coverage protecting the strict contract.
+- [x] The notifications planner/apply boundary now rejects the `noreply@example.com` `sender_email` placeholder whenever live Resend delivery is targeted, keeping planner/apply validation aligned with the shipped manifest contract.
+- [x] `docs/technical/plan-apply-system.md` and `docs/technical/user_manual.md` are aligned to schema version `"1"` and the fail-hard auth guidance.
+- [x] `docs/technical/decisions.md` now uses the narrowed module-API wording that matches the shipped routed endpoint surface.
+- [x] A refreshed active-source sweep no longer finds comma-form `except A, B:` multi-exception syntax in `quickscale_cli/src`, `quickscale_core/src`, or `quickscale_modules/*/src`.
 
-**Phase 7 execution handoff plan (2026-04-08)**
+**Phase 7 completion record (2026-05-01)**
 
-Resume the remaining pre-tag work in the following slices so the next implementation pass can start from preserved planning state instead of redoing discovery. No implementation has started from this preserved handoff state:
+Phase 7 no longer has an execution handoff. The remaining unreleased v0.83.0 backlog now starts at Phase 8.
 
-1. **Schema version contract lock-in**
-   - Keep the top-level `quickscale.yml` and `.quickscale/state.yml` version canonical at `"1"`; the code contract is already fixed.
-   - Align roadmap wording, SSOT references, and regression expectations around that existing contract instead of reopening parser/writer behavior.
-   - Defer stale technical-doc example rewrites in `plan-apply-system.md` and `user_manual.md` until the auth-boundary slice lands, so those docs do not end up half-normalized.
-   - Validation: targeted CLI schema/state regressions plus touched-doc example sweep.
-2. **Auth boundary hardening with explicit planner hard-fail UX**
-   - Treat config-only legacy auth desired config as a deliberate breaking path in existing-project `plan_command.py` flows; do not add planner-side canonicalization or backward-compatible prefills.
-   - Reject stale auth keys and invalid canonical values at raw `validate_config` / module-option readers before `ModuleConfig` sanitization across all `quickscale.yml` consumers, including `quickscale_cli/utils/project_identity.py`, `quickscale_cli/utils/module_wiring_manager.py`, and `quickscale_cli/utils/project_manager.py`.
-   - Preserve tolerance for legacy auth shapes only in applied-state loading and state-derived wiring.
-   - Ship actionable remediation output plus dedicated reconfigure/add-modules regressions for config-only legacy auth snapshots.
-   - Validation: schema/apply regressions plus planner reconfigure/add-modules coverage.
-3. **Notifications live-delivery placeholder rejection**
-   - Reuse the raw desired-config boundary seam from Slice 2.
-   - Reject `noreply@example.com` only when live Resend delivery is actually targeted, while keeping console-safe defaults valid.
-   - Add runtime defense-in-depth so direct settings drift still fails loudly at send time.
-   - Validation: CLI apply/config regressions and notifications service tests.
-4. **Analytics regression expectation cleanup**
-   - Update the analytics tests to match the shipped enabled-by-default behavior when `QUICKSCALE_ANALYTICS_ENABLED` is missing.
-   - Treat this as test-only unless the assertion review reveals a real runtime drift.
-   - Validation: analytics service tests.
-5. **Docs and SSOT reconciliation**
-   - After slices 1-4 settle, normalize the remaining `quickscale.yml` and `.quickscale/state.yml` examples in `plan-apply-system.md` and `user_manual.md`.
-   - Narrow the blanket module-API prohibition in `decisions.md` so it matches shipped routed endpoints across forms, blog, listings, notifications, and CRM.
-   - Cross-check `module-extension.md` during the docs pass so architecture guidance stays consistent.
-   - Validation: source-to-doc pass against shipped routes, canonical config examples, and the resolved fail-hard auth guidance.
-6. **Syntax sweep and final gates**
-   - Replace the remaining comma-form multi-exception syntax across active CLI/core/module files, using the refreshed 17-site active-source ledger in the checklist above as the minimum seed list rather than the older 11-file snapshot.
-   - Validation: targeted `python3 -m py_compile`, touched pytest files, then `make lint`, `make typecheck`, `make test`, `make version-check`, and `make ci-e2e` when environment prerequisites are available.
-
-**Dependency note**: Slice 1 locks the fixed `"1"` contract wording/tests before the broader docs pass in Slice 5. Slice 2 is the intentional breaking change: planner hard rejection and remediation must land before docs/examples normalize around the strict auth boundary. Slice 3 should reuse the boundary seam from Slice 2. Slice 6 stays last so syntax-only churn does not obscure behavioral review.
+1. Existing-project planner add/reconfigure flows now abort before rewriting `quickscale.yml` when live notifications config is incomplete or still using the production placeholder, including the state-only reconfigure path.
+2. Planner regression coverage now includes `quickscale_cli/tests/test_plan_add.py::test_plan_add_aborts_before_rewrite_for_invalid_live_notifications_config` and `quickscale_cli/tests/test_plan_reconfigure.py::test_plan_reconfigure_state_only_aborts_before_write_for_invalid_live_notifications`; apply/module-config notifications parity coverage also passed.
+3. `docs/technical/plan-apply-system.md` and `docs/technical/user_manual.md` already reflect schema version `"1"` and canonical auth guidance, so the docs/SSOT cleanup tracked in this phase is closed.
+4. `docs/technical/decisions.md` already carries the narrowed module-API wording, and `quickscale_modules/analytics/tests/test_services.py` now matches the shipped enabled-by-default analytics behavior when the setting is absent.
+5. A refreshed active-source sweep no longer finds comma-form `except A, B:` syntax in `quickscale_cli/src`, `quickscale_core/src`, or `quickscale_modules/*/src`.
+6. v0.82.0 remains the current published release; Phase 8 and Phase 9 are now the remaining v0.83.0 pre-tag backlog.
 
 **Recorded validation context**
 
-- Final validation evidence already recorded for the completed closeout pass: `make ci-e2e` and `make version-check`.
+- Phase 1-6 closeout validation remains the previously recorded `make ci-e2e` and `make version-check` evidence.
+- Phase 7 completion evidence includes the planner add/reconfigure regressions for invalid live notifications config plus passed apply/module-config notifications parity coverage.
 - The current published release pointer stays at v0.82.0 until a v0.83.0 tag/release exists.
 
 #### Phase 8: Hardening Review Follow-Ups
