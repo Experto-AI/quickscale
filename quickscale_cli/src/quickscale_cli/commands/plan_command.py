@@ -19,6 +19,10 @@ from quickscale_cli.module_catalog import (
     get_module_entries,
     get_module_readiness_reason,
 )
+from quickscale_cli.notifications_contract import (
+    notifications_production_targeted,
+    validate_notifications_module_options,
+)
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     DockerConfig,
@@ -354,6 +358,46 @@ def _abort_for_invalid_existing_config(config_path: Path, error: Exception) -> N
     raise click.Abort()
 
 
+def _validate_existing_project_notifications_or_abort(
+    config: QuickScaleConfig,
+) -> None:
+    """Abort existing-project planner flows on invalid notifications settings."""
+    notifications_config = config.modules.get("notifications")
+    if notifications_config is None:
+        return
+
+    notifications_options = notifications_config.options or {}
+    notification_issues = validate_notifications_module_options(notifications_options)
+    if not notification_issues:
+        return
+
+    click.secho(
+        "\n❌ Notifications module configuration is incomplete for this planner update:",
+        fg="red",
+        err=True,
+        bold=True,
+    )
+    for issue in notification_issues:
+        click.echo(f"  • {issue}", err=True)
+
+    if notifications_production_targeted(notifications_options):
+        click.echo(
+            "\n💡 This configuration targets live Resend delivery, so planner "
+            "refuses to rewrite quickscale.yml until the missing notifications "
+            "settings are fixed. Re-run 'quickscale plan --reconfigure "
+            "--configure-modules' or edit quickscale.yml first.",
+            err=True,
+        )
+    else:
+        click.echo(
+            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or "
+            "edit quickscale.yml to correct the notifications values.",
+            err=True,
+        )
+
+    raise click.Abort()
+
+
 def _detect_existing_project(
     *,
     strict_config_validation: bool = False,
@@ -625,6 +669,8 @@ def _handle_add_modules(
         docker=docker_config,
     )
 
+    _validate_existing_project_notifications_or_abort(config)
+
     # Generate YAML
     yaml_content = generate_yaml(config)
 
@@ -785,6 +831,8 @@ def _handle_reconfigure(
             create_superuser=docker_create_superuser,
         ),
     )
+
+    _validate_existing_project_notifications_or_abort(config)
 
     # Generate YAML
     yaml_content = generate_yaml(config)

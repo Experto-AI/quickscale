@@ -12,7 +12,7 @@ from quickscale_cli.commands.plan_command import _get_project_info_for_reconfig,
 class TestPlanReconfigureBasic:
     """Basic tests for plan --reconfigure command"""
 
-    def test_plan_reconfigure_not_in_project(self):
+    def test_plan_reconfigure_not_in_project(self) -> None:
         """Test plan --reconfigure when not in a QuickScale project"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -21,7 +21,7 @@ class TestPlanReconfigureBasic:
             assert result.exit_code != 0
             assert "Not in a QuickScale project" in result.output
 
-    def test_plan_reconfigure_help(self):
+    def test_plan_reconfigure_help(self) -> None:
         """Test that --reconfigure flag is documented in help"""
         runner = CliRunner()
         result = runner.invoke(plan, ["--help"])
@@ -30,7 +30,7 @@ class TestPlanReconfigureBasic:
         assert "--reconfigure" in result.output
         assert "--configure-modules" in result.output
 
-    def test_get_project_info_fallback_uses_react_default(self):
+    def test_get_project_info_fallback_uses_react_default(self) -> None:
         """Fallback project info should use showcase_react when state/config missing."""
         project_slug, package_name, theme = _get_project_info_for_reconfig(
             state=None,
@@ -42,7 +42,7 @@ class TestPlanReconfigureBasic:
         assert package_name == "fallback_project"
         assert theme == "showcase_react"
 
-    def test_plan_reconfigure_aborts_for_invalid_auth_desired_config(self):
+    def test_plan_reconfigure_aborts_for_invalid_auth_desired_config(self) -> None:
         """Reconfigure should fail hard on stale auth desired config in quickscale.yml."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -75,7 +75,7 @@ docker:
 class TestPlanReconfigureWithState:
     """Tests for --reconfigure with state file"""
 
-    def test_plan_reconfigure_shows_project_info(self):
+    def test_plan_reconfigure_shows_project_info(self) -> None:
         """Test that --reconfigure shows current project info"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -102,7 +102,7 @@ class TestPlanReconfigureWithState:
             assert "testapp" in result.output
             assert "showcase_html" in result.output
 
-    def test_plan_reconfigure_shows_theme_locked(self):
+    def test_plan_reconfigure_shows_theme_locked(self) -> None:
         """Test that --reconfigure shows theme is locked"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -127,11 +127,52 @@ class TestPlanReconfigureWithState:
 
             assert "locked" in result.output.lower()
 
+    def test_plan_reconfigure_state_only_aborts_before_write_for_invalid_live_notifications(
+        self,
+    ) -> None:
+        """State-only reconfigure should fail before reconstructing quickscale.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "notifications": {
+                                "version": None,
+                                "commit_sha": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {
+                                    "sender_name": "QuickScale",
+                                    "sender_email": "noreply@example.com",
+                                    "resend_domain": "mail.example.com",
+                                },
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            result = runner.invoke(plan, ["--reconfigure"], input="n\nn\n")
+
+            assert result.exit_code != 0
+            assert "Notifications module configuration is incomplete" in result.output
+            assert "sender_email cannot use the default placeholder" in result.output
+            assert not Path("quickscale.yml").exists()
+
 
 class TestPlanReconfigureShowsModules:
     """Tests for module display in reconfigure"""
 
-    def test_plan_reconfigure_shows_installed_modules(self):
+    def test_plan_reconfigure_shows_installed_modules(self) -> None:
         """Test that --reconfigure shows installed modules"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -176,7 +217,7 @@ docker:
 
             assert "auth" in result.output
 
-    def test_plan_reconfigure_shows_pending_modules(self):
+    def test_plan_reconfigure_shows_pending_modules(self) -> None:
         """Test that --reconfigure shows modules pending apply"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -228,7 +269,7 @@ docker:
 class TestPlanReconfigureDocker:
     """Tests for Docker reconfiguration"""
 
-    def test_plan_reconfigure_docker_options(self):
+    def test_plan_reconfigure_docker_options(self) -> None:
         """Test that --reconfigure allows Docker option changes"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -262,7 +303,7 @@ class TestPlanReconfigureDocker:
 class TestPlanReconfigureAddModules:
     """Tests for adding modules during reconfigure"""
 
-    def test_plan_reconfigure_add_module(self):
+    def test_plan_reconfigure_add_module(self) -> None:
         """Test adding a module during reconfigure"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -293,7 +334,7 @@ class TestPlanReconfigureAddModules:
 
     def test_plan_reconfigure_rejects_placeholder_modules_with_experimental_picker(
         self,
-    ):
+    ) -> None:
         """Billing and teams stay visible-only in reconfigure add-module flow."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -338,7 +379,7 @@ docker:
 class TestPlanReconfigureSavesConfig:
     """Tests for config saving"""
 
-    def test_plan_reconfigure_saves_config(self):
+    def test_plan_reconfigure_saves_config(self) -> None:
         """Test that --reconfigure saves updated config"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -368,7 +409,7 @@ class TestPlanReconfigureSavesConfig:
                 content = f.read()
             assert "testapp" in content
 
-    def test_plan_reconfigure_cancel(self):
+    def test_plan_reconfigure_cancel(self) -> None:
         """Test canceling --reconfigure doesn't save config"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -397,7 +438,7 @@ class TestPlanReconfigureSavesConfig:
             if result.exit_code != 0:
                 assert not os.path.exists("quickscale.yml")
 
-    def test_plan_reconfigure_preserves_existing_module_options(self):
+    def test_plan_reconfigure_preserves_existing_module_options(self) -> None:
         """Reconfigure should round-trip existing module options when not re-editing them."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -451,7 +492,7 @@ docker:
                 content = f.read()
             assert "public_base_url: https://cdn.example.com/media" in content
 
-    def test_plan_reconfigure_prunes_legacy_storage_custom_domain(self):
+    def test_plan_reconfigure_prunes_legacy_storage_custom_domain(self) -> None:
         """Reconfigure should remove legacy storage custom_domain options on save."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -508,7 +549,7 @@ docker:
             assert "custom_domain" not in content
             assert "public_base_url: https://cdn.example.com/media" in content
 
-    def test_plan_reconfigure_configure_modules_updates_storage_options(self):
+    def test_plan_reconfigure_configure_modules_updates_storage_options(self) -> None:
         """Reconfigure should allow interactive storage option updates when requested."""
         runner = CliRunner()
         with runner.isolated_filesystem():
