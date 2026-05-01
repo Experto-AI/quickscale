@@ -207,65 +207,65 @@ Each task below is an independent edit to one file. They can be done in any orde
 
 #### `quickscale/adaptive.rules.md`
 
-- [ ] Remove the `- **Important context (always read)**:` block and its `quickscale/README.md` and `quickscale/pyproject.toml` list items from `# Shared`.
-- [ ] Add the meta-package identity note to `# Shared`: state that this is the installation meta-package with no implementation code, that it only declares the combined core+CLI dependency bundle, and that `pyproject.toml` version pins are the only meaningful changes here.
-- [ ] Add the import-shim guard to `# Shared`: state that changes under `quickscale/src/` affect only the import shim, so application logic must not be added there.
-- [ ] Add to `# Implement`: scope guard stating that changes here are almost always version pin updates in `pyproject.toml`, and that anything beyond that should prompt a scope question.
-- [ ] Add to `# Quality Gate`: note that this package has minimal test coverage by design because it contains no implementation to test.
+- [x] Remove the `- **Important context (always read)**:` block and its `quickscale/README.md` and `quickscale/pyproject.toml` list items from `# Shared`.
+- [x] Add the meta-package identity note to `# Shared`: state that this is the installation meta-package with no implementation code, that it only declares the combined core+CLI dependency bundle, and that `pyproject.toml` version pins are the only meaningful changes here.
+- [x] Add the import-shim guard to `# Shared`: state that changes under `quickscale/src/` affect only the import shim, so application logic must not be added there.
+- [x] Add to `# Implement`: scope guard stating that changes here are almost always version pin updates in `pyproject.toml`, and that anything beyond that should prompt a scope question.
+- [x] Add to `# Quality Gate`: note that this package has minimal test coverage by design because it contains no implementation to test.
 
 #### `quickscale_core/adaptive.rules.md`
 
-- [ ] Remove the `- **Important context (always read)**:` block and its README/pyproject list items from `# Shared`.
-- [ ] Add to `# Shared`: source path (`quickscale_core/src/quickscale_core/`), identity as the scaffolding engine, and the consequence that changes here affect every generated project's output.
-- [ ] Add to `# Shared`: test location (`quickscale_core/tests/`) and the instruction to run `make test-unit` to validate.
-- [ ] Add to `# Implement`: template-change contract rule — edits in `src/quickscale_core/generator/` are user-facing contract changes and require regeneration testing (fresh `plan`/`apply` cycle).
-- [ ] Add to `# Quality Gate`: post-template-change verification rule — after any template change, confirm generated project structure matches `docs/technical/generated_project_structure.md`.
+- [x] Remove the `- **Important context (always read)**:` block and its README/pyproject list items from `# Shared`.
+- [x] Add to `# Shared`: source path (`quickscale_core/src/quickscale_core/`), identity as the scaffolding engine, and the consequence that changes here affect every generated project's output.
+- [x] Add to `# Shared`: test location (`quickscale_core/tests/`) and the instruction to run `make test-unit` to validate.
+- [x] Add to `# Implement`: template-change contract rule — edits in `src/quickscale_core/generator/` are user-facing contract changes and require regeneration testing (fresh `plan`/`apply` cycle).
+- [x] Add to `# Quality Gate`: post-template-change verification rule — after any template change, confirm generated project structure matches `docs/technical/generated_project_structure.md`.
 
 #### `quickscale_cli/adaptive.rules.md`
 
-- [ ] Remove the `- **Important context (always read)**:` block and its README/pyproject list items from `# Shared`.
-- [ ] Add to `# Shared`: source path (`quickscale_cli/src/quickscale_cli/`), identity as the command surface only, and the boundary rule that business logic belongs in `quickscale_core`.
-- [ ] Add to `# Shared`: the command group taxonomy (lifecycle, disaster recovery, local dev, deployment, module workflows) so the agent understands the existing surface without reading the README.
-- [ ] Add to `# Shared`: test location (`quickscale_cli/tests/`).
-- [ ] Add to `# Implement`: placement rule — new commands belong here, new generation or scaffolding logic belongs in `quickscale_core`; do not put template logic in CLI handlers.
-- [ ] Add to `# Plan`: scope boundary reminder — CLI work is command wiring, argument parsing, and user-facing output; `quickscale_core` does the heavy lifting.
+- [x] Remove the `- **Important context (always read)**:` block and its README/pyproject list items from `# Shared`.
+- [x] Add to `# Shared`: source path (`quickscale_cli/src/quickscale_cli/`), identity as the command surface only, and the boundary rule that business logic belongs in `quickscale_core`.
+- [x] Add to `# Shared`: the command group taxonomy (lifecycle, disaster recovery, local dev, deployment, module workflows) so the agent understands the existing surface without reading the README.
+- [x] Add to `# Shared`: test location (`quickscale_cli/tests/`).
+- [x] Add to `# Implement`: placement rule — new commands belong here, new generation or scaffolding logic belongs in `quickscale_core`; do not put template logic in CLI handlers.
+- [x] Add to `# Plan`: scope boundary reminder — CLI work is command wiring, argument parsing, and user-facing output; `quickscale_core` does the heavy lifting.
 
 #### `quickscale_modules/adaptive.rules.md`
 
-- [ ] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
-- [ ] Add to `# Shared`: identity statement — this is the maintainer-side module inventory, not generated into user projects by default.
-- [ ] Add to `# Shared`: the `module.yml` ownership rule — it is the canonical source for shipped version and configuration metadata; `pyproject.toml` version and exported `__version__` must match the manifest.
-- [ ] Add to `# Shared`: distribution rule — modules reach generated projects via the git-subtree workflow; do not copy module files manually.
-- [ ] Add to `# Shared`: the packaged vs placeholder distinction, listing which modules are fully packaged (auth, blog, crm, forms, listings, analytics, social, storage, backups) and which are placeholder-only (billing, teams).
-- [ ] Add to `# Implement`: `module.yml` sync rule — update `module.yml` in the same change as any version bump.
-- [ ] Add to `# Quality Gate`: module-scoped test target instruction — use `make MODULE=<name> test-unit -- --modules` for module-scoped validation instead of the root test suite.
+- [x] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
+- [x] Add to `# Shared`: identity statement — this is the maintainer-side module inventory, not generated into user projects by default.
+- [x] Add to `# Shared`: the `module.yml` ownership rule — it is the canonical source for shipped version and configuration metadata; `pyproject.toml` version and exported `__version__` must match the manifest.
+- [x] Add to `# Shared`: distribution rule — modules reach generated projects via the git-subtree workflow; do not copy module files manually.
+- [x] Add to `# Shared`: the packaged vs placeholder distinction, listing which modules are fully packaged (auth, blog, crm, forms, listings, analytics, social, storage, backups) and which are placeholder-only (billing, teams).
+- [x] Add to `# Implement`: `module.yml` sync rule — update `module.yml` in the same change as any version bump.
+- [x] Add to `# Quality Gate`: module-scoped test target instruction — use `make MODULE=<name> test-unit -- --modules` for module-scoped validation instead of the root test suite.
 
 #### `scripts/adaptive.rules.md`
 
-- [ ] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
-- [ ] Add to `# Shared`: Makefile-first rule — always prefer root `make` targets; call scripts directly only when no matching target exists or a script header says otherwise.
-- [ ] Add to `# Shared`: working directory constraint — scripts expect to be run from the repository root; repo-relative paths break when run from a subdirectory.
-- [ ] Add to `# Shared`: redundancy guard — do not add a new script if a `make` target already covers the same workflow.
-- [ ] Add to `# Implement`: Makefile-first automation rule — new automation belongs in the Makefile first; add a script only when the logic is too complex for a make target.
-- [ ] Add to `# Plan`: discovery step — check whether an existing make target or script already covers the need before designing a new one; reference `scripts/README.md` for the preferred-command map.
+- [x] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
+- [x] Add to `# Shared`: Makefile-first rule — always prefer root `make` targets; call scripts directly only when no matching target exists or a script header says otherwise.
+- [x] Add to `# Shared`: working directory constraint — scripts expect to be run from the repository root; repo-relative paths break when run from a subdirectory.
+- [x] Add to `# Shared`: redundancy guard — do not add a new script if a `make` target already covers the same workflow.
+- [x] Add to `# Implement`: Makefile-first automation rule — new automation belongs in the Makefile first; add a script only when the logic is too complex for a make target.
+- [x] Add to `# Plan`: discovery step — check whether an existing make target or script already covers the need before designing a new one; reference `scripts/README.md` for the preferred-command map.
 
 #### `docs/adaptive.rules.md`
 
-- [ ] Remove the `- **Important context (always read)**:` block and its `docs/index.md` list item from `# Shared`.
-- [ ] Add to `# Shared`: the two-audience rule — this directory serves human contributors and AI hydration; they have separate documents and must not be mixed.
-- [ ] Add to `# Shared`: the human-first document list (README.md, START_HERE.md, contrib/contributing.md, contrib/shared/README.md) with the instruction not to optimize those for AI consumption.
-- [ ] Add to `# Shared`: the AI hydration document roles — `ai_context.md` is the compact AI baseline, `decisions.md` is the policy authority, other technical docs are role-specific includes governed by `ai_hydration_topology.md`.
-- [ ] Add to `# Implement`: audience-decision rule — before adding a new doc, classify it as human-first or AI hydration context, add it to the right category, and update `ai_hydration_topology.md` if it changes hydration.
-- [ ] Add to `# Change Review`: governance gate — doc changes that touch `adaptive.rules.md`, `ai_context.md`, or `ai_hydration_topology.md` require a hydration-metrics check per the governance requirements in `ai_hydration_topology.md`.
+- [x] Remove the `- **Important context (always read)**:` block and its `docs/index.md` list item from `# Shared`.
+- [x] Add to `# Shared`: the two-audience rule — this directory serves human contributors and AI hydration; they have separate documents and must not be mixed.
+- [x] Add to `# Shared`: the human-first document list (README.md, START_HERE.md, contrib/contributing.md, contrib/shared/README.md) with the instruction not to optimize those for AI consumption.
+- [x] Add to `# Shared`: the AI hydration document roles — `ai_context.md` is the compact AI baseline, `decisions.md` is the policy authority, other technical docs are role-specific includes governed by `ai_hydration_topology.md`.
+- [x] Add to `# Implement`: audience-decision rule — before adding a new doc, classify it as human-first or AI hydration context, add it to the right category, and update `ai_hydration_topology.md` if it changes hydration.
+- [x] Add to `# Change Review`: governance gate — doc changes that touch `adaptive.rules.md`, `ai_context.md`, or `ai_hydration_topology.md` require a hydration-metrics check per the governance requirements in `ai_hydration_topology.md`.
 
 #### `examples/adaptive.rules.md`
 
-- [ ] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
-- [ ] Add to `# Shared`: examples identity — reference material, not authoritative product scope, not generated into projects by default.
-- [ ] Add to `# Shared`: usage rule — treat examples as patterns that can be selectively copied, not as tested components.
-- [ ] Add to `# Shared`: scope guard — do not add examples that imply features or constraints that are not in the main product.
-- [ ] Add to `# Implement`: promotion rule — if an example grows into a tested module, it belongs in `quickscale_modules/`, not here.
-- [ ] Add to `# Change Review`: contract consistency check — new examples must not contradict the generated project contract in `docs/technical/generated_project_structure.md`.
+- [x] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
+- [x] Add to `# Shared`: examples identity — reference material, not authoritative product scope, not generated into projects by default.
+- [x] Add to `# Shared`: usage rule — treat examples as patterns that can be selectively copied, not as tested components.
+- [x] Add to `# Shared`: scope guard — do not add examples that imply features or constraints that are not in the main product.
+- [x] Add to `# Implement`: promotion rule — if an example grows into a tested module, it belongs in `quickscale_modules/`, not here.
+- [x] Add to `# Change Review`: contract consistency check — new examples must not contradict the generated project contract in `docs/technical/generated_project_structure.md`.
 
 ---
 
