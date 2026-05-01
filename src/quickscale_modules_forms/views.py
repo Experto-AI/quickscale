@@ -46,6 +46,17 @@ from quickscale_modules_forms.throttles import FormSubmitThrottle
 
 logger = logging.getLogger(__name__)
 
+_SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _neutralize_csv_cell(value: Any) -> str:
+    """Prefix spreadsheet formula cells so exports stay inert when opened."""
+    text = "" if value is None else str(value)
+    stripped = text.lstrip()
+    if stripped and stripped[0] in _SPREADSHEET_FORMULA_PREFIXES:
+        return f"'{text}"
+    return text
+
 
 def _capture_submission_analytics(submission: FormSubmission, request: Request) -> None:
     """Best-effort analytics hook for successful public form submissions."""
@@ -326,7 +337,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
             "is_spam",
             "ip_address",
         ] + all_field_names
-        writer.writerow(header)
+        writer.writerow([_neutralize_csv_cell(cell) for cell in header])
 
         # Write data rows
         for submission in submissions:
@@ -338,7 +349,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
                 submission.is_spam,
                 submission.ip_address or "",
             ] + [values_by_name.get(name, "") for name in all_field_names]
-            writer.writerow(row)
+            writer.writerow([_neutralize_csv_cell(cell) for cell in row])
 
         from datetime import date
 
