@@ -1,7 +1,7 @@
 # Context Hydration Refactor Review And Implementation Plan
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Planning** → Context Hydration Refactor
-> **Related docs**: [adaptive.rules.md](../../adaptive.rules.md) | [Technical Decisions](../technical/decisions.md) | [Scaffolding](../technical/scaffolding.md) | [Contributing](../contrib/contributing.md)
+ > **Related docs**: [adaptive.rules.md](../../adaptive.rules.md) | [Technical Decisions](../technical/decisions.md) | [Scaffolding](../technical/scaffolding.md) | [Contributing](../contrib/contributing.md) | [AI Hydration Topology And Governance](../technical/ai_hydration_topology.md)
 
 ## Goal
 
@@ -454,6 +454,7 @@ Success should mean all of the following:
 - Rollout is reversible without reopening the entire documentation strategy.
 - Future contributors have a maintenance contract for AI-facing summary files and includes.
 
+<a id="current-state-snapshot"></a>
 ## Phase 0 Baseline Capture (Completed 2026-05-01)
 
 Hydration metrics were captured before any file edits in this phase using the current MCP include graph and the major role sections.
@@ -574,31 +575,33 @@ This implementation plan is designed for phased handoff. Each item references th
 
 Source state note as of 2026-05-01: the shared-baseline swap and most role rewiring landed during phases 2-4 while those include trims were being applied, so the checklist below reflects the current source state rather than only work deferred to a future phase-5 pass.
 
+Final rationale, topology inventory, validation snapshot, rollback notes, and governance rules now live in [AI Hydration Topology And Governance](../technical/ai_hydration_topology.md).
+
 - [x] Replace the current broad `# Shared` include list with the new compact AI baseline and only the smallest necessary inline notes. See [Shared Baseline For All AI Roles](#shared-baseline-for-all-ai-roles).
 - [x] Restrict structure-heavy context to `plan`, `codebase-discovery`, and `implement`. See [Role-Specific Context Model](#role-specific-context-model).
 - [x] Keep `external-research` on the compact baseline unless a concrete research workflow proves it needs more. See [Human Router Documents Are Valuable, But Not As Default AI Inputs](#7-human-router-documents-are-valuable-but-not-as-default-ai-inputs).
 - [x] Keep `quality-gate` on the compact baseline plus `validation_policy.md`, testing, and debugging guidance only. See [Role-Specific Context Model](#role-specific-context-model).
 - [x] Keep `change-review` on the compact baseline plus review guidance only. See [Role-Specific Context Model](#role-specific-context-model).
-- [ ] Record the final include rationale in comments or in a short companion note so future edits do not drift back toward broad whole-file inclusion. See [Best-Practice Constraints For This Refactor](#best-practice-constraints-for-this-refactor).
-- [ ] Create a simple role-to-input inventory after rewiring so future edits can be reviewed against the intended topology. See [Topology Controls](#3-topology-controls).
+- [x] Record the final include rationale in comments or in a short companion note so future edits do not drift back toward broad whole-file inclusion. See [Final Include Rationale](../technical/ai_hydration_topology.md#final-include-rationale).
+- [x] Create a simple role-to-input inventory after rewiring so future edits can be reviewed against the intended topology. See [Role-To-Input Inventory](../technical/ai_hydration_topology.md#role-to-input-inventory).
 
 ### Phase 6 - Validation And Rollout
 
-- [ ] Re-run hydration for all major sections after the refactor and compare the new size to the Phase 0 baseline. See [Current State Snapshot](#current-state-snapshot).
-- [ ] Spot-check each section for missing authority, workflow, validation, or role-specific execution guidance. The goal is smaller context, not weaker context. See [What Good Looks Like After The Refactor](#what-good-looks-like-after-the-refactor).
-- [ ] Review the include graph for broken links and redundant includes. See [Whole-File Includes Make Large Docs Expensive](#3-whole-file-includes-make-large-docs-expensive).
-- [ ] Confirm that human docs remain coherent and useful after AI-focused trimming. See [Document-By-Document Assessment](#document-by-document-assessment).
-- [ ] Remove any now-obsolete duplicated text only after the new include strategy is validated. See [Authority And Precedence Statements Are Repeated Too Many Times](#2-authority-and-precedence-statements-are-repeated-too-many-times).
-- [ ] Record before/after results in a compact validation table so the rollout is auditable by future contributors. See [Hardening Lens](#hardening-lens).
-- [ ] Define a rollback note describing which include changes can be reverted independently if one role regresses. See [Recovery And Rollback Controls](#6-recovery-and-rollback-controls).
+- [x] Re-run hydration for all major sections after the refactor and compare the new size to the Phase 0 baseline. See [Post-Refactor Validation Snapshot](../technical/ai_hydration_topology.md#post-refactor-validation-snapshot).
+- [x] Spot-check each section for missing authority, workflow, validation, or role-specific execution guidance. The goal is smaller context, not weaker context. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
+- [x] Review the include graph for broken links and redundant includes. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
+- [x] Confirm that human docs remain coherent and useful after AI-focused trimming. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
+- [x] Validate whether any now-obsolete duplicated text remained after the new include strategy settled; this pass confirmed that no additional in-scope duplicate cleanup was needed beyond the phase-4 guide trims. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
+- [x] Record before/after results in a compact validation table so the rollout is auditable by future contributors. See [Post-Refactor Validation Snapshot](../technical/ai_hydration_topology.md#post-refactor-validation-snapshot).
+- [x] Define a rollback note describing which include changes can be reverted independently if one role regresses. See [Rollback Notes](../technical/ai_hydration_topology.md#rollback-notes).
 
 ### Phase 7 - Ongoing Hardening And Governance
 
-- [ ] Assign a maintenance owner or review cadence for AI hydration files and include topology changes. See [Governance Controls](#4-governance-controls).
-- [ ] Require future `adaptive.rules.md` or AI-baseline edits to include a short rationale and updated hydration metrics for affected roles. See [Governance Controls](#4-governance-controls).
-- [ ] Periodically review whether any shared include has become role-specific or any role-specific include has become obsolete. See [Topology Controls](#3-topology-controls).
-- [ ] Keep the human-versus-AI document boundary explicit so future cleanup does not collapse the two audiences back together. See [Overall Assessment](#overall-assessment).
-- [ ] Revisit the size budgets after a few iterations and tighten or relax them based on actual hydration quality rather than guesswork. See [Budget Controls](#1-budget-controls).
+- [x] Assign a maintenance owner and review cadence for AI hydration files and include topology changes. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
+- [x] Require future `adaptive.rules.md` or AI-baseline edits to include a short rationale and updated hydration metrics for affected roles. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
+- [x] Periodically review whether any shared include has become role-specific or any role-specific include has become obsolete. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
+- [x] Keep the human-versus-AI document boundary explicit so future cleanup does not collapse the two audiences back together. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
+- [x] Revisit the size budgets after a few iterations and tighten or relax them based on actual hydration quality rather than guesswork. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
 
 ## Suggested Handoff Order
 

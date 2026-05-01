@@ -3,6 +3,8 @@ domain: root
 merge_strategy: append
 ---
 
+<!-- Hydration rationale, role inventory, validation snapshots, rollback notes, and governance rules live in docs/technical/ai_hydration_topology.md. Keep # Shared on the compact baseline unless updated metrics justify a broader role-wide change. -->
+
 # Shared
 
 [include](docs/technical/ai_context.md)
