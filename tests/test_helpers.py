@@ -278,6 +278,28 @@ class TestValidateFileUpload:
                 allowed_image_formats={"PNG"},
             )
 
+    def test_validate_file_upload_rejects_decompression_bomb(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        uploaded = _uploaded_image()
+
+        def raise_decompression_bomb(*args: object, **kwargs: object) -> None:
+            del args, kwargs
+            raise Image.DecompressionBombError("too many pixels")
+
+        monkeypatch.setattr(
+            "quickscale_modules_storage.helpers.Image.open",
+            raise_decompression_bomb,
+        )
+
+        with pytest.raises(ValueError, match="Image exceeds safe pixel limit"):
+            validate_file_upload(
+                uploaded,
+                max_size_bytes=2_000_000,
+                allowed_image_formats={"PNG"},
+            )
+
     def test_validate_file_upload_rejects_excessive_width(self) -> None:
         uploaded = _uploaded_image(image_format="PNG", size=(641, 360))
 
