@@ -1,620 +1,285 @@
-# Context Hydration Refactor Review And Implementation Plan
+# Context Hydration Refactor — Next Steps
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Planning** → Context Hydration Refactor
- > **Related docs**: [adaptive.rules.md](../../adaptive.rules.md) | [Technical Decisions](../technical/decisions.md) | [Scaffolding](../technical/scaffolding.md) | [Contributing](../contrib/contributing.md) | [AI Hydration Topology And Governance](../technical/ai_hydration_topology.md)
+> **Related docs**: [adaptive.rules.md](../../adaptive.rules.md) | [AI Hydration Topology](../technical/ai_hydration_topology.md) | [AI Context Baseline](../technical/ai_context.md)
 
-## Goal
+## Current State (2026-05-01)
 
-Review the current MCP hydration inputs defined in [adaptive.rules.md](../../adaptive.rules.md), identify what should be preserved versus trimmed, and define a phased implementation and hardening plan to make AI context smaller, clearer, safer, and more DRY.
+The seven-phase context hydration refactor is complete. The root `adaptive.rules.md` now uses a compact `ai_context.md` as the universal shared baseline, with role-specific documents added only where they materially change behavior. Payloads dropped from 117–128 KB per role to 4–18 KB. See [AI Hydration Topology](../technical/ai_hydration_topology.md) for the full validation snapshot and governance rules.
 
-Unless a later section says otherwise, the opening review below records the Phase 0 pre-refactor baseline captured on 2026-05-01. The phase sections later in this document track the current post-phase-2/3/4 source state separately.
+## Remaining Problems
 
-## Phase 0 Pre-Refactor Baseline Snapshot
+### 1. Sub-Package Rules Files Are All Identical Boilerplate
 
-At the start of this refactor, the root `# Shared` section in [adaptive.rules.md](../../adaptive.rules.md) included:
+All seven sub-package `adaptive.rules.md` files (under `quickscale/`, `quickscale_core/`, `quickscale_cli/`, `quickscale_modules/`, `scripts/`, `docs/`, and `examples/`) share the same structure:
 
-- [docs/technical/decisions.md](../technical/decisions.md)
-- [docs/technical/scaffolding.md](../technical/scaffolding.md)
-- [README.md](../../README.md)
-- [START_HERE.md](../../START_HERE.md)
-- [docs/contrib/contributing.md](../contrib/contributing.md)
-- [docs/contrib/shared/README.md](../contrib/shared/README.md)
+- A `# Shared` section pointing to the local README as "Important context (always read)"
+- Seven role sections that each just `[include](#shared)` with no local content
 
-The stage sections then added:
+These files add no domain-specific rules. They exist as structural placeholders. When an agent works in any of these directories, it gets told to read a README — and those READMEs uniformly say "defer to root docs for policy." The agent follows a pointer to a document that sends it back where it started.
 
-- [docs/contrib/plan.md](../contrib/plan.md)
-- [docs/contrib/code.md](../contrib/code.md)
-- [docs/contrib/testing.md](../contrib/testing.md)
-- [docs/contrib/debug.md](../contrib/debug.md)
-- [docs/contrib/review.md](../contrib/review.md)
+This is the same anti-pattern the root refactor fixed: injecting human navigation documents as default AI context, except now it happens at the sub-package level through the "always read" hint mechanism rather than through inline includes.
 
-Observed Phase 0 costs from that setup:
+### 2. The "Always Read README" Pattern Is Circular
 
-- The current referenced source set is about 3,133 lines before hydration.
-- Current measured role baselines captured on 2026-05-01 range from 2,507 lines / 117.0 KB (`adaptive`) to 2,875 lines / 128.6 KB (`quality-gate`).
-- The MCP include mechanism expands whole files, not file fragments, so large documents amplify context size quickly.
-- Human-facing navigation and onboarding content is now being injected into every agent role, including roles that do not need it.
+Package READMEs are documented in `ai_context.md` and `decisions.md` as "informational context only" that does not override technical authorities. Pointing the AI to read them as priority context in every sub-package domain works against the authority model, not with it.
 
-## Executive Summary
+A README for `quickscale/` that says "this installs core and CLI together" and "defer to root docs for policy" is not useful local context. It is a nav stub. Hydrating it as if it were domain-critical guidance wastes attention and contradicts the refactor's own principles.
 
-The pre-refactor include-driven hydration model was directionally correct and much better than path-only reminders. It gave the coding assistant the actual text instead of requiring iterative follow-up reads.
+### 3. `ai_context.md` Has No Drift Detection
 
-The problem at that baseline was that the include graph had overshot into broad whole-file inclusion. The result was that each role received a mix of authoritative rules, human onboarding material, duplicated authority statements, and repeated stage-guide framing. That increased token cost, expanded latency, and raised drift risk without adding proportional decision value.
+`ai_context.md` is a derivative summary of `decisions.md` and companion docs. If those canonical sources change without a corresponding update to `ai_context.md`, the AI gets an authoritative-looking stale summary. The refactor documents this risk and relies entirely on human discipline ("update this file to stay aligned"). There is no mechanism that makes the drift visible.
 
-The target state should preserve the strengths of the current documentation system while narrowing default AI context to the smallest set of decision-critical facts. Human navigation documents should remain valuable for contributors, but they should not be part of the default hydration baseline for coding assistants.
+---
 
-## Bird's-Eye Hardening Review
+## Recommended Changes
 
-From a bird's-eye perspective, the repository has already solved the first-order problem: the MCP can now hydrate real context instead of returning a path-only reading list. The next problem is second-order hardening. The system must now be resistant to regression, ownership drift, role contamination, and accidental context bloat.
+### Phase A — Give Sub-Package Files Meaningful Local Rules
 
-### Overall Assessment
+Replace the "always read README" pattern in each sub-package `adaptive.rules.md` with concrete domain-local rules. Remove the README pointers. Add rules that are actually specific to working in that directory.
 
-| Area | Current state | Hardening assessment | Direction |
-|---|---|---|---|
-| Context delivery model | Strong foundation | Correct mechanism, but currently over-expanded | Preserve and tighten |
-| Authority model | Clear in theory | Duplicated across too many documents | Consolidate ownership |
-| Role isolation | Weak | Too much shared context crosses role boundaries | Enforce per-role minima |
-| Performance budget | Weak | No explicit size or line-budget guardrails | Add measurable budgets |
-| Change safety | Weak-to-moderate | No formal rollback, acceptance, or non-regression framework yet | Add rollout controls |
-| Include graph governance | Weak | Includes work, but there is no strong maintenance contract yet | Add ownership and review cadence |
-| Human versus AI document boundary | Blurry | Human router docs are being used as AI execution docs | Separate responsibilities |
-| Long-term maintainability | Moderate | Good conceptual model, incomplete operational discipline | Harden with policy and review loops |
+Recommended content for each file:
 
-### Hardening Lens
+#### `quickscale/adaptive.rules.md` — Meta-Package
 
-The refactor should be evaluated against these control objectives:
+This package has no implementation logic. It is a dependency declaration bundle.
 
-1. **Determinism**: the same role should hydrate the same critical facts reliably.
-2. **Minimality**: each role should receive the smallest context bundle that still preserves correctness.
-3. **Single ownership**: each rule, precedence statement, and workflow constraint should have one canonical owner.
-4. **Role isolation**: planning, implementation, quality, and review contexts should not all inherit the same broad human-router payload.
-5. **Observability**: context size, critical-fact coverage, and include topology should be inspectable before and after changes.
-6. **Reversibility**: the refactor should be deployable in stages and easy to roll back if context quality regresses.
-7. **Human-doc preservation**: human-facing docs should remain readable and useful instead of being contorted around AI constraints.
-8. **Maintenance discipline**: future contributors should have a clear rule for how and where to update hydrated context.
+```
+# Shared
+- This is the installation meta-package. It has no implementation code; it only
+  declares the combined quickscale-core and quickscale-cli dependency bundle.
+- The only meaningful changes here are version pins in pyproject.toml.
+- Do not add application logic under quickscale/src/; changes there affect the
+  import shim only.
+```
 
-## Strong Points To Preserve
+Role additions:
+- **Implement**: "Changes in this package are almost always version pin updates in `pyproject.toml`. If anything else needs changing, question the scope."
+- **Quality Gate**: "This package has minimal test coverage by design — it contains no implementation to test."
 
-### 1. Include-Driven MCP Hydration
+#### `quickscale_core/adaptive.rules.md` — Scaffolding Engine
 
-This is the right mechanism.
+```
+# Shared
+- Source lives at quickscale_core/src/quickscale_core/.
+- This is the scaffolding engine. Changes here affect the output of every generated project.
+- Template changes require regeneration testing — verify that a fresh plan/apply cycle
+  produces valid output.
+- Tests live at quickscale_core/tests/. Run make test-unit to validate.
+```
 
-Why it is strong:
+Role additions:
+- **Implement**: "Template edits in `src/quickscale_core/generator/` affect generated-project output. Treat template changes as user-facing contract changes."
+- **Quality Gate**: "After any template change, verify generated project structure against `docs/technical/generated_project_structure.md`."
 
-- The assistant receives the actual text, not a list of files to read later.
-- The hydration result is deterministic and easier to reason about.
-- The system avoids extra search and read steps during task execution.
-- Shared sections like `[include](#shared)` already give a good DRY foundation.
+#### `quickscale_cli/adaptive.rules.md` — CLI Surface
 
-Preserve:
+```
+# Shared
+- Source lives at quickscale_cli/src/quickscale_cli/.
+- This package is the command surface only. Business logic belongs in quickscale_core.
+- CLI commands are grouped: lifecycle (plan, apply, status, remove), disaster recovery
+  (dr capture/plan/execute/report), local dev (up, down, ps, logs, shell, manage),
+  deployment (deploy), and module workflows (update, push).
+- Tests live at quickscale_cli/tests/.
+```
 
-- External include usage as the primary hydration strategy.
-- Same-file shared anchors for DRY reuse.
-- Explicit role sections in [adaptive.rules.md](../../adaptive.rules.md).
+Role additions:
+- **Implement**: "New commands belong here. New scaffolding or generation logic belongs in `quickscale_core`. Do not put template or generation logic in CLI handlers."
+- **Plan**: "CLI commands call into `quickscale_core` for heavy lifting. Scope CLI work to command wiring, argument parsing, and user-facing output."
 
-### 2. `decisions.md` As The Primary SSOT
+#### `quickscale_modules/adaptive.rules.md` — Module Workspace
 
-This remains the most important document to preserve as the authority source.
+```
+# Shared
+- This is the maintainer-side module inventory. It is not generated into user projects by default.
+- Each module directory under quickscale_modules/<name>/ is independently packaged.
+- module.yml is the canonical source for a module's shipped version and configuration metadata.
+  The module's pyproject.toml version and exported __version__ must match the manifest.
+- Modules are distributed to generated projects via the documented git-subtree workflow.
+  Do not copy module files manually into generated project directories.
+- Packaged modules: auth, blog, crm, forms, listings, analytics, social, storage, backups.
+  Placeholder-only (no tests/packaging yet): billing, teams.
+```
 
-Why it is strong:
+Role additions:
+- **Implement**: "For packaged modules, `module.yml` owns version metadata. Update it in the same change as any version bump."
+- **Quality Gate**: "Each packaged module has its own test suite. Run the module-specific test target (`make MODULE=<name> test-unit -- --modules`) rather than the root test suite for module-scoped work."
 
-- It clearly owns technical rules, scope, and tie-breakers.
-- It already contains high-value AI-relevant material such as quick reference, critical rules, current contract, document responsibilities, and testing policy.
-- It provides clear conflict resolution across the repository.
+#### `scripts/adaptive.rules.md` — Repository Scripts
 
-Preserve:
+```
+# Shared
+- Scripts in this directory are maintenance and workflow helpers.
+- Always prefer the root Makefile as the entrypoint. Call a script directly only when
+  no make target exists or a script header says otherwise.
+- Scripts expect to be run from the repository root. Repo-relative paths will break if
+  a script is run from a subdirectory.
+- Do not add a new script if a make target already covers the same workflow.
+```
 
-- `decisions.md` as the authoritative technical source.
-- The rule that scope and policy updates start there first.
-- Its role as the conflict resolver when lower-priority docs differ.
+Role additions:
+- **Implement**: "New automation belongs in the Makefile first. Add a script only when the logic is too complex for a make target."
+- **Plan**: "Check whether an existing make target or script already covers the need before designing a new one. See `scripts/README.md` for the full preferred-command map."
 
-### 3. `scaffolding.md` As The Structure Authority
+#### `docs/adaptive.rules.md` — Documentation
 
-This document is useful and should remain authoritative for layout and placement.
+```
+# Shared
+- This directory has two audiences: human contributors and AI hydration.
+- Human-first documents: README.md, START_HERE.md, contrib/contributing.md,
+  contrib/shared/README.md. Do not optimize these for AI consumption.
+- AI hydration documents: docs/technical/ai_context.md is the compact AI baseline;
+  docs/technical/decisions.md is the policy authority; other technical docs
+  are role-specific includes governed by ai_hydration_topology.md.
+- When editing docs, decide which audience owns the file first. Do not add
+  AI-specific shortcuts to human-first docs, and do not add human navigation
+  tours to AI-hydrated files.
+```
 
-Why it is strong:
+Role additions:
+- **Implement**: "Before adding a new doc, decide: is it human-first or AI-hydration context? Add it to the right category and update `ai_hydration_topology.md` if it changes hydration."
+- **Change Review**: "Doc changes that touch `adaptive.rules.md`, `ai_context.md`, or `ai_hydration_topology.md` require a hydration-metrics check per the governance requirements in `ai_hydration_topology.md`."
 
-- It explains repository layout, generated-project layout, and naming/placement examples.
-- It complements `decisions.md` cleanly when used for structural questions.
-- It is valuable for planning, discovery, and implementation roles.
+#### `examples/adaptive.rules.md` — Examples
 
-Preserve:
+```
+# Shared
+- Examples are reference material, not authoritative product scope.
+- Examples are not generated into projects by default unless a workflow explicitly says otherwise.
+- Treat examples as patterns that can be selectively copied, not as tested components.
+- Do not add examples that imply features or constraints that are not in the main product.
+```
 
-- `scaffolding.md` as the structure and layout reference.
-- Its distinction from `decisions.md`, which owns policy and tie-breakers.
+Role additions:
+- **Implement**: "Examples should be minimal and copyable. If an example grows into a tested module, it belongs in `quickscale_modules/`, not here."
+- **Change Review**: "New examples must not contradict the generated project contract in `docs/technical/generated_project_structure.md`."
 
-### 4. Shared Rules Versus Stage Guides
+---
 
-The split between `docs/contrib/shared/` and `docs/contrib/*.md` is conceptually correct.
+### Phase B — Address `ai_context.md` Drift Risk
 
-Why it is strong:
+The current approach relies on human discipline: "update the authoritative doc first, then update `ai_context.md`." This is fragile.
 
-- Shared documents define normative rules that apply across stages.
-- Stage guides define applied checklists, commands, and examples for a specific kind of work.
-- The model is already understandable and aligned with good documentation separation.
+**Option 1 — Inline the critical facts into `adaptive.rules.md` directly.**
+For the two roles that only need the compact baseline (`adaptive` and `external-research`), the shared content is small enough to live inline in the root rules file. This removes the sync obligation entirely for the most-read roles. The risk is that `adaptive.rules.md` grows back toward boilerplate.
 
-Preserve:
+**Option 2 — Add a lint step that checks `ai_context.md` is consistent with its sources.**
+A script that validates `ai_context.md` references match existing files and that key constant values (stack baseline, make targets) appear in both `ai_context.md` and `decisions.md`. This is mechanical verification, not semantic correctness, but it makes obvious drift visible in CI.
 
-- Shared docs as the normative layer.
-- Stage guides as application-layer docs.
-- The rule that shared docs win if there is a conflict.
+**Option 3 — Accept the risk and document it explicitly at the top of `ai_context.md`.**
+Acknowledge in the file header that this is a best-effort derivative, that it may lag behind canonical sources, and that agents should treat any conflict with `decisions.md` as authoritative immediately — even before `ai_context.md` is corrected. This is the lowest-effort option and is honest about the limitation.
 
-### 5. Repo-Specific Applied Guidance In Stage Guides
+Recommendation: **Option 3 now, Option 2 as a follow-on** if drift actually causes problems. Option 1 trades one maintenance risk for another.
 
-The best parts of the stage guides are the parts that are actually specific to QuickScale.
+---
 
-Examples worth keeping:
+### Phase C — Document the "Always Read" vs `[include]` Mechanism Distinction
 
-- Planning checklist and planning questions in [docs/contrib/plan.md](../contrib/plan.md)
-- Implementation checklist and scope guardrails in [docs/contrib/code.md](../contrib/code.md)
-- Test decision tree, commands, fixtures, and contamination pitfalls in [docs/contrib/testing.md](../contrib/testing.md)
-- Debugging loop and focused commands in [docs/contrib/debug.md](../contrib/debug.md)
-- Review checklist and required evidence in [docs/contrib/review.md](../contrib/review.md)
+The root `adaptive.rules.md` uses `[include](path)` which inlines file content into the hydrated payload. Sub-package files currently use a markdown list under "Important context (always read)" which is a read hint — the agent is told to fetch those files on demand, not inline them.
 
-Preserve:
+These are meaningfully different mechanisms with different cost profiles. Neither `ai_hydration_topology.md` nor any other governance document explains the distinction. This matters because:
 
-- The checklist-style, task-oriented content.
-- Repo-specific commands, placements, and failure-analysis workflows.
-- The distinction between normative rules and applied execution help.
+- Inline includes expand the measured hydrated payload.
+- "Always read" hints expand context on demand, which may happen at the wrong time or not at all.
 
-## Weak Points And Refactor Pressure
+The governance documentation should clarify which mechanism is canonical for which use case, and whether sub-package files should use `[include]` for consistency or whether "always read" hints are intentionally chosen.
 
-### 1. Shared Includes Are Too Broad
+---
 
-The current `# Shared` block includes both core policy docs and human router docs.
+## Summary of Recommended Actions
 
-Why this is weak:
-
-- [README.md](../../README.md) and [START_HERE.md](../../START_HERE.md) are primarily human orientation documents.
-- [docs/contrib/contributing.md](../contrib/contributing.md) is a contributor map and guide index.
-- [docs/contrib/shared/README.md](../contrib/shared/README.md) largely explains the shared/stage-guide model rather than adding high-signal task constraints.
-- These documents are now injected into roles like `external-research`, `quality-gate`, and `change-review` where most of that routing material is unnecessary.
-
-Impact:
-
-- Hydrated context becomes large quickly.
-- Roles spend context budget on navigation copy instead of constraints and task-relevant guidance.
-- Signal-to-noise ratio drops.
-
-### 2. Authority And Precedence Statements Are Repeated Too Many Times
-
-The same messages appear in several places:
-
-- `decisions.md` is authoritative.
-- Package READMEs are informational only.
-- Shared docs win over stage guides.
-- Execution order is not prescribed.
-
-Why this is weak:
-
-- Duplication increases maintenance overhead.
-- The same rule must be updated in multiple files.
-- AI context burns tokens repeating precedence rules instead of giving execution help.
-- Drift becomes more likely over time.
-
-### 3. Whole-File Includes Make Large Docs Expensive
-
-The include engine expands whole files, not file-section fragments.
-
-Why this matters:
-
-- [docs/technical/decisions.md](../technical/decisions.md) is very large.
-- [docs/technical/scaffolding.md](../technical/scaffolding.md) is also large.
-- The only reliable way to reduce hydration size is to split documents or change which files are included.
-
-Implication:
-
-- Refactoring must focus on file decomposition and include boundaries, not only wording cleanup.
-
-### 4. Stage-Guide Boilerplate Repeats Across Files
-
-Most stage guides repeat the same framing structure:
-
-- `Use This Guide When`
-- `Authoritative Sources`
-- `Related Guidance`
-- sometimes `Exit Criteria`
-
-Why this is weak:
-
-- Once a compact shared baseline exists, these repeated introductions add little value.
-- The high-value parts of the guides are the applied checklists, commands, pitfalls, and examples.
-- The framing copy is informative for humans but low-value for repeated AI hydration.
-
-### 5. Testing And Debugging Guidance Is Split In Ways That Invite Duplication
-
-Testing and debugging policy currently spans multiple layers:
-
-- Repo-wide testing policy lives in [docs/technical/decisions.md](../technical/decisions.md)
-- Cross-stage norms live in `docs/contrib/shared/`
-- Repo-specific commands and recipes live in [docs/contrib/testing.md](../contrib/testing.md) and [docs/contrib/debug.md](../contrib/debug.md)
-
-Why this is weak:
-
-- The boundary between normative policy and applied execution is not as sharp as it could be.
-- Similar guidance appears in multiple places.
-- Contributors and agents may over-read when one narrower document would suffice.
-
-### 6. Generic Educational Examples Compete With Real Repo Constraints
-
-[docs/contrib/code.md](../contrib/code.md) contains some generic examples that teach broad engineering habits more than QuickScale-specific implementation behavior.
-
-Why this is weak:
-
-- Generic examples consume context budget.
-- They are less useful than concrete repository constraints and local patterns.
-- They are better suited for optional human reference than default hydrated context.
-
-### 7. Human Router Documents Are Valuable, But Not As Default AI Inputs
-
-[README.md](../../README.md), [START_HERE.md](../../START_HERE.md), and [docs/contrib/contributing.md](../contrib/contributing.md) remain useful documents.
-
-Why they should not be default AI context:
-
-- They explain where to go next more than they define what to do now.
-- They repeat authority and navigation guidance already covered elsewhere.
-- They are optimized for people reading the docs, not for role-specific agent execution.
-
-## Hardening Risks And Failure Modes
-
-The current document already identifies duplication and context bloat. For hardening, those issues need to be translated into concrete failure modes that future implementation work can guard against.
-
-| Risk | Typical trigger | Failure symptom | Operational impact | Required control |
-|---|---|---|---|---|
-| Shared-context relapse | A future editor adds more whole-file includes to `# Shared` for convenience | Hydrated size jumps sharply across all roles | Latency, higher token cost, lower signal-to-noise | Shared-context size budget plus change-review gate |
-| Authority inversion | A new AI summary file drifts from `decisions.md` or shared docs | Assistant follows stale or conflicting rules | Wrong implementation or review decisions | Explicit owner contract and backlink to canonical source |
-| Role contamination | Human router or unrelated stage guidance is included broadly | `quality-gate` or `change-review` receives planning or onboarding prose | Reduced role precision and wasted context | Per-role coverage matrix and tighter include boundaries |
-| Over-trimming | Cleanup removes a critical rule while shrinking size | Assistant misses a required command, ownership rule, or validation expectation | Regressed behavior despite smaller context | Must-have-facts checklist per role |
-| Include graph fragility | Files are renamed, split, or moved without include updates | Hydration fails or silently degrades to missing context | Broken agent workflows and brittle maintenance | Include inventory and post-change audit step |
-| Ownership vacuum | New AI-focused files are added without a maintenance rule | No one knows which file to update first | Drift and duplicated policy over time | Written maintenance contract in the new baseline file |
-| Human-doc collateral damage | Docs are rewritten primarily for AI optimization | README and contributor docs become less useful to people | Higher contributor friction | Preserve separate human and AI document responsibilities |
-| Silent duplication persistence | Extracted files are created but old copies of the same rule remain | Same policy still appears in multiple sources | Drift risk remains even after refactor effort | One-owner cleanup pass before rollout completes |
-
-## Hardening Controls And Guardrails
-
-Hardening the context system is not only about rewriting content. It also requires explicit controls that make future regressions visible.
-
-### 1. Budget Controls
-
-Define explicit soft and hard budgets for hydrated context. Initial targets should be treated as provisional until Phase 0 metrics are complete.
-
-Suggested starting targets:
-
-- Shared AI baseline file: ideally under 8 to 12 KB.
-- `Adaptive` and `External Research`: ideally under 15 KB.
-- `Plan`, `Implement`, `Quality Gate`, and `Change Review`: ideally under 35 to 50 KB each.
-- Any single whole-file include larger than about 20 KB should require explicit rationale.
-
-These are not product requirements yet, but they create a hardening discipline that the current system lacks.
-
-### 2. Coverage Controls
-
-Shrinking context safely requires a must-have-facts view for each role.
-
-Minimum examples:
-
-- `Adaptive`: repository contract, authority order, standard workflow baseline.
-- `Plan`: architecture constraints, structure context, scope discipline, validation planning expectations.
-- `Implement`: structure context, implementation guardrails, validation expectations, shared authority rules.
-- `Quality Gate`: test commands, debugging loop, evidence expectations, regression discipline.
-- `Change Review`: review checklist, evidence requirements, authority order, scope protection.
-
-The hardening rule should be: no document is removed from hydration until all facts it uniquely contributed are accounted for somewhere else.
-
-### 3. Topology Controls
-
-The include graph should be treated as a maintained system, not just a convenience layer.
-
-Recommended controls:
-
-- maintain a simple inventory of which files feed which role sections
-- avoid broad whole-file includes in `# Shared` unless the file is truly universal
-- document why each shared include exists
-- prefer smaller extracted files over repeatedly including large mixed-purpose documents
-
-### 4. Governance Controls
-
-The refactor needs a maintenance contract.
-
-Recommended rules:
-
-- every AI-focused summary file must state whether it is authoritative or derivative
-- derivative AI summaries must say which source documents win on conflict
-- `adaptive.rules.md` changes should require before/after hydration metrics and a short rationale
-- each extracted file should have one clear owner, even if that owner is a larger parent document
-
-### 5. Rollout Controls
-
-This refactor should be staged rather than landed as one large rewrite.
-
-Recommended rollout discipline:
-
-- measure before editing
-- add the compact AI baseline before removing existing broad includes
-- narrow one class of includes at a time
-- rehydrate all major roles after each stage
-- keep rollback simple by ensuring include changes are isolated and reversible
-
-### 6. Recovery And Rollback Controls
-
-If a refactor stage removes too much context, rollback should be operationally simple.
-
-The safest posture is:
-
-- keep changes to shared includes isolated in small commits or small handoff tasks
-- preserve the previous include set until the replacement baseline is validated
-- record which role lost which document so a targeted re-include is possible without reverting everything
-
-## Anti-Patterns To Avoid
-
-- Creating `ai_context.md` as a second SSOT instead of a compact derivative or clearly authoritative layer.
-- Removing duplicated text from `adaptive.rules.md` while leaving the same rule duplicated across technical and contrib docs.
-- Optimizing only for smaller size without checking whether critical facts were lost.
-- Using `# Shared` as a convenience bucket for any file that feels important.
-- Rewriting human entry-point docs primarily to serve the AI instead of preserving their reader-facing role.
-- Splitting large docs into smaller files without clarifying canonical ownership.
-- Declaring the refactor complete without a before/after hydration comparison for each role.
-
-## Document-By-Document Assessment
-
-| Document | Keep For Humans | Keep In Default AI Shared Context | Recommended Action |
-|---|---|---|---|
-| [docs/technical/decisions.md](../technical/decisions.md) | Yes | Not as a broad shared whole-file include | Preserve as SSOT; split or extract AI-critical subdocuments for targeted inclusion |
-| [docs/technical/scaffolding.md](../technical/scaffolding.md) | Yes | Only for roles that need structure | Include only for planning, discovery, and implementation contexts |
-| [README.md](../../README.md) | Yes | No | Keep human-first; remove from default shared hydration |
-| [START_HERE.md](../../START_HERE.md) | Yes | No | Keep as human entry point; remove from default shared hydration |
-| [docs/contrib/contributing.md](../contrib/contributing.md) | Yes | No | Keep as contributor map; remove from default shared hydration |
-| [docs/contrib/shared/README.md](../contrib/shared/README.md) | Yes | Probably no | Slim to the contrib authority map; do not inject by default if a compact AI baseline exists |
-| [docs/contrib/plan.md](../contrib/plan.md) | Yes | Yes, in `plan` only | Trim framing; keep checklist and planning questions |
-| [docs/contrib/code.md](../contrib/code.md) | Yes | Yes, in `implement` only | Trim framing; reduce or replace generic examples |
-| [docs/contrib/testing.md](../contrib/testing.md) | Yes | Yes, in `quality-gate` only | Keep decision tree, commands, fixtures, and contamination guidance |
-| [docs/contrib/debug.md](../contrib/debug.md) | Yes | Yes, in `quality-gate` only | Keep debugging loop, focused commands, and failure-analysis guidance |
-| [docs/contrib/review.md](../contrib/review.md) | Yes | Yes, in `change-review` only | Keep checklist and evidence requirements |
-
-## Recommended Target State
-
-### Shared Baseline For All AI Roles
-
-Create one compact AI-oriented baseline file, for example `docs/technical/ai_context.md`.
-
-This file should contain only:
-
-- repository purpose and current product contract
-- authoritative document order and conflict resolution
-- approved stack and workflow baseline
-- validation entrypoints and standard command expectations
-- generated-project ownership model
-- concise document ownership map
-
-This file should not contain:
-
-- reading paths
-- contributor onboarding walkthroughs
-- marketing or positioning copy
-- FAQ content
-- document directory tours
-
-### Role-Specific Context Model
-
-Use the compact baseline as the universal shared layer, then add only the role-specific documents that materially change behavior.
-
-Suggested target matrix:
-
-| Section | Recommended Inputs |
-|---|---|
-| `Adaptive` | compact AI baseline only |
-| `Plan` | compact AI baseline + planning guide + structure context |
-| `Codebase Discovery` | compact AI baseline + structure context |
-| `External Research` | compact AI baseline only |
-| `Implement` | compact AI baseline + implementation guide + structure context |
-| `Quality Gate` | compact AI baseline + testing guide + debug guide |
-| `Change Review` | compact AI baseline + review guide |
-
-### Ownership Cleanup Model
-
-Make each concern owned in one place only:
-
-- Repo-wide documentation precedence and policy: `decisions.md`
-- Shared-versus-stage-guide authority model: `docs/contrib/shared/README.md`
-- Human orientation and navigation: `README.md`, `START_HERE.md`, `docs/contrib/contributing.md`
-- Role-specific applied execution help: stage guides in `docs/contrib/*.md`
-- AI hydration baseline: new compact AI context file
-
-### Best-Practice Constraints For This Refactor
-
-- Do not degrade the human docs just to optimize AI hydration.
-- Do not copy large sections into a new AI file without deciding who owns that text.
-- Do not keep duplicated precedence rules after a compact baseline exists.
-- Do not assume future heading-fragment support in external includes; optimize for whole-file inclusion constraints.
-- Prefer smaller authoritative files over one giant authoritative file that every role must ingest.
-- Do not ship the refactor without explicit hardening guardrails for size, coverage, and rollback.
-
-## Hardening Success Criteria
-
-The refactor should not be considered hardened only because the file structure looks cleaner. It is hardened when the system becomes easier to govern and harder to regress.
-
-Success should mean all of the following:
-
-- shared hydration is materially smaller and has a documented reason for every included file
-- every role has a bounded and explainable context bundle
-- authority and precedence statements are owned in one place per concern
-- human router docs remain useful without being default AI inputs
-- future edits to the include graph can be reviewed with metrics and a clear rollback path
-- the repository has a simple answer to "where do I update this rule so hydrated AI context stays correct?"
-
-## What Good Looks Like After The Refactor
-
-- Default role hydration is materially smaller than the current 122 KB `implement` payload.
-- Shared context contains mostly constraints, contracts, and execution-relevant defaults.
-- Human navigation docs remain useful without being part of the default AI baseline.
-- Stage guides are concise and role-specific.
-- Authority rules live in one place per concern.
-- The include graph is easy to reason about and maintain.
-- Context size and role coverage are measurable before and after changes.
-- Rollout is reversible without reopening the entire documentation strategy.
-- Future contributors have a maintenance contract for AI-facing summary files and includes.
-
-<a id="current-state-snapshot"></a>
-## Phase 0 Baseline Capture (Completed 2026-05-01)
-
-Hydration metrics were captured before any file edits in this phase using the current MCP include graph and the major role sections.
-
-| Role | Lines | Size | Baseline note |
-|---|---:|---:|---|
-| `adaptive` | 2,507 | 117.0 KB | Shared payload is still dominated by universal whole-file includes. |
-| `plan` | 2,585 | 120.6 KB | Adds planning guidance on top of the broad shared baseline. |
-| `implement` | 2,661 | 122.2 KB | Adds implementation guidance on top of the broad shared baseline. |
-| `quality-gate` | 2,875 | 128.6 KB | Largest current payload because testing and debug guidance stack onto shared docs. |
-| `change-review` | 2,572 | 119.7 KB | Review guidance is still overshadowed by shared-context overhead. |
-
-Explicit target outcomes for the refactor:
-
-| Outcome | Target state |
-|---|---|
-| Shared default AI input | Replace the mixed human/router `# Shared` payload with one compact derivative AI baseline file. |
-| Authority handling | Keep [decisions.md](../technical/decisions.md) authoritative for policy and [scaffolding.md](../technical/scaffolding.md) authoritative for structure; derivative summaries must defer on conflict. |
-| Human-doc preservation | Keep [README.md](../../README.md), [START_HERE.md](../../START_HERE.md), and [docs/contrib/contributing.md](../contrib/contributing.md) human-first and out of default shared AI hydration. |
-| Role isolation | Limit each role to the compact baseline plus only the role-specific docs that materially change behavior. |
-| Change safety | Require before/after hydration metrics and a must-have-facts check whenever the include graph changes. |
-
-Human-first versus AI-default classification to preserve during later phases:
-
-| Document | Primary responsibility | Default AI role after refactor | Note |
-|---|---|---|---|
-| [docs/technical/decisions.md](../technical/decisions.md) | Repo-wide policy and tie-breakers | Referenced via compact baseline, not broad shared whole-file include | Remains the top authority. |
-| [docs/technical/scaffolding.md](../technical/scaffolding.md) | Structure and placement authority | `plan`, `codebase-discovery`, `implement` only | Structural context, not universal default. |
-| [README.md](../../README.md) | Human overview and orientation | No | Keep human-first. |
-| [START_HERE.md](../../START_HERE.md) | Human repo entry point | No | Keep human-first. |
-| [docs/contrib/contributing.md](../contrib/contributing.md) | Human contributor router | No | Keep human-first. |
-| [docs/contrib/shared/README.md](../contrib/shared/README.md) | Human explanation of the shared/stage-doc model | Not by default | Only re-include if a later phase finds a unique AI-critical fact. |
-| [docs/contrib/plan.md](../contrib/plan.md) | Planning workflow | `plan` only | Role-specific applied guidance. |
-| [docs/contrib/code.md](../contrib/code.md) | Implementation workflow | `implement` only | Role-specific applied guidance. |
-| [docs/contrib/testing.md](../contrib/testing.md) | Validation workflow | `quality-gate` only | Role-specific applied guidance. |
-| [docs/contrib/debug.md](../contrib/debug.md) | Debug workflow | `quality-gate` only | Role-specific applied guidance. |
-| [docs/contrib/review.md](../contrib/review.md) | Review workflow | `change-review` only | Role-specific applied guidance. |
-| [docs/technical/ai_context.md](../technical/ai_context.md) | Compact AI baseline | All AI roles | Derivative, concise, and intentionally non-navigational. |
-
-Provisional size budgets for later phases:
-
-| Payload | Provisional budget | Rationale |
+| Action | File(s) to change | Priority |
 |---|---|---|
-| Compact shared AI baseline | <= 12 KB and <= 250 lines | Small enough to hydrate everywhere without crowding role-local facts. |
-| `adaptive` | <= 15 KB and <= 350 lines | Needs authority, workflow, and stack only. |
-| `plan` | <= 50 KB and <= 900 lines | Needs structure plus planning workflow, but not the full human-router set. |
-| `implement` | <= 50 KB and <= 900 lines | Needs structure plus implementation guardrails. |
-| `quality-gate` | <= 50 KB and <= 950 lines | Needs validation and debug guidance, but should still drop most shared prose. |
-| `change-review` | <= 35 KB and <= 750 lines | Needs authority, evidence standards, and review checklist only. |
-| Any single whole-file include | More than 20 KB requires explicit rationale | Prevent convenience-driven shared-context relapse. |
+| Replace README pointers with domain-local rules | All 7 sub-package `adaptive.rules.md` files | High — these are currently noise |
+| Add role-specific local rules to each sub-package file | Same files | High — currently all sections are empty |
+| Add explicit drift disclaimer to `ai_context.md` | `docs/technical/ai_context.md` | Medium — makes the known risk visible |
+| Document `[include]` vs "always read" distinction | `docs/technical/ai_hydration_topology.md` | Medium — needed for maintainer clarity |
+| Evaluate a lint check for `ai_context.md` consistency | New script or Makefile target | Low — only if drift actually causes problems |
 
-Must-have facts to preserve before trimming any current include:
+---
 
-| Role | Must-have facts |
-|---|---|
-| `adaptive` | Authority order, conflict policy, workflow baseline, repo stack baseline, validation entrypoints, and generated-project ownership model. |
-| `plan` | `adaptive` baseline plus structure authority, generated-project contract, scope discipline, and validation-planning expectations. |
-| `implement` | `adaptive` baseline plus structure authority, implementation guardrails, make/pytest entrypoints, and ownership boundaries for generated code. |
-| `quality-gate` | `adaptive` baseline plus test policy, coverage expectations, narrow-first validation commands, and debug workflow. |
-| `change-review` | `adaptive` baseline plus evidence expectations, authority order, scope protection, and regression-review discipline. |
+## Implementation Plan
 
-## Phase 1 Compact AI Baseline (Completed 2026-05-01)
+### Phase A — Sub-Package Rules Files
 
-Phase 1 delivers [docs/technical/ai_context.md](../technical/ai_context.md) as the compact AI-default baseline.
+Each task below is an independent edit to one file. They can be done in any order.
 
-Current phase-1 decisions:
+#### `quickscale/adaptive.rules.md`
 
-- The file is derivative and AI-focused, not a new SSOT.
-- It keeps only shared decision-critical facts: authority order, workflow baseline, stack baseline, validation entrypoints, generated-project ownership, maintenance rule, and conflict policy.
-- It is intentionally non-navigational: no reader tours, onboarding paths, FAQ sections, or contributor walkthroughs.
-- [adaptive.rules.md](../../adaptive.rules.md) remains unchanged in this phase; include rewiring starts in Phase 2.
+- [ ] Remove the `- **Important context (always read)**:` block and its `quickscale/README.md` and `quickscale/pyproject.toml` list items from `# Shared`.
+- [ ] Add the meta-package identity note to `# Shared`: state that this is the installation meta-package with no implementation code, that it only declares the combined core+CLI dependency bundle, and that `pyproject.toml` version pins are the only meaningful changes here.
+- [ ] Add the import-shim guard to `# Shared`: state that changes under `quickscale/src/` affect only the import shim, so application logic must not be added there.
+- [ ] Add to `# Implement`: scope guard stating that changes here are almost always version pin updates in `pyproject.toml`, and that anything beyond that should prompt a scope question.
+- [ ] Add to `# Quality Gate`: note that this package has minimal test coverage by design because it contains no implementation to test.
 
-## Detailed Implementation Plan
+#### `quickscale_core/adaptive.rules.md`
 
-This implementation plan is designed for phased handoff. Each item references the findings above so the work stays anchored to the intended outcomes.
+- [ ] Remove the `- **Important context (always read)**:` block and its README/pyproject list items from `# Shared`.
+- [ ] Add to `# Shared`: source path (`quickscale_core/src/quickscale_core/`), identity as the scaffolding engine, and the consequence that changes here affect every generated project's output.
+- [ ] Add to `# Shared`: test location (`quickscale_core/tests/`) and the instruction to run `make test-unit` to validate.
+- [ ] Add to `# Implement`: template-change contract rule — edits in `src/quickscale_core/generator/` are user-facing contract changes and require regeneration testing (fresh `plan`/`apply` cycle).
+- [ ] Add to `# Quality Gate`: post-template-change verification rule — after any template change, confirm generated project structure matches `docs/technical/generated_project_structure.md`.
 
-### Phase 0 - Baseline, Scope, And Success Criteria
+#### `quickscale_cli/adaptive.rules.md`
 
-- [x] Capture current hydration metrics for at least `adaptive`, `plan`, `implement`, `quality-gate`, and `change-review`. Record line count and size before editing anything. See [Current State Snapshot](#current-state-snapshot).
-- [x] Define explicit target outcomes for the refactor, including a smaller shared baseline and smaller role-specific payloads. See [What Good Looks Like After The Refactor](#what-good-looks-like-after-the-refactor).
-- [x] Confirm which docs are human-first versus AI-default so the refactor does not accidentally damage contributor navigation. See [Document-By-Document Assessment](#document-by-document-assessment).
-- [x] Define provisional hardening budgets for shared and role-specific context sizes so the refactor has an explicit performance target. See [Budget Controls](#1-budget-controls).
-- [x] Define a must-have-facts checklist per role before removing any currently included document. See [Coverage Controls](#2-coverage-controls).
+- [ ] Remove the `- **Important context (always read)**:` block and its README/pyproject list items from `# Shared`.
+- [ ] Add to `# Shared`: source path (`quickscale_cli/src/quickscale_cli/`), identity as the command surface only, and the boundary rule that business logic belongs in `quickscale_core`.
+- [ ] Add to `# Shared`: the command group taxonomy (lifecycle, disaster recovery, local dev, deployment, module workflows) so the agent understands the existing surface without reading the README.
+- [ ] Add to `# Shared`: test location (`quickscale_cli/tests/`).
+- [ ] Add to `# Implement`: placement rule — new commands belong here, new generation or scaffolding logic belongs in `quickscale_core`; do not put template logic in CLI handlers.
+- [ ] Add to `# Plan`: scope boundary reminder — CLI work is command wiring, argument parsing, and user-facing output; `quickscale_core` does the heavy lifting.
 
-### Phase 1 - Create The Compact AI Baseline
+#### `quickscale_modules/adaptive.rules.md`
 
-- [x] Create a new compact AI baseline file such as `docs/technical/ai_context.md`. It should contain only decision-critical repository facts. See [Recommended Target State](#recommended-target-state).
-- [x] Move concise authority order, workflow baseline, stack baseline, validation entrypoints, and generated-project ownership rules into that file. See [Shared Baseline For All AI Roles](#shared-baseline-for-all-ai-roles).
-- [x] Keep the new file short and intentionally non-navigational. Do not add reading paths, FAQ sections, or contributor walkthroughs. See [Best-Practice Constraints For This Refactor](#best-practice-constraints-for-this-refactor).
-- [x] Decide whether the compact AI baseline becomes authoritative for AI hydration only or whether it also becomes a human-maintained summary that is updated alongside `decisions.md`. Record that maintenance rule in the file itself. See [Ownership Cleanup Model](#ownership-cleanup-model).
-- [x] Add an explicit conflict rule inside the new baseline file stating which source documents win if the summary drifts. See [Governance Controls](#4-governance-controls).
+- [ ] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
+- [ ] Add to `# Shared`: identity statement — this is the maintainer-side module inventory, not generated into user projects by default.
+- [ ] Add to `# Shared`: the `module.yml` ownership rule — it is the canonical source for shipped version and configuration metadata; `pyproject.toml` version and exported `__version__` must match the manifest.
+- [ ] Add to `# Shared`: distribution rule — modules reach generated projects via the git-subtree workflow; do not copy module files manually.
+- [ ] Add to `# Shared`: the packaged vs placeholder distinction, listing which modules are fully packaged (auth, blog, crm, forms, listings, analytics, social, storage, backups) and which are placeholder-only (billing, teams).
+- [ ] Add to `# Implement`: `module.yml` sync rule — update `module.yml` in the same change as any version bump.
+- [ ] Add to `# Quality Gate`: module-scoped test target instruction — use `make MODULE=<name> test-unit -- --modules` for module-scoped validation instead of the root test suite.
 
-### Phase 2 - Reduce Shared-Context Over-Inclusion
+#### `scripts/adaptive.rules.md`
 
-- [x] Remove [README.md](../../README.md), [START_HERE.md](../../START_HERE.md), and [docs/contrib/contributing.md](../contrib/contributing.md) from the default `# Shared` include set after the compact baseline exists. See [Shared Includes Are Too Broad](#1-shared-includes-are-too-broad).
-- [x] Decide whether [docs/contrib/shared/README.md](../contrib/shared/README.md) still belongs in default AI context or whether its useful content should be summarized in the compact AI baseline. See [Ownership Cleanup Model](#ownership-cleanup-model).
-- [x] Keep only the minimal shared notes directly in [adaptive.rules.md](../../adaptive.rules.md) once the external shared baseline is in place. See [Include-Driven MCP Hydration](#1-include-driven-mcp-hydration).
-- [x] For each removed shared document, record which facts were preserved elsewhere so trimming is explicit rather than assumed. See [Coverage Controls](#2-coverage-controls).
+- [ ] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
+- [ ] Add to `# Shared`: Makefile-first rule — always prefer root `make` targets; call scripts directly only when no matching target exists or a script header says otherwise.
+- [ ] Add to `# Shared`: working directory constraint — scripts expect to be run from the repository root; repo-relative paths break when run from a subdirectory.
+- [ ] Add to `# Shared`: redundancy guard — do not add a new script if a `make` target already covers the same workflow.
+- [ ] Add to `# Implement`: Makefile-first automation rule — new automation belongs in the Makefile first; add a script only when the logic is too complex for a make target.
+- [ ] Add to `# Plan`: discovery step — check whether an existing make target or script already covers the need before designing a new one; reference `scripts/README.md` for the preferred-command map.
 
-### Phase 3 - Split Or Extract Large Technical Inputs
+#### `docs/adaptive.rules.md`
 
-- [x] Review [docs/technical/decisions.md](../technical/decisions.md) and identify the specific AI-critical material that is needed frequently: authority rules, current workflow, stack, testing policy, document responsibilities, and core contract. See [Strong Points To Preserve](#strong-points-to-preserve).
-- [x] Decide whether to split `decisions.md` into smaller authoritative companion documents or to create smaller extracted files that `decisions.md` links to while remaining the top-level SSOT. See [Whole-File Includes Make Large Docs Expensive](#3-whole-file-includes-make-large-docs-expensive).
-- [x] Do the same analysis for [docs/technical/scaffolding.md](../technical/scaffolding.md), extracting only the structure-critical portions that planning, discovery, and implementation actually need. See [scaffolding.md As The Structure Authority](#3-scaffoldingmd-as-the-structure-authority).
-- [x] Preserve one clear owner for every moved rule. Do not create two competing copies of the same policy in the new smaller files. See [Authority And Precedence Statements Are Repeated Too Many Times](#2-authority-and-precedence-statements-are-repeated-too-many-times).
-- [x] Add backlinks or ownership notes so extracted files remain traceable to their canonical parent or canonical rule owner. See [Governance Controls](#4-governance-controls).
+- [ ] Remove the `- **Important context (always read)**:` block and its `docs/index.md` list item from `# Shared`.
+- [ ] Add to `# Shared`: the two-audience rule — this directory serves human contributors and AI hydration; they have separate documents and must not be mixed.
+- [ ] Add to `# Shared`: the human-first document list (README.md, START_HERE.md, contrib/contributing.md, contrib/shared/README.md) with the instruction not to optimize those for AI consumption.
+- [ ] Add to `# Shared`: the AI hydration document roles — `ai_context.md` is the compact AI baseline, `decisions.md` is the policy authority, other technical docs are role-specific includes governed by `ai_hydration_topology.md`.
+- [ ] Add to `# Implement`: audience-decision rule — before adding a new doc, classify it as human-first or AI hydration context, add it to the right category, and update `ai_hydration_topology.md` if it changes hydration.
+- [ ] Add to `# Change Review`: governance gate — doc changes that touch `adaptive.rules.md`, `ai_context.md`, or `ai_hydration_topology.md` require a hydration-metrics check per the governance requirements in `ai_hydration_topology.md`.
 
-### Phase 4 - Normalize Contrib Shared And Stage Guides
+#### `examples/adaptive.rules.md`
 
-- [x] Reduce [docs/contrib/shared/README.md](../contrib/shared/README.md) to the smallest useful authority-map explanation if that document remains user-facing. See [Ownership Cleanup Model](#ownership-cleanup-model).
-- [x] Remove duplicated framing from [docs/contrib/plan.md](../contrib/plan.md), [docs/contrib/code.md](../contrib/code.md), [docs/contrib/testing.md](../contrib/testing.md), [docs/contrib/debug.md](../contrib/debug.md), and [docs/contrib/review.md](../contrib/review.md) when the shared AI baseline already carries the same orientation. See [Stage-Guide Boilerplate Repeats Across Files](#4-stage-guide-boilerplate-repeats-across-files).
-- [x] Keep only the parts of each stage guide that are genuinely stage-specific. See [Repo-Specific Applied Guidance In Stage Guides](#5-repo-specific-applied-guidance-in-stage-guides).
-- [x] Replace or move generic educational examples in [docs/contrib/code.md](../contrib/code.md) if they do not teach QuickScale-specific implementation practice. See [Generic Educational Examples Compete With Real Repo Constraints](#6-generic-educational-examples-compete-with-real-repo-constraints).
-- [x] Clarify the boundary between normative testing/debugging policy and repo-specific execution guidance so the same rule is not repeated across `decisions.md`, shared docs, and stage docs. See [Testing And Debugging Guidance Is Split In Ways That Invite Duplication](#5-testing-and-debugging-guidance-is-split-in-ways-that-invite-duplication).
-- [x] Ensure each stage guide can justify its presence in hydration with role-specific value, not just historical structure. See [Role-Specific Context Model](#role-specific-context-model).
+- [ ] Remove the `- **Important context (always read)**:` block and its README list item from `# Shared`.
+- [ ] Add to `# Shared`: examples identity — reference material, not authoritative product scope, not generated into projects by default.
+- [ ] Add to `# Shared`: usage rule — treat examples as patterns that can be selectively copied, not as tested components.
+- [ ] Add to `# Shared`: scope guard — do not add examples that imply features or constraints that are not in the main product.
+- [ ] Add to `# Implement`: promotion rule — if an example grows into a tested module, it belongs in `quickscale_modules/`, not here.
+- [ ] Add to `# Change Review`: contract consistency check — new examples must not contradict the generated project contract in `docs/technical/generated_project_structure.md`.
 
-### Phase 5 - Rewire `adaptive.rules.md`
+---
 
-Source state note as of 2026-05-01: the shared-baseline swap and most role rewiring landed during phases 2-4 while those include trims were being applied, so the checklist below reflects the current source state rather than only work deferred to a future phase-5 pass.
+### Phase B — `ai_context.md` Drift Risk
 
-Final rationale, topology inventory, validation snapshot, rollback notes, and governance rules now live in [AI Hydration Topology And Governance](../technical/ai_hydration_topology.md).
+- [ ] Add an explicit drift disclaimer at the top of `docs/technical/ai_context.md` — immediately below the opening paragraph — stating that this file is a best-effort derivative, that it may lag behind canonical sources, and that any conflict with `decisions.md` or companion technical docs resolves in favor of those canonical sources immediately, before this file is corrected.
+- [ ] *(deferred)* Evaluate a lightweight lint script that verifies `ai_context.md` references resolve to existing files and that key constant values (make targets, stack baseline entries) still appear in both `ai_context.md` and `decisions.md`. Only pursue this if real drift causes a problem first.
 
-- [x] Replace the current broad `# Shared` include list with the new compact AI baseline and only the smallest necessary inline notes. See [Shared Baseline For All AI Roles](#shared-baseline-for-all-ai-roles).
-- [x] Restrict structure-heavy context to `plan`, `codebase-discovery`, and `implement`. See [Role-Specific Context Model](#role-specific-context-model).
-- [x] Keep `external-research` on the compact baseline unless a concrete research workflow proves it needs more. See [Human Router Documents Are Valuable, But Not As Default AI Inputs](#7-human-router-documents-are-valuable-but-not-as-default-ai-inputs).
-- [x] Keep `quality-gate` on the compact baseline plus `validation_policy.md`, testing, and debugging guidance only. See [Role-Specific Context Model](#role-specific-context-model).
-- [x] Keep `change-review` on the compact baseline plus review guidance only. See [Role-Specific Context Model](#role-specific-context-model).
-- [x] Record the final include rationale in comments or in a short companion note so future edits do not drift back toward broad whole-file inclusion. See [Final Include Rationale](../technical/ai_hydration_topology.md#final-include-rationale).
-- [x] Create a simple role-to-input inventory after rewiring so future edits can be reviewed against the intended topology. See [Role-To-Input Inventory](../technical/ai_hydration_topology.md#role-to-input-inventory).
+---
 
-### Phase 6 - Validation And Rollout
+### Phase C — Mechanism Documentation
 
-- [x] Re-run hydration for all major sections after the refactor and compare the new size to the Phase 0 baseline. See [Post-Refactor Validation Snapshot](../technical/ai_hydration_topology.md#post-refactor-validation-snapshot).
-- [x] Spot-check each section for missing authority, workflow, validation, or role-specific execution guidance. The goal is smaller context, not weaker context. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
-- [x] Review the include graph for broken links and redundant includes. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
-- [x] Confirm that human docs remain coherent and useful after AI-focused trimming. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
-- [x] Validate whether any now-obsolete duplicated text remained after the new include strategy settled; this pass confirmed that no additional in-scope duplicate cleanup was needed beyond the phase-4 guide trims. See [Validation Findings](../technical/ai_hydration_topology.md#validation-findings).
-- [x] Record before/after results in a compact validation table so the rollout is auditable by future contributors. See [Post-Refactor Validation Snapshot](../technical/ai_hydration_topology.md#post-refactor-validation-snapshot).
-- [x] Define a rollback note describing which include changes can be reverted independently if one role regresses. See [Rollback Notes](../technical/ai_hydration_topology.md#rollback-notes).
-
-### Phase 7 - Ongoing Hardening And Governance
-
-- [x] Assign a maintenance owner and review cadence for AI hydration files and include topology changes. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
-- [x] Require future `adaptive.rules.md` or AI-baseline edits to include a short rationale and updated hydration metrics for affected roles. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
-- [x] Periodically review whether any shared include has become role-specific or any role-specific include has become obsolete. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
-- [x] Keep the human-versus-AI document boundary explicit so future cleanup does not collapse the two audiences back together. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
-- [x] Revisit the size budgets after a few iterations and tighten or relax them based on actual hydration quality rather than guesswork. See [Governance Requirements](../technical/ai_hydration_topology.md#governance-requirements).
-
-## Suggested Handoff Order
-
-If this work is split across multiple implementation tasks, the recommended order is:
-
-1. baseline and measurements
-2. compact AI baseline file
-3. `adaptive.rules.md` shared-context reduction
-4. technical doc decomposition
-5. contrib guide normalization
-6. final hydration validation and cleanup
-7. ongoing governance and hardening controls
-
-## Expected Outcome
-
-If the plan above is executed cleanly, QuickScale will keep the benefits of MCP-hydrated context while reducing repeated prose, preserving authority boundaries, and giving each coding assistant role a smaller, safer, and more governable context bundle.
+- [ ] Add a `## Mechanism Reference` section to `docs/technical/ai_hydration_topology.md` that explains the two hydration mechanisms side by side:
+  - `[include](path)` — inlines file content into the measured hydrated payload at hydration time; use this for files where the content is always needed and should be counted in size budgets.
+  - `"Important context (always read)"` list — surfaces a read hint alongside the payload; the agent fetches the file on demand, not at hydration time; the content does not appear in inline hydration metrics.
+- [ ] Add guidance on which mechanism to use when: inline includes for role-critical policy and structure files; read hints for supplementary local context that may or may not be needed depending on the task.
+- [ ] Update the existing `## Final Include Rationale` table in `ai_hydration_topology.md` to add a `Mechanism` column distinguishing between `[include]` entries and any "always read" pointer entries, so the inventory is complete and unambiguous.
