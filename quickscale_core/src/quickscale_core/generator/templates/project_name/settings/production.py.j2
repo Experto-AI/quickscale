@@ -23,6 +23,27 @@ from decouple import config
 
 from .base import *  # noqa: F403
 
+_SHIPPED_SECRET_KEY_PLACEHOLDER = "django-insecure-change-this-in-production"
+
+
+def _require_production_secret_key(secret_key: object) -> str:
+    """Reject blank or shipped placeholder SECRET_KEY values in production."""
+    normalized_secret_key = str(secret_key).strip()
+    if (
+        not normalized_secret_key
+        or normalized_secret_key == _SHIPPED_SECRET_KEY_PLACEHOLDER
+    ):
+        raise ValueError(
+            "SECRET_KEY must be set to a non-empty, non-default value in "
+            "production. Generate one with: "
+            "python -c 'from django.core.management.utils import "
+            "get_random_secret_key; print(get_random_secret_key())'"
+        )
+    return normalized_secret_key
+
+
+SECRET_KEY = _require_production_secret_key(SECRET_KEY)  # noqa: F405
+
 # SECURITY: DEBUG must be False in production
 DEBUG = False
 

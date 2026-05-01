@@ -11,6 +11,7 @@ import pytest
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.conf import settings
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -47,6 +48,25 @@ def _attach_messages(request: HttpRequest) -> None:
     session_middleware.process_request(request)
     request.session.save()
     setattr(request, "_messages", FallbackStorage(request))
+
+
+def _place_artifact_in_authoritative_root(artifact: BackupArtifact) -> Path:
+    """Move one artifact file into the configured authoritative backup root."""
+    root = Path(str(getattr(settings, "QUICKSCALE_BACKUPS_LOCAL_DIRECTORY", "")))
+    if not root.is_absolute():
+        root = Path(getattr(settings, "BASE_DIR", Path.cwd())) / root
+    root.mkdir(parents=True, exist_ok=True)
+
+    source_path = Path(artifact.local_path)
+    target_path = root / artifact.filename
+    target_path.write_bytes(source_path.read_bytes())
+    artifact.local_path = str(target_path)
+    artifact.checksum_sha256 = hashlib.sha256(target_path.read_bytes()).hexdigest()
+    artifact.size_bytes = target_path.stat().st_size
+    artifact.save(
+        update_fields=["local_path", "checksum_sha256", "size_bytes", "updated_at"]
+    )
+    return target_path
 
 
 def _make_staff_user(username: str, *permission_codenames: str) -> AbstractBaseUser:
@@ -733,7 +753,10 @@ class TestBackupArtifactAdmin:
         self,
         admin_client: Client,
         backup_artifact: BackupArtifact,
+        local_backup_settings: Path,
     ) -> None:
+        del local_backup_settings
+        _place_artifact_in_authoritative_root(backup_artifact)
         response = admin_client.get(
             reverse(
                 "admin:quickscale_modules_backups_backupartifact_change",
@@ -856,7 +879,10 @@ class TestBackupArtifactAdmin:
         self,
         backup_artifact: BackupArtifact,
         superuser: AbstractBaseUser,
+        local_backup_settings: Path,
     ) -> None:
+        del local_backup_settings
+        _place_artifact_in_authoritative_root(backup_artifact)
         artifact_admin = _artifact_admin()
         request = RequestFactory().get("/admin/")
         request.user = superuser
@@ -891,7 +917,10 @@ class TestBackupArtifactAdmin:
     def test_download_view_allows_staff_user_with_view_permission(
         self,
         backup_artifact: BackupArtifact,
+        local_backup_settings: Path,
     ) -> None:
+        del local_backup_settings
+        _place_artifact_in_authoritative_root(backup_artifact)
         user = _make_staff_user(
             "backups-staff-artifact-view-only",
             "view_backupartifact",
@@ -908,6 +937,47 @@ class TestBackupArtifactAdmin:
 
         assert response.status_code == 200
         assert backup_artifact.filename in response["Content-Disposition"]
+
+    def test_download_view_redirects_out_of_tree_artifact(
+        self,
+        backup_artifact: BackupArtifact,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+    ) -> None:
+        del local_backup_settings
+        artifact_admin = _artifact_admin()
+        request = RequestFactory().get("/admin/")
+        request.user = superuser
+        _attach_messages(request)
+
+        response = artifact_admin.download_view(request, backup_artifact.pk)
+
+        assert response.status_code == 302
+        assert response.url == reverse(
+            "admin:quickscale_modules_backups_backupartifact_change",
+            args=[backup_artifact.pk],
+        )
+        assert [message.message for message in get_messages(request)] == [
+            "Download unavailable: this artifact is no longer available."
+        ]
+
+    def test_download_link_is_unavailable_for_symlink_escape(
+        self,
+        backup_artifact: BackupArtifact,
+        local_backup_settings: Path,
+        tmp_path: Path,
+    ) -> None:
+        escape_target = tmp_path / "outside-root.json"
+        escape_target.write_text("[]", encoding="utf-8")
+        symlink_path = local_backup_settings / "database" / backup_artifact.filename
+        symlink_path.parent.mkdir(parents=True, exist_ok=True)
+        symlink_path.symlink_to(escape_target)
+        backup_artifact.local_path = str(symlink_path)
+        backup_artifact.save(update_fields=["local_path", "updated_at"])
+
+        artifact_admin = _artifact_admin()
+
+        assert artifact_admin.download_link(backup_artifact) == "Unavailable"
 
     def test_download_link_is_unavailable_for_deleted_artifact(
         self,
@@ -965,7 +1035,12 @@ class TestBackupArtifactAdmin:
         request.user = superuser
         _attach_messages(request)
 
-        with patch("quickscale_modules_backups.admin.download_backup_path") as mocked:
+        with patch(
+            "quickscale_modules_backups.admin.download_backup_path",
+            side_effect=BackupError(
+                f"Backup file not found: {Path(backup_artifact.local_path)}"
+            ),
+        ) as mocked:
             response = artifact_admin.download_view(request, backup_artifact.pk)
 
         assert response.status_code == 302
@@ -973,7 +1048,7 @@ class TestBackupArtifactAdmin:
             "admin:quickscale_modules_backups_backupartifact_change",
             args=[backup_artifact.pk],
         )
-        mocked.assert_not_called()
+        mocked.assert_called_once()
 
     def test_delete_model_removes_local_file(
         self,

@@ -1,11 +1,98 @@
 """Unit tests for CRM module API views"""
 
 import pytest
+from django.conf import settings
 from django.test import override_settings
 from django.urls import reverse
+from django.shortcuts import resolve_url
 from rest_framework import status
 
 from quickscale_modules_crm.models import Deal, Stage
+
+
+DASHBOARD_TEST_MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+]
+
+DASHBOARD_TEST_TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ]
+        },
+    }
+]
+
+
+@pytest.mark.django_db
+class TestCRMDashboardView:
+    """Tests for the CRM HTML dashboard access contract."""
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_dashboard_redirects_anonymous_users_to_login(self, client):
+        """Anonymous users should enter the configured auth flow before dashboard access."""
+        dashboard_url = reverse("quickscale_crm:dashboard")
+
+        response = client.get(dashboard_url)
+
+        assert response.status_code == status.HTTP_302_FOUND
+        assert response["Location"] == (
+            f"{resolve_url(settings.LOGIN_URL)}?next={dashboard_url}"
+        )
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_dashboard_returns_403_for_authenticated_non_staff_user(self, client, user):
+        """Authenticated non-staff users should be blocked from the HTML dashboard."""
+        client.force_login(user)
+
+        response = client.get(reverse("quickscale_crm:dashboard"))
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_dashboard_returns_200_for_staff_user(self, client, user, contact, deal):
+        """Staff users should be able to render the dashboard."""
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        client.force_login(user)
+
+        response = client.get(reverse("quickscale_crm:dashboard"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "CRM Dashboard" in response.content.decode()
+
+    @override_settings(CRM_ENABLE_API=False)
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_dashboard_stays_available_to_staff_when_api_is_disabled(
+        self, client, user, contact, deal
+    ):
+        """Disabling the API should not disable the separate staff-only HTML dashboard."""
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        client.force_login(user)
+
+        response = client.get(reverse("quickscale_crm:dashboard"))
+
+        assert response.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db

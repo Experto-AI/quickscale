@@ -2650,6 +2650,103 @@ class TestBackupServiceHelpers:
         assert destination.read_bytes() == b"remote-artifact"
         assert deleted == [(expected_options, remote_key)]
 
+    def test_download_backup_path_allows_current_authoritative_root(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+    ) -> None:
+        local_backup_settings.mkdir(parents=True, exist_ok=True)
+        artifact_path = local_backup_settings / "downloadable-backup.json"
+        artifact_path.write_text("[]", encoding="utf-8")
+        artifact = BackupArtifact.objects.create(
+            filename=artifact_path.name,
+            local_path=str(artifact_path),
+            checksum_sha256=hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+            size_bytes=artifact_path.stat().st_size,
+            backup_format="json",
+            database_engine="django.db.backends.sqlite3",
+            database_name="test.sqlite3",
+            metadata_json={"environment": "test"},
+            initiated_by=superuser,
+        )
+
+        resolved_path = backup_services.download_backup_path(artifact)
+
+        assert resolved_path == artifact_path.resolve()
+
+    def test_download_backup_path_allows_authoritative_snapshot_root_after_settings_drift(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+    ) -> None:
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+        original_path = Path(artifact.local_path)
+
+        with override_settings(
+            BASE_DIR=local_backup_settings.parent,
+            QUICKSCALE_BACKUPS_LOCAL_DIRECTORY=str(
+                local_backup_settings.parent / "drifted-private-backups"
+            ),
+        ):
+            resolved_path = backup_services.download_backup_path(artifact)
+
+        assert resolved_path == original_path.resolve()
+
+    def test_download_backup_path_rejects_out_of_tree_tampered_row(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        tmp_path: Path,
+    ) -> None:
+        outside_path = tmp_path / "tampered-backup.json"
+        outside_path.write_text("[]", encoding="utf-8")
+        artifact = BackupArtifact.objects.create(
+            filename=outside_path.name,
+            local_path=str(outside_path),
+            checksum_sha256=hashlib.sha256(outside_path.read_bytes()).hexdigest(),
+            size_bytes=outside_path.stat().st_size,
+            backup_format="json",
+            database_engine="django.db.backends.sqlite3",
+            database_name="test.sqlite3",
+            metadata_json={"environment": "test"},
+            initiated_by=superuser,
+        )
+
+        with pytest.raises(
+            BackupError,
+            match="authoritative backup roots",
+        ):
+            backup_services.download_backup_path(artifact)
+
+    def test_download_backup_path_rejects_symlink_escape_within_authoritative_root(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        tmp_path: Path,
+    ) -> None:
+        escape_target = tmp_path / "outside-root.json"
+        escape_target.write_text("[]", encoding="utf-8")
+        symlink_path = local_backup_settings / "database" / "linked-backup.json"
+        symlink_path.parent.mkdir(parents=True, exist_ok=True)
+        symlink_path.symlink_to(escape_target)
+        artifact = BackupArtifact.objects.create(
+            filename=symlink_path.name,
+            local_path=str(symlink_path),
+            checksum_sha256=hashlib.sha256(escape_target.read_bytes()).hexdigest(),
+            size_bytes=escape_target.stat().st_size,
+            backup_format="json",
+            database_engine="django.db.backends.sqlite3",
+            database_name="test.sqlite3",
+            metadata_json={"environment": "test"},
+            initiated_by=superuser,
+        )
+
+        with pytest.raises(BackupError, match="cannot use symlinks"):
+            backup_services.download_backup_path(artifact)
+
     def test_restore_execution_allowed_honors_debug_and_env(
         self,
         monkeypatch: pytest.MonkeyPatch,

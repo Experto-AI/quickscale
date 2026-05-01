@@ -1,5 +1,7 @@
 """Tests for Forms module views"""
 
+import csv
+import io
 from unittest.mock import Mock
 
 import pytest
@@ -502,6 +504,26 @@ class TestAdminSubmissionExportView:
         content = response.content.decode()
         assert "full_name" in content
         assert "Alice" in content
+
+    def test_csv_neutralizes_formula_headers_and_values(
+        self, staff_client, form, submission, field_value
+    ):
+        """CSV export prefixes dangerous header/value cells so spreadsheets keep them inert."""
+        field_value.field_name = "=2+2"
+        field_value.value = "  +SUM(A1:A2)"
+        field_value.save(update_fields=["field_name", "value"])
+
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+        )
+        response = staff_client.get(url)
+
+        assert response.status_code == 200
+
+        rows = list(csv.reader(io.StringIO(response.content.decode())))
+        assert rows[0][0] == "id"
+        assert rows[0][-1] == "'=2+2"
+        assert rows[1][-1] == "'  +SUM(A1:A2)"
 
     def test_returns_403_for_anonymous(self, api_client, form):
         """Anonymous user cannot export submissions"""

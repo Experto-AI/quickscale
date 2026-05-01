@@ -2573,15 +2573,84 @@ def validate_backup_artifact(artifact: BackupArtifact) -> list[str]:
     return issues
 
 
-def download_backup_path(artifact: BackupArtifact) -> Path:
+def _is_path_within_root(candidate_path: Path, root_path: Path) -> bool:
+    """Return whether one absolute path stays inside one absolute root."""
+    try:
+        candidate_path.relative_to(root_path)
+    except ValueError:
+        return False
+    return True
+
+
+def _path_uses_symlink_within_root(candidate_path: Path, root_path: Path) -> bool:
+    """Return whether one candidate path traverses any symlink below a root."""
+    if not _is_path_within_root(candidate_path, root_path):
+        return False
+
+    current = root_path
+    for part in candidate_path.relative_to(root_path).parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _get_authoritative_local_backup_roots(
+    artifact: BackupArtifact,
+    policy: BackupPolicySnapshot,
+) -> tuple[Path, ...]:
+    """Return the local roots that may legitimately contain an artifact download."""
+    roots = [Path(os.path.abspath(os.fspath(get_local_backup_directory(policy))))]
+    snapshot = _get_authoritative_snapshot_for_artifact(artifact)
+    if snapshot is not None:
+        roots.append(Path(os.path.abspath(snapshot.local_root_path)))
+
+    unique_roots: list[Path] = []
+    for root in roots:
+        if root not in unique_roots:
+            unique_roots.append(root)
+    return tuple(unique_roots)
+
+
+def download_backup_path(
+    artifact: BackupArtifact,
+    *,
+    policy: BackupPolicySnapshot | None = None,
+) -> Path:
     """Return the local operator download path for an artifact."""
     if not artifact.local_path:
         raise BackupError("This artifact does not have a local download path.")
 
-    local_path = Path(artifact.local_path)
-    if not local_path.exists():
-        raise BackupError(f"Backup file not found: {local_path}")
-    return local_path
+    candidate_path = Path(artifact.local_path).expanduser()
+    absolute_candidate = Path(os.path.abspath(os.fspath(candidate_path)))
+    if not absolute_candidate.exists():
+        raise BackupError(f"Backup file not found: {absolute_candidate}")
+
+    resolved_policy = policy or load_policy_snapshot()
+    resolved_candidate = absolute_candidate.resolve(strict=True)
+    if not resolved_candidate.is_file():
+        raise BackupError(f"Backup file is not a regular file: {resolved_candidate}")
+
+    for authoritative_root in _get_authoritative_local_backup_roots(
+        artifact,
+        resolved_policy,
+    ):
+        if not _is_path_within_root(absolute_candidate, authoritative_root):
+            continue
+        if _path_uses_symlink_within_root(absolute_candidate, authoritative_root):
+            raise BackupError("Backup download path cannot use symlinks.")
+
+        resolved_root = authoritative_root.resolve(strict=False)
+        if not _is_path_within_root(resolved_candidate, resolved_root):
+            raise BackupError(
+                "Backup download path must stay within authoritative backup roots."
+            )
+
+        return resolved_candidate
+
+    raise BackupError(
+        "Backup download path must stay within authoritative backup roots."
+    )
 
 
 def delete_artifact_files(

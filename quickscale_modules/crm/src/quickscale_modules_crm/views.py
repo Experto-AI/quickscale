@@ -3,6 +3,9 @@
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
+from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Sum
 from django.http import Http404
 from django.views.generic import TemplateView
@@ -61,6 +64,15 @@ class CRMDashboardView(TemplateView):
     """Dashboard view for CRM module showing summary statistics"""
 
     template_name = "quickscale_modules_crm/crm/dashboard.html"
+
+    def dispatch(self, request, *args: Any, **kwargs: Any):
+        user = getattr(request, "user", AnonymousUser())
+        if not user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+        if not user.is_staff:
+            raise PermissionDenied("CRM dashboard access is limited to staff users.")
+        request.user = user
+        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)

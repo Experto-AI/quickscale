@@ -636,9 +636,12 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         """Return whether the admin can still offer a local download action."""
         if obj.status == BackupArtifact.STATUS_DELETED:
             return False
-        if not obj.local_path:
+
+        try:
+            download_backup_path(obj)
+        except BackupError:
             return False
-        return Path(obj.local_path).exists()
+        return True
 
     @admin.display(description="Classification")
     def restore_scope_badge(self, obj: BackupArtifact) -> str:

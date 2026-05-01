@@ -118,6 +118,10 @@ The blog module now supports a two-step automation flow:
     - `file` (required)
     - `alt` (optional)
     - `kind` (optional: `inline`, `featured`, `general`)
+- Validation: enforces `BLOG_API_UPLOAD_MAX_BYTES`, allowed image formats,
+  `BLOG_API_UPLOAD_MAX_WIDTH`, and `BLOG_API_UPLOAD_MAX_HEIGHT`; Pillow
+  decompression-bomb failures are returned as a stable validation error rather
+  than a traceback.
 
 **Response**
 
@@ -366,6 +370,8 @@ MARKDOWNX_IMAGE_MAX_SIZE = {'size': (1920, 1080), 'quality': 90}
 # Blog automation API settings
 BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 BLOG_API_ALLOWED_IMAGE_FORMATS = ['PNG', 'JPEG', 'WEBP', 'GIF']
+BLOG_API_UPLOAD_MAX_WIDTH = 4096
+BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 BLOG_API_TOKENS = []  # Optional machine-auth tokens for automation pipelines
 
 # Featured image settings

@@ -91,7 +91,7 @@ All authenticated API endpoints are available under `/crm/api/` when `CRM_ENABLE
 | `/crm/api/deal-notes/` | GET, POST | List/create deal notes |
 | `/crm/api/deal-notes/{id}/` | GET, PUT, PATCH, DELETE | Deal note detail |
 
-All CRM API endpoints use session authentication and require an authenticated user. When `CRM_ENABLE_API=False`, the `/crm/api/` endpoints return `404` while the module dashboard remains available at `/crm/`.
+All CRM API endpoints use session authentication and require an authenticated user. The HTML dashboard at `/crm/` is a separate staff-only surface: anonymous users are redirected to the configured login entry, authenticated non-staff users receive `403`, and staff users can view the dashboard regardless of the `CRM_ENABLE_API` toggle. When `CRM_ENABLE_API=False`, only the `/crm/api/` endpoints return `404`.
 
 ### Filtering
 
