@@ -7,7 +7,8 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Sum
-from django.http import Http404
+from django.http import Http404, HttpRequest
+from django.http.response import HttpResponseBase
 from django.views.generic import TemplateView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
@@ -65,7 +66,9 @@ class CRMDashboardView(TemplateView):
 
     template_name = "quickscale_modules_crm/crm/dashboard.html"
 
-    def dispatch(self, request, *args: Any, **kwargs: Any):
+    def dispatch(
+        self, request: HttpRequest, *args: Any, **kwargs: Any
+    ) -> HttpResponseBase:
         user = getattr(request, "user", AnonymousUser())
         if not user.is_authenticated:
             return redirect_to_login(request.get_full_path())
