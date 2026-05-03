@@ -5,7 +5,7 @@ A lightweight CRM module for QuickScale projects, providing contact management, 
 ## Features
 
 - **7 Core Models**: Tag, Company, Contact, Stage, Deal, ContactNote, DealNote
-- **RESTful API**: Session-authenticated CRUD operations with Django REST Framework
+- **RESTful API**: Session-authenticated, staff-only CRUD operations with Django REST Framework
 - **Deal Pipeline**: Configurable stages with probability tracking
 - **Bulk Operations**: Update multiple deals at once
 - **Django Admin**: Full admin interface with inlines
@@ -67,10 +67,11 @@ longer have a semantic terminal stage.
 
 ## API Endpoints
 
-All authenticated API endpoints are available under `/crm/api/` when `CRM_ENABLE_API=True`:
+All staff-authenticated API endpoints are available under `/crm/api/` when `CRM_ENABLE_API=True`:
 
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
+| `/crm/api/` | GET | Staff-only API root with CRM endpoint links |
 | `/crm/api/tags/` | GET, POST | List/create tags |
 | `/crm/api/tags/{id}/` | GET, PUT, PATCH, DELETE | Tag detail |
 | `/crm/api/companies/` | GET, POST | List/create companies |
@@ -91,7 +92,7 @@ All authenticated API endpoints are available under `/crm/api/` when `CRM_ENABLE
 | `/crm/api/deal-notes/` | GET, POST | List/create deal notes |
 | `/crm/api/deal-notes/{id}/` | GET, PUT, PATCH, DELETE | Deal note detail |
 
-All CRM API endpoints use session authentication and require an authenticated user. The HTML dashboard at `/crm/` is a separate staff-only surface: anonymous users are redirected to the configured login entry, authenticated non-staff users receive `403`, and staff users can view the dashboard regardless of the `CRM_ENABLE_API` toggle. When `CRM_ENABLE_API=False`, only the `/crm/api/` endpoints return `404`.
+All CRM API endpoints, including standalone note routes, nested note actions, and deal bulk actions, use session authentication and require a staff user. The HTML dashboard at `/crm/` is a separate staff-only surface: anonymous users are redirected to the configured login entry, authenticated non-staff users receive `403`, and staff users can view the dashboard regardless of the `CRM_ENABLE_API` toggle. When `CRM_ENABLE_API=False`, the `/crm/api/` routes remain hidden and return `404`.
 
 ### Filtering
 

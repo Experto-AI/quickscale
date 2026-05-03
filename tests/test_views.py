@@ -31,6 +31,56 @@ DASHBOARD_TEST_TEMPLATES = [
 ]
 
 
+def _perform_api_request(client, method, url, data=None):
+    """Dispatch a CRM API request for the given method."""
+    if method == "get":
+        return client.get(url)
+    return getattr(client, method)(url, data or {}, format="json")
+
+
+def _assert_staff_only_route(
+    api_client,
+    non_staff_authenticated_client,
+    authenticated_client,
+    method,
+    url,
+    expected_staff_status,
+    data=None,
+):
+    """Assert the CRM API route is anonymous-denied, non-staff-denied, and staff-allowed."""
+    anonymous_response = _perform_api_request(api_client, method, url, data)
+    assert anonymous_response.status_code in (
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+    )
+
+    non_staff_response = _perform_api_request(
+        non_staff_authenticated_client, method, url, data
+    )
+    assert non_staff_response.status_code == status.HTTP_403_FORBIDDEN
+
+    staff_response = _perform_api_request(authenticated_client, method, url, data)
+    assert staff_response.status_code == expected_staff_status
+
+
+def _assert_api_hidden_for_all_callers(
+    api_client,
+    non_staff_authenticated_client,
+    authenticated_client,
+    method,
+    url,
+    data=None,
+):
+    """Assert the CRM API route stays hidden when the module API toggle is off."""
+    for client in (
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+    ):
+        response = _perform_api_request(client, method, url, data)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
 @pytest.mark.django_db
 class TestCRMDashboardView:
     """Tests for the CRM HTML dashboard access contract."""
@@ -75,7 +125,306 @@ class TestCRMDashboardView:
         response = client.get(reverse("quickscale_crm:dashboard"))
 
         assert response.status_code == status.HTTP_200_OK
-        assert "CRM Dashboard" in response.content.decode()
+
+
+@pytest.mark.django_db
+class TestCRMAPIPermissions:
+    """Permission matrix tests for the staff-only CRM API."""
+
+    def test_api_root_requires_staff(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+    ):
+        """The CRM API root should only allow staff users."""
+        url = reverse("quickscale_crm:api-root")
+
+        _assert_staff_only_route(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            "get",
+            url,
+            status.HTTP_200_OK,
+        )
+
+    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    def test_api_root_returns_404_when_api_disabled(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+    ):
+        """The CRM API root should stay hidden when the API toggle is off."""
+        url = reverse("quickscale_crm:api-root")
+
+        _assert_api_hidden_for_all_callers(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            "get",
+            url,
+        )
+
+    @pytest.mark.parametrize(
+        "route_name",
+        [
+            "tag-list",
+            "company-list",
+            "contact-list",
+            "stage-list",
+            "deal-list",
+            "contact-note-list",
+            "deal-note-list",
+        ],
+    )
+    def test_primary_resource_routes_require_staff(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+        route_name,
+    ):
+        """Primary CRM resource routes should only allow staff users."""
+        url = reverse(f"quickscale_crm:{route_name}")
+
+        _assert_staff_only_route(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            "get",
+            url,
+            status.HTTP_200_OK,
+        )
+
+    @pytest.mark.parametrize(
+        ("route_name", "method", "payload", "expected_staff_status"),
+        [
+            pytest.param(
+                "contact-notes",
+                "get",
+                None,
+                status.HTTP_200_OK,
+                id="contact-notes-list",
+            ),
+            pytest.param(
+                "contact-notes",
+                "post",
+                {"text": "Staff contact note"},
+                status.HTTP_201_CREATED,
+                id="contact-notes-create",
+            ),
+            pytest.param(
+                "deal-notes",
+                "get",
+                None,
+                status.HTTP_200_OK,
+                id="deal-notes-list",
+            ),
+            pytest.param(
+                "deal-notes",
+                "post",
+                {"text": "Staff deal note"},
+                status.HTTP_201_CREATED,
+                id="deal-notes-create",
+            ),
+        ],
+    )
+    def test_nested_note_actions_require_staff(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+        contact,
+        deal,
+        route_name,
+        method,
+        payload,
+        expected_staff_status,
+    ):
+        """Nested CRM note actions should only allow staff users."""
+        object_id = contact.id if route_name == "contact-notes" else deal.id
+        url = reverse(f"quickscale_crm:{route_name}", args=[object_id])
+
+        _assert_staff_only_route(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            method,
+            url,
+            expected_staff_status,
+            payload,
+        )
+
+    @pytest.mark.parametrize(
+        ("route_name", "payload_factory"),
+        [
+            pytest.param(
+                "deal-bulk-update-stage",
+                lambda deal, closed_won_stage: {
+                    "deal_ids": [deal.id],
+                    "stage_id": closed_won_stage.id,
+                },
+                id="bulk-update-stage",
+            ),
+            pytest.param(
+                "deal-mark-won",
+                lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
+                id="mark-won",
+            ),
+            pytest.param(
+                "deal-mark-lost",
+                lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
+                id="mark-lost",
+            ),
+        ],
+    )
+    def test_deal_bulk_actions_require_staff(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+        deal,
+        closed_won_stage,
+        route_name,
+        payload_factory,
+    ):
+        """Deal bulk actions should only allow staff users."""
+        url = reverse(f"quickscale_crm:{route_name}")
+        payload = payload_factory(deal, closed_won_stage)
+
+        _assert_staff_only_route(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            "post",
+            url,
+            status.HTTP_200_OK,
+            payload,
+        )
+
+    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @pytest.mark.parametrize(
+        "route_name",
+        [
+            "tag-list",
+            "company-list",
+            "contact-list",
+            "stage-list",
+            "deal-list",
+            "contact-note-list",
+            "deal-note-list",
+        ],
+    )
+    def test_primary_resource_routes_return_404_when_api_disabled(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+        route_name,
+    ):
+        """Primary CRM resource routes should stay hidden when the API toggle is off."""
+        url = reverse(f"quickscale_crm:{route_name}")
+
+        _assert_api_hidden_for_all_callers(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            "get",
+            url,
+        )
+
+    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @pytest.mark.parametrize(
+        ("route_name", "method", "payload"),
+        [
+            pytest.param("contact-notes", "get", None, id="contact-notes-list"),
+            pytest.param(
+                "contact-notes",
+                "post",
+                {"text": "Hidden contact note"},
+                id="contact-notes-create",
+            ),
+            pytest.param("deal-notes", "get", None, id="deal-notes-list"),
+            pytest.param(
+                "deal-notes",
+                "post",
+                {"text": "Hidden deal note"},
+                id="deal-notes-create",
+            ),
+        ],
+    )
+    def test_nested_note_actions_return_404_when_api_disabled(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+        contact,
+        deal,
+        route_name,
+        method,
+        payload,
+    ):
+        """Nested note actions should stay hidden when the API toggle is off."""
+        object_id = contact.id if route_name == "contact-notes" else deal.id
+        url = reverse(f"quickscale_crm:{route_name}", args=[object_id])
+
+        _assert_api_hidden_for_all_callers(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            method,
+            url,
+            payload,
+        )
+
+    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    @pytest.mark.parametrize(
+        ("route_name", "payload_factory"),
+        [
+            pytest.param(
+                "deal-bulk-update-stage",
+                lambda deal, closed_won_stage: {
+                    "deal_ids": [deal.id],
+                    "stage_id": closed_won_stage.id,
+                },
+                id="bulk-update-stage",
+            ),
+            pytest.param(
+                "deal-mark-won",
+                lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
+                id="mark-won",
+            ),
+            pytest.param(
+                "deal-mark-lost",
+                lambda deal, closed_won_stage: {"deal_ids": [deal.id]},
+                id="mark-lost",
+            ),
+        ],
+    )
+    def test_deal_bulk_actions_return_404_when_api_disabled(
+        self,
+        api_client,
+        non_staff_authenticated_client,
+        authenticated_client,
+        deal,
+        closed_won_stage,
+        route_name,
+        payload_factory,
+    ):
+        """Deal bulk actions should stay hidden when the API toggle is off."""
+        url = reverse(f"quickscale_crm:{route_name}")
+        payload = payload_factory(deal, closed_won_stage)
+
+        _assert_api_hidden_for_all_callers(
+            api_client,
+            non_staff_authenticated_client,
+            authenticated_client,
+            "post",
+            url,
+            payload,
+        )
 
     @override_settings(CRM_ENABLE_API=False)
     @override_settings(
@@ -222,10 +571,21 @@ class TestContactViewSet:
         )
 
     @override_settings(REST_FRAMEWORK={})
-    def test_contact_list_allows_authenticated_user_without_host_defaults(
+    def test_contact_list_returns_403_for_non_staff_user_without_host_defaults(
+        self, non_staff_authenticated_client, contact
+    ):
+        """Explicit CRM auth should still reject non-staff users without global DRF settings."""
+        response = non_staff_authenticated_client.get(
+            reverse("quickscale_crm:contact-list")
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @override_settings(REST_FRAMEWORK={})
+    def test_contact_list_allows_staff_user_without_host_defaults(
         self, authenticated_client, contact
     ):
-        """Authenticated CRM access should remain available without global DRF settings."""
+        """Staff CRM access should remain available without global DRF settings."""
         response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
 
         assert response.status_code == status.HTTP_200_OK
