@@ -478,5 +478,5 @@ docker run -d \
 
 ---
 
-**Last Updated**: 2026-04-08
-**QuickScale Version**: current v0.83.0 implementation line (unreleased)
+**Last Updated**: 2026-05-03
+**QuickScale Version**: current published v0.83.0 release line
