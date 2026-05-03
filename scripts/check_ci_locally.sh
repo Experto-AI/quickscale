@@ -51,14 +51,12 @@ poetry install --with dev
 
 echo ""
 echo "[2/5] Running linters (ruff)..."
-poetry run ruff check quickscale_core quickscale_cli
-poetry run ruff format quickscale_core quickscale_cli
-poetry run ruff format --check quickscale_core quickscale_cli
+make lint -- --core --cli --modules
 echo "✓ Linting passed"
 
 echo ""
 echo "[3/5] Running type checks (mypy)..."
-poetry run mypy quickscale_core/src/ quickscale_cli/src/
+make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""

@@ -227,6 +227,8 @@ poetry run pre-commit install
 poetry run pre-commit run --all-files
 
 # Hooks run automatically on 'git commit'
+# Hooks use the root Poetry environment for Ruff and may rewrite files.
+# If that happens, re-stage the changed files and run 'git commit' again.
 ```
 
 ### Making Changes
@@ -236,7 +238,7 @@ poetry run pre-commit run --all-files
 2. Make code changes in `quickscale_core/src/` or `quickscale_cli/src/`
 3. Add tests in corresponding `tests/` directory
 4. Run tests: `./scripts/test_unit.sh`
-5. Run linters: `./scripts/lint.sh`
+5. Run linters: `make lint` or `make lint-fix`; run `make typecheck` before commit
 6. Commit changes: `git commit -m "feat: description"`
 7. Push and create PR: `git push origin feature/my-feature`
 

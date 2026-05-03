@@ -85,19 +85,11 @@ jobs:
 
       - name: Run linting (ruff)
         run: |
-          poetry run ruff check quickscale_core quickscale_cli quickscale_modules
-          poetry run ruff format --check quickscale_core quickscale_cli quickscale_modules
+          make lint -- --core --cli --modules
 
       - name: Run type checking (mypy)
         run: |
-          poetry run mypy quickscale_core/src/
-          poetry run mypy quickscale_cli/src/
-          for mod in quickscale_modules/*/; do
-            if [ -d "${mod}src" ]; then
-              echo "Type checking ${mod}..."
-              poetry run mypy "${mod}src/" || true
-            fi
-          done
+          make typecheck -- --core --cli --modules
 
       - name: Run unit and integration tests
         run: |
