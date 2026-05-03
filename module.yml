@@ -13,6 +13,12 @@ config:
       django_setting: BLOG_POSTS_PER_PAGE
       description: "Number of blog posts per page"
 
+    api_rate_limit:
+      type: string
+      default: "5/hour"
+      django_setting: BLOG_API_RATE_LIMIT
+      description: "Throttle rate for authenticated blog API requests (per IP). Format: '<count>/<period>'."
+
     enable_rss:
       type: boolean
       default: true

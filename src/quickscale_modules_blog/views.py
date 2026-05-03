@@ -3,6 +3,7 @@
 import json
 import logging
 import secrets
+from time import time
 from collections.abc import Callable, Mapping
 from importlib import import_module
 from typing import Any, TypeVar, cast
@@ -10,6 +11,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -44,6 +46,7 @@ if storage_helpers is not None:
 logger = logging.getLogger(__name__)
 
 DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
+DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
 DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH = 4096
 DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
@@ -176,6 +179,96 @@ def _enforce_csrf(request: HttpRequest) -> HttpResponse | None:
     """Apply Django's CSRF validation for session-authenticated API requests."""
     middleware = CsrfViewMiddleware(lambda req: JsonResponse({"error": "Forbidden"}))
     return middleware.process_view(request, lambda req: JsonResponse({}), (), {})
+
+
+def _parse_blog_api_rate_limit(rate_value: Any) -> tuple[int, int]:
+    """Return the configured request count and window size for blog API throttling."""
+    normalized_rate = (
+        str(rate_value).strip()
+        if isinstance(rate_value, str) and rate_value.strip()
+        else DEFAULT_BLOG_API_RATE_LIMIT
+    )
+    count_text, _, period_text = normalized_rate.partition("/")
+
+    try:
+        request_count = int(count_text.strip())
+    except TypeError, ValueError:
+        if normalized_rate == DEFAULT_BLOG_API_RATE_LIMIT:
+            return 5, 3600
+        return _parse_blog_api_rate_limit(DEFAULT_BLOG_API_RATE_LIMIT)
+
+    period = period_text.strip().lower()
+    period_seconds_by_name = {
+        "s": 1,
+        "sec": 1,
+        "second": 1,
+        "seconds": 1,
+        "m": 60,
+        "min": 60,
+        "minute": 60,
+        "minutes": 60,
+        "h": 3600,
+        "hr": 3600,
+        "hour": 3600,
+        "hours": 3600,
+        "d": 86400,
+        "day": 86400,
+        "days": 86400,
+    }
+    window_seconds = period_seconds_by_name.get(period)
+
+    if request_count <= 0 or window_seconds is None:
+        if normalized_rate == DEFAULT_BLOG_API_RATE_LIMIT:
+            return 5, 3600
+        return _parse_blog_api_rate_limit(DEFAULT_BLOG_API_RATE_LIMIT)
+
+    return request_count, window_seconds
+
+
+def _get_blog_api_rate_limit_ident(request: HttpRequest) -> str:
+    """Return the client identifier used for blog API throttling."""
+    remote_addr = request.META.get("REMOTE_ADDR", "")
+    if isinstance(remote_addr, str) and remote_addr.strip():
+        return remote_addr.strip()
+
+    return "unknown"
+
+
+def _get_blog_api_rate_limit_cache_key(request: HttpRequest, bucket: int) -> str:
+    """Build a stable cache key for the current blog API throttle bucket."""
+    ident = _get_blog_api_rate_limit_ident(request)
+    safe_ident = ident.replace(":", "_").replace(".", "_") or "unknown"
+    return f"throttle_blog_api_{safe_ident}_{bucket}"
+
+
+def _enforce_blog_api_rate_limit(request: HttpRequest) -> HttpResponse | None:
+    """Apply additive per-IP throttling for authenticated blog API requests."""
+    allowed_requests, window_seconds = _parse_blog_api_rate_limit(
+        getattr(settings, "BLOG_API_RATE_LIMIT", DEFAULT_BLOG_API_RATE_LIMIT)
+    )
+    current_time = int(time())
+    bucket = current_time // window_seconds
+    cache_key = _get_blog_api_rate_limit_cache_key(request, bucket)
+
+    try:
+        if cache.add(cache_key, 1, timeout=window_seconds):
+            request_count = 1
+        else:
+            request_count = cache.incr(cache_key)
+    except AttributeError, NotImplementedError, ValueError:
+        cached_value = cache.get(cache_key, 0)
+        request_count = cached_value if isinstance(cached_value, int) else 0
+        request_count += 1
+        cache.set(cache_key, request_count, timeout=window_seconds)
+
+    if request_count <= allowed_requests:
+        return None
+
+    response = JsonResponse({"error": "Rate limit exceeded"}, status=429)
+    response["Retry-After"] = str(
+        max(window_seconds - (current_time % window_seconds), 1)
+    )
+    return response
 
 
 def authenticate_blog_api_request(
@@ -466,7 +559,7 @@ def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) 
 
 
 @_typed_csrf_exempt
-def upload_media_api(request: HttpRequest) -> JsonResponse:
+def upload_media_api(request: HttpRequest) -> HttpResponse:
     """Upload a blog image for later use in Markdown or as a featured image."""
     if request.method != "POST":
         return JsonResponse(
@@ -476,7 +569,11 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
 
     author, auth_error = authenticate_blog_api_request(request)
     if auth_error is not None:
-        return auth_error  # type: ignore[return-value]
+        return auth_error
+
+    throttle_error = _enforce_blog_api_rate_limit(request)
+    if throttle_error is not None:
+        return throttle_error
 
     try:
         asset = create_blog_media_asset_from_request(request, author)
@@ -497,7 +594,7 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
 
 
 @_typed_csrf_exempt
-def publish_post_api(request: HttpRequest) -> JsonResponse:
+def publish_post_api(request: HttpRequest) -> HttpResponse:
     """Create and publish a blog post from JSON payload for authenticated staff users"""
     if request.method != "POST":
         return JsonResponse(
@@ -507,7 +604,11 @@ def publish_post_api(request: HttpRequest) -> JsonResponse:
 
     author, auth_error = authenticate_blog_api_request(request)
     if auth_error is not None:
-        return auth_error  # type: ignore[return-value]
+        return auth_error
+
+    throttle_error = _enforce_blog_api_rate_limit(request)
+    if throttle_error is not None:
+        return throttle_error
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
