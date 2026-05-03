@@ -52,6 +52,8 @@ DEFAULT_BLOG_API_UPLOAD_MAX_WIDTH = 4096
 DEFAULT_BLOG_API_UPLOAD_MAX_HEIGHT = 4096
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 DEFAULT_BLOG_POSTS_PER_PAGE = 10
+RATE_LIMIT_VALUE_PARSE_ERRORS = (TypeError, ValueError)
+RATE_LIMIT_CACHE_FALLBACK_ERRORS = (AttributeError, NotImplementedError, ValueError)
 
 ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
 
@@ -192,7 +194,7 @@ def _parse_blog_api_rate_limit(rate_value: Any) -> tuple[int, int]:
 
     try:
         request_count = int(count_text.strip())
-    except (TypeError, ValueError):
+    except RATE_LIMIT_VALUE_PARSE_ERRORS:
         if normalized_rate == DEFAULT_BLOG_API_RATE_LIMIT:
             return 5, 3600
         return _parse_blog_api_rate_limit(DEFAULT_BLOG_API_RATE_LIMIT)
@@ -255,7 +257,7 @@ def _enforce_blog_api_rate_limit(request: HttpRequest) -> HttpResponse | None:
             request_count = 1
         else:
             request_count = cache.incr(cache_key)
-    except (AttributeError, NotImplementedError, ValueError):
+    except RATE_LIMIT_CACHE_FALLBACK_ERRORS:
         cached_value = cache.get(cache_key, 0)
         request_count = cached_value if isinstance(cached_value, int) else 0
         request_count += 1
