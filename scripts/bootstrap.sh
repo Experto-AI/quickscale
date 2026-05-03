@@ -92,6 +92,30 @@ if ! command -v poetry &> /dev/null; then
     exit 0
 else
     echo "✓ Poetry version: $(poetry --version)"
+    # Update Poetry if requested
+    if [[ "${UPDATE_POETRY:-0}" == "1" ]]; then
+        echo "🆙 Updating Poetry..."
+        poetry self update
+        echo "✓ Poetry updated"
+        echo ""
+    fi
+fi
+echo ""
+
+# Check for Docker (required for E2E tests)
+echo "📋 Checking Docker installation (optional, required for E2E)..."
+if ! command -v docker &> /dev/null; then
+    echo "⚠️  Docker is not installed."
+    echo "   Docker is required for running E2E tests (\`make test-e2e\`)."
+    echo "   Please install Docker from https://docs.docker.com/get-docker/"
+else
+    echo "✓ Docker version: $(docker --version)"
+    if ! docker info &> /dev/null; then
+        echo "⚠️  Docker is installed but not running."
+        echo "   Please start the Docker daemon to run E2E tests."
+    else
+        echo "✓ Docker is running"
+    fi
 fi
 echo ""
 

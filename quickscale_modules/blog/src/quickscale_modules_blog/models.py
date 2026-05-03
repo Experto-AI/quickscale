@@ -1,6 +1,7 @@
 """Blog models for QuickScale blog module"""
 
 import posixpath
+import warnings
 from collections.abc import Callable
 from importlib import import_module
 from io import BytesIO
@@ -341,30 +342,36 @@ class Post(models.Model):
         source_name = str(self.featured_image.name)
 
         try:
-            with storage.open(source_name, "rb") as source_file:
-                with Image.open(source_file) as image:
-                    source_format = _save_format_from_name(source_name, image.format)
-                    for size_name, dimensions in sizes.items():
-                        img_copy = image.copy()
-                        img_copy.thumbnail(dimensions, Image.Resampling.LANCZOS)
-                        prepared = _prepare_thumbnail_image(img_copy, source_format)
-                        thumbnail_name = self._get_thumbnail_name(size_name)
-                        output = BytesIO()
-                        prepared.save(
-                            output,
-                            format=source_format,
-                            **_thumbnail_save_kwargs(source_format),
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                with storage.open(source_name, "rb") as source_file:
+                    with Image.open(source_file) as image:
+                        source_format = _save_format_from_name(
+                            source_name, image.format
                         )
-                        output.seek(0)
-                        if storage.exists(thumbnail_name):
-                            storage.delete(thumbnail_name)
-                        storage.save(
-                            thumbnail_name,
-                            ContentFile(output.getvalue()),
-                        )
+                        for size_name, dimensions in sizes.items():
+                            img_copy = image.copy()
+                            img_copy.thumbnail(dimensions, Image.Resampling.LANCZOS)
+                            prepared = _prepare_thumbnail_image(img_copy, source_format)
+                            thumbnail_name = self._get_thumbnail_name(size_name)
+                            output = BytesIO()
+                            prepared.save(
+                                output,
+                                format=source_format,
+                                **_thumbnail_save_kwargs(source_format),
+                            )
+                            output.seek(0)
+                            if storage.exists(thumbnail_name):
+                                storage.delete(thumbnail_name)
+                            storage.save(
+                                thumbnail_name,
+                                ContentFile(output.getvalue()),
+                            )
         except (
             AttributeError,
             FileNotFoundError,
+            Image.DecompressionBombError,
+            Image.DecompressionBombWarning,
             NotImplementedError,
             OSError,
             ValueError,

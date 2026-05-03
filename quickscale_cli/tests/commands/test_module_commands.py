@@ -647,7 +647,11 @@ class TestEmbedModule:
         mock_regenerate.assert_called_once()
         assert mock_regenerate.call_args.kwargs["module_names"] == ["blog"]
         assert mock_regenerate.call_args.kwargs["option_overrides"] == {
-            "blog": {"posts_per_page": 10, "enable_rss": True}
+            "blog": {
+                "posts_per_page": 10,
+                "enable_rss": True,
+                "api_rate_limit": "5/hour",
+            }
         }
 
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")

@@ -574,11 +574,15 @@ def apply_auth_configuration(
 # ============================================================================
 
 
+DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
+
+
 def get_default_blog_config() -> dict[str, Any]:
     """Get default configuration for blog module (non-interactive mode)"""
     return {
         "posts_per_page": 10,
         "enable_rss": True,
+        "api_rate_limit": DEFAULT_BLOG_API_RATE_LIMIT,
     }
 
 
@@ -593,7 +597,8 @@ def configure_blog_module(
         click.echo("\n⚙️  Using default blog module configuration...")
         config = defaults
         click.echo(f"  • Posts per page: {config['posts_per_page']}")
-        click.echo("  • RSS feed: Enabled")
+        click.echo(f"  • RSS feed: {'Enabled' if config['enable_rss'] else 'Disabled'}")
+        click.echo(f"  • API rate limit: {config['api_rate_limit']}")
         return config
 
     click.echo("\n⚙️  Configuring blog module...")
@@ -609,6 +614,11 @@ def configure_blog_module(
             "Enable RSS feed?",
             default=bool(defaults["enable_rss"]),
         ),
+        "api_rate_limit": click.prompt(
+            "Blog API rate limit (e.g. 5/hour, 10/minute)",
+            default=str(defaults["api_rate_limit"]),
+        ).strip()
+        or DEFAULT_BLOG_API_RATE_LIMIT,
     }
 
     return config
@@ -621,17 +631,20 @@ def apply_blog_configuration(
     execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> None:
     """Apply blog module configuration via managed wiring files."""
+    normalized = get_default_blog_config() | config
+
     _regenerate_wiring_for_execution_mode(
         project_path,
         "blog",
-        config,
+        normalized,
         execution_mode=execution_mode,
     )
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Posts per page: {config['posts_per_page']}")
-    click.echo(f"  • RSS feed: {'Enabled' if config['enable_rss'] else 'Disabled'}")
+    click.echo(f"  • Posts per page: {normalized['posts_per_page']}")
+    click.echo(f"  • RSS feed: {'Enabled' if normalized['enable_rss'] else 'Disabled'}")
+    click.echo(f"  • API rate limit: {normalized['api_rate_limit']}")
 
 
 # ============================================================================

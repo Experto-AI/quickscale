@@ -239,6 +239,7 @@ class TestBlogModuleConfig:
 
         assert config["enable_rss"] is True
         assert config["posts_per_page"] == 10
+        assert config["api_rate_limit"] == "5/hour"
 
     def test_configure_blog_module_non_interactive(self):
         """Test non-interactive blog configuration."""
@@ -246,18 +247,20 @@ class TestBlogModuleConfig:
 
         assert config["enable_rss"] is True
         assert config["posts_per_page"] == 10
+        assert config["api_rate_limit"] == "5/hour"
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_blog_module_interactive(self, mock_confirm, mock_prompt):
         """Test interactive blog configuration."""
         mock_confirm.return_value = False
-        mock_prompt.return_value = 20
+        mock_prompt.side_effect = [20, "10/minute"]
 
         config = configure_blog_module(non_interactive=False)
 
         assert config["enable_rss"] is False
         assert config["posts_per_page"] == 20
+        assert config["api_rate_limit"] == "10/minute"
 
     @patch("quickscale_cli.commands.module_config.Path.exists")
     def test_apply_blog_configuration(self, mock_exists, tmp_path):

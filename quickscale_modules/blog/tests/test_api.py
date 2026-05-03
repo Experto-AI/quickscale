@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import Client
@@ -71,6 +72,14 @@ def staff_user(db):
         password="staffpass123",
         is_staff=True,
     )
+
+
+@pytest.fixture(autouse=True)
+def clear_blog_api_rate_limit_cache():
+    """Keep per-IP blog API throttle state isolated across tests."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.mark.django_db
@@ -202,6 +211,71 @@ class TestPublishPostApi:
         assert response.status_code == 201
         post = Post.objects.get(slug="token-post")
         assert post.author == staff_user
+
+    def test_publish_post_api_token_auth_ignores_spoofed_forwarded_for_for_rate_limit(
+        self,
+        settings,
+        staff_user,
+    ):
+        """Token-authenticated publish requests should throttle by REMOTE_ADDR by default."""
+        settings.BLOG_API_RATE_LIMIT = "1/hour"
+        settings.BLOG_API_TOKENS = [
+            {"token": "publish-token", "username": staff_user.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        first_response = csrf_client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Token Post One", "content": "Body"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer publish-token",
+            HTTP_X_FORWARDED_FOR="198.51.100.10",
+            REMOTE_ADDR="10.0.0.8",
+        )
+        second_response = csrf_client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Token Post Two", "content": "Body"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer publish-token",
+            HTTP_X_FORWARDED_FOR="198.51.100.11",
+            REMOTE_ADDR="10.0.0.8",
+        )
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 429
+        assert second_response.json() == {"error": "Rate limit exceeded"}
+        assert int(second_response["Retry-After"]) > 0
+        assert Post.objects.filter(slug="token-post-two").count() == 0
+
+    def test_publish_post_api_missing_csrf_still_returns_403_when_rate_limited(
+        self,
+        settings,
+        staff_user,
+    ):
+        """Session-authenticated requests should keep CSRF enforcement ahead of throttling."""
+        settings.BLOG_API_RATE_LIMIT = "1/hour"
+        settings.BLOG_API_TOKENS = [
+            {"token": "publish-token", "username": staff_user.username}
+        ]
+
+        token_client = Client(enforce_csrf_checks=True)
+        session_client = Client(enforce_csrf_checks=True)
+        session_client.force_login(staff_user)
+
+        warm_response = token_client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Warm Post", "content": "Body"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer publish-token",
+        )
+        csrf_response = session_client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Blocked Post", "content": "Body"}),
+            content_type="application/json",
+        )
+
+        assert warm_response.status_code == 201
+        assert csrf_response.status_code == 403
 
     def test_publish_post_api_invalid_json_returns_400(self, client, staff_user):
         """Test API validates JSON format"""
@@ -1017,3 +1091,37 @@ class TestUploadMediaApi:
         )
 
         assert response.status_code == 201
+
+    def test_upload_media_api_token_auth_ignores_spoofed_forwarded_for_for_rate_limit(
+        self,
+        settings,
+        staff_user,
+        tmp_path,
+    ):
+        """Token-authenticated uploads should throttle by REMOTE_ADDR by default."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.BLOG_API_RATE_LIMIT = "1/hour"
+        settings.BLOG_API_TOKENS = [
+            {"token": "upload-token", "username": staff_user.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        first_response = csrf_client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image()},
+            HTTP_AUTHORIZATION="Bearer upload-token",
+            HTTP_X_FORWARDED_FOR="198.51.100.20",
+            REMOTE_ADDR="10.0.0.9",
+        )
+        second_response = csrf_client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image(filename="upload-2.png")},
+            HTTP_AUTHORIZATION="Bearer upload-token",
+            HTTP_X_FORWARDED_FOR="198.51.100.21",
+            REMOTE_ADDR="10.0.0.9",
+        )
+
+        assert first_response.status_code == 201
+        assert second_response.status_code == 429
+        assert second_response.json() == {"error": "Rate limit exceeded"}
+        assert int(second_response["Retry-After"]) > 0

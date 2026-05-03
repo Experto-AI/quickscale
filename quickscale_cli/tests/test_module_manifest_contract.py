@@ -206,3 +206,13 @@ def test_forms_manifest_no_longer_ships_dead_storage_backend_option() -> None:
     manifest = load_manifest_from_path(_manifest_path("forms"))
 
     assert "storage_backend" not in manifest.get_all_options()
+
+
+def test_blog_api_rate_limit_default_matches_manifest_contract() -> None:
+    """Blog API rate-limit defaults should stay aligned across CLI and manifest."""
+    manifest = load_manifest_from_path(_manifest_path("blog"))
+    option = manifest.get_all_options()["api_rate_limit"]
+    defaults = get_default_blog_config()
+
+    assert option.django_setting == "BLOG_API_RATE_LIMIT"
+    assert option.default == defaults["api_rate_limit"] == "5/hour"

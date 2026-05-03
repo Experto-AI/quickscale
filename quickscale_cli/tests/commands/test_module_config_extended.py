@@ -673,7 +673,11 @@ class TestApplyBlogConfigurationFull:
     def test_already_configured(self, tmp_path):
         """Managed wiring remains idempotent when blog reapplied."""
         project = _make_project(tmp_path)
-        config = {"posts_per_page": 10, "enable_rss": True}
+        config = {
+            "posts_per_page": 10,
+            "enable_rss": True,
+            "api_rate_limit": "5/hour",
+        }
         apply_blog_configuration(project, config)
         apply_blog_configuration(project, config)
         settings = (project / "myproject" / "settings" / "modules.py").read_text()
@@ -682,12 +686,17 @@ class TestApplyBlogConfigurationFull:
     def test_full_apply_blog_with_rss(self, tmp_path):
         """Full blog config apply with RSS enabled"""
         project = _make_project(tmp_path)
-        config = {"posts_per_page": 15, "enable_rss": True}
+        config = {
+            "posts_per_page": 15,
+            "enable_rss": True,
+            "api_rate_limit": "10/minute",
+        }
         apply_blog_configuration(project, config)
 
         settings = (project / "myproject" / "settings" / "modules.py").read_text()
         assert "quickscale_modules_blog" in settings
         assert "'BLOG_POSTS_PER_PAGE': 15" in settings
+        assert "'BLOG_API_RATE_LIMIT': '10/minute'" in settings
         assert "markdownx" in settings.lower() or "MARKDOWNX" in settings
 
         urls = (project / "myproject" / "urls_modules.py").read_text()
@@ -697,7 +706,11 @@ class TestApplyBlogConfigurationFull:
     def test_full_apply_blog_without_rss(self, tmp_path):
         """Full blog config apply with RSS disabled"""
         project = _make_project(tmp_path)
-        config = {"posts_per_page": 5, "enable_rss": False}
+        config = {
+            "posts_per_page": 5,
+            "enable_rss": False,
+            "api_rate_limit": "5/hour",
+        }
         apply_blog_configuration(project, config)
 
         urls = (project / "myproject" / "urls_modules.py").read_text()
@@ -708,7 +721,11 @@ class TestApplyBlogConfigurationFull:
         """Skip URL update when blog urls already present"""
         project = _make_project(tmp_path)
         (project / "myproject" / "urls.py").write_text("quickscale_modules_blog here\n")
-        config = {"posts_per_page": 10, "enable_rss": True}
+        config = {
+            "posts_per_page": 10,
+            "enable_rss": True,
+            "api_rate_limit": "5/hour",
+        }
         apply_blog_configuration(project, config)
         managed_urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_blog.urls" in managed_urls
@@ -882,7 +899,11 @@ class TestModuleWiringSpecs:
         """`MARKDOWNX_MEDIA_PATH` should remain stable with blog and listings."""
         specs = build_module_wiring_specs(
             {
-                "blog": {"posts_per_page": 10, "enable_rss": True},
+                "blog": {
+                    "posts_per_page": 10,
+                    "enable_rss": True,
+                    "api_rate_limit": "5/hour",
+                },
                 "listings": {"listings_per_page": 12},
             }
         )
@@ -902,12 +923,19 @@ class TestModuleWiringSpecs:
     def test_blog_wiring_without_rss_still_includes_markdownx_urls(self):
         """Blog wiring should keep markdownx URLs even when RSS is disabled."""
         specs = build_module_wiring_specs(
-            {"blog": {"posts_per_page": 10, "enable_rss": False}}
+            {
+                "blog": {
+                    "posts_per_page": 10,
+                    "enable_rss": False,
+                    "api_rate_limit": "15/minute",
+                }
+            }
         )
 
         _, _, settings, urls = collect_wiring(specs)
 
         assert settings["BLOG_ENABLE_RSS"] is False
+        assert settings["BLOG_API_RATE_LIMIT"] == "15/minute"
         assert ("blog/", "quickscale_modules_blog.urls") in urls
         assert ("markdownx/", "markdownx.urls") in urls
 

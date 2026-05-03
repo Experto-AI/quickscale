@@ -36,6 +36,9 @@ from quickscale_cli.social_contract import (
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 
+DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
+
+
 def _normalize_media_url(media_url: str) -> str:
     normalized = (media_url or "/media/").strip()
     if not normalized.startswith("/") and not normalized.startswith("http"):
@@ -106,6 +109,10 @@ def _auth_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
 def _blog_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     posts_per_page = int(options.get("posts_per_page", 10))
     enable_rss = bool(options.get("enable_rss", True))
+    api_rate_limit = (
+        str(options.get("api_rate_limit", DEFAULT_BLOG_API_RATE_LIMIT)).strip()
+        or DEFAULT_BLOG_API_RATE_LIMIT
+    )
 
     url_includes: list[tuple[str, str]] = [
         ("blog/", "quickscale_modules_blog.urls"),
@@ -115,6 +122,7 @@ def _blog_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     settings = {
         "BLOG_POSTS_PER_PAGE": posts_per_page,
         "BLOG_ENABLE_RSS": enable_rss,
+        "BLOG_API_RATE_LIMIT": api_rate_limit,
         "MARKDOWNX_MARKDOWN_EXTENSIONS": [
             "markdown.extensions.fenced_code",
             "markdown.extensions.tables",

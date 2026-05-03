@@ -159,10 +159,9 @@ bootstrap:
 
 # Setup development environment (alias kept for familiarity)
 setup:
+	@scripts/bootstrap.sh
 	@poetry install
-	@echo "✅ Dependencies installed!"
-
-# Install QuickScale CLI globally
+	@echo "✅ Dependencies and system checks complete!"
 install:
 	@scripts/install_global.sh
 

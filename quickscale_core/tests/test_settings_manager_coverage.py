@@ -1,5 +1,6 @@
 """Additional tests for settings_manager covering uncovered branches."""
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -65,7 +66,7 @@ class TestResolvePackageName:
             _resolve_package_name(project_path)
 
     def test_resolve_package_name_quickscale_yml_invalid_yaml_falls_back(
-        self, tmp_path: Path
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Invalid YAML in quickscale.yml causes fallback to state.yml."""
         project_path = tmp_path / "myproject"
@@ -77,10 +78,20 @@ class TestResolvePackageName:
         state_dir = project_path / ".quickscale"
         state_dir.mkdir()
         (state_dir / "state.yml").write_text("project:\n  package: recovered_package\n")
-        assert _resolve_package_name(project_path) == "recovered_package"
+
+        with caplog.at_level(logging.DEBUG, logger="quickscale_core.settings_manager"):
+            assert _resolve_package_name(project_path) == "recovered_package"
+
+        assert any(
+            record.levelno == logging.DEBUG
+            and "Failed to read or parse project config while resolving package"
+            in record.message
+            for record in caplog.records
+        )
+        assert any("quickscale.yml" in record.message for record in caplog.records)
 
     def test_resolve_package_name_state_yml_invalid_yaml_raises(
-        self, tmp_path: Path
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Invalid YAML in state.yml (and no quickscale.yml) raises SettingsError."""
         project_path = tmp_path / "myproject"
@@ -88,8 +99,18 @@ class TestResolvePackageName:
         state_dir = project_path / ".quickscale"
         state_dir.mkdir()
         (state_dir / "state.yml").write_text("project:\n  package: [invalid yaml\n")
-        with pytest.raises(SettingsError):
-            _resolve_package_name(project_path)
+
+        with caplog.at_level(logging.DEBUG, logger="quickscale_core.settings_manager"):
+            with pytest.raises(SettingsError):
+                _resolve_package_name(project_path)
+
+        assert any(
+            record.levelno == logging.DEBUG
+            and "Failed to read or parse QuickScale state while resolving package"
+            in record.message
+            for record in caplog.records
+        )
+        assert any("state.yml" in record.message for record in caplog.records)
 
 
 class TestPythonValueToStringEdgeCases:

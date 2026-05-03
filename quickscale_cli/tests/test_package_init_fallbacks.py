@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 import importlib
+import logging
 from pathlib import Path
 import sys
 
@@ -49,15 +50,22 @@ def _reload_quickscale_cli_without_embedded_version(
 
 def test_init_reads_repository_version_file_when_embedded_version_is_missing(
     monkeypatch,
+    caplog,
 ) -> None:
-    _reload_quickscale_cli_without_embedded_version(
-        monkeypatch,
-        version_file_exists=True,
-        version_text="2.3.4\n",
-    )
+    with caplog.at_level(logging.WARNING, logger="quickscale_cli"):
+        _reload_quickscale_cli_without_embedded_version(
+            monkeypatch,
+            version_file_exists=True,
+            version_text="2.3.4\n",
+        )
 
     assert quickscale_cli.__version__ == "2.3.4"
     assert quickscale_cli.VERSION == (2, 3, 4)
+    assert any(
+        record.levelno == logging.WARNING
+        and "Failed to import embedded CLI version" in record.message
+        for record in caplog.records
+    )
 
     monkeypatch.undo()
     importlib.reload(quickscale_cli)
@@ -65,14 +73,21 @@ def test_init_reads_repository_version_file_when_embedded_version_is_missing(
 
 def test_init_falls_back_to_zero_version_without_embedded_or_repo_version(
     monkeypatch,
+    caplog,
 ) -> None:
-    _reload_quickscale_cli_without_embedded_version(
-        monkeypatch,
-        version_file_exists=False,
-    )
+    with caplog.at_level(logging.WARNING, logger="quickscale_cli"):
+        _reload_quickscale_cli_without_embedded_version(
+            monkeypatch,
+            version_file_exists=False,
+        )
 
     assert quickscale_cli.__version__ == "0.0.0"
     assert quickscale_cli.VERSION == (0, 0, 0)
+    assert any(
+        record.levelno == logging.WARNING
+        and "Failed to import embedded CLI version" in record.message
+        for record in caplog.records
+    )
 
     monkeypatch.undo()
     importlib.reload(quickscale_cli)

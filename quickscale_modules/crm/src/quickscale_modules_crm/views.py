@@ -16,9 +16,10 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.routers import APIRootView
 from rest_framework.views import APIView
 
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
@@ -146,10 +147,17 @@ class DealPagination(_PlainListPagination):
 
 
 class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
-    """Shared explicit auth policy for CRM API endpoints."""
+    """Shared explicit staff-only auth policy for CRM API endpoints."""
 
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+
+
+class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
+    """Staff-only API root for the CRM router."""
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
 
 
 class TagViewSet(CRMModelViewSet):

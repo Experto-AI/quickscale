@@ -1,6 +1,7 @@
 """Tests for blog models"""
 
 import os
+import warnings
 from io import BytesIO
 from unittest.mock import patch
 
@@ -512,6 +513,88 @@ class TestPost:
         assert post.featured_image.storage.exists(thumbnail_name)
         assert post.get_thumbnail_url("medium").startswith(
             "https://cdn.example.com/media/"
+        )
+
+    def test_generate_thumbnails_ignores_decompression_bomb_error(
+        self,
+        author_user,
+        tmp_path,
+        settings,
+    ):
+        """Thumbnail generation should swallow decompression-bomb image failures."""
+        settings.MEDIA_ROOT = str(tmp_path)
+
+        image = Image.new("RGB", (1200, 800), color="maroon")
+        image_path = tmp_path / "bomb.jpg"
+        image.save(str(image_path), format="JPEG")
+
+        with open(image_path, "rb") as image_handle:
+            uploaded_file = SimpleUploadedFile(
+                "bomb.jpg",
+                image_handle.read(),
+                content_type="image/jpeg",
+            )
+
+        with patch(
+            "quickscale_modules_blog.models.Image.open",
+            side_effect=Image.DecompressionBombError("too many pixels"),
+        ):
+            post = Post.objects.create(
+                title="Bomb Post",
+                author=author_user,
+                content="Content",
+                featured_image=uploaded_file,
+            )
+
+        assert post.featured_image.name.endswith("bomb.jpg")
+        assert not os.path.exists(
+            os.path.join(tmp_path, "blog", "images", "thumbnails")
+        )
+
+    def test_generate_thumbnails_ignores_decompression_bomb_warning(
+        self,
+        author_user,
+        tmp_path,
+        settings,
+    ):
+        """Thumbnail generation should treat warning-level decompression bombs as fatal."""
+        settings.MEDIA_ROOT = str(tmp_path)
+
+        image = Image.new("RGB", (1200, 800), color="olive")
+        image_path = tmp_path / "warning-bomb.jpg"
+        image.save(str(image_path), format="JPEG")
+
+        with open(image_path, "rb") as image_handle:
+            uploaded_file = SimpleUploadedFile(
+                "warning-bomb.jpg",
+                image_handle.read(),
+                content_type="image/jpeg",
+            )
+
+        original_open = Image.open
+
+        def _warn_then_open(*args, **kwargs):
+            warnings.warn(
+                "too many pixels",
+                Image.DecompressionBombWarning,
+                stacklevel=2,
+            )
+            return original_open(*args, **kwargs)
+
+        with patch(
+            "quickscale_modules_blog.models.Image.open",
+            side_effect=_warn_then_open,
+        ):
+            post = Post.objects.create(
+                title="Warning Bomb Post",
+                author=author_user,
+                content="Content",
+                featured_image=uploaded_file,
+            )
+
+        assert post.featured_image.name.endswith("warning-bomb.jpg")
+        assert not os.path.exists(
+            os.path.join(tmp_path, "blog", "images", "thumbnails")
         )
 
     def test_helper_backed_urls_do_not_depend_on_storage_url(

@@ -12,6 +12,7 @@ Production-ready blog module for Django projects with Markdown support, featured
 - **Author Profiles**: Extended user profiles with bio and avatar
 - **Featured Images**: Auto-generated thumbnails (300x200, 800x450)
 - **Automation API**: Upload images over API, then publish Markdown posts with a featured image reference
+- **API Throttling**: `BLOG_API_RATE_LIMIT` applies one additive per-IP limit across the authenticated blog automation endpoints
 - **RSS Feed**: Latest 20 published posts with full metadata when `BLOG_ENABLE_RSS` is enabled
 - **Zero-Style Templates**: Semantic HTML base templates (no CSS classes)
 - **Pagination**: `BLOG_POSTS_PER_PAGE` controls the page size (default: 10)
@@ -40,6 +41,7 @@ The shipped `quickscale.yml` options for this module are:
 
 1. **Posts per page** (`BLOG_POSTS_PER_PAGE`, default: 10)
 2. **Enable RSS feed** (`BLOG_ENABLE_RSS`, default: yes)
+3. **Blog API rate limit** (`BLOG_API_RATE_LIMIT`, default: `5/hour`)
 
 ### Manual Installation
 
@@ -113,6 +115,7 @@ The blog module now supports a two-step automation flow:
 
 - `POST /blog/api/media/`
 - Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
+- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`) applies after successful auth/CSRF checks
 - `multipart/form-data`
 - Fields:
     - `file` (required)
@@ -142,6 +145,7 @@ The blog module now supports a two-step automation flow:
 
 - `POST /blog/api/publish/`
 - Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
+- Rate limit: `BLOG_API_RATE_LIMIT` (default `5/hour`) applies after successful auth/CSRF checks
 - `application/json`
 - Fields:
     - `title` (required)
@@ -372,6 +376,7 @@ BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 BLOG_API_ALLOWED_IMAGE_FORMATS = ['PNG', 'JPEG', 'WEBP', 'GIF']
 BLOG_API_UPLOAD_MAX_WIDTH = 4096
 BLOG_API_UPLOAD_MAX_HEIGHT = 4096
+BLOG_API_RATE_LIMIT = '5/hour'
 BLOG_API_TOKENS = []  # Optional machine-auth tokens for automation pipelines
 
 # Featured image settings

@@ -3,11 +3,15 @@
 Handles updating Django settings.py files for mutable module configuration.
 """
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsError(Exception):
@@ -28,8 +32,12 @@ def _resolve_package_name(project_path: Path) -> str:
             package_name = (config_data.get("project") or {}).get("package")
             if isinstance(package_name, str) and package_name:
                 return package_name
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "Failed to read or parse project config while resolving package: %s (%s)",
+                config_path,
+                exc,
+            )
 
     state_path = project_path / ".quickscale" / "state.yml"
     if state_path.exists():
@@ -38,8 +46,12 @@ def _resolve_package_name(project_path: Path) -> str:
             package_name = (state_data.get("project") or {}).get("package")
             if isinstance(package_name, str) and package_name:
                 return package_name
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "Failed to read or parse QuickScale state while resolving package: %s (%s)",
+                state_path,
+                exc,
+            )
 
     raise SettingsError(
         "Unable to resolve project package. Expected project.package in "

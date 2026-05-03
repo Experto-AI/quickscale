@@ -7,15 +7,22 @@ stays in sync with other packages when the release is bumped in one place.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 __author__ = "Experto AI"
 __email__ = "victor@experto.ai"
 
+logger = logging.getLogger(__name__)
+
 # Prefer an embedded package-level `_version.py` if it exists (build step).
 try:
     from ._version import __version__
-except Exception:
+except Exception as exc:
+    logger.warning(
+        "Failed to import embedded CLI version; falling back to VERSION file or 0.0.0: %s",
+        exc,
+    )
     _root = Path(__file__).resolve().parents[3]
     _version_file = _root / "VERSION"
     if _version_file.exists():

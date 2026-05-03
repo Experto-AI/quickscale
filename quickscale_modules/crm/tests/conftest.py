@@ -29,16 +29,39 @@ def user(db):
 
 
 @pytest.fixture
+def staff_user(db):
+    """Create a staff test user"""
+    user_model = get_user_model()
+    staff_user = user_model.objects.create_user(
+        username="staffuser",
+        email="staffuser@example.com",
+        password="TestPass123!",
+    )
+    staff_user.is_staff = True
+    staff_user.save(update_fields=["is_staff"])
+    return staff_user
+
+
+@pytest.fixture
 def api_client():
     """Create an API client"""
     return APIClient()
 
 
 @pytest.fixture
-def authenticated_client(api_client, user):
-    """Create an authenticated API client"""
-    api_client.force_authenticate(user=user)
-    return api_client
+def authenticated_client(staff_user):
+    """Create a staff-authenticated API client"""
+    client = APIClient()
+    client.force_authenticate(user=staff_user)
+    return client
+
+
+@pytest.fixture
+def non_staff_authenticated_client(user):
+    """Create a non-staff authenticated API client"""
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client
 
 
 @pytest.fixture

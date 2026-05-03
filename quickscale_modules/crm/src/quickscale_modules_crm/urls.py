@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CompanyViewSet,
+    CRMApiRootView,
     ContactNoteViewSet,
     ContactViewSet,
     CRMDashboardView,
@@ -16,7 +17,14 @@ from .views import (
 
 app_name = "quickscale_crm"
 
-router = DefaultRouter()
+
+class CRMRouter(DefaultRouter):
+    """Default router with the CRM-specific staff-only API root."""
+
+    APIRootView = CRMApiRootView
+
+
+router = CRMRouter()
 router.register(r"tags", TagViewSet, basename="tag")
 router.register(r"companies", CompanyViewSet, basename="company")
 router.register(r"contacts", ContactViewSet, basename="contact")
