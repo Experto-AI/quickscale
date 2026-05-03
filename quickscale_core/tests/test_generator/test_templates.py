@@ -964,6 +964,9 @@ class TestDevOpsTemplateRendering:
         assert len(output) > 0
         assert "testproject" in output
         assert "[tool.poetry]" in output
+        assert 'python = ">=3.12,<3.14"' in output
+        assert 'target-version = "py312"' in output
+        assert 'python_version = "3.12"' in output
 
     def test_github_ci_workflow_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -976,6 +979,7 @@ class TestDevOpsTemplateRendering:
         assert "name: CI" in output
         assert "pytest --cov=testproject" in output
         assert "runs-on: ubuntu-24.04" in output
+        assert 'python-version: ["3.12"]' in output
         assert "apt.postgresql.org" in output
         assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
@@ -990,6 +994,11 @@ class TestDevOpsTemplateRendering:
         )
         assert "pg_dump --version" in output
         assert "pg_restore --version" in output
+        assert (
+            "if: matrix.python-version == '3.12' && matrix.django-version == '6.0'"
+            in output
+        )
+        assert "3.14" not in output
         assert "gpg --dearmor" not in output
         assert "gnupg" not in output
 
@@ -1002,7 +1011,7 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "FROM python:3.14-slim-bookworm" in output
+        assert "FROM python:3.12-slim-bookworm" in output
 
     def test_docker_compose_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1237,8 +1246,8 @@ class TestDockerfileContent:
         """Test Dockerfile uses multi-stage build pattern."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "FROM python:3.14-slim-bookworm as builder" in output
-        assert "FROM python:3.14-slim-bookworm" in output
+        assert "FROM python:3.12-slim-bookworm as builder" in output
+        assert "FROM python:3.12-slim-bookworm" in output
         assert "bookworm-pgdg" in output
         assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
@@ -1269,7 +1278,7 @@ class TestDockerfileContent:
         """Test Dockerfile optimizes layer caching with dependency files first."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "COPY pyproject.toml poetry.lock" in output
+        assert "COPY pyproject.toml poetry.lock* ./" in output
         # Dependencies installed before copying application code
         lines = output.split("\n")
         poetry_install_idx = next(
@@ -1277,6 +1286,27 @@ class TestDockerfileContent:
         )
         copy_app_idx = next(i for i, line in enumerate(lines) if "COPY --chown" in line)
         assert poetry_install_idx < copy_app_idx
+
+    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
+    def test_collectstatic_uses_build_time_secret_key(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        theme: str,
+    ) -> None:
+        """Collectstatic should use a build-time-only SECRET_KEY."""
+        template = jinja_env.get_template("Dockerfile.j2")
+        output = template.render({**test_context, "theme": theme})
+
+        collectstatic_line = next(
+            line.strip()
+            for line in output.splitlines()
+            if "python manage.py collectstatic --noinput" in line
+        )
+
+        assert collectstatic_line.startswith('SECRET_KEY="$(python -c')
+        assert "token_urlsafe(50)" in collectstatic_line
+        assert "ENV SECRET_KEY" not in output
 
     def test_healthcheck(
         self, jinja_env: Environment, test_context: dict[str, str]

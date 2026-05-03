@@ -833,6 +833,7 @@ class TestReactThemeModuleActivationMatrix:
         settings_page = (
             output_path / "frontend" / "src" / "pages" / "SettingsPage.tsx"
         ).read_text()
+        normalized_crm_page = " ".join(crm_page.split())
 
         assert "backups: false" in use_modules
         assert "notifications: false" in use_modules
@@ -868,7 +869,9 @@ class TestReactThemeModuleActivationMatrix:
         assert "reloadDocument={item.reloadDocument}" in sidebar
 
         assert "CRM Workspace" in crm_page
-        assert "The Django dashboard at /crm/ remains staff-only." in crm_page
+        assert (
+            "The Django dashboard at /crm/ remains staff-only." in normalized_crm_page
+        )
         assert "Staff CRM Dashboard" in crm_page
 
         assert "Storage & CDN" in settings_page

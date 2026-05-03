@@ -22,6 +22,7 @@ import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.main import cli
+from quickscale_cli.utils.docker_utils import get_docker_compose_command
 from quickscale_core.generator import ProjectGenerator
 
 
@@ -75,7 +76,7 @@ class TestDevelopmentCommandsE2E:
         # Cleanup: ensure containers are stopped
         try:
             subprocess.run(
-                ["docker-compose", "down", "-v"],
+                [*get_docker_compose_command(), "down", "-v"],
                 cwd=project_path,
                 capture_output=True,
                 timeout=30,
@@ -433,7 +434,7 @@ class TestDevelopmentCommandsIntegration:
         # Cleanup
         try:
             subprocess.run(
-                ["docker-compose", "down", "-v"],
+                [*get_docker_compose_command(), "down", "-v"],
                 cwd=project_path,
                 capture_output=True,
                 timeout=30,
@@ -444,7 +445,7 @@ class TestDevelopmentCommandsIntegration:
     def test_docker_compose_configuration_valid(self, generated_project):
         """Verify docker-compose.yml is valid and parseable."""
         result = subprocess.run(
-            ["docker-compose", "config"],
+            [*get_docker_compose_command(), "config"],
             cwd=generated_project,
             capture_output=True,
             text=True,

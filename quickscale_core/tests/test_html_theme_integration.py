@@ -71,7 +71,7 @@ class TestHtmlThemeIntegration:
         assert "postgresql-client-18" in dockerfile
         assert "apt.postgresql.org" in dockerfile
         assert "apt.postgresql.org.asc" in dockerfile
-        assert "python:3.14-slim-bookworm" in dockerfile
+        assert "python:3.12-slim-bookworm" in dockerfile
         assert "gpg --dearmor" not in dockerfile
         assert "gnupg" not in dockerfile
 

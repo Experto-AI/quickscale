@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from quickscale_cli.utils.docker_utils import get_docker_compose_command
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_DEPENDENCY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+")
@@ -519,7 +521,7 @@ class TestFullE2EWorkflow:
 
         # Verify docker-compose config is valid
         result = subprocess.run(
-            ["docker-compose", "config"],
+            [*get_docker_compose_command(), "config"],
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -746,6 +748,7 @@ class TestFullE2EWorkflow:
 
         ci_content = ci_file.read_text()
         assert "runs-on: ubuntu-24.04" in ci_content
+        assert 'python-version: ["3.12"]' in ci_content
         assert "apt.postgresql.org" in ci_content
         assert "apt.postgresql.org.asc" in ci_content
         assert "postgresql-client-18" in ci_content
@@ -760,6 +763,11 @@ class TestFullE2EWorkflow:
         )
         assert "pg_dump --version" in ci_content
         assert "pg_restore --version" in ci_content
+        assert (
+            "if: matrix.python-version == '3.12' && matrix.django-version == '6.0'"
+            in ci_content
+        )
+        assert "3.14" not in ci_content
         assert "gpg --dearmor" not in ci_content
         assert "gnupg" not in ci_content
 
