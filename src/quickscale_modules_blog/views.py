@@ -192,7 +192,7 @@ def _parse_blog_api_rate_limit(rate_value: Any) -> tuple[int, int]:
 
     try:
         request_count = int(count_text.strip())
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         if normalized_rate == DEFAULT_BLOG_API_RATE_LIMIT:
             return 5, 3600
         return _parse_blog_api_rate_limit(DEFAULT_BLOG_API_RATE_LIMIT)
@@ -255,7 +255,7 @@ def _enforce_blog_api_rate_limit(request: HttpRequest) -> HttpResponse | None:
             request_count = 1
         else:
             request_count = cache.incr(cache_key)
-    except AttributeError, NotImplementedError, ValueError:
+    except (AttributeError, NotImplementedError, ValueError):
         cached_value = cache.get(cache_key, 0)
         request_count = cached_value if isinstance(cached_value, int) else 0
         request_count += 1
