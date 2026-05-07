@@ -53,8 +53,8 @@ make install
 
 **What this does:**
 1. Builds `quickscale_core` and `quickscale_cli` packages
-2. Installs them to your system Python (via pip)
-3. Makes `quickscale` command available globally
+2. Installs them into an isolated user virtual environment under `~/.local/share/quickscale`
+3. Links `quickscale` at `~/.local/bin/quickscale` so it is available from any directory
 
 **Usage:**
 ```bash
@@ -364,7 +364,7 @@ The wizard guides you through:
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: "1"
+version: 0.84.0
 project:
   slug: myapp
   package: myapp
@@ -659,6 +659,8 @@ Use these from the repository root:
 - `make test-e2e` / `make ci-e2e` — E2E and release-gate validation
 - `make lint` / `make format` / `make typecheck` — shared quality checks
 - `make publish-module MODULE=<name>` — publish module changes to split branches
+- `make publish-module-status` — show which module split branches are up to date, outdated, or unpublished
+- `make publish-modules-outdated` — publish only modules whose split branches are missing or outdated
 - `make version-check` — verify `VERSION` alignment across packages
 
 Lower-level helpers still live in `scripts/` if you need to inspect the underlying implementation.
@@ -682,6 +684,8 @@ Lower-level helpers still live in `scripts/` if you need to inspect the underlyi
 - Lint: `make lint`
 - Format: `make format`
 - Version parity: `make version-check`
+- Module publish status: `make publish-module-status`
+- Publish outdated modules: `make publish-modules-outdated`
 
 **CLI Commands (Current)**:
 - CLI help: `quickscale --help`

@@ -94,7 +94,7 @@ myapp/
 ### `quickscale.yml` (Desired State)
 
 ```yaml
-version: "1"
+version: 0.84.0
 
 project:
   slug: myapp
@@ -129,7 +129,7 @@ state first.
 ### `.quickscale/state.yml` (Applied State)
 
 ```yaml
-version: "1"
+version: 0.84.0
 
 project:
   slug: myapp
@@ -140,7 +140,7 @@ project:
 
 modules:
   auth:
-    version: 0.83.0
+    version: 0.84.0
     commit_sha: "abc1234"
     embedded_at: "2025-11-28T10:05:00"
     options:
@@ -154,7 +154,7 @@ modules:
 
 ```yaml
 name: auth
-version: 0.83.0
+version: 0.84.0
 
 config:
   mutable:                       # Can change after embed

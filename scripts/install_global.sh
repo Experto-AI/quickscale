@@ -13,6 +13,14 @@ PYTHON_DISPLAY_VERSION=""
 REQUIRED_PYTHON_SPEC="$(quickscale_requires_python_spec "$ROOT")"
 REQUIRED_PYTHON_VERSION="$(quickscale_min_python_version "$ROOT")"
 POETRY_BUILD_VENVS_DIR=""
+INSTALL_BASE_DIR=""
+INSTALL_VENVS_DIR=""
+INSTALL_VENV_DIR=""
+INSTALL_CURRENT_LINK=""
+INSTALL_BIN_DIR=""
+INSTALL_SHIM_PATH=""
+INSTALL_PENDING_VENV=""
+PREVIOUS_INSTALL_VENV=""
 
 ensure_compatible_python_available() {
     if PYTHON_BIN="$(quickscale_find_compatible_python "$ROOT")"; then
@@ -35,22 +43,51 @@ ensure_compatible_python_available() {
     exit 1
 }
 
-ensure_compatible_python_pip_available() {
-    if "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+ensure_compatible_python_venv_available() {
+    if "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import ensurepip
+import venv
+PY
+    then
         return 0
     fi
 
     echo ""
-    echo "❌ Compatible Python ${PYTHON_DISPLAY_VERSION:-$REQUIRED_PYTHON_VERSION} was found at $PYTHON_BIN, but its pip module is unavailable."
+    echo "❌ Compatible Python ${PYTHON_DISPLAY_VERSION:-$REQUIRED_PYTHON_VERSION} was found at $PYTHON_BIN, but its venv/ensurepip modules are unavailable."
     echo ""
-    echo "Install the matching pip/venv support and retry. For Ubuntu/Debian, for example:"
-    echo "  sudo apt install -y python${PYTHON_DISPLAY_VERSION:-$REQUIRED_PYTHON_VERSION}-venv python3-pip"
-    echo "  # Or run: $PYTHON_BIN -m ensurepip --upgrade"
+    echo "Install the matching venv support and retry. For Ubuntu/Debian, for example:"
+    echo "  sudo apt install -y python${PYTHON_DISPLAY_VERSION:-$REQUIRED_PYTHON_VERSION}-venv"
     echo ""
     echo "Then run:"
     echo "  make install"
     echo ""
     exit 1
+}
+
+configure_user_install_paths() {
+    INSTALL_BASE_DIR="${QUICKSCALE_HOME:-$HOME/.local/share/quickscale}"
+    INSTALL_VENVS_DIR="$INSTALL_BASE_DIR/venvs"
+    INSTALL_VENV_DIR="$INSTALL_VENVS_DIR/quickscale-${VERSION}-$(date +%Y%m%d%H%M%S)"
+    INSTALL_CURRENT_LINK="$INSTALL_BASE_DIR/current"
+    INSTALL_BIN_DIR="${QUICKSCALE_BIN_DIR:-$HOME/.local/bin}"
+    INSTALL_SHIM_PATH="$INSTALL_BIN_DIR/quickscale"
+}
+
+prepare_user_install_dirs() {
+    mkdir -p "$INSTALL_VENVS_DIR" "$INSTALL_BIN_DIR"
+}
+
+record_previous_install() {
+    if [[ -L "$INSTALL_CURRENT_LINK" ]]; then
+        PREVIOUS_INSTALL_VENV="$(readlink -f "$INSTALL_CURRENT_LINK" 2>/dev/null || true)"
+    else
+        PREVIOUS_INSTALL_VENV=""
+    fi
+}
+
+create_install_venv() {
+    INSTALL_PENDING_VENV="$INSTALL_VENV_DIR"
+    "$PYTHON_BIN" -m venv "$INSTALL_VENV_DIR"
 }
 
 ensure_poetry_uses_compatible_python() {
@@ -152,6 +189,10 @@ cleanup_build_state() {
     remove_readme "$ROOT/quickscale_core" || true
     remove_readme "$ROOT/quickscale_cli" || true
 
+    if [[ -n "${INSTALL_PENDING_VENV:-}" ]] && [[ -d "$INSTALL_PENDING_VENV" ]]; then
+        rm -rf "$INSTALL_PENDING_VENV"
+    fi
+
     if [[ -n "${POETRY_BUILD_VENVS_DIR:-}" ]] && [[ -d "$POETRY_BUILD_VENVS_DIR" ]]; then
         rm -rf "$POETRY_BUILD_VENVS_DIR"
     fi
@@ -167,13 +208,48 @@ replace_path_deps_cli() {
     sed -Ei "s|quickscale-core = \{path = \"\.\./quickscale_core\"(, develop = true)?\}|quickscale-core = \"^${version}\"|" "$pyproject"
 }
 
-pip_install_user() {
+pip_install_isolated() {
+    local venv_dir="$1"
+    shift
+
     PYTHONWARNINGS=ignore::SyntaxWarning \
-    "$PYTHON_BIN" -m pip install \
-        --user \
+    "$venv_dir/bin/python" -m pip install \
         --disable-pip-version-check \
         --force-reinstall \
         "$@"
+}
+
+activate_installed_command() {
+    if [[ -e "$INSTALL_CURRENT_LINK" ]] && [[ ! -L "$INSTALL_CURRENT_LINK" ]]; then
+        echo "❌ Install location $INSTALL_CURRENT_LINK exists and is not a symlink."
+        echo "   Move or remove it, then re-run make install."
+        exit 1
+    fi
+
+    ln -sfnT "$INSTALL_VENV_DIR" "$INSTALL_CURRENT_LINK"
+    ln -sfnT "$INSTALL_CURRENT_LINK/bin/quickscale" "$INSTALL_SHIM_PATH"
+    INSTALL_PENDING_VENV=""
+
+    if [[ -n "$PREVIOUS_INSTALL_VENV" ]] \
+        && [[ "$PREVIOUS_INSTALL_VENV" != "$INSTALL_VENV_DIR" ]] \
+        && [[ "$PREVIOUS_INSTALL_VENV" == "$INSTALL_VENVS_DIR"/quickscale-* ]] \
+        && [[ -d "$PREVIOUS_INSTALL_VENV" ]]; then
+        rm -rf "$PREVIOUS_INSTALL_VENV"
+    fi
+}
+
+path_contains_dir() {
+    local candidate="$1"
+    local entry
+
+    IFS=':' read -r -a path_entries <<< "${PATH:-}"
+    for entry in "${path_entries[@]}"; do
+        if [[ "$entry" == "$candidate" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 VERSION=$(read_version)
@@ -181,7 +257,10 @@ VERSION=$(read_version)
 trap cleanup_build_state EXIT
 
 ensure_compatible_python_available
-ensure_compatible_python_pip_available
+ensure_compatible_python_venv_available
+configure_user_install_paths
+prepare_user_install_dirs
+record_previous_install
 POETRY_BUILD_VENVS_DIR="$(mktemp -d)"
 
 echo "🚀 Installing QuickScale globally (version $VERSION)..."
@@ -207,13 +286,25 @@ replace_path_deps_cli "$ROOT/quickscale_cli" "$VERSION"
 rm -rf dist/
 build_with_poetry_compatible_python "$ROOT/quickscale_cli"
 
-# Install both packages globally
-echo "📦 Installing globally with pip ($(basename "$PYTHON_BIN") --user)..."
-pip_install_user \
+# Install both packages into an isolated user environment
+echo "📦 Installing into isolated user environment: $INSTALL_VENV_DIR"
+create_install_venv
+pip_install_isolated "$INSTALL_VENV_DIR" \
     "$ROOT/quickscale_core/dist/quickscale_core-"*.whl \
     "$ROOT/quickscale_cli/dist/quickscale_cli-"*.whl
+activate_installed_command
 
-echo "✅ QuickScale installed globally. You can now run 'quickscale' from any directory."
+echo "✅ QuickScale installed for the current user. You can now run 'quickscale' from any directory."
+echo "   Environment: $INSTALL_CURRENT_LINK"
+echo "   Command shim: $INSTALL_SHIM_PATH"
+
+if ! path_contains_dir "$INSTALL_BIN_DIR"; then
+    echo ""
+    echo "⚠️  $INSTALL_BIN_DIR is not on your PATH."
+    echo "   Add it to your shell profile, for example:"
+    echo "   export PATH=\"$INSTALL_BIN_DIR:\$PATH\""
+fi
+
 echo ""
 echo "🔄 To use the new version in this terminal session, run:"
 echo "   hash -r && quickscale --version"

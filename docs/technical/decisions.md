@@ -347,7 +347,7 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: "1"
+version: 0.84.0
 project:
   slug: myapp
   package: myapp
@@ -377,7 +377,7 @@ docker:
 System-managed state file tracking what has been applied:
 
 ```yaml
-version: "1"
+version: 0.84.0
 project:
   slug: myapp
   package: myapp
@@ -386,7 +386,7 @@ project:
   last_applied: 2025-12-03T14:32:00
 modules:
   auth:
-    version: 0.83.0
+    version: 0.84.0
     commit_sha: abc123def456
     embedded_at: 2025-12-03T14:30:00
     options:
@@ -394,7 +394,7 @@ modules:
       email_verification: none
       authentication_method: email
   listings:
-    version: 0.83.0
+    version: 0.84.0
     commit_sha: xyz789uvw012
     embedded_at: 2025-12-03T14:31:00
     options: null
@@ -516,7 +516,7 @@ Automatic changes made:
 **Current workflow**:
 ```yaml
 # quickscale.yml (v0.68.0+)
-version: "1"
+version: 0.84.0
 project:
   slug: myproject
   package: myproject
@@ -607,7 +607,7 @@ workflow coverage are aligned to it.
 **Manifest Schema:**
 ```yaml
 name: auth
-version: 0.83.0
+version: 0.84.0
 config:
   mutable:
     registration_enabled:
@@ -816,10 +816,10 @@ Keep this anchor in place for compatibility. Update the companion doc when the s
 - ✅ Poetry package manager
 - ✅ pyproject.toml + poetry.lock (required)
 - ✅ src/ layout (prevents accidental imports)
-- ✅ Use ./scripts/install_global.sh for global Poetry install
+- ✅ Use ./scripts/install_global.sh for Poetry-built user installs
 - ❌ NO requirements.txt generation
 - ❌ NO setup.py files
-- ❌ NO pip commands (use Poetry only)
+- ❌ NO direct system-Python pip install flows (`pip install --user`, `--break-system-packages`, etc.)
 
 **Development Tools:**
 - ✅ Ruff: Format + lint (replaces Black + Flake8)

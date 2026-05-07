@@ -559,7 +559,15 @@ publish-full:
 # Publish module changes to its split branch (e.g. make publish-module MODULE=auth)
 publish-module:
 	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth)"; exit 1; fi
-	@scripts/publish_module.sh $(MODULE)
+	@scripts/publish_module.sh $(MODULE) $(if $(CLEAN),--clean,)
+
+# Show split-branch status for all modules
+publish-module-status:
+	@scripts/publish_module.sh --status
+
+# Publish modules whose split branches are missing or outdated
+publish-modules-outdated:
+	@scripts/publish_module.sh --publish-outdated $(if $(CLEAN),--clean,)
 
 # Clean build artifacts
 clean:

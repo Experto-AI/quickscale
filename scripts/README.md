@@ -35,6 +35,8 @@ Preferred maintainer-facing command map:
 | `./scripts/publish.sh prod` | `make publish-prod` |
 | `./scripts/publish.sh full` | `make publish-full` |
 | `./scripts/publish_module.sh <module>` | `make publish-module MODULE=<module>` |
+| `./scripts/publish_module.sh --status` | `make publish-module-status` |
+| `./scripts/publish_module.sh --publish-outdated` | `make publish-modules-outdated` |
 | `./scripts/version_tool.sh check` | `make version-check` |
 | `./scripts/version_tool.sh update` | `make version-update` after editing `VERSION`, or `make bump-version X.Y.Z` to update `VERSION` first |
 
@@ -70,7 +72,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 ### Release and distribution
 
 - [publish.sh](./publish.sh) — builds and publishes packages (prefer `make publish-build`, `make publish-test`, `make publish-prod`, or `make publish-full`)
-- [publish_module.sh](./publish_module.sh) — publishes module changes to split branches (`make publish-module MODULE=<name>`)
+- [publish_module.sh](./publish_module.sh) — publishes module changes to split branches, reports module split-branch status, and can publish every outdated module (`make publish-module MODULE=<name>`, `make publish-module-status`, `make publish-modules-outdated`)
 - [version_tool.sh](./version_tool.sh) — checks and synchronizes version metadata (`make version-check`, `make version-update`, or `make bump-version X.Y.Z`; direct script commands: `check`, `update`)
 
 ## Notes for maintainers

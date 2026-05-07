@@ -167,6 +167,8 @@ cd quickscale
 ./scripts/install_global.sh
 ```
 
+This builds the packages with Poetry, installs them into an isolated user environment under `~/.local/share/quickscale`, and links the `quickscale` command at `~/.local/bin/quickscale`.
+
 **Then use directly:**
 ```bash
 quickscale plan myapp
@@ -189,7 +191,7 @@ If you want to contribute to QuickScale development, see the [Development Guide]
 **Want to see QuickScale in action right now?** Here's the fastest path to a working Django SaaS:
 
 ```bash
-# 1. Install QuickScale
+# 1. Install QuickScale for your user
 ./scripts/install_global.sh
 
 # 2. Create your project configuration
@@ -280,7 +282,7 @@ docker:
 ## Full Documentation & Setup
 
 ```bash
-# Install QuickScale globally
+# Install QuickScale for your user
 ./scripts/install_global.sh
 
 # Create a configuration interactively
