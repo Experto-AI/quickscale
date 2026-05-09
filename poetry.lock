@@ -1680,17 +1680,17 @@ files = [
 
 [[package]]
 name = "quickscale"
-version = "0.83.0"
+version = "0.84.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-quickscale-cli = "^0.83.0"
-quickscale-core = "^0.83.0"
+quickscale-cli = "^0.84.0"
+quickscale-core = "^0.84.0"
 
 [package.source]
 type = "directory"
@@ -1698,10 +1698,10 @@ url = "quickscale"
 
 [[package]]
 name = "quickscale-cli"
-version = "0.83.0"
+version = "0.84.0"
 description = "Command-line interface for QuickScale Django project generator"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
@@ -1716,10 +1716,10 @@ url = "quickscale_cli"
 
 [[package]]
 name = "quickscale-core"
-version = "0.83.0"
+version = "0.84.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
@@ -1737,13 +1737,13 @@ name = "quickscale-module-analytics"
 version = "0.80.0"
 description = "QuickScale PostHog analytics module with service-style capture helpers"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 posthog = ">=3.7.4,<4.0.0"
 
 [package.source]
@@ -1755,13 +1755,13 @@ name = "quickscale-module-auth"
 version = "0.71.0"
 description = "QuickScale authentication module with django-allauth integration"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 django-allauth = ">=65.14.1,<66.0.0"
 
 [package.source]
@@ -1773,14 +1773,14 @@ name = "quickscale-module-backups"
 version = "0.77.0"
 description = "QuickScale operational backups module with private local and remote artifact workflows"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
 boto3 = "^1.40.46"
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 django-storages = "^1.14.6"
 
 [package.source]
@@ -1792,13 +1792,13 @@ name = "quickscale-module-blog"
 version = "0.73.0"
 description = "QuickScale blog module with Markdown support and RSS feeds"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 django-markdownx = "^4.0.9"
 Pillow = ">=12.1.1,<13.0.0"
 
@@ -1811,13 +1811,13 @@ name = "quickscale-module-crm"
 version = "0.73.0"
 description = "QuickScale CRM module with contacts, companies, deals, and pipeline management"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 django-filter = "^25.2"
 djangorestframework = "^3.16.1"
 
@@ -1830,13 +1830,13 @@ name = "quickscale-module-forms"
 version = "0.75.0"
 description = "QuickScale generic form-builder module with admin management and React frontend renderer"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 django-filter = "^25.2"
 djangorestframework = "^3.16.1"
 
@@ -1849,13 +1849,13 @@ name = "quickscale-module-listings"
 version = "0.73.0"
 description = "QuickScale listings module with AbstractListing model for marketplace verticals"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 django-filter = "^25.2"
 django-markdownx = "^4.0.9"
 Pillow = ">=12.1.1,<13.0.0"
@@ -1869,13 +1869,13 @@ name = "quickscale-module-notifications"
 version = "0.78.0"
 description = "QuickScale transactional notifications module with Resend-first Anymail delivery"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 django-anymail = ">=13.0,<14.0"
 
 [package.source]
@@ -1887,13 +1887,13 @@ name = "quickscale-module-social"
 version = "0.79.0"
 description = "QuickScale curated social links and embeds module"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 
 [package.source]
 type = "directory"
@@ -1904,19 +1904,19 @@ name = "quickscale-module-storage"
 version = "0.76.0"
 description = "QuickScale storage infrastructure module with local/S3-compatible helpers"
 optional = false
-python-versions = ">=3.12,<3.14"
+python-versions = ">=3.13,<3.15"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-boto3 = {version = "^1.35.0", optional = true}
-Django = ">=6.0.3,<7.0.0"
-django-storages = {version = "^1.14.4", optional = true}
+boto3 = {version = "^1.40.46", optional = true}
+Django = ">=6.0.3,<6.1.0"
+django-storages = {version = "^1.14.6", optional = true}
 Pillow = ">=12.1.1,<13.0.0"
 
 [package.extras]
-cloud = ["boto3 (>=1.35.0,<2.0.0)", "django-storages (>=1.14.4,<2.0.0)"]
+cloud = ["boto3 (>=1.40.46,<2.0.0)", "django-storages (>=1.14.6,<2.0.0)"]
 
 [package.source]
 type = "directory"
@@ -2130,5 +2130,5 @@ files = [
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.12,<3.14"
-content-hash = "e4e447f150517e29ff860c4a8276f9078f862f8456f0d3b3189917c26b61b063"
+python-versions = ">=3.13,<3.15"
+content-hash = "9f4c736d7d226a4c56c0aba1872fa8e7393ca6597b0577cd3b5e54d26d782139"

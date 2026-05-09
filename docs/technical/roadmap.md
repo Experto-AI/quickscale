@@ -248,8 +248,8 @@ All libraries that depend on these runtimes or toolchains must be updated to ver
 - [x] Update React, TypeScript, Vite, Vitest, and all frontend devDependencies in `package.json.j2` to compatible latest-stable versions
 - [ ] Audit and update the remaining Python libraries not already covered by the template/toolchain sweep (django-storages, boto3, gunicorn, whitenoise, psycopg2-binary, Jinja2, pyyaml, anymail, etc.) to the latest versions compatible with Django 6.0.x and Python 3.13
 - [ ] Audit and update the remaining frontend runtime libraries not already covered by the React/toolchain bump (Radix UI, TanStack Query, react-router-dom, lucide-react, motion, zod, zustand, etc.) to versions compatible with React 19 and TypeScript 6
-- [ ] Align repo-owned Python support metadata so closeout evidence uses one coherent support window across `project.requires-python`, `tool.poetry.dependencies.python`, classifiers, and other maintainer/runtime declarations that participate in the support story
-- [ ] Restore functional local Docker access before rerunning container-backed gates. Current blocker: `docker info` fails with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`. Next iteration: use provided sudo access to configure Docker so it can be run in normal user mode.
+- [x] Align repo-owned Python support metadata so closeout evidence uses one coherent support window across `project.requires-python`, `tool.poetry.dependencies.python`, classifiers, and other maintainer/runtime declarations that participate in the support story
+- [x] Restore functional local Docker access before rerunning container-backed gates. Local normal-user `docker info` access was restored on 2026-05-09; the Docker-backed parity and E2E reruns remain open below.
 - [x] Validate `make version-check`
 - [x] Validate `make lint`
 - [x] Validate `make typecheck`

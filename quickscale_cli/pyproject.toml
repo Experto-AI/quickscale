@@ -2,7 +2,7 @@
 name = "quickscale-cli"
 version = "0.84.0"
 description = "Command-line interface for QuickScale Django project generator"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.13,<3.15"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -11,6 +11,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Framework :: Django",
     "Framework :: Django :: 6.0",
@@ -29,7 +30,7 @@ quickscale = "quickscale_cli.main:cli"
 packages = [{include = "quickscale_cli", from = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.14"
+python = ">=3.13,<3.15"
 click = "^8.3.1"
 quickscale-core = {path = "../quickscale_core"}
 

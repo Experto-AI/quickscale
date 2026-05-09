@@ -971,6 +971,7 @@ class TestDevOpsTemplateRendering:
         assert "[tool.poetry]" in output
         assert 'python = ">=3.13,<3.15"' in output
         assert 'Django = ">=6.0.3,<6.1.0"' in output
+        assert 'django-stubs = "^6.0.2"' in output
         assert 'target-version = "py313"' in output
         assert 'python_version = "3.13"' in output
 
