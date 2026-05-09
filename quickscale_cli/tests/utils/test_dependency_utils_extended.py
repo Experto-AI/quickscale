@@ -146,7 +146,7 @@ class TestCheckGitInstalled:
 
 
 class TestCheckDockerInstalled:
-    """Tests for check_docker_installed compose fallback paths"""
+    """Tests for check_docker_installed compose v2-only paths"""
 
     @patch.dict(os.environ, {"QUICKSCALE_SKIP_DEPENDENCY_CHECKS": "0"}, clear=False)
     @patch("quickscale_cli.utils.dependency_utils.shutil.which")
@@ -172,28 +172,23 @@ class TestCheckDockerInstalled:
     @patch.dict(os.environ, {"QUICKSCALE_SKIP_DEPENDENCY_CHECKS": "0"}, clear=False)
     @patch("quickscale_cli.utils.dependency_utils.shutil.which")
     @patch("quickscale_cli.utils.dependency_utils.subprocess.run")
-    def test_docker_with_compose_v1_fallback(self, mock_run, mock_which):
-        """Test Docker falls back to docker-compose v1"""
+    def test_docker_without_compose_v2_plugin(self, mock_run, mock_which):
+        """Test Docker fails when the Compose v2 plugin is unavailable"""
         mock_which.return_value = "/usr/bin/docker"
 
-        call_count = 0
-
         def side_effect(cmd, **kwargs):
-            nonlocal call_count
-            call_count += 1
             if cmd == ["docker", "--version"]:
                 return MagicMock(
                     stdout="Docker version 24.0.6, build ed223bc", returncode=0
                 )
             if cmd == ["docker", "compose", "version"]:
                 raise subprocess.SubprocessError("not found")
-            if cmd == ["docker-compose", "--version"]:
-                return MagicMock(stdout="docker-compose version 1.29.2", returncode=0)
             raise subprocess.SubprocessError("unexpected")
 
         mock_run.side_effect = side_effect
         result = check_docker_installed()
-        assert result.installed is True
+        assert result.installed is False
+        assert "v2 plugin" in result.purpose
 
     @patch.dict(os.environ, {"QUICKSCALE_SKIP_DEPENDENCY_CHECKS": "0"}, clear=False)
     @patch("quickscale_cli.utils.dependency_utils.shutil.which")
@@ -212,7 +207,7 @@ class TestCheckDockerInstalled:
         mock_run.side_effect = side_effect
         result = check_docker_installed()
         assert result.installed is False
-        assert "Compose not found" in result.purpose
+        assert "v2 plugin" in result.purpose
 
     @patch.dict(os.environ, {"QUICKSCALE_SKIP_DEPENDENCY_CHECKS": "0"}, clear=False)
     @patch("quickscale_cli.utils.dependency_utils.shutil.which")
@@ -315,7 +310,7 @@ class TestCheckAllDependencies:
     def test_verify_missing_required(self, mock_all):
         """Test verify_required_dependencies with missing required dep"""
         mock_all.return_value = [
-            DependencyStatus("Python", True, "3.14", True, "test"),
+            DependencyStatus("Python", True, "3.13", True, "test"),
             DependencyStatus("Poetry", False, None, True, "test"),
             DependencyStatus("Git", True, "2.0", False, "test"),
             DependencyStatus("Docker", True, "24.0", False, "test"),

@@ -53,15 +53,18 @@ make test-e2e
 Unit and integration tests that require PostgreSQL in `quickscale_core/` use the
 test compose file below.
 
+Use the Docker Compose v2 plugin command syntax (`docker compose`). The
+compose file name stays `docker-compose.test.yml`.
+
 ```bash
 # Start PostgreSQL test database (quickscale_core)
-docker-compose -f quickscale_core/tests/docker-compose.test.yml up -d test-db
+docker compose -f quickscale_core/tests/docker-compose.test.yml up -d test-db
 
 # Run unit and integration tests
 make test
 
 # Cleanup
-docker-compose -f quickscale_core/tests/docker-compose.test.yml down
+docker compose -f quickscale_core/tests/docker-compose.test.yml down
 ```
 
 ## Repo Test Placement and Fixtures

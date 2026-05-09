@@ -10,6 +10,7 @@ import click
 
 from quickscale_cli.schema.config_schema import QuickScaleConfig
 from quickscale_cli.utils.docker_utils import (
+    DockerComposePluginRequiredError,
     get_docker_compose_command,
     get_port_from_env,
     is_docker_running,
@@ -74,8 +75,32 @@ def _show_port_conflict_error(port: int | str) -> None:
     )
 
 
+def _show_compose_v2_required_error() -> None:
+    """Display a user-friendly error when Docker Compose v2 is unavailable."""
+    click.secho(
+        "❌ Error: Docker Compose v2 plugin is required",
+        fg="red",
+        err=True,
+    )
+    click.echo(
+        "💡 Tip: Install or update Docker so the 'docker compose' command is "
+        "available. QuickScale keeps the generated 'docker-compose.yml' file "
+        "name, but the CLI uses the Docker Compose v2 plugin.",
+        err=True,
+    )
+
+
+def _require_docker_compose_command() -> list[str]:
+    """Return the Docker Compose v2 command or exit with remediation text."""
+    try:
+        return get_docker_compose_command()
+    except DockerComposePluginRequiredError:
+        _show_compose_v2_required_error()
+        sys.exit(1)
+
+
 def _run_docker_compose_up(compose_cmd: list, build: bool, no_cache: bool) -> None:
-    """Execute docker-compose up with appropriate flags."""
+    """Execute docker compose up with appropriate flags."""
     if build or no_cache:
         cmd = compose_cmd + ["--progress", "plain", "up", "-d"]
     else:
@@ -101,7 +126,7 @@ def _run_docker_compose_up(compose_cmd: list, build: bool, no_cache: bool) -> No
 
 
 def _handle_up_error(error: subprocess.CalledProcessError) -> None:
-    """Handle docker-compose up errors with user-friendly messages."""
+    """Handle docker compose up errors with user-friendly messages."""
     error_output = error.stderr if error.stderr else ""
     stdout_output = error.stdout if error.stdout else ""
     full_output = error_output + stdout_output
@@ -122,7 +147,7 @@ def _handle_up_error(error: subprocess.CalledProcessError) -> None:
         click.echo(
             f"\n💡 To resolve this issue, try one of the following:\n"
             f"   1. Stop existing containers: quickscale down\n"
-            f"   2. Remove orphaned containers: docker-compose down --remove-orphans\n"
+            f"   2. Remove orphaned containers: docker compose down --remove-orphans\n"
             f"   3. Find and kill the process: lsof -ti:{conflict_port} | xargs kill -9\n"
             f"   4. Find process details: sudo lsof -i:{conflict_port}\n"
             f"   5. Or use: sudo fuser -k {conflict_port}/tcp",
@@ -272,14 +297,14 @@ def up(build: bool, no_cache: bool) -> None:
         )
         click.secho("   quickscale down && quickscale up --build\n", fg="cyan")
 
-    # Check if required port is available BEFORE calling docker-compose
+    # Check if required port is available BEFORE calling docker compose.
     port = get_port_from_env()
     if not is_port_available(port):
         _show_port_conflict_error(port)
         sys.exit(1)
 
     try:
-        compose_cmd = get_docker_compose_command()
+        compose_cmd = _require_docker_compose_command()
         _run_docker_compose_up(compose_cmd, should_build, no_cache)
 
         # Update build timestamp if build was performed
@@ -326,7 +351,7 @@ def down(volumes: bool) -> None:
     _validate_project_and_docker()
 
     try:
-        compose_cmd = get_docker_compose_command()
+        compose_cmd = _require_docker_compose_command()
         cmd = compose_cmd + ["down", "--remove-orphans"]
 
         if volumes:
@@ -468,7 +493,7 @@ def logs(service: str | None, follow: bool, tail: str | None, timestamps: bool) 
     _validate_project_and_docker()
 
     try:
-        compose_cmd = get_docker_compose_command()
+        compose_cmd = _require_docker_compose_command()
         cmd = compose_cmd + ["logs"]
 
         if follow:
@@ -503,7 +528,7 @@ def ps() -> None:
     _validate_project_and_docker()
 
     try:
-        compose_cmd = get_docker_compose_command()
+        compose_cmd = _require_docker_compose_command()
         cmd = compose_cmd + ["ps"]
         subprocess.run(cmd, check=True)
 

@@ -22,6 +22,7 @@
 #   make lint                 - Run linting
 #   make lint-fix             - Fix linting issues
 #   make lint-frontend        - Lint React theme templates
+#   make frontend-proof       - Render showcase_react and run pnpm install/type-check/build
 #   make lint-agent           - Lint .agent adapter system
 #   make typecheck            - Run type checking
 #   make format               - Format code with ruff
@@ -45,7 +46,7 @@
 
 .PHONY: setup bootstrap install \
         test test-unit test-cov test-e2e test-agent \
-        lint lint-fix lint-frontend lint-agent typecheck format \
+	lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality check ci ci-e2e \
         docs \
         build clean \
@@ -110,6 +111,7 @@ help:
 	@echo "  make lint                 - Check linting (no changes)"
 	@echo "  make lint-fix             - Fix linting issues"
 	@echo "  make lint-frontend        - Lint React theme templates (ESLint + TypeScript)"
+	@echo "  make frontend-proof       - Render showcase_react and run pnpm install/type-check/build"
 	@echo "  make lint-agent           - Lint .agent adapter shell scripts"
 	@echo "  make typecheck            - Run mypy type checking"
 	@echo "  make format               - Format code with ruff"
@@ -460,6 +462,10 @@ typecheck:
 # Lint React theme templates (renders to tmp dir, runs ESLint + TypeScript check)
 lint-frontend:
 	@scripts/lint_frontend.sh
+
+# Render showcase_react and prove the generated frontend toolchain without Docker
+frontend-proof:
+	@scripts/frontend_proof.sh
 
 # Lint .agent adapter shell scripts for syntax errors
 lint-agent:

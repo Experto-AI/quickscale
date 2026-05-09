@@ -42,13 +42,13 @@ class DependencyStatus(NamedTuple):
 
 
 def check_python_version() -> DependencyStatus:
-    """Check Python version (3.14+ required)."""
+    """Check Python version (3.13+ required)."""
     import sys
 
     version = (
         f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     )
-    meets_requirement = sys.version_info >= (3, 14)
+    meets_requirement = sys.version_info >= (3, 13)
 
     return DependencyStatus(
         name="Python",
@@ -151,7 +151,7 @@ def check_git_installed() -> DependencyStatus:
 
 
 def check_docker_installed() -> DependencyStatus:
-    """Check if Docker and Docker Compose are installed."""
+    """Check if Docker and the Docker Compose v2 plugin are installed."""
 
     if _should_skip_dependency_checks():
         return _skipped_dependency(
@@ -176,45 +176,28 @@ def check_docker_installed() -> DependencyStatus:
             parts = version_str.split()
             version = parts[2].rstrip(",") if len(parts) >= 3 else None
 
-            # Also check for Docker Compose (either v2 plugin or v1 standalone)
-            compose_available = False
+            # Docker-backed workflows require the Compose v2 plugin.
             try:
-                # Try docker compose v2 (plugin)
                 subprocess.run(
                     ["docker", "compose", "version"],
                     capture_output=True,
                     check=True,
                     timeout=2,
                 )
-                compose_available = True
             except (
                 subprocess.SubprocessError,
                 FileNotFoundError,
                 subprocess.TimeoutExpired,
             ):
-                # Try docker-compose v1 (standalone)
-                try:
-                    subprocess.run(
-                        ["docker-compose", "--version"],
-                        capture_output=True,
-                        check=True,
-                        timeout=2,
-                    )
-                    compose_available = True
-                except (
-                    subprocess.SubprocessError,
-                    FileNotFoundError,
-                    subprocess.TimeoutExpired,
-                ):
-                    pass
-
-            if not compose_available:
                 return DependencyStatus(
                     name="Docker",
                     installed=False,
                     version=version,
                     required=False,
-                    purpose="Containerized development (quickscale up/down) - Docker Compose not found",
+                    purpose=(
+                        "Containerized development (quickscale up/down) - "
+                        "Docker Compose v2 plugin not found"
+                    ),
                 )
 
             return DependencyStatus(

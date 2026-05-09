@@ -42,7 +42,7 @@ class TestUpCommand:
                                 mock_in_project.return_value = True
                                 mock_docker.return_value = True
                                 mock_port.return_value = True
-                                mock_cmd.return_value = ["docker-compose"]
+                                mock_cmd.return_value = ["docker", "compose"]
                                 mock_backend.return_value = "myproject-backend-1"
                                 mock_run.return_value = Mock(returncode=0)
 
@@ -126,14 +126,14 @@ class TestUpCommand:
                                 mock_in_project.return_value = True
                                 mock_docker.return_value = True
                                 mock_port.return_value = True
-                                mock_cmd.return_value = ["docker-compose"]
+                                mock_cmd.return_value = ["docker", "compose"]
                                 mock_backend.return_value = "myproject-backend-1"
                                 mock_run.return_value = Mock(returncode=0)
 
                                 result = runner.invoke(up, ["--build"])
 
                                 assert result.exit_code == 0
-                                # Verify --build was passed in at least one docker-compose call
+                                # Verify --build was passed in at least one docker compose call.
                                 all_calls = [
                                     call.args[0] for call in mock_run.call_args_list
                                 ]
@@ -167,7 +167,7 @@ class TestUpCommand:
                                 mock_in_project.return_value = True
                                 mock_docker.return_value = True
                                 mock_port.return_value = True
-                                mock_cmd.return_value = ["docker-compose"]
+                                mock_cmd.return_value = ["docker", "compose"]
                                 mock_backend.return_value = "myproject-backend-1"
                                 mock_run.return_value = Mock(returncode=0)
 
@@ -211,7 +211,7 @@ class TestDownCommand:
                         ) as mock_wait:
                             mock_in_project.return_value = True
                             mock_docker.return_value = True
-                            mock_cmd.return_value = ["docker-compose"]
+                            mock_cmd.return_value = ["docker", "compose"]
                             mock_run.return_value = Mock(returncode=0)
                             mock_wait.return_value = True
 
@@ -239,14 +239,14 @@ class TestDownCommand:
                         ) as mock_wait:
                             mock_in_project.return_value = True
                             mock_docker.return_value = True
-                            mock_cmd.return_value = ["docker-compose"]
+                            mock_cmd.return_value = ["docker", "compose"]
                             mock_run.return_value = Mock(returncode=0)
                             mock_wait.return_value = True
 
                             result = runner.invoke(down, ["--volumes"])
 
                             assert result.exit_code == 0
-                            # Verify --volumes was passed to docker-compose
+                            # Verify --volumes was passed to docker compose.
                             call_args = mock_run.call_args[0][0]
                             assert "--volumes" in call_args
 
@@ -365,7 +365,7 @@ class TestLogsCommand:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(logs)
@@ -388,7 +388,7 @@ class TestLogsCommand:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(logs, ["backend"])
@@ -414,7 +414,7 @@ class TestLogsCommand:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(logs, ["--follow"])
@@ -439,7 +439,7 @@ class TestLogsCommand:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(logs, ["--tail", "100"])
@@ -465,7 +465,7 @@ class TestLogsCommand:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(logs, ["--timestamps"])
@@ -506,7 +506,7 @@ class TestErrorHandling:
     """Tests for error handling in commands."""
 
     def test_up_docker_compose_fails(self):
-        """Test up command when docker-compose fails."""
+        """Test up command when docker compose fails."""
         runner = CliRunner()
 
         with patch(
@@ -525,9 +525,9 @@ class TestErrorHandling:
                             mock_in_project.return_value = True
                             mock_docker.return_value = True
                             mock_port.return_value = True
-                            mock_cmd.return_value = ["docker-compose"]
+                            mock_cmd.return_value = ["docker", "compose"]
                             mock_run.side_effect = subprocess.CalledProcessError(
-                                1, "docker-compose"
+                                1, ["docker", "compose"]
                             )
 
                             result = runner.invoke(up)
@@ -536,7 +536,7 @@ class TestErrorHandling:
                             assert "Failed to start services" in result.output
 
     def test_down_docker_compose_fails(self):
-        """Test down command when docker-compose fails."""
+        """Test down command when docker compose fails."""
         runner = CliRunner()
 
         with patch(
@@ -551,9 +551,9 @@ class TestErrorHandling:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.side_effect = subprocess.CalledProcessError(
-                            1, "docker-compose"
+                            1, ["docker", "compose"]
                         )
 
                         result = runner.invoke(down)
@@ -613,7 +613,7 @@ class TestErrorHandling:
                         assert result.exit_code == 1
 
     def test_logs_docker_compose_fails(self):
-        """Test logs command when docker-compose fails."""
+        """Test logs command when docker compose fails."""
         runner = CliRunner()
 
         with patch(
@@ -628,9 +628,9 @@ class TestErrorHandling:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.side_effect = subprocess.CalledProcessError(
-                            1, "docker-compose"
+                            1, ["docker", "compose"]
                         )
 
                         result = runner.invoke(logs)
@@ -639,7 +639,7 @@ class TestErrorHandling:
                         assert "Failed to retrieve logs" in result.output
 
     def test_ps_docker_compose_fails(self):
-        """Test ps command when docker-compose fails."""
+        """Test ps command when docker compose fails."""
         runner = CliRunner()
 
         with patch(
@@ -654,9 +654,9 @@ class TestErrorHandling:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
+                        mock_cmd.return_value = ["docker", "compose"]
                         mock_run.side_effect = subprocess.CalledProcessError(
-                            1, "docker-compose"
+                            1, ["docker", "compose"]
                         )
 
                         result = runner.invoke(ps)

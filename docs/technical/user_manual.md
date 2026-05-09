@@ -86,7 +86,7 @@ Purpose: get a development environment ready to run tests and use the CLI.
 Recommended sequence:
 
 ```bash
-# Ensure prerequisites are installed (Python 3.14+, Git, and Poetry)
+# Ensure prerequisites are installed (Python 3.13+, Git, and Poetry)
 make bootstrap
 
 # If Poetry is already configured and you only need dependencies:
@@ -171,6 +171,9 @@ Use the repository Makefile targets for code quality checks:
 make lint
 make typecheck
 
+# Prove the rendered showcase_react starter frontend without Docker
+make frontend-proof
+
 # Apply formatting changes
 make format
 
@@ -239,27 +242,29 @@ The generated project is meant to be fully owned by the user — templates and g
 
 > **Status**: ✅ Available (shipped in v0.59.0)
 >
-> The following commands will simplify Docker and Django operations, eliminating the need to remember complex docker-compose and docker exec syntax.
+> The following commands simplify Docker and Django operations, eliminating the need to remember complex `docker compose` and `docker exec` syntax.
+
+Generated projects keep the `docker-compose.yml` file name, but QuickScale and this repo's guidance use the Docker Compose v2 plugin command syntax: `docker compose`.
 
 **Docker Service Management**:
 ```bash
 # Start Docker services
 quickscale up
-# Equivalent to: docker-compose up -d
+# Equivalent to: docker compose up -d
 
 # Stop Docker services
 quickscale down
-# Equivalent to: docker-compose down
+# Equivalent to: docker compose down
 
 # View service logs
 quickscale logs           # All services
 quickscale logs backend       # Backend service only
 quickscale logs db        # Database only
-# Equivalent to: docker-compose logs [service]
+# Equivalent to: docker compose logs [service]
 
 # Check service status
 quickscale ps
-# Equivalent to: docker-compose ps
+# Equivalent to: docker compose ps
 ```
 
 **Development Tools**:
@@ -632,11 +637,11 @@ quickscale apply
 Generated projects include Docker support for both development and production. After generating a project:
 
 ```bash
-# Development with Docker Compose
+# Development with Docker Compose v2
 cd myapp
 cp .env.example .env  # Configure environment variables
-docker-compose up --build
-docker-compose exec backend python manage.py migrate
+docker compose up --build
+docker compose exec backend python manage.py migrate
 
 # Production Docker build
 docker build -t myapp:latest .
@@ -647,7 +652,7 @@ docker run -p 8000:8000 \
   myapp:latest
 ```
 
-The `Dockerfile` uses multi-stage builds (builder + runtime) for production efficiency. The `docker-compose.yml` includes PostgreSQL and is configured for local development.
+The `Dockerfile` uses multi-stage builds (builder + runtime) for production efficiency. The generated project keeps the `docker-compose.yml` file name, and that file includes PostgreSQL for local development.
 
 ## 5) Repository Make Targets
 
@@ -658,6 +663,7 @@ Use these from the repository root:
 - `make test` / `make test-unit` — shared test entrypoints
 - `make test-e2e` / `make ci-e2e` — E2E and release-gate validation
 - `make lint` / `make format` / `make typecheck` — shared quality checks
+- `make frontend-proof` — render `showcase_react` and run `pnpm install`, `pnpm type-check`, and `pnpm build` without Docker
 - `make publish-module MODULE=<name>` — publish module changes to split branches
 - `make publish-module-status` — show which module split branches are up to date, outdated, or unpublished
 - `make publish-modules-outdated` — publish only modules whose split branches are missing or outdated
@@ -682,6 +688,7 @@ Lower-level helpers still live in `scripts/` if you need to inspect the underlyi
 - E2E tests: `make test-e2e`
 - CI parity + E2E: `make ci-e2e`
 - Lint: `make lint`
+- Rendered React proof: `make frontend-proof`
 - Format: `make format`
 - Version parity: `make version-check`
 - Module publish status: `make publish-module-status`

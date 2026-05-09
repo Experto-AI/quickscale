@@ -501,33 +501,56 @@ class TestReactThemeDockerIntegration:
 
     def test_dockerfile_builds_with_react(self, tmp_path, docker_available):
         """
-        Verify Dockerfile builds successfully with React frontend.
+        Verify Dockerfile builds successfully with React frontend and ships
+        PostgreSQL client tooling in the built image.
 
-        This tests the complete Docker build including frontend compilation.
+        This tests the complete Docker build including frontend compilation and
+        runtime PostgreSQL client availability.
         """
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "docker_build_test"
         project_path = tmp_path / project_name
+        image_tag = "quickscale-react-test"
 
         generator.generate(project_name, project_path)
 
-        # Build Docker image
-        result = subprocess.run(
-            ["docker", "build", "-t", "quickscale-react-test", "."],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minutes for build
-        )
+        try:
+            build_result = subprocess.run(
+                ["docker", "build", "-t", image_tag, "."],
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minutes for build
+            )
 
-        assert result.returncode == 0, f"Docker build failed: {result.stderr}"
+            assert build_result.returncode == 0, (
+                "Docker build failed:\n"
+                f"STDOUT:\n{build_result.stdout}\n"
+                f"STDERR:\n{build_result.stderr}"
+            )
 
-        # Cleanup: remove test image
-        subprocess.run(
-            ["docker", "rmi", "quickscale-react-test"],
-            capture_output=True,
-            timeout=30,
-        )
+            for command in ("pg_dump", "pg_restore"):
+                version_result = subprocess.run(
+                    ["docker", "run", "--rm", image_tag, command, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+
+                assert version_result.returncode == 0, (
+                    f"{command} version check failed:\n"
+                    f"STDOUT:\n{version_result.stdout}\n"
+                    f"STDERR:\n{version_result.stderr}"
+                )
+                assert "(PostgreSQL) 18" in version_result.stdout, (
+                    f"Unexpected {command} version output: {version_result.stdout}"
+                )
+        finally:
+            subprocess.run(
+                ["docker", "rmi", image_tag],
+                capture_output=True,
+                timeout=30,
+            )
 
 
 @pytest.mark.e2e

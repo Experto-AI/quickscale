@@ -256,7 +256,7 @@ All libraries that depend on these runtimes or toolchains must be updated to ver
 - [x] Validate `make test`
 - [ ] Validate `make test-e2e` once Docker access is restored
 - [ ] Validate `make ci-e2e` once Docker access is restored
-- [ ] Validate a full frontend `pnpm build` + `pnpm type-check` against the refreshed React toolchain
+- [x] Validate a full frontend `pnpm build` + `pnpm type-check` against the refreshed React toolchain
 - [ ] Validate generated-project Docker parity end to end, including PostgreSQL 18 client tooling from inside the built image, before marking the runtime/tooling closeout complete
 
 **Testing**:

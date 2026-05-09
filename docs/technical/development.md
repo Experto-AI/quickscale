@@ -6,7 +6,7 @@
 **Target**: New contributor can clone repository and run tests successfully in <15 minutes.
 
 **Last Updated**: March 21, 2026
-**Tested On**: Ubuntu 22.04, Python 3.14
+**Tested On**: Ubuntu 22.04, Python 3.13
 
 ---
 
@@ -16,10 +16,10 @@ Before starting, ensure you have these tools installed:
 
 ### Required Tools
 
-1. **Python 3.14 or higher**
+1. **Python 3.13 or higher**
    ```bash
    python3 --version
-   # Should show 3.14.x or higher
+   # Should show 3.13.x or higher
    ```
 
 2. **Git 2.25+**
@@ -38,9 +38,9 @@ Before starting, ensure you have these tools installed:
 
 **Ubuntu/Debian:**
 ```bash
-# Python 3.14+ (if not already installed)
+# Python 3.13+ (if not already installed)
 sudo apt update
-sudo apt install python3.14 python3.14-venv python3-pip
+sudo apt install python3.13 python3.13-venv python3-pip
 
 # Git
 sudo apt install git
@@ -53,8 +53,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 **macOS:**
 ```bash
-# Python 3.14+ via Homebrew
-brew install python@3.14
+# Python 3.13+ via Homebrew
+brew install python@3.13
 
 # Git (usually pre-installed)
 brew install git
@@ -115,6 +115,9 @@ poetry run pytest
 #### 4. Run Linters (1-2 minutes)
 ```bash
 ./scripts/lint.sh
+
+# Prove the rendered showcase_react starter frontend without Docker
+make frontend-proof
 
 # Expected output:
 # ✓ ruff format --check (code formatting)
@@ -420,7 +423,7 @@ poetry install
 
 ### Issue: Python version mismatch
 
-**Cause**: System Python version doesn't match project requirements (3.14+)
+**Cause**: System Python version doesn't match project requirements (3.13+)
 
 **Solution:**
 ```bash
@@ -428,10 +431,10 @@ poetry install
 python3 --version
 
 # Install specific version (Ubuntu)
-sudo apt install python3.14 python3.14-venv
+sudo apt install python3.13 python3.13-venv
 
 # Tell Poetry to use specific version
-poetry env use python3.14
+poetry env use python3.13
 
 # Verify
 poetry run python --version

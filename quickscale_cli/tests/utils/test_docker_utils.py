@@ -3,7 +3,10 @@
 import subprocess
 from unittest.mock import Mock, patch
 
+import pytest
+
 from quickscale_cli.utils.docker_utils import (
+    DockerComposePluginRequiredError,
     exec_in_container,
     find_docker_compose,
     get_container_status,
@@ -106,13 +109,15 @@ class TestGetDockerComposeCommand:
             # v2 plugin (docker compose) is tried first and preferred
             assert result == ["docker", "compose"]
 
-    def test_docker_compose_v1_fallback(self):
-        """Test fallback to docker-compose v1 when v2 is not available."""
+    def test_docker_compose_v2_required(self):
+        """Test that missing v2 plugin raises a dedicated error."""
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError()
-            result = get_docker_compose_command()
-            # Falls back to v1 standalone (docker-compose)
-            assert result == ["docker-compose"]
+
+            with pytest.raises(DockerComposePluginRequiredError) as error:
+                get_docker_compose_command()
+
+            assert "docker compose" in str(error.value)
 
 
 class TestGetContainerStatus:

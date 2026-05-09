@@ -9,7 +9,7 @@ RUN corepack enable
 # Copy dependency files
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 # Install dependencies
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --config.strict-dep-builds=false --no-frozen-lockfile
 # Copy source code and build
 COPY frontend .
 RUN pnpm run build

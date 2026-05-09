@@ -20,6 +20,7 @@ from quickscale_cli.commands.development_commands import (
     shell,
     up,
 )
+from quickscale_cli.utils.docker_utils import DockerComposePluginRequiredError
 from quickscale_cli.utils.project_manager import ProjectConfigLoadError
 
 
@@ -76,28 +77,28 @@ class TestHandleUpError:
 
     def test_port_conflict_error(self):
         """Handle port conflict in error output"""
-        error = subprocess.CalledProcessError(1, "docker-compose")
+        error = subprocess.CalledProcessError(1, ["docker", "compose"])
         error.stderr = "Bind for 0.0.0.0:8000 failed: port is already allocated"
         error.stdout = ""
         _handle_up_error(error)
 
     def test_generic_error(self):
         """Handle generic error output"""
-        error = subprocess.CalledProcessError(1, "docker-compose")
+        error = subprocess.CalledProcessError(1, ["docker", "compose"])
         error.stderr = "Some other error"
         error.stdout = ""
         _handle_up_error(error)
 
     def test_error_no_output(self):
         """Handle error with no output"""
-        error = subprocess.CalledProcessError(1, "docker-compose")
+        error = subprocess.CalledProcessError(1, ["docker", "compose"])
         error.stderr = ""
         error.stdout = ""
         _handle_up_error(error)
 
     def test_port_conflict_in_stdout(self):
         """Handle port conflict in stdout"""
-        error = subprocess.CalledProcessError(1, "docker-compose")
+        error = subprocess.CalledProcessError(1, ["docker", "compose"])
         error.stderr = ""
         error.stdout = "Bind for 0.0.0.0:3000 failed: port is already allocated"
         _handle_up_error(error)
@@ -378,7 +379,7 @@ class TestUpCommandExtended:
                     ):
                         with patch(
                             "quickscale_cli.commands.development_commands.get_docker_compose_command",
-                            return_value=["docker-compose"],
+                            return_value=["docker", "compose"],
                         ):
                             with patch(
                                 "quickscale_cli.commands.development_commands.get_backend_container_name",
@@ -392,6 +393,34 @@ class TestUpCommandExtended:
                                     assert (
                                         "Dependencies may have changed" in result.output
                                     )
+
+    def test_up_requires_compose_v2_plugin(self):
+        """Test up shows remediation when the Compose v2 plugin is unavailable."""
+        runner = CliRunner()
+
+        with patch(
+            "quickscale_cli.commands.development_commands.is_in_quickscale_project",
+            return_value=True,
+        ):
+            with patch(
+                "quickscale_cli.commands.development_commands.is_docker_running",
+                return_value=True,
+            ):
+                with patch(
+                    "quickscale_cli.commands.development_commands.is_port_available",
+                    return_value=True,
+                ):
+                    with patch(
+                        "quickscale_cli.commands.development_commands.get_docker_compose_command",
+                        side_effect=DockerComposePluginRequiredError(
+                            "Docker Compose v2 is required."
+                        ),
+                    ):
+                        result = runner.invoke(up)
+
+        assert result.exit_code == 1
+        assert "Docker Compose v2 plugin is required" in result.output
+        assert "docker compose" in result.output
 
 
 # ============================================================================
@@ -416,7 +445,7 @@ class TestDownCommandExtended:
             ):
                 with patch(
                     "quickscale_cli.commands.development_commands.get_docker_compose_command",
-                    return_value=["docker-compose"],
+                    return_value=["docker", "compose"],
                 ):
                     with patch("subprocess.run", return_value=Mock(returncode=0)):
                         with patch(
@@ -515,7 +544,7 @@ class TestLogsAndPsExtended:
             ):
                 with patch(
                     "quickscale_cli.commands.development_commands.get_docker_compose_command",
-                    return_value=["docker-compose"],
+                    return_value=["docker", "compose"],
                 ):
                     with patch("subprocess.run", side_effect=KeyboardInterrupt):
                         result = runner.invoke(logs)
@@ -537,7 +566,7 @@ class TestLogsAndPsExtended:
             ):
                 with patch(
                     "quickscale_cli.commands.development_commands.get_docker_compose_command",
-                    return_value=["docker-compose"],
+                    return_value=["docker", "compose"],
                 ):
                     with patch(
                         "subprocess.run",

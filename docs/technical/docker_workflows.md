@@ -21,6 +21,9 @@ docker:
   build: true   # Rebuild Docker images during start?
 ```
 
+QuickScale keeps the generated `docker-compose.yml` file name, but repo-owned
+commands and docs use the Docker Compose v2 plugin syntax: `docker compose`.
+
 ### `docker.start`
 
 Controls whether `quickscale apply` automatically starts Docker services.
@@ -118,7 +121,7 @@ quickscale up --build --no-cache
 quickscale down
 
 # Stop and remove volumes (⚠️ destroys database!)
-docker-compose down -v
+docker compose down -v
 ```
 
 ### Checking Status
@@ -233,7 +236,7 @@ quickscale up --build --no-cache
 
 # Still not working? Nuclear option:
 quickscale down
-docker-compose down -v  # ⚠️ Destroys database!
+docker compose down -v  # ⚠️ Destroys database!
 quickscale up --build
 quickscale manage migrate
 quickscale manage createsuperuser
@@ -323,7 +326,7 @@ quickscale manage migrate
 
 # Or rebuild everything:
 quickscale down
-docker-compose down -v  # ⚠️ Destroys database
+docker compose down -v  # ⚠️ Destroys database
 quickscale up --build
 quickscale manage migrate
 ```

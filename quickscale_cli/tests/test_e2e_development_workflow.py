@@ -22,7 +22,10 @@ import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.main import cli
-from quickscale_cli.utils.docker_utils import get_docker_compose_command
+from quickscale_cli.utils.docker_utils import (
+    DockerComposePluginRequiredError,
+    get_docker_compose_command,
+)
 from quickscale_core.generator import ProjectGenerator
 
 
@@ -94,6 +97,11 @@ class TestDevelopmentCommandsE2E:
         )
         if result.returncode != 0:
             pytest.skip("Docker is not running")
+
+        try:
+            get_docker_compose_command()
+        except DockerComposePluginRequiredError as error:
+            pytest.skip(str(error))
 
     @pytest.fixture
     def docker_env(self) -> dict[str, str]:
@@ -450,7 +458,7 @@ class TestDevelopmentCommandsIntegration:
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, f"docker-compose config invalid: {result.stderr}"
+        assert result.returncode == 0, f"docker compose config invalid: {result.stderr}"
 
     def test_project_structure_supports_docker_workflow(self, generated_project):
         """Verify project has all files needed for Docker workflow."""
