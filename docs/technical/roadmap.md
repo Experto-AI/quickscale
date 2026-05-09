@@ -113,6 +113,51 @@ v0.83.0 closed the pre-billing hardening track across plan/apply validation, shi
 
 **Progress note**: The runtime/tooling refresh is largely implemented and the non-Docker local quality gates are green. Remaining work is concentrated in backup lifecycle hardening, the remaining dependency sweeps, and Docker-backed validation closeout.
 
+**Execution note (2026-05-09)**: The remaining runtime/tooling closeout is now explicitly staged so implementation can continue without reopening the same planning blockers. Stage 1 is the metadata and dependency-alignment pass that makes the support contract coherent across repo-owned manifests and generated templates, and it should proceed even if Docker is still blocked locally. Stage 2 is the Docker-backed parity and closeout-validation pass that runs only after Stage 1 evidence exists.
+
+**Decisions captured from the current closeout session**:
+- Treat the runtime/tooling closeout as a two-stage track, not one flat checklist, so metadata alignment and Docker-backed parity can be validated independently.
+- Keep backup feature work out of the runtime/tooling closeout. Admin backup artifact access, backup completeness, and upload-driven restore remain separate open tracks below.
+- Keep `zod` on the current 3.x line for v0.84.0 unless another required dependency forces a broader forms migration. The hardening release should not expand into avoidable schema/runtime migration work.
+- Treat `module.yml` dependency spec-string normalization as deferred for this milestone unless a later implementation pass chooses to normalize it opportunistically. The dependency sync path resolves third-party version values from embedded module `pyproject.toml`, not from `module.yml`, so stale spec strings there are not a runtime/tooling closeout blocker by themselves.
+- Do not count repo reruns or Docker/workflow parity evidence while repo-owned Python support metadata tells a contradictory story. The closeout must align repo metadata before those reruns are considered authoritative.
+- Generated-project parity is not complete until the closeout evidence covers both generated workflow/config text and generated image runtime behavior, including PostgreSQL 18 client tooling inside the built image.
+
+**Staged runtime/tooling closeout**:
+
+**Stage 1: Metadata and dependency alignment (must close before Stage 2)**
+- Goal: finish the remaining dependency sweeps and make the Python support contract coherent across repo-owned metadata before Docker-backed reruns count as closeout evidence.
+- Scope:
+	- Remaining Python dependency audit/update work.
+	- Remaining frontend runtime dependency audit/update work.
+	- Repo-owned Python support metadata alignment across all packaged surfaces that can invalidate closeout evidence.
+- Required Stage 1 decisions:
+	- Align both `project.requires-python` and `tool.poetry.dependencies.python` wherever they appear in the root package, first-party packages, and packaged modules.
+	- Align supported-Python classifiers or document/test an intentional exception instead of leaving mixed metadata in tree.
+	- Align repo tool-version metadata that participates in the support story, including Ruff target versions and any maintainer-facing Python-version declarations that would contradict the chosen closeout window.
+	- If repo workflows continue to exercise Python 3.14, that only counts as closeout evidence once repo-owned package metadata also admits that window; otherwise treat 3.14 as extra canary coverage rather than closeout proof.
+- Required Stage 1 validation:
+	- Narrow metadata-contract validation first.
+	- Then `make version-check`, `make lint`, `make typecheck`, and `make test`.
+	- Then the refreshed frontend validation path, including `pnpm type-check` and `pnpm build` for the React starter.
+
+**Stage 2: Docker access, generated-project parity, and container-backed closeout**
+- Goal: restore local Docker usability for the normal user, then rerun the generated-project parity and end-to-end gates on top of the Stage 1-aligned support contract.
+- Scope:
+	- Restore `docker info` for normal user execution.
+	- Re-run the Docker-backed validation gates.
+	- Prove generated-project parity locally or record the exact hosted fallback evidence before checking off the Docker-backed closeout items.
+- Required Stage 2 parity evidence:
+	- Fresh generated-project workflow/config assertions remain green.
+	- `docker compose config` succeeds on the fresh generated project.
+	- The generated image builds successfully.
+	- The generated image exposes PostgreSQL 18 client tooling at runtime, proven with `pg_dump --version` and `pg_restore --version` from inside the built image.
+- Required Stage 2 validation:
+	- `make test-e2e`
+	- `make ci-e2e`
+- Closeout rule:
+	- Do not mark the Docker-backed runtime/tooling boxes complete until Stage 2 evidence exists. If local parity cannot be stabilized in the same pass, record the exact hosted workflow/job evidence used as fallback instead of inferring parity from text-only assertions.
+
 **Admin backup artifact access**:
 - [ ] Add a reliable download flow for backup artifacts listed in `http://localhost:8000/admin/quickscale_modules_backups/backupartifact/`
 - [ ] Ensure the admin surface exposes the generated backup file directly without maintainer-only shell access
@@ -185,6 +230,11 @@ Target versions (latest with LTS or long-term support coverage where applicable;
 
 All libraries that depend on these runtimes or toolchains must be updated to versions compatible with the targets above. A partially upgraded stack (e.g. a module pinning an older Django patch, or a frontend package incompatible with TypeScript 6) is not acceptable — the refresh must be coherent repo-wide.
 
+**Closeout implementation notes for the remaining refresh work**:
+- The direct Docker base-image, generated template, and GitHub Actions major-version bumps listed below are already landed. The remaining open runtime/tooling work is the staged closeout above, not another broad version-bump pass across those already-updated files.
+- The remaining Python-support alignment work is broader than generated templates alone. Fresh generated projects already target Python 3.13, but repo-owned package metadata still needs one coherent closeout story before Docker-backed reruns count.
+- The remaining frontend audit should prefer compatibility-safe bumps first. Keep the forms/runtime seam conservative unless validation proves a broader migration is required.
+
 - [x] Update Python Docker base images from `python:3.12-slim-bookworm` → `python:3.13-slim-bookworm` in `Dockerfile.j2`; update `site-packages` copy path from `python3.12` → `python3.13`
 - [x] Update `postgres:17-alpine` → `postgres:18-alpine` in `quickscale_core/tests/docker-compose.test.yml`
 - [x] Update `codecov/codecov-action` from `@v4` → `@v5` in `ci.yml` and `e2e.yml`
@@ -198,6 +248,7 @@ All libraries that depend on these runtimes or toolchains must be updated to ver
 - [x] Update React, TypeScript, Vite, Vitest, and all frontend devDependencies in `package.json.j2` to compatible latest-stable versions
 - [ ] Audit and update the remaining Python libraries not already covered by the template/toolchain sweep (django-storages, boto3, gunicorn, whitenoise, psycopg2-binary, Jinja2, pyyaml, anymail, etc.) to the latest versions compatible with Django 6.0.x and Python 3.13
 - [ ] Audit and update the remaining frontend runtime libraries not already covered by the React/toolchain bump (Radix UI, TanStack Query, react-router-dom, lucide-react, motion, zod, zustand, etc.) to versions compatible with React 19 and TypeScript 6
+- [ ] Align repo-owned Python support metadata so closeout evidence uses one coherent support window across `project.requires-python`, `tool.poetry.dependencies.python`, classifiers, and other maintainer/runtime declarations that participate in the support story
 - [ ] Restore functional local Docker access before rerunning container-backed gates. Current blocker: `docker info` fails with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`. Next iteration: use provided sudo access to configure Docker so it can be run in normal user mode.
 - [x] Validate `make version-check`
 - [x] Validate `make lint`
@@ -206,6 +257,7 @@ All libraries that depend on these runtimes or toolchains must be updated to ver
 - [ ] Validate `make test-e2e` once Docker access is restored
 - [ ] Validate `make ci-e2e` once Docker access is restored
 - [ ] Validate a full frontend `pnpm build` + `pnpm type-check` against the refreshed React toolchain
+- [ ] Validate generated-project Docker parity end to end, including PostgreSQL 18 client tooling from inside the built image, before marking the runtime/tooling closeout complete
 
 **Testing**:
 - [ ] Unit tests for backup artifact download permissions, storage access, and backup composition
