@@ -34,6 +34,7 @@ class TestReactThemeGeneration:
 
         # Core frontend files
         assert (frontend_path / "package.json").exists()
+        assert (frontend_path / "pnpm-workspace.yaml").exists()
         assert (frontend_path / "vite.config.ts").exists()
         assert (frontend_path / "tsconfig.json").exists()
         assert (frontend_path / "tailwind.config.js").exists()
@@ -146,7 +147,7 @@ class TestReactThemeGeneration:
             package = json.load(f)
 
         package_manager = package.get("packageManager", "")
-        assert re.fullmatch(r"pnpm@\d+\.\d+\.\d+", package_manager)
+        assert re.fullmatch(r"pnpm@11\.\d+\.\d+", package_manager)
 
         # Core React dependencies
         deps = package.get("dependencies", {})
@@ -181,6 +182,24 @@ class TestReactThemeGeneration:
         assert "vitest" in dev_deps
         assert "@playwright/test" in dev_deps
         assert "tailwindcss" in dev_deps
+        assert re.fullmatch(r"\^24\.\d+\.\d+", dev_deps["@types/node"])
+        assert re.fullmatch(r"\^6\.\d+\.\d+", dev_deps["@vitejs/plugin-react"])
+        assert re.fullmatch(r"\^6\.\d+\.\d+", dev_deps["typescript"])
+        assert re.fullmatch(r"\^8\.\d+\.\d+", dev_deps["vite"])
+
+    def test_react_theme_pnpm_workspace_allows_reviewed_build_scripts(self, tmp_path):
+        """pnpm workspace config should allow the reviewed dependency build scripts."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_pnpm_workspace_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        pnpm_workspace = (output_path / "frontend" / "pnpm-workspace.yaml").read_text()
+
+        assert "allowBuilds:" in pnpm_workspace
+        assert "core-js: true" in pnpm_workspace
+        assert "protobufjs: true" in pnpm_workspace
 
     def test_react_theme_vite_config_correct(self, tmp_path):
         """Vite config should have correct settings for Django integration"""
@@ -227,6 +246,7 @@ class TestReactThemeGeneration:
 
         # Should have path aliases
         assert '"paths"' in content or '"baseUrl"' in content
+        assert '"baseUrl"' not in content
 
     def test_react_theme_shadcn_components_json_correct(self, tmp_path):
         """components.json should have correct shadcn/ui configuration"""

@@ -1,0 +1,29 @@
+import { useQuery } from '@tanstack/react-query'
+
+async function fetchApi<T>(endpoint: string): Promise<T> {
+  const response = await fetch(endpoint)
+  if (!response.ok) {
+    throw new Error(`API Error: ${response.status}`)
+  }
+  return response.json()
+}
+
+export function useHealthCheck() {
+  return useQuery({
+    queryKey: ['health'],
+    queryFn: () => fetchApi<{ status: string }>('/healthcheck/'),
+    retry: false,
+  })
+}
+
+export function useApiData<T>(
+  endpoint: string,
+  queryKey: string[],
+  options: { retry?: boolean } = {},
+) {
+  return useQuery({
+    queryKey,
+    queryFn: () => fetchApi<T>(endpoint),
+    retry: options.retry ?? false,
+  })
+}

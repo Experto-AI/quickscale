@@ -1,0 +1,69 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: phase2_showcase_db
+    environment:
+      POSTGRES_DB: phase2_showcase
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    # Port mapping removed to avoid conflicts with system PostgreSQL
+    # The backend service can still access the database via the internal Docker network
+    # If you need to access PostgreSQL from your host, uncomment the next 2 lines:
+    # ports:
+    #   - "5433:5432"  # Maps to host port 5433 to avoid conflict with system PostgreSQL
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  frontend:
+    image: node:24-slim
+    container_name: phase2_showcase_frontend
+    # Map to host user to prevent root-owned files in mounted volumes
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    working_dir: /app/frontend
+    environment:
+      - HOME=/tmp
+    # Use corepack without `enable` because this container runs as non-root.
+    # `corepack enable` writes to /usr/local/bin and fails with EACCES.
+    command: sh -c "corepack pnpm install --no-frozen-lockfile && corepack pnpm run build"
+    volumes:
+      - .:/app
+
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_DEV: "true"  # Install dev dependencies for local development
+    container_name: phase2_showcase_backend
+    command: python manage.py runserver 0.0.0.0:${PORT:-8000}
+    # Map to host user to prevent root-owned files in mounted volumes
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    environment:
+      - DJANGO_SETTINGS_MODULE=phase2_showcase.settings.local
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/phase2_showcase
+      - PORT=${PORT:-8000}
+    depends_on:
+      db:
+        condition: service_healthy
+
+      frontend:
+        condition: service_completed_successfully
+
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:

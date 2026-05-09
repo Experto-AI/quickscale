@@ -1,0 +1,30 @@
+import { Routes, Route } from 'react-router-dom'
+import { Layout } from '@/components/layout/Layout'
+import { Dashboard } from '@/pages/Dashboard'
+import { BlogPage } from '@/pages/BlogPage'
+import { ListingsPage } from '@/pages/ListingsPage'
+import { CrmPage } from '@/pages/CrmPage'
+import { ProfilePage } from '@/pages/ProfilePage'
+import { SettingsPage } from '@/pages/SettingsPage'
+import { FormsPage } from '@/pages/FormsPage'
+import { NotFound } from '@/pages/NotFound'
+
+function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/blog" element={<BlogPage />} />
+        <Route path="/listings" element={<ListingsPage />} />
+        <Route path="/crm-workspace" element={<CrmPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/forms" element={<FormsPage />} />
+        <Route path="/forms/:slug" element={<FormsPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  )
+}
+
+export default App

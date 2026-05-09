@@ -905,6 +905,11 @@ class TestDevOpsTemplateLoading:
         template = jinja_env.get_template("pyproject.toml.j2")
         assert template is not None
 
+    def test_precommit_config_loads(self, jinja_env: Environment) -> None:
+        """Test .pre-commit-config template loads without errors."""
+        template = jinja_env.get_template(".pre-commit-config.yaml.j2")
+        assert template is not None
+
     def test_github_ci_workflow_loads(self, jinja_env: Environment) -> None:
         """Test generated GitHub CI workflow template loads without errors."""
         template = jinja_env.get_template("github/workflows/ci.yml.j2")
@@ -964,9 +969,23 @@ class TestDevOpsTemplateRendering:
         assert len(output) > 0
         assert "testproject" in output
         assert "[tool.poetry]" in output
-        assert 'python = ">=3.12,<3.14"' in output
-        assert 'target-version = "py312"' in output
-        assert 'python_version = "3.12"' in output
+        assert 'python = ">=3.13,<3.15"' in output
+        assert 'Django = ">=6.0.3,<6.1.0"' in output
+        assert 'target-version = "py313"' in output
+        assert 'python_version = "3.13"' in output
+
+    def test_precommit_config_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test .pre-commit-config renders the pinned hook toolchain."""
+        template = jinja_env.get_template(".pre-commit-config.yaml.j2")
+        output = template.render(test_context)
+        assert output is not None
+        assert len(output) > 0
+        assert "pre-commit/pre-commit-hooks" in output
+        assert "rev: v6.0.0" in output
+        assert "astral-sh/ruff-pre-commit" in output
+        assert "rev: v0.15.12" in output
 
     def test_github_ci_workflow_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -979,7 +998,7 @@ class TestDevOpsTemplateRendering:
         assert "name: CI" in output
         assert "pytest --cov=testproject" in output
         assert "runs-on: ubuntu-24.04" in output
-        assert 'python-version: ["3.12"]' in output
+        assert 'python-version: ["3.13"]' in output
         assert "apt.postgresql.org" in output
         assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
@@ -995,7 +1014,7 @@ class TestDevOpsTemplateRendering:
         assert "pg_dump --version" in output
         assert "pg_restore --version" in output
         assert (
-            "if: matrix.python-version == '3.12' && matrix.django-version == '6.0'"
+            "if: matrix.python-version == '3.13' && matrix.django-version == '6.0'"
             in output
         )
         assert "3.14" not in output
@@ -1011,7 +1030,7 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "FROM python:3.12-slim-bookworm" in output
+        assert "FROM python:3.13-slim-bookworm" in output
 
     def test_docker_compose_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1160,7 +1179,7 @@ class TestPyprojectTomlContent:
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "Django" in output
-        assert "^6.0" in output
+        assert 'Django = ">=6.0.3,<6.1.0"' in output
 
     def test_postgresql_driver(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1246,8 +1265,8 @@ class TestDockerfileContent:
         """Test Dockerfile uses multi-stage build pattern."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "FROM python:3.12-slim-bookworm as builder" in output
-        assert "FROM python:3.12-slim-bookworm" in output
+        assert "FROM python:3.13-slim-bookworm as builder" in output
+        assert "FROM python:3.13-slim-bookworm" in output
         assert "bookworm-pgdg" in output
         assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
@@ -1270,7 +1289,7 @@ class TestDockerfileContent:
         """Test Dockerfile installs Poetry for dependency management."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "poetry" in output.lower()
+        assert "pip install poetry==2.4.0" in output
 
     def test_optimized_layers(
         self, jinja_env: Environment, test_context: dict[str, str]

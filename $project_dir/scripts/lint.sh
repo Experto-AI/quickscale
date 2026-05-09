@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Lint the entire project: Python (ruff + mypy) and React frontend (ESLint + TypeScript)
+# Usage: ./scripts/lint.sh
+#
+# Run Python only:  ./scripts/lint.sh --python
+# Run React only:   ./scripts/lint.sh --frontend
+
+set -e
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+EXIT_CODE=0
+
+# Parse arguments
+RUN_PYTHON=true
+RUN_FRONTEND=true
+
+if [ "${1:-}" = "--python" ]; then
+	RUN_FRONTEND=false
+elif [ "${1:-}" = "--frontend" ]; then
+	RUN_PYTHON=false
+fi
+
+echo "🔍 Running project-wide lint checks..."
+echo ""
+
+# ─── Python Linting ──────────────────────────────────────────────────────────
+
+if [ "$RUN_PYTHON" = true ]; then
+	echo "🐍 Python lint checks..."
+	echo ""
+
+	echo "  → Running ruff check..."
+	if poetry run ruff check .; then
+		echo "  ✅ ruff check passed"
+	else
+		echo "  ❌ ruff check found issues"
+		EXIT_CODE=1
+	fi
+
+	echo "  → Running ruff format --check..."
+	if poetry run ruff format --check .; then
+		echo "  ✅ ruff format passed"
+	else
+		echo "  ❌ ruff format check found issues"
+		EXIT_CODE=1
+	fi
+
+	echo "  → Running mypy..."
+	if poetry run mypy phase2_showcase/; then
+		echo "  ✅ mypy passed"
+	else
+		echo "  ❌ mypy found type errors"
+		EXIT_CODE=1
+	fi
+	echo ""
+fi
+
+# ─── React Frontend Linting ──────────────────────────────────────────────────
+
+if [ "$RUN_FRONTEND" = true ] && [ -d "$ROOT/frontend" ]; then
+	echo "⚛️  React frontend lint checks..."
+	echo ""
+
+	cd "$ROOT/frontend"
+
+	if ! command -v pnpm &> /dev/null; then
+		echo "  ❌ pnpm is required but not installed."
+		echo "  💡 Install pnpm: npm install -g pnpm"
+		EXIT_CODE=1
+		cd "$ROOT"
+	else
+		# Check if node_modules exists
+		if [ ! -d "node_modules" ]; then
+			echo "  → Installing frontend dependencies..."
+			pnpm install
+			echo "  → Formatting generated sources..."
+			pnpm format
+		fi
+
+		echo "  → Running ESLint..."
+		if pnpm lint; then
+			echo "  ✅ ESLint passed"
+		else
+			echo "  ❌ ESLint found issues"
+			EXIT_CODE=1
+		fi
+
+		echo "  → Running TypeScript type check..."
+		if pnpm type-check; then
+			echo "  ✅ TypeScript check passed"
+		else
+			echo "  ❌ TypeScript found type errors"
+			EXIT_CODE=1
+		fi
+
+		echo "  → Running Prettier format check..."
+		if pnpm format:check; then
+			echo "  ✅ Prettier format check passed"
+		else
+			echo "  ❌ Prettier format check found issues"
+			EXIT_CODE=1
+		fi
+
+		cd "$ROOT"
+	fi
+
+	echo ""
+elif [ "$RUN_FRONTEND" = true ]; then
+	echo "ℹ️  No frontend/ directory found, skipping React lint"
+	echo ""
+fi
+
+# ─── Summary ─────────────────────────────────────────────────────────────────
+
+if [ $EXIT_CODE -eq 0 ]; then
+	echo "✅ All lint checks passed!"
+else
+	echo "❌ Some lint checks failed!"
+	exit $EXIT_CODE
+fi

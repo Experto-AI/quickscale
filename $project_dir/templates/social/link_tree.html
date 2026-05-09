@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block title %}Social | phase2_showcase{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'frontend/assets/index.css' %}" />
+<style>
+    .qs-main {
+        max-width: 1200px;
+        padding-top: 1.75rem;
+        padding-bottom: 2.5rem;
+    }
+    .qs-social-react-shell {
+        min-height: 70vh;
+    }
+    .qs-social-react-shell:empty::before {
+        content: 'Loading public social page...';
+        display: block;
+        width: 100%;
+        padding: 1rem 1.25rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+        color: #475569;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+<div id="root" class="qs-social-react-shell"></div>
+<noscript>
+    <div class="qs-alert qs-alert-info">
+        JavaScript is required to render the managed public social link tree on this page.
+    </div>
+</noscript>
+{% else %}
+<section class="qs-card">
+  <h1>Social module not active</h1>
+  <p>
+    This theme reserves <code>/social</code>, but the managed public social surface only hydrates
+    when the social module is installed and at least one public social setting is enabled.
+  </p>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+<script>
+  window.__QUICKSCALE__ = {
+    projectName: "phase2_showcase",
+    modules: {
+      auth: false,
+      blog: false,
+      listings: false,
+      crm: false,
+      forms: false,
+      storage: false,
+      backups: false,
+      notifications: false,
+      social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %},
+    },
+    modulePaths: {
+      social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}",
+    },
+    publicPage: {
+      module: 'social',
+      surface: 'link_tree',
+      endpoint: '/_quickscale/social/',
+      navigation: {
+        home: '/',
+        linkTree: '/social',
+        embeds: '/social/embeds',
+      },
+    },
+  }
+</script>
+<script type="module" src="{% static 'frontend/assets/index.js' %}"></script>
+{% endif %}
+{% endblock %}

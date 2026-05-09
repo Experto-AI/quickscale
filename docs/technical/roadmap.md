@@ -51,7 +51,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.81.0 | ✅ Released | Beta-site migration maintainer tooling | Maintainer-only fresh-first and checkpoint-first in-place beta-site migration workflows; archived in release note and changelog |
 | v0.82.0 | ✅ Released | Disaster recovery & environment promotion | Public `quickscale dr` capture/plan/execute/report workflows with `snapshot_id` lookup, resumable capture/execute, rollback pins, conservative env-var sync, and source-side media sync; archived in release note and changelog |
 | v0.83.0 | ✅ Released | Hardening release | Repo-wide hardening release published; archived in the release note and changelog |
-| v0.84.0 | 📋 Planned | Backups hardening release | Admin backup artifact download, full backup completeness, uploaded backup restore, and latest-stable runtime and toolchain refresh across modules |
+| v0.84.0 | 🟡 In progress | Backups hardening release | Runtime and toolchain refresh is largely implemented; backup lifecycle hardening, Docker-backed validation closeout, and remaining dependency sweeps are still open |
 | v0.85.0 | 📋 Planned | Billing module | Stripe integration after v0.84.0 backups hardening closes the remaining backup lifecycle gaps |
 | v0.86.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
 | v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and teams milestones |
@@ -63,8 +63,8 @@ This table is the single milestone summary for shipped history and the active fo
 
 **Status:**
 - **Current release:** v0.83.0 is the published release
-- **Current in-repo milestone:** v0.83.0 hardening is published and archived; active forward roadmap work now begins at v0.84.0 backups hardening
-- **Next planned milestone:** v0.84.0 backups hardening release
+- **Current in-repo milestone:** v0.84.0 backups hardening is in progress; runtime/tooling refresh work is mostly in place while backup lifecycle hardening and Docker-backed validation remain open
+- **Next planned milestone:** v0.85.0 billing module after v0.84.0 closeout
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.86.0 - auth, billing, teams modules complete on top of the notifications foundation
 
@@ -107,9 +107,11 @@ v0.83.0 closed the pre-billing hardening track across plan/apply validation, shi
 
 ### v0.84.0: Backups Hardening Release
 
-**Status**: 📋 Planned
+**Status**: 🟡 In progress
 
 **Dependency note**: This milestone starts after v0.83.0 and closes the remaining backup lifecycle gaps before billing work begins.
+
+**Progress note**: The runtime/tooling refresh is largely implemented and the non-Docker local quality gates are green. Remaining work is concentrated in backup lifecycle hardening, the remaining dependency sweeps, and Docker-backed validation closeout.
 
 **Admin backup artifact access**:
 - [ ] Add a reliable download flow for backup artifacts listed in `http://localhost:8000/admin/quickscale_modules_backups/backupartifact/`
@@ -153,10 +155,10 @@ Target versions (latest with LTS or long-term support coverage where applicable;
 
 | Image | Target | Files | Notes |
 |-------|--------|-------|-------|
-| `python:3.12-slim-bookworm` | `python:3.13-slim-bookworm` | `Dockerfile.j2` (builder stage and runtime stage) | Both stages must be bumped together; also update the `site-packages` copy path from `python3.12` → `python3.13`. |
+| `python:3.13-slim-bookworm` | `python:3.13-slim-bookworm` | `Dockerfile.j2` (builder stage and runtime stage) | Builder/runtime stages and the `site-packages` copy path are aligned to `python3.13`. |
 | `node:24-slim` | `node:24-slim` | `docker-compose.yml.j2`, `Dockerfile.j2` | Already on Active LTS — no change. |
 | `postgres:18-alpine` | `postgres:18-alpine` | `docker-compose.yml.j2`, `e2e.yml` | Already current — no change. |
-| `postgres:17-alpine` | `postgres:18-alpine` | `quickscale_core/tests/docker-compose.test.yml` | **Bug: inconsistent with the rest of the repo.** Must be aligned to 18. |
+| `postgres:18-alpine` | `postgres:18-alpine` | `quickscale_core/tests/docker-compose.test.yml` | Test compose fixture is aligned to the rest of the repo. |
 
 **CI/CD infrastructure (GitHub Actions)**
 
@@ -169,34 +171,41 @@ Target versions (latest with LTS or long-term support coverage where applicable;
 | `actions/download-artifact` | `@v8` | `@v8` | No change. |
 | `snok/install-poetry` | `@v1` | `@v1` | No change. |
 | `pnpm/action-setup` | `@v5` | `@v5` | No change (`ci.yml.j2`). |
-| `codecov/codecov-action` | `@v4` | **`@v5`** | `ci.yml`, `e2e.yml` — minor version bump. |
-| `softprops/action-gh-release` | `@v2` | **`@v3`** | `publish.yml` — v3 runs on Node 24. |
+| `codecov/codecov-action` | `@v5` | **`@v5`** | `ci.yml`, `e2e.yml` — minor version bump. |
+| `softprops/action-gh-release` | `@v3` | **`@v3`** | `publish.yml` — v3 runs on Node 24. |
 | `pypa/gh-action-pypi-publish` | `@release/v1` | `@release/v1` | No change. |
 
 **Structural tooling**
 
 | Tool | Current | Target | Files | Notes |
 |------|---------|--------|-------|-------|
-| `pre-commit-hooks` | `v4.5.0` | **`v6.0.0`** | `.pre-commit-config.yaml.j2` | Generated app template hook is stale. |
-| `ruff-pre-commit` | `v0.6.0` | **`v0.15.12`** | `.pre-commit-config.yaml.j2` | Must match the `ruff` version pinned in dev dependencies. |
-| `docker compose` | `docker-compose` (v1, apt package) | **`docker compose`** (v2 plugin) | `e2e.yml` | `docker-compose` v1 is deprecated and removed from Ubuntu 24.04 runners. Replace `apt-get install docker-compose` + `docker-compose config` calls with the v2 plugin syntax (`docker compose config`). The compose file format is fully backward-compatible. |
+| `pre-commit-hooks` | `v6.0.0` | **`v6.0.0`** | `.pre-commit-config.yaml.j2` | Generated app template hook is aligned. |
+| `ruff-pre-commit` | `v0.15.12` | **`v0.15.12`** | `.pre-commit-config.yaml.j2` | Matches the `ruff` version pinned in dev dependencies. |
+| `docker compose` | `docker compose` (v2 plugin) | **`docker compose`** (v2 plugin) | `e2e.yml` | `docker-compose` v1 is deprecated and removed from Ubuntu 24.04 runners. Replace `apt-get install docker-compose` + `docker-compose config` calls with the v2 plugin syntax (`docker compose config`). The compose file format is fully backward-compatible. |
 
 All libraries that depend on these runtimes or toolchains must be updated to versions compatible with the targets above. A partially upgraded stack (e.g. a module pinning an older Django patch, or a frontend package incompatible with TypeScript 6) is not acceptable — the refresh must be coherent repo-wide.
 
-- [ ] Update Python Docker base images from `python:3.12-slim-bookworm` → `python:3.13-slim-bookworm` in `Dockerfile.j2`; update `site-packages` copy path from `python3.12` → `python3.13`
-- [ ] Update `postgres:17-alpine` → `postgres:18-alpine` in `quickscale_core/tests/docker-compose.test.yml`
-- [ ] Update `codecov/codecov-action` from `@v4` → `@v5` in `ci.yml` and `e2e.yml`
-- [ ] Update `softprops/action-gh-release` from `@v2` → `@v3` in `publish.yml`
-- [ ] Replace deprecated `docker-compose` (v1) with `docker compose` (v2 plugin) in `e2e.yml`
-- [ ] Update `pre-commit-hooks` from `v4.5.0` → `v6.0.0` and `ruff-pre-commit` from `v0.6.0` → `v0.15.12` in `.pre-commit-config.yaml.j2`
-- [ ] Update Python runtime to 3.13 in generated project templates: `requires-python` in `pyproject.toml.j2`, CI matrix in `ci.yml.j2`, mypy `python_version`, ruff `target-version`
-- [ ] Update Django to the latest 6.0.x patch across all module `pyproject.toml` files and the generated app template
-- [ ] Update Poetry to 2.4.0 in `Dockerfile.j2` and any other pinned references
-- [ ] Update pnpm to latest 11.x in `package.json.j2` (`packageManager` field) and `ci.yml.j2` (pinned version step)
-- [ ] Update React, TypeScript, Vite, Vitest, and all frontend devDependencies in `package.json.j2` to compatible latest-stable versions
-- [ ] Update all Python library dependencies (django-storages, boto3, gunicorn, whitenoise, psycopg2-binary, Jinja2, pyyaml, anymail, etc.) to the latest versions compatible with Django 6.0.x and Python 3.13
-- [ ] Update all frontend libraries (Radix UI, TanStack Query, react-router-dom, lucide-react, motion, zod, zustand, etc.) to versions compatible with React 19 and TypeScript 6
-- [ ] Validate with `make lint`, `make typecheck`, `make test`, `make test-e2e`, and a full frontend `pnpm build` + `pnpm type-check` after all bumps are applied
+- [x] Update Python Docker base images from `python:3.12-slim-bookworm` → `python:3.13-slim-bookworm` in `Dockerfile.j2`; update `site-packages` copy path from `python3.12` → `python3.13`
+- [x] Update `postgres:17-alpine` → `postgres:18-alpine` in `quickscale_core/tests/docker-compose.test.yml`
+- [x] Update `codecov/codecov-action` from `@v4` → `@v5` in `ci.yml` and `e2e.yml`
+- [x] Update `softprops/action-gh-release` from `@v2` → `@v3` in `publish.yml`
+- [x] Replace deprecated `docker-compose` (v1) with `docker compose` (v2 plugin) in `e2e.yml`
+- [x] Update `pre-commit-hooks` from `v4.5.0` → `v6.0.0` and `ruff-pre-commit` from `v0.6.0` → `v0.15.12` in `.pre-commit-config.yaml.j2`
+- [x] Update Python runtime to 3.13 in generated project templates: `requires-python` in `pyproject.toml.j2`, CI matrix in `ci.yml.j2`, mypy `python_version`, ruff `target-version`
+- [x] Update Django to the latest 6.0.x patch across all module `pyproject.toml` files and the generated app template
+- [x] Update Poetry to 2.4.0 in `Dockerfile.j2` and any other pinned references
+- [x] Update pnpm to latest 11.x in `package.json.j2` (`packageManager` field) and `ci.yml.j2` (pinned version step)
+- [x] Update React, TypeScript, Vite, Vitest, and all frontend devDependencies in `package.json.j2` to compatible latest-stable versions
+- [ ] Audit and update the remaining Python libraries not already covered by the template/toolchain sweep (django-storages, boto3, gunicorn, whitenoise, psycopg2-binary, Jinja2, pyyaml, anymail, etc.) to the latest versions compatible with Django 6.0.x and Python 3.13
+- [ ] Audit and update the remaining frontend runtime libraries not already covered by the React/toolchain bump (Radix UI, TanStack Query, react-router-dom, lucide-react, motion, zod, zustand, etc.) to versions compatible with React 19 and TypeScript 6
+- [ ] Restore functional local Docker access before rerunning container-backed gates. Current blocker: `docker info` fails with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`. Next iteration: use provided sudo access to configure Docker so it can be run in normal user mode.
+- [x] Validate `make version-check`
+- [x] Validate `make lint`
+- [x] Validate `make typecheck`
+- [x] Validate `make test`
+- [ ] Validate `make test-e2e` once Docker access is restored
+- [ ] Validate `make ci-e2e` once Docker access is restored
+- [ ] Validate a full frontend `pnpm build` + `pnpm type-check` against the refreshed React toolchain
 
 **Testing**:
 - [ ] Unit tests for backup artifact download permissions, storage access, and backup composition

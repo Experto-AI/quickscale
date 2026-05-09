@@ -8,7 +8,7 @@ These tests verify the complete lifecycle:
 4. Execute Django management commands
 5. Start development server
 6. Test frontend with Playwright browser automation
-7. Verify Docker and docker-compose setup
+7. Verify Docker and Docker Compose v2 setup
 
 Run with: pytest -m e2e
 """
@@ -506,7 +506,7 @@ class TestFullE2EWorkflow:
         )
 
     def test_docker_compose_configuration(self, tmp_path):
-        """Verify docker-compose.yml is valid and can be parsed."""
+        """Verify docker-compose.yml is valid and can be parsed by docker compose."""
         from quickscale_core.generator import ProjectGenerator
 
         generator = ProjectGenerator(theme="showcase_html")
@@ -519,7 +519,7 @@ class TestFullE2EWorkflow:
         docker_compose_file = project_path / "docker-compose.yml"
         assert docker_compose_file.exists()
 
-        # Verify docker-compose config is valid
+        # Verify docker compose config is valid
         result = subprocess.run(
             [*get_docker_compose_command(), "config"],
             cwd=project_path,
@@ -528,7 +528,7 @@ class TestFullE2EWorkflow:
         )
 
         # Should successfully parse the config
-        assert result.returncode == 0, f"docker-compose config failed: {result.stderr}"
+        assert result.returncode == 0, f"docker compose config failed: {result.stderr}"
 
     def test_generated_project_tests_run(self, tmp_path, e2e_postgres_url):
         """Verify the generated project's test suite runs successfully."""
@@ -748,7 +748,7 @@ class TestFullE2EWorkflow:
 
         ci_content = ci_file.read_text()
         assert "runs-on: ubuntu-24.04" in ci_content
-        assert 'python-version: ["3.12"]' in ci_content
+        assert 'python-version: ["3.13"]' in ci_content
         assert "apt.postgresql.org" in ci_content
         assert "apt.postgresql.org.asc" in ci_content
         assert "postgresql-client-18" in ci_content
@@ -763,11 +763,17 @@ class TestFullE2EWorkflow:
         )
         assert "pg_dump --version" in ci_content
         assert "pg_restore --version" in ci_content
+        assert "uses: codecov/codecov-action@v5" in ci_content
+        assert "files: ./coverage.xml" in ci_content
+        assert "file: ./coverage.xml" not in ci_content
+        assert "version: 11.0.9" in ci_content
         assert (
-            "if: matrix.python-version == '3.12' && matrix.django-version == '6.0'"
+            "if: matrix.python-version == '3.13' && matrix.django-version == '6.0'"
             in ci_content
         )
         assert "3.14" not in ci_content
+        assert "10.28.2" not in ci_content
+        assert "codecov/codecov-action@v4" not in ci_content
         assert "gpg --dearmor" not in ci_content
         assert "gnupg" not in ci_content
 
@@ -968,7 +974,7 @@ class TestFullE2EWorkflow:
         )
 
     def _build_react_frontend(self, project_path: Path) -> None:
-        """Install and build React frontend assets for generated project."""
+        """Install, type-check, and build React frontend assets."""
         self._ensure_pnpm_available()
         frontend_path = project_path / "frontend"
 
@@ -1010,6 +1016,17 @@ class TestFullE2EWorkflow:
 
         assert install_result is not None
         assert install_result.returncode == 0, "pnpm install failed"
+
+        typecheck_result = subprocess.run(
+            ["pnpm", "run", "type-check"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        assert typecheck_result.returncode == 0, (
+            f"pnpm type-check failed: {typecheck_result.stderr}"
+        )
 
         build_result = subprocess.run(
             ["pnpm", "run", "build"],

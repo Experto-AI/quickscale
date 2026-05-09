@@ -1,0 +1,10 @@
+"""
+Django settings for phase2_showcase project.
+
+This package contains split settings configuration:
+- base.py: Shared settings for all environments
+- local.py: Development settings (DEBUG=True, PostgreSQL via DATABASE_URL)
+- production.py: Production settings (DEBUG=False, PostgreSQL, security)
+
+Use DJANGO_SETTINGS_MODULE environment variable to select the appropriate settings module.
+"""

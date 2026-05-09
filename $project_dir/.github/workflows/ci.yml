@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.13"]
+        django-version: ["6.0"]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install PostgreSQL 18 client tooling
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ca-certificates curl
+        distro_codename="$(
+          . /etc/os-release
+          echo "$VERSION_CODENAME"
+        )"
+        sudo install -d /usr/share/postgresql-common/pgdg
+        sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client-18
+        echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+    - name: Verify PostgreSQL 18 client tooling
+      run: |
+        test -x /usr/lib/postgresql/18/bin/pg_dump
+        test -x /usr/lib/postgresql/18/bin/pg_restore
+        test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
+        test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
+        /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v5
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+
+    - name: Install project
+      run: poetry install --no-interaction
+
+    - name: Install Django ${{ matrix.django-version }}
+      run: poetry add "Django~=${{ matrix.django-version }}" --group dev
+
+    - name: Run ruff format check
+      run: poetry run ruff format --check .
+
+    - name: Run ruff linter
+      run: poetry run ruff check .
+
+    - name: Run tests with coverage
+      run: poetry run pytest --cov=phase2_showcase --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      if: matrix.python-version == '3.13' && matrix.django-version == '6.0'
+      with:
+        files: ./coverage.xml
+        fail_ci_if_error: false
+
+  frontend-lint:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('frontend/package.json') != '' }}
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v5
+      with:
+        version: 11.0.9
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: actions/cache@v5
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: pnpm install
+
+    - name: Run ESLint
+      working-directory: frontend
+      run: pnpm lint
+
+    - name: Run TypeScript type check
+      working-directory: frontend
+      run: pnpm type-check
+
+    - name: Run frontend tests
+      working-directory: frontend
+      run: pnpm test:coverage

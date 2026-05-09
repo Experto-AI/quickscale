@@ -1,0 +1,83 @@
+"""
+URL configuration for phase2_showcase project.
+
+The `urlpatterns` list routes URLs to views. For more information please see:
+    https://docs.djangoproject.com/en/stable/topics/http/urls/
+
+Examples:
+Function views
+    1. Add an import:  from my_app import views
+    2. Add a URL to urlpatterns:  path('', views.home, name='home')
+Class-based views
+    1. Add an import:  from other_app.views import Home
+    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
+Including another URLconf
+    1. Import the include() function: from django.urls import include, path
+    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+"""
+
+import importlib
+from typing import Any, cast
+
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.http import HttpRequest, HttpResponse
+from django.urls import include, path, re_path
+from django.views.generic import TemplateView
+
+from phase2_showcase.urls_modules import MODULE_URLPATTERNS
+from phase2_showcase.views import custom_404_view  # noqa: F401
+
+
+def healthcheck(request: HttpRequest) -> HttpResponse:
+    """Simple healthcheck endpoint for Railway and other monitoring services.
+
+    Returns HTTP 200 OK without requiring database access or HTTPS redirect.
+    This endpoint is exempt from SECURE_SSL_REDIRECT in production settings.
+    """
+    return HttpResponse("OK", content_type="text/plain", status=200)
+
+
+urlpatterns = [
+    path("healthcheck/", healthcheck, name="healthcheck"),
+    path("admin/", admin.site.urls),
+    path("", TemplateView.as_view(template_name="index.html"), name="home"),
+    re_path(
+        r"^social/?$",
+        TemplateView.as_view(template_name="social/link_tree.html"),
+        name="social-link-tree",
+    ),
+    re_path(
+        r"^social/embeds/?$",
+        TemplateView.as_view(template_name="social/embeds.html"),
+        name="social-embeds",
+    ),
+]
+urlpatterns += MODULE_URLPATTERNS
+
+# Custom error handlers with helpful module guidance
+handler404 = "phase2_showcase.views.custom_404_view"
+handler500 = "phase2_showcase.views.custom_500_view"
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+    # Django Debug Toolbar (if installed)
+    try:
+        debug_toolbar_urls = cast(
+            Any,
+            importlib.import_module("debug_toolbar"),
+        ).urls
+        urlpatterns = [
+            path("__debug__/", include(debug_toolbar_urls)),
+        ] + urlpatterns
+    except ImportError:
+        pass
+# React SPA catch-all: serve index.html for client-side routing.
+# This must be enabled in both local and production environments so
+# direct navigation to routes like /settings works on Railway.
+urlpatterns += [
+    re_path(r".*", TemplateView.as_view(template_name="index.html")),
+]

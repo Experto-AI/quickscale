@@ -1,0 +1,88 @@
+[tool.poetry]
+name = "phase2_showcase"
+version = "0.1.0"
+description = "A Django project scaffolded by QuickScale"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "phase2_showcase"}]
+
+[tool.poetry.dependencies]
+python = ">=3.13,<3.15"
+Django = ">=6.0.3,<6.1.0"
+psycopg2-binary = "^2.9.11"
+python-decouple = "^3.8"
+whitenoise = "^6.8.0"
+gunicorn = "^25.0.0"
+dj-database-url = "^3.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.0.0"
+pytest-django = "^4.8.0"
+pytest-cov = "^7.0.0"
+factory-boy = "^3.3.3"
+ruff = "^0.15.0"
+mypy = "^1.19.0"
+django-stubs = "^5.2.9"
+pre-commit = "^4.1.0"
+virtualenv = ">=20.29,<21.0"  # pin to avoid virtualenv 21.x import breakage in Docker builds
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "phase2_showcase.settings.local"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--strict-markers --cov=phase2_showcase --cov-report=term-missing --cov-report=html --cov-fail-under=90"
+
+[tool.coverage.report]
+fail_under = 90
+# Per-file minimum target: 80% (enforced via code review)
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+exclude = [
+    ".git",
+    ".venv",
+    ".pytest_cache",
+    "__pycache__",
+    "migrations",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by ruff format)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["mypy_django_plugin.main"]
+
+[[tool.mypy.overrides]]
+module = "*.migrations.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["decouple", "debug_toolbar", "debug_toolbar.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "phase2_showcase.settings.local"

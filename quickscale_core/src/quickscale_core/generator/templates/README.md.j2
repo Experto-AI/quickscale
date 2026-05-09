@@ -6,9 +6,9 @@ A Django project generated with QuickScale - a production-ready starter with bes
 
 ### Prerequisites
 
-- Python 3.10+ installed
+- Python 3.13+ installed
 - Poetry installed (`pip install poetry`)
-- Docker and Docker Compose (optional, for containerized development)
+- Docker and Docker Compose v2 (optional, for containerized development)
 
 ### Setup (Local Development)
 
@@ -48,13 +48,13 @@ cp .env.example .env
 # Generate a real SECRET_KEY before deploying to production.
 
 # 2. Build and start containers
-docker-compose up --build
+docker compose up --build
 
 # 3. Run migrations (in another terminal)
-docker-compose exec backend python manage.py migrate
+docker compose exec backend python manage.py migrate
 
 # 4. Create a superuser (optional)
-docker-compose exec backend python manage.py createsuperuser
+docker compose exec backend python manage.py createsuperuser
 ```
 
 Visit http://127.0.0.1:8000 to see your application.
@@ -268,8 +268,8 @@ The included `Dockerfile` and `docker-compose.yml` are ready for production use:
 # Build production image
 docker build -t {{ project_name }}:latest .
 
-# Run with docker-compose
-docker-compose -f docker-compose.yml up -d
+# Run with docker compose
+docker compose -f docker-compose.yml up -d
 ```
 
 ## 📚 Project Structure

@@ -1,0 +1,42 @@
+import path from "path"
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  base: '/static/frontend/',
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/_quickscale': { target: 'http://localhost:8000', changeOrigin: true },
+      '/admin': { target: 'http://localhost:8000', changeOrigin: true },
+      '/accounts': { target: 'http://localhost:8000', changeOrigin: true },
+      '/blog': { target: 'http://localhost:8000', changeOrigin: true },
+      '/listings': { target: 'http://localhost:8000', changeOrigin: true },
+      '/crm': { target: 'http://localhost:8000', changeOrigin: true },
+      '/healthcheck': { target: 'http://localhost:8000', changeOrigin: true },
+      '/static': { target: 'http://localhost:8000', changeOrigin: true },
+      '/markdownx': { target: 'http://localhost:8000', changeOrigin: true },
+      '/social': { target: 'http://localhost:8000', changeOrigin: true },
+    },
+  },
+  build: {
+    outDir: '../static/frontend',
+    emptyOutDir: true,
+    manifest: true,
+    rollupOptions: {
+      output: {
+        // Use consistent filenames for Django template compatibility
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
+  },
+})

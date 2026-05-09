@@ -168,7 +168,7 @@ jobs:
         ./scripts/test_unit.sh
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       if: always() && github.ref == 'refs/heads/main'
       with:
         files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml

@@ -1,0 +1,392 @@
+# phase2_showcase
+
+A Django project generated with QuickScale - a production-ready starter with best practices built-in.
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.13+ installed
+- Poetry installed (`pip install poetry`)
+- Docker and Docker Compose v2 (optional, for containerized development)
+
+### Setup (Local Development)
+
+```bash
+# 1. Install dependencies
+poetry install
+
+# 2. Copy environment variables
+cp .env.example .env
+# Edit .env for local database/port changes as needed.
+# The shipped SECRET_KEY placeholder is for local development only.
+# Generate a real SECRET_KEY before deploying to production.
+
+# 3. Run migrations
+poetry run python manage.py migrate
+
+# 4. Create a superuser (optional)
+poetry run python manage.py createsuperuser
+
+# 5. Run the development server
+poetry run python manage.py runserver
+```
+
+Visit http://127.0.0.1:8000 to see your application.
+
+### ⚠️ Auth Module Timing
+
+If you plan to use the QuickScale `auth` module (custom `AUTH_USER_MODEL`), embed/apply it **before your first migration** in a fresh database. Adding it after baseline Django auth migrations can require a destructive database reset.
+
+### Setup (Docker)
+
+```bash
+# 1. Copy environment variables
+cp .env.example .env
+# Edit .env for local database/port changes as needed.
+# The shipped SECRET_KEY placeholder is for local development only.
+# Generate a real SECRET_KEY before deploying to production.
+
+# 2. Build and start containers
+docker compose up --build
+
+# 3. Run migrations (in another terminal)
+docker compose exec backend python manage.py migrate
+
+# 4. Create a superuser (optional)
+docker compose exec backend python manage.py createsuperuser
+```
+
+Visit http://127.0.0.1:8000 to see your application.
+
+> **Note:** The PostgreSQL container does not expose port 5432 to your host machine by default to avoid conflicts with system PostgreSQL installations. The Django application connects to the database via Docker's internal network. If you need to access PostgreSQL from your host (e.g., for database GUI tools), uncomment the `ports` section in `docker-compose.yml`.
+
+## 📋 What's Included
+
+This project comes pre-configured with:
+
+- ✅ **Django 6.0+** - Latest stable Django version
+- ✅ **PostgreSQL** - Local and production database (no SQLite fallback)
+- ✅ **Docker** - Containerized development and production deployment
+- ✅ **Environment-based settings** - Separate configs for local/production
+- ✅ **Security best practices** - SECRET_KEY management, ALLOWED_HOSTS, security middleware
+- ✅ **Testing infrastructure** - pytest, pytest-django, factory_boy, pytest-cov
+- ✅ **Code quality tools** - pre-commit hooks with ruff (format + lint)
+- ✅ **CI/CD pipeline** - GitHub Actions workflow for automated testing
+- ✅ **Static files** - WhiteNoise for serving static files in production
+- ✅ **Production server** - Gunicorn WSGI server configured
+
+## 🛠️ Development
+
+### Running Tests
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run with coverage
+poetry run pytest --cov=phase2_showcase --cov-report=html
+
+# Run specific test file
+poetry run pytest tests/test_example.py
+
+# Run tests in verbose mode
+poetry run pytest -v
+```
+
+View coverage report: `open htmlcov/index.html`
+
+### Code Quality
+
+```bash
+# Lint the entire project (Python + React frontend)
+./scripts/lint.sh
+
+# Lint Python only
+./scripts/lint.sh --python
+
+# Lint React frontend only
+./scripts/lint.sh --frontend
+
+# ── Python Commands ──
+
+# Format code with ruff
+poetry run ruff format .
+
+# Check code style
+poetry run ruff check .
+
+# Auto-fix issues
+poetry run ruff check --fix .
+
+# Type check
+poetry run mypy phase2_showcase/
+
+# Run pre-commit hooks manually
+poetry run pre-commit run --all-files
+```
+
+### Frontend Code Quality
+
+If your project uses the React frontend (in `frontend/`):
+
+```bash
+cd frontend
+
+# Lint with ESLint
+pnpm lint
+
+# Lint and auto-fix
+pnpm lint:fix
+
+# TypeScript type check
+pnpm type-check
+
+# Run all frontend lint checks (type-check + ESLint)
+pnpm lint:all
+
+# Format with Prettier
+pnpm format
+
+# Check formatting (CI-friendly)
+pnpm format:check
+```
+
+### Database Management
+
+```bash
+# Create migrations
+poetry run python manage.py makemigrations
+
+# Apply migrations
+poetry run python manage.py migrate
+
+# Open Django shell
+poetry run python manage.py shell
+
+# Access database shell
+poetry run python manage.py dbshell
+```
+
+### Creating Django Apps
+
+```bash
+# Create a new Django app
+poetry run python manage.py startapp myapp
+
+# Add app to INSTALLED_APPS in settings/base.py
+# Run migrations if you add models
+```
+
+## 🚢 Deployment
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+# Required for production
+# Do not reuse the shipped local-development placeholder from .env.example.
+SECRET_KEY=your-secret-key-here
+DEBUG=False
+ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+
+# Server Configuration
+PORT=8000  # Change this if port 8000 is already in use
+
+# Database (if using PostgreSQL)
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/phase2_showcase
+
+# Optional: Sentry error tracking
+# SENTRY_DSN=your-sentry-dsn-here
+```
+
+### S3 and CDN for Media Uploads
+
+Use S3-compatible storage for user-uploaded media. Keep Django static assets on
+WhiteNoise and `collectstatic`; use the storage module plus a CDN host for
+uploaded files.
+
+Set these fields in `quickscale.yml` and then run `quickscale apply`:
+
+```yaml
+modules:
+	storage:
+		backend: s3
+		media_url: /media/
+		public_base_url: https://cdn.example.com
+		bucket_name: your-media-bucket
+		endpoint_url: ""
+		region_name: eu-west-1
+		access_key_id: YOUR_ACCESS_KEY_ID
+		secret_access_key: YOUR_SECRET_ACCESS_KEY
+		default_acl: ""
+		querystring_auth: false
+```
+
+Set these deployment environment variables:
+
+```bash
+QUICKSCALE_STORAGE_BACKEND=s3
+QUICKSCALE_STORAGE_PUBLIC_BASE_URL=https://cdn.example.com
+AWS_STORAGE_BUCKET_NAME=your-media-bucket
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_S3_REGION_NAME=eu-west-1
+AWS_QUERYSTRING_AUTH=false
+
+# Cloudflare R2 only
+# QUICKSCALE_STORAGE_BACKEND=r2
+# AWS_S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
+# AWS_S3_REGION_NAME=auto
+```
+
+Keep `public_base_url` blank in local development. Set it to the final public
+CDN/media host in staging and production.
+
+### Production Checklist
+
+Before deploying to production:
+
+- [ ] Set `DEBUG=False` in production environment
+- [ ] Configure `ALLOWED_HOSTS` with your domain(s)
+- [ ] Set a strong `SECRET_KEY` (the shipped placeholder is rejected by `settings/production.py`; use `python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'`)
+- [ ] Confirm `DATABASE_URL` points to your production PostgreSQL instance
+- [ ] Configure static files serving (WhiteNoise is included)
+- [ ] Set up HTTPS/SSL certificates
+- [ ] Review security settings in `settings/production.py`
+- [ ] Configure email backend for production
+- [ ] Set up error monitoring (e.g., Sentry)
+- [ ] Run migrations: `python manage.py migrate`
+- [ ] Collect static files: `python manage.py collectstatic`
+
+### Docker Deployment
+
+The included `Dockerfile` and `docker-compose.yml` are ready for production use:
+
+```bash
+# Build production image
+docker build -t phase2_showcase:latest .
+
+# Run with docker compose
+docker compose -f docker-compose.yml up -d
+```
+
+## 📚 Project Structure
+
+```
+phase2_showcase/
+├── phase2_showcase/           # Main Django project package
+│   ├── settings/                 # Split settings (base, local, production)
+│   ├── urls.py                   # Root URL configuration
+│   ├── wsgi.py                   # WSGI application
+│   └── asgi.py                   # ASGI application
+├── templates/                    # HTML templates
+├── static/                       # Static files (CSS, JS, images)
+├── tests/                        # Project-level tests
+├── manage.py                     # Django management script
+├── pyproject.toml                # Poetry dependencies
+├── Dockerfile                    # Docker configuration
+├── docker-compose.yml            # Docker Compose configuration
+├── .env.example                  # Environment variables template
+├── .pre-commit-config.yaml       # Pre-commit hooks configuration
+└── README.md                     # This file
+```
+
+## 🔧 Configuration
+
+### Settings
+
+This project uses split settings for different environments:
+
+- `settings/base.py` - Common settings shared across all environments
+- `settings/local.py` - Local development settings (DEBUG=True, PostgreSQL via `DATABASE_URL`)
+- `settings/production.py` - Production settings (DEBUG=False, PostgreSQL, security)
+
+The active settings module is controlled by the `DJANGO_SETTINGS_MODULE` environment variable:
+
+```bash
+# Local development (default in manage.py)
+export DJANGO_SETTINGS_MODULE=phase2_showcase.settings.local
+
+# Production
+export DJANGO_SETTINGS_MODULE=phase2_showcase.settings.production
+```
+
+### Adding Dependencies
+
+```bash
+# Add a new package
+poetry add package-name
+
+# Add a development-only package
+poetry add --group dev package-name
+
+# Update dependencies
+poetry update
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Issue: `ImportError` when running manage.py**
+```bash
+# Make sure you're using Poetry to run commands
+poetry run python manage.py <command>
+
+# Or activate the Poetry virtualenv first
+poetry shell
+python manage.py <command>
+```
+
+**Issue: Database connection errors**
+```bash
+# Check your DATABASE_URL in .env
+# Local and production use PostgreSQL
+```
+
+**Issue: Static files not loading**
+```bash
+# Collect static files
+poetry run python manage.py collectstatic --noinput
+
+# In development, Django serves static files automatically
+# In production, WhiteNoise handles static files
+```
+
+**Issue: Port already in use**
+```bash
+# Solution 1: Change the PORT in your .env file (recommended)
+# Edit .env and set: PORT=8001
+# Then restart your server or Docker containers
+
+# Solution 2: Run Django on a different port directly
+poetry run python manage.py runserver 8001
+
+# Solution 3: Find and kill the process using port 8000
+lsof -ti:8000 | xargs kill -9
+```
+
+## 📖 Learn More
+
+- [Django Documentation](https://docs.djangoproject.com/)
+- [Poetry Documentation](https://python-poetry.org/docs/)
+- [pytest Documentation](https://docs.pytest.org/)
+- [Docker Documentation](https://docs.docker.com/)
+- [QuickScale Documentation](https://github.com/Experto-AI/quickscale)
+
+## 🤝 Contributing
+
+This project was generated with QuickScale, but it's now yours to own and modify. Feel free to:
+
+- Add new Django apps and features
+- Modify the project structure to fit your needs
+- Customize templates, settings, and configurations
+- Remove components you don't need
+
+For QuickScale-specific contributions, see [QuickScale Contributing Guide](https://github.com/Experto-AI/quickscale/blob/main/docs/contrib/contributing.md).
+
+## 📄 License
+
+This project is yours - use it as you see fit. QuickScale is Apache 2.0 licensed.

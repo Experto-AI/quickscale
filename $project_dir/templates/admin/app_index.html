@@ -1,0 +1,20 @@
+{% extends "admin/app_index.html" %}
+
+{% block content %}
+{% if app_label == "quickscale_modules_backups" %}
+<div class="app-list">
+    <ul class="object-tools">
+        <li>
+            <form action="/admin/quickscale_modules_backups/backuppolicy/ops/create/" method="post">
+                {% csrf_token %}
+                <button type="submit" class="button">Create backup now</button>
+            </form>
+        </li>
+        <li>
+            <a href="/admin/quickscale_modules_backups/backuppolicy/" class="button">Open backup ops</a>
+        </li>
+    </ul>
+</div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

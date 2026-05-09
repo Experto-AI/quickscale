@@ -13,7 +13,7 @@ packages = [{include = "quickscale_modules_analytics", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
-Django = ">=6.0.3,<7.0.0"
+Django = ">=6.0.3,<6.1.0"
 posthog = ">=3.7.4,<4.0.0"
 
 [tool.poetry.group.dev.dependencies]
