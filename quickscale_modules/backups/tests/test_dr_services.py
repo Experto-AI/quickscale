@@ -10,7 +10,11 @@ import pytest
 
 from django.conf import settings
 
-from quickscale_modules_backups.models import BackupPolicy
+from quickscale_modules_backups.models import (
+    BackupArtifact,
+    BackupPolicy,
+    BackupSnapshot,
+)
 from quickscale_modules_backups.services import (
     BackupConfigurationError,
     create_backup,
@@ -18,6 +22,11 @@ from quickscale_modules_backups.services import (
     report_backup_snapshot,
     sync_backup_snapshot_media,
 )
+
+
+def _get_authoritative_snapshot(artifact: BackupArtifact) -> BackupSnapshot:
+    """Load the snapshot linked to one authoritative dump artifact."""
+    return BackupSnapshot.objects.get(authoritative_dump=artifact)
 
 
 def test_report_backup_snapshot_includes_requested_sidecar_payloads(
@@ -34,7 +43,7 @@ def test_report_backup_snapshot_includes_requested_sidecar_payloads(
     )
 
     artifact = create_backup(initiated_by=superuser, trigger="manual")
-    snapshot = artifact.authoritative_snapshot
+    snapshot = _get_authoritative_snapshot(artifact)
 
     report = report_backup_snapshot(
         snapshot.snapshot_id,
@@ -49,9 +58,13 @@ def test_record_backup_snapshot_verification_appends_route_report(
     django_user_model: type[Any],
     backup_policy: BackupPolicy,
     local_backup_settings: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backup_policy.local_directory = str(local_backup_settings)
     backup_policy.save(update_fields=["local_directory", "updated_at"])
+    media_root = local_backup_settings.parent / "media-root"
+    media_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "MEDIA_ROOT", str(media_root))
     superuser = django_user_model.objects.create_superuser(
         username="backup-verify",
         email="verify@example.com",
@@ -59,7 +72,7 @@ def test_record_backup_snapshot_verification_appends_route_report(
     )
 
     artifact = create_backup(initiated_by=superuser, trigger="manual")
-    snapshot = artifact.authoritative_snapshot
+    snapshot = _get_authoritative_snapshot(artifact)
 
     report = record_backup_snapshot_verification(
         snapshot.snapshot_id,
@@ -76,8 +89,14 @@ def test_record_backup_snapshot_verification_appends_route_report(
     )
 
     assert verification_payload["status"] == "manual_required"
+    assert verification_payload["full_backup"]["status"] == "complete"
+    assert (
+        verification_payload["full_backup"]["provenance"]["source_environment"]
+        == "local"
+    )
     assert verification_payload["reports"][-1]["route"] == "local-to-railway-develop"
     assert verification_payload["reports"][-1]["phase"] == "plan"
+    assert verification_payload["reports"][-1]["full_backup"]["status"] == "complete"
     assert (
         verification_payload["reports"][-1]["payload"]["database"]["status"] == "ready"
     )
@@ -87,6 +106,60 @@ def test_record_backup_snapshot_verification_appends_route_report(
         ]
         == "manual_required"
     )
+    assert report["full_backup"]["status"] == "complete"
+
+
+def test_record_backup_snapshot_verification_reports_incomplete_full_backup_contract(
+    django_user_model: type[Any],
+    backup_policy: BackupPolicy,
+    local_backup_settings: Path,
+) -> None:
+    backup_policy.local_directory = str(local_backup_settings)
+    backup_policy.save(update_fields=["local_directory", "updated_at"])
+    superuser = django_user_model.objects.create_superuser(
+        username="backup-verify-incomplete",
+        email="verify-incomplete@example.com",
+        password="password123",
+    )
+
+    artifact = create_backup(initiated_by=superuser, trigger="manual")
+    snapshot = _get_authoritative_snapshot(artifact)
+    release_metadata_path = Path(snapshot.local_root_path) / "release-metadata.json"
+    release_metadata_path.unlink()
+
+    report = record_backup_snapshot_verification(
+        snapshot.snapshot_id,
+        route="local-to-railway-develop",
+        phase="execute",
+        status="manual_required",
+        payload={"database": {"status": "ready"}},
+    )
+
+    verification_payload = json.loads(
+        (Path(snapshot.local_root_path) / "promotion-verification.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert verification_payload["full_backup"]["status"] == "incomplete"
+    assert verification_payload["full_backup"]["completeness"]["status"] == (
+        "incomplete"
+    )
+    assert any(
+        "release-metadata.json" in issue
+        for issue in verification_payload["full_backup"]["completeness"]["issues"]
+    )
+    assert verification_payload["full_backup"]["provenance"]["status"] == (
+        "inconsistent"
+    )
+    assert any(
+        "release-metadata.json" in issue
+        for issue in verification_payload["full_backup"]["provenance"]["issues"]
+    )
+    assert verification_payload["reports"][-1]["full_backup"]["status"] == (
+        "incomplete"
+    )
+    assert report["full_backup"]["status"] == "incomplete"
 
 
 def test_sync_backup_snapshot_media_supports_local_to_local_dry_run_and_execute(
@@ -115,7 +188,7 @@ def test_sync_backup_snapshot_media_supports_local_to_local_dry_run_and_execute(
         password="password123",
     )
     artifact = create_backup(initiated_by=superuser, trigger="manual")
-    snapshot = artifact.authoritative_snapshot
+    snapshot = _get_authoritative_snapshot(artifact)
 
     target_media_root = tmp_path / "target-media"
     monkeypatch.setenv("QUICKSCALE_DR_TARGET_QUICKSCALE_STORAGE_BACKEND", "local")
@@ -160,7 +233,7 @@ def test_sync_backup_snapshot_media_rejects_railway_target_local_backend(
         password="password123",
     )
     artifact = create_backup(initiated_by=superuser, trigger="manual")
-    snapshot = artifact.authoritative_snapshot
+    snapshot = _get_authoritative_snapshot(artifact)
 
     target_media_root = tmp_path / f"target-media-{int(dry_run)}"
     target_media_root.mkdir(parents=True, exist_ok=True)

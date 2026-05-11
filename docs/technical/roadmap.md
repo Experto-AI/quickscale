@@ -159,22 +159,22 @@ v0.83.0 closed the pre-billing hardening track across plan/apply validation, shi
 	- Do not mark the Docker-backed runtime/tooling boxes complete until Stage 2 evidence exists. If local parity cannot be stabilized in the same pass, record the exact hosted workflow/job evidence used as fallback instead of inferring parity from text-only assertions.
 
 **Admin backup artifact access**:
-- [ ] Add a reliable download flow for backup artifacts listed in `http://localhost:8000/admin/quickscale_modules_backups/backupartifact/`
-- [ ] Ensure the admin surface exposes the generated backup file directly without maintainer-only shell access
+- [x] Add a reliable download flow for backup artifacts listed in `http://localhost:8000/admin/quickscale_modules_backups/backupartifact/`
+- [x] Ensure the admin surface exposes the generated backup file directly without maintainer-only shell access
 - [ ] Verify the download path preserves the expected backup filename, content type, and storage-backed access rules
-- [ ] Expose artifact provenance fields in the admin changelist: checksum (SHA256), restore_scope, storage location, validated_at, size — so operators can assess artifact health without CLI access
-- [ ] Add an admin action to trigger on-demand backup creation from the `BackupArtifact` changelist, so non-CLI operators can initiate captures from the web UI (not just download existing ones)
-- [ ] Add an admin action to run artifact integrity validation (checksum re-verification) directly from the changelist
+- [x] Expose artifact provenance fields in the admin changelist: checksum (SHA256), restore_scope, storage location, validated_at, size — so operators can assess artifact health without CLI access
+- [x] Add an admin action to trigger on-demand backup creation from the `BackupArtifact` changelist, so non-CLI operators can initiate captures from the web UI (not just download existing ones)
+- [x] Add an admin action to run artifact integrity validation (checksum re-verification) directly from the changelist
 
 **Full backup completeness**:
 - [ ] Ensure generated backups contain both database structure and all records instead of structure-only or records-only snapshots
-- [ ] Define and validate the exact backup contract for schema, relational data, and required app-owned backup metadata
-- [ ] Add verification coverage that proves a generated backup is restorable as a full application snapshot
+- [x] Define and validate the exact backup contract for schema, relational data, and required app-owned backup metadata
+- [x] Add verification coverage that proves a generated backup is restorable as a full application snapshot
 
 **Restore from uploaded backup**:
-- [ ] Add an upload-driven restore workflow so a previously downloaded backup can be restored back into the environment
-- [ ] Validate uploaded backup files before restore and fail safely on incomplete or incompatible archives; validate format, checksum, and archive integrity before any destructive step begins
-- [ ] Add a pre-flight compatibility check that surfaces database engine and major-version mismatches between the backup's recorded metadata and the current live database, and surfaces these as blocking warnings before restore executes
+- [x] Add an upload-driven restore workflow so a previously downloaded backup can be restored back into the environment
+- [x] Validate uploaded backup files before restore and fail safely on incomplete or incompatible archives; validate format, checksum, and archive integrity before any destructive step begins
+- [x] Add a pre-flight compatibility check that surfaces database engine and major-version mismatches between the backup's recorded metadata and the current live database, and surfaces these as blocking warnings before restore executes
 - [ ] Ensure restore execution covers both schema and data recovery for a complete environment rebuild
 
 **Runtime and tooling refresh**:
@@ -260,7 +260,7 @@ All libraries that depend on these runtimes or toolchains must be updated to ver
 - [ ] Validate generated-project Docker parity end to end, including PostgreSQL 18 client tooling from inside the built image, before marking the runtime/tooling closeout complete
 
 **Testing**:
-- [ ] Unit tests for backup artifact download permissions, storage access, and backup composition
+- [x] Unit tests for backup artifact download permissions, storage access, and backup composition
 - [ ] Integration tests covering backup generation, download, upload, and restore as one round-trip workflow
 - [ ] Admin-path or end-to-end validation proving a generated backup can be downloaded and restored successfully
 

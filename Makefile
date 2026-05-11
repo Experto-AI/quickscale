@@ -137,6 +137,8 @@ help:
 	@echo "  make publish-prod         - Publish to production PyPI"
 	@echo "  make publish-full         - Publish TestPyPI → verify → PyPI"
 	@echo "  make publish-module       - Publish module to split branch (MODULE=<name>)"
+	@echo "  make publish-module-status - Show split-branch status for all modules"
+	@echo "  make publish-modules-outdated - Publish modules with missing or outdated branches"
 	@echo "  make clean                - Remove build artifacts"
 	@echo ""
 	@echo "Legacy:"

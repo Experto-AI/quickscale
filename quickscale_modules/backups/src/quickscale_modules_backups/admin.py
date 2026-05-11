@@ -14,7 +14,11 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
+from quickscale_modules_backups.models import (
+    BackupArtifact,
+    BackupPolicy,
+    BackupSnapshot,
+)
 from quickscale_modules_backups.services import (
     BackupError,
     RestoreSourceResolutionMode,
@@ -23,6 +27,7 @@ from quickscale_modules_backups.services import (
     download_backup_path,
     ensure_default_policy,
     prune_expired_backups,
+    restore_admin_uploaded_backup,
     restore_backup_artifact,
     validate_backup_artifact,
 )
@@ -32,23 +37,53 @@ if TYPE_CHECKING:
 
 
 class BackupPolicyRestoreForm(forms.Form):
-    """Collect the selected local artifact and exact filename confirmation."""
+    """Collect either a local artifact or uploaded file plus exact confirmation."""
+
+    SOURCE_MODE_RECORDED_ARTIFACT = "recorded_artifact"
+    SOURCE_MODE_UPLOADED_FILE = "uploaded_file"
+
+    source_mode = forms.ChoiceField(
+        label="Restore source",
+        required=False,
+        choices=[
+            (SOURCE_MODE_RECORDED_ARTIFACT, "Recorded local artifact"),
+            (SOURCE_MODE_UPLOADED_FILE, "Uploaded backup file"),
+        ],
+        initial=SOURCE_MODE_RECORDED_ARTIFACT,
+        widget=forms.RadioSelect,
+        help_text=(
+            "Use a recorded local artifact already present on disk, or upload a "
+            "backup file that must resolve to one trusted authoritative artifact "
+            "recorded on the snapshot seam."
+        ),
+    )
 
     artifact_id = forms.IntegerField(
         label="Eligible local artifact",
         min_value=1,
+        required=False,
         widget=forms.Select(),
         help_text=(
             "Choose a row-backed PostgreSQL dump artifact whose local file is "
             "already present on disk."
         ),
     )
+    uploaded_file = forms.FileField(
+        label="Uploaded backup file",
+        required=False,
+        help_text=(
+            "Upload a PostgreSQL custom dump to quarantine staging. The upload is "
+            "accepted only when its checksum and size resolve to exactly one "
+            "trusted authoritative artifact with a complete snapshot contract."
+        ),
+    )
     confirmation = forms.CharField(
         label="Exact artifact filename",
         strip=False,
         help_text=(
-            "Type the exact filename of the selected artifact before dry-run "
-            "validation or restore can continue."
+            "Type the exact authoritative artifact filename before dry-run "
+            "validation or restore can continue. Uploaded files must still match "
+            "the recorded artifact filename exactly here."
         ),
     )
 
@@ -56,13 +91,73 @@ class BackupPolicyRestoreForm(forms.Form):
         self,
         *args: Any,
         artifact_choices: list[tuple[int, str]],
+        allow_recorded_artifact_source: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
+        self.allow_recorded_artifact_source = allow_recorded_artifact_source
+        if allow_recorded_artifact_source:
+            self.fields["source_mode"].choices = [
+                (
+                    self.SOURCE_MODE_RECORDED_ARTIFACT,
+                    "Recorded local artifact",
+                ),
+                (self.SOURCE_MODE_UPLOADED_FILE, "Uploaded backup file"),
+            ]
+            self.fields["source_mode"].initial = self.SOURCE_MODE_RECORDED_ARTIFACT
+        else:
+            self.fields["source_mode"].choices = [
+                (self.SOURCE_MODE_UPLOADED_FILE, "Uploaded backup file")
+            ]
+            self.fields["source_mode"].initial = self.SOURCE_MODE_UPLOADED_FILE
+            self.fields["source_mode"].error_messages["invalid_choice"] = (
+                "Recorded local artifacts are unavailable for your current permissions."
+            )
+            self.fields["source_mode"].help_text = (
+                "Uploaded backup file is the only restore source available for "
+                "your current permissions."
+            )
         self.fields["artifact_id"].widget.choices = [
             ("", "Select an eligible local backup artifact"),
             *artifact_choices,
         ]
+
+    def clean(self) -> dict[str, Any]:
+        """Require the source-specific restore input before continuing."""
+        cleaned_data: dict[str, Any] = super().clean() or {}
+        default_source_mode = (
+            self.SOURCE_MODE_RECORDED_ARTIFACT
+            if self.allow_recorded_artifact_source
+            else self.SOURCE_MODE_UPLOADED_FILE
+        )
+        source_mode = cleaned_data.get("source_mode") or default_source_mode
+        cleaned_data["source_mode"] = source_mode
+
+        if self.has_error("source_mode"):
+            return cleaned_data
+
+        if source_mode == self.SOURCE_MODE_RECORDED_ARTIFACT:
+            if not self.allow_recorded_artifact_source:
+                self.add_error(
+                    "source_mode",
+                    "Recorded local artifacts are unavailable for your current permissions.",
+                )
+                return cleaned_data
+            if cleaned_data.get("artifact_id") is None:
+                self.add_error(
+                    "artifact_id",
+                    "Choose an eligible local backup artifact before continuing.",
+                )
+        elif source_mode == self.SOURCE_MODE_UPLOADED_FILE:
+            if cleaned_data.get("uploaded_file") is None:
+                self.add_error(
+                    "uploaded_file",
+                    "Upload a backup file before continuing.",
+                )
+        else:
+            self.add_error("source_mode", "Choose a restore source before continuing.")
+
+        return cleaned_data
 
 
 @admin.register(BackupPolicy)
@@ -189,6 +284,20 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         model_fields = [field.name for field in self.model._meta.fields]
         return [*model_fields, *self._notice_fields]
 
+    def _get_artifact_admin(self) -> BackupArtifactAdmin | None:
+        """Return the registered BackupArtifact admin when available."""
+        artifact_admin = self.admin_site._registry.get(BackupArtifact)
+        if isinstance(artifact_admin, BackupArtifactAdmin):
+            return artifact_admin
+        return None
+
+    def _can_view_restore_artifacts(self, request: HttpRequest) -> bool:
+        """Return whether this request may inspect artifact-backed restore inputs."""
+        artifact_admin = self._get_artifact_admin()
+        if artifact_admin is None:
+            return False
+        return artifact_admin.has_view_or_change_permission(request)
+
     def _require_change_permission(self, request: HttpRequest) -> None:
         """Require BackupPolicy change permission for mutating admin operations."""
         if not self.has_change_permission(request):
@@ -240,7 +349,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         )
 
     def restore_backup_view(self, request: HttpRequest) -> HttpResponse:
-        """Render and execute the guarded local-artifact restore workflow."""
+        """Render and execute the guarded admin restore workflow."""
         if request.method == "POST":
             if not self.has_change_permission(request):
                 raise PermissionDenied
@@ -248,42 +357,25 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             raise PermissionDenied
 
         policy = ensure_default_policy()
-        eligible_artifacts = self._get_admin_restore_candidates()
+        can_view_restore_artifacts = self._can_view_restore_artifacts(request)
+        eligible_artifacts = (
+            self._get_admin_restore_candidates() if can_view_restore_artifacts else []
+        )
         form = BackupPolicyRestoreForm(
-            artifact_choices=self._build_restore_artifact_choices(eligible_artifacts)
+            artifact_choices=self._build_restore_artifact_choices(eligible_artifacts),
+            allow_recorded_artifact_source=can_view_restore_artifacts,
         )
         selected_artifact: BackupArtifact | None = None
 
         if request.method == "POST":
             form = BackupPolicyRestoreForm(
                 request.POST,
+                request.FILES,
                 artifact_choices=self._build_restore_artifact_choices(
                     eligible_artifacts
                 ),
+                allow_recorded_artifact_source=can_view_restore_artifacts,
             )
-            posted_artifact_id = self._parse_restore_artifact_id(
-                request.POST.get("artifact_id")
-            )
-            selected_artifact = self._get_restore_artifact_by_id(posted_artifact_id)
-
-            if not eligible_artifacts:
-                form.add_error(
-                    None,
-                    "No eligible local backup artifacts are currently available for admin restore.",
-                )
-
-            if posted_artifact_id is not None and selected_artifact is None:
-                form.add_error(
-                    "artifact_id",
-                    "The selected backup artifact no longer exists.",
-                )
-            elif selected_artifact is not None:
-                ineligible_reason = self._get_admin_restore_ineligible_reason(
-                    selected_artifact
-                )
-                if ineligible_reason is not None:
-                    form.add_error("artifact_id", ineligible_reason)
-
             operation = request.POST.get("operation")
             if operation not in {"dry_run", "restore"}:
                 form.add_error(
@@ -291,47 +383,92 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                     "Choose either dry-run validation or restore before continuing.",
                 )
 
-            if (
-                form.is_valid()
-                and selected_artifact is not None
-                and operation is not None
-            ):
-                try:
-                    result = restore_backup_artifact(
-                        selected_artifact,
-                        confirmation=form.cleaned_data["confirmation"],
-                        dry_run=operation == "dry_run",
-                        resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
-                    )
-                except BackupError as exc:
-                    form.add_error(None, str(exc))
-                else:
-                    self.message_user(
-                        request,
-                        result.message,
-                        level=messages.SUCCESS,
-                    )
-                    for warning in result.warnings:
-                        self.message_user(
-                            request,
-                            warning.message,
-                            level=messages.WARNING,
+            if form.is_valid() and operation is not None:
+                source_mode = form.cleaned_data["source_mode"]
+                if source_mode == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT:
+                    if not can_view_restore_artifacts:
+                        form.add_error(
+                            "source_mode",
+                            "Recorded local artifacts are unavailable for your current permissions.",
+                        )
+                    else:
+                        artifact_id = form.cleaned_data["artifact_id"]
+                        selected_artifact = self._get_restore_artifact_by_id(
+                            artifact_id
                         )
 
-                    if operation == "dry_run":
+                        if artifact_id is not None and selected_artifact is None:
+                            form.add_error(
+                                "artifact_id",
+                                "The selected backup artifact no longer exists.",
+                            )
+                        elif selected_artifact is not None:
+                            ineligible_reason = (
+                                self._get_admin_restore_ineligible_reason(
+                                    selected_artifact
+                                )
+                            )
+                            if ineligible_reason is not None:
+                                form.add_error("artifact_id", ineligible_reason)
+                        elif not eligible_artifacts:
+                            form.add_error(
+                                None,
+                                "No eligible local backup artifacts are currently available for admin restore.",
+                            )
+
+                if not form.errors:
+                    try:
+                        if (
+                            form.cleaned_data["source_mode"]
+                            == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
+                        ):
+                            assert selected_artifact is not None
+                            result = restore_backup_artifact(
+                                selected_artifact,
+                                confirmation=form.cleaned_data["confirmation"],
+                                dry_run=operation == "dry_run",
+                                resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
+                            )
+                        else:
+                            result = restore_admin_uploaded_backup(
+                                form.cleaned_data["uploaded_file"],
+                                confirmation=form.cleaned_data["confirmation"],
+                                dry_run=operation == "dry_run",
+                            )
+                    except BackupError as exc:
+                        form.add_error(None, str(exc))
+                    else:
+                        self.message_user(
+                            request,
+                            result.message,
+                            level=messages.SUCCESS,
+                        )
+                        for warning in result.warnings:
+                            self.message_user(
+                                request,
+                                warning.message,
+                                level=messages.WARNING,
+                            )
+
+                        if operation == "dry_run":
+                            redirect_url = reverse(
+                                "admin:quickscale_modules_backups_backuppolicy_restore"
+                            )
+                            if selected_artifact is not None:
+                                redirect_url = (
+                                    f"{redirect_url}?artifact_id={selected_artifact.pk}"
+                                )
+                            return HttpResponseRedirect(redirect_url)
                         return HttpResponseRedirect(
-                            f"{reverse('admin:quickscale_modules_backups_backuppolicy_restore')}"
-                            f"?artifact_id={selected_artifact.pk}"
+                            reverse(
+                                "admin:quickscale_modules_backups_backuppolicy_changelist"
+                            )
                         )
-                    return HttpResponseRedirect(
-                        reverse(
-                            "admin:quickscale_modules_backups_backuppolicy_changelist"
-                        )
-                    )
         else:
-            selected_artifact = self._get_restore_artifact_by_id(
-                self._parse_restore_artifact_id(request.GET.get("artifact_id"))
-            )
+            if can_view_restore_artifacts:
+                selected_artifact = self._get_restore_artifact_by_id(
+                    self._parse_restore_artifact_id(request.GET.get("artifact_id"))
+                )
             initial_artifact_id = (
                 selected_artifact.pk if selected_artifact is not None else None
             )
@@ -341,6 +478,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                     artifact_choices=self._build_restore_artifact_choices(
                         eligible_artifacts
                     ),
+                    allow_recorded_artifact_source=can_view_restore_artifacts,
                 )
 
         change_url = reverse(
@@ -357,6 +495,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             "changelist_url": reverse(
                 "admin:quickscale_modules_backups_backuppolicy_changelist"
             ),
+            "can_view_restore_artifacts": can_view_restore_artifacts,
             "eligible_artifacts": eligible_artifacts,
             "selected_artifact": selected_artifact,
         }
@@ -474,12 +613,15 @@ class BackupPolicyAdmin(admin.ModelAdmin):
     def restore_notice(self, obj: BackupPolicy) -> str:
         return (
             "Guarded admin restore is available only from the BackupPolicy change "
-            "list for row-backed local PostgreSQL dump artifacts that are already "
-            "present on disk. Operators must choose an eligible artifact, re-enter "
-            "the exact filename, and satisfy the existing environment gate. Remote-"
-            "only artifacts are never materialized through admin, and CLI restore "
-            "keeps its current artifact-id and --file PATH entrypoints under the "
-            "same guardrails."
+            "list for PostgreSQL dump artifacts. Operators may either choose an "
+            "eligible local artifact already present on disk or upload a dump file "
+            "that resolves to exactly one trusted authoritative artifact by recorded "
+            "checksum and size. Operators must still re-enter the exact filename for "
+            "the authoritative artifact and satisfy the existing environment gate. "
+            "Remote-only artifacts "
+            "are never materialized through admin, and CLI restore keeps its current "
+            "artifact-id, snapshot-id, and --file PATH entrypoints under the same "
+            "guardrails."
         )
 
     @admin.action(description="Create backup now", permissions=["change"])
@@ -522,8 +664,13 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     list_display = [
         "filename",
         "status",
+        "snapshot_status_badge",
+        "snapshot_provenance",
         "restore_scope_badge",
         "storage_target",
+        "storage_location",
+        "checksum_sha256",
+        "validated_at",
         "size_bytes",
         "trigger",
         "created_at",
@@ -534,6 +681,9 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     search_fields = ["filename", "checksum_sha256", "database_name", "remote_key"]
     readonly_fields = [
         "filename",
+        "snapshot_reference",
+        "snapshot_status_badge",
+        "snapshot_source_environment",
         "storage_target",
         "restore_scope_badge",
         "local_path",
@@ -567,6 +717,9 @@ class BackupArtifactAdmin(admin.ModelAdmin):
                 "fields": [
                     "filename",
                     "status",
+                    "snapshot_status_badge",
+                    "snapshot_reference",
+                    "snapshot_source_environment",
                     "restore_scope_badge",
                     "storage_target",
                     "backup_format",
@@ -610,6 +763,20 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         ),
     ]
     actions = ["validate_selected_backups"]
+    change_list_template = (
+        "admin/quickscale_modules_backups/backupartifact/change_list.html"
+    )
+
+    def get_queryset(self, request: HttpRequest) -> Any:
+        """Load related user and snapshot data for provenance projections."""
+        return (
+            super()
+            .get_queryset(request)
+            .select_related(
+                "initiated_by",
+                "authoritative_snapshot",
+            )
+        )
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         """Artifacts are created through commands or the policy admin."""
@@ -620,17 +787,112 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path(
+                "ops/create/",
+                self.admin_site.admin_view(self.create_backup_view),
+                name="quickscale_modules_backups_backupartifact_create",
+            ),
+            path(
                 "<int:artifact_id>/download/",
                 self.admin_site.admin_view(self.download_view),
                 name="quickscale_modules_backups_backupartifact_download",
-            )
+            ),
         ]
         return custom_urls + urls
+
+    def _get_policy_admin(self) -> BackupPolicyAdmin | None:
+        """Return the registered BackupPolicy admin when available."""
+        policy_admin = self.admin_site._registry.get(BackupPolicy)
+        if isinstance(policy_admin, BackupPolicyAdmin):
+            return policy_admin
+        return None
+
+    def _has_policy_change_permission(self, request: HttpRequest) -> bool:
+        """Mirror the existing BackupPolicy change gate for backup creation."""
+        policy_admin = self._get_policy_admin()
+        if policy_admin is None:
+            return False
+        return policy_admin.has_change_permission(request)
+
+    def _require_policy_change_permission(self, request: HttpRequest) -> None:
+        """Require the existing BackupPolicy change permission boundary."""
+        if not self._has_policy_change_permission(request):
+            raise PermissionDenied
 
     def _require_view_or_change_permission(self, request: HttpRequest) -> None:
         """Require BackupArtifact view or change permission for admin downloads."""
         if not self.has_view_or_change_permission(request):
             raise PermissionDenied
+
+    def _get_snapshot(self, obj: BackupArtifact) -> BackupSnapshot | None:
+        """Return the attached authoritative snapshot when one is tracked."""
+        if hasattr(obj, "authoritative_snapshot"):
+            return obj.authoritative_snapshot
+        return None
+
+    def _snapshot_metadata(self, obj: BackupArtifact) -> dict[str, Any]:
+        """Return artifact metadata as a dict for provenance fallbacks."""
+        metadata = obj.metadata_json
+        if isinstance(metadata, dict):
+            return metadata
+        return {}
+
+    def _snapshot_reference_value(self, obj: BackupArtifact) -> str | None:
+        """Return the tracked snapshot identifier when one is available."""
+        snapshot = self._get_snapshot(obj)
+        if snapshot is not None:
+            return snapshot.snapshot_id
+
+        snapshot_id = str(self._snapshot_metadata(obj).get("snapshot_id", "")).strip()
+        return snapshot_id or None
+
+    def _snapshot_status_value(self, obj: BackupArtifact) -> str | None:
+        """Return the tracked snapshot lifecycle status when one is available."""
+        snapshot = self._get_snapshot(obj)
+        if snapshot is not None:
+            return snapshot.status
+
+        snapshot_status = str(
+            self._snapshot_metadata(obj).get("snapshot_status", "")
+        ).strip()
+        return snapshot_status or None
+
+    def _snapshot_source_environment_value(self, obj: BackupArtifact) -> str | None:
+        """Return the recorded source environment for the attached snapshot."""
+        snapshot = self._get_snapshot(obj)
+        if snapshot is None:
+            return None
+
+        source_environment = snapshot.source_environment.strip()
+        return source_environment or None
+
+    def changelist_view(
+        self,
+        request: HttpRequest,
+        extra_context: dict[str, Any] | None = None,
+    ) -> HttpResponse:
+        """Expose a create-backup affordance only to policy mutation operators."""
+        merged_context = {
+            **(extra_context or {}),
+            "show_create_backup_control": self._has_policy_change_permission(request),
+        }
+        return super().changelist_view(request, merged_context)
+
+    def create_backup_view(self, request: HttpRequest) -> HttpResponseRedirect:
+        """Delegate artifact-side backup creation to the existing policy admin flow."""
+        self._require_policy_change_permission(request)
+        if request.method != "POST":
+            return HttpResponseRedirect(
+                reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+            )
+
+        policy_admin = self._get_policy_admin()
+        if policy_admin is None:
+            raise PermissionDenied
+
+        policy_admin.create_backup_now(request, BackupPolicy.objects.none())
+        return HttpResponseRedirect(
+            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+        )
 
     def _has_downloadable_local_file(self, obj: BackupArtifact) -> bool:
         """Return whether the admin can still offer a local download action."""
@@ -647,6 +909,34 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     def restore_scope_badge(self, obj: BackupArtifact) -> str:
         return obj.effective_restore_scope() or "unclassified"
 
+    @admin.display(description="Snapshot status")
+    def snapshot_status_badge(self, obj: BackupArtifact) -> str:
+        snapshot_status = self._snapshot_status_value(obj)
+        if snapshot_status is None:
+            return "Untracked"
+
+        return dict(BackupSnapshot.STATUS_CHOICES).get(snapshot_status, snapshot_status)
+
+    @admin.display(description="Provenance")
+    def snapshot_provenance(self, obj: BackupArtifact) -> str:
+        source_environment = self._snapshot_source_environment_value(obj)
+        snapshot_reference = self._snapshot_reference_value(obj)
+        if source_environment and snapshot_reference:
+            return f"{source_environment} ({snapshot_reference})"
+        if source_environment:
+            return source_environment
+        if snapshot_reference:
+            return snapshot_reference
+        return "Untracked"
+
+    @admin.display(description="Snapshot reference")
+    def snapshot_reference(self, obj: BackupArtifact) -> str:
+        return self._snapshot_reference_value(obj) or "Untracked"
+
+    @admin.display(description="Source environment")
+    def snapshot_source_environment(self, obj: BackupArtifact) -> str:
+        return self._snapshot_source_environment_value(obj) or "Unavailable"
+
     @admin.display(description="Download")
     def download_link(self, obj: BackupArtifact) -> str:
         if not self._has_downloadable_local_file(obj):
@@ -660,6 +950,10 @@ class BackupArtifactAdmin(admin.ModelAdmin):
 
     @admin.display(description="Download path")
     def download_path_display(self, obj: BackupArtifact) -> str:
+        return obj.download_path() or "Unavailable"
+
+    @admin.display(description="Storage location")
+    def storage_location(self, obj: BackupArtifact) -> str:
         return obj.download_path() or "Unavailable"
 
     @admin.display(description="Admin availability")
