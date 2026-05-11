@@ -15,12 +15,21 @@ from django.conf import settings
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import FileResponse, HttpRequest
 from django.test import Client, RequestFactory
 from django.urls import reverse
 
-from quickscale_modules_backups.admin import BackupArtifactAdmin, BackupPolicyAdmin
-from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
+from quickscale_modules_backups.admin import (
+    BackupArtifactAdmin,
+    BackupPolicyAdmin,
+    BackupPolicyRestoreForm,
+)
+from quickscale_modules_backups.models import (
+    BackupArtifact,
+    BackupPolicy,
+    BackupSnapshot,
+)
 from quickscale_modules_backups.services import (
     BackupError,
     RestoreResult,
@@ -230,8 +239,140 @@ class TestBackupPolicyAdmin:
         assert "Dry-run validation" in content
         assert "Restore backup" in content
         assert postgresql_backup_artifact.filename in content
+        assert postgresql_backup_artifact.local_path in content
         assert "Selected artifact:" in content
+        assert "Eligible local artifacts" in content
+        assert "Uploaded backup file" in content
         assert "remote-only artifacts" in content
+
+    @pytest.mark.parametrize(
+        ("permission_codenames", "expect_artifact_inventory"),
+        [
+            (("view_backuppolicy",), False),
+            (("view_backuppolicy", "view_backupartifact"), True),
+        ],
+    )
+    def test_restore_page_artifact_inventory_follows_artifact_view_permission(
+        self,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        permission_codenames: tuple[str, ...],
+        expect_artifact_inventory: bool,
+    ) -> None:
+        del backup_policy
+        user = _make_staff_user(
+            f"backups-staff-restore-matrix-{'-'.join(permission_codenames)}",
+            *permission_codenames,
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+            {"artifact_id": str(postgresql_backup_artifact.pk)},
+        )
+
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Restore backup artifact" in content
+        assert "Uploaded backup file" in content
+        if expect_artifact_inventory:
+            assert postgresql_backup_artifact.filename in content
+            assert postgresql_backup_artifact.local_path in content
+            assert "Eligible local artifacts" in content
+            assert "Selected artifact:" in content
+            assert "Restore source" in content
+        else:
+            assert postgresql_backup_artifact.filename not in content
+            assert postgresql_backup_artifact.local_path not in content
+            assert "Eligible local artifacts" not in content
+            assert "Selected artifact:" not in content
+            assert "Restore source" not in content
+            assert (
+                "Recorded local artifacts are hidden on this page because your current"
+                in content
+            )
+
+    def test_restore_submission_rejects_recorded_artifact_mode_without_artifact_permission(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        user = _make_staff_user(
+            "backups-staff-restore-change-no-artifact-view",
+            "change_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+
+        with patch(
+            "quickscale_modules_backups.admin.restore_backup_artifact"
+        ) as mocked_restore:
+            response = client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT,
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "dry_run",
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_restore.assert_not_called()
+        assert (
+            "Recorded local artifacts are unavailable for your current permissions."
+            in response.content.decode("utf-8")
+        )
+
+    def test_restore_page_routes_uploaded_file_through_trusted_admin_service(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        del backup_policy
+        uploaded_file = SimpleUploadedFile(
+            "operator-upload.dump",
+            b"PGDMP\x01\x0e\x00trusted upload bytes",
+        )
+
+        with (
+            patch(
+                "quickscale_modules_backups.admin.restore_admin_uploaded_backup",
+                return_value=RestoreResult(
+                    executed=False,
+                    dry_run=True,
+                    message="Restore validation completed successfully (dry run).",
+                ),
+            ) as mocked_uploaded_restore,
+            patch(
+                "quickscale_modules_backups.admin.restore_backup_artifact"
+            ) as mocked_recorded_restore,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "dry_run",
+                    "uploaded_file": uploaded_file,
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_recorded_restore.assert_not_called()
+        assert mocked_uploaded_restore.call_count == 1
+        args, kwargs = mocked_uploaded_restore.call_args
+        assert args[0].name == "operator-upload.dump"
+        assert kwargs == {
+            "confirmation": postgresql_backup_artifact.filename,
+            "dry_run": True,
+        }
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Restore validation completed successfully (dry run)."
+        ]
 
     def test_restore_page_denies_staff_user_without_backups_permissions(
         self,
@@ -733,6 +874,15 @@ class TestBackupPolicyAdmin:
 class TestBackupArtifactAdmin:
     """Tests for artifact admin actions and download handling."""
 
+    def test_artifact_changelist_includes_roadmap_provenance_columns(self) -> None:
+        artifact_admin = _artifact_admin()
+
+        assert "restore_scope_badge" in artifact_admin.list_display
+        assert "storage_location" in artifact_admin.list_display
+        assert "checksum_sha256" in artifact_admin.list_display
+        assert "validated_at" in artifact_admin.list_display
+        assert "size_bytes" in artifact_admin.list_display
+
     def test_nonstaff_user_is_denied_artifact_changelist(self) -> None:
         user = get_user_model().objects.create_user(
             username="backups-operator",
@@ -748,6 +898,151 @@ class TestBackupArtifactAdmin:
 
         assert response.status_code == 302
         assert response.url.startswith(reverse("admin:login"))
+
+    def test_artifact_changelist_renders_snapshot_provenance_projection(
+        self,
+        admin_client: Client,
+        backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        validated_at = backup_artifact.created_at.replace(
+            year=2037,
+            month=6,
+            day=7,
+            hour=8,
+            minute=9,
+            second=10,
+            microsecond=0,
+        )
+        backup_artifact.checksum_sha256 = "checksum-admin-projection-123"
+        backup_artifact.validated_at = validated_at
+        backup_artifact.save(
+            update_fields=["checksum_sha256", "validated_at", "updated_at"]
+        )
+        BackupSnapshot.objects.create(
+            snapshot_id="snap-artifact-admin",
+            authoritative_dump=backup_artifact,
+            status=BackupSnapshot.STATUS_FAILED,
+            source_environment="railway-prod",
+            local_root_path=str(tmp_path / "snapshot-root"),
+        )
+
+        response = admin_client.get(
+            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+        )
+
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Snapshot status" in content
+        assert "Provenance" in content
+        assert "Storage location" in content
+        assert "snap-artifact-admin" in content
+        assert "railway-prod (snap-artifact-admin)" in content
+        assert backup_artifact.local_path in content
+        assert backup_artifact.checksum_sha256 in content
+        assert "2037" in content
+        assert "Failed" in content
+
+    def test_artifact_changelist_exposes_create_button_for_policy_mutation_operator(
+        self,
+    ) -> None:
+        user = _make_staff_user(
+            "backups-staff-artifact-create-visible",
+            "view_backupartifact",
+            "change_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+        )
+
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Create backup now" in content
+        assert (
+            reverse("admin:quickscale_modules_backups_backupartifact_create") in content
+        )
+
+    def test_artifact_changelist_hides_create_button_without_policy_change_permission(
+        self,
+    ) -> None:
+        user = _make_staff_user(
+            "backups-staff-artifact-change-only",
+            "view_backupartifact",
+            "change_backupartifact",
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+        )
+
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Create backup now" not in content
+        assert (
+            reverse("admin:quickscale_modules_backups_backupartifact_create")
+            not in content
+        )
+
+    def test_artifact_create_endpoint_runs_with_policy_change_permission(
+        self,
+    ) -> None:
+        user = _make_staff_user(
+            "backups-staff-artifact-create-endpoint",
+            "view_backupartifact",
+            "change_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+        fake_artifact = BackupArtifact(
+            filename="db-project-local-20260326T120000Z.json",
+            checksum_sha256="abc",
+            size_bytes=1,
+            backup_format="json",
+            database_engine="django.db.backends.sqlite3",
+            database_name="test.sqlite3",
+        )
+
+        with patch(
+            "quickscale_modules_backups.admin.create_backup",
+            return_value=fake_artifact,
+        ) as mocked_create:
+            response = client.post(
+                reverse("admin:quickscale_modules_backups_backupartifact_create"),
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_create.assert_called_once_with(initiated_by=user, trigger="admin")
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Created backup artifact db-project-local-20260326T120000Z.json"
+        ]
+
+    def test_artifact_create_endpoint_denies_staff_user_without_policy_change_permission(
+        self,
+    ) -> None:
+        user = _make_staff_user(
+            "backups-staff-artifact-create-denied",
+            "view_backupartifact",
+            "change_backupartifact",
+        )
+        client = Client()
+        client.force_login(user)
+
+        with patch("quickscale_modules_backups.admin.create_backup") as mocked_create:
+            response = client.post(
+                reverse("admin:quickscale_modules_backups_backupartifact_create")
+            )
+
+        assert response.status_code == 403
+        mocked_create.assert_not_called()
 
     def test_change_view_renders_download_link(
         self,

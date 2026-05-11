@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from io import StringIO
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, mkdtemp
 from typing import TYPE_CHECKING, Any, Callable, Protocol, Sequence, cast
 from uuid import uuid4
 
@@ -296,6 +296,15 @@ class ResolvedRestoreSource:
         if self.artifact is None:
             return self.backup_format == "json"
         return self.artifact.is_export_only()
+
+
+@dataclass(frozen=True)
+class StagedAdminRestoreUpload:
+    """Quarantined admin-uploaded restore input plus trusted-match metadata."""
+
+    local_path: Path
+    checksum_sha256: str
+    size_bytes: int
 
 
 def ensure_default_policy() -> BackupPolicy:
@@ -2079,14 +2088,10 @@ def get_backup_snapshot(snapshot_id: str) -> BackupSnapshot:
         ) from exc
 
 
-def build_backup_snapshot_report(
+def _get_snapshot_report_children(
     snapshot: BackupSnapshot,
-    *,
-    now: datetime | None = None,
-    sidecar_payloads: Sequence[str] | None = None,
-) -> dict[str, Any]:
-    """Build a structured report for one stored snapshot."""
-    report_time = now or django_timezone.now()
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Return normalized child descriptors used by snapshot reporting."""
     child_descriptors_json = (
         snapshot.child_descriptors_json
         if isinstance(snapshot.child_descriptors_json, dict)
@@ -2099,6 +2104,247 @@ def build_backup_snapshot_report(
     sidecars = child_descriptors_json.get("sidecars")
     if not isinstance(sidecars, dict):
         sidecars = {}
+
+    return child_descriptors_json, database_descriptor, sidecars
+
+
+def _resolve_snapshot_provenance_value(
+    *,
+    field_name: str,
+    candidates: Sequence[tuple[str, str]],
+    issues: list[str],
+) -> str | None:
+    """Resolve one provenance value and note mismatches across stored sources."""
+    populated_candidates = [
+        (source, value) for source, value in candidates if value.strip()
+    ]
+    if not populated_candidates:
+        issues.append(f"{field_name} is not recorded on the snapshot seam")
+        return None
+
+    unique_values = {value for _, value in populated_candidates}
+    if len(unique_values) > 1:
+        mismatch_details = ", ".join(
+            f"{source}={value}" for source, value in populated_candidates
+        )
+        issues.append(
+            f"{field_name} is inconsistent across snapshot provenance sources: "
+            f"{mismatch_details}"
+        )
+
+    return populated_candidates[0][1]
+
+
+def _build_snapshot_full_backup_contract(
+    snapshot: BackupSnapshot,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Build the canonical full-backup completeness/provenance contract."""
+    evaluated_at = now or django_timezone.now()
+    _, database_descriptor, sidecars = _get_snapshot_report_children(snapshot)
+
+    completeness_issues: list[str] = []
+    provenance_issues: list[str] = []
+
+    if snapshot.status != BackupSnapshot.STATUS_READY:
+        completeness_issues.append(f"snapshot status is '{snapshot.status}'")
+
+    authoritative_dump = snapshot.authoritative_dump
+    database_status = str(database_descriptor.get("status", "")).strip() or "missing"
+    database_relative_path = str(database_descriptor.get("relative_path", "")).strip()
+    database_local_available = False
+    database_remote_available = False
+    database_remote_key = str(database_descriptor.get("remote_key", "")).strip()
+
+    authoritative_dump_payload: dict[str, Any] | None = None
+    if authoritative_dump is None:
+        completeness_issues.append("authoritative database dump is missing")
+    else:
+        database_local_path = _resolve_snapshot_database_local_path(
+            snapshot,
+            authoritative_dump,
+        )
+        database_local_available = database_local_path.exists()
+        database_remote_available = bool(
+            database_remote_key or authoritative_dump.remote_key
+        )
+        if authoritative_dump.status == BackupArtifact.STATUS_DELETED:
+            completeness_issues.append("authoritative database dump has been deleted")
+        if database_status != BackupSnapshot.STATUS_READY:
+            completeness_issues.append(f"database dump status is '{database_status}'")
+        if not database_local_available and not database_remote_available:
+            completeness_issues.append(
+                "database dump is unavailable in both local and remote storage"
+            )
+
+        authoritative_dump_payload = {
+            "artifact_id": authoritative_dump.pk,
+            "filename": authoritative_dump.filename,
+            "backup_format": authoritative_dump.backup_format,
+            "database_engine": authoritative_dump.database_engine,
+            "database_name": authoritative_dump.database_name,
+            "checksum_sha256": authoritative_dump.checksum_sha256,
+            "size_bytes": authoritative_dump.size_bytes,
+        }
+
+    required_sidecars: dict[str, dict[str, Any]] = {}
+    loaded_sidecar_payloads: dict[str, dict[str, Any]] = {}
+    expected_manifest_statuses = {
+        _MEDIA_SYNC_MANIFEST_FILENAME: "ready",
+        _ENV_VAR_MANIFEST_FILENAME: "ready",
+        _RELEASE_METADATA_FILENAME: "ready",
+    }
+
+    for filename in _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES:
+        raw_descriptor = sidecars.get(filename)
+        descriptor = raw_descriptor if isinstance(raw_descriptor, dict) else {}
+        sidecar_status = str(descriptor.get("status", "")).strip() or "missing"
+        metadata = descriptor.get("metadata", {})
+        manifest_status = ""
+        if isinstance(metadata, dict):
+            manifest_status = str(metadata.get("manifest_status", "")).strip()
+
+        local_path_text = str(descriptor.get("local_path", "")).strip()
+        local_path = (
+            Path(local_path_text)
+            if local_path_text
+            else _snapshot_sidecar_path(snapshot, filename)
+        )
+        local_available = local_path.exists()
+        remote_available = bool(str(descriptor.get("remote_key", "")).strip())
+
+        required_sidecars[filename] = {
+            "status": sidecar_status,
+            "manifest_status": manifest_status,
+            "local_available": local_available,
+            "remote_available": remote_available,
+        }
+
+        if not isinstance(raw_descriptor, dict):
+            completeness_issues.append(f"{filename} descriptor is missing")
+        elif sidecar_status != BackupSnapshot.STATUS_READY:
+            completeness_issues.append(f"{filename} status is '{sidecar_status}'")
+        if not local_available and not remote_available:
+            completeness_issues.append(
+                f"{filename} is unavailable in both local and remote storage"
+            )
+
+        expected_manifest_status = expected_manifest_statuses.get(filename)
+        if (
+            expected_manifest_status is not None
+            and manifest_status != expected_manifest_status
+        ):
+            completeness_issues.append(
+                f"{filename} manifest status is '{manifest_status or 'missing'}'"
+            )
+
+        if local_available:
+            try:
+                loaded_sidecar_payloads[filename] = _load_snapshot_sidecar_payload(
+                    snapshot,
+                    filename,
+                )
+            except BackupError as exc:
+                provenance_issues.append(
+                    f"{filename} could not be loaded for provenance validation: {exc}"
+                )
+        elif not remote_available:
+            provenance_issues.append(
+                f"{filename} provenance payload is unavailable for inspection"
+            )
+
+    project_slug_candidates: list[tuple[str, str]] = []
+    source_environment_candidates: list[tuple[str, str]] = [
+        ("snapshot", snapshot.source_environment.strip())
+    ]
+    sidecar_captured_at: dict[str, str | None] = {}
+    for filename, payload in loaded_sidecar_payloads.items():
+        payload_project_slug = str(payload.get("project_slug", "")).strip()
+        if payload_project_slug:
+            project_slug_candidates.append((filename, payload_project_slug))
+        else:
+            provenance_issues.append(f"{filename} is missing project_slug")
+
+        payload_source_environment = str(payload.get("source_environment", "")).strip()
+        if payload_source_environment:
+            source_environment_candidates.append((filename, payload_source_environment))
+        else:
+            provenance_issues.append(f"{filename} is missing source_environment")
+
+        captured_at = payload.get("captured_at")
+        sidecar_captured_at[filename] = (
+            str(captured_at).strip() if captured_at is not None else None
+        )
+
+    project_slug = _resolve_snapshot_provenance_value(
+        field_name="project_slug",
+        candidates=project_slug_candidates,
+        issues=provenance_issues,
+    )
+    source_environment = _resolve_snapshot_provenance_value(
+        field_name="source_environment",
+        candidates=source_environment_candidates,
+        issues=provenance_issues,
+    )
+
+    release_payload = loaded_sidecar_payloads.get(_RELEASE_METADATA_FILENAME, {})
+    module_versions = release_payload.get("module_versions", {})
+    release_summary = {
+        "app_version": release_payload.get("app_version"),
+        "django_version": release_payload.get("django_version"),
+        "module_versions": module_versions if isinstance(module_versions, dict) else {},
+        "git_sha": release_payload.get("git_sha"),
+    }
+
+    completeness_status = "complete" if not completeness_issues else "incomplete"
+    provenance_status = "consistent" if not provenance_issues else "inconsistent"
+
+    return {
+        "status": (
+            "complete"
+            if completeness_status == "complete" and provenance_status == "consistent"
+            else "incomplete"
+        ),
+        "validated_at": evaluated_at.astimezone(timezone.utc).isoformat(),
+        "completeness": {
+            "status": completeness_status,
+            "issues": completeness_issues,
+            "database": {
+                "status": database_status,
+                "relative_path": database_relative_path,
+                "local_available": database_local_available,
+                "remote_available": database_remote_available,
+            },
+            "required_sidecars": required_sidecars,
+        },
+        "provenance": {
+            "status": provenance_status,
+            "issues": provenance_issues,
+            "snapshot_id": snapshot.snapshot_id,
+            "project_slug": project_slug,
+            "source_environment": source_environment,
+            "captured_at": snapshot.created_at.astimezone(timezone.utc).isoformat(),
+            "sidecar_captured_at": sidecar_captured_at,
+            "authoritative_dump": authoritative_dump_payload,
+            "release": release_summary,
+        },
+    }
+
+
+def build_backup_snapshot_report(
+    snapshot: BackupSnapshot,
+    *,
+    now: datetime | None = None,
+    sidecar_payloads: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Build a structured report for one stored snapshot."""
+    report_time = now or django_timezone.now()
+    _, database_descriptor, sidecars = _get_snapshot_report_children(snapshot)
+    full_backup_contract = _build_snapshot_full_backup_contract(
+        snapshot,
+        now=report_time,
+    )
 
     authoritative_dump = snapshot.authoritative_dump
     authoritative_dump_payload: dict[str, Any] | None = None
@@ -2176,6 +2422,7 @@ def build_backup_snapshot_report(
             "database": database_descriptor,
             "sidecars": sidecars,
         },
+        "full_backup": full_backup_contract,
         "sidecar_summary": sidecar_summary,
         "sidecar_payloads": included_sidecar_payloads,
         "sidecar_payload_errors": sidecar_payload_errors,
@@ -2221,6 +2468,10 @@ def record_backup_snapshot_verification(
 
     snapshot = get_backup_snapshot(snapshot_id)
     recorded_at = now or django_timezone.now()
+    full_backup_contract = _build_snapshot_full_backup_contract(
+        snapshot,
+        now=recorded_at,
+    )
     try:
         verification_payload = _load_snapshot_sidecar_payload(
             snapshot,
@@ -2244,6 +2495,7 @@ def record_backup_snapshot_verification(
         "source_environment": snapshot.source_environment,
         "status": normalized_status,
         "updated_at": recorded_at.astimezone(timezone.utc).isoformat(),
+        "full_backup": full_backup_contract,
         "reports": [
             *existing_reports,
             {
@@ -2251,6 +2503,7 @@ def record_backup_snapshot_verification(
                 "phase": normalized_phase,
                 "status": normalized_status,
                 "recorded_at": recorded_at.astimezone(timezone.utc).isoformat(),
+                "full_backup": full_backup_contract,
                 "payload": payload,
             },
         ],
@@ -2777,6 +3030,72 @@ def restore_backup_artifact(
     )
 
 
+def restore_admin_uploaded_backup(
+    uploaded_file: Any,
+    *,
+    confirmation: str,
+    dry_run: bool = False,
+    allow_production: bool = False,
+    shell_runner: ShellCommandRunner | None = None,
+) -> RestoreResult:
+    """Restore one admin-uploaded backup after trusted snapshot-backed matching."""
+    staging_directory = Path(mkdtemp(prefix="quickscale-backups-admin-upload-"))
+    result: RestoreResult | None = None
+
+    try:
+        staged_upload = _stage_admin_restore_upload(
+            uploaded_file,
+            staging_directory=staging_directory,
+        )
+        trusted_artifact = _resolve_admin_uploaded_restore_artifact(
+            checksum_sha256=staged_upload.checksum_sha256,
+            size_bytes=staged_upload.size_bytes,
+        )
+        result = _execute_restore_for_resolved_source(
+            ResolvedRestoreSource(
+                confirmation_value=trusted_artifact.filename,
+                local_path=staged_upload.local_path,
+                backup_format=trusted_artifact.backup_format,
+                artifact=trusted_artifact,
+            ),
+            confirmation=confirmation,
+            dry_run=dry_run,
+            allow_production=allow_production,
+            shell_runner=shell_runner,
+        )
+    except Exception as exc:
+        cleanup_error = _cleanup_admin_restore_upload_directory(staging_directory)
+        if cleanup_error is not None:
+            exc.add_note(
+                "Failed to clean up staged admin restore upload directory "
+                f"'{staging_directory}': {cleanup_error}"
+            )
+        raise
+
+    assert result is not None
+    cleanup_error = _cleanup_admin_restore_upload_directory(staging_directory)
+    if cleanup_error is None:
+        return result
+
+    return replace(
+        result,
+        warnings=(
+            *result.warnings,
+            RestoreWarning(
+                code="admin_restore_upload_cleanup_failed",
+                message=(
+                    "Restore completed, but the staged admin upload directory "
+                    "could not be cleaned up automatically."
+                ),
+                details={
+                    "staging_directory": str(staging_directory),
+                    "error": cleanup_error,
+                },
+            ),
+        ),
+    )
+
+
 def restore_backup_source(
     *,
     artifact: BackupArtifact | None = None,
@@ -2801,100 +3120,327 @@ def restore_backup_source(
         policy=policy,
         remote_materializer=remote_materializer,
     ) as restore_source:
-        if confirmation.strip() != restore_source.confirmation_value:
-            raise BackupRestoreBlocked(
-                "Confirmation must exactly match the backup filename."
-            )
+        return _execute_restore_for_resolved_source(
+            restore_source,
+            confirmation=confirmation,
+            dry_run=dry_run,
+            allow_production=allow_production,
+            shell_runner=shell_runner,
+        )
 
-        if restore_source.is_export_only():
-            if restore_source.artifact is None:
-                raise BackupRestoreBlocked(
-                    "Restore blocked because JSON file inputs are not a supported "
-                    "restore input."
-                )
+
+def _execute_restore_for_resolved_source(
+    restore_source: ResolvedRestoreSource,
+    *,
+    confirmation: str,
+    dry_run: bool,
+    allow_production: bool,
+    shell_runner: ShellCommandRunner | None,
+) -> RestoreResult:
+    """Run the shared guarded restore pipeline for one resolved source."""
+    if confirmation.strip() != restore_source.confirmation_value:
+        raise BackupRestoreBlocked(
+            "Confirmation must exactly match the backup filename."
+        )
+
+    if restore_source.is_export_only():
+        if restore_source.artifact is None:
             raise BackupRestoreBlocked(
-                "Restore blocked because export_only artifacts are not a supported "
+                "Restore blocked because JSON file inputs are not a supported "
                 "restore input."
             )
-
-        source_issues = _get_restore_source_validation_issues(restore_source)
-        if source_issues:
-            raise BackupRestoreBlocked(
-                "Restore blocked because backup validation failed: "
-                + "; ".join(source_issues)
-            )
-
-        current_engine = str(
-            django.db.connections["default"].settings_dict.get("ENGINE") or ""
-        ).strip()
-        compatibility_issues = _get_restore_source_compatibility_issues(
-            restore_source,
-            current_engine,
+        raise BackupRestoreBlocked(
+            "Restore blocked because export_only artifacts are not a supported "
+            "restore input."
         )
-        if compatibility_issues:
-            compatibility_prefix = (
-                "Restore blocked because artifact compatibility validation failed: "
-                if restore_source.artifact is not None
-                else "Restore blocked because restore compatibility validation failed: "
-            )
-            raise BackupRestoreBlocked(
-                compatibility_prefix + "; ".join(compatibility_issues)
-            )
 
-        if dry_run:
-            _ensure_postgresql_18_restore_runtime(current_engine)
-            _ensure_operator_supplied_custom_archive_valid(
-                restore_source,
-                shell_runner=shell_runner,
-            )
-            return RestoreResult(
-                executed=False,
-                dry_run=True,
-                message="Restore validation completed successfully (dry run).",
-            )
+    source_issues = _get_restore_source_validation_issues(restore_source)
+    if source_issues:
+        raise BackupRestoreBlocked(
+            "Restore blocked because backup validation failed: "
+            + "; ".join(source_issues)
+        )
 
-        if not _restore_execution_allowed():
-            message = (
-                "Restore execution is blocked outside local development until "
-                "QUICKSCALE_BACKUPS_ALLOW_RESTORE=true is set."
-            )
-            if allow_production:
-                message += " --allow-production does not bypass this environment gate."
-            raise BackupRestoreBlocked(message)
+    current_engine = str(
+        django.db.connections["default"].settings_dict.get("ENGINE") or ""
+    ).strip()
+    compatibility_issues = _get_restore_source_compatibility_issues(
+        restore_source,
+        current_engine,
+    )
+    if compatibility_issues:
+        compatibility_prefix = (
+            "Restore blocked because artifact compatibility validation failed: "
+            if restore_source.artifact is not None
+            else "Restore blocked because restore compatibility validation failed: "
+        )
+        raise BackupRestoreBlocked(
+            compatibility_prefix + "; ".join(compatibility_issues)
+        )
 
-        if restore_source.backup_format != "pg_dump_custom":
-            raise BackupRestoreBlocked(
-                "Executable restore is only supported for PostgreSQL custom-format "
-                "artifacts. Use --dry-run for JSON fallback backups."
-            )
-
+    if dry_run:
         _ensure_postgresql_18_restore_runtime(current_engine)
         _ensure_operator_supplied_custom_archive_valid(
             restore_source,
             shell_runner=shell_runner,
         )
-
-        connection_settings = django.db.connections["default"].settings_dict
-        command, env = _build_pg_restore_command(
-            restore_source.local_path,
-            connection_settings,
+        return RestoreResult(
+            executed=False,
+            dry_run=True,
+            message="Restore validation completed successfully (dry run).",
         )
-        runner = shell_runner or _run_shell_command
-        runner(command, env=env)
 
-        restore_warnings: tuple[RestoreWarning, ...] = ()
-        if restore_source.artifact is not None:
-            restore_warnings = _persist_restore_artifact_metadata(
-                restore_source.artifact,
-                restored_at=django_timezone.now(),
+    if not _restore_execution_allowed():
+        message = (
+            "Restore execution is blocked outside local development until "
+            "QUICKSCALE_BACKUPS_ALLOW_RESTORE=true is set."
+        )
+        if allow_production:
+            message += " --allow-production does not bypass this environment gate."
+        raise BackupRestoreBlocked(message)
+
+    if restore_source.backup_format != "pg_dump_custom":
+        raise BackupRestoreBlocked(
+            "Executable restore is only supported for PostgreSQL custom-format "
+            "artifacts. Use --dry-run for JSON fallback backups."
+        )
+
+    _ensure_postgresql_18_restore_runtime(current_engine)
+    _ensure_operator_supplied_custom_archive_valid(
+        restore_source,
+        shell_runner=shell_runner,
+    )
+
+    connection_settings = django.db.connections["default"].settings_dict
+    command, env = _build_pg_restore_command(
+        restore_source.local_path,
+        connection_settings,
+    )
+    runner = shell_runner or _run_shell_command
+    runner(command, env=env)
+
+    restore_warnings: tuple[RestoreWarning, ...] = ()
+    if restore_source.artifact is not None:
+        restore_warnings = _persist_restore_artifact_metadata(
+            restore_source.artifact,
+            restored_at=django_timezone.now(),
+        )
+
+    return RestoreResult(
+        executed=True,
+        dry_run=False,
+        message=(f"Restore executed for {restore_source.confirmation_value}."),
+        warnings=restore_warnings,
+    )
+
+
+def _stage_admin_restore_upload(
+    uploaded_file: Any,
+    *,
+    staging_directory: Path,
+) -> StagedAdminRestoreUpload:
+    """Write one uploaded admin restore file into a quarantined staging directory."""
+    original_name = str(getattr(uploaded_file, "name", "")).strip()
+    staged_name = Path(original_name).name or "uploaded-backup.dump"
+    staged_path = staging_directory / staged_name
+    digest = hashlib.sha256()
+    size_bytes = 0
+
+    try:
+        with staged_path.open("wb") as handle:
+            for chunk in _iter_admin_restore_upload_chunks(uploaded_file):
+                if not chunk:
+                    continue
+                digest.update(chunk)
+                handle.write(chunk)
+                size_bytes += len(chunk)
+    except OSError as exc:
+        raise BackupError(f"Unable to stage uploaded backup file: {exc}") from exc
+
+    if size_bytes < 1:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the uploaded backup file is empty."
+        )
+
+    return StagedAdminRestoreUpload(
+        local_path=staged_path,
+        checksum_sha256=digest.hexdigest(),
+        size_bytes=size_bytes,
+    )
+
+
+def _iter_admin_restore_upload_chunks(uploaded_file: Any) -> Iterator[bytes]:
+    """Yield admin-uploaded restore bytes across Django upload implementations."""
+    chunks_method = getattr(uploaded_file, "chunks", None)
+    if callable(chunks_method):
+        yielded_chunk = False
+        for chunk in chunks_method():
+            yielded_chunk = True
+            if isinstance(chunk, bytes):
+                yield chunk
+            else:
+                yield bytes(chunk)
+        if yielded_chunk:
+            return
+
+    read_method = getattr(uploaded_file, "read", None)
+    if not callable(read_method):
+        raise BackupError("Uploaded backup file does not provide a readable stream.")
+
+    payload = read_method()
+    if isinstance(payload, str):
+        yield payload.encode("utf-8")
+        return
+    if isinstance(payload, bytes):
+        yield payload
+        return
+    raise BackupError("Uploaded backup file did not return bytes when read.")
+
+
+def _cleanup_admin_restore_upload_directory(staging_directory: Path) -> str | None:
+    """Delete one quarantined admin restore staging directory."""
+    try:
+        shutil.rmtree(staging_directory)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return str(exc)
+    return None
+
+
+def _resolve_admin_uploaded_restore_artifact(
+    *,
+    checksum_sha256: str,
+    size_bytes: int,
+) -> BackupArtifact:
+    """Resolve an uploaded file to exactly one trusted authoritative artifact."""
+    normalized_checksum = checksum_sha256.strip().lower()
+    if not normalized_checksum:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the uploaded backup file checksum could not be determined."
+        )
+    if size_bytes < 1:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the uploaded backup file is empty."
+        )
+
+    candidates = list(
+        BackupArtifact.objects.filter(
+            checksum_sha256=normalized_checksum,
+            size_bytes=size_bytes,
+        )
+        .select_related("authoritative_snapshot")
+        .order_by("pk")
+    )
+    if not candidates:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the uploaded backup file does not match any recorded authoritative backup artifact."
+        )
+
+    trusted_candidates: list[BackupArtifact] = []
+    trust_issues: list[str] = []
+    for candidate in candidates:
+        trust_issue = _get_admin_uploaded_restore_artifact_trust_issue(candidate)
+        if trust_issue is None:
+            trusted_candidates.append(candidate)
+            continue
+        trust_issues.append(trust_issue)
+
+    if not trusted_candidates:
+        issue_message = (
+            trust_issues[0]
+            if trust_issues
+            else "no trusted metadata match was available"
+        )
+        raise BackupRestoreBlocked(
+            "Restore blocked because the uploaded backup file could not be resolved "
+            f"to a trusted authoritative backup artifact: {issue_message}."
+        )
+
+    if len(trusted_candidates) > 1:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the uploaded backup file matches multiple trusted authoritative backup artifacts."
+        )
+
+    return trusted_candidates[0]
+
+
+def _get_admin_uploaded_restore_artifact_trust_issue(
+    artifact: BackupArtifact,
+) -> str | None:
+    """Return why one checksum-matched artifact is not trusted for admin upload."""
+    if artifact.status == BackupArtifact.STATUS_DELETED:
+        return "matching recorded artifact has been deleted"
+    if artifact.is_export_only() or artifact.backup_format != "pg_dump_custom":
+        return "matching recorded artifact is not a PostgreSQL custom-format restore candidate"
+    if artifact.effective_restore_scope() not in {
+        BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+        BackupArtifact.RESTORE_SCOPE_PORTABLE,
+    }:
+        return "matching recorded artifact is not classified as an eligible restore candidate"
+
+    snapshot = _get_authoritative_snapshot_for_artifact(artifact)
+    if snapshot is None:
+        return "matching recorded artifact is not linked to an authoritative snapshot"
+    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+        return "matching authoritative snapshot has been deleted or pruned"
+
+    full_backup_contract = _build_snapshot_full_backup_contract(snapshot)
+    if str(full_backup_contract.get("status", "")).strip() != "complete":
+        contract_issues = _summarize_full_backup_contract_issues(full_backup_contract)
+        if contract_issues:
+            return (
+                "matching authoritative snapshot does not satisfy the full-backup "
+                f"contract: {contract_issues}"
+            )
+        return (
+            "matching authoritative snapshot does not satisfy the full-backup contract"
+        )
+
+    provenance = full_backup_contract.get("provenance", {})
+    authoritative_dump = (
+        provenance.get("authoritative_dump", {}) if isinstance(provenance, dict) else {}
+    )
+    if not isinstance(authoritative_dump, dict):
+        return "matching authoritative snapshot does not record authoritative dump metadata"
+    if authoritative_dump.get("artifact_id") != artifact.pk:
+        return "matching authoritative snapshot does not point back to this artifact"
+    if (
+        str(authoritative_dump.get("checksum_sha256", "")).strip()
+        != artifact.checksum_sha256
+    ):
+        return "matching authoritative snapshot checksum metadata does not match the artifact row"
+    if authoritative_dump.get("size_bytes") != artifact.size_bytes:
+        return "matching authoritative snapshot size metadata does not match the artifact row"
+
+    return None
+
+
+def _summarize_full_backup_contract_issues(
+    full_backup_contract: dict[str, Any],
+) -> str:
+    """Flatten completeness and provenance issues from the Phase 1 contract."""
+    issues: list[str] = []
+
+    completeness = full_backup_contract.get("completeness", {})
+    if isinstance(completeness, dict):
+        completeness_issues = completeness.get("issues", [])
+        if isinstance(completeness_issues, list):
+            issues.extend(
+                str(issue).strip()
+                for issue in completeness_issues
+                if str(issue).strip()
             )
 
-        return RestoreResult(
-            executed=True,
-            dry_run=False,
-            message=(f"Restore executed for {restore_source.confirmation_value}."),
-            warnings=restore_warnings,
-        )
+    provenance = full_backup_contract.get("provenance", {})
+    if isinstance(provenance, dict):
+        provenance_issues = provenance.get("issues", [])
+        if isinstance(provenance_issues, list):
+            issues.extend(
+                str(issue).strip() for issue in provenance_issues if str(issue).strip()
+            )
+
+    return "; ".join(dict.fromkeys(issues))
 
 
 def _persist_restore_artifact_metadata(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -12,7 +13,9 @@ from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import DatabaseError, connections
@@ -34,6 +37,7 @@ from quickscale_modules_backups.services import (
     RemoteDeleter,
     RemoteMaterializer,
     RemoteUploader,
+    RestoreResult,
     RestoreSourceResolutionMode,
     ShellCommandRunner,
     build_backup_filename,
@@ -41,6 +45,7 @@ from quickscale_modules_backups.services import (
     load_policy_snapshot,
     prune_expired_backups,
     report_backup_snapshot,
+    restore_admin_uploaded_backup,
     restore_backup_artifact,
     restore_backup_source,
     set_backup_snapshot_rollback_pin,
@@ -112,6 +117,117 @@ def _private_remote_policy_snapshot(
         remote_secret_access_key_env_var="TEST_BACKUPS_SECRET_KEY",
         automation_enabled=False,
         schedule="0 2 * * *",
+    )
+
+
+def _get_authoritative_snapshot(artifact: BackupArtifact) -> BackupSnapshot:
+    """Load the snapshot linked to one authoritative dump artifact."""
+    return BackupSnapshot.objects.get(authoritative_dump=artifact)
+
+
+def _attach_complete_snapshot_contract(
+    artifact: BackupArtifact,
+    tmp_path: Path,
+    *,
+    snapshot_id: str,
+) -> BackupSnapshot:
+    """Attach a complete Phase 1 snapshot contract to one artifact."""
+    snapshot_root = tmp_path / snapshot_id
+    snapshot_root.mkdir(parents=True, exist_ok=True)
+    captured_at = "2026-05-01T00:00:00+00:00"
+    project_slug = "quickscale-test"
+    source_environment = "local"
+    sidecar_specs = {
+        "media-sync-manifest.json": (
+            "media_sync_manifest",
+            {
+                "manifest_version": 1,
+                "captured_at": captured_at,
+                "project_slug": project_slug,
+                "source_environment": source_environment,
+                "status": "ready",
+                "storage": {"backend": "local"},
+                "inventory": [],
+            },
+        ),
+        "env-var-manifest.json": (
+            "env_var_manifest",
+            {
+                "manifest_version": 1,
+                "captured_at": captured_at,
+                "project_slug": project_slug,
+                "source_environment": source_environment,
+                "status": "ready",
+                "count": 0,
+                "names": [],
+            },
+        ),
+        "release-metadata.json": (
+            "release_metadata",
+            {
+                "manifest_version": 1,
+                "captured_at": captured_at,
+                "project_slug": project_slug,
+                "source_environment": source_environment,
+                "status": "ready",
+                "app_version": "test-app",
+                "django_version": "5.1",
+                "module_versions": {},
+                "git_sha": "abc123",
+            },
+        ),
+        "promotion-verification.json": (
+            "promotion_verification",
+            {
+                "manifest_version": 1,
+                "captured_at": captured_at,
+                "project_slug": project_slug,
+                "source_environment": source_environment,
+                "status": "ready",
+                "updated_at": captured_at,
+                "reports": [],
+                "notes": "Reserved for route-specific plan and execute reports.",
+                "rollback_pin": {"active": False, "expires_at": None, "reason": ""},
+            },
+        ),
+    }
+
+    sidecar_descriptors: dict[str, dict[str, Any]] = {}
+    for filename, (kind, payload) in sidecar_specs.items():
+        sidecar_path = snapshot_root / filename
+        sidecar_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        sidecar_descriptors[filename] = {
+            "kind": kind,
+            "status": BackupSnapshot.STATUS_READY,
+            "relative_path": filename,
+            "local_path": str(sidecar_path),
+            "size_bytes": sidecar_path.stat().st_size,
+            "checksum_sha256": hashlib.sha256(sidecar_path.read_bytes()).hexdigest(),
+            "metadata": {"manifest_status": str(payload["status"])},
+        }
+
+    return BackupSnapshot.objects.create(
+        snapshot_id=snapshot_id,
+        authoritative_dump=artifact,
+        status=BackupSnapshot.STATUS_READY,
+        source_environment=source_environment,
+        local_root_path=str(snapshot_root),
+        remote_root_key="",
+        child_descriptors_json={
+            "database": {
+                "kind": "database_dump",
+                "status": BackupSnapshot.STATUS_READY,
+                "relative_path": f"database/{artifact.filename}",
+                "local_path": artifact.local_path,
+                "size_bytes": artifact.size_bytes,
+                "checksum_sha256": artifact.checksum_sha256,
+                "metadata": {"backup_format": artifact.backup_format},
+            },
+            "sidecars": sidecar_descriptors,
+        },
     )
 
 
@@ -230,7 +346,7 @@ class TestBackupLifecycle:
         payload = json.loads(Path(artifact.local_path).read_text(encoding="utf-8"))
         assert isinstance(payload, list)
 
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         snapshot_root = local_backup_settings / "snapshots" / snapshot.snapshot_id
         assert snapshot is not None
         assert len(snapshot.snapshot_id) == 32
@@ -283,7 +399,7 @@ class TestBackupLifecycle:
         local_backup_settings: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import quickscale_modules_storage.helpers as storage_helpers
+        import quickscale_modules_storage.helpers as storage_helpers  # type: ignore[import-untyped]
 
         backup_policy.local_directory = str(local_backup_settings)
         backup_policy.save(update_fields=["local_directory", "updated_at"])
@@ -308,7 +424,7 @@ class TestBackupLifecycle:
 
         artifact = create_backup(initiated_by=superuser, trigger="manual")
 
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         media_manifest = json.loads(
             (Path(snapshot.local_root_path) / "media-sync-manifest.json").read_text(
                 encoding="utf-8"
@@ -416,7 +532,7 @@ class TestBackupLifecycle:
             remote_uploader=cast(RemoteUploader, fake_uploader),
         )
 
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         assert snapshot is not None
         snapshot_prefix = f"ops/backups/snapshots/{snapshot.snapshot_id}"
 
@@ -898,7 +1014,7 @@ class TestBackupLifecycle:
 
         artifact = create_backup(initiated_by=superuser, trigger="manual")
 
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         snapshot_root = Path(snapshot.local_root_path)
         artifact.refresh_from_db()
         snapshot.refresh_from_db()
@@ -941,7 +1057,7 @@ class TestBackupLifecycle:
 
         artifact = create_backup(initiated_by=superuser, trigger="manual")
 
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         original_artifact_id = artifact.pk
         assert snapshot is not None
         assert snapshot.status == BackupSnapshot.STATUS_FAILED
@@ -1416,7 +1532,7 @@ class TestBackupLifecycle:
             policy=original_policy,
             remote_uploader=remote_uploader,
         )
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         assert snapshot is not None
         BackupArtifact.objects.filter(pk=artifact.pk).update(
             created_at=datetime.now(timezone.utc) - timedelta(days=30)
@@ -1512,7 +1628,7 @@ class TestBackupLifecycle:
         backup_policy.save(update_fields=["local_directory", "updated_at"])
 
         artifact = create_backup(initiated_by=superuser, trigger="manual")
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         assert snapshot is not None
 
         expired_created_at = datetime.now(timezone.utc) - timedelta(days=30)
@@ -1559,7 +1675,7 @@ class TestBackupLifecycle:
         backup_policy.save(update_fields=["local_directory", "updated_at"])
 
         artifact = create_backup(initiated_by=superuser, trigger="manual")
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
 
         report = report_backup_snapshot(snapshot.snapshot_id)
 
@@ -1573,6 +1689,49 @@ class TestBackupLifecycle:
         )
         assert report["rollback_pin"]["active"] is False
 
+    def test_report_backup_snapshot_uses_snapshot_full_backup_contract_not_artifact_metadata(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+        media_root = local_backup_settings.parent / "media-root"
+        media_root.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "MEDIA_ROOT", str(media_root))
+
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+        snapshot = _get_authoritative_snapshot(artifact)
+        artifact.metadata_json = {
+            **artifact.metadata_json,
+            "full_backup": {
+                "status": "artifact-shadow",
+                "provenance": {"source_environment": "tampered-env"},
+            },
+        }
+        artifact.save(update_fields=["metadata_json", "updated_at"])
+
+        report = report_backup_snapshot(snapshot.snapshot_id)
+
+        assert report["full_backup"]["status"] == "complete"
+        assert report["full_backup"]["completeness"]["status"] == "complete"
+        assert report["full_backup"]["completeness"]["issues"] == []
+        assert report["full_backup"]["provenance"]["status"] == "consistent"
+        assert (
+            report["full_backup"]["provenance"]["project_slug"]
+            == local_backup_settings.parent.name
+        )
+        assert report["full_backup"]["provenance"]["source_environment"] == "local"
+        assert (
+            report["full_backup"]["provenance"]["authoritative_dump"]["artifact_id"]
+            == artifact.pk
+        )
+        assert (
+            report["full_backup"]["provenance"]["release"]["app_version"] == "test-app"
+        )
+
     def test_set_and_clear_backup_snapshot_rollback_pin_update_snapshot_report(
         self,
         superuser: AbstractBaseUser,
@@ -1583,7 +1742,7 @@ class TestBackupLifecycle:
         backup_policy.save(update_fields=["local_directory", "updated_at"])
 
         artifact = create_backup(initiated_by=superuser, trigger="manual")
-        snapshot = artifact.authoritative_snapshot
+        snapshot = _get_authoritative_snapshot(artifact)
         assert snapshot is not None
 
         pinned_report = set_backup_snapshot_rollback_pin(
@@ -1636,6 +1795,208 @@ class TestBackupLifecycle:
 
         assert result.executed is False
         assert result.dry_run is True
+
+    def test_restore_admin_uploaded_backup_rejects_unmatched_upload(self) -> None:
+        uploaded_file = SimpleUploadedFile(
+            "unmatched.dump",
+            b"PGDMP\x01\x0e\x00unmatched upload bytes",
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="does not match any recorded authoritative backup artifact",
+        ):
+            restore_admin_uploaded_backup(
+                uploaded_file,
+                confirmation="missing-authoritative.dump",
+                dry_run=True,
+            )
+
+    def test_restore_admin_uploaded_backup_requires_complete_snapshot_contract(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        snapshot = _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-admin-upload-incomplete",
+        )
+        (Path(snapshot.local_root_path) / "release-metadata.json").unlink()
+        uploaded_file = SimpleUploadedFile(
+            "operator-upload.dump",
+            Path(postgresql_backup_artifact.local_path).read_bytes(),
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="full-backup contract",
+        ):
+            restore_admin_uploaded_backup(
+                uploaded_file,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+            )
+
+    def test_restore_admin_uploaded_backup_rejects_ambiguous_trusted_match(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+    ) -> None:
+        original_payload = Path(postgresql_backup_artifact.local_path).read_bytes()
+        _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-admin-upload-first",
+        )
+
+        duplicate_path = tmp_path / "duplicate-artifact.dump"
+        duplicate_path.write_bytes(original_payload)
+        duplicate_artifact = BackupArtifact.objects.create(
+            filename="duplicate-artifact.dump",
+            local_path=str(duplicate_path),
+            checksum_sha256=hashlib.sha256(original_payload).hexdigest(),
+            size_bytes=duplicate_path.stat().st_size,
+            backup_format="pg_dump_custom",
+            restore_scope=BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+            database_engine=postgresql_backup_artifact.database_engine,
+            database_name=postgresql_backup_artifact.database_name,
+            database_server_major=postgresql_backup_artifact.database_server_major,
+            dump_client_major=postgresql_backup_artifact.dump_client_major,
+            metadata_json={"environment": "local"},
+        )
+        _attach_complete_snapshot_contract(
+            duplicate_artifact,
+            tmp_path,
+            snapshot_id="snap-admin-upload-second",
+        )
+
+        uploaded_file = SimpleUploadedFile("duplicate-match.dump", original_payload)
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="matches multiple trusted authoritative backup artifacts",
+        ):
+            restore_admin_uploaded_backup(
+                uploaded_file,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+            )
+
+    def test_restore_admin_uploaded_backup_routes_through_shared_restore_pipeline(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-admin-upload-success",
+        )
+        original_path = Path(postgresql_backup_artifact.local_path)
+        staged_paths: list[Path] = []
+
+        def fake_execute(
+            restore_source: backup_services.ResolvedRestoreSource,
+            *,
+            confirmation: str,
+            dry_run: bool,
+            allow_production: bool,
+            shell_runner: ShellCommandRunner | None,
+        ) -> RestoreResult:
+            staged_paths.append(restore_source.local_path)
+            assert restore_source.artifact == postgresql_backup_artifact
+            assert (
+                restore_source.confirmation_value == postgresql_backup_artifact.filename
+            )
+            assert restore_source.local_path != original_path
+            assert restore_source.local_path.exists()
+            assert restore_source.local_path.read_bytes() == original_path.read_bytes()
+            assert confirmation == postgresql_backup_artifact.filename
+            assert dry_run is True
+            assert allow_production is False
+            assert shell_runner is None
+            return RestoreResult(
+                executed=False,
+                dry_run=True,
+                message="Restore validation completed successfully (dry run).",
+            )
+
+        monkeypatch.setattr(
+            backup_services,
+            "_execute_restore_for_resolved_source",
+            fake_execute,
+        )
+
+        result = restore_admin_uploaded_backup(
+            SimpleUploadedFile("operator-upload.dump", original_path.read_bytes()),
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=True,
+        )
+
+        assert result.executed is False
+        assert result.dry_run is True
+        assert staged_paths and not staged_paths[0].exists()
+
+    def test_restore_admin_uploaded_backup_warns_when_quarantine_cleanup_fails(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _attach_complete_snapshot_contract(
+            postgresql_backup_artifact,
+            tmp_path,
+            snapshot_id="snap-admin-upload-cleanup-warning",
+        )
+        original_path = Path(postgresql_backup_artifact.local_path)
+        staged_paths: list[Path] = []
+
+        def fake_execute(
+            restore_source: backup_services.ResolvedRestoreSource,
+            *,
+            confirmation: str,
+            dry_run: bool,
+            allow_production: bool,
+            shell_runner: ShellCommandRunner | None,
+        ) -> RestoreResult:
+            del confirmation, dry_run, allow_production, shell_runner
+            staged_paths.append(restore_source.local_path)
+            return RestoreResult(
+                executed=False,
+                dry_run=True,
+                message="Restore validation completed successfully (dry run).",
+            )
+
+        def failing_rmtree(path: str | Path) -> None:
+            del path
+            raise OSError("device busy")
+
+        original_rmtree = shutil.rmtree
+        monkeypatch.setattr(
+            backup_services,
+            "_execute_restore_for_resolved_source",
+            fake_execute,
+        )
+        monkeypatch.setattr(backup_services.shutil, "rmtree", failing_rmtree)
+
+        result = restore_admin_uploaded_backup(
+            SimpleUploadedFile("operator-upload.dump", original_path.read_bytes()),
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=True,
+        )
+
+        assert result.executed is False
+        assert result.dry_run is True
+        assert [warning.code for warning in result.warnings] == [
+            "admin_restore_upload_cleanup_failed"
+        ]
+        assert result.warnings[0].details == {
+            "staging_directory": str(staged_paths[0].parent),
+            "error": "device busy",
+        }
+        original_rmtree(staged_paths[0].parent, ignore_errors=True)
 
     @override_settings(DEBUG=False)
     def test_restore_requires_environment_guard(

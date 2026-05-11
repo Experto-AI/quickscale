@@ -17,17 +17,19 @@
 {% block content %}
 <div id="content-main">
     <p>
-        Admin restore is limited to row-backed PostgreSQL custom dump artifacts whose
-        local file is already present on disk. This page never materializes
-        remote-only artifacts.
+        Admin restore supports either a recorded local PostgreSQL custom dump artifact
+        already present on disk or an uploaded dump file that resolves to exactly one
+        trusted authoritative artifact by recorded checksum and size. This page never
+        materializes remote-only artifacts.
     </p>
     <p>
-        Dry-run validation and restore both require the exact artifact filename. The
-        existing environment gate still applies to executable restore.
+        Uploaded files are quarantined temporarily for trusted-match resolution and
+        cleanup. Dry-run validation and restore both require the exact authoritative
+        artifact filename. The existing environment gate still applies to executable
+        restore.
     </p>
 
-    {% if eligible_artifacts or form.is_bound %}
-    <form method="post" novalidate>
+    <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
         <ul class="errorlist nonfield">
@@ -38,12 +40,38 @@
         {% endif %}
 
         <fieldset class="module aligned">
+            {% if can_view_restore_artifacts %}
+            <div class="form-row">
+                {{ form.source_mode.errors }}
+                <div>
+                    {{ form.source_mode.label_tag }}
+                    {{ form.source_mode }}
+                    <div class="help">{{ form.source_mode.help_text }}</div>
+                </div>
+            </div>
+            {% else %}
+            {{ form.source_mode.errors }}
+            <p>
+                Recorded local artifacts are hidden on this page because your current
+                permissions do not include BackupArtifact access.
+            </p>
+            {% endif %}
+            {% if can_view_restore_artifacts %}
             <div class="form-row">
                 {{ form.artifact_id.errors }}
                 <div>
                     {{ form.artifact_id.label_tag }}
                     {{ form.artifact_id }}
                     <div class="help">{{ form.artifact_id.help_text }}</div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="form-row">
+                {{ form.uploaded_file.errors }}
+                <div>
+                    {{ form.uploaded_file.label_tag }}
+                    {{ form.uploaded_file }}
+                    <div class="help">{{ form.uploaded_file.help_text }}</div>
                 </div>
             </div>
             <div class="form-row">
@@ -56,7 +84,7 @@
             </div>
         </fieldset>
 
-        {% if selected_artifact %}
+        {% if can_view_restore_artifacts and selected_artifact %}
         <p>
             Selected artifact: <strong>{{ selected_artifact.filename }}</strong>
         </p>
@@ -67,9 +95,8 @@
             <button type="submit" name="operation" value="restore">Restore backup</button>
         </div>
     </form>
-    {% endif %}
 
-    {% if eligible_artifacts %}
+    {% if can_view_restore_artifacts and eligible_artifacts %}
     <h2>Eligible local artifacts</h2>
     <table class="listing">
         <thead>
@@ -93,8 +120,8 @@
             {% endfor %}
         </tbody>
     </table>
-    {% else %}
-    <p>No eligible local backup artifacts are currently present on disk for admin restore.</p>
+    {% elif can_view_restore_artifacts %}
+    <p>No eligible local backup artifacts are currently present on disk for the recorded-artifact restore path.</p>
     {% endif %}
 </div>
 {% endblock %}
