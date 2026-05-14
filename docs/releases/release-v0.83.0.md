@@ -64,4 +64,4 @@ make ci-e2e
 
 ## Deferred Follow-up
 
-- None. Forward feature work resumes at the v0.84.0 billing milestone tracked in the roadmap.
+- None. Forward feature work resumes at the v0.85.0 billing milestone tracked in the roadmap.
