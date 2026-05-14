@@ -369,7 +369,7 @@ The wizard guides you through:
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: 0.84.0
+version: 0.85.0
 project:
   slug: myapp
   package: myapp

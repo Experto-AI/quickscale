@@ -89,66 +89,136 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ---
 
-### v0.83.0: Hardening Release
-
-**Status**: ✅ Released
-**Release date**: 2026-05-03
-
-v0.83.0 closed the pre-billing hardening track across plan/apply validation, shipped starter and runtime contract fidelity, privileged operator surfaces, export and upload safety guards, and release-closeout validation.
-
-**Canonical history**
-
-- See [CHANGELOG.md](../../CHANGELOG.md) for the version index entry.
-- See [Release v0.83.0](../releases/release-v0.83.0.md) for the single public release note linked from the GitHub tag and release PR.
-- Publication validation completed through `make version-check`, `make lint`, `make typecheck`, `make test`, `make test-e2e`, and `make ci-e2e`.
-- v0.85.0 billing module is now the next planned milestone.
-
----
-
-### v0.84.0: Backups Hardening Release
-
-**Status**: ✅ Released
-**Release date**: 2026-05-14
-
-v0.84.0 closes the backups hardening line with a reader-facing release note and a canonical changelog entry. The shipped scope centers on tighter backup lifecycle operations, safer restore intake, and the runtime/tooling support alignment that clears the roadmap for billing work without restating unverified Docker-backed validation as fresh evidence.
-
-**Canonical history**
-
-- See [CHANGELOG.md](../../CHANGELOG.md) for the version index entry.
-- See [Release v0.84.0](../releases/release-v0.84.0.md) for the single public release note linked from the GitHub tag and release PR.
-- The archived public summary records the release scope conservatively: same-session docs closeout evidence includes `make test`, while broader Docker-backed reruns are not re-claimed here without fresh confirmation.
-- v0.85.0 billing module is now the next planned milestone.
-
----
-
 ### v0.85.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
 **Dependency note**: This milestone starts only after v0.84.0 closes the backup hardening work for admin download, full backup completeness, upload-driven restore, and the repo-wide stable runtime/tooling refresh.
 
-**Stripe Integration**:
-- [ ] Set up dj-stripe for Stripe API integration
-- [ ] Configure webhook endpoints for payment events
-- [ ] Implement subscription lifecycle management
-- [ ] Add payment method handling (cards, etc.)
+**Library Decision**: Direct `stripe` Python SDK (not dj-stripe). dj-stripe mirrors ~50 Stripe tables into the Django ORM but provides none of the credits accounting logic, which is the core domain. The direct SDK gives full control with a minimal footprint, consistent with the notifications module's thin-adapter pattern (`django-anymail` over a full ORM-mirror). Credits, balances, and transactions are custom Django models; Stripe is purely the payment trigger.
 
-**Pricing & Plans**:
-- [ ] Create pricing tier models and admin
-- [ ] Implement plan creation and management
-- [ ] Add usage tracking and limits
-- [ ] Create pricing page templates
+**Credits System Design**: Credits are the central abstraction. Monthly plans top up a user's credit balance on each `invoice.paid` webhook. One-time purchases top up credits on `checkout.session.completed`. The credit ledger (`CreditBalance` + `CreditTransaction`) is owned entirely by Django models — Stripe is the payment trigger, not the source of truth for credit counts.
 
-**Subscription Management**:
-- [ ] Build subscription dashboard for users
-- [ ] Implement plan upgrades/downgrades
-- [ ] Add billing history and invoices
-- [ ] Create cancellation and pause functionality
+**Domain Models**:
+- `Plan` — name, slug, stripe_price_id, credits_per_period, price_cents, billing_interval (monthly/yearly/one_time), is_active
+- `CreditBalance` — user (1:1), balance (int), updated_at
+- `CreditTransaction` — user (FK), amount, transaction_type (PLAN/PURCHASE/USAGE/REFUND/ADJUSTMENT), stripe refs, description, balance_after (snapshot), created_at
+- `Subscription` — user (FK), plan (FK), stripe_subscription_id, stripe_customer_id, status, period dates
+- `WebhookEvent` — stripe_event_id (unique), event_type, payload (JSONField), processed, processing_error, created_at
 
-**Testing**:
-- [ ] Unit tests for billing models and logic
-- [ ] Integration tests with Stripe webhooks
-- [ ] E2E tests for subscription flows
+---
+
+#### Phase 1: Foundation — Models, Admin, Module Config
+
+**Estimated hours**: 8–10 h
+
+**Delivers**: A fully migrated, admin-registered module with all five domain models. No Stripe dependency yet.
+
+- [ ] `module.yml` — name, version, mutable settings for `stripe_*_env_var` pointers and `billing_currency`; `django_apps: [quickscale_modules_billing]`
+- [ ] `pyproject.toml` — `stripe` NOT yet included; dev deps: `pytest-django`; `--cov-fail-under=90`; mypy `ignore_missing_imports` for `stripe.*`
+- [ ] `apps.py` — `QuickscaleBillingConfig`, `label = "quickscale_modules_billing"`, `default_auto_field = BigAutoField`
+- [ ] `models.py` — all five models with `select_for_update`-ready `CreditBalance.get_or_create_for_user()` class method
+- [ ] `admin.py` — all five models registered; read-only admin for `CreditBalance`, `CreditTransaction`, `WebhookEvent`; full CRUD for `Plan`
+- [ ] `migrations/0001_initial.py` — handwritten, includes `UniqueConstraint` on `WebhookEvent.stripe_event_id`
+- [ ] `tests/settings.py`, `conftest.py`, `test_models.py`, `test_admin.py`
+
+**Acceptance**: `pytest --cov-fail-under=90` passes; all five models visible in Django admin; no `stripe` import anywhere.
+
+---
+
+#### Phase 2: Stripe Infrastructure — Customer Management and Webhook Endpoint
+
+**Estimated hours**: 10–12 h
+
+**Delivers**: Working webhook endpoint with idempotency gate and a safe credit ledger core. All Stripe API calls are isolated in `services.py`.
+
+- [ ] Add `stripe>=12.0.0,<13.0.0` to `pyproject.toml` and `module.yml`
+- [ ] `services.py` — `BillingSettingsSnapshot.from_settings()` (mirrors `AnalyticsRuntimeSettingsSnapshot` pattern); `BillingError` exception hierarchy (`BillingConfigurationError`, `BillingWebhookError`, `BillingWebhookSignatureError`); `get_or_create_stripe_customer(user) -> str`; `credit_user(user, amount, type, description, stripe_refs) -> CreditTransaction` with `select_for_update()` inside `transaction.atomic()` and `F('balance') + amount` ORM update; `handle_stripe_event()` stub
+- [ ] `views.py` — `StripeWebhookView` (`@csrf_exempt`): verifies Stripe signature, `get_or_create(stripe_event_id=...)` for idempotency, dispatches to `handle_stripe_event`, marks `processed=True` on success, returns 200 always (Stripe retries on non-2xx)
+- [ ] `urls.py` — `POST billing/webhooks/stripe/`
+- [ ] `tests/test_services.py` — `credit_user` atomicity (`@pytest.mark.django_db(transaction=True)`), `balance_after` integrity, `get_or_create_stripe_customer` (mock `stripe.customers.create`), all error paths
+- [ ] `tests/test_views.py` — invalid signature → 403; duplicate event id → 200 idempotent; valid signature with unknown event type → row stored `processed=True`
+
+**Acceptance**: Webhook endpoint rejects bad signatures; duplicate events are absorbed; `credit_user` is concurrency-safe; `pytest --cov-fail-under=90` passes.
+
+---
+
+#### Phase 3: One-Time Credit Purchases End-to-End
+
+**Estimated hours**: 10–12 h
+
+**Delivers**: Full purchase flow — API to create a Stripe Checkout Session + webhook handler that credits the user on payment completion.
+
+- [ ] `services.py` — `create_checkout_session(user, plan, success_url, cancel_url) -> str` (Stripe Checkout `mode="payment"`); `handle_stripe_event` dispatch for `checkout.session.completed` → calls `credit_user` with `transaction_type="PURCHASE"`
+- [ ] `serializers.py` — `CreateCheckoutSessionSerializer` (validates plan slug + `billing_interval="one_time"`), `CreditBalanceSerializer`, `CreditTransactionSerializer`
+- [ ] `views.py` — `CreateCheckoutSessionView` (authenticated, returns `checkout_url`); `CreditBalanceView`; `CreditTransactionListView` (paginated); `PurchaseSuccessView` / `PurchaseCancelView` (template views for Stripe redirect targets)
+- [ ] `urls.py` — `POST api/billing/purchase/checkout/`, `GET api/billing/balance/`, `GET api/billing/transactions/`, `GET billing/purchase/success/`, `GET billing/purchase/cancel/`
+- [ ] Templates — `purchase_success.html` and `purchase_cancel.html` with React mount div pattern
+- [ ] `tests/test_purchase.py` — full purchase flow mocked; idempotency on duplicate `checkout.session.completed`; balance reflects credited amount; unauthenticated → 401
+
+**Acceptance**: `POST /api/billing/purchase/checkout/` returns checkout URL; duplicate webhook does not double-credit; `GET /api/billing/balance/` reflects new balance; `pytest --cov-fail-under=90` passes.
+
+---
+
+#### Phase 4: Subscription Plans End-to-End
+
+**Estimated hours**: 12–14 h
+
+**Delivers**: Recurring subscription flow — Stripe Checkout Session in subscription mode, lifecycle webhooks that credit users on each billing cycle.
+
+- [ ] `services.py` — `create_subscription_checkout_session(user, plan, success_url, cancel_url) -> str` (Stripe Checkout `mode="subscription"`); `handle_stripe_event` dispatch for: `invoice.paid` (billing_reason guard: only `subscription_cycle`/`subscription_create` trigger `credit_user` with `transaction_type="PLAN"`); `customer.subscription.created/updated` (sync `Subscription` row); `customer.subscription.deleted` (set `status="canceled"`); `cancel_subscription(subscription) -> Subscription`
+- [ ] `serializers.py` — `SubscriptionSerializer`, `CreateSubscriptionCheckoutSerializer`, `PlanSerializer`
+- [ ] `views.py` — `PlanListView` (public); `CreateSubscriptionCheckoutView` (authenticated); `SubscriptionDetailView` (authenticated, 404 if none); `CancelSubscriptionView` (authenticated POST)
+- [ ] `urls.py` — `GET api/billing/plans/`, `POST api/billing/subscription/checkout/`, `GET api/billing/subscription/`, `POST api/billing/subscription/cancel/`, `GET billing/subscription/success/`
+- [ ] `tests/test_subscriptions.py` — `invoice.paid` credits once; duplicate event idempotent; manual billing_reason skipped; subscription status transitions; cancel API; `PlanListView` public access; 404 when no subscription
+
+**Acceptance**: `invoice.paid` grants `credits_per_period` credits; duplicates are absorbed; subscription status reflected in `Subscription` row; `GET /api/billing/plans/` is unauthenticated; `pytest --cov-fail-under=90` passes.
+
+---
+
+#### Phase 5: React UI — Credit Dashboard and Pricing Page
+
+**Estimated hours**: 10–14 h
+
+**Delivers**: Django template mount points for a React billing UI + publishable key API; React starter component guide in README.
+
+- [ ] `views.py` — `StripPublishableKeyView` (authenticated, returns `{"publishable_key": ...}` resolved from env var — never hardcoded); `BillingDashboardView(LoginRequiredMixin, TemplateView)`; `PricingPageView(TemplateView)` (public)
+- [ ] Templates — `dashboard.html` (`<div id="billing-root" data-view="dashboard">`); `pricing.html` (`<div id="billing-root" data-view="pricing">`)
+- [ ] `urls.py` — `GET billing/dashboard/`, `GET billing/pricing/`, `GET api/billing/config/`
+- [ ] `README.md` — React starter guide: five components (CreditBalance widget, PricingPage, PurchaseButton, SubscriptionStatus, TransactionHistory), exact API endpoints, TanStack Query patterns, shadcn/ui component choices, `loadStripe()` redirect pattern
+- [ ] `tests/test_views.py` extensions — dashboard redirects unauthenticated; pricing page public; config returns publishable key
+
+**Acceptance**: Dashboard redirects anonymous users; pricing page public; API returns publishable key (never secret key); React starter guide documented; `pytest --cov-fail-under=90` passes (backend only).
+
+---
+
+#### Phase 6: Tests, Docs, and Release Prep
+
+**Estimated hours**: 6–8 h
+
+**Delivers**: 90%+ coverage, mypy clean, `debit_user` API, decisions.md billing contract, full public README.
+
+- [ ] `services.py` — `debit_user(user, amount, description) -> CreditTransaction` with `InsufficientCreditsError(BillingError)` guard; uses `select_for_update()` inside `transaction.atomic()`
+- [ ] `tests/test_debit.py` — `debit_user` success, `InsufficientCreditsError` when balance zero, `balance_after` accuracy, `transaction_type="USAGE"`
+- [ ] `tests/test_apps.py` — `AppConfig` attributes; `ready()` does not raise
+- [ ] `tests/test_circular_import.py` — top-level import confirms no circular dependency (mirrors auth module pattern)
+- [ ] Coverage audit — run `pytest --cov-report=html`; close any branch below 80% per-file
+- [ ] `decisions.md` — add billing module contract section (mirrors notifications contract at line 928): authoritative config in env vars + `quickscale.yml`; `WebhookEvent` is the idempotency gate; `debit_user` is the approved credit-consumption API; Stripe keys never stored in DB
+- [ ] `README.md` — finalize public docs: env var list, Stripe dashboard setup, credits system explanation, React UI integration guide, debit API usage example
+- [ ] `module.yml` — version `"0.85.0"`, all deps pinned
+- [ ] `mypy src/quickscale_modules_billing` — zero errors
+- [ ] CLI gating — coordinate with CLI team to enable `billing` as a selectable module in `quickscale plan`
+
+**Acceptance**: `pytest --cov-fail-under=90`; `mypy` clean; no circular imports; `decisions.md` billing contract section present; `debit_user` raises `InsufficientCreditsError` when balance insufficient; module selectable via `quickscale plan --add billing`.
+
+---
+
+#### Cross-Phase Technical Notes
+
+- **Credit ledger safety**: `credit_user` and `debit_user` MUST use `select_for_update()` on `CreditBalance` inside `transaction.atomic()`, then `F('balance') + amount` ORM update followed by `refresh_from_db()`. Never `balance = balance + amount` in Python.
+- **Webhook idempotency**: `WebhookEvent.stripe_event_id` unique constraint + `get_or_create` in `StripeWebhookView` is the outer gate. A second Stripe delivery of the same event is absorbed at the view layer before any handler runs.
+- **No dj-stripe**: `stripe` SDK calls only, isolated to `services.py`. Mock with `unittest.mock.patch` in all tests.
+- **Secret handling**: Raw Stripe keys are never stored in the database. Only env-var names are stored in config. Keys are resolved at call time via `os.getenv()`, following the notifications module pattern.
 
 ---
 

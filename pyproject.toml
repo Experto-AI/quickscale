@@ -28,7 +28,7 @@ quickscale-module-social = {path = "./quickscale_modules/social", develop = true
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks
-pytest = "^9.0.2"
+pytest = "^9.0.3"
 pytest-cov = "^7.1.0"  # Updated for better coverage compatibility
 coverage = "^7.13.5"  # Pin to avoid templite syntax errors with newer versions
 pytest-docker = "^3.2.5"
