@@ -13,10 +13,10 @@ packages = [{include = "quickscale_modules_storage", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.13,<3.15"
-Django = ">=6.0.3,<6.1.0"
+Django = ">=6.0.5,<6.1.0"
 django-storages = {version = "^1.14.6", optional = true}
 boto3 = {version = "^1.40.46", optional = true}
-Pillow = ">=12.1.1,<13.0.0"
+Pillow = ">=12.2.0,<13.0.0"
 
 [tool.poetry.extras]
 cloud = ["django-storages", "boto3"]
