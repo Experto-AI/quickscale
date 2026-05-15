@@ -11,6 +11,7 @@ from click.testing import CliRunner
 from quickscale_cli.commands.apply_command import (
     _abort_for_not_ready_modules,
     _regenerate_managed_wiring_for_apply,
+    _validate_module_prerequisites,
     apply,
 )
 
@@ -152,6 +153,38 @@ modules:
 
             assert result.exit_code != 0
             assert "Configuration error" in result.output
+
+    @pytest.mark.parametrize(
+        ("options", "expected_marker"),
+        [
+            (
+                {"publishable_key_env_var": "stripe-publishable-key"},
+                "publishable_key_env_var must be an environment variable name",
+            ),
+            (
+                {"billing_currency": "credits"},
+                "billing_currency must be one of the supported QuickScale billing currency codes",
+            ),
+        ],
+    )
+    def test_apply_billing_prerequisites_fail_before_readiness_gate(
+        self,
+        options,
+        expected_marker,
+        capsys,
+    ):
+        """Billing apply preflight should report contract issues before readiness."""
+        qs_config = SimpleNamespace(
+            modules={"billing": SimpleNamespace(options=options)}
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Billing module configuration is incomplete for apply" in error_output
+        assert expected_marker in error_output
+        assert "references modules that are not public-ready" not in error_output
 
     def test_abort_for_not_ready_modules_reports_billing_reason(self, capsys):
         """Test billing hits apply's non-public-ready abort helper."""

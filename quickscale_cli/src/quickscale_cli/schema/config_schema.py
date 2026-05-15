@@ -11,6 +11,12 @@ from typing import Any
 
 import yaml
 
+from quickscale_cli.billing_contract import (
+    BILLING_ENV_VAR_OPTION_NAMES,
+    BILLING_MODULE_OPTION_KEYS,
+    validate_billing_currency,
+    validate_billing_env_var_reference,
+)
 from quickscale_cli.auth_contract import (
     AUTH_AUTHENTICATION_METHOD_OPTION,
     AUTH_AUTHENTICATION_METHOD_VALUES,
@@ -239,6 +245,67 @@ def _validate_auth_module_options(
             )
 
 
+def _validate_billing_module_options(
+    module_options: dict[str, Any],
+    yaml_content: str,
+) -> None:
+    """Validate billing config keys and value shapes before readiness gating."""
+    billing_option_keys = set(BILLING_MODULE_OPTION_KEYS)
+
+    for option_name in module_options:
+        if option_name not in billing_option_keys:
+            line = _find_line_number(yaml_content, option_name)
+            suggestion = _suggest_similar_key(option_name, billing_option_keys)
+            suggestion_text = (
+                f"Use modules.billing.{suggestion} instead."
+                if suggestion
+                else "Supported keys: "
+                + ", ".join(
+                    f"modules.billing.{key}" for key in sorted(billing_option_keys)
+                )
+            )
+            raise ConfigValidationError(
+                f"Unknown key '{option_name}' in modules.billing section",
+                line=line,
+                suggestion=suggestion_text,
+            )
+
+    if "enabled" in module_options and not isinstance(module_options["enabled"], bool):
+        raise ConfigValidationError(
+            "'modules.billing.enabled' must be a boolean (true/false)",
+            line=_find_line_number(yaml_content, "enabled"),
+        )
+
+    for option_name in BILLING_ENV_VAR_OPTION_NAMES:
+        if option_name not in module_options:
+            continue
+
+        issue = validate_billing_env_var_reference(
+            option_name,
+            module_options[option_name],
+        )
+        if issue:
+            raise ConfigValidationError(
+                issue,
+                line=_find_line_number(yaml_content, option_name),
+                suggestion=(
+                    "Use uppercase environment-variable names such as "
+                    "STRIPE_SECRET_KEY."
+                ),
+            )
+
+    if "billing_currency" in module_options:
+        currency_issue = validate_billing_currency(
+            module_options["billing_currency"],
+        )
+        if currency_issue:
+            raise ConfigValidationError(
+                currency_issue,
+                line=_find_line_number(yaml_content, "billing_currency"),
+                suggestion="Use a supported ISO 4217 code such as usd or eur.",
+            )
+
+
 def _validate_version(data: dict, yaml_content: str) -> None:
     """Validate the version field."""
     if "version" not in data:
@@ -426,18 +493,6 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
                 or f"Available modules: {', '.join(sorted(AVAILABLE_MODULES))}",
             )
 
-        readiness_reason = get_module_readiness_reason(module_name)
-        if readiness_reason is not None:
-            line = _find_line_number(yaml_content, module_name)
-            raise ConfigValidationError(
-                readiness_reason,
-                line=line,
-                suggestion=(
-                    "Remove it from quickscale.yml and choose a shipped module: "
-                    + ", ".join(sorted(READY_MODULES))
-                ),
-            )
-
         if module_options is None:
             module_options = {}
         elif not isinstance(module_options, dict):
@@ -449,6 +504,20 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
 
         if module_name == "auth":
             _validate_auth_module_options(module_options, yaml_content)
+        if module_name == "billing":
+            _validate_billing_module_options(module_options, yaml_content)
+
+        readiness_reason = get_module_readiness_reason(module_name)
+        if readiness_reason is not None:
+            line = _find_line_number(yaml_content, module_name)
+            raise ConfigValidationError(
+                readiness_reason,
+                line=line,
+                suggestion=(
+                    "Remove it from quickscale.yml and choose a shipped module: "
+                    + ", ".join(sorted(READY_MODULES))
+                ),
+            )
 
         modules[module_name] = ModuleConfig(name=module_name, options=module_options)
 

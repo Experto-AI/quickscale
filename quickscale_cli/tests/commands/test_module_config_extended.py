@@ -23,6 +23,7 @@ from quickscale_cli.commands.module_config import (
     apply_analytics_configuration,
     apply_auth_configuration,
     apply_backups_configuration,
+    apply_billing_configuration,
     apply_blog_configuration,
     apply_crm_configuration,
     apply_forms_configuration,
@@ -33,6 +34,7 @@ from quickscale_cli.commands.module_config import (
     configure_analytics_module,
     configure_auth_module,
     configure_backups_module,
+    configure_billing_module,
     configure_forms_module,
     configure_storage_module,
     configure_crm_module,
@@ -41,6 +43,7 @@ from quickscale_cli.commands.module_config import (
     get_default_analytics_config,
     get_default_auth_config,
     get_default_backups_config,
+    get_default_billing_config,
     get_default_crm_config,
     get_default_forms_config,
     get_default_notifications_config,
@@ -1586,6 +1589,82 @@ class TestAnalyticsModuleConfig:
                 "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
                 "posthog_host": "https://eu.i.posthog.com",
                 "exclude_staff": True,
+            },
+        )
+
+
+class TestBillingModuleConfig:
+    """Tests for billing module configurator registration and normalization."""
+
+    def test_billing_default_config_keys_match_manifest_contract_intent(self):
+        config = get_default_billing_config()
+
+        assert config["enabled"] is True
+        assert config["publishable_key_env_var"] == "STRIPE_PUBLISHABLE_KEY"
+        assert config["secret_key_env_var"] == "STRIPE_SECRET_KEY"
+        assert config["webhook_secret_env_var"] == "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+        assert config["billing_currency"] == "usd"
+
+    def test_billing_in_module_configurators(self):
+        assert "billing" in MODULE_CONFIGURATORS
+
+        config = configure_billing_module(non_interactive=True)
+
+        assert config["enabled"] is True
+        assert config["billing_currency"] == "usd"
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_billing_interactive_normalizes_values(
+        self,
+        mock_confirm,
+        mock_prompt,
+    ):
+        mock_confirm.return_value = True
+        mock_prompt.side_effect = [
+            "  OPS_STRIPE_PUBLISHABLE_KEY  ",
+            " OPS_STRIPE_SECRET_KEY ",
+            "  OPS_BILLING_WEBHOOK_SECRET ",
+            " EUR ",
+        ]
+
+        config = configure_billing_module(non_interactive=False)
+
+        assert config == {
+            "enabled": True,
+            "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
+            "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
+            "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
+            "billing_currency": "eur",
+        }
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    def test_apply_billing_configuration_regenerates_managed_wiring(
+        self,
+        mock_regenerate,
+        tmp_path,
+    ):
+        project = _make_project(tmp_path)
+
+        apply_billing_configuration(
+            project,
+            {
+                "publishable_key_env_var": " OPS_STRIPE_PUBLISHABLE_KEY ",
+                "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
+                "webhook_secret_env_var": " OPS_BILLING_WEBHOOK_SECRET ",
+                "billing_currency": "EUR",
+            },
+        )
+
+        mock_regenerate.assert_called_once_with(
+            project,
+            "billing",
+            get_default_billing_config()
+            | {
+                "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
+                "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
+                "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
+                "billing_currency": "eur",
             },
         )
 

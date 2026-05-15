@@ -160,12 +160,12 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Delivers**: A concrete billing config contract that the planner, `quickscale.yml` validation, and apply flow can enforce before the module is marked publicly ready.
 
-- [ ] `quickscale_cli/src/quickscale_cli/billing_contract.py` — `default_billing_module_options()`, `resolve_billing_module_options()`, env-var reference validation, currency validation, and `billing_production_targeted()` helper mirroring analytics/notifications contract patterns
-- [ ] `quickscale_cli/tests/test_billing_contract.py` — defaults match `module.yml`; invalid env-var names fail; invalid currency fails; resolved config is stable
-- [ ] `quickscale_cli/src/quickscale_cli/schema/config_schema.py` — reject unknown `modules.billing.*` keys and surface actionable suggestions
-- [ ] `quickscale_cli/src/quickscale_cli/commands/module_config.py` — interactive prompt/resolver for the five mutable keys above
-- [ ] `quickscale_cli/src/quickscale_cli/commands/apply_command.py` — validate resolved billing config before wiring; fail hard on malformed env-var references instead of silently embedding a broken module
-- [ ] `quickscale_cli/src/quickscale_cli/module_catalog.py` — keep `billing.ready = False` in this phase; the readiness flip happens only after the full module surface ships
+- [x] `quickscale_cli/src/quickscale_cli/billing_contract.py` — `default_billing_module_options()`, `resolve_billing_module_options()`, env-var reference validation, currency validation, and `billing_production_targeted()` helper mirroring analytics/notifications contract patterns
+- [x] `quickscale_cli/tests/test_billing_contract.py` — defaults match `module.yml`; invalid env-var names fail; invalid currency fails; resolved config is stable
+- [x] `quickscale_cli/src/quickscale_cli/schema/config_schema.py` — reject unknown `modules.billing.*` keys and surface actionable suggestions
+- [x] `quickscale_cli/src/quickscale_cli/commands/module_config.py` — interactive prompt/resolver for the five mutable keys above
+- [x] `quickscale_cli/src/quickscale_cli/commands/apply_command.py` — validate resolved billing config before wiring; fail hard on malformed env-var references instead of silently embedding a broken module
+- [x] `quickscale_cli/src/quickscale_cli/module_catalog.py` — keep `billing.ready = False` in this phase; the readiness flip happens only after the full module surface ships
 
 **Acceptance**: Invalid `modules.billing.*` values fail fast in `quickscale.yml` validation and apply preflight; defaults match `module.yml`; billing still remains placeholder-only in public planner flows at the end of this phase.
 

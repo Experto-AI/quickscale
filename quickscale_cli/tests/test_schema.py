@@ -423,6 +423,64 @@ modules:
         else:
             assert "placeholder inventory only" in message
 
+    def test_billing_unknown_key_is_rejected_before_readiness_gate(self):
+        """Billing key validation should fire before the non-public-ready error."""
+        yaml_content = """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+modules:
+  billing:
+    plan_slug: starter
+"""
+
+        with pytest.raises(ConfigValidationError) as exc:
+            validate_config(yaml_content)
+
+        message = str(exc.value)
+        assert "Unknown key 'plan_slug' in modules.billing section" in message
+        assert "public-ready QuickScale module" not in message
+
+    @pytest.mark.parametrize(
+        ("option_name", "option_value", "expected_marker"),
+        [
+            (
+                "publishable_key_env_var",
+                '"stripe-publishable-key"',
+                "publishable_key_env_var must be an environment variable name",
+            ),
+            (
+                "billing_currency",
+                '"credits"',
+                "billing_currency must be one of the supported QuickScale billing currency codes",
+            ),
+        ],
+    )
+    def test_billing_invalid_values_fail_before_readiness_gate(
+        self,
+        option_name,
+        option_value,
+        expected_marker,
+    ):
+        """Billing value validation should be actionable before readiness gating."""
+        yaml_content = f"""
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+modules:
+  billing:
+    {option_name}: {option_value}
+"""
+
+        with pytest.raises(ConfigValidationError) as exc:
+            validate_config(yaml_content)
+
+        message = str(exc.value)
+        assert expected_marker in message
+        assert "public-ready QuickScale module" not in message
+
     def test_unknown_top_level_key(self):
         """Test error for unknown top-level key"""
         yaml_content = """

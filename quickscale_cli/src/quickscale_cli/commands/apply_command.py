@@ -21,6 +21,7 @@ from quickscale_cli.analytics_contract import (
     resolve_analytics_module_options,
     validate_analytics_module_options,
 )
+from quickscale_cli.billing_contract import validate_billing_module_options
 from quickscale_cli.backups_contract import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -720,6 +721,25 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
 
 def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     """Validate actionable module-specific prerequisites before apply proceeds."""
+    billing_config = qs_config.modules.get("billing")
+    if billing_config is not None:
+        billing_issues = validate_billing_module_options(billing_config.options or {})
+        if billing_issues:
+            click.secho(
+                "\n❌ Billing module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in billing_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Billing remains non-public-ready in public planner/apply flows, "
+                "but internal billing config still must use valid env-var references "
+                "and a supported currency code.",
+                err=True,
+            )
+            raise click.Abort()
+
     _abort_for_not_ready_modules(
         list(qs_config.modules.keys()), source="quickscale.yml"
     )

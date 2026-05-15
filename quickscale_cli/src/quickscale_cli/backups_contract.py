@@ -10,6 +10,7 @@ from collections.abc import Mapping
 import re
 from typing import Any
 
+from quickscale_cli.billing_contract import normalize_billing_module_options
 from quickscale_cli.analytics_contract import normalize_analytics_module_options
 from quickscale_cli.auth_contract import normalize_auth_module_options
 from quickscale_cli.crm_contract import normalize_crm_module_options
@@ -116,6 +117,8 @@ def sanitize_module_options(
         return normalize_auth_module_options(options)
     if module_name == "backups":
         return normalize_backups_module_options(options)
+    if module_name == "billing":
+        return normalize_billing_module_options(options)
     if module_name == "crm":
         return normalize_crm_module_options(options)
     if module_name == "notifications":

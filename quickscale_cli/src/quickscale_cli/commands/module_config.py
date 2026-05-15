@@ -21,6 +21,11 @@ from quickscale_cli.analytics_contract import (
     resolve_analytics_module_options,
     validate_analytics_module_options,
 )
+from quickscale_cli.billing_contract import (
+    default_billing_module_options,
+    resolve_billing_module_options,
+    validate_billing_module_options,
+)
 from quickscale_cli.auth_contract import (
     default_auth_module_options,
     resolve_auth_module_options,
@@ -1723,6 +1728,115 @@ def apply_analytics_configuration(
 
 
 # ============================================================================
+# BILLING MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_billing_config() -> dict[str, Any]:
+    """Return default configuration for the billing module."""
+    return default_billing_module_options()
+
+
+def _raise_for_invalid_billing_config(config: Mapping[str, Any]) -> None:
+    """Abort with actionable messaging when billing config is invalid."""
+    issues = validate_billing_module_options(config)
+    if not issues:
+        return
+
+    click.secho("\n❌ Invalid billing module configuration:", fg="red", err=True)
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    raise click.Abort()
+
+
+def configure_billing_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Configure billing module settings interactively or with defaults."""
+    defaults = resolve_billing_module_options(existing_config)
+
+    if non_interactive:
+        click.echo("\n⚙️  Using default billing module configuration...")
+        click.echo("  • Runtime: " + ("Enabled" if defaults["enabled"] else "Disabled"))
+        click.echo(
+            "  • Publishable key env var: " + str(defaults["publishable_key_env_var"])
+        )
+        click.echo("  • Secret key env var: " + str(defaults["secret_key_env_var"]))
+        click.echo(
+            "  • Webhook secret env var: " + str(defaults["webhook_secret_env_var"])
+        )
+        click.echo("  • Billing currency: " + str(defaults["billing_currency"]))
+        _raise_for_invalid_billing_config(defaults)
+        return defaults
+
+    click.echo("\n⚙️  Configuring billing module...")
+    click.echo(
+        "Billing remains internal-only in public QuickScale flows during this "
+        "phase. These settings capture the planner/apply contract that later "
+        "phases will wire into the runtime.\n"
+    )
+
+    config = resolve_billing_module_options(
+        {
+            "enabled": click.confirm(
+                "Enable the billing runtime?",
+                default=bool(defaults["enabled"]),
+            ),
+            "publishable_key_env_var": click.prompt(
+                "Stripe publishable key environment variable",
+                default=str(defaults["publishable_key_env_var"]),
+                show_default=True,
+            ).strip(),
+            "secret_key_env_var": click.prompt(
+                "Stripe secret key environment variable",
+                default=str(defaults["secret_key_env_var"]),
+                show_default=True,
+            ).strip(),
+            "webhook_secret_env_var": click.prompt(
+                "Stripe webhook secret environment variable",
+                default=str(defaults["webhook_secret_env_var"]),
+                show_default=True,
+            ).strip(),
+            "billing_currency": click.prompt(
+                "Billing currency (ISO 4217)",
+                default=str(defaults["billing_currency"]),
+                show_default=True,
+            ).strip(),
+        }
+    )
+
+    _raise_for_invalid_billing_config(config)
+    return config
+
+
+def apply_billing_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
+    """Apply billing module configuration via managed wiring files."""
+    resolved = resolve_billing_module_options(config)
+    _raise_for_invalid_billing_config(resolved)
+    _regenerate_wiring_for_execution_mode(
+        project_path,
+        "billing",
+        resolved,
+        execution_mode=execution_mode,
+    )
+
+    click.echo("\n📋 Configuration applied:")
+    click.echo("  • Runtime: " + ("Enabled" if resolved["enabled"] else "Disabled"))
+    click.echo(
+        "  • Publishable key env var: " + str(resolved["publishable_key_env_var"])
+    )
+    click.echo("  • Secret key env var: " + str(resolved["secret_key_env_var"]))
+    click.echo("  • Webhook secret env var: " + str(resolved["webhook_secret_env_var"]))
+    click.echo("  • Billing currency: " + str(resolved["billing_currency"]))
+
+
+# ============================================================================
 # SOCIAL MODULE CONFIGURATION
 # ============================================================================
 
@@ -1870,6 +1984,7 @@ MODULE_CONFIGURATORS = {
     "forms": (configure_forms_module, apply_forms_configuration),
     "storage": (configure_storage_module, apply_storage_configuration),
     "backups": (configure_backups_module, apply_backups_configuration),
+    "billing": (configure_billing_module, apply_billing_configuration),
     "notifications": (
         configure_notifications_module,
         apply_notifications_configuration,
