@@ -189,53 +189,91 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ---
 
-#### Phase 4: One-Time Credit Purchases End-to-End
+#### Phase 4a: One-Time Credit Purchases — Domain Layer
 
-**Estimated hours**: 10–12 h
+**Estimated hours**: 5–6 h
 
-**Delivers**: Full purchase flow — API to create a Stripe Checkout Session + webhook handler that credits the user on payment completion.
+**Delivers**: The purchase domain layer — checkout session creation, webhook dispatch for `checkout.session.completed`, and the serializers that validate purchase requests and expose balance/transaction data. No HTTP surface yet.
 
 - [ ] `services.py` — `create_checkout_session(user, plan, success_url, cancel_url) -> str` (Stripe Checkout `mode="payment"`); attach local metadata on both the Checkout Session and underlying PaymentIntent; `handle_stripe_event` dispatch for `checkout.session.completed` → calls `credit_user` with `transaction_type="PURCHASE"`
 - [ ] `serializers.py` — `CreateCheckoutSessionSerializer` (validates plan slug + `billing_interval="one_time"`), `CreditBalanceSerializer`, `CreditTransactionSerializer`
+- [ ] `tests/test_purchase.py` (service layer) — `create_checkout_session` returns Stripe URL; `checkout.session.completed` credits correctly; idempotency on duplicate event delivery; second distinct event object for the same Checkout Session does not double-credit; balance snapshot accuracy
+
+**Acceptance**: `create_checkout_session` returns a Stripe-hosted URL; duplicate `checkout.session.completed` deliveries and duplicate underlying Checkout Session events do not double-credit; `pytest --cov-fail-under=90` passes (service layer only).
+
+---
+
+#### Phase 4b: One-Time Credit Purchases — API Surface and Templates
+
+**Estimated hours**: 5–6 h
+
+**Delivers**: The HTTP surface for one-time purchases — authenticated API views, redirect-target template views, and end-to-end coverage of the purchase flow through the API layer.
+
 - [ ] `views.py` — `CreateCheckoutSessionView` (authenticated, returns `checkout_url`); `CreditBalanceView`; `CreditTransactionListView` (paginated); `PurchaseSuccessView` / `PurchaseCancelView` (template views for Stripe redirect targets)
 - [ ] `urls.py` — `POST api/billing/purchase/checkout/`, `GET api/billing/balance/`, `GET api/billing/transactions/`, `GET billing/purchase/success/`, `GET billing/purchase/cancel/`
 - [ ] Templates — `purchase_success.html` and `purchase_cancel.html` with React mount div pattern
-- [ ] `tests/test_purchase.py` — full purchase flow mocked; idempotency on duplicate `checkout.session.completed`; second distinct event object for the same Checkout Session does not double-credit; balance reflects credited amount; unauthenticated → 401
+- [ ] `tests/test_purchase.py` extensions — `POST /api/billing/purchase/checkout/` returns checkout URL; `GET /api/billing/balance/` reflects credited amount; `GET /api/billing/transactions/` is paginated; unauthenticated → 401; redirect template views respond 200
 
-**Acceptance**: `POST /api/billing/purchase/checkout/` returns checkout URL; duplicate webhook delivery and duplicate underlying Checkout Session events do not double-credit; `GET /api/billing/balance/` reflects new balance; `pytest --cov-fail-under=90` passes.
+**Acceptance**: `POST /api/billing/purchase/checkout/` returns checkout URL; `GET /api/billing/balance/` reflects new balance; unauthenticated requests are rejected; `pytest --cov-fail-under=90` passes.
 
 ---
 
-#### Phase 5: Subscription Plans End-to-End
+#### Phase 5a: Subscription Core Lifecycle
 
-**Estimated hours**: 12–14 h
+**Estimated hours**: 7–8 h
 
-**Delivers**: Recurring subscription flow — Stripe Checkout Session in subscription mode, lifecycle webhooks that credit users on each billing cycle, and Stripe-hosted self-service for payment-method recovery.
+**Delivers**: The subscription domain layer — checkout session creation, invoice lifecycle webhooks that credit users on each billing cycle, subscription state sync, and the read-only plan/subscription API surface.
 
-- [ ] `services.py` — `create_subscription_checkout_session(user, plan, success_url, cancel_url) -> str` (Stripe Checkout `mode="subscription"`); attach metadata on the Checkout Session and `subscription_data.metadata`; `handle_stripe_event` dispatch for: `invoice.paid` (billing_reason guard: only `subscription_cycle`/`subscription_create` trigger `credit_user` with `transaction_type="PLAN"`), `invoice.payment_failed` (set local `Subscription.status = "past_due"`; no service suspension in v0.85.0 — Stripe-hosted portal handles payment-method recovery), `customer.subscription.created/updated` (sync `Subscription` row), `customer.subscription.deleted` (set `status="canceled"`); `cancel_subscription(subscription) -> Subscription` defaults to `cancel_at_period_end=True`; `create_billing_portal_session(user, return_url) -> str`
+- [ ] `services.py` — `create_subscription_checkout_session(user, plan, success_url, cancel_url) -> str` (Stripe Checkout `mode="subscription"`); attach metadata on the Checkout Session and `subscription_data.metadata`; `handle_stripe_event` dispatch for: `invoice.paid` (billing_reason guard: only `subscription_cycle`/`subscription_create` trigger `credit_user` with `transaction_type="PLAN"`), `invoice.payment_failed` (set local `Subscription.status = "past_due"`), `customer.subscription.created/updated` (sync `Subscription` row), `customer.subscription.deleted` (set `status="canceled"`)
 - [ ] `serializers.py` — `SubscriptionSerializer`, `CreateSubscriptionCheckoutSerializer`, `PlanSerializer`
-- [ ] `views.py` — `PlanListView` (public); `CreateSubscriptionCheckoutView` (authenticated); `SubscriptionDetailView` (authenticated, 404 if none); `CancelSubscriptionView` (authenticated POST); `CreateBillingPortalSessionView` (authenticated POST, returns portal URL)
-- [ ] `urls.py` — `GET api/billing/plans/`, `POST api/billing/subscription/checkout/`, `GET api/billing/subscription/`, `POST api/billing/subscription/cancel/`, `POST api/billing/portal/`, `GET billing/subscription/success/`
-- [ ] `tests/test_subscriptions.py` — `invoice.paid` credits once; duplicate event idempotent; second distinct event object for the same invoice does not double-credit; manual billing_reason skipped; payment-failed status sync; subscription status transitions; cancel API defaults to period-end cancel; portal-session API; `PlanListView` public access; 404 when no subscription
+- [ ] `views.py` — `PlanListView` (public); `CreateSubscriptionCheckoutView` (authenticated); `SubscriptionDetailView` (authenticated, 404 if none)
+- [ ] `urls.py` — `GET api/billing/plans/`, `POST api/billing/subscription/checkout/`, `GET api/billing/subscription/`, `GET billing/subscription/success/`
+- [ ] `tests/test_subscriptions.py` — `invoice.paid` credits once; duplicate event idempotent; second distinct event object for the same invoice does not double-credit; manual billing_reason skipped; payment-failed status sync; subscription status transitions; `PlanListView` public access; 404 when no subscription
+
+**Acceptance**: `invoice.paid` grants `credits_per_period` credits; duplicate deliveries and duplicate underlying invoice events are absorbed; `invoice.payment_failed` sets `Subscription.status = "past_due"` and is restored on subsequent `invoice.paid`; `GET /api/billing/plans/` is unauthenticated; `pytest --cov-fail-under=90` passes.
+
+---
+
+#### Phase 5b: Subscription Self-Service and Event Recovery
+
+**Estimated hours**: 5–6 h
+
+**Delivers**: Cancel and billing portal flows, plus out-of-order event recovery so a late `invoice.paid` always reconciles local state even when subscription sync hasn't landed yet.
+
+- [ ] `services.py` — `cancel_subscription(subscription) -> Subscription` defaults to `cancel_at_period_end=True`; `create_billing_portal_session(user, return_url) -> str`
+- [ ] `views.py` — `CancelSubscriptionView` (authenticated POST); `CreateBillingPortalSessionView` (authenticated POST, returns portal URL)
+- [ ] `urls.py` — `POST api/billing/subscription/cancel/`, `POST api/billing/portal/`
+- [ ] `tests/test_subscriptions.py` extensions — cancel API defaults to period-end cancel; portal-session API returns URL
 - [ ] `tests/test_subscription_ordering.py` — `invoice.paid` arriving before `customer.subscription.created` still resolves user/plan via metadata or Stripe API retrieval and backfills the local `Subscription` row
 
-**Acceptance**: `invoice.paid` grants `credits_per_period` credits; duplicate deliveries and duplicate underlying invoice events are absorbed; `invoice.payment_failed` sets `Subscription.status = "past_due"` and is restored to `"active"` on subsequent `invoice.paid`; out-of-order subscription events still reconcile correctly; `GET /api/billing/plans/` is unauthenticated; `POST /api/billing/portal/` returns a Stripe-hosted self-service URL; `pytest --cov-fail-under=90` passes.
+**Acceptance**: Cancel defaults to `cancel_at_period_end=True`; `POST /api/billing/portal/` returns a Stripe-hosted self-service URL; out-of-order subscription events still reconcile correctly; `pytest --cov-fail-under=90` passes.
 
 ---
 
-#### Phase 6: Module-Owned UI — Credit Dashboard and Pricing Page
+#### Phase 6a: Module-Owned UI — Backend Pages and API
 
-**Estimated hours**: 10–14 h
+**Estimated hours**: 4–6 h
 
-**Delivers**: Django template mount points for a billing UI + publishable key API. In v0.85.0, QuickScale ships module-owned billing pages and a manual React-adoption guide rather than rewriting user-owned frontend files during apply.
+**Delivers**: Django backend for billing UI — publishable key API, login-gated dashboard, and public pricing page. No Stripe JS or React in this phase; only the Django mount points and their tests.
 
 - [ ] `views.py` — `StripePublishableKeyView` (authenticated, returns `{"publishable_key": ...}` resolved from env var — never hardcoded); `BillingDashboardView(LoginRequiredMixin, TemplateView)`; `PricingPageView(TemplateView)` (public)
 - [ ] Templates — `dashboard.html` (`<div id="billing-root" data-view="dashboard">`); `pricing.html` (`<div id="billing-root" data-view="pricing">`)
 - [ ] `urls.py` — `GET billing/dashboard/`, `GET billing/pricing/`, `GET api/billing/config/`
-- [ ] `README.md` — React starter guide: five components (CreditBalance widget, PricingPage, PurchaseButton, SubscriptionStatus, TransactionHistory), exact API endpoints, TanStack Query patterns, shadcn/ui component choices, `loadStripe()` redirect pattern
-- [ ] `tests/test_views.py` extensions — dashboard redirects unauthenticated; pricing page public; config returns publishable key
+- [ ] `tests/test_views.py` extensions — dashboard redirects unauthenticated; pricing page public; config returns publishable key; config never leaks secret key
 
-**Acceptance**: Dashboard redirects anonymous users; pricing page public; API returns publishable key (never secret key); React starter guide documented; `pytest --cov-fail-under=90` passes (backend only).
+**Acceptance**: Dashboard redirects anonymous users to login; pricing page is publicly accessible; `GET /api/billing/config/` returns publishable key and never the secret key; `pytest --cov-fail-under=90` passes.
+
+---
+
+#### Phase 6b: React Integration Guide
+
+**Estimated hours**: 5–7 h
+
+**Delivers**: A complete React adoption guide in `README.md` so developers can wire the billing API into the generated React frontend without QuickScale rewriting user-owned files.
+
+- [ ] `README.md` — React starter guide covering: five components (CreditBalance widget, PricingPage, PurchaseButton, SubscriptionStatus, TransactionHistory); exact API endpoint reference table; TanStack Query patterns for balance polling and transaction pagination; shadcn/ui component choices for each surface; `loadStripe()` redirect pattern for checkout and portal flows; environment variable wiring (`VITE_STRIPE_PUBLISHABLE_KEY` from `/api/billing/config/`)
+
+**Acceptance**: All five component patterns documented with working API call examples; `loadStripe()` redirect pattern shown for both purchase and subscription checkout; env-var wiring is explicit and does not require hardcoded keys.
 
 ---
 
