@@ -14,6 +14,7 @@ packages = [{include = "quickscale_modules_billing", from = "src"}]
 [tool.poetry.dependencies]
 python = ">=3.13,<3.15"
 Django = ">=6.0.5,<6.1.0"
+djangorestframework = "^3.16.1"
 stripe = ">=15.0.0,<16.0.0"
 
 [tool.poetry.group.dev.dependencies]
@@ -28,6 +29,10 @@ target-version = "py313"
 
 [[tool.mypy.overrides]]
 module = "stripe.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "rest_framework.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

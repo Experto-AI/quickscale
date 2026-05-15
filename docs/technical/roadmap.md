@@ -195,9 +195,9 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Delivers**: The purchase domain layer — checkout session creation, webhook dispatch for `checkout.session.completed`, and the serializers that validate purchase requests and expose balance/transaction data. No HTTP surface yet.
 
-- [ ] `services.py` — `create_checkout_session(user, plan, success_url, cancel_url) -> str` (Stripe Checkout `mode="payment"`); attach local metadata on both the Checkout Session and underlying PaymentIntent; `handle_stripe_event` dispatch for `checkout.session.completed` → calls `credit_user` with `transaction_type="PURCHASE"`
-- [ ] `serializers.py` — `CreateCheckoutSessionSerializer` (validates plan slug + `billing_interval="one_time"`), `CreditBalanceSerializer`, `CreditTransactionSerializer`
-- [ ] `tests/test_purchase.py` (service layer) — `create_checkout_session` returns Stripe URL; `checkout.session.completed` credits correctly; idempotency on duplicate event delivery; second distinct event object for the same Checkout Session does not double-credit; balance snapshot accuracy
+- [x] `services.py` — `create_checkout_session(user, plan, success_url, cancel_url) -> str` (Stripe Checkout `mode="payment"`); attach local metadata on both the Checkout Session and underlying PaymentIntent; `handle_stripe_event` dispatch for `checkout.session.completed` → calls `credit_user` with `transaction_type="PURCHASE"`
+- [x] `serializers.py` — `CreateCheckoutSessionSerializer` (validates plan slug + `billing_interval="one_time"`), `CreditBalanceSerializer`, `CreditTransactionSerializer`
+- [x] `tests/test_purchase.py` (service layer) — `create_checkout_session` returns Stripe URL; `checkout.session.completed` credits correctly; idempotency on duplicate event delivery; second distinct event object for the same Checkout Session does not double-credit; balance snapshot accuracy
 
 **Acceptance**: `create_checkout_session` returns a Stripe-hosted URL; duplicate `checkout.session.completed` deliveries and duplicate underlying Checkout Session events do not double-credit; `pytest --cov-fail-under=90` passes (service layer only).
 
