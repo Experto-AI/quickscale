@@ -26,6 +26,7 @@ DEFAULT_BILLING_CURRENCY = "usd"
 DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
 DEFAULT_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"
 DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+STRIPE_EVENT_TYPE_CHECKOUT_SESSION_COMPLETED = "checkout.session.completed"
 STRIPE_EVENT_TYPE_INVOICE_PAID = "invoice.paid"
 _INVOICE_REFERENCE_KEYS = ("invoice_id",)
 _BUSINESS_OBJECT_REFERENCE_KEYS = (
@@ -36,6 +37,10 @@ _BUSINESS_OBJECT_REFERENCE_KEYS = (
     "stripe_subscription_id",
 )
 _USER_METADATA_KEY = "quickscale_user_reference"
+_PLAN_SLUG_METADATA_KEY = "quickscale_plan_slug"
+_PLAN_CREDITS_METADATA_KEY = "quickscale_plan_credits"
+_PLAN_INTERVAL_METADATA_KEY = "quickscale_plan_interval"
+_PRICE_ID_METADATA_KEY = "stripe_price_id"
 
 
 class BillingError(Exception):
@@ -170,6 +175,59 @@ class StripeClient:
         created_customer = self._stripe_module.Customer.create(**create_kwargs)
         return _normalize_mapping(created_customer)
 
+    def create_checkout_session(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        success_url: str,
+        cancel_url: str,
+        session_metadata: Mapping[str, str],
+        payment_intent_metadata: Mapping[str, str],
+        client_reference_id: str,
+    ) -> dict[str, Any]:
+        """Create a Stripe Checkout Session for a one-time purchase."""
+        self._activate_api_key()
+        checkout_module = getattr(self._stripe_module, "checkout", None)
+        checkout_session_api = getattr(checkout_module, "Session", None)
+        if checkout_session_api is None or not hasattr(checkout_session_api, "create"):
+            raise BillingConfigurationError(
+                "Stripe Checkout SDK support is unavailable in this environment."
+            )
+        created_session = checkout_session_api.create(
+            mode="payment",
+            customer=customer_id,
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            client_reference_id=client_reference_id,
+            metadata=dict(session_metadata),
+            payment_intent_data={"metadata": dict(payment_intent_metadata)},
+        )
+        return _normalize_mapping(created_session)
+
+    def retrieve_payment_intent(self, *, payment_intent_id: str) -> dict[str, Any]:
+        """Return a normalized Stripe PaymentIntent payload."""
+        self._activate_api_key()
+        payment_intent_api = getattr(self._stripe_module, "PaymentIntent", None)
+        if payment_intent_api is None or not hasattr(payment_intent_api, "retrieve"):
+            raise BillingConfigurationError(
+                "Stripe PaymentIntent SDK support is unavailable in this environment."
+            )
+        payment_intent = payment_intent_api.retrieve(payment_intent_id)
+        return _normalize_mapping(payment_intent)
+
+    def retrieve_price(self, *, price_id: str) -> dict[str, Any]:
+        """Return a normalized Stripe Price payload."""
+        self._activate_api_key()
+        price_api = getattr(self._stripe_module, "Price", None)
+        if price_api is None or not hasattr(price_api, "retrieve"):
+            raise BillingConfigurationError(
+                "Stripe Price SDK support is unavailable in this environment."
+            )
+        price = price_api.retrieve(price_id)
+        return _normalize_mapping(price)
+
     def construct_event(
         self,
         *,
@@ -275,6 +333,53 @@ def get_or_create_stripe_customer(
     return created_customer_id, True
 
 
+def create_checkout_session(
+    user: Any,
+    plan: Plan,
+    success_url: str,
+    cancel_url: str,
+    *,
+    stripe_client: Any | None = None,
+    settings_snapshot: BillingSettingsSnapshot | None = None,
+) -> str:
+    """Create a Stripe Checkout Session for a one-time credit purchase."""
+    snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
+    _ensure_billing_enabled(snapshot)
+
+    normalized_success_url = success_url.strip()
+    normalized_cancel_url = cancel_url.strip()
+    if not normalized_success_url or not normalized_cancel_url:
+        raise BillingValidationError("Checkout success and cancel URLs are required.")
+
+    _validate_one_time_purchase_plan(plan)
+
+    resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
+    stripe_price = resolved_client.retrieve_price(price_id=plan.stripe_price_id)
+    _validate_stripe_price_matches_plan(plan=plan, stripe_price=stripe_price)
+
+    customer_id, _ = get_or_create_stripe_customer(
+        user,
+        stripe_client=resolved_client,
+        settings_snapshot=snapshot,
+    )
+    session_metadata = _build_checkout_session_metadata(user, plan)
+    checkout_session = resolved_client.create_checkout_session(
+        customer_id=customer_id,
+        price_id=plan.stripe_price_id,
+        success_url=normalized_success_url,
+        cancel_url=normalized_cancel_url,
+        session_metadata=session_metadata,
+        payment_intent_metadata=session_metadata,
+        client_reference_id=_user_reference(user),
+    )
+    checkout_url = str(checkout_session.get("url") or "").strip()
+    if not checkout_url:
+        raise BillingError(
+            "Stripe checkout session creation did not return a hosted URL."
+        )
+    return checkout_url
+
+
 def credit_user(
     user: Any,
     *,
@@ -375,7 +480,13 @@ def handle_stripe_event(
                 update_fields=["event_type", "payload", "processing_error"]
             )
 
-            if event_type == STRIPE_EVENT_TYPE_INVOICE_PAID:
+            if event_type == STRIPE_EVENT_TYPE_CHECKOUT_SESSION_COMPLETED:
+                _handle_checkout_session_completed_event(
+                    event_payload,
+                    stripe_client=resolved_client,
+                )
+                processing_status = "processed"
+            elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAID:
                 _handle_invoice_paid_event(event_payload)
                 processing_status = "processed"
             else:
@@ -441,6 +552,70 @@ def _handle_invoice_paid_event(event_payload: Mapping[str, Any]) -> CreditTransa
     )
 
 
+def _handle_checkout_session_completed_event(
+    event_payload: Mapping[str, Any],
+    *,
+    stripe_client: Any | None = None,
+) -> CreditTransaction:
+    checkout_session_payload = _extract_event_object(event_payload)
+    checkout_session_id = str(checkout_session_payload.get("id") or "").strip()
+    if not checkout_session_id:
+        raise BillingWebhookError("Stripe checkout session payload is missing an id.")
+
+    checkout_mode = str(checkout_session_payload.get("mode") or "").strip()
+    if checkout_mode and checkout_mode != "payment":
+        raise BillingWebhookError(
+            "Stripe checkout session is not a one-time payment session."
+        )
+
+    payment_status = str(checkout_session_payload.get("payment_status") or "").strip()
+    if payment_status and payment_status != "paid":
+        raise BillingWebhookError("Stripe checkout session payment is not settled.")
+
+    payment_intent_payload = _retrieve_checkout_payment_intent_payload(
+        checkout_session_payload=checkout_session_payload,
+        stripe_client=stripe_client,
+    )
+    plan = _resolve_plan_for_checkout_session(
+        checkout_session_payload=checkout_session_payload,
+        payment_intent_payload=payment_intent_payload,
+    )
+    credited_amount = _resolve_checkout_session_credit_amount(
+        checkout_session_payload=checkout_session_payload,
+        payment_intent_payload=payment_intent_payload,
+    )
+    user = _resolve_user_for_checkout_session(
+        checkout_session_payload=checkout_session_payload,
+        payment_intent_payload=payment_intent_payload,
+    )
+    if user is None:
+        raise BillingWebhookError(
+            "Could not resolve a local user for the Stripe checkout session."
+        )
+
+    payment_intent_id = str(
+        checkout_session_payload.get("payment_intent") or ""
+    ).strip()
+    customer_id = str(checkout_session_payload.get("customer") or "").strip()
+    reference_data: dict[str, Any] = {
+        "checkout_session_id": checkout_session_id,
+        "stripe_customer_id": customer_id,
+        "stripe_price_id": plan.stripe_price_id,
+    }
+    if payment_intent_id:
+        reference_data["payment_intent_id"] = payment_intent_id
+
+    return credit_user(
+        user,
+        amount=credited_amount,
+        transaction_type=CreditTransaction.TransactionType.PURCHASE,
+        description=f"{plan.name} credits from Stripe checkout session {checkout_session_id}",
+        stripe_event_id=str(event_payload.get("id") or "").strip(),
+        stripe_object_id=checkout_session_id,
+        stripe_reference_data=reference_data,
+    )
+
+
 def _extract_event_object(event_payload: Mapping[str, Any]) -> dict[str, Any]:
     event_data = event_payload.get("data")
     if not isinstance(event_data, Mapping):
@@ -501,6 +676,30 @@ def _resolve_user_for_invoice(*, invoice_payload: Mapping[str, Any]) -> Any | No
         _normalize_mapping(invoice_payload.get("subscription_details") or {}),
         _normalize_mapping(invoice_payload.get("parent") or {}),
     ]
+    return _resolve_user_from_metadata_sources(metadata_sources)
+
+
+def _resolve_user_for_checkout_session(
+    *,
+    checkout_session_payload: Mapping[str, Any],
+    payment_intent_payload: Mapping[str, Any],
+) -> Any | None:
+    client_reference_id = str(
+        checkout_session_payload.get("client_reference_id") or ""
+    ).strip()
+    if client_reference_id:
+        user = _resolve_user_from_reference(client_reference_id)
+        if user is not None:
+            return user
+
+    return _resolve_user_from_metadata_sources(
+        [checkout_session_payload, payment_intent_payload]
+    )
+
+
+def _resolve_user_from_metadata_sources(
+    metadata_sources: list[Mapping[str, Any]],
+) -> Any | None:
     for metadata_source in metadata_sources:
         metadata = metadata_source.get("metadata")
         if not isinstance(metadata, Mapping):
@@ -512,6 +711,167 @@ def _resolve_user_for_invoice(*, invoice_payload: Mapping[str, Any]) -> Any | No
         if user is not None:
             return user
     return None
+
+
+def _resolve_plan_for_checkout_session(
+    *,
+    checkout_session_payload: Mapping[str, Any],
+    payment_intent_payload: Mapping[str, Any],
+) -> Plan:
+    metadata_sources = [checkout_session_payload, payment_intent_payload]
+    price_id = _extract_metadata_value(metadata_sources, _PRICE_ID_METADATA_KEY)
+    if not price_id:
+        raise BillingWebhookError(
+            "Stripe checkout session is missing immutable Stripe price metadata."
+        )
+
+    plan = Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
+    if plan is None:
+        raise BillingWebhookError(f"No billing plan matches Stripe price {price_id}.")
+
+    _validate_completed_checkout_plan(
+        plan,
+        expected_price_id=price_id,
+        expected_interval=_extract_metadata_value(
+            metadata_sources,
+            _PLAN_INTERVAL_METADATA_KEY,
+        ),
+    )
+    return plan
+
+
+def _resolve_checkout_session_credit_amount(
+    *,
+    checkout_session_payload: Mapping[str, Any],
+    payment_intent_payload: Mapping[str, Any],
+) -> int:
+    metadata_sources = [checkout_session_payload, payment_intent_payload]
+    stored_credits = _extract_metadata_value(
+        metadata_sources,
+        _PLAN_CREDITS_METADATA_KEY,
+    )
+    credited_amount = _normalize_integer(stored_credits)
+    if credited_amount is None or credited_amount <= 0:
+        raise BillingWebhookError(
+            "Stripe checkout session is missing immutable credit metadata."
+        )
+    return credited_amount
+
+
+def _retrieve_checkout_payment_intent_payload(
+    *,
+    checkout_session_payload: Mapping[str, Any],
+    stripe_client: Any | None,
+) -> dict[str, Any]:
+    payment_intent_id = str(
+        checkout_session_payload.get("payment_intent") or ""
+    ).strip()
+    if not payment_intent_id:
+        return {}
+    if _checkout_session_metadata_is_complete(checkout_session_payload):
+        return {}
+    if stripe_client is None or not hasattr(stripe_client, "retrieve_payment_intent"):
+        return {}
+    return _normalize_mapping(
+        stripe_client.retrieve_payment_intent(payment_intent_id=payment_intent_id)
+    )
+
+
+def _checkout_session_metadata_is_complete(
+    checkout_session_payload: Mapping[str, Any],
+) -> bool:
+    metadata = _normalize_mapping(checkout_session_payload.get("metadata") or {})
+    user_reference = str(metadata.get(_USER_METADATA_KEY) or "").strip()
+    plan_slug = str(metadata.get(_PLAN_SLUG_METADATA_KEY) or "").strip()
+    price_id = str(metadata.get(_PRICE_ID_METADATA_KEY) or "").strip()
+    return bool(user_reference and (plan_slug or price_id))
+
+
+def _extract_metadata_value(
+    metadata_sources: list[Mapping[str, Any]],
+    key: str,
+) -> str:
+    for metadata_source in metadata_sources:
+        metadata = metadata_source.get("metadata")
+        if not isinstance(metadata, Mapping):
+            continue
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _validate_one_time_purchase_plan(plan: Plan) -> None:
+    if not plan.is_active:
+        raise BillingValidationError("Billing plan is not active.")
+    if plan.billing_interval != Plan.BillingInterval.ONE_TIME:
+        raise BillingValidationError(
+            "Billing plan does not support one-time purchases."
+        )
+    if not str(plan.stripe_price_id or "").strip():
+        raise BillingValidationError("Billing plan is missing a Stripe price id.")
+
+
+def _validate_completed_checkout_plan(
+    plan: Plan,
+    *,
+    expected_price_id: str,
+    expected_interval: str,
+) -> None:
+    if not str(plan.stripe_price_id or "").strip():
+        raise BillingWebhookError("Billing plan is missing a Stripe price id.")
+    if plan.stripe_price_id != expected_price_id:
+        raise BillingWebhookError(
+            "Billing plan no longer matches the immutable checkout price."
+        )
+    if expected_interval and expected_interval != Plan.BillingInterval.ONE_TIME:
+        raise BillingWebhookError(
+            "Stripe checkout session metadata does not describe a one-time purchase."
+        )
+
+
+def _build_checkout_session_metadata(user: Any, plan: Plan) -> dict[str, str]:
+    metadata = _build_customer_metadata(user)
+    metadata.update(
+        {
+            _PLAN_SLUG_METADATA_KEY: plan.slug,
+            _PLAN_CREDITS_METADATA_KEY: str(plan.credits_per_period),
+            _PLAN_INTERVAL_METADATA_KEY: plan.billing_interval,
+            _PRICE_ID_METADATA_KEY: plan.stripe_price_id,
+        }
+    )
+    return metadata
+
+
+def _validate_stripe_price_matches_plan(
+    *,
+    plan: Plan,
+    stripe_price: Mapping[str, Any],
+) -> None:
+    unit_amount = _normalize_integer(stripe_price.get("unit_amount"))
+    if unit_amount is None or unit_amount != plan.price_cents:
+        raise BillingValidationError(
+            "Billing plan price does not match the referenced Stripe price amount."
+        )
+
+    currency = str(stripe_price.get("currency") or "").strip().lower()
+    if currency != plan.currency.casefold():
+        raise BillingValidationError(
+            "Billing plan currency does not match the referenced Stripe price."
+        )
+
+    price_type = str(stripe_price.get("type") or "").strip().lower()
+    if price_type != "one_time":
+        raise BillingValidationError(
+            "Billing plan must reference a one-time Stripe price for purchases."
+        )
+
+
+def _normalize_integer(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _resolve_user_from_reference(user_reference: str) -> Any | None:
@@ -626,6 +986,7 @@ __all__ = [
     "BillingWebhookSignatureError",
     "StripeClient",
     "StripeWebhookResult",
+    "create_checkout_session",
     "credit_user",
     "get_or_create_stripe_customer",
     "get_stripe_client",
