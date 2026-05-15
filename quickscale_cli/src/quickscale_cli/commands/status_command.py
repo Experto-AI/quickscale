@@ -120,13 +120,13 @@ def _load_module_manifests(
 
 
 def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
-    """Abort status when placeholder modules appear in config or applied state."""
+    """Abort status when non-public-ready modules appear in config or applied state."""
     not_ready = find_not_ready_modules(module_names)
     if not not_ready:
         return
 
     click.secho(
-        f"\n❌ Unsupported placeholder module state detected in {source}:",
+        f"\n❌ Unsupported non-public-ready module state detected in {source}:",
         fg="red",
         err=True,
         bold=True,
@@ -137,8 +137,9 @@ def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> Non
             click.echo(f"  • {reason}", err=True)
 
     click.echo(
-        "\n💡 Billing and teams remain placeholder directories and cannot "
-        "participate in public QuickScale plan/apply/status workflows yet.",
+        "\n💡 Billing remains internal-only and teams remains placeholder "
+        "inventory; neither can participate in public QuickScale plan, "
+        "quickscale.yml, apply, or status workflows yet.",
         err=True,
     )
     raise click.Abort()

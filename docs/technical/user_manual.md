@@ -364,7 +364,7 @@ quickscale plan myapp --overwrite
 
 The wizard guides you through:
 1. **Theme selection**: Choose from available themes (showcase_html, showcase_react). Fresh `showcase_react` generations scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages in v0.83.0.
-2. **Module selection**: Select optional modules to include. In the current implementation line, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage. The `billing` and `teams` directories remain placeholder inventory only; `quickscale plan`, `quickscale.yml` validation, `quickscale apply`, and generated starter output exclude them until those modules ship.
+2. **Module selection**: Select optional modules to include. In the current implementation line, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage. Billing also has an in-repo packaged Phase 1 foundation under `quickscale_modules/billing`, but public `quickscale plan`, `quickscale.yml` validation, `quickscale apply`, and generated starter output must continue to exclude it until later billing phases ship. The `teams` directory remains placeholder inventory only.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:

@@ -531,7 +531,8 @@ class TestStatusCommandExtended:
             result = runner.invoke(status)
 
             assert result.exit_code != 0
-            assert "placeholder" in result.output
+            assert "public-ready QuickScale module" in result.output
+            assert "internal packaged Phase 1 foundation" in result.output
             assert "billing" in result.output
 
     def test_status_fails_for_malformed_installed_manifest(self):

@@ -315,14 +315,16 @@ docker:
 
             assert result.exit_code == 0
             assert (
-                "billing - Stripe integration (placeholder, not ready)" in result.output
-            )
-            assert (
-                "teams - Multi-tenancy and team management (placeholder, not ready)"
+                "billing - Stripe integration "
+                "(internal packaged Phase 1 foundation, not public-ready)"
                 in result.output
             )
-            assert "Module 'billing' is a placeholder" in result.output
-            assert "Module 'teams' is a placeholder" in result.output
+            assert (
+                "teams - Multi-tenancy and team management "
+                "(placeholder, not public-ready)" in result.output
+            )
+            assert "internal packaged Phase 1 foundation" in result.output
+            assert "Module 'teams' remains placeholder inventory only" in result.output
             assert "No new modules selected" in result.output
 
             with open("quickscale.yml") as f:

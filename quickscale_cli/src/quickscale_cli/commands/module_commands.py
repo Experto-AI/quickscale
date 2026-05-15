@@ -215,11 +215,18 @@ def _validate_module_readiness(module: str) -> bool:
         return True
 
     click.secho(f"❌ Error: {readiness_reason}", fg="red", err=True)
-    click.echo(
-        "\n💡 Placeholder directories remain in the repository for documentation and "
-        "future work only.",
-        err=True,
-    )
+    if module == "billing":
+        click.echo(
+            "\n💡 Billing remains excluded from public quickscale embed and quickscale "
+            "update workflows until later phases ship.",
+            err=True,
+        )
+    else:
+        click.echo(
+            "\n💡 Placeholder directories remain in the repository for documentation and "
+            "future work only.",
+            err=True,
+        )
     return False
 
 

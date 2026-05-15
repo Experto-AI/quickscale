@@ -16,6 +16,7 @@ quickscale-core = {path = "./quickscale_core", develop = true}
 quickscale-cli = {path = "./quickscale_cli", develop = true}
 # All modules installed in editable mode for centralized testing
 quickscale-module-auth = {path = "./quickscale_modules/auth", develop = true}
+quickscale-module-billing = {path = "./quickscale_modules/billing", develop = true}
 quickscale-module-blog = {path = "./quickscale_modules/blog", develop = true}
 quickscale-module-listings = {path = "./quickscale_modules/listings", develop = true}
 quickscale-module-crm = {path = "./quickscale_modules/crm", develop = true}

@@ -36,7 +36,7 @@ def test_get_module_entries_filters_experimental_by_default() -> None:
 
 
 def test_get_module_names_includes_experimental_when_requested() -> None:
-    """Explicit include_experimental should surface placeholder entries."""
+    """Explicit include_experimental should surface non-public entries."""
     names = get_module_names(include_experimental=True)
 
     assert "billing" in names
@@ -64,17 +64,29 @@ def test_get_module_entry_returns_social_metadata() -> None:
     assert entry.ready is True
 
 
-def test_get_module_readiness_reason_reports_placeholder_modules() -> None:
-    """Placeholder directories should expose an actionable readiness message."""
+def test_get_module_readiness_reason_reports_internal_billing_foundation() -> None:
+    """Billing should expose the internal-foundation non-public readiness message."""
     reason = get_module_readiness_reason("billing")
 
     assert reason is not None
     assert "billing" in reason
-    assert "placeholder" in reason
+    assert "internal packaged Phase 1 foundation" in reason
+    assert "not a placeholder-only directory" in reason
+    assert "public-ready QuickScale module" in reason
+
+
+def test_get_module_readiness_reason_reports_placeholder_teams_inventory() -> None:
+    """Teams should continue exposing placeholder-only inventory wording."""
+    reason = get_module_readiness_reason("teams")
+
+    assert reason is not None
+    assert "teams" in reason
+    assert "placeholder inventory only" in reason
+    assert "public-ready QuickScale module" in reason
 
 
 def test_find_not_ready_modules_filters_ready_modules() -> None:
-    """Readiness filtering should keep only known placeholder modules."""
+    """Readiness filtering should keep only known non-public modules."""
     assert find_not_ready_modules(["auth", "billing", "teams", "unknown"]) == [
         "billing",
         "teams",

@@ -1,0 +1,43 @@
+[project]
+name = "quickscale-module-billing"
+version = "0.85.0"
+description = "QuickScale billing foundation with a Django-owned credits ledger and future direct Stripe integration"
+requires-python = ">=3.13,<3.15"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
+dynamic = ["dependencies"]
+
+[tool.poetry]
+packages = [{include = "quickscale_modules_billing", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.13,<3.15"
+Django = ">=6.0.5,<6.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest-django = "^4.11.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py313"
+
+[[tool.mypy.overrides]]
+module = "stripe.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = [".", "src"]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --cov=quickscale_modules_billing --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+
+[tool.coverage.report]
+fail_under = 90
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"

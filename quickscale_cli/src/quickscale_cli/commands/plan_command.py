@@ -52,7 +52,12 @@ def _get_module_choices(
 def _format_module_choice(entry: ModuleCatalogEntry) -> str:
     """Format a catalog entry for interactive display."""
     if not entry.ready:
-        return f"{entry.name} - {entry.description} (placeholder, not ready)"
+        if entry.name == "billing":
+            return (
+                f"{entry.name} - {entry.description} "
+                "(internal packaged Phase 1 foundation, not public-ready)"
+            )
+        return f"{entry.name} - {entry.description} (placeholder, not public-ready)"
     if entry.experimental:
         return f"{entry.name} - {entry.description} (experimental)"
     return f"{entry.name} - {entry.description}"
@@ -171,7 +176,7 @@ def _select_modules(*, include_experimental: bool = False) -> list[str]:
 
     if include_experimental and any(not entry.ready for entry in available_modules):
         click.echo(
-            "\n  Placeholder modules are shown for visibility only and cannot be selected"
+            "\n  Non-public modules are shown for visibility only and cannot be selected"
         )
 
     click.echo(
@@ -1051,7 +1056,7 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
 @click.option(
     "--include-experimental",
     is_flag=True,
-    help="Show placeholder module directories (billing, teams) in the picker",
+    help="Show non-public module inventory entries (billing, teams) in the picker",
 )
 @click.option(
     "--configure-modules",

@@ -152,7 +152,7 @@ myproject/
   └── base.py            # INSTALLED_APPS = [..., "modules.auth", "modules.blog"]
 ```
 
-Billing and teams remain placeholder directories in the monorepo inventory. They are discoverable in docs and maintainer workflows, but they are not valid public `quickscale plan` / `quickscale.yml` / `quickscale apply` module selections until implementation ships.
+Billing now has an internal packaged Phase 1 foundation in `quickscale_modules/billing`, but it remains non-public-ready: public `quickscale plan`, `quickscale.yml`, `quickscale apply`, and generated starter output must continue to exclude billing until later phases ship. Teams remains placeholder inventory only.
 
 **Key Characteristics:**
 - ✅ Runtime dependencies (in INSTALLED_APPS)
@@ -305,7 +305,7 @@ Fresh generations copy `showcase_react/src/**` into the generated project's
   Django-owned public social pages
 - ✅ Fresh `showcase_html` generations do not scaffold public social pages; non-React
   themes rely on manual adoption for that public page surface
-- ✅ Generated starter output excludes billing and teams placeholder routes,
+- ✅ Generated starter output excludes billing and teams routes,
   navigation, flags, and dashboard cards until those modules ship
 - ❌ Complete vertical themes are not part of the current shipped CLI surface yet
 - ✅ Module releases may extend managed backend/runtime surfaces in existing projects, but newly scaffolded theme-owned routes, navigation, registries, and page source are only guaranteed on fresh generation or explicit manual adoption

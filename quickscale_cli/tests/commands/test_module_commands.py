@@ -657,16 +657,28 @@ class TestEmbedModule:
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    def test_placeholder_module_is_rejected(
-        self, mock_git_env, mock_not_exists, mock_remote, tmp_path
+    def test_billing_module_is_rejected_with_internal_foundation_message(
+        self,
+        mock_git_env,
+        mock_not_exists,
+        mock_remote,
+        tmp_path,
+        capsys,
     ):
-        """Placeholder modules should never reach remote-branch validation."""
+        """Billing should stay blocked from embed while showing the shipped contract."""
         mock_git_env.return_value = True
         mock_not_exists.return_value = True
 
         result = embed_module("billing", tmp_path)
+        captured = capsys.readouterr()
 
         assert result is False
+        assert "internal packaged Phase 1 foundation" in captured.err
+        assert (
+            "Billing remains excluded from public quickscale embed and quickscale "
+            "update workflows until later phases ship."
+        ) in captured.err
+        assert "Placeholder directories remain in the repository" not in captured.err
         mock_remote.assert_not_called()
 
     @patch("quickscale_cli.commands.module_commands._perform_module_embed")
@@ -1120,13 +1132,13 @@ class TestUpdateCommand:
     @patch("quickscale_cli.commands.module_commands._update_single_module")
     @patch("quickscale_cli.commands.module_commands.load_config")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
-    def test_update_rejects_placeholder_modules_before_any_subtree_work(
+    def test_update_rejects_billing_module_before_any_subtree_work(
         self,
         mock_validate,
         mock_load,
         mock_update,
     ):
-        """Placeholder modules should abort update before any subtree operations run."""
+        """Billing should abort update before any subtree operations run."""
         module_info = Mock(
             installed_version="0.70.0",
             prefix="modules/billing",
@@ -1144,7 +1156,12 @@ class TestUpdateCommand:
         result = runner.invoke(update, ["--no-preview"])
 
         assert result.exit_code != 0
-        assert "placeholder" in result.output
+        assert "internal packaged Phase 1 foundation" in result.output
+        assert (
+            "Billing remains excluded from public quickscale embed and quickscale "
+            "update workflows until later phases ship."
+        ) in result.output
+        assert "Placeholder directories remain in the repository" not in result.output
         mock_update.assert_not_called()
 
     @patch("quickscale_cli.commands.module_commands._update_single_module")

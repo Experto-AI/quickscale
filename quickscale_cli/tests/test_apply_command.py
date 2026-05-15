@@ -1,5 +1,6 @@
 """Tests for quickscale apply command"""
 
+import click
 import os
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -8,6 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.commands.apply_command import (
+    _abort_for_not_ready_modules,
     _regenerate_managed_wiring_for_apply,
     apply,
 )
@@ -150,6 +152,21 @@ modules:
 
             assert result.exit_code != 0
             assert "Configuration error" in result.output
+
+    def test_abort_for_not_ready_modules_reports_billing_reason(self, capsys):
+        """Test billing hits apply's non-public-ready abort helper."""
+        with pytest.raises(click.Abort):
+            _abort_for_not_ready_modules(["billing"], source="quickscale.yml")
+
+        error_output = capsys.readouterr().err
+        assert (
+            "quickscale.yml references modules that are not public-ready"
+            in error_output
+        )
+        assert (
+            "Module 'billing' has an internal packaged Phase 1 foundation"
+            in error_output
+        )
 
 
 class TestApplyDirectoryHandling:

@@ -226,7 +226,7 @@ class TestPlanModuleSelection:
             assert "teams - Multi-tenancy and team management" not in result.output
 
     def test_experimental_modules_visible_with_flag(self):
-        """Billing/teams should appear as placeholders with --include-experimental."""
+        """Billing and teams should expose their distinct non-public labels."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -236,11 +236,13 @@ class TestPlanModuleSelection:
             )
 
             assert (
-                "billing - Stripe integration (placeholder, not ready)" in result.output
+                "billing - Stripe integration "
+                "(internal packaged Phase 1 foundation, not public-ready)"
+                in result.output
             )
             assert (
-                "teams - Multi-tenancy and team management (placeholder, not ready)"
-                in result.output
+                "teams - Multi-tenancy and team management "
+                "(placeholder, not public-ready)" in result.output
             )
 
     @pytest.mark.parametrize("placeholder_name", ["billing", "teams"])
@@ -255,7 +257,11 @@ class TestPlanModuleSelection:
             )
 
             assert result.exit_code == 0
-            assert "placeholder" in result.output
+            assert "public-ready QuickScale module" in result.output
+            if placeholder_name == "billing":
+                assert "internal packaged Phase 1 foundation" in result.output
+            else:
+                assert "placeholder inventory only" in result.output
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
             assert f"{placeholder_name}:" not in content

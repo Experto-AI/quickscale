@@ -134,19 +134,21 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Estimated hours**: 8–10 h
 
+**Current state**: Complete in-repo as the packaged Phase 1 foundation. Public planner/apply readiness remains gated on later phases in this milestone.
+
 **Delivers**: A fully migrated, admin-registered module skeleton that is importable in the monorepo and aligned with QuickScale packaging contracts. No Stripe dependency yet.
 
-- [ ] `module.yml` — name, version, mutable settings for `enabled`, `publishable_key_env_var`, `secret_key_env_var`, `webhook_secret_env_var`, and `billing_currency`; `django_apps: [quickscale_modules_billing]`
-- [ ] `pyproject.toml` — `stripe` NOT yet included; dev deps: `pytest-django`; `--cov-fail-under=90`; mypy `ignore_missing_imports` for `stripe.*`
-- [ ] Root `pyproject.toml` — add editable `quickscale-module-billing = {path = "./quickscale_modules/billing", develop = true}`
-- [ ] Root `mypy.ini` — add `[mypy-quickscale_modules_billing.*]` override alongside `stripe.*` ignore-missing-imports
-- [ ] `src/quickscale_modules_billing/__init__.py` — export `__version__ = "0.85.0"` matching `module.yml` and `pyproject.toml`
-- [ ] `apps.py` — `QuickscaleBillingConfig`, `label = "quickscale_modules_billing"`, `default_auto_field = BigAutoField`
-- [ ] `models.py` — all five models with `select_for_update`-ready `CreditBalance.get_or_create_for_user()` class method
-- [ ] `admin.py` — all five models registered; read-only admin for `CreditBalance`, `CreditTransaction`, `WebhookEvent`; full CRUD for `Plan`
-- [ ] `migrations/0001_initial.py` — handwritten, includes `UniqueConstraint` on `WebhookEvent.stripe_event_id`
-- [ ] `README.md` — replace the placeholder scope with the credits-first direct-Stripe plan, shipping contract, and current non-goals
-- [ ] `tests/settings.py`, `conftest.py`, `test_models.py`, `test_admin.py`
+- [x] `module.yml` — name, version, mutable settings for `enabled`, `publishable_key_env_var`, `secret_key_env_var`, `webhook_secret_env_var`, and `billing_currency`; `django_apps: [quickscale_modules_billing]`
+- [x] `pyproject.toml` — `stripe` NOT yet included; dev deps: `pytest-django`; `--cov-fail-under=90`; mypy `ignore_missing_imports` for `stripe.*`
+- [x] Root `pyproject.toml` — add editable `quickscale-module-billing = {path = "./quickscale_modules/billing", develop = true}`
+- [x] Root `mypy.ini` — add `[mypy-quickscale_modules_billing.*]` override alongside `stripe.*` ignore-missing-imports
+- [x] `src/quickscale_modules_billing/__init__.py` — export `__version__ = "0.85.0"` matching `module.yml` and `pyproject.toml`
+- [x] `apps.py` — `QuickscaleBillingConfig`, `label = "quickscale_modules_billing"`, `default_auto_field = BigAutoField`
+- [x] `models.py` — all five models with `select_for_update`-ready `CreditBalance.get_or_create_for_user()` class method
+- [x] `admin.py` — all five models registered; read-only admin for `CreditBalance`, `CreditTransaction`, `WebhookEvent`; full CRUD for `Plan`
+- [x] `migrations/0001_initial.py` — handwritten, includes `UniqueConstraint` on `WebhookEvent.stripe_event_id`
+- [x] `README.md` — replace the placeholder scope with the credits-first direct-Stripe plan, shipping contract, and current non-goals
+- [x] `tests/settings.py`, `conftest.py`, `test_models.py`, `test_admin.py`
 
 **Acceptance**: `pytest --cov-fail-under=90` passes; all five models visible in Django admin; no `stripe` import anywhere; package version metadata is self-consistent across `module.yml`, `pyproject.toml`, and `__init__.py`.
 

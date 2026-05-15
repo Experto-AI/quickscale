@@ -470,13 +470,13 @@ def _start_docker(
 
 
 def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
-    """Abort apply when placeholder modules appear in config or applied state."""
+    """Abort apply when non-public-ready modules appear in config or applied state."""
     not_ready = find_not_ready_modules(module_names)
     if not not_ready:
         return
 
     click.secho(
-        f"\n❌ {source} references placeholder modules that are not ready:",
+        f"\n❌ {source} references modules that are not public-ready:",
         fg="red",
         err=True,
         bold=True,

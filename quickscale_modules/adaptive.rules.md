@@ -12,7 +12,8 @@ merge_strategy: append
 - Modules are distributed to generated projects via the documented git-subtree workflow.
   Do not copy module files manually into generated project directories.
 - Packaged modules: analytics, auth, backups, blog, crm, forms, listings, notifications, social, storage.
-  Placeholder-only (no tests/packaging yet): billing, teams.
+- Internal packaged Phase 1 foundation (not public-ready): billing.
+- Placeholder-only (no tests/packaging yet): teams.
 
 # Adaptive
 <!-- Add rules for the main orchestrator agent here -->

@@ -1788,6 +1788,23 @@ type = "directory"
 url = "quickscale_modules/backups"
 
 [[package]]
+name = "quickscale-module-billing"
+version = "0.85.0"
+description = "QuickScale billing foundation with a Django-owned credits ledger and future direct Stripe integration"
+optional = false
+python-versions = ">=3.13,<3.15"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+Django = ">=6.0.5,<6.1.0"
+
+[package.source]
+type = "directory"
+url = "quickscale_modules/billing"
+
+[[package]]
 name = "quickscale-module-blog"
 version = "0.73.0"
 description = "QuickScale blog module with Markdown support and RSS feeds"
@@ -2131,4 +2148,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.15"
-content-hash = "85fb4517ebb621e6b3f4093bd06aefc50d7faf93fc5ff9330f84616a6e2a667a"
+content-hash = "8a6395d95cf36149fc252ba141b5e5c69d14841767342801a49310bfa8e6be49"

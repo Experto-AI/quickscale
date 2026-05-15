@@ -414,8 +414,14 @@ modules:
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
 
-        assert placeholder_name in str(exc.value)
-        assert "placeholder" in str(exc.value)
+        message = str(exc.value)
+        assert placeholder_name in message
+        assert "public-ready QuickScale module" in message
+        if placeholder_name == "billing":
+            assert "internal packaged Phase 1 foundation" in message
+            assert "not a placeholder-only directory" in message
+        else:
+            assert "placeholder inventory only" in message
 
     def test_unknown_top_level_key(self):
         """Test error for unknown top-level key"""

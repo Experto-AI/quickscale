@@ -114,13 +114,25 @@ def find_not_ready_modules(module_names: Iterable[str]) -> list[str]:
 
 
 def get_module_readiness_reason(module_name: str) -> str | None:
-    """Return an actionable readiness error for placeholder modules."""
+    """Return an actionable readiness error for non-public-ready modules."""
     entry = get_module_entry(module_name)
     if entry is None or entry.ready:
         return None
 
+    if module_name == "billing":
+        return (
+            "Module 'billing' has an internal packaged Phase 1 foundation and is "
+            "not a placeholder-only directory, but it is not a public-ready "
+            "QuickScale module yet. Billing remains excluded from public quickscale "
+            "plan, quickscale.yml, quickscale apply, and quickscale status "
+            "workflows until later phases ship."
+        )
+
+    module_display_name = module_name.replace("_", " ").title()
     return (
-        f"Module '{module_name}' is a placeholder and is not a valid shipped-module "
-        "selection yet. Billing and teams remain discoverable in docs and module "
-        "inventory only until they ship."
+        f"Module '{module_name}' remains placeholder inventory only and is not a "
+        "public-ready QuickScale module yet. "
+        f"{module_display_name} remains excluded from public quickscale plan, "
+        "quickscale.yml, quickscale apply, and quickscale status workflows until "
+        "it ships."
     )

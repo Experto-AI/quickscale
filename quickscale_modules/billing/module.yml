@@ -1,0 +1,40 @@
+name: billing
+version: "0.85.0"
+description: "Credits-first billing foundation with Django-owned ledger models and a future direct Stripe SDK contract"
+
+config:
+  mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_BILLING_ENABLED
+      description: "Enable the billing runtime once later phases wire planner/apply and Stripe-backed services."
+
+    publishable_key_env_var:
+      type: string
+      default: "STRIPE_PUBLISHABLE_KEY"
+      django_setting: QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR
+      description: "Environment-variable name containing the Stripe publishable key used by later checkout flows."
+
+    secret_key_env_var:
+      type: string
+      default: "STRIPE_SECRET_KEY"
+      django_setting: QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR
+      description: "Environment-variable name containing the Stripe secret key for server-side API calls in later phases."
+
+    webhook_secret_env_var:
+      type: string
+      default: "QUICKSCALE_BILLING_WEBHOOK_SECRET"
+      django_setting: QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR
+      description: "Environment-variable name containing the Stripe webhook signing secret."
+
+    billing_currency:
+      type: string
+      default: "usd"
+      django_setting: QUICKSCALE_BILLING_CURRENCY
+      description: "ISO 4217 billing currency code used for future plan display metadata and Checkout validation."
+
+dependencies: []
+
+django_apps:
+  - quickscale_modules_billing
