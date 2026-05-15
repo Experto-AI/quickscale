@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-import os
-
-import django
 import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
-django.setup()
 
 
 @pytest.fixture
