@@ -8,12 +8,12 @@ This directory reserves the billing module namespace and captures intended scope
 
 The full billing module is expected to include:
 
-- **dj-stripe integration** - Complete Stripe subscription management
-- **Subscription plans** - Flexible pricing tiers and trial periods
-- **Webhook handling** - Secure Stripe webhook processing with logging
-- **Invoice management** - Customer billing history and invoice generation
-- **Payment methods** - Credit card and payment method management
-- **Theme support** - HTML and React theme variants
+- **Direct Stripe SDK integration** - Thin adapter around Stripe rather than a full ORM mirror
+- **Credits ledger** - Django-owned balances and transactions with Stripe as the payment trigger
+- **One-time purchases and subscriptions** - Checkout-session flows that credit users on payment success
+- **Webhook handling** - Signed, idempotent Stripe webhook processing that tolerates duplicate delivery and out-of-order events
+- **Stripe-hosted self-service** - Customer-portal session support for payment-method recovery and subscription management
+- **Module-owned billing pages** - Django routes/templates plus manual React adoption guidance for project-owned frontends
 
 ## Current Contract
 
@@ -50,6 +50,8 @@ For module management commands and workflows, see:
 - [User Manual](../../docs/technical/user_manual.md)
 - [Technical Roadmap](../../docs/technical/roadmap.md)
 - [Decisions Document](../../docs/technical/decisions.md)
+
+The authoritative implementation plan for v0.85.0 lives in [docs/technical/roadmap.md](../../docs/technical/roadmap.md). Until that milestone ships, this README remains a placeholder contract only.
 
 ---
 
