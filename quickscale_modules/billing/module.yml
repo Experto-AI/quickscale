@@ -34,7 +34,8 @@ config:
       django_setting: QUICKSCALE_BILLING_CURRENCY
       description: "ISO 4217 billing currency code used for future plan display metadata and Checkout validation."
 
-dependencies: []
+dependencies:
+  - stripe>=15.0.0,<16.0.0
 
 django_apps:
   - quickscale_modules_billing

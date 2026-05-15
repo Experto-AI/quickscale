@@ -156,6 +156,37 @@ class TestSharedModuleDependencySync:
             in pyproject_content
         )
 
+    def test_sync_adds_manifest_backed_stripe_dependency_for_billing(self, tmp_path):
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "billing",
+            manifest_content=(
+                "name: billing\n"
+                'version: "0.85.0"\n'
+                "dependencies:\n"
+                "  - stripe>=15.0.0,<16.0.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-billing"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'stripe = ">=15.0.0,<16.0.0"\n'
+            ),
+        )
+
+        result = sync_project_module_dependencies(project, {"billing": {}})
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert result.added_package_dependencies == ["stripe"]
+        assert result.added_path_dependencies == ["quickscale-module-billing"]
+        assert 'stripe = ">=15.0.0,<16.0.0"' in pyproject_content
+        assert (
+            'quickscale-module-billing = {path = "./modules/billing", develop = true}'
+            in pyproject_content
+        )
+
     def test_sync_is_add_only_for_existing_project_dependency(self, tmp_path):
         project = _make_project(tmp_path)
         (project / "pyproject.toml").write_text(

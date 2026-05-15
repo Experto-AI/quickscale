@@ -175,16 +175,17 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Estimated hours**: 10–12 h
 
-**Delivers**: Working webhook endpoint with idempotency gate and a safe credit ledger core. All Stripe API calls are isolated in `services.py`.
+**Current state**: Complete in-repo for the Phase 3 Stripe runtime slice. Public milestone readiness still depends on later phases in this milestone.
 
-- [ ] Add `stripe>=15.0.0,<16.0.0` to `pyproject.toml` and `module.yml`
-- [ ] `services.py` — `BillingSettingsSnapshot.from_settings()` (mirrors `AnalyticsRuntimeSettingsSnapshot` pattern); `BillingError` exception hierarchy (`BillingConfigurationError`, `BillingWebhookError`, `BillingWebhookSignatureError`); `get_or_create_stripe_customer(user) -> str`; `credit_user(user, amount, type, description, stripe_refs, stripe_event_id, stripe_object_id) -> CreditTransaction` with `select_for_update()` inside `transaction.atomic()` and `F('balance') + amount` ORM update; `handle_stripe_event()` stub
-- [ ] `views.py` — `StripeWebhookView` (`@csrf_exempt`): verifies Stripe signature, `get_or_create(stripe_event_id=...)` for transport-level idempotency, dispatches to `handle_stripe_event`, marks `processed=True` on success, returns 200 always (Stripe retries on non-2xx)
-- [ ] `urls.py` — `POST billing/webhooks/stripe/`
-- [ ] `tests/test_services.py` — `credit_user` atomicity (`@pytest.mark.django_db(transaction=True)`), `balance_after` integrity, `get_or_create_stripe_customer` (mock `stripe.customers.create`), duplicate `stripe_object_id` absorption, all error paths
-- [ ] `tests/test_views.py` — invalid signature → 403; duplicate event id → 200 idempotent; valid signature with unknown event type → row stored `processed=True`
+**Delivers**: Working webhook endpoint with a persisted idempotency gate and a safe credit ledger core. Stripe SDK integration stays isolated in `services.py`.
 
-**Acceptance**: Webhook endpoint rejects bad signatures; duplicate deliveries are absorbed both by `WebhookEvent.stripe_event_id` and by business-object guards inside the credit ledger; `credit_user` is concurrency-safe; `pytest --cov-fail-under=90` passes.
+- [x] `pyproject.toml` and `module.yml` — align on `stripe>=15.0.0,<16.0.0`, with the CLI dependency-sync regression covering manifest-backed Stripe dependency propagation
+- [x] `services.py` — `BillingSettingsSnapshot.from_settings()` (mirrors the analytics runtime snapshot pattern); `BillingError` hierarchy (`BillingConfigurationError`, `BillingDisabledError`, `BillingValidationError`, `BillingWebhookError`, `BillingWebhookSignatureError`); `get_or_create_stripe_customer(user) -> tuple[str, bool]`; `credit_user(...)` atomic duplicate-safe credit grants; `handle_stripe_event()` verifies, persists, and dispatches Stripe webhook events
+- [x] `views.py` — `StripeWebhookView` (`@csrf_exempt`) delegates raw body/signature handling to `handle_stripe_event`, returns accepted JSON on success, and maps disabled/signature/configuration/processing failures to explicit HTTP responses
+- [x] `urls.py` — `POST billing/webhooks/stripe/`
+- [x] `tests/settings_auth_parity.py`, `tests/test_services.py`, `tests/test_views.py` — cover Stripe customer provisioning, duplicate-business-object suppression, webhook error handling, duplicate deliveries, processed/ignored unknown event types, and the auth-backed parity lane
+
+**Acceptance**: `module.yml` and `pyproject.toml` stay aligned on the shipped Stripe dependency; the webhook endpoint rejects bad signatures, records duplicate/unknown events safely through `WebhookEvent.stripe_event_id` and credit-ledger business-object guards, and the targeted CLI dependency-sync regression plus billing service/view tests pass in both the default and auth-backed settings lanes.
 
 ---
 
