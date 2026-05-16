@@ -285,6 +285,15 @@ def test_create_checkout_session_rejects_mismatched_stripe_price(user) -> None:
 @pytest.mark.django_db
 def test_create_checkout_session_serializer_validates_one_time_plan() -> None:
     plan = _create_one_time_plan(slug="credits-500")
+    serializer = CreateCheckoutSessionSerializer(data={"plan_slug": plan.slug})
+
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.validated_data["plan"] == plan
+
+
+@pytest.mark.django_db
+def test_create_checkout_session_serializer_rejects_redirect_fields() -> None:
+    plan = _create_one_time_plan(slug="credits-redirect-contract")
     serializer = CreateCheckoutSessionSerializer(
         data={
             "plan_slug": plan.slug,
@@ -293,20 +302,17 @@ def test_create_checkout_session_serializer_validates_one_time_plan() -> None:
         }
     )
 
-    assert serializer.is_valid(), serializer.errors
-    assert serializer.validated_data["plan"] == plan
+    assert serializer.is_valid() is False
+    assert serializer.errors == {
+        "cancel_url": ["This field is not allowed."],
+        "success_url": ["This field is not allowed."],
+    }
 
 
 @pytest.mark.django_db
 def test_create_checkout_session_serializer_rejects_non_one_time_plan() -> None:
     monthly_plan = _create_monthly_plan(slug="starter-monthly-serializer")
-    serializer = CreateCheckoutSessionSerializer(
-        data={
-            "plan_slug": monthly_plan.slug,
-            "success_url": "https://app.example.com/billing/purchase/success",
-            "cancel_url": "https://app.example.com/billing/purchase/cancel",
-        }
-    )
+    serializer = CreateCheckoutSessionSerializer(data={"plan_slug": monthly_plan.slug})
 
     assert serializer.is_valid() is False
     assert serializer.errors == {
@@ -316,13 +322,7 @@ def test_create_checkout_session_serializer_rejects_non_one_time_plan() -> None:
 
 @pytest.mark.django_db
 def test_create_checkout_session_serializer_rejects_unknown_plan() -> None:
-    serializer = CreateCheckoutSessionSerializer(
-        data={
-            "plan_slug": "missing-plan",
-            "success_url": "https://app.example.com/billing/purchase/success",
-            "cancel_url": "https://app.example.com/billing/purchase/cancel",
-        }
-    )
+    serializer = CreateCheckoutSessionSerializer(data={"plan_slug": "missing-plan"})
 
     assert serializer.is_valid() is False
     assert serializer.errors == {"plan_slug": ["Unknown billing plan."]}
@@ -331,13 +331,7 @@ def test_create_checkout_session_serializer_rejects_unknown_plan() -> None:
 @pytest.mark.django_db
 def test_create_checkout_session_serializer_rejects_inactive_plan() -> None:
     inactive_plan = _create_one_time_plan(slug="inactive-plan", is_active=False)
-    serializer = CreateCheckoutSessionSerializer(
-        data={
-            "plan_slug": inactive_plan.slug,
-            "success_url": "https://app.example.com/billing/purchase/success",
-            "cancel_url": "https://app.example.com/billing/purchase/cancel",
-        }
-    )
+    serializer = CreateCheckoutSessionSerializer(data={"plan_slug": inactive_plan.slug})
 
     assert serializer.is_valid() is False
     assert serializer.errors == {"plan_slug": ["Billing plan is not active."]}

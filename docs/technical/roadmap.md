@@ -209,10 +209,10 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Delivers**: The HTTP surface for one-time purchases — authenticated API views, redirect-target template views, and end-to-end coverage of the purchase flow through the API layer.
 
-- [ ] `views.py` — `CreateCheckoutSessionView` (authenticated, returns `checkout_url`); `CreditBalanceView`; `CreditTransactionListView` (paginated); `PurchaseSuccessView` / `PurchaseCancelView` (template views for Stripe redirect targets)
-- [ ] `urls.py` — `POST api/billing/purchase/checkout/`, `GET api/billing/balance/`, `GET api/billing/transactions/`, `GET billing/purchase/success/`, `GET billing/purchase/cancel/`
-- [ ] Templates — `purchase_success.html` and `purchase_cancel.html` with React mount div pattern
-- [ ] `tests/test_purchase.py` extensions — `POST /api/billing/purchase/checkout/` returns checkout URL; `GET /api/billing/balance/` reflects credited amount; `GET /api/billing/transactions/` is paginated; unauthenticated → 401; redirect template views respond 200
+- [x] `views.py` — `CreateCheckoutSessionView` (authenticated, returns `checkout_url`); `CreditBalanceView`; `CreditTransactionListView` (paginated); `PurchaseSuccessView` / `PurchaseCancelView` (template views for Stripe redirect targets)
+- [x] `urls.py` — `POST api/billing/purchase/checkout/`, `GET api/billing/balance/`, `GET api/billing/transactions/`, `GET billing/purchase/success/`, `GET billing/purchase/cancel/`
+- [x] Templates — `purchase_success.html` and `purchase_cancel.html` with React mount div pattern
+- [x] `tests/test_purchase.py` extensions — `POST /api/billing/purchase/checkout/` returns checkout URL; `GET /api/billing/balance/` reflects credited amount; `GET /api/billing/transactions/` is paginated; unauthenticated → 401; redirect template views respond 200
 
 **Acceptance**: `POST /api/billing/purchase/checkout/` returns checkout URL; `GET /api/billing/balance/` reflects new balance; unauthenticated requests are rejected; `pytest --cov-fail-under=90` passes.
 
