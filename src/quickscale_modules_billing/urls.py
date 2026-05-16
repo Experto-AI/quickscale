@@ -3,8 +3,11 @@
 from django.urls import path
 
 from quickscale_modules_billing.views import (
+    BillingPortalReturnView,
+    CancelSubscriptionView,
     CreditBalanceView,
     CreditTransactionListView,
+    CreateBillingPortalSessionView,
     CreateCheckoutSessionView,
     CreateSubscriptionCheckoutView,
     PlanListView,
@@ -18,6 +21,7 @@ from quickscale_modules_billing.views import (
 
 PURCHASE_SUCCESS_PATH = "billing/purchase/success/"
 PURCHASE_CANCEL_PATH = "billing/purchase/cancel/"
+PORTAL_RETURN_PATH = "billing/portal/return/"
 SUBSCRIPTION_SUCCESS_PATH = "billing/subscription/success/"
 SUBSCRIPTION_CANCEL_PATH = "billing/subscription/cancel/"
 
@@ -53,6 +57,21 @@ urlpatterns = [
         "api/billing/subscription/checkout/",
         CreateSubscriptionCheckoutView.as_view(),
         name="subscription-checkout",
+    ),
+    path(
+        "api/billing/subscription/cancel/",
+        CancelSubscriptionView.as_view(),
+        name="subscription-cancel-current",
+    ),
+    path(
+        "api/billing/portal/",
+        CreateBillingPortalSessionView.as_view(),
+        name="billing-portal-session",
+    ),
+    path(
+        PORTAL_RETURN_PATH,
+        BillingPortalReturnView.as_view(),
+        name="portal-return",
     ),
     path(
         PURCHASE_SUCCESS_PATH,

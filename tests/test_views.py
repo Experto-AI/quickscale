@@ -110,6 +110,61 @@ def test_subscription_checkout_view_returns_json_401_for_anonymous_requests() ->
     assert response.json() == {"error": "Authentication required"}
 
 
+def test_cancel_subscription_view_returns_json_401_for_anonymous_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csrf_client = Client(enforce_csrf_checks=True)
+    called = False
+
+    def fake_cancel_current_subscription(auth_user) -> None:
+        del auth_user
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.cancel_current_subscription",
+        fake_cancel_current_subscription,
+    )
+
+    response = csrf_client.post(
+        reverse("quickscale_billing:subscription-cancel-current"),
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Authentication required"}
+    assert called is False
+
+
+def test_billing_portal_session_view_returns_json_401_for_anonymous_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csrf_client = Client(enforce_csrf_checks=True)
+    called = False
+
+    def fake_create_billing_portal_session(auth_user, return_url: str) -> str:
+        del auth_user, return_url
+        nonlocal called
+        called = True
+        return "https://billing.example.com/portal-session"
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_billing_portal_session",
+        fake_create_billing_portal_session,
+    )
+
+    response = csrf_client.post(
+        reverse("quickscale_billing:billing-portal-session"),
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Authentication required"}
+    assert called is False
+
+
 @pytest.mark.parametrize(
     "route_name",
     ["credit-balance", "credit-transactions", "subscription-detail"],
@@ -196,6 +251,63 @@ def test_subscription_checkout_view_missing_csrf_returns_403(user) -> None:
     )
 
     assert response.status_code == 403
+
+
+def test_cancel_subscription_view_missing_csrf_returns_403_without_calling_service(
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(user)
+    called = False
+
+    def fake_cancel_current_subscription(auth_user) -> None:
+        del auth_user
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.cancel_current_subscription",
+        fake_cancel_current_subscription,
+    )
+
+    response = csrf_client.post(
+        reverse("quickscale_billing:subscription-cancel-current"),
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    assert called is False
+
+
+def test_billing_portal_session_view_missing_csrf_returns_403_without_calling_service(
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(user)
+    called = False
+
+    def fake_create_billing_portal_session(auth_user, return_url: str) -> str:
+        del auth_user, return_url
+        nonlocal called
+        called = True
+        return "https://billing.example.com/portal-session"
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_billing_portal_session",
+        fake_create_billing_portal_session,
+    )
+
+    response = csrf_client.post(
+        reverse("quickscale_billing:billing-portal-session"),
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+    assert called is False
 
 
 @pytest.mark.django_db
@@ -291,6 +403,75 @@ def test_subscription_checkout_view_rejects_caller_supplied_redirect_fields(
             "success_url": ["This field is not allowed."],
         }
     }
+
+
+@pytest.mark.django_db
+def test_cancel_subscription_view_rejects_caller_supplied_return_url_without_calling_service(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_cancel_current_subscription(auth_user) -> None:
+        del auth_user
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.cancel_current_subscription",
+        fake_cancel_current_subscription,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:subscription-cancel-current"),
+        data=json.dumps({"return_url": "https://app.example.com/custom/return"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "errors": {
+            "return_url": ["This field is not allowed."],
+        }
+    }
+    assert called is False
+
+
+@pytest.mark.django_db
+def test_billing_portal_session_view_rejects_caller_supplied_return_url_without_calling_service(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_create_billing_portal_session(auth_user, return_url: str) -> str:
+        del auth_user, return_url
+        nonlocal called
+        called = True
+        return "https://billing.example.com/portal-session"
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_billing_portal_session",
+        fake_create_billing_portal_session,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:billing-portal-session"),
+        data=json.dumps({"return_url": "https://app.example.com/custom/return"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "errors": {
+            "return_url": ["This field is not allowed."],
+        }
+    }
+    assert called is False
 
 
 @pytest.mark.django_db
@@ -535,6 +716,70 @@ def test_subscription_checkout_view_blocks_while_current_subscription_exists(
 
 
 @pytest.mark.django_db
+def test_cancel_subscription_view_returns_204_and_calls_service(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_user: Any | None = None
+
+    def fake_cancel_current_subscription(auth_user) -> None:
+        nonlocal captured_user
+        captured_user = auth_user
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.cancel_current_subscription",
+        fake_cancel_current_subscription,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:subscription-cancel-current"),
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert captured_user == user
+
+
+@pytest.mark.django_db
+def test_billing_portal_session_view_returns_server_owned_return_url(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_call: dict[str, Any] = {}
+
+    def fake_create_billing_portal_session(auth_user, return_url: str) -> str:
+        captured_call["user"] = auth_user
+        captured_call["return_url"] = return_url
+        return "https://billing.example.com/portal-session"
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_billing_portal_session",
+        fake_create_billing_portal_session,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:billing-portal-session"),
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "portal_url": "https://billing.example.com/portal-session"
+    }
+    assert captured_call == {
+        "user": user,
+        "return_url": "http://testserver/billing/portal/return/",
+    }
+
+
+@pytest.mark.django_db
 def test_subscription_detail_view_returns_current_subscription(
     client: Client,
     user,
@@ -674,6 +919,18 @@ def test_subscription_return_views_are_public_and_render(
     assert 'id="billing-subscription-root"' in content
     assert 'id="billing-purchase-root"' not in content
     assert f'data-subscription-status="{expected_subscription_status}"' in content
+
+
+def test_billing_portal_return_view_is_public_and_render(client: Client) -> None:
+    response = client.get(reverse("quickscale_billing:portal-return"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Billing portal return" in content
+    assert 'id="billing-portal-root"' in content
+    assert 'data-portal-status="return"' in content
+    assert 'id="billing-purchase-root"' not in content
+    assert 'id="billing-subscription-root"' not in content
 
 
 def test_webhook_view_maps_signature_errors_to_403(

@@ -95,6 +95,22 @@ class CreateSubscriptionCheckoutSerializer(serializers.Serializer):
         return attrs
 
 
+class CancelSubscriptionSerializer(serializers.Serializer):
+    """Validate a recurring subscription cancel request."""
+
+    def to_internal_value(self, data: Any) -> dict[str, Any]:
+        _reject_unexpected_fields(data, allowed_fields=set())
+        return super().to_internal_value(data)
+
+
+class CreateBillingPortalSessionSerializer(serializers.Serializer):
+    """Validate a billing portal session request."""
+
+    def to_internal_value(self, data: Any) -> dict[str, Any]:
+        _reject_unexpected_fields(data, allowed_fields=set())
+        return super().to_internal_value(data)
+
+
 class CreditBalanceSerializer(serializers.Serializer):
     """Serialize the current credit balance snapshot."""
 
@@ -136,6 +152,8 @@ class CreditTransactionSerializer(serializers.ModelSerializer):
 
 
 __all__ = [
+    "CancelSubscriptionSerializer",
+    "CreateBillingPortalSessionSerializer",
     "CreateCheckoutSessionSerializer",
     "CreateSubscriptionCheckoutSerializer",
     "CreditBalanceSerializer",

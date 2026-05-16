@@ -760,6 +760,74 @@ def test_handle_stripe_event_updates_pending_row_on_subscription_created(
 
 
 @pytest.mark.django_db
+def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(price_id="price_invoice_first_incomplete")
+    pending_reservation = Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_customer_id="cus_invoice_first_incomplete",
+        stripe_checkout_session_id="cs_invoice_first_incomplete",
+        status=Subscription.Status.INCOMPLETE,
+    )
+    fake_client = FakeSubscriptionStripeClient(
+        event=_invoice_event(
+            event_id="evt_invoice_first_incomplete",
+            event_type="invoice.paid",
+            invoice_id="in_invoice_first_incomplete",
+            customer_id="cus_invoice_first_incomplete",
+            price_id=plan.stripe_price_id,
+            subscription_id="sub_invoice_first_incomplete",
+            billing_reason="subscription_create",
+        )
+    )
+    monkeypatch.setenv(
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_invoice_first_incomplete",
+    )
+
+    paid_result = handle_stripe_event(
+        body=b'{"id":"evt_invoice_first_incomplete"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    pending_reservation.refresh_from_db()
+
+    assert paid_result.status == "processed"
+    assert Subscription.objects.current().count() == 1
+    assert Subscription.objects.current().get(user=user).pk == pending_reservation.pk
+    assert pending_reservation.status == Subscription.Status.ACTIVE
+    assert pending_reservation.stripe_subscription_id == "sub_invoice_first_incomplete"
+    assert CreditBalance.objects.get(user=user).balance == plan.credits_per_period
+
+    fake_client.event = _subscription_event(
+        event_id="evt_invoice_first_incomplete_late_update",
+        event_type="customer.subscription.updated",
+        subscription_id="sub_invoice_first_incomplete",
+        customer_id="cus_invoice_first_incomplete",
+        price_id=plan.stripe_price_id,
+        status="active",
+    )
+    updated_result = handle_stripe_event(
+        body=b'{"id":"evt_invoice_first_incomplete_late_update"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    pending_reservation.refresh_from_db()
+
+    assert updated_result.status == "processed"
+    assert Subscription.objects.current().count() == 1
+    assert Subscription.objects.current().get(user=user).pk == pending_reservation.pk
+    assert pending_reservation.current_period_start is not None
+    assert pending_reservation.current_period_end is not None
+    assert CreditTransaction.objects.filter(user=user).count() == 1
+
+
+@pytest.mark.django_db
 def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
     user,
     monkeypatch: pytest.MonkeyPatch,
