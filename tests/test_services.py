@@ -54,31 +54,33 @@ def _invoice_paid_event(
     invoice_id: str,
     customer_id: str,
     price_id: str,
+    billing_reason: str | None = "subscription_cycle",
     user_reference: str | None = None,
 ) -> dict[str, Any]:
     metadata = {}
     if user_reference:
         metadata["quickscale_user_reference"] = user_reference
+    invoice_object: dict[str, Any] = {
+        "id": invoice_id,
+        "customer": customer_id,
+        "subscription": "sub_123",
+        "metadata": metadata,
+        "lines": {
+            "data": [
+                {
+                    "price": {
+                        "id": price_id,
+                    }
+                }
+            ]
+        },
+    }
+    if billing_reason is not None:
+        invoice_object["billing_reason"] = billing_reason
     return {
         "id": event_id,
         "type": "invoice.paid",
-        "data": {
-            "object": {
-                "id": invoice_id,
-                "customer": customer_id,
-                "subscription": "sub_123",
-                "metadata": metadata,
-                "lines": {
-                    "data": [
-                        {
-                            "price": {
-                                "id": price_id,
-                            }
-                        }
-                    ]
-                },
-            }
-        },
+        "data": {"object": invoice_object},
     }
 
 

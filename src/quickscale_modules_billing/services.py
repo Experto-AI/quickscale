@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone as dt_timezone
 import hashlib
 from importlib import import_module
 import json
@@ -12,7 +13,8 @@ from typing import Any, cast
 
 from django.apps import apps
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from quickscale_modules_billing.models import (
     CreditBalance,
@@ -28,6 +30,10 @@ DEFAULT_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"
 DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR = "QUICKSCALE_BILLING_WEBHOOK_SECRET"
 STRIPE_EVENT_TYPE_CHECKOUT_SESSION_COMPLETED = "checkout.session.completed"
 STRIPE_EVENT_TYPE_INVOICE_PAID = "invoice.paid"
+STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED = "invoice.payment_failed"
+STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_CREATED = "customer.subscription.created"
+STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED = "customer.subscription.updated"
+STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED = "customer.subscription.deleted"
 _INVOICE_REFERENCE_KEYS = ("invoice_id",)
 _BUSINESS_OBJECT_REFERENCE_KEYS = (
     "checkout_session_id",
@@ -41,6 +47,26 @@ _PLAN_SLUG_METADATA_KEY = "quickscale_plan_slug"
 _PLAN_CREDITS_METADATA_KEY = "quickscale_plan_credits"
 _PLAN_INTERVAL_METADATA_KEY = "quickscale_plan_interval"
 _PRICE_ID_METADATA_KEY = "stripe_price_id"
+_CREDITABLE_INVOICE_BILLING_REASONS = frozenset(
+    {"subscription_create", "subscription_cycle"}
+)
+_CURRENT_RECURRING_SUBSCRIPTION_ERROR = (
+    "User already has a current recurring subscription."
+)
+_STRIPE_RECURRING_INTERVAL_BY_PLAN_INTERVAL = {
+    Plan.BillingInterval.MONTHLY: "month",
+    Plan.BillingInterval.YEARLY: "year",
+}
+_STRIPE_TO_LOCAL_SUBSCRIPTION_STATUS = {
+    "incomplete": Subscription.Status.INCOMPLETE,
+    "incomplete_expired": Subscription.Status.INCOMPLETE_EXPIRED,
+    "trialing": Subscription.Status.TRIALING,
+    "active": Subscription.Status.ACTIVE,
+    "past_due": Subscription.Status.PAST_DUE,
+    "canceled": Subscription.Status.CANCELED,
+    "unpaid": Subscription.Status.UNPAID,
+    "paused": Subscription.Status.PAUSED,
+}
 
 
 class BillingError(Exception):
@@ -188,12 +214,7 @@ class StripeClient:
     ) -> dict[str, Any]:
         """Create a Stripe Checkout Session for a one-time purchase."""
         self._activate_api_key()
-        checkout_module = getattr(self._stripe_module, "checkout", None)
-        checkout_session_api = getattr(checkout_module, "Session", None)
-        if checkout_session_api is None or not hasattr(checkout_session_api, "create"):
-            raise BillingConfigurationError(
-                "Stripe Checkout SDK support is unavailable in this environment."
-            )
+        checkout_session_api = self._resolve_checkout_session_api()
         created_session = checkout_session_api.create(
             mode="payment",
             customer=customer_id,
@@ -205,6 +226,39 @@ class StripeClient:
             payment_intent_data={"metadata": dict(payment_intent_metadata)},
         )
         return _normalize_mapping(created_session)
+
+    def create_subscription_checkout_session(
+        self,
+        *,
+        customer_id: str,
+        price_id: str,
+        success_url: str,
+        cancel_url: str,
+        session_metadata: Mapping[str, str],
+        subscription_metadata: Mapping[str, str],
+        client_reference_id: str,
+    ) -> dict[str, Any]:
+        """Create a Stripe Checkout Session for a recurring subscription."""
+        self._activate_api_key()
+        checkout_session_api = self._resolve_checkout_session_api()
+        created_session = checkout_session_api.create(
+            mode="subscription",
+            customer=customer_id,
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            client_reference_id=client_reference_id,
+            metadata=dict(session_metadata),
+            subscription_data={"metadata": dict(subscription_metadata)},
+        )
+        return _normalize_mapping(created_session)
+
+    def retrieve_checkout_session(self, *, checkout_session_id: str) -> dict[str, Any]:
+        """Return a normalized Stripe Checkout Session payload."""
+        self._activate_api_key()
+        checkout_session_api = self._resolve_checkout_session_api()
+        checkout_session = checkout_session_api.retrieve(checkout_session_id)
+        return _normalize_mapping(checkout_session)
 
     def retrieve_payment_intent(self, *, payment_intent_id: str) -> dict[str, Any]:
         """Return a normalized Stripe PaymentIntent payload."""
@@ -265,6 +319,15 @@ class StripeClient:
         if hasattr(self._stripe_module, "api_key"):
             setattr(self._stripe_module, "api_key", self._api_key)
 
+    def _resolve_checkout_session_api(self) -> Any:
+        checkout_module = getattr(self._stripe_module, "checkout", None)
+        checkout_session_api = getattr(checkout_module, "Session", None)
+        if checkout_session_api is None:
+            raise BillingConfigurationError(
+                "Stripe Checkout SDK support is unavailable in this environment."
+            )
+        return checkout_session_api
+
 
 def get_stripe_client(
     *,
@@ -296,15 +359,15 @@ def get_or_create_stripe_customer(
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
     _ensure_billing_enabled(snapshot)
 
-    existing_customer_id = (
-        Subscription.objects.filter(user=user)
-        .exclude(stripe_customer_id="")
-        .order_by("-pk")
-        .values_list("stripe_customer_id", flat=True)
-        .first()
+    authoritative_subscription = _resolve_authoritative_subscription_reservation(
+        user=user,
     )
-    if existing_customer_id:
-        return str(existing_customer_id), False
+    if authoritative_subscription is not None:
+        existing_customer_id = str(
+            authoritative_subscription.stripe_customer_id or ""
+        ).strip()
+        if existing_customer_id:
+            return existing_customer_id, False
 
     resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
     customer_metadata = _build_customer_metadata(user)
@@ -355,7 +418,7 @@ def create_checkout_session(
 
     resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
     stripe_price = resolved_client.retrieve_price(price_id=plan.stripe_price_id)
-    _validate_stripe_price_matches_plan(plan=plan, stripe_price=stripe_price)
+    _validate_stripe_price_parity(plan=plan, stripe_price=stripe_price)
 
     customer_id, _ = get_or_create_stripe_customer(
         user,
@@ -376,6 +439,142 @@ def create_checkout_session(
     if not checkout_url:
         raise BillingError(
             "Stripe checkout session creation did not return a hosted URL."
+        )
+    return checkout_url
+
+
+def create_subscription_checkout_session(
+    user: Any,
+    plan: Plan,
+    success_url: str,
+    cancel_url: str,
+    *,
+    stripe_client: Any | None = None,
+    settings_snapshot: BillingSettingsSnapshot | None = None,
+) -> str:
+    """Create or reuse a Stripe Checkout Session for a recurring subscription."""
+    snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
+    _ensure_billing_enabled(snapshot)
+
+    normalized_success_url = success_url.strip()
+    normalized_cancel_url = cancel_url.strip()
+    if not normalized_success_url or not normalized_cancel_url:
+        raise BillingValidationError("Checkout success and cancel URLs are required.")
+
+    _validate_recurring_subscription_plan(plan)
+
+    resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
+    stripe_price = resolved_client.retrieve_price(price_id=plan.stripe_price_id)
+    _validate_stripe_price_parity(plan=plan, stripe_price=stripe_price)
+
+    with transaction.atomic():
+        reservation, recovered_from_create_conflict = (
+            _prepare_subscription_checkout_reservation(user=user, plan=plan)
+        )
+
+    customer_id = str(reservation.stripe_customer_id or "").strip()
+    if not customer_id:
+        customer_id, _ = get_or_create_stripe_customer(
+            user,
+            stripe_client=resolved_client,
+            settings_snapshot=snapshot,
+        )
+        with transaction.atomic():
+            reservation = Subscription.objects.select_for_update().get(
+                pk=reservation.pk
+            )
+            if not _subscription_reservation_can_be_reused(reservation, plan=plan):
+                raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
+            reservation.stripe_customer_id = customer_id
+            reservation.save(update_fields=["stripe_customer_id"])
+
+    live_checkout_url = _reuse_live_subscription_checkout_url(
+        reservation=reservation,
+        stripe_client=resolved_client,
+    )
+    if live_checkout_url:
+        return live_checkout_url
+    if recovered_from_create_conflict:
+        raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
+
+    if str(reservation.stripe_checkout_session_id or "").strip():
+        recovered_from_replacement_conflict = False
+        with transaction.atomic():
+            current_reservation = Subscription.objects.select_for_update().get(
+                pk=reservation.pk
+            )
+            if _subscription_reservation_can_be_reused(current_reservation, plan=plan):
+                _expire_subscription_reservation(current_reservation)
+                reservation, recovered_from_replacement_conflict = (
+                    _create_subscription_reservation(
+                        user=user,
+                        plan=plan,
+                        stripe_customer_id=customer_id or None,
+                    )
+                )
+        customer_id = str(reservation.stripe_customer_id or "").strip()
+        live_checkout_url = _reuse_live_subscription_checkout_url(
+            reservation=reservation,
+            stripe_client=resolved_client,
+        )
+        if live_checkout_url:
+            return live_checkout_url
+        if recovered_from_replacement_conflict:
+            raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
+
+    try:
+        session_metadata = _build_checkout_session_metadata(user, plan)
+        checkout_session = resolved_client.create_subscription_checkout_session(
+            customer_id=customer_id,
+            price_id=plan.stripe_price_id,
+            success_url=normalized_success_url,
+            cancel_url=normalized_cancel_url,
+            session_metadata=session_metadata,
+            subscription_metadata=session_metadata,
+            client_reference_id=_user_reference(user),
+        )
+        checkout_session_id = str(checkout_session.get("id") or "").strip()
+        checkout_url = str(checkout_session.get("url") or "").strip()
+        if not checkout_session_id:
+            raise BillingError(
+                "Stripe subscription checkout session creation did not return an id."
+            )
+        if not checkout_url:
+            raise BillingError(
+                "Stripe subscription checkout session creation did not return a hosted URL."
+            )
+    except Exception:
+        with transaction.atomic():
+            failed_reservation = (
+                Subscription.objects.select_for_update()
+                .filter(pk=reservation.pk)
+                .first()
+            )
+            if (
+                failed_reservation is not None
+                and _subscription_reservation_can_be_reused(
+                    failed_reservation,
+                    plan=plan,
+                )
+            ):
+                _expire_subscription_reservation(failed_reservation)
+        raise
+
+    with transaction.atomic():
+        reservation = Subscription.objects.select_for_update().get(pk=reservation.pk)
+        if not _subscription_reservation_can_be_reused(reservation, plan=plan):
+            raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
+        reservation.stripe_customer_id = customer_id
+        reservation.stripe_checkout_session_id = checkout_session_id
+        reservation.checkout_expires_at = _extract_checkout_session_expires_at(
+            checkout_session
+        )
+        reservation.save(
+            update_fields=[
+                "stripe_customer_id",
+                "stripe_checkout_session_id",
+                "checkout_expires_at",
+            ]
         )
     return checkout_url
 
@@ -489,6 +688,16 @@ def handle_stripe_event(
             elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAID:
                 _handle_invoice_paid_event(event_payload)
                 processing_status = "processed"
+            elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
+                _handle_invoice_payment_failed_event(event_payload)
+                processing_status = "processed"
+            elif event_type in {
+                STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_CREATED,
+                STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED,
+                STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED,
+            }:
+                _handle_subscription_event(event_payload, event_type=event_type)
+                processing_status = "processed"
             else:
                 processing_status = "ignored"
             locked_event.processed = True
@@ -514,11 +723,17 @@ def _ensure_billing_enabled(settings_snapshot: BillingSettingsSnapshot) -> None:
         raise BillingDisabledError("Billing module is disabled.")
 
 
-def _handle_invoice_paid_event(event_payload: Mapping[str, Any]) -> CreditTransaction:
+def _handle_invoice_paid_event(
+    event_payload: Mapping[str, Any],
+) -> CreditTransaction | None:
     invoice_payload = _extract_event_object(event_payload)
     invoice_id = str(invoice_payload.get("id") or "").strip()
     if not invoice_id:
         raise BillingWebhookError("Stripe invoice payload is missing an id.")
+
+    billing_reason = str(invoice_payload.get("billing_reason") or "").strip().lower()
+    if billing_reason not in _CREDITABLE_INVOICE_BILLING_REASONS:
+        return None
 
     price_id = _extract_price_id(invoice_payload)
     plan = Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
@@ -533,6 +748,28 @@ def _handle_invoice_paid_event(event_payload: Mapping[str, Any]) -> CreditTransa
 
     subscription_id = str(invoice_payload.get("subscription") or "").strip()
     customer_id = str(invoice_payload.get("customer") or "").strip()
+    subscription = _resolve_subscription_for_runtime_event(
+        stripe_subscription_id=subscription_id,
+        customer_id=customer_id,
+        user=user,
+        for_update=True,
+    )
+    if subscription is not None and subscription.status == Subscription.Status.PAST_DUE:
+        subscription.plan = plan
+        subscription.status = Subscription.Status.ACTIVE
+        subscription.stripe_customer_id = customer_id or subscription.stripe_customer_id
+        subscription.stripe_subscription_id = (
+            subscription_id or subscription.stripe_subscription_id
+        )
+        subscription.save(
+            update_fields=[
+                "plan",
+                "status",
+                "stripe_customer_id",
+                "stripe_subscription_id",
+            ]
+        )
+
     reference_data: dict[str, Any] = {
         "invoice_id": invoice_id,
         "stripe_customer_id": customer_id,
@@ -552,17 +789,132 @@ def _handle_invoice_paid_event(event_payload: Mapping[str, Any]) -> CreditTransa
     )
 
 
+def _handle_invoice_payment_failed_event(
+    event_payload: Mapping[str, Any],
+) -> Subscription:
+    invoice_payload = _extract_event_object(event_payload)
+    invoice_id = str(invoice_payload.get("id") or "").strip()
+    if not invoice_id:
+        raise BillingWebhookError("Stripe invoice payload is missing an id.")
+
+    resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
+    subscription = _resolve_subscription_for_runtime_event(
+        stripe_subscription_id=str(invoice_payload.get("subscription") or "").strip(),
+        customer_id=str(invoice_payload.get("customer") or "").strip(),
+        user=resolved_user,
+        for_update=True,
+    )
+
+    if subscription is None:
+        if resolved_user is None:
+            raise BillingWebhookError(
+                "Could not resolve a local user for the Stripe invoice."
+            )
+        price_id = _extract_price_id(invoice_payload)
+        plan = Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
+        if plan is None:
+            raise BillingWebhookError(
+                f"No billing plan matches Stripe price {price_id}."
+            )
+        subscription = Subscription(user=resolved_user, plan=plan)
+
+    subscription.status = Subscription.Status.PAST_DUE
+    subscription.stripe_customer_id = (
+        str(invoice_payload.get("customer") or "").strip()
+        or subscription.stripe_customer_id
+    )
+    subscription.stripe_subscription_id = (
+        str(invoice_payload.get("subscription") or "").strip()
+        or subscription.stripe_subscription_id
+    )
+    if subscription.pk is None:
+        subscription.save()
+    else:
+        subscription.save(
+            update_fields=[
+                "status",
+                "stripe_customer_id",
+                "stripe_subscription_id",
+            ]
+        )
+    return subscription
+
+
+def _handle_subscription_event(
+    event_payload: Mapping[str, Any],
+    *,
+    event_type: str,
+) -> Subscription:
+    subscription_payload = _extract_event_object(event_payload)
+    stripe_subscription_id = str(subscription_payload.get("id") or "").strip()
+    if not stripe_subscription_id:
+        raise BillingWebhookError("Stripe subscription payload is missing an id.")
+
+    stripe_status = str(subscription_payload.get("status") or "").strip().lower()
+    if (
+        event_type == STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED
+        and not stripe_status
+    ):
+        stripe_status = Subscription.Status.CANCELED
+    local_status = _map_stripe_subscription_status(stripe_status)
+    plan = _resolve_plan_for_subscription_payload(subscription_payload)
+    user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
+    if user is None:
+        raise BillingWebhookError(
+            "Could not resolve a local user for the Stripe subscription."
+        )
+
+    subscription = _resolve_subscription_for_runtime_event(
+        stripe_subscription_id=stripe_subscription_id,
+        customer_id=str(subscription_payload.get("customer") or "").strip(),
+        user=user,
+        for_update=True,
+    )
+    if subscription is None:
+        subscription = Subscription(user=user, plan=plan)
+
+    subscription.plan = plan
+    subscription.status = local_status
+    subscription.stripe_subscription_id = stripe_subscription_id
+    subscription.stripe_customer_id = (
+        str(subscription_payload.get("customer") or "").strip()
+        or subscription.stripe_customer_id
+    )
+    subscription.current_period_start = _stripe_timestamp_to_datetime(
+        subscription_payload.get("current_period_start")
+    )
+    subscription.current_period_end = _stripe_timestamp_to_datetime(
+        subscription_payload.get("current_period_end")
+    )
+    if subscription.pk is None:
+        subscription.save()
+    else:
+        subscription.save(
+            update_fields=[
+                "plan",
+                "status",
+                "stripe_subscription_id",
+                "stripe_customer_id",
+                "current_period_start",
+                "current_period_end",
+            ]
+        )
+    return subscription
+
+
 def _handle_checkout_session_completed_event(
     event_payload: Mapping[str, Any],
     *,
     stripe_client: Any | None = None,
-) -> CreditTransaction:
+) -> CreditTransaction | None:
     checkout_session_payload = _extract_event_object(event_payload)
     checkout_session_id = str(checkout_session_payload.get("id") or "").strip()
     if not checkout_session_id:
         raise BillingWebhookError("Stripe checkout session payload is missing an id.")
 
     checkout_mode = str(checkout_session_payload.get("mode") or "").strip()
+    if checkout_mode == "subscription":
+        return None
     if checkout_mode and checkout_mode != "payment":
         raise BillingWebhookError(
             "Stripe checkout session is not a one-time payment session."
@@ -659,14 +1011,91 @@ def _extract_price_id(invoice_payload: Mapping[str, Any]) -> str:
     raise BillingWebhookError("Stripe invoice payload is missing a billing price id.")
 
 
+def _extract_subscription_price_id(subscription_payload: Mapping[str, Any]) -> str:
+    subscription_items = subscription_payload.get("items")
+    line_item_data: list[Mapping[str, Any]] = []
+    if isinstance(subscription_items, Mapping):
+        raw_data = subscription_items.get("data", [])
+        if isinstance(raw_data, list):
+            line_item_data = [item for item in raw_data if isinstance(item, Mapping)]
+
+    price_ids = {
+        str(price_data.get("id") or "").strip()
+        for line_item in line_item_data
+        for price_data in [_normalize_mapping(line_item.get("price") or {})]
+        if str(price_data.get("id") or "").strip()
+    }
+    if len(price_ids) == 1:
+        return next(iter(price_ids))
+    if len(price_ids) > 1:
+        raise BillingWebhookError(
+            "Stripe subscription payload contains multiple billing price ids."
+        )
+
+    fallback_price_id = str(
+        _normalize_mapping(subscription_payload.get("metadata") or {}).get(
+            _PRICE_ID_METADATA_KEY,
+            "",
+        )
+    ).strip()
+    if fallback_price_id:
+        return fallback_price_id
+
+    raise BillingWebhookError(
+        "Stripe subscription payload is missing a billing price id."
+    )
+
+
+def _resolve_plan_for_subscription_payload(
+    subscription_payload: Mapping[str, Any],
+) -> Plan:
+    price_id = _extract_subscription_price_id(subscription_payload)
+    plan = Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
+    if plan is None:
+        raise BillingWebhookError(f"No billing plan matches Stripe price {price_id}.")
+    return plan
+
+
+def _resolve_subscription_for_runtime_event(
+    *,
+    stripe_subscription_id: str,
+    customer_id: str,
+    user: Any | None,
+    for_update: bool = False,
+) -> Subscription | None:
+    normalized_subscription_id = stripe_subscription_id.strip()
+    if normalized_subscription_id:
+        queryset = Subscription.objects.select_related("user", "plan").filter(
+            stripe_subscription_id=normalized_subscription_id
+        )
+        if for_update:
+            queryset = queryset.select_for_update()
+        subscription = queryset.order_by("-pk").first()
+        if subscription is not None:
+            return subscription
+
+    if customer_id.strip():
+        subscription = _resolve_authoritative_subscription_reservation(
+            customer_id=customer_id,
+            for_update=for_update,
+        )
+        if subscription is not None:
+            return subscription
+
+    if user is not None:
+        return _resolve_authoritative_subscription_reservation(
+            user=user,
+            for_update=for_update,
+        )
+
+    return None
+
+
 def _resolve_user_for_invoice(*, invoice_payload: Mapping[str, Any]) -> Any | None:
     customer_id = str(invoice_payload.get("customer") or "").strip()
     if customer_id:
-        subscription = (
-            Subscription.objects.select_related("user")
-            .filter(stripe_customer_id=customer_id)
-            .order_by("-pk")
-            .first()
+        subscription = _resolve_authoritative_subscription_reservation(
+            customer_id=customer_id,
         )
         if subscription is not None:
             return subscription.user
@@ -677,6 +1106,20 @@ def _resolve_user_for_invoice(*, invoice_payload: Mapping[str, Any]) -> Any | No
         _normalize_mapping(invoice_payload.get("parent") or {}),
     ]
     return _resolve_user_from_metadata_sources(metadata_sources)
+
+
+def _resolve_user_for_subscription(
+    *, subscription_payload: Mapping[str, Any]
+) -> Any | None:
+    customer_id = str(subscription_payload.get("customer") or "").strip()
+    if customer_id:
+        subscription = _resolve_authoritative_subscription_reservation(
+            customer_id=customer_id,
+        )
+        if subscription is not None:
+            return subscription.user
+
+    return _resolve_user_from_metadata_sources([subscription_payload])
 
 
 def _resolve_user_for_checkout_session(
@@ -812,6 +1255,17 @@ def _validate_one_time_purchase_plan(plan: Plan) -> None:
         raise BillingValidationError("Billing plan is missing a Stripe price id.")
 
 
+def _validate_recurring_subscription_plan(plan: Plan) -> None:
+    if not plan.is_active:
+        raise BillingValidationError("Billing plan is not active.")
+    if plan.billing_interval not in _STRIPE_RECURRING_INTERVAL_BY_PLAN_INTERVAL:
+        raise BillingValidationError(
+            "Billing plan does not support recurring subscriptions."
+        )
+    if not str(plan.stripe_price_id or "").strip():
+        raise BillingValidationError("Billing plan is missing a Stripe price id.")
+
+
 def _validate_completed_checkout_plan(
     plan: Plan,
     *,
@@ -843,7 +1297,7 @@ def _build_checkout_session_metadata(user: Any, plan: Plan) -> dict[str, str]:
     return metadata
 
 
-def _validate_stripe_price_matches_plan(
+def _validate_stripe_price_parity(
     *,
     plan: Plan,
     stripe_price: Mapping[str, Any],
@@ -861,10 +1315,219 @@ def _validate_stripe_price_matches_plan(
         )
 
     price_type = str(stripe_price.get("type") or "").strip().lower()
-    if price_type != "one_time":
+    if (
+        plan.billing_interval == Plan.BillingInterval.ONE_TIME
+        and price_type != "one_time"
+    ):
         raise BillingValidationError(
             "Billing plan must reference a one-time Stripe price for purchases."
         )
+    if (
+        plan.billing_interval != Plan.BillingInterval.ONE_TIME
+        and price_type != "recurring"
+    ):
+        raise BillingValidationError(
+            "Billing plan must reference a recurring Stripe price for subscriptions."
+        )
+    if plan.billing_interval == Plan.BillingInterval.ONE_TIME:
+        return
+
+    expected_interval = _STRIPE_RECURRING_INTERVAL_BY_PLAN_INTERVAL.get(
+        plan.billing_interval,
+        "",
+    )
+    recurring_data = _normalize_mapping(stripe_price.get("recurring") or {})
+    actual_interval = str(recurring_data.get("interval") or "").strip().lower()
+    if actual_interval != expected_interval:
+        raise BillingValidationError(
+            "Billing plan billing interval does not match the referenced Stripe price."
+        )
+
+
+def _resolve_authoritative_subscription_reservation(
+    *,
+    user: Any | None = None,
+    customer_id: str = "",
+    for_update: bool = False,
+) -> Subscription | None:
+    normalized_customer_id = customer_id.strip()
+    if user is None and not normalized_customer_id:
+        return None
+
+    queryset = Subscription.objects.select_related("user", "plan").order_by("-pk")
+    if for_update:
+        queryset = queryset.select_for_update()
+    if user is not None:
+        queryset = queryset.filter(user=user)
+    if normalized_customer_id:
+        queryset = queryset.filter(stripe_customer_id=normalized_customer_id)
+    return queryset.current().first()
+
+
+def _subscription_reservation_can_be_reused(
+    reservation: Subscription,
+    *,
+    plan: Plan,
+) -> bool:
+    if reservation.plan_id != plan.pk:
+        return False
+    if reservation.status != Subscription.Status.INCOMPLETE:
+        return False
+    return not str(reservation.stripe_subscription_id or "").strip()
+
+
+def _subscription_reservation_needs_replacement(
+    reservation: Subscription,
+) -> bool:
+    checkout_session_id = str(reservation.stripe_checkout_session_id or "").strip()
+    if not checkout_session_id:
+        return True
+    if reservation.checkout_expires_at is None:
+        return False
+    return reservation.checkout_expires_at <= timezone.now()
+
+
+def _expire_subscription_reservation(reservation: Subscription) -> None:
+    reservation.status = Subscription.Status.INCOMPLETE_EXPIRED
+    reservation.save(update_fields=["status"])
+
+
+def _create_subscription_reservation(
+    *,
+    user: Any,
+    plan: Plan,
+    stripe_customer_id: str | None = None,
+) -> tuple[Subscription, bool]:
+    try:
+        with transaction.atomic():
+            return (
+                Subscription.objects.create(
+                    user=user,
+                    plan=plan,
+                    stripe_customer_id=stripe_customer_id,
+                    status=Subscription.Status.INCOMPLETE,
+                ),
+                False,
+            )
+    except IntegrityError as exc:
+        recovered_reservation = _recover_conflicting_subscription_reservation(
+            user=user,
+            plan=plan,
+        )
+        if recovered_reservation is not None:
+            return recovered_reservation, True
+        raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR) from exc
+
+
+def _recover_conflicting_subscription_reservation(
+    *,
+    user: Any,
+    plan: Plan,
+) -> Subscription | None:
+    with transaction.atomic():
+        current_reservation = _resolve_authoritative_subscription_reservation(
+            user=user,
+            for_update=True,
+        )
+        if current_reservation is None:
+            return None
+        if not _subscription_reservation_can_be_reused(current_reservation, plan=plan):
+            return None
+        if _subscription_reservation_needs_replacement(current_reservation):
+            return None
+        return current_reservation
+
+
+def _prepare_subscription_checkout_reservation(
+    *,
+    user: Any,
+    plan: Plan,
+) -> tuple[Subscription, bool]:
+    current_reservation = _resolve_authoritative_subscription_reservation(
+        user=user,
+        for_update=True,
+    )
+    if current_reservation is None:
+        return _create_subscription_reservation(user=user, plan=plan)
+
+    if not _subscription_reservation_can_be_reused(current_reservation, plan=plan):
+        raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
+
+    if _subscription_reservation_needs_replacement(current_reservation):
+        persisted_customer_id = str(
+            current_reservation.stripe_customer_id or ""
+        ).strip()
+        _expire_subscription_reservation(current_reservation)
+        return _create_subscription_reservation(
+            user=user,
+            plan=plan,
+            stripe_customer_id=persisted_customer_id or None,
+        )
+
+    return current_reservation, False
+
+
+def _reuse_live_subscription_checkout_url(
+    *,
+    reservation: Subscription,
+    stripe_client: Any,
+) -> str:
+    checkout_session_id = str(reservation.stripe_checkout_session_id or "").strip()
+    if not checkout_session_id:
+        return ""
+    if (
+        reservation.checkout_expires_at is not None
+        and reservation.checkout_expires_at <= timezone.now()
+    ):
+        return ""
+    if not hasattr(stripe_client, "retrieve_checkout_session"):
+        return ""
+
+    checkout_session = _normalize_mapping(
+        stripe_client.retrieve_checkout_session(
+            checkout_session_id=checkout_session_id,
+        )
+    )
+    return _extract_live_checkout_session_url(checkout_session)
+
+
+def _extract_live_checkout_session_url(
+    checkout_session_payload: Mapping[str, Any],
+) -> str:
+    checkout_url = str(checkout_session_payload.get("url") or "").strip()
+    if not checkout_url:
+        return ""
+
+    session_status = str(checkout_session_payload.get("status") or "").strip().lower()
+    if session_status and session_status != "open":
+        return ""
+
+    expires_at = _extract_checkout_session_expires_at(checkout_session_payload)
+    if expires_at is not None and expires_at <= timezone.now():
+        return ""
+    return checkout_url
+
+
+def _extract_checkout_session_expires_at(
+    checkout_session_payload: Mapping[str, Any],
+) -> datetime | None:
+    return _stripe_timestamp_to_datetime(checkout_session_payload.get("expires_at"))
+
+
+def _stripe_timestamp_to_datetime(value: Any) -> datetime | None:
+    normalized_timestamp = _normalize_integer(value)
+    if normalized_timestamp is None or normalized_timestamp <= 0:
+        return None
+    return datetime.fromtimestamp(normalized_timestamp, tz=dt_timezone.utc)
+
+
+def _map_stripe_subscription_status(stripe_status: str) -> str:
+    normalized_status = stripe_status.strip().lower()
+    if normalized_status in _STRIPE_TO_LOCAL_SUBSCRIPTION_STATUS:
+        return _STRIPE_TO_LOCAL_SUBSCRIPTION_STATUS[normalized_status]
+    raise BillingWebhookError(
+        f"Stripe subscription status {normalized_status or '<blank>'} is not supported."
+    )
 
 
 def _normalize_integer(value: Any) -> int | None:
@@ -987,6 +1650,7 @@ __all__ = [
     "StripeClient",
     "StripeWebhookResult",
     "create_checkout_session",
+    "create_subscription_checkout_session",
     "credit_user",
     "get_or_create_stripe_customer",
     "get_stripe_client",
