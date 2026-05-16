@@ -8,6 +8,28 @@ from django.conf import settings
 from django.db import models, transaction
 
 
+CURRENT_SUBSCRIPTION_STATUSES = (
+    "incomplete",
+    "trialing",
+    "active",
+    "past_due",
+    "unpaid",
+    "paused",
+)
+
+
+def populated_value_q(field_name: str) -> models.Q:
+    """Return a predicate that matches non-empty string values."""
+
+    return models.Q(**{f"{field_name}__isnull": False}) & ~models.Q(**{field_name: ""})
+
+
+def current_subscription_status_q(*, field_name: str = "status") -> models.Q:
+    """Return a predicate that matches current subscription rows."""
+
+    return models.Q(**{f"{field_name}__in": CURRENT_SUBSCRIPTION_STATUSES})
+
+
 class Plan(models.Model):
     """QuickScale-owned plan metadata that points at a Stripe price."""
 
@@ -101,15 +123,29 @@ class CreditTransaction(models.Model):
         return f"{self.user} {self.transaction_type} {self.amount}"
 
 
+class SubscriptionQuerySet(models.QuerySet["Subscription"]):
+    """Query helpers for subscription state lookups."""
+
+    def current(self) -> "SubscriptionQuerySet":
+        """Return only rows that represent current subscription state."""
+
+        return self.filter(current_subscription_status_q())
+
+
 class Subscription(models.Model):
     """Local snapshot of a user's recurring billing state."""
 
     class Status(models.TextChoices):
         INCOMPLETE = "incomplete", "Incomplete"
+        INCOMPLETE_EXPIRED = "incomplete_expired", "Incomplete expired"
+        TRIALING = "trialing", "Trialing"
         ACTIVE = "active", "Active"
         PAST_DUE = "past_due", "Past due"
         CANCELED = "canceled", "Canceled"
         UNPAID = "unpaid", "Unpaid"
+        PAUSED = "paused", "Paused"
+
+    CURRENT_STATUSES = CURRENT_SUBSCRIPTION_STATUSES
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -121,19 +157,68 @@ class Subscription(models.Model):
         related_name="subscriptions",
         on_delete=models.PROTECT,
     )
-    stripe_subscription_id = models.CharField(max_length=255, unique=True)
-    stripe_customer_id = models.CharField(max_length=255, db_index=True)
+    stripe_subscription_id = models.CharField(max_length=255, null=True, blank=True)
+    stripe_customer_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    stripe_checkout_session_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+    )
     status = models.CharField(
         max_length=32,
         choices=Status.choices,
         default=Status.INCOMPLETE,
     )
+    checkout_expires_at = models.DateTimeField(null=True, blank=True)
     current_period_start = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
+
+    objects = SubscriptionQuerySet.as_manager()
 
     class Meta:
         app_label = "quickscale_modules_billing"
         ordering = ["-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stripe_subscription_id"],
+                condition=populated_value_q("stripe_subscription_id"),
+                name="quickscale_billing_unique_stripe_subscription_id_when_populated",
+            ),
+            models.UniqueConstraint(
+                fields=["stripe_checkout_session_id"],
+                condition=populated_value_q("stripe_checkout_session_id"),
+                name="quickscale_billing_unique_stripe_checkout_session_id_present",
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=current_subscription_status_q(),
+                name="quickscale_billing_unique_current_subscription_per_user",
+            ),
+        ]
+
+    @classmethod
+    def current_statuses(cls) -> tuple[str, ...]:
+        """Return the local statuses that count as a current subscription."""
+
+        return cls.CURRENT_STATUSES
+
+    @classmethod
+    def is_current_status(cls, status: str | None) -> bool:
+        """Return whether the given local status is considered current."""
+
+        normalized_status = (status or "").strip()
+        return normalized_status in cls.current_statuses()
+
+    @classmethod
+    def current_status_q(cls, *, field_name: str = "status") -> models.Q:
+        """Return a reusable predicate for current-subscription filtering."""
+
+        return current_subscription_status_q(field_name=field_name)
 
     def __str__(self) -> str:
         return f"{self.user} / {self.plan.slug} ({self.status})"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 
 import quickscale_modules_billing
@@ -108,3 +109,179 @@ def test_webhook_event_stripe_event_id_is_unique() -> None:
                 event_type="checkout.session.completed",
                 payload={"id": "evt_duplicate"},
             )
+
+
+@pytest.mark.django_db
+def test_subscription_current_status_helpers_and_queryset(user) -> None:
+    user_model = get_user_model()
+    other_user = user_model.objects.create_user(
+        username="billing-current-other",
+        email="billing-current-other@example.com",
+        password="billingpass123",
+    )
+    plan = Plan.objects.create(
+        name="Growth",
+        slug="growth",
+        stripe_price_id="price_growth_monthly",
+        credits_per_period=250,
+        price_cents=4900,
+        currency="usd",
+        billing_interval=Plan.BillingInterval.MONTHLY,
+    )
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id="sub_old_canceled",
+        stripe_customer_id="cus_old_canceled",
+        status=Subscription.Status.CANCELED,
+    )
+    current_subscription = Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id="sub_current_active",
+        stripe_customer_id="cus_current_active",
+        status=Subscription.Status.ACTIVE,
+    )
+    current_trial = Subscription.objects.create(
+        user=other_user,
+        plan=plan,
+        stripe_subscription_id="sub_current_trial",
+        stripe_customer_id="cus_current_trial",
+        status=Subscription.Status.TRIALING,
+    )
+    Subscription.objects.create(
+        user=other_user,
+        plan=plan,
+        stripe_subscription_id="sub_expired",
+        stripe_customer_id="cus_expired",
+        status=Subscription.Status.INCOMPLETE_EXPIRED,
+    )
+
+    assert Subscription.current_statuses() == (
+        Subscription.Status.INCOMPLETE,
+        Subscription.Status.TRIALING,
+        Subscription.Status.ACTIVE,
+        Subscription.Status.PAST_DUE,
+        Subscription.Status.UNPAID,
+        Subscription.Status.PAUSED,
+    )
+    assert Subscription.is_current_status(Subscription.Status.ACTIVE) is True
+    assert Subscription.is_current_status(Subscription.Status.PAUSED) is True
+    assert Subscription.is_current_status(Subscription.Status.CANCELED) is False
+    assert Subscription.is_current_status(None) is False
+    assert list(Subscription.objects.current()) == [current_trial, current_subscription]
+    assert Subscription.objects.filter(Subscription.current_status_q()).count() == 2
+
+
+@pytest.mark.django_db(transaction=True)
+def test_subscription_partial_unique_constraints_ignore_unset_external_ids(
+    user,
+) -> None:
+    user_model = get_user_model()
+    other_user = user_model.objects.create_user(
+        username="billing-constraint-other",
+        email="billing-constraint-other@example.com",
+        password="billingpass123",
+    )
+    duplicate_subscription_user = user_model.objects.create_user(
+        username="billing-constraint-sub-duplicate",
+        email="billing-constraint-sub-duplicate@example.com",
+        password="billingpass123",
+    )
+    duplicate_session_user = user_model.objects.create_user(
+        username="billing-constraint-session-duplicate",
+        email="billing-constraint-session-duplicate@example.com",
+        password="billingpass123",
+    )
+    plan = Plan.objects.create(
+        name="Scale",
+        slug="scale",
+        stripe_price_id="price_scale_monthly",
+        credits_per_period=500,
+        price_cents=9900,
+        currency="usd",
+        billing_interval=Plan.BillingInterval.MONTHLY,
+    )
+
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id=None,
+        stripe_customer_id=None,
+        stripe_checkout_session_id=None,
+        status=Subscription.Status.CANCELED,
+    )
+    Subscription.objects.create(
+        user=other_user,
+        plan=plan,
+        stripe_subscription_id=None,
+        stripe_customer_id=None,
+        stripe_checkout_session_id=None,
+        status=Subscription.Status.INCOMPLETE_EXPIRED,
+    )
+    Subscription.objects.create(
+        user=other_user,
+        plan=plan,
+        stripe_subscription_id="sub_populated_unique",
+        stripe_customer_id="cus_populated_unique",
+        stripe_checkout_session_id="cs_populated_unique",
+        status=Subscription.Status.CANCELED,
+    )
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Subscription.objects.create(
+            user=duplicate_subscription_user,
+            plan=plan,
+            stripe_subscription_id="sub_populated_unique",
+            stripe_customer_id="cus_duplicate_subscription",
+            status=Subscription.Status.CANCELED,
+        )
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Subscription.objects.create(
+            user=duplicate_session_user,
+            plan=plan,
+            stripe_subscription_id="sub_session_unique",
+            stripe_customer_id="cus_duplicate_session",
+            stripe_checkout_session_id="cs_populated_unique",
+            status=Subscription.Status.CANCELED,
+        )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_subscription_enforces_single_current_row_per_user(user) -> None:
+    plan = Plan.objects.create(
+        name="Enterprise",
+        slug="enterprise",
+        stripe_price_id="price_enterprise_monthly",
+        credits_per_period=1000,
+        price_cents=19900,
+        currency="usd",
+        billing_interval=Plan.BillingInterval.MONTHLY,
+    )
+
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id=None,
+        stripe_customer_id=None,
+        stripe_checkout_session_id="cs_pending_current",
+        status=Subscription.Status.INCOMPLETE,
+    )
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Subscription.objects.create(
+            user=user,
+            plan=plan,
+            stripe_subscription_id="sub_second_current",
+            stripe_customer_id="cus_second_current",
+            status=Subscription.Status.ACTIVE,
+        )
+
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id="sub_terminal_history",
+        stripe_customer_id="cus_terminal_history",
+        status=Subscription.Status.CANCELED,
+    )

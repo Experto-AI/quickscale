@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 from typing import Any
 
@@ -10,10 +11,16 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
-from quickscale_modules_billing.models import CreditBalance, CreditTransaction, Plan
+from quickscale_modules_billing.models import (
+    CreditBalance,
+    CreditTransaction,
+    Plan,
+    Subscription,
+)
 from quickscale_modules_billing.services import (
     BillingConfigurationError,
     BillingDisabledError,
+    BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
     StripeWebhookResult,
@@ -36,6 +43,28 @@ def _create_one_time_plan(
         currency="usd",
         billing_interval=Plan.BillingInterval.ONE_TIME,
         is_active=True,
+    )
+
+
+def _create_recurring_plan(
+    *,
+    slug: str = "starter-monthly",
+    price_id: str = "price_starter_monthly",
+    credits: int = 100,
+    price_cents: int = 1900,
+    interval: str = Plan.BillingInterval.MONTHLY,
+    is_active: bool = True,
+    name: str = "Starter Monthly",
+) -> Plan:
+    return Plan.objects.create(
+        name=name,
+        slug=slug,
+        stripe_price_id=price_id,
+        credits_per_period=credits,
+        price_cents=price_cents,
+        currency="usd",
+        billing_interval=interval,
+        is_active=is_active,
     )
 
 
@@ -68,9 +97,22 @@ def test_checkout_view_returns_json_401_for_anonymous_requests() -> None:
     assert response.json() == {"error": "Authentication required"}
 
 
+def test_subscription_checkout_view_returns_json_401_for_anonymous_requests() -> None:
+    csrf_client = Client(enforce_csrf_checks=True)
+
+    response = csrf_client.post(
+        reverse("quickscale_billing:subscription-checkout"),
+        data=json.dumps({"plan_slug": "starter-monthly"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Authentication required"}
+
+
 @pytest.mark.parametrize(
     "route_name",
-    ["credit-balance", "credit-transactions"],
+    ["credit-balance", "credit-transactions", "subscription-detail"],
 )
 def test_billing_read_views_return_json_401_for_anonymous_requests(
     client: Client,
@@ -82,6 +124,54 @@ def test_billing_read_views_return_json_401_for_anonymous_requests(
     assert response.json() == {"error": "Authentication required"}
 
 
+@pytest.mark.django_db
+def test_plan_list_view_is_public_and_returns_only_active_recurring_plans(
+    client: Client,
+) -> None:
+    monthly_plan = _create_recurring_plan(
+        slug="starter-monthly",
+        price_id="price_starter_monthly",
+        name="Starter Monthly",
+    )
+    yearly_plan = _create_recurring_plan(
+        slug="starter-yearly",
+        price_id="price_starter_yearly",
+        price_cents=19000,
+        credits=1200,
+        interval=Plan.BillingInterval.YEARLY,
+        name="Starter Yearly",
+    )
+    _create_one_time_plan(slug="credits-pack", price_id="price_credits_pack")
+    _create_recurring_plan(
+        slug="starter-inactive",
+        price_id="price_starter_inactive",
+        is_active=False,
+        name="Starter Inactive",
+    )
+
+    response = client.get(reverse("quickscale_billing:subscription-plans"))
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "name": monthly_plan.name,
+            "slug": monthly_plan.slug,
+            "credits_per_period": monthly_plan.credits_per_period,
+            "price_cents": monthly_plan.price_cents,
+            "currency": monthly_plan.currency,
+            "billing_interval": monthly_plan.billing_interval,
+        },
+        {
+            "name": yearly_plan.name,
+            "slug": yearly_plan.slug,
+            "credits_per_period": yearly_plan.credits_per_period,
+            "price_cents": yearly_plan.price_cents,
+            "currency": yearly_plan.currency,
+            "billing_interval": yearly_plan.billing_interval,
+        },
+    ]
+
+
 def test_checkout_view_missing_csrf_returns_403(user) -> None:
     csrf_client = Client(enforce_csrf_checks=True)
     csrf_client.force_login(user)
@@ -89,6 +179,19 @@ def test_checkout_view_missing_csrf_returns_403(user) -> None:
     response = csrf_client.post(
         reverse("quickscale_billing:purchase-checkout"),
         data=json.dumps({"plan_slug": "credits-pack"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+
+
+def test_subscription_checkout_view_missing_csrf_returns_403(user) -> None:
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(user)
+
+    response = csrf_client.post(
+        reverse("quickscale_billing:subscription-checkout"),
+        data=json.dumps({"plan_slug": "starter-monthly"}),
         content_type="application/json",
     )
 
@@ -147,6 +250,35 @@ def test_checkout_view_rejects_caller_supplied_redirect_fields(
                 "plan_slug": plan.slug,
                 "success_url": "https://app.example.com/custom/success",
                 "cancel_url": "https://app.example.com/custom/cancel",
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "errors": {
+            "cancel_url": ["This field is not allowed."],
+            "success_url": ["This field is not allowed."],
+        }
+    }
+
+
+@pytest.mark.django_db
+def test_subscription_checkout_view_rejects_caller_supplied_redirect_fields(
+    client: Client,
+    user,
+) -> None:
+    plan = _create_recurring_plan(slug="starter-redirect-view")
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:subscription-checkout"),
+        data=json.dumps(
+            {
+                "plan_slug": plan.slug,
+                "success_url": "https://app.example.com/custom/subscription/success",
+                "cancel_url": "https://app.example.com/custom/subscription/cancel",
             }
         ),
         content_type="application/json",
@@ -314,6 +446,149 @@ def test_checkout_view_creates_session_with_server_owned_redirect_urls(
     }
 
 
+@pytest.mark.django_db
+def test_subscription_checkout_view_creates_session_with_server_owned_redirect_urls(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(slug="starter-checkout-view")
+    captured_call: dict[str, Any] = {}
+
+    def fake_create_subscription_checkout_session(
+        auth_user,
+        auth_plan,
+        success_url: str,
+        cancel_url: str,
+    ) -> str:
+        captured_call["user"] = auth_user
+        captured_call["plan"] = auth_plan
+        captured_call["success_url"] = success_url
+        captured_call["cancel_url"] = cancel_url
+        return "https://checkout.stripe.test/subscription/view"
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_subscription_checkout_session",
+        fake_create_subscription_checkout_session,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:subscription-checkout"),
+        data=json.dumps({"plan_slug": plan.slug}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "checkout_url": "https://checkout.stripe.test/subscription/view"
+    }
+    assert captured_call == {
+        "user": user,
+        "plan": plan,
+        "success_url": "http://testserver/billing/subscription/success/",
+        "cancel_url": "http://testserver/billing/subscription/cancel/",
+    }
+
+
+@pytest.mark.django_db
+def test_subscription_checkout_view_blocks_while_current_subscription_exists(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_recurring_plan(slug="starter-existing-view")
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        status=Subscription.Status.ACTIVE,
+    )
+
+    def fake_create_subscription_checkout_session(
+        auth_user,
+        auth_plan,
+        success_url: str,
+        cancel_url: str,
+    ) -> str:
+        del auth_plan, success_url, cancel_url
+        assert Subscription.objects.current().filter(user=auth_user).exists()
+        raise BillingValidationError(
+            "User already has a current recurring subscription."
+        )
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_subscription_checkout_session",
+        fake_create_subscription_checkout_session,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:subscription-checkout"),
+        data=json.dumps({"plan_slug": plan.slug}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "User already has a current recurring subscription."
+    }
+
+
+@pytest.mark.django_db
+def test_subscription_detail_view_returns_current_subscription(
+    client: Client,
+    user,
+) -> None:
+    plan = _create_recurring_plan(slug="starter-current-detail")
+    period_start = timezone.now()
+    period_end = period_start + timedelta(days=30)
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        status=Subscription.Status.ACTIVE,
+        current_period_start=period_start,
+        current_period_end=period_end,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("quickscale_billing:subscription-detail"))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "plan": {
+            "name": plan.name,
+            "slug": plan.slug,
+            "credits_per_period": plan.credits_per_period,
+            "price_cents": plan.price_cents,
+            "currency": plan.currency,
+            "billing_interval": plan.billing_interval,
+        },
+        "status": Subscription.Status.ACTIVE,
+        "checkout_expires_at": None,
+        "current_period_start": period_start.isoformat().replace("+00:00", "Z"),
+        "current_period_end": period_end.isoformat().replace("+00:00", "Z"),
+    }
+
+
+@pytest.mark.django_db
+def test_subscription_detail_view_returns_404_when_current_subscription_is_missing(
+    client: Client,
+    user,
+) -> None:
+    plan = _create_recurring_plan(slug="starter-missing-detail")
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        status=Subscription.Status.CANCELED,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("quickscale_billing:subscription-detail"))
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "Current subscription not found."}
+
+
 def test_webhook_view_passes_raw_body_and_signature_header(
     client: Client,
     monkeypatch: pytest.MonkeyPatch,
@@ -374,7 +649,31 @@ def test_purchase_return_views_are_public_and_render(
     assert response.status_code == 200
     assert expected_text in content
     assert 'id="billing-purchase-root"' in content
+    assert 'id="billing-subscription-root"' not in content
     assert f'data-purchase-status="{expected_purchase_status}"' in content
+
+
+@pytest.mark.parametrize(
+    ("route_name", "expected_text", "expected_subscription_status"),
+    [
+        ("subscription-success", "Subscription checkout complete", "success"),
+        ("subscription-cancel", "Subscription checkout canceled", "cancel"),
+    ],
+)
+def test_subscription_return_views_are_public_and_render(
+    client: Client,
+    route_name: str,
+    expected_text: str,
+    expected_subscription_status: str,
+) -> None:
+    response = client.get(reverse(f"quickscale_billing:{route_name}"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert expected_text in content
+    assert 'id="billing-subscription-root"' in content
+    assert 'id="billing-purchase-root"' not in content
+    assert f'data-subscription-status="{expected_subscription_status}"' in content
 
 
 def test_webhook_view_maps_signature_errors_to_403(
