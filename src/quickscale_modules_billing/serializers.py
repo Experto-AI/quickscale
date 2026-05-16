@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import serializers
@@ -13,8 +14,19 @@ class CreateCheckoutSessionSerializer(serializers.Serializer):
     """Validate a one-time credit purchase request."""
 
     plan_slug = serializers.SlugField()
-    success_url = serializers.URLField()
-    cancel_url = serializers.URLField()
+
+    def to_internal_value(self, data: Any) -> dict[str, Any]:
+        if isinstance(data, Mapping):
+            unexpected_fields = sorted(set(data) - {"plan_slug"})
+            if unexpected_fields:
+                raise serializers.ValidationError(
+                    {
+                        field_name: ["This field is not allowed."]
+                        for field_name in unexpected_fields
+                    }
+                )
+
+        return super().to_internal_value(data)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         plan_slug = str(attrs.get("plan_slug") or "").strip()
