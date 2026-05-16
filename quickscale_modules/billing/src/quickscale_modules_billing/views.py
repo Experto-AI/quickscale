@@ -25,7 +25,9 @@ from quickscale_modules_billing.models import (
     Subscription,
 )
 from quickscale_modules_billing.serializers import (
+    CancelSubscriptionSerializer,
     CreateCheckoutSessionSerializer,
+    CreateBillingPortalSessionSerializer,
     CreateSubscriptionCheckoutSerializer,
     CreditBalanceSerializer,
     CreditTransactionSerializer,
@@ -39,7 +41,9 @@ from quickscale_modules_billing.services import (
     BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
+    cancel_current_subscription,
     create_checkout_session,
+    create_billing_portal_session,
     create_subscription_checkout_session,
     handle_stripe_event,
 )
@@ -68,21 +72,28 @@ def _parse_json_object_payload(
     return payload, None
 
 
+def _build_redirect_url(
+    request: HttpRequest,
+    *,
+    path: str,
+) -> str:
+    script_prefix = get_script_prefix()
+    normalized_prefix = (
+        script_prefix if script_prefix.endswith("/") else f"{script_prefix}/"
+    )
+    redirect_path = f"{normalized_prefix}{path.lstrip('/')}"
+    return request.build_absolute_uri(redirect_path)
+
+
 def _build_checkout_redirect_urls(
     request: HttpRequest,
     *,
     success_path: str,
     cancel_path: str,
 ) -> tuple[str, str]:
-    script_prefix = get_script_prefix()
-    normalized_prefix = (
-        script_prefix if script_prefix.endswith("/") else f"{script_prefix}/"
-    )
-    success_redirect_path = f"{normalized_prefix}{success_path.lstrip('/')}"
-    cancel_redirect_path = f"{normalized_prefix}{cancel_path.lstrip('/')}"
     return (
-        request.build_absolute_uri(success_redirect_path),
-        request.build_absolute_uri(cancel_redirect_path),
+        _build_redirect_url(request, path=success_path),
+        _build_redirect_url(request, path=cancel_path),
     )
 
 
@@ -104,6 +115,12 @@ def _build_subscription_checkout_redirect_urls(request: HttpRequest) -> tuple[st
         success_path=billing_urls.SUBSCRIPTION_SUCCESS_PATH,
         cancel_path=billing_urls.SUBSCRIPTION_CANCEL_PATH,
     )
+
+
+def _build_billing_portal_return_url(request: HttpRequest) -> str:
+    from quickscale_modules_billing import urls as billing_urls
+
+    return _build_redirect_url(request, path=billing_urls.PORTAL_RETURN_PATH)
 
 
 class _TransactionPagination(PageNumberPagination):
@@ -222,6 +239,83 @@ class CreateSubscriptionCheckoutView(View):
         return JsonResponse({"checkout_url": checkout_url})
 
 
+@method_decorator(csrf_exempt, name="dispatch")
+class CancelSubscriptionView(View):
+    """Cancel the authenticated user's current recurring subscription."""
+
+    http_method_names = ["post"]
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        del args, kwargs
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required"}, status=401)
+
+        csrf_response = _enforce_csrf(request)
+        if csrf_response is not None:
+            return csrf_response
+
+        payload, payload_error = _parse_json_object_payload(request)
+        if payload_error is not None:
+            return payload_error
+        assert payload is not None
+
+        serializer = CancelSubscriptionSerializer(data=payload)
+        if not serializer.is_valid():
+            return JsonResponse({"errors": serializer.errors}, status=400)
+
+        try:
+            cancel_current_subscription(request.user)
+        except BillingDisabledError as exc:
+            return JsonResponse({"error": str(exc)}, status=403)
+        except BillingValidationError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        except BillingConfigurationError as exc:
+            return JsonResponse({"error": str(exc)}, status=500)
+        except BillingError as exc:
+            return JsonResponse({"error": str(exc)}, status=500)
+
+        return HttpResponse(status=204)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class CreateBillingPortalSessionView(View):
+    """Create a hosted Stripe billing portal session for the current user."""
+
+    http_method_names = ["post"]
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        del args, kwargs
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required"}, status=401)
+
+        csrf_response = _enforce_csrf(request)
+        if csrf_response is not None:
+            return csrf_response
+
+        payload, payload_error = _parse_json_object_payload(request)
+        if payload_error is not None:
+            return payload_error
+        assert payload is not None
+
+        serializer = CreateBillingPortalSessionSerializer(data=payload)
+        if not serializer.is_valid():
+            return JsonResponse({"errors": serializer.errors}, status=400)
+
+        return_url = _build_billing_portal_return_url(request)
+        try:
+            portal_url = create_billing_portal_session(request.user, return_url)
+        except BillingDisabledError as exc:
+            return JsonResponse({"error": str(exc)}, status=403)
+        except BillingValidationError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        except BillingConfigurationError as exc:
+            return JsonResponse({"error": str(exc)}, status=500)
+        except BillingError as exc:
+            return JsonResponse({"error": str(exc)}, status=500)
+
+        return JsonResponse({"portal_url": portal_url})
+
+
 class CreditBalanceView(APIView):
     """Return the authenticated user's current credit balance snapshot."""
 
@@ -274,7 +368,7 @@ class SubscriptionDetailView(APIView):
         subscription = (
             Subscription.objects.select_related("plan")
             .filter(user=request.user)
-            .current()
+            .filter(Subscription.current_status_q())
             .order_by("-id")
             .first()
         )
@@ -283,6 +377,12 @@ class SubscriptionDetailView(APIView):
 
         serializer = SubscriptionSerializer(subscription)
         return Response(serializer.data)
+
+
+class BillingPortalReturnView(TemplateView):
+    """Public return page for hosted Stripe billing portal sessions."""
+
+    template_name = "quickscale_modules_billing/billing/portal_return.html"
 
 
 class PurchaseSuccessView(TemplateView):

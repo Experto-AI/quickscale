@@ -20,11 +20,14 @@ from quickscale_modules_billing import services as billing_services
 from quickscale_modules_billing.services import (
     BillingConfigurationError,
     BillingDisabledError,
+    BillingError,
     BillingSettingsSnapshot,
     BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
     StripeClient,
+    cancel_current_subscription,
+    create_billing_portal_session,
     credit_user,
     get_or_create_stripe_customer,
     get_stripe_client,
@@ -101,6 +104,12 @@ class FakeStripeClient:
     )
     reject_changed_idempotent_payload: bool = False
     construct_calls: list[dict[str, Any]] = field(default_factory=list)
+    portal_session: dict[str, Any] | None = None
+    portal_session_calls: list[dict[str, Any]] = field(default_factory=list)
+    canceled_subscription: dict[str, Any] | None = None
+    canceled_subscription_calls: list[str] = field(default_factory=list)
+    subscriptions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    retrieved_subscription_ids: list[str] = field(default_factory=list)
 
     def search_customers(self, *, user_reference: str) -> list[dict[str, Any]]:
         self.searched_references.append(user_reference)
@@ -185,6 +194,44 @@ class FakeStripeClient:
             raise self.construct_error
         assert self.event is not None
         return self.event
+
+    def create_billing_portal_session(
+        self,
+        *,
+        customer_id: str,
+        return_url: str,
+    ) -> dict[str, Any]:
+        self.portal_session_calls.append(
+            {
+                "customer_id": customer_id,
+                "return_url": return_url,
+            }
+        )
+        if self.portal_session is not None:
+            return dict(self.portal_session)
+        return {"url": "https://billing.example.com/session"}
+
+    def cancel_subscription(
+        self,
+        *,
+        stripe_subscription_id: str,
+    ) -> dict[str, Any]:
+        self.canceled_subscription_calls.append(stripe_subscription_id)
+        if self.canceled_subscription is not None:
+            return dict(self.canceled_subscription)
+        return {
+            "id": stripe_subscription_id,
+            "status": Subscription.Status.ACTIVE,
+            "cancel_at_period_end": True,
+        }
+
+    def retrieve_subscription(
+        self,
+        *,
+        stripe_subscription_id: str,
+    ) -> dict[str, Any]:
+        self.retrieved_subscription_ids.append(stripe_subscription_id)
+        return dict(self.subscriptions.get(stripe_subscription_id, {}))
 
 
 def test_billing_settings_snapshot_reads_defaults_and_environment(
@@ -433,6 +480,134 @@ def test_get_or_create_stripe_customer_rejects_created_customer_without_id(
 
 
 @pytest.mark.django_db
+def test_create_billing_portal_session_returns_stripe_url(user) -> None:
+    plan = _create_plan()
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id="sub_portal",
+        stripe_customer_id="cus_portal",
+        status=Subscription.Status.ACTIVE,
+    )
+    fake_client = FakeStripeClient(
+        portal_session={"url": "https://billing.example.com/portal-session"}
+    )
+
+    portal_url = create_billing_portal_session(
+        user,
+        " https://app.example.com/billing/portal/return/ ",
+        stripe_client=fake_client,
+    )
+
+    assert portal_url == "https://billing.example.com/portal-session"
+    assert fake_client.portal_session_calls == [
+        {
+            "customer_id": "cus_portal",
+            "return_url": "https://app.example.com/billing/portal/return/",
+        }
+    ]
+    assert fake_client.searched_references == []
+
+
+@pytest.mark.django_db
+def test_create_billing_portal_session_requires_return_url(user) -> None:
+    with pytest.raises(BillingValidationError, match="return URL"):
+        create_billing_portal_session(
+            user,
+            " ",
+            stripe_client=FakeStripeClient(),
+        )
+
+
+@pytest.mark.django_db
+def test_create_billing_portal_session_rejects_missing_hosted_url(user) -> None:
+    plan = _create_plan(price_id="price_portal_missing_url")
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id="sub_portal_missing_url",
+        stripe_customer_id="cus_portal_missing_url",
+        status=Subscription.Status.ACTIVE,
+    )
+
+    with pytest.raises(BillingError, match="hosted URL"):
+        create_billing_portal_session(
+            user,
+            "https://app.example.com/billing/portal/return/",
+            stripe_client=FakeStripeClient(portal_session={}),
+        )
+
+
+@pytest.mark.django_db
+def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_local_snapshot(
+    user,
+) -> None:
+    plan = _create_plan(price_id="price_cancel")
+    current_period_start = billing_services._stripe_timestamp_to_datetime(1713225600)
+    current_period_end = billing_services._stripe_timestamp_to_datetime(1715817600)
+    subscription = Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_subscription_id="sub_cancel",
+        stripe_customer_id="cus_cancel",
+        status=Subscription.Status.ACTIVE,
+        current_period_start=current_period_start,
+        current_period_end=current_period_end,
+    )
+    fake_client = FakeStripeClient(
+        canceled_subscription={
+            "id": "sub_cancel",
+            "status": Subscription.Status.ACTIVE,
+            "customer": "cus_cancel_updated",
+            "current_period_start": 1715817600,
+            "current_period_end": 1718409600,
+            "cancel_at_period_end": True,
+        }
+    )
+
+    updated_subscription = cancel_current_subscription(
+        user,
+        stripe_client=fake_client,
+    )
+    subscription.refresh_from_db()
+
+    assert updated_subscription.pk == subscription.pk
+    assert subscription.status == Subscription.Status.ACTIVE
+    assert subscription.stripe_customer_id == "cus_cancel_updated"
+    assert (
+        subscription.current_period_start
+        == billing_services._stripe_timestamp_to_datetime(1715817600)
+    )
+    assert (
+        subscription.current_period_end
+        == billing_services._stripe_timestamp_to_datetime(1718409600)
+    )
+    assert fake_client.canceled_subscription_calls == ["sub_cancel"]
+
+
+@pytest.mark.django_db
+def test_cancel_current_subscription_rejects_missing_current_subscription(user) -> None:
+    with pytest.raises(BillingValidationError, match="current recurring subscription"):
+        cancel_current_subscription(user, stripe_client=FakeStripeClient())
+
+
+@pytest.mark.django_db
+def test_cancel_current_subscription_rejects_missing_stripe_subscription_id(
+    user,
+) -> None:
+    plan = _create_plan(price_id="price_cancel_missing_stripe_id")
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_customer_id="cus_cancel_missing_stripe_id",
+        status=Subscription.Status.INCOMPLETE,
+    )
+
+    with pytest.raises(BillingValidationError, match="Stripe subscription id"):
+        cancel_current_subscription(user, stripe_client=FakeStripeClient())
+
+
+@pytest.mark.django_db
 def test_credit_user_updates_balance_and_suppresses_duplicate_business_object(
     user,
 ) -> None:
@@ -620,7 +795,7 @@ def test_handle_stripe_event_credits_subscription_user_and_records_event(
 
 
 @pytest.mark.django_db
-def test_handle_stripe_event_uses_metadata_user_reference_without_subscription(
+def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
     user,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -632,7 +807,28 @@ def test_handle_stripe_event_uses_metadata_user_reference_without_subscription(
             customer_id="cus_metadata",
             price_id=plan.stripe_price_id,
             user_reference=_user_reference(user),
-        )
+        ),
+        subscriptions={
+            "sub_123": {
+                "id": "sub_123",
+                "customer": "cus_metadata",
+                "status": "active",
+                "current_period_start": 1713225600,
+                "current_period_end": 1715817600,
+                "metadata": {
+                    "stripe_price_id": plan.stripe_price_id,
+                },
+                "items": {
+                    "data": [
+                        {
+                            "price": {
+                                "id": plan.stripe_price_id,
+                            }
+                        }
+                    ]
+                },
+            }
+        },
     )
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_metadata")
 
@@ -643,8 +839,22 @@ def test_handle_stripe_event_uses_metadata_user_reference_without_subscription(
     )
 
     transaction_row = CreditTransaction.objects.get(user=user)
+    subscription = Subscription.objects.get(user=user)
 
     assert result.status == "processed"
+    assert fake_client.retrieved_subscription_ids == ["sub_123"]
+    assert subscription.plan == plan
+    assert subscription.status == Subscription.Status.ACTIVE
+    assert subscription.stripe_customer_id == "cus_metadata"
+    assert subscription.stripe_subscription_id == "sub_123"
+    assert (
+        subscription.current_period_start
+        == billing_services._stripe_timestamp_to_datetime(1713225600)
+    )
+    assert (
+        subscription.current_period_end
+        == billing_services._stripe_timestamp_to_datetime(1715817600)
+    )
     assert transaction_row.stripe_object_id == "in_metadata"
     assert CreditBalance.objects.get(user=user).balance == 100
 
@@ -837,12 +1047,18 @@ def test_handle_stripe_event_uses_metadata_price_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_fallback")
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        stripe_customer_id="cus_fallback",
+        stripe_subscription_id="sub_123",
+        status=Subscription.Status.ACTIVE,
+    )
     fallback_event = _invoice_paid_event(
         event_id="evt_fallback",
         invoice_id="in_fallback",
         customer_id="cus_fallback",
         price_id=plan.stripe_price_id,
-        user_reference=_user_reference(user),
     )
     fallback_event["data"]["object"]["lines"] = {"data": []}
     fallback_event["data"]["object"]["metadata"]["stripe_price_id"] = (
@@ -922,10 +1138,33 @@ def test_handle_stripe_event_uses_subscription_details_user_reference(
         customer_id="",
         price_id=plan.stripe_price_id,
     )
-    event["data"]["object"]["subscription"] = ""
     event["data"]["object"]["subscription_details"] = {
         "metadata": {"quickscale_user_reference": _user_reference(user)}
     }
+    fake_client = FakeStripeClient(
+        event=event,
+        subscriptions={
+            "sub_123": {
+                "id": "sub_123",
+                "customer": "cus_subscription_details",
+                "status": "active",
+                "current_period_start": 1713225600,
+                "current_period_end": 1715817600,
+                "metadata": {
+                    "stripe_price_id": plan.stripe_price_id,
+                },
+                "items": {
+                    "data": [
+                        {
+                            "price": {
+                                "id": plan.stripe_price_id,
+                            }
+                        }
+                    ]
+                },
+            }
+        },
+    )
     monkeypatch.setenv(
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_subscription_details",
@@ -934,16 +1173,22 @@ def test_handle_stripe_event_uses_subscription_details_user_reference(
     result = handle_stripe_event(
         body=b'{"id":"evt_subscription_details"}',
         signature="t=1,v1=test-signature",
-        stripe_client=FakeStripeClient(event=event),
+        stripe_client=fake_client,
     )
 
     transaction_row = CreditTransaction.objects.get(user=user)
+    subscription = Subscription.objects.get(user=user)
 
     assert result.status == "processed"
+    assert fake_client.retrieved_subscription_ids == ["sub_123"]
+    assert subscription.status == Subscription.Status.ACTIVE
+    assert subscription.stripe_customer_id == "cus_subscription_details"
+    assert subscription.stripe_subscription_id == "sub_123"
     assert transaction_row.stripe_reference_data == {
         "invoice_id": "in_subscription_details",
         "stripe_customer_id": "",
         "stripe_price_id": plan.stripe_price_id,
+        "stripe_subscription_id": "sub_123",
     }
 
 
@@ -981,20 +1226,40 @@ def test_handle_stripe_event_rejects_unresolvable_user_reference(
 ) -> None:
     _create_plan(price_id="price_unresolvable")
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unresolvable")
+    fake_client = FakeStripeClient(
+        event=_invoice_paid_event(
+            event_id="evt_unresolvable",
+            invoice_id="in_unresolvable",
+            customer_id="cus_unresolvable",
+            price_id="price_unresolvable",
+            user_reference="bad-reference",
+        ),
+        subscriptions={
+            "sub_123": {
+                "id": "sub_123",
+                "customer": "cus_unresolvable",
+                "status": "active",
+                "metadata": {
+                    "stripe_price_id": "price_unresolvable",
+                },
+                "items": {
+                    "data": [
+                        {
+                            "price": {
+                                "id": "price_unresolvable",
+                            }
+                        }
+                    ]
+                },
+            }
+        },
+    )
 
     with pytest.raises(BillingWebhookError, match="Could not resolve a local user"):
         handle_stripe_event(
             body=b'{"id":"evt_unresolvable"}',
             signature="t=1,v1=test-signature",
-            stripe_client=FakeStripeClient(
-                event=_invoice_paid_event(
-                    event_id="evt_unresolvable",
-                    invoice_id="in_unresolvable",
-                    customer_id="cus_unresolvable",
-                    price_id="price_unresolvable",
-                    user_reference="bad-reference",
-                )
-            ),
+            stripe_client=fake_client,
         )
 
 
@@ -1004,20 +1269,40 @@ def test_handle_stripe_event_rejects_unknown_model_user_reference(
 ) -> None:
     _create_plan(price_id="price_unknown_model")
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unknown_model")
+    fake_client = FakeStripeClient(
+        event=_invoice_paid_event(
+            event_id="evt_unknown_model",
+            invoice_id="in_unknown_model",
+            customer_id="",
+            price_id="price_unknown_model",
+            user_reference="missing.user:1",
+        ),
+        subscriptions={
+            "sub_123": {
+                "id": "sub_123",
+                "customer": "cus_unknown_model",
+                "status": "active",
+                "metadata": {
+                    "stripe_price_id": "price_unknown_model",
+                },
+                "items": {
+                    "data": [
+                        {
+                            "price": {
+                                "id": "price_unknown_model",
+                            }
+                        }
+                    ]
+                },
+            }
+        },
+    )
 
     with pytest.raises(BillingWebhookError, match="Could not resolve a local user"):
         handle_stripe_event(
             body=b'{"id":"evt_unknown_model"}',
             signature="t=1,v1=test-signature",
-            stripe_client=FakeStripeClient(
-                event=_invoice_paid_event(
-                    event_id="evt_unknown_model",
-                    invoice_id="in_unknown_model",
-                    customer_id="",
-                    price_id="price_unknown_model",
-                    user_reference="missing.user:1",
-                )
-            ),
+            stripe_client=fake_client,
         )
 
 
@@ -1127,6 +1412,64 @@ def test_stripe_client_create_customer_includes_name_and_email() -> None:
         "name": "Billing User",
         "idempotency_key": "customer-key",
         "metadata": {"quickscale_user_reference": "auth.user:1"},
+    }
+    assert stripe_module.api_key == "sk_test"
+
+
+def test_stripe_client_create_billing_portal_session_uses_billing_portal_api() -> None:
+    stripe_module = SimpleNamespace(
+        api_key="",
+        billing_portal=SimpleNamespace(
+            Session=SimpleNamespace(create=lambda **kwargs: {"id": "bps_123", **kwargs})
+        ),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key="sk_test")
+
+    portal_session = stripe_client.create_billing_portal_session(
+        customer_id="cus_portal",
+        return_url="https://app.example.com/billing/portal/return/",
+    )
+
+    assert portal_session == {
+        "id": "bps_123",
+        "customer": "cus_portal",
+        "return_url": "https://app.example.com/billing/portal/return/",
+    }
+    assert stripe_module.api_key == "sk_test"
+
+
+def test_stripe_client_cancel_subscription_uses_subscription_api() -> None:
+    captured_call: dict[str, Any] = {}
+
+    def fake_modify(subscription_id: str, **kwargs: Any) -> dict[str, Any]:
+        captured_call["subscription_id"] = subscription_id
+        captured_call["kwargs"] = dict(kwargs)
+        return {
+            "id": subscription_id,
+            "status": "active",
+            **kwargs,
+        }
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        Subscription=SimpleNamespace(
+            modify=fake_modify,
+        ),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key="sk_test")
+
+    canceled_subscription = stripe_client.cancel_subscription(
+        stripe_subscription_id="sub_cancel"
+    )
+
+    assert canceled_subscription == {
+        "id": "sub_cancel",
+        "status": "active",
+        "cancel_at_period_end": True,
+    }
+    assert captured_call == {
+        "subscription_id": "sub_cancel",
+        "kwargs": {"cancel_at_period_end": True},
     }
     assert stripe_module.api_key == "sk_test"
 

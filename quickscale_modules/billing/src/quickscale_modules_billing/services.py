@@ -253,6 +253,64 @@ class StripeClient:
         )
         return _normalize_mapping(created_session)
 
+    def create_billing_portal_session(
+        self,
+        *,
+        customer_id: str,
+        return_url: str,
+    ) -> dict[str, Any]:
+        """Create a Stripe Billing Portal Session for an existing customer."""
+        self._activate_api_key()
+        billing_portal_session_api = self._resolve_billing_portal_session_api()
+        created_session = billing_portal_session_api.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+        return _normalize_mapping(created_session)
+
+    def cancel_subscription(
+        self,
+        *,
+        stripe_subscription_id: str,
+    ) -> dict[str, Any]:
+        """Schedule a Stripe subscription to cancel at period end."""
+        self._activate_api_key()
+        subscription_api = getattr(self._stripe_module, "Subscription", None)
+        if subscription_api is None:
+            raise BillingConfigurationError(
+                "Stripe Subscription SDK support is unavailable in this environment."
+            )
+        if hasattr(subscription_api, "modify"):
+            updated_subscription = subscription_api.modify(
+                stripe_subscription_id,
+                cancel_at_period_end=True,
+            )
+            return _normalize_mapping(updated_subscription)
+        if hasattr(subscription_api, "update"):
+            updated_subscription = subscription_api.update(
+                stripe_subscription_id,
+                cancel_at_period_end=True,
+            )
+            return _normalize_mapping(updated_subscription)
+        raise BillingConfigurationError(
+            "Stripe Subscription SDK update support is unavailable in this environment."
+        )
+
+    def retrieve_subscription(
+        self,
+        *,
+        stripe_subscription_id: str,
+    ) -> dict[str, Any]:
+        """Return a normalized Stripe Subscription payload."""
+        self._activate_api_key()
+        subscription_api = getattr(self._stripe_module, "Subscription", None)
+        if subscription_api is None or not hasattr(subscription_api, "retrieve"):
+            raise BillingConfigurationError(
+                "Stripe Subscription SDK retrieve support is unavailable in this environment."
+            )
+        subscription = subscription_api.retrieve(stripe_subscription_id)
+        return _normalize_mapping(subscription)
+
     def retrieve_checkout_session(self, *, checkout_session_id: str) -> dict[str, Any]:
         """Return a normalized Stripe Checkout Session payload."""
         self._activate_api_key()
@@ -327,6 +385,15 @@ class StripeClient:
                 "Stripe Checkout SDK support is unavailable in this environment."
             )
         return checkout_session_api
+
+    def _resolve_billing_portal_session_api(self) -> Any:
+        billing_portal_module = getattr(self._stripe_module, "billing_portal", None)
+        billing_portal_session_api = getattr(billing_portal_module, "Session", None)
+        if billing_portal_session_api is None:
+            raise BillingConfigurationError(
+                "Stripe Billing Portal SDK support is unavailable in this environment."
+            )
+        return billing_portal_session_api
 
 
 def get_stripe_client(
@@ -579,6 +646,111 @@ def create_subscription_checkout_session(
     return checkout_url
 
 
+def create_billing_portal_session(
+    user: Any,
+    return_url: str,
+    *,
+    stripe_client: Any | None = None,
+    settings_snapshot: BillingSettingsSnapshot | None = None,
+) -> str:
+    """Create a hosted Stripe billing portal session for the given user."""
+    snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
+    _ensure_billing_enabled(snapshot)
+
+    normalized_return_url = return_url.strip()
+    if not normalized_return_url:
+        raise BillingValidationError("Billing portal return URL is required.")
+
+    resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
+    customer_id, _ = get_or_create_stripe_customer(
+        user,
+        stripe_client=resolved_client,
+        settings_snapshot=snapshot,
+    )
+    portal_session = resolved_client.create_billing_portal_session(
+        customer_id=customer_id,
+        return_url=normalized_return_url,
+    )
+    portal_url = str(portal_session.get("url") or "").strip()
+    if not portal_url:
+        raise BillingError(
+            "Stripe billing portal session creation did not return a hosted URL."
+        )
+    return portal_url
+
+
+def cancel_current_subscription(
+    user: Any,
+    *,
+    stripe_client: Any | None = None,
+    settings_snapshot: BillingSettingsSnapshot | None = None,
+) -> Subscription:
+    """Schedule the user's current Stripe-backed subscription to end after the period."""
+    snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
+    _ensure_billing_enabled(snapshot)
+
+    subscription = _resolve_authoritative_subscription_reservation(user=user)
+    if subscription is None:
+        raise BillingValidationError(
+            "User does not have a current recurring subscription."
+        )
+
+    stripe_subscription_id = str(subscription.stripe_subscription_id or "").strip()
+    if not stripe_subscription_id:
+        raise BillingValidationError(
+            "Current recurring subscription is missing a Stripe subscription id."
+        )
+
+    resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
+    updated_subscription = resolved_client.cancel_subscription(
+        stripe_subscription_id=stripe_subscription_id,
+    )
+
+    remote_status = str(updated_subscription.get("status") or "").strip().lower()
+    if remote_status:
+        try:
+            local_status = _map_stripe_subscription_status(remote_status)
+        except BillingWebhookError as exc:
+            raise BillingError(str(exc)) from exc
+    else:
+        local_status = subscription.status
+
+    current_period_start = _stripe_timestamp_to_datetime(
+        updated_subscription.get("current_period_start")
+    )
+    current_period_end = _stripe_timestamp_to_datetime(
+        updated_subscription.get("current_period_end")
+    )
+
+    with transaction.atomic():
+        subscription = Subscription.objects.select_for_update().get(pk=subscription.pk)
+        subscription.status = local_status
+        subscription.stripe_subscription_id = (
+            str(updated_subscription.get("id") or "").strip()
+            or subscription.stripe_subscription_id
+        )
+        subscription.stripe_customer_id = (
+            str(updated_subscription.get("customer") or "").strip()
+            or subscription.stripe_customer_id
+        )
+        subscription.current_period_start = (
+            current_period_start or subscription.current_period_start
+        )
+        subscription.current_period_end = (
+            current_period_end or subscription.current_period_end
+        )
+        subscription.save(
+            update_fields=[
+                "status",
+                "stripe_subscription_id",
+                "stripe_customer_id",
+                "current_period_start",
+                "current_period_end",
+            ]
+        )
+    return subscription
+
+
 def credit_user(
     user: Any,
     *,
@@ -686,7 +858,10 @@ def handle_stripe_event(
                 )
                 processing_status = "processed"
             elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAID:
-                _handle_invoice_paid_event(event_payload)
+                _handle_invoice_paid_event(
+                    event_payload,
+                    stripe_client=resolved_client,
+                )
                 processing_status = "processed"
             elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
                 _handle_invoice_payment_failed_event(event_payload)
@@ -725,6 +900,8 @@ def _ensure_billing_enabled(settings_snapshot: BillingSettingsSnapshot) -> None:
 
 def _handle_invoice_paid_event(
     event_payload: Mapping[str, Any],
+    *,
+    stripe_client: Any | None = None,
 ) -> CreditTransaction | None:
     invoice_payload = _extract_event_object(event_payload)
     invoice_id = str(invoice_payload.get("id") or "").strip()
@@ -740,34 +917,42 @@ def _handle_invoice_paid_event(
     if plan is None:
         raise BillingWebhookError(f"No billing plan matches Stripe price {price_id}.")
 
-    user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
-    if user is None:
-        raise BillingWebhookError(
-            "Could not resolve a local user for the Stripe invoice."
-        )
-
+    resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
     subscription_id = str(invoice_payload.get("subscription") or "").strip()
     customer_id = str(invoice_payload.get("customer") or "").strip()
     subscription = _resolve_subscription_for_runtime_event(
         stripe_subscription_id=subscription_id,
         customer_id=customer_id,
-        user=user,
+        user=resolved_user,
         for_update=True,
     )
-    if subscription is not None and subscription.status == Subscription.Status.PAST_DUE:
-        subscription.plan = plan
-        subscription.status = Subscription.Status.ACTIVE
-        subscription.stripe_customer_id = customer_id or subscription.stripe_customer_id
-        subscription.stripe_subscription_id = (
-            subscription_id or subscription.stripe_subscription_id
+
+    if subscription is None:
+        subscription = _backfill_missing_subscription_for_paid_invoice(
+            invoice_payload=invoice_payload,
+            stripe_client=stripe_client,
+            fallback_user=resolved_user,
+            expected_plan=plan,
         )
-        subscription.save(
-            update_fields=[
-                "plan",
-                "status",
-                "stripe_customer_id",
-                "stripe_subscription_id",
-            ]
+    elif subscription.status in {
+        Subscription.Status.INCOMPLETE,
+        Subscription.Status.PAST_DUE,
+    } or (
+        subscription_id and not str(subscription.stripe_subscription_id or "").strip()
+    ):
+        subscription = _activate_subscription_for_paid_invoice(
+            subscription=subscription,
+            plan=plan,
+            customer_id=customer_id,
+            stripe_subscription_id=subscription_id,
+        )
+
+    user = resolved_user
+    if user is None and subscription is not None:
+        user = subscription.user
+    if user is None:
+        raise BillingWebhookError(
+            "Could not resolve a local user for the Stripe invoice."
         )
 
     reference_data: dict[str, Any] = {
@@ -840,25 +1025,96 @@ def _handle_invoice_payment_failed_event(
     return subscription
 
 
-def _handle_subscription_event(
-    event_payload: Mapping[str, Any],
+def _activate_subscription_for_paid_invoice(
     *,
-    event_type: str,
+    subscription: Subscription,
+    plan: Plan,
+    customer_id: str,
+    stripe_subscription_id: str,
 ) -> Subscription:
-    subscription_payload = _extract_event_object(event_payload)
+    update_fields: list[str] = []
+    if subscription.plan.pk != plan.pk:
+        subscription.plan = plan
+        update_fields.append("plan")
+    if subscription.status != Subscription.Status.ACTIVE:
+        subscription.status = Subscription.Status.ACTIVE
+        update_fields.append("status")
+
+    normalized_customer_id = customer_id.strip()
+    if (
+        normalized_customer_id
+        and subscription.stripe_customer_id != normalized_customer_id
+    ):
+        subscription.stripe_customer_id = normalized_customer_id
+        update_fields.append("stripe_customer_id")
+
+    normalized_subscription_id = stripe_subscription_id.strip()
+    if (
+        normalized_subscription_id
+        and subscription.stripe_subscription_id != normalized_subscription_id
+    ):
+        subscription.stripe_subscription_id = normalized_subscription_id
+        update_fields.append("stripe_subscription_id")
+
+    if update_fields:
+        subscription.save(update_fields=update_fields)
+    return subscription
+
+
+def _backfill_missing_subscription_for_paid_invoice(
+    *,
+    invoice_payload: Mapping[str, Any],
+    stripe_client: Any | None,
+    fallback_user: Any | None,
+    expected_plan: Plan,
+) -> Subscription:
+    stripe_subscription_id = str(invoice_payload.get("subscription") or "").strip()
+    if not stripe_subscription_id:
+        raise BillingWebhookError(
+            "Stripe invoice payload is missing a subscription id for local reconciliation."
+        )
+    if stripe_client is None or not hasattr(stripe_client, "retrieve_subscription"):
+        raise BillingWebhookError(
+            "Stripe subscription retrieval is unavailable for invoice reconciliation."
+        )
+
+    subscription_payload = _normalize_mapping(
+        stripe_client.retrieve_subscription(
+            stripe_subscription_id=stripe_subscription_id,
+        )
+    )
+    return _upsert_subscription_from_payload(
+        subscription_payload,
+        fallback_user=fallback_user,
+        expected_plan=expected_plan,
+    )
+
+
+def _upsert_subscription_from_payload(
+    subscription_payload: Mapping[str, Any],
+    *,
+    fallback_user: Any | None = None,
+    expected_plan: Plan | None = None,
+    fallback_status: str = "",
+) -> Subscription:
     stripe_subscription_id = str(subscription_payload.get("id") or "").strip()
     if not stripe_subscription_id:
         raise BillingWebhookError("Stripe subscription payload is missing an id.")
 
     stripe_status = str(subscription_payload.get("status") or "").strip().lower()
-    if (
-        event_type == STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED
-        and not stripe_status
-    ):
-        stripe_status = Subscription.Status.CANCELED
+    if not stripe_status:
+        stripe_status = fallback_status.strip().lower()
     local_status = _map_stripe_subscription_status(stripe_status)
+
     plan = _resolve_plan_for_subscription_payload(subscription_payload)
+    if expected_plan is not None and plan.pk != expected_plan.pk:
+        raise BillingWebhookError(
+            "Stripe subscription does not match the invoiced billing plan."
+        )
+
     user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
+    if user is None:
+        user = fallback_user
     if user is None:
         raise BillingWebhookError(
             "Could not resolve a local user for the Stripe subscription."
@@ -900,6 +1156,21 @@ def _handle_subscription_event(
             ]
         )
     return subscription
+
+
+def _handle_subscription_event(
+    event_payload: Mapping[str, Any],
+    *,
+    event_type: str,
+) -> Subscription:
+    subscription_payload = _extract_event_object(event_payload)
+    fallback_status = ""
+    if event_type == STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED:
+        fallback_status = Subscription.Status.CANCELED
+    return _upsert_subscription_from_payload(
+        subscription_payload,
+        fallback_status=fallback_status,
+    )
 
 
 def _handle_checkout_session_completed_event(
@@ -1361,7 +1632,7 @@ def _resolve_authoritative_subscription_reservation(
         queryset = queryset.filter(user=user)
     if normalized_customer_id:
         queryset = queryset.filter(stripe_customer_id=normalized_customer_id)
-    return queryset.current().first()
+    return queryset.filter(Subscription.current_status_q()).first()
 
 
 def _subscription_reservation_can_be_reused(
@@ -1369,7 +1640,7 @@ def _subscription_reservation_can_be_reused(
     *,
     plan: Plan,
 ) -> bool:
-    if reservation.plan_id != plan.pk:
+    if reservation.plan.pk != plan.pk:
         return False
     if reservation.status != Subscription.Status.INCOMPLETE:
         return False
@@ -1640,6 +1911,7 @@ def _normalize_mapping(value: Any) -> dict[str, Any]:
 
 
 __all__ = [
+    "cancel_current_subscription",
     "BillingConfigurationError",
     "BillingDisabledError",
     "BillingError",
@@ -1649,6 +1921,7 @@ __all__ = [
     "BillingWebhookSignatureError",
     "StripeClient",
     "StripeWebhookResult",
+    "create_billing_portal_session",
     "create_checkout_session",
     "create_subscription_checkout_session",
     "credit_user",

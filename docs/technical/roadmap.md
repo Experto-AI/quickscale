@@ -251,15 +251,17 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Estimated hours**: 5–6 h
 
-**Delivers**: Cancel and billing portal flows, plus out-of-order event recovery so a late `invoice.paid` always reconciles local state even when subscription sync hasn't landed yet.
+**Current state**: Complete in-repo for the Phase 5b subscription self-service and event-recovery slice.
 
-- [ ] `services.py` — `cancel_subscription(subscription) -> Subscription` defaults to `cancel_at_period_end=True`; `create_billing_portal_session(user, return_url) -> str`
-- [ ] `views.py` — `CancelSubscriptionView` (authenticated POST); `CreateBillingPortalSessionView` (authenticated POST, returns portal URL)
-- [ ] `urls.py` — `POST api/billing/subscription/cancel/`, `POST api/billing/portal/`
-- [ ] `tests/test_subscriptions.py` extensions — cancel API defaults to period-end cancel; portal-session API returns URL
-- [ ] `tests/test_subscription_ordering.py` — `invoice.paid` arriving before `customer.subscription.created` still resolves user/plan via metadata or Stripe API retrieval and backfills the local `Subscription` row
+**Delivers**: The shipped Phase 5b slice adds cancel and billing portal self-service flows plus out-of-order `invoice.paid` recovery so a late recurring charge reconciles either an existing incomplete reservation or a missing local subscription row before credits are granted.
 
-**Acceptance**: Cancel defaults to `cancel_at_period_end=True`; `POST /api/billing/portal/` returns a Stripe-hosted self-service URL; out-of-order subscription events still reconcile correctly; `pytest --cov-fail-under=90` passes.
+- [x] `services.py` — `cancel_current_subscription(user)` schedules `cancel_at_period_end=True`; `create_billing_portal_session(user, return_url) -> str` returns a Stripe-hosted portal URL; `invoice.paid` recovery falls back to Stripe subscription retrieval when the local row is missing and reconciles an existing incomplete reservation before crediting
+- [x] `views.py` — `CancelSubscriptionView` is an authenticated POST that returns `204 No Content`; `CreateBillingPortalSessionView` is an authenticated POST that returns `portal_url`, uses the server-owned module `billing/portal/return/` target, and rejects caller-supplied redirect input
+- [x] `urls.py` — `POST api/billing/subscription/cancel/`, `POST api/billing/portal/`, and `GET billing/portal/return/`
+- [x] `tests/test_views.py` and `tests/test_services.py` — cancel API returns `204`; portal-session API returns `portal_url`, rejects caller-supplied redirect input, and uses the server-owned return target; missing-row `invoice.paid` recovery backfills the local `Subscription` row through Stripe subscription retrieval
+- [x] `tests/test_subscriptions.py` — `invoice.paid` arriving before `customer.subscription.created` reconciles an existing incomplete reservation before crediting and remains stable when the later subscription update lands
+
+**Acceptance**: Cancel defaults to `cancel_at_period_end=True` and `POST /api/billing/subscription/cancel/` returns `204`; `POST /api/billing/portal/` returns a Stripe-hosted `portal_url`, uses the server-owned module `billing/portal/return/` target, and rejects caller-supplied redirect input; out-of-order `invoice.paid` recovery now handles both the missing-row and incomplete-reservation paths via Stripe subscription retrieval fallback before crediting; focused billing checkpoints passed.
 
 ---
 
