@@ -3,6 +3,7 @@
 from django.urls import path
 
 from quickscale_modules_billing.views import (
+    BillingDashboardView,
     BillingPortalReturnView,
     CancelSubscriptionView,
     CreditBalanceView,
@@ -11,23 +12,32 @@ from quickscale_modules_billing.views import (
     CreateCheckoutSessionView,
     CreateSubscriptionCheckoutView,
     PlanListView,
+    PricingPageView,
     PurchaseCancelView,
     PurchaseSuccessView,
+    StripePublishableKeyView,
     StripeWebhookView,
     SubscriptionCancelView,
     SubscriptionDetailView,
     SubscriptionSuccessView,
 )
 
+DASHBOARD_PATH = "billing/dashboard/"
 PURCHASE_SUCCESS_PATH = "billing/purchase/success/"
 PURCHASE_CANCEL_PATH = "billing/purchase/cancel/"
 PORTAL_RETURN_PATH = "billing/portal/return/"
+PRICING_PATH = "billing/pricing/"
 SUBSCRIPTION_SUCCESS_PATH = "billing/subscription/success/"
 SUBSCRIPTION_CANCEL_PATH = "billing/subscription/cancel/"
 
 app_name = "quickscale_billing"
 
 urlpatterns = [
+    path(
+        "api/billing/config/",
+        StripePublishableKeyView.as_view(),
+        name="billing-config",
+    ),
     path(
         "api/billing/plans/",
         PlanListView.as_view(),
@@ -69,9 +79,19 @@ urlpatterns = [
         name="billing-portal-session",
     ),
     path(
+        DASHBOARD_PATH,
+        BillingDashboardView.as_view(),
+        name="billing-dashboard",
+    ),
+    path(
         PORTAL_RETURN_PATH,
         BillingPortalReturnView.as_view(),
         name="portal-return",
+    ),
+    path(
+        PRICING_PATH,
+        PricingPageView.as_view(),
+        name="pricing-page",
     ),
     path(
         PURCHASE_SUCCESS_PATH,
