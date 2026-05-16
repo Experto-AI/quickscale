@@ -152,7 +152,7 @@ myproject/
   └── base.py            # INSTALLED_APPS = [..., "modules.auth", "modules.blog"]
 ```
 
-Billing now has an internal packaged Phase 1 foundation in `quickscale_modules/billing`, but it remains non-public-ready: public `quickscale plan`, `quickscale.yml`, `quickscale apply`, and generated starter output must continue to exclude billing until later phases ship. Teams remains placeholder inventory only.
+Billing now has an in-repo packaged implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide, but it remains non-public-ready: public `quickscale plan`, `quickscale.yml`, `quickscale apply`, and generated starter output must continue to exclude billing until the later distribution-enablement phases ship. Teams remains placeholder inventory only.
 
 **Key Characteristics:**
 - ✅ Runtime dependencies (in INSTALLED_APPS)

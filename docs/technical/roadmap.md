@@ -284,9 +284,11 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Estimated hours**: 5–7 h
 
+**Current state**: Complete in-repo for the Phase 6b React integration guide slice.
+
 **Delivers**: A complete React adoption guide in `README.md` so developers can wire the billing API into the generated React frontend without QuickScale rewriting user-owned files.
 
-- [ ] `README.md` — React starter guide covering: five components (CreditBalance widget, PricingPage, PurchaseButton, SubscriptionStatus, TransactionHistory); exact API endpoint reference table; TanStack Query patterns for balance polling and transaction pagination; shadcn/ui component choices for each surface; `loadStripe()` redirect pattern for checkout and portal flows; environment variable wiring (`VITE_STRIPE_PUBLISHABLE_KEY` from `/api/billing/config/`)
+- [x] `README.md` — React starter guide covering: five components (CreditBalance widget, PricingPage, PurchaseButton, SubscriptionStatus, TransactionHistory); exact API endpoint reference table; TanStack Query patterns for balance polling and transaction pagination; shadcn/ui component choices for each surface; `loadStripe()` redirect pattern for checkout and portal flows; environment variable wiring (`VITE_STRIPE_PUBLISHABLE_KEY` from `/api/billing/config/`)
 
 **Acceptance**: All five component patterns documented with working API call examples; `loadStripe()` redirect pattern shown for both purchase and subscription checkout; env-var wiring is explicit and does not require hardcoded keys.
 
