@@ -7,7 +7,9 @@ import json
 from typing import Any
 
 import pytest
+from django.conf import settings
 from django.test import Client
+from django.shortcuts import resolve_url
 from django.urls import reverse
 from django.utils import timezone
 
@@ -167,7 +169,12 @@ def test_billing_portal_session_view_returns_json_401_for_anonymous_requests(
 
 @pytest.mark.parametrize(
     "route_name",
-    ["credit-balance", "credit-transactions", "subscription-detail"],
+    [
+        "billing-config",
+        "credit-balance",
+        "credit-transactions",
+        "subscription-detail",
+    ],
 )
 def test_billing_read_views_return_json_401_for_anonymous_requests(
     client: Client,
@@ -225,6 +232,99 @@ def test_plan_list_view_is_public_and_returns_only_active_recurring_plans(
             "billing_interval": yearly_plan.billing_interval,
         },
     ]
+
+
+def test_billing_dashboard_view_redirects_anonymous_users_to_login(
+    client: Client,
+) -> None:
+    dashboard_url = reverse("quickscale_billing:billing-dashboard")
+
+    response = client.get(dashboard_url)
+
+    assert response.status_code == 302
+    assert (
+        response["Location"]
+        == f"{resolve_url(settings.LOGIN_URL)}?next={dashboard_url}"
+    )
+
+
+@pytest.mark.django_db
+def test_billing_dashboard_view_renders_for_authenticated_users(
+    client: Client,
+    user,
+) -> None:
+    client.force_login(user)
+
+    response = client.get(reverse("quickscale_billing:billing-dashboard"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Billing dashboard" in content
+    assert 'id="billing-root"' in content
+    assert 'data-view="dashboard"' in content
+
+
+def test_pricing_page_view_is_public_and_render(client: Client) -> None:
+    response = client.get(reverse("quickscale_billing:pricing-page"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Billing pricing" in content
+    assert 'id="billing-root"' in content
+    assert 'data-view="pricing"' in content
+
+
+@pytest.mark.django_db
+def test_billing_config_view_returns_publishable_key_without_secret_key(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+    settings,
+) -> None:
+    settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "PHASE_6A_PUBLISHABLE_KEY"
+    settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "PHASE_6A_SECRET_KEY"
+    monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", "pk_test_phase_6a")
+    monkeypatch.setenv("PHASE_6A_SECRET_KEY", "sk_test_phase_6a")
+    client.force_login(user)
+
+    response = client.get(reverse("quickscale_billing:billing-config"))
+
+    assert response.status_code == 200
+    assert response.json() == {"publishable_key": "pk_test_phase_6a"}
+    assert "secret_key" not in response.json()
+    assert "sk_test_phase_6a" not in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("publishable_key_value",),
+    [(None,), ("   ",)],
+    ids=["missing", "blank"],
+)
+def test_billing_config_view_returns_500_for_missing_or_blank_publishable_key(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+    settings,
+    publishable_key_value: str | None,
+) -> None:
+    settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "PHASE_6A_PUBLISHABLE_KEY"
+    settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "PHASE_6A_SECRET_KEY"
+    monkeypatch.setenv("PHASE_6A_SECRET_KEY", "sk_test_phase_6a")
+    if publishable_key_value is None:
+        monkeypatch.delenv("PHASE_6A_PUBLISHABLE_KEY", raising=False)
+    else:
+        monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", publishable_key_value)
+    client.force_login(user)
+
+    response = client.get(reverse("quickscale_billing:billing-config"))
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": "Stripe publishable key is not configured in the runtime environment."
+    }
+    assert "publishable_key" not in response.json()
+    assert "sk_test_phase_6a" not in response.content.decode("utf-8")
 
 
 def test_checkout_view_missing_csrf_returns_403(user) -> None:
@@ -692,7 +792,10 @@ def test_subscription_checkout_view_blocks_while_current_subscription_exists(
         cancel_url: str,
     ) -> str:
         del auth_plan, success_url, cancel_url
-        assert Subscription.objects.current().filter(user=auth_user).exists()
+        assert Subscription.objects.filter(
+            Subscription.current_status_q(),
+            user=auth_user,
+        ).exists()
         raise BillingValidationError(
             "User already has a current recurring subscription."
         )

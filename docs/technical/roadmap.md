@@ -271,10 +271,10 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Delivers**: Django backend for billing UI — publishable key API, login-gated dashboard, and public pricing page. No Stripe JS or React in this phase; only the Django mount points and their tests.
 
-- [ ] `views.py` — `StripePublishableKeyView` (authenticated, returns `{"publishable_key": ...}` resolved from env var — never hardcoded); `BillingDashboardView(LoginRequiredMixin, TemplateView)`; `PricingPageView(TemplateView)` (public)
-- [ ] Templates — `dashboard.html` (`<div id="billing-root" data-view="dashboard">`); `pricing.html` (`<div id="billing-root" data-view="pricing">`)
-- [ ] `urls.py` — `GET billing/dashboard/`, `GET billing/pricing/`, `GET api/billing/config/`
-- [ ] `tests/test_views.py` extensions — dashboard redirects unauthenticated; pricing page public; config returns publishable key; config never leaks secret key
+- [x] `views.py` — `StripePublishableKeyView` (authenticated, returns `{"publishable_key": ...}` resolved from env var — never hardcoded); `BillingDashboardView(LoginRequiredMixin, TemplateView)`; `PricingPageView(TemplateView)` (public)
+- [x] Templates — `dashboard.html` (`<div id="billing-root" data-view="dashboard">`); `pricing.html` (`<div id="billing-root" data-view="pricing">`)
+- [x] `urls.py` — `GET billing/dashboard/`, `GET billing/pricing/`, `GET api/billing/config/`
+- [x] `tests/test_views.py` extensions — dashboard redirects unauthenticated; pricing page public; config returns publishable key; config never leaks secret key
 
 **Acceptance**: Dashboard redirects anonymous users to login; pricing page is publicly accessible; `GET /api/billing/config/` returns publishable key and never the secret key; `pytest --cov-fail-under=90` passes.
 

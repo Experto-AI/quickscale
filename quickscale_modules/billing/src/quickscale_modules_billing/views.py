@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
 from django.urls import get_script_prefix
@@ -38,6 +39,7 @@ from quickscale_modules_billing.services import (
     BillingError,
     BillingConfigurationError,
     BillingDisabledError,
+    BillingSettingsSnapshot,
     BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
@@ -377,6 +379,38 @@ class SubscriptionDetailView(APIView):
 
         serializer = SubscriptionSerializer(subscription)
         return Response(serializer.data)
+
+
+class StripePublishableKeyView(APIView):
+    """Return the authenticated Stripe publishable key for billing UI clients."""
+
+    authentication_classes = [SessionAuthentication]
+    http_method_names = ["get"]
+
+    def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        del args, kwargs
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentication required"}, status=401)
+
+        snapshot = BillingSettingsSnapshot.from_settings()
+        try:
+            return Response({"publishable_key": snapshot.resolve_publishable_key()})
+        except BillingConfigurationError as exc:
+            return Response({"error": str(exc)}, status=500)
+        except BillingError as exc:
+            return Response({"error": str(exc)}, status=500)
+
+
+class BillingDashboardView(LoginRequiredMixin, TemplateView):
+    """Module-owned billing dashboard mount page."""
+
+    template_name = "quickscale_modules_billing/dashboard.html"
+
+
+class PricingPageView(TemplateView):
+    """Public billing pricing mount page."""
+
+    template_name = "quickscale_modules_billing/pricing.html"
 
 
 class BillingPortalReturnView(TemplateView):

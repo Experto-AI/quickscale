@@ -144,7 +144,12 @@ class BillingSettingsSnapshot:
 
     def resolve_publishable_key(self) -> str:
         """Resolve the Stripe publishable key from the configured env var."""
-        return os.getenv(self.publishable_key_env_var, "").strip()
+        publishable_key = os.getenv(self.publishable_key_env_var, "").strip()
+        if not publishable_key:
+            raise BillingConfigurationError(
+                "Stripe publishable key is not configured in the runtime environment."
+            )
+        return publishable_key
 
     def resolve_secret_key(self) -> str:
         """Resolve the Stripe secret key from the configured env var."""
