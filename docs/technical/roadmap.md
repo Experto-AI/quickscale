@@ -311,6 +311,133 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ---
 
+#### Phase 8a: React Showcase Theme — Billing Integration Verification and Tests
+
+**Estimated hours**: 3–4 h
+
+**Context**: The `showcase_react` theme templates already contain billing wiring added during Phase 7 (`useModules.ts.j2`, `index.html.j2`, `Dashboard.tsx.j2`, `Sidebar.tsx.j2`). This phase audits that wiring for correctness, closes any gaps, and adds dedicated test methods that pin the exact generated output so future template changes cannot silently regress billing theme support.
+
+**Template audit checklist** (read each file in `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/` and verify each contract point before writing tests):
+
+- `src/hooks/useModules.ts.j2`:
+  - `QuickScaleModules` interface declares `billing: boolean`
+  - `defaultConfig.modules` initializes `billing: false`
+  - `QuickScaleModulePaths` interface declares `billing: string`
+  - `defaultConfig.modulePaths.billing` is set to `'/billing/pricing/'`
+
+- `templates/index.html.j2`:
+  - `window.__QUICKSCALE__.modules.billing` is rendered as `{% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}true{% else %}false{% endif %}`
+  - `window.__QUICKSCALE__.modulePaths.billing` renders the auth-aware path: `/billing/dashboard/` when `user.is_authenticated`, `/billing/pricing/` otherwise — the exact `{% if user.is_authenticated %}` branch must be present and produce the correct strings
+
+- `src/pages/Dashboard.tsx.j2`:
+  - `buildModuleInfo()` receives `billingPath` as a parameter (alongside `socialPath`)
+  - The billing card entry has `key: 'billing'`, `icon: CreditCard`, `reloadDocument: true`, `actionLabel: 'Open billing'`, and `href: billingPath` (not a hardcoded string)
+  - `CreditCard` is imported from `lucide-react`
+  - `buildModuleInfo(...)` is called with `modulePaths.billing` as the `billingPath` argument
+
+- `src/components/layout/Sidebar.tsx.j2`:
+  - `CreditCard` is imported from `lucide-react`
+  - The billing `NavItem` has `name: 'Billing'`, `href: modulePaths.billing`, `icon: CreditCard`, `show: modules.billing`, `reloadDocument: true`
+  - The `navigation` array entry is positioned relative to the other module entries (between Forms and Social)
+
+- `src/App.tsx.j2`:
+  - No `/billing/` `<Route>` is declared — billing pages are Django-owned (`reloadDocument: true` in both Dashboard card and Sidebar means the SPA never intercepts billing routes)
+  - Confirm no `BillingPage` import exists
+
+**Implementation tasks**:
+
+- [ ] Audit each template file against the checklist above; fix any gaps before writing tests
+- [ ] `quickscale_core/tests/test_react_theme_integration.py` — add `test_react_theme_billing_window_config_flag`:
+  - Generate a project with `theme="showcase_react"`
+  - Read `templates/index.html` from the output
+  - Assert the `billing:` module flag uses the conditional `INSTALLED_APPS` check (exact substring match)
+  - Assert the `modulePaths.billing` entry uses the `{% if user.is_authenticated %}` auth-aware branch with `/billing/dashboard/` for authenticated and `/billing/pricing/` for unauthenticated
+- [ ] `test_react_theme_billing_dashboard_card`:
+  - Generate a project; read `src/pages/Dashboard.tsx` from the output
+  - Assert `key: 'billing'` is present
+  - Assert `icon: CreditCard` maps to the billing entry (not another module)
+  - Assert `reloadDocument: true` is on the billing entry
+  - Assert `actionLabel: 'Open billing'` is present
+  - Assert `href: billingPath` is used (not a hardcoded `/billing/` string)
+  - Assert `CreditCard` appears in the lucide-react import line
+- [ ] `test_react_theme_billing_sidebar_nav_entry`:
+  - Generate a project; read `src/components/layout/Sidebar.tsx` from the output
+  - Assert billing `NavItem` has `name: 'Billing'`, `show: modules.billing`, `reloadDocument: true`
+  - Assert `CreditCard` appears in the lucide-react import line
+  - Assert `modulePaths.billing` is the `href` source (not a hardcoded string)
+- [ ] `test_react_theme_billing_no_spa_route`:
+  - Generate a project; read `src/App.tsx` from the output
+  - Assert no `<Route` element with a path matching `/billing` is present
+  - Assert no `BillingPage` import is present
+- [ ] `test_react_theme_billing_modules_hook_interface`:
+  - Generate a project; read `src/hooks/useModules.ts` from the output
+  - Assert `billing: boolean` appears in the `QuickScaleModules` interface block
+  - Assert `billing: false` appears in `defaultConfig.modules`
+  - Assert `billing: string` appears in `QuickScaleModulePaths`
+  - Assert `modulePaths.billing` default value is `'/billing/pricing/'`
+
+**Acceptance**: All five new test methods pass under `pytest quickscale_core/tests/test_react_theme_integration.py`; no `hardcoded /billing/` path strings appear in `Dashboard.tsx.j2` or `Sidebar.tsx.j2` (all routing goes through `modulePaths.billing`); no SPA `/billing/` route exists in `App.tsx.j2`; billing module flag in `index.html.j2` uses the exact `INSTALLED_APPS` conditional pattern consistent with all other module flags.
+
+---
+
+#### Phase 8b: HTML Showcase Theme — Billing Integration Verification and Tests
+
+**Estimated hours**: 2–3 h
+
+**Context**: The `showcase_html` theme templates already contain billing wiring added during Phase 7 (`index.html.j2`, `navigation.html.j2`). This phase audits that wiring, closes any gaps, and pins it with dedicated test methods in the HTML theme integration test suite.
+
+**Template audit checklist** (read each file in `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_html/templates/` and verify each contract point before writing tests):
+
+- `templates/index.html.j2` (the generated `templates/index.html`):
+  - Billing module card is guarded by `{% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}`
+  - Card header reads `<h3>Billing</h3>` with `<span class="module-badge">Active</span>`
+  - Card body mentions Stripe-backed pricing and billing dashboard pages
+  - A module note explains that billing uses module-owned Django pages (no starter-owned frontend billing app)
+  - Auth-aware action links: `{% if user.is_authenticated %}` branch renders `<a class="module-link" href="/billing/dashboard/">Open billing dashboard</a>`; else branch renders `<a class="module-link" href="/billing/pricing/">View pricing</a>`
+  - The billing card block is closed with `{% endif %}` before the next module block
+
+- `templates/components/navigation.html.j2` (the generated `templates/components/navigation.html`):
+  - Navigation section guarded by `{% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}`
+  - Section title is `<span class="nav-section-title">Billing</span>`
+  - Unconditional `<a href="/billing/pricing/">Pricing</a>` link always present when billing is installed
+  - `{% if user.is_authenticated %}` guard renders `<a href="/billing/dashboard/">Billing Dashboard</a>` for authenticated users
+  - `{% else %}` branch renders a `<span class="nav-disabled-link">` hint to sign in
+  - `{% endif %}` for the auth guard, then `{% endif %}` closing the billing block
+  - Teams navigation section is NOT present (teams is not yet a shipped module)
+
+**Implementation tasks**:
+
+- [ ] Audit each template file against the checklist above; fix any gaps before writing tests
+- [ ] `quickscale_core/tests/test_html_theme_integration.py` — add `test_html_theme_billing_card_and_auth_aware_links`:
+  - Generate a project with `theme="showcase_html"`
+  - Read `templates/index.html` from the output
+  - Assert `{% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}` guards the billing card
+  - Assert `<h3>Billing</h3>` is present
+  - Assert `/billing/pricing/` link is present (the unauthenticated branch)
+  - Assert `/billing/dashboard/` link is present (the authenticated branch)
+  - Assert `{% if user.is_authenticated %}` auth gate is present within the billing card
+  - Assert the module note text about Django-owned pages is present (billing does not scaffold a starter-owned billing UI)
+- [ ] `test_html_theme_billing_navigation_section`:
+  - Generate a project; read `templates/components/navigation.html` from the output
+  - Assert `<span class="nav-section-title">Billing</span>` is present
+  - Assert `/billing/pricing/` link appears unconditionally inside the billing nav block
+  - Assert `/billing/dashboard/` link appears under an `{% if user.is_authenticated %}` guard
+  - Assert a `nav-disabled-link` hint is present in the `{% else %}` branch for the billing nav
+  - Assert `<span class="nav-section-title">Teams</span>` is NOT present
+- [ ] `test_html_theme_billing_installed_apps_guard`:
+  - Generate a project; read both `templates/index.html` and `templates/components/navigation.html`
+  - Assert the billing card in `index.html` is wrapped in exactly one `INSTALLED_APPS` check for `quickscale_modules_billing`
+  - Assert the billing nav block in `navigation.html` is wrapped in exactly one `INSTALLED_APPS` check for `quickscale_modules_billing`
+  - Assert neither file contains any billing-related unconditional hardcoded URL strings outside the conditional blocks
+- [ ] `test_html_theme_billing_no_teams_entry`:
+  - Generate a project; read both `templates/index.html` and `templates/components/navigation.html`
+  - Assert `Teams` does not appear in either file (teams is not a shipped module in this release)
+  - Assert `quickscale_modules_teams` does not appear in either file
+
+**Acceptance**: All four new test methods pass under `pytest quickscale_core/tests/test_html_theme_integration.py`; billing card and nav section are guarded by the `INSTALLED_APPS` conditional in both generated files; auth-aware links route authenticated users to `/billing/dashboard/` and unauthenticated users to `/billing/pricing/`; teams is absent from generated HTML theme output.
+
+---
+
 #### Phase 8: Tests, Docs, and Release Prep
 
 **Estimated hours**: 6–8 h
