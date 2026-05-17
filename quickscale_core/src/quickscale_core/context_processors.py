@@ -12,6 +12,9 @@ def installed_modules(request: HttpRequest) -> dict[str, Any]:
     try:
         # Load module configuration
         config = load_config()
+        is_authenticated = bool(
+            getattr(getattr(request, "user", None), "is_authenticated", False)
+        )
 
         # Define shipped modules and their navigation info
         available_modules = {
@@ -19,6 +22,13 @@ def installed_modules(request: HttpRequest) -> dict[str, Any]:
                 "name": "Authentication",
                 "url": "quickscale_auth:profile",
                 "icon": "👤",
+            },
+            "billing": {
+                "name": "Billing",
+                "url": "/billing/dashboard/"
+                if is_authenticated
+                else "/billing/pricing/",
+                "icon": "💳",
             },
         }
 

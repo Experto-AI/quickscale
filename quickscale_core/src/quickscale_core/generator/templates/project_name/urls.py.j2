@@ -79,10 +79,11 @@ if settings.DEBUG:
         pass
 {%- if theme != 'showcase_react' %}
     # In DEBUG mode, show custom 404 page instead of Django's technical 404
-    # This keeps shipped auth guidance ahead of the generic fallback.
+    # This keeps shipped auth/billing guidance ahead of the generic fallback.
     urlpatterns += [
-        # Catch auth URLs first (more specific pattern)
+        # Catch auth and billing URLs first (more specific patterns)
         re_path(r"^accounts/.*", custom_404_view),
+        re_path(r"^billing/.*", custom_404_view),
         # Catch-all for any other 404s (must be last)
         re_path(r".*", custom_404_view),
     ]

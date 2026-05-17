@@ -15,7 +15,7 @@ Key rules:
 - `showcase_react` is the default starter theme.
 - `showcase_html` remains the secondary starter option.
 - Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages in v0.83.0.
-- Generated starter output excludes billing and teams placeholder routes, navigation, cards, and flags until those modules ship.
+- Generated starter output surfaces billing as module flags, cards, and navigation links into module-owned Django pages (`/billing/pricing/` public and `/billing/dashboard/` for signed-in users) without generating a starter-owned billing React page; teams placeholder routes, navigation, cards, and flags remain excluded.
 - Modules embed into the generated project and can later be updated through the documented git-subtree workflow.
 - QuickScale does not generate a maintainer-style `quickscale_modules/` workspace inside client projects.
 
@@ -156,6 +156,7 @@ myapp/
 Notes:
 - Fresh `showcase_react` generations include `frontend/src/lib/analytics.ts` as dormant PostHog starter wiring. It initializes only when `VITE_POSTHOG_KEY` contains a real key.
 - Fresh `showcase_react` generations also include `frontend/src/pages/SocialLinkTreePublicPage.tsx` and `frontend/src/pages/SocialEmbedsPublicPage.tsx`, plus Django `templates/social/*.html` wrappers that keep `/social` and `/social/embeds` under Django ownership while hydrating the shared React bundle through `window.__QUICKSCALE__.publicPage`.
+- Fresh `showcase_react` generations surface billing only as full-document links into the billing module's Django-owned `/billing/pricing/` and `/billing/dashboard/` pages; QuickScale does not generate a starter-owned `BillingPage.tsx`.
 - That public-page scaffolding is fresh-generation-only; existing projects and non-React themes must manually adopt any equivalent public pages they want.
 
 ### HTML Starter Output
@@ -182,6 +183,7 @@ myapp/
 
 Notes:
 - Fresh `showcase_html` generations do not scaffold Django-owned public `/social` or `/social/embeds` pages in v0.83.0.
+- Fresh `showcase_html` generations surface billing as server-rendered cards and navigation links into the billing module's Django-owned `/billing/pricing/` and `/billing/dashboard/` pages.
 - Enabling the `social` module still wires the backend-managed transport surface, but non-React themes must manually adopt any public page surface they want.
 
 ### State and Module Metadata

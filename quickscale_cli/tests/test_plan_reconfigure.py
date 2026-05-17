@@ -332,10 +332,10 @@ class TestPlanReconfigureAddModules:
                     content = f.read()
                 assert "auth" in content
 
-    def test_plan_reconfigure_rejects_placeholder_modules_with_experimental_picker(
+    def test_plan_reconfigure_supports_billing_and_rejects_teams_with_experimental_picker(
         self,
     ) -> None:
-        """Billing and teams stay visible-only in reconfigure add-module flow."""
+        """Reconfigure add flow should accept billing while keeping teams hidden-only."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -354,27 +354,22 @@ docker:
             result = runner.invoke(
                 plan,
                 ["--reconfigure", "--include-experimental"],
-                input="y\nbilling\nteams\n\nn\ny\n",
+                input="y\nteams\nbilling\nn\ny\n",
             )
 
             assert result.exit_code == 0
-            assert (
-                "billing - Stripe integration "
-                "(internal packaged Phase 1 foundation, not public-ready)"
-                in result.output
-            )
+            assert "billing - Stripe integration" in result.output
             assert (
                 "teams - Multi-tenancy and team management "
                 "(placeholder, not public-ready)" in result.output
             )
-            assert "internal packaged Phase 1 foundation" in result.output
             assert "Module 'teams' remains placeholder inventory only" in result.output
 
             with open("quickscale.yml") as f:
                 config = yaml.safe_load(f)
 
             modules = (config or {}).get("modules") or {}
-            assert "billing" not in modules
+            assert "billing" in modules
             assert "teams" not in modules
 
 

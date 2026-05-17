@@ -2,7 +2,6 @@
 
 import os
 
-import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
@@ -212,8 +211,8 @@ class TestPlanModuleSelection:
             assert "auth:" in content
             assert "listings:" in content
 
-    def test_experimental_modules_hidden_by_default(self):
-        """Billing/teams should be hidden unless --include-experimental is used."""
+    def test_only_teams_is_hidden_by_default(self):
+        """Billing should be visible by default while teams stays hidden."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -222,11 +221,11 @@ class TestPlanModuleSelection:
                 input="\n1\n\ny\ny\nn\n",
             )
 
-            assert "billing - Stripe integration" not in result.output
+            assert "billing - Stripe integration" in result.output
             assert "teams - Multi-tenancy and team management" not in result.output
 
     def test_experimental_modules_visible_with_flag(self):
-        """Billing and teams should expose their distinct non-public labels."""
+        """Billing stays selectable while teams remains visibility-only with the flag."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -235,36 +234,43 @@ class TestPlanModuleSelection:
                 input="\n1\n\ny\ny\nn\nn\n",
             )
 
-            assert (
-                "billing - Stripe integration "
-                "(internal packaged Phase 1 foundation, not public-ready)"
-                in result.output
-            )
+            assert "billing - Stripe integration" in result.output
             assert (
                 "teams - Multi-tenancy and team management "
                 "(placeholder, not public-ready)" in result.output
             )
 
-    @pytest.mark.parametrize("placeholder_name", ["billing", "teams"])
-    def test_placeholder_modules_cannot_be_selected_with_flag(self, placeholder_name):
-        """Billing/teams remain visible only and cannot be written into config."""
+    def test_billing_can_be_selected_with_flag(self):
+        """Billing should write into config when selected from the picker."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
                 plan,
                 ["myapp", "--include-experimental"],
-                input=f"\n1\n{placeholder_name}\n\ny\ny\nn\ny\n",
+                input="\n1\nbilling\ny\ny\nn\ny\n",
+            )
+
+            assert result.exit_code == 0
+            with open("myapp/quickscale.yml") as f:
+                content = f.read()
+            assert "billing:" in content
+
+    def test_teams_cannot_be_selected_with_flag(self):
+        """Teams remains visible only and cannot be written into config."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp", "--include-experimental"],
+                input="\n1\nteams\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
             assert "public-ready QuickScale module" in result.output
-            if placeholder_name == "billing":
-                assert "internal packaged Phase 1 foundation" in result.output
-            else:
-                assert "placeholder inventory only" in result.output
+            assert "placeholder inventory only" in result.output
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
-            assert f"{placeholder_name}:" not in content
+            assert "teams:" not in content
 
 
 class TestPlanDockerConfiguration:

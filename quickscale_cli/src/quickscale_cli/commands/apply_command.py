@@ -733,9 +733,29 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
             for issue in billing_issues:
                 click.echo(f"  • {issue}", err=True)
             click.echo(
-                "\n💡 Billing remains non-public-ready in public planner/apply flows, "
-                "but internal billing config still must use valid env-var references "
-                "and a supported currency code.",
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or "
+                "edit quickscale.yml to correct the billing option values. "
+                "Billing apply requires valid env-var references and a supported "
+                "currency code.",
+                err=True,
+            )
+            raise click.Abort()
+
+        if "auth" not in qs_config.modules:
+            click.secho(
+                "\n❌ Billing requires the auth module before apply can continue:",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "  • Add 'auth' under modules in quickscale.yml before applying billing.",
+                err=True,
+            )
+            click.echo(
+                "\n💡 Billing relies on the QuickScale auth login flow and "
+                "AUTH_USER_MODEL. Re-run 'quickscale plan --reconfigure "
+                "--configure-modules' or edit quickscale.yml to add auth, then "
+                "re-run 'quickscale apply'.",
                 err=True,
             )
             raise click.Abort()

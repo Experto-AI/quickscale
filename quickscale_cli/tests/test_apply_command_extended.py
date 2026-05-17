@@ -603,10 +603,7 @@ class TestLoadAndValidateConfig:
 
         assert result.modules["backups"].options == {}
 
-    @pytest.mark.parametrize("placeholder_module", ["billing", "teams"])
-    def test_placeholder_modules_are_rejected_on_load(
-        self, tmp_path, placeholder_module
-    ):
+    def test_teams_placeholder_module_is_rejected_on_load(self, tmp_path):
         """Apply should reject placeholder modules even if they are hand-edited in."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
@@ -616,13 +613,56 @@ class TestLoadAndValidateConfig:
             "  package: myapp\n"
             "  theme: showcase_html\n"
             "modules:\n"
-            f"  {placeholder_module}:\n"
+            "  teams:\n"
             "docker:\n"
             "  start: false\n"
         )
 
         with pytest.raises(click.Abort):
             _load_and_validate_config(config)
+
+    def test_billing_module_requires_auth_on_load(self, tmp_path, capsys):
+        """Apply load should reject billing until auth is present in the desired config."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  billing:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+        error_output = capsys.readouterr().err
+        assert (
+            "Billing requires the auth module before apply can continue" in error_output
+        )
+
+    def test_billing_module_loads_with_auth_on_load(self, tmp_path):
+        """Apply load should accept billing once auth is also configured."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "  billing:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+
+        assert set(result.modules.keys()) == {"auth", "billing"}
 
     def test_legacy_backups_secrets_are_sanitized_on_load(self, tmp_path):
         """Legacy raw backup secrets should be rewritten to env-var references."""
@@ -933,10 +973,7 @@ class TestLoadAndValidateConfig:
 class TestPrepareApplyContext:
     """Tests for apply preflight context loading."""
 
-    @pytest.mark.parametrize("placeholder_module", ["billing", "teams"])
-    def test_rejects_placeholder_modules_in_existing_state(
-        self, tmp_path, placeholder_module
-    ):
+    def test_rejects_teams_placeholder_module_in_existing_state(self, tmp_path):
         """Apply should abort when legacy state still references placeholders."""
         project_path = tmp_path / "myapp"
         project_path.mkdir()
@@ -958,7 +995,7 @@ class TestPrepareApplyContext:
             "  package: myapp\n"
             "  theme: showcase_html\n"
             "modules:\n"
-            f"  {placeholder_module}:\n"
+            "  teams:\n"
             '    version: "0.1.0"\n'
         )
 

@@ -184,22 +184,37 @@ modules:
         error_output = capsys.readouterr().err
         assert "Billing module configuration is incomplete for apply" in error_output
         assert expected_marker in error_output
+        assert "correct the billing option values" in error_output
+        assert "non-public-ready" not in error_output
         assert "references modules that are not public-ready" not in error_output
 
-    def test_abort_for_not_ready_modules_reports_billing_reason(self, capsys):
-        """Test billing hits apply's non-public-ready abort helper."""
+    def test_apply_billing_requires_auth_module(self, capsys):
+        """Billing apply should fail early when auth is not selected."""
+        qs_config = SimpleNamespace(modules={"billing": SimpleNamespace(options={})})
+
         with pytest.raises(click.Abort):
-            _abort_for_not_ready_modules(["billing"], source="quickscale.yml")
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert (
+            "Billing requires the auth module before apply can continue" in error_output
+        )
+        assert (
+            "Add 'auth' under modules in quickscale.yml before applying billing"
+            in error_output
+        )
+
+    def test_abort_for_not_ready_modules_reports_teams_reason(self, capsys):
+        """Teams should remain blocked by the non-public-ready apply helper."""
+        with pytest.raises(click.Abort):
+            _abort_for_not_ready_modules(["teams"], source="quickscale.yml")
 
         error_output = capsys.readouterr().err
         assert (
             "quickscale.yml references modules that are not public-ready"
             in error_output
         )
-        assert (
-            "Module 'billing' has an internal packaged Phase 1 foundation"
-            in error_output
-        )
+        assert "Module 'teams' remains placeholder inventory only" in error_output
 
 
 class TestApplyDirectoryHandling:

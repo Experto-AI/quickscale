@@ -1772,9 +1772,10 @@ def configure_billing_module(
 
     click.echo("\n⚙️  Configuring billing module...")
     click.echo(
-        "Billing remains internal-only in public QuickScale flows during this "
-        "phase. These settings capture the planner/apply contract that later "
-        "phases will wire into the runtime.\n"
+        "Billing is public-ready in quickscale plan, quickscale.yml, and "
+        "quickscale apply flows. These settings configure the managed Stripe "
+        "runtime, while quickscale apply still requires auth before billing "
+        "can be enabled.\n"
     )
 
     config = resolve_billing_module_options(

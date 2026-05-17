@@ -1650,6 +1650,7 @@ class TestBillingModuleConfig:
         self,
         mock_confirm,
         mock_prompt,
+        capsys,
     ):
         mock_confirm.return_value = True
         mock_prompt.side_effect = [
@@ -1660,6 +1661,7 @@ class TestBillingModuleConfig:
         ]
 
         config = configure_billing_module(non_interactive=False)
+        output = capsys.readouterr().out
 
         assert config == {
             "enabled": True,
@@ -1668,6 +1670,11 @@ class TestBillingModuleConfig:
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
             "billing_currency": "eur",
         }
+        assert "Billing is public-ready in quickscale plan, quickscale.yml" in output
+        assert (
+            "quickscale apply still requires auth before billing can be enabled"
+            in output
+        )
 
     @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
     def test_apply_billing_configuration_regenerates_managed_wiring(

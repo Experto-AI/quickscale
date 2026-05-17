@@ -101,6 +101,24 @@
             </article>
             {% endif %}
 
+            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Billing</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Stripe-backed pricing and customer billing pages owned by the billing module.</p>
+                <p class="module-note">QuickScale keeps billing on module-owned Django pages rather than generating a starter-owned frontend billing app.</p>
+                <div class="module-card-actions">
+                    {% if user.is_authenticated %}
+                    <a class="module-link" href="/billing/dashboard/">Open billing dashboard</a>
+                    {% else %}
+                    <a class="module-link" href="/billing/pricing/">View pricing</a>
+                    {% endif %}
+                </div>
+            </article>
+            {% endif %}
+
             {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}
             <article class="module-card">
                 <div class="module-card-header">
@@ -140,7 +158,7 @@
             </article>
             {% endif %}
 
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS %}
             <article class="module-card empty-state">
                 <div class="module-card-header">
                     <h3>No modules installed</h3>

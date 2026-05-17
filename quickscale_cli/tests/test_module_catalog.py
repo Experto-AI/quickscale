@@ -23,15 +23,15 @@ def test_get_module_entry_returns_none_for_unknown_module() -> None:
     assert get_module_entry("unknown") is None
 
 
-def test_get_module_entries_filters_experimental_by_default() -> None:
-    """Default catalog listing should omit experimental modules."""
+def test_get_module_entries_filters_non_ready_modules_by_default() -> None:
+    """Default catalog listing should include billing but keep teams hidden."""
     entries = get_module_entries()
     names = [entry.name for entry in entries]
 
     assert "storage" in names
     assert "backups" in names
     assert "social" in names
-    assert "billing" not in names
+    assert "billing" in names
     assert "teams" not in names
 
 
@@ -64,15 +64,9 @@ def test_get_module_entry_returns_social_metadata() -> None:
     assert entry.ready is True
 
 
-def test_get_module_readiness_reason_reports_internal_billing_foundation() -> None:
-    """Billing should expose the internal-foundation non-public readiness message."""
-    reason = get_module_readiness_reason("billing")
-
-    assert reason is not None
-    assert "billing" in reason
-    assert "internal packaged Phase 1 foundation" in reason
-    assert "not a placeholder-only directory" in reason
-    assert "public-ready QuickScale module" in reason
+def test_get_module_readiness_reason_returns_none_for_public_ready_billing() -> None:
+    """Billing should no longer expose a non-public readiness message."""
+    assert get_module_readiness_reason("billing") is None
 
 
 def test_get_module_readiness_reason_reports_placeholder_teams_inventory() -> None:
@@ -88,6 +82,5 @@ def test_get_module_readiness_reason_reports_placeholder_teams_inventory() -> No
 def test_find_not_ready_modules_filters_ready_modules() -> None:
     """Readiness filtering should keep only known non-public modules."""
     assert find_not_ready_modules(["auth", "billing", "teams", "unknown"]) == [
-        "billing",
         "teams",
     ]

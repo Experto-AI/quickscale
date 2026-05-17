@@ -30,11 +30,15 @@ class TestHtmlThemeIntegration:
             "There is no Django Admin configuration surface for storage secrets."
             in index_html
         )
-        assert "Billing" not in index_html
+        assert "Billing" in index_html
+        assert "/billing/pricing/" in index_html
+        assert "/billing/dashboard/" in index_html
         assert "Teams" not in index_html
 
         assert '<span class="nav-section-title">Social</span>' not in navigation
-        assert '<span class="nav-section-title">Billing</span>' not in navigation
+        assert '<span class="nav-section-title">Billing</span>' in navigation
+        assert "/billing/pricing/" in navigation
+        assert "/billing/dashboard/" in navigation
         assert '<span class="nav-section-title">Teams</span>' not in navigation
         assert "{% if user.is_staff %}" in navigation
         assert "CRM dashboard access is limited to staff users." in navigation

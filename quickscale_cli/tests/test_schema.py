@@ -230,13 +230,14 @@ modules:
   forms:
   storage:
   backups:
+  billing:
   analytics:
   notifications:
   social:
 """
         config = validate_config(yaml_content)
 
-        assert len(config.modules) == 10
+        assert len(config.modules) == 11
         assert set(config.modules.keys()) == {
             "auth",
             "blog",
@@ -245,6 +246,7 @@ modules:
             "forms",
             "storage",
             "backups",
+            "billing",
             "analytics",
             "notifications",
             "social",
@@ -400,7 +402,7 @@ modules:
 
         assert "Unknown module 'unknown_module'" in str(exc.value)
 
-    @pytest.mark.parametrize("placeholder_name", ["billing", "teams"])
+    @pytest.mark.parametrize("placeholder_name", ["teams"])
     def test_placeholder_module_is_rejected(self, placeholder_name):
         """Placeholder modules should not validate into quickscale.yml."""
         yaml_content = f"""
@@ -417,14 +419,25 @@ modules:
         message = str(exc.value)
         assert placeholder_name in message
         assert "public-ready QuickScale module" in message
-        if placeholder_name == "billing":
-            assert "internal packaged Phase 1 foundation" in message
-            assert "not a placeholder-only directory" in message
-        else:
-            assert "placeholder inventory only" in message
+        assert "placeholder inventory only" in message
+
+    def test_billing_module_is_accepted(self):
+        """Billing should validate as a public-ready module in quickscale.yml."""
+        yaml_content = """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+modules:
+  billing:
+"""
+
+        config = validate_config(yaml_content)
+
+        assert "billing" in config.modules
 
     def test_billing_unknown_key_is_rejected_before_readiness_gate(self):
-        """Billing key validation should fire before the non-public-ready error."""
+        """Billing key validation should remain actionable."""
         yaml_content = """
 version: "1"
 project:
@@ -463,7 +476,7 @@ modules:
         option_value,
         expected_marker,
     ):
-        """Billing value validation should be actionable before readiness gating."""
+        """Billing value validation should remain actionable."""
         yaml_content = f"""
 version: "1"
 project:

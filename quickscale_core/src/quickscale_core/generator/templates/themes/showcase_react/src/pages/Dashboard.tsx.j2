@@ -11,6 +11,7 @@ import {
   Briefcase,
   ClipboardList,
   Code,
+  CreditCard,
   Database,
   ExternalLink,
   HardDrive,
@@ -32,7 +33,7 @@ type ModuleCard = {
   actionLabel?: string
 }
 
-const buildModuleInfo = (socialPath: string): ModuleCard[] => [
+const buildModuleInfo = (socialPath: string, billingPath: string): ModuleCard[] => [
   {
     key: 'auth',
     name: 'Authentication',
@@ -68,6 +69,15 @@ const buildModuleInfo = (socialPath: string): ModuleCard[] => [
     icon: ClipboardList,
     description: 'Dynamic form builder with spam protection and submission management',
     href: '/forms/contact',
+  },
+  {
+    key: 'billing',
+    name: 'Billing',
+    icon: CreditCard,
+    description: 'Module-owned pricing and billing dashboard pages powered by the billing module.',
+    href: billingPath,
+    reloadDocument: true,
+    actionLabel: 'Open billing',
   },
   {
     key: 'social',
@@ -115,7 +125,9 @@ const gettingStarted = [
 export function Dashboard() {
   const modules = useModules()
   const { modulePaths } = useProjectConfig()
-  const installedModules = buildModuleInfo(modulePaths.social).filter((m) => modules[m.key])
+  const installedModules = buildModuleInfo(modulePaths.social, modulePaths.billing).filter(
+    (m) => modules[m.key],
+  )
   const hasModules = installedModules.length > 0
 
   return (

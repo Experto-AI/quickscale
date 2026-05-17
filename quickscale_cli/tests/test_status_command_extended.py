@@ -1,5 +1,6 @@
 """Extended tests for status_command.py - covering helper functions and edge cases."""
 
+import json
 import os
 from unittest.mock import Mock, patch
 
@@ -513,8 +514,8 @@ class TestStatusCommandExtended:
             assert result.exit_code == 0
             assert "testapp" in result.output
 
-    def test_status_fails_for_placeholder_config(self):
-        """Status should not silently ignore placeholder modules in quickscale.yml."""
+    def test_status_json_succeeds_for_billing_ready_config(self):
+        """Billing-only configs should pass status now that billing is public-ready."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -526,14 +527,40 @@ class TestStatusCommandExtended:
                     "  theme: showcase_html\n"
                     "modules:\n"
                     "  billing:\n"
+                    "docker:\n"
+                    "  start: false\n"
+                )
+
+            result = runner.invoke(status, ["--json"])
+
+            assert result.exit_code == 0
+            payload = json.loads(result.output)
+            assert payload["config"]["modules"] == ["billing"]
+            assert payload["pending_changes"]["has_changes"] is True
+            assert "billing" in payload["pending_changes"]["modules_to_add"]
+
+    def test_status_fails_for_placeholder_config(self):
+        """Status should still reject placeholder-only modules in quickscale.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    'version: "1"\n'
+                    "project:\n"
+                    "  slug: testapp\n"
+                    "  package: testapp\n"
+                    "  theme: showcase_html\n"
+                    "modules:\n"
+                    "  teams:\n"
                 )
 
             result = runner.invoke(status)
 
             assert result.exit_code != 0
             assert "public-ready QuickScale module" in result.output
-            assert "internal packaged Phase 1 foundation" in result.output
-            assert "billing" in result.output
+            assert "placeholder inventory only" in result.output
+            assert "teams" in result.output
+            assert "Billing remains internal-only" not in result.output
 
     def test_status_fails_for_malformed_installed_manifest(self):
         """Status should fail fast when an installed module manifest is malformed."""

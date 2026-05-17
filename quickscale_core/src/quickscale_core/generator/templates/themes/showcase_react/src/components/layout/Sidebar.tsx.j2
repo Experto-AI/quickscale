@@ -4,6 +4,7 @@ import {
   Home,
   Settings,
   BookOpen,
+  CreditCard,
   Store,
   Briefcase,
   UserCircle,
@@ -32,6 +33,13 @@ export function Sidebar() {
     { name: 'Listings', href: '/listings', icon: Store, show: modules.listings },
     { name: 'CRM', href: '/crm-workspace', icon: Briefcase, show: modules.crm },
     { name: 'Forms', href: '/forms', icon: ClipboardList, show: modules.forms },
+    {
+      name: 'Billing',
+      href: modulePaths.billing,
+      icon: CreditCard,
+      show: modules.billing,
+      reloadDocument: true,
+    },
     {
       name: 'Social',
       href: modulePaths.social,

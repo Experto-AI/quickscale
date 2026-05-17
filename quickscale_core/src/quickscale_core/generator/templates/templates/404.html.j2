@@ -118,6 +118,18 @@
         <pre><code>quickscale apply</code></pre>
         <p>This will add login, signup, password reset, and profile management to your project.</p>
     </div>
+    {% elif request_path and 'billing/' in request_path %}
+    <div class="module-hint">
+        <strong>Looking for billing?</strong>
+        <p>It looks like you're trying to access billing URLs, but the billing module isn't installed yet.</p>
+    </div>
+
+    <div class="error-help">
+        <h3>Add QuickScale billing with auth</h3>
+        <p>Add <code>auth</code> and <code>billing</code> to <code>quickscale.yml</code>, then apply the change:</p>
+        <pre><code>quickscale apply</code></pre>
+        <p>Billing keeps its own Django pages at <code>/billing/pricing/</code> for public pricing and <code>/billing/dashboard/</code> for signed-in users.</p>
+    </div>
     {% else %}
     <div class="error-help">
         <h3>What you can do:</h3>

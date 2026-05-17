@@ -1056,7 +1056,7 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
 @click.option(
     "--include-experimental",
     is_flag=True,
-    help="Show non-public module inventory entries (billing, teams) in the picker",
+    help="Show non-public module inventory entries (currently teams) in the picker",
 )
 @click.option(
     "--configure-modules",

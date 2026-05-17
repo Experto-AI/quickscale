@@ -68,6 +68,20 @@
             </li>
             {% endif %}
 
+            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
+            <li class="nav-section">
+                <span class="nav-section-title">Billing</span>
+                <ul class="nav-submenu">
+                    <li><a href="/billing/pricing/">Pricing</a></li>
+                    {% if user.is_authenticated %}
+                    <li><a href="/billing/dashboard/">Billing Dashboard</a></li>
+                    {% else %}
+                    <li><span class="nav-disabled-link">Sign in to open the billing dashboard.</span></li>
+                    {% endif %}
+                </ul>
+            </li>
+            {% endif %}
+
             {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}
             <li class="nav-section">
                 <span class="nav-section-title">Storage</span>

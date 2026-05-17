@@ -8,10 +8,12 @@ interface QuickScaleModules {
   storage: boolean
   backups: boolean
   notifications: boolean
+  billing: boolean
   social: boolean
 }
 
 interface QuickScaleModulePaths {
+  billing: string
   social: string
 }
 
@@ -54,9 +56,11 @@ const defaultConfig: QuickScaleConfig = {
     storage: false,
     backups: false,
     notifications: false,
+    billing: false,
     social: false,
   },
   modulePaths: {
+    billing: '/billing/pricing/',
     social: '/social',
   },
 }

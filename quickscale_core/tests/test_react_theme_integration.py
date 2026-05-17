@@ -694,6 +694,7 @@ class TestReactThemeModuleActivationMatrix:
         "storage",
         "backups",
         "notifications",
+        "billing",
     ]
 
     @staticmethod
@@ -725,7 +726,7 @@ class TestReactThemeModuleActivationMatrix:
             module: f"quickscale_modules_{module}" for module in self.APP_BACKED_MODULES
         }
         assert app_map == expected
-        assert "billing:" not in index_html
+        assert "billing:" in index_html
         assert "teams:" not in index_html
 
     @pytest.mark.parametrize(
@@ -739,8 +740,9 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_crm",
                     "quickscale_modules_storage",
                     "quickscale_modules_backups",
+                    "quickscale_modules_billing",
                 ],
-                {"auth", "blog", "crm", "storage", "backups"},
+                {"auth", "blog", "crm", "storage", "backups", "billing"},
             ),
             (  # all
                 [
@@ -752,6 +754,7 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_storage",
                     "quickscale_modules_backups",
                     "quickscale_modules_notifications",
+                    "quickscale_modules_billing",
                 ],
                 {
                     "auth",
@@ -762,6 +765,7 @@ class TestReactThemeModuleActivationMatrix:
                     "storage",
                     "backups",
                     "notifications",
+                    "billing",
                 },
             ),
         ],
@@ -857,10 +861,11 @@ class TestReactThemeModuleActivationMatrix:
 
         assert "backups: false" in use_modules
         assert "notifications: false" in use_modules
+        assert "billing: false" in use_modules
         assert "social: false" in use_modules
-        assert "billing: false" not in use_modules
         assert "teams: false" not in use_modules
         assert "modulePaths" in use_modules
+        assert "billing: '/billing/pricing/'" in use_modules
         assert "social: '/social'" in use_modules
 
         assert "key: 'backups'" in dashboard
@@ -872,9 +877,11 @@ class TestReactThemeModuleActivationMatrix:
         assert "key: 'social'" in dashboard
         assert "name: 'Social'" in dashboard
         assert "modulePaths.social" in dashboard
+        assert "key: 'billing'" in dashboard
+        assert "name: 'Billing'" in dashboard
+        assert "modulePaths.billing" in dashboard
         assert "href: '/crm-workspace'" in dashboard
         assert "actionLabel: 'Open workspace'" in dashboard
-        assert "key: 'billing'" not in dashboard
         assert "key: 'teams'" not in dashboard
         assert "reloadDocument={mod.reloadDocument}" in dashboard
         assert "lg:grid-cols-4" in dashboard
@@ -882,7 +889,8 @@ class TestReactThemeModuleActivationMatrix:
         assert "href: '/crm-workspace'" in sidebar
         assert "name: 'Social'" in sidebar
         assert "modulePaths.social" in sidebar
-        assert "name: 'Billing'" not in sidebar
+        assert "name: 'Billing'" in sidebar
+        assert "modulePaths.billing" in sidebar
         assert "name: 'Teams'" not in sidebar
         assert "name: 'Notifications'" not in sidebar
         assert "name: 'Backups'" not in sidebar

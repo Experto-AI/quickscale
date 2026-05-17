@@ -125,7 +125,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 **Repository Touchpoints**:
 - `quickscale_modules/billing/` — package, tests, public README, manifest
 - `quickscale_cli/` — billing contract helper, config schema, planner prompts, apply validation, module catalog readiness
-- `quickscale_core/` — generated-project helper surfaces, runtime hints, and tests that currently assert billing stays hidden
+- `quickscale_core/` — generated-project helper surfaces, runtime hints, and tests that now surface billing as module-owned starter links while teams stays hidden
 - `docs/technical/` — roadmap, decisions, generated-project structure, user manual, and release note handoff
 
 ---
@@ -300,12 +300,12 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Delivers**: Billing becomes a real selectable QuickScale module across planner, generated projects, runtime helper surfaces, and repo tests that currently enforce placeholder-only behavior.
 
-- [ ] `quickscale_cli/src/quickscale_cli/module_catalog.py` — flip `billing.ready` to `True`, remove placeholder-only readiness messaging, keep description aligned with the credits-first Stripe scope
-- [ ] `quickscale_core/context_processors.py` + tests — decide and implement whether billing joins the shipped helper-module output once it is a real module
-- [ ] `quickscale_core/tests/test_react_theme_integration.py` — replace billing-placeholder assertions with the final shipped contract for starter routes/cards/module flags
-- [ ] `quickscale_core/tests/test_error_pages.py` — replace "never mention billing" assertions with the final shipped install/runtime guidance
-- [ ] Generated project templates/docs — update any helper surfaces, starter copy, or managed hints that currently exclude billing because it is a placeholder
-- [ ] Public planner/apply flow — billing becomes selectable only after Phases 1–6 pass; billing hard-requires the QuickScale `auth` module at `quickscale apply` time — apply fails with an actionable error if `auth` is absent
+- [x] `quickscale_cli/src/quickscale_cli/module_catalog.py` — flip `billing.ready` to `True`, remove placeholder-only readiness messaging, keep description aligned with the credits-first Stripe scope
+- [x] `quickscale_core/context_processors.py` + tests — decide and implement whether billing joins the shipped helper-module output once it is a real module
+- [x] `quickscale_core/tests/test_react_theme_integration.py` — replace billing-placeholder assertions with the final shipped contract for starter routes/cards/module flags
+- [x] `quickscale_core/tests/test_error_pages.py` — replace "never mention billing" assertions with the final shipped install/runtime guidance
+- [x] Generated project templates/docs — update any helper surfaces, starter copy, or managed hints that currently exclude billing because it is a placeholder
+- [x] Public planner/apply flow — billing becomes selectable only after Phases 1–6 pass; billing hard-requires the QuickScale `auth` module at `quickscale apply` time — apply fails with an actionable error if `auth` is absent
 
 **Acceptance**: `quickscale plan --add billing` works in public flows; placeholder-only wording is removed from shipped helper surfaces; generator/core tests reflect the final billing contract rather than a hidden placeholder.
 

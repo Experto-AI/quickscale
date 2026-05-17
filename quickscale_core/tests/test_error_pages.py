@@ -34,7 +34,7 @@ class TestErrorPageGeneration:
 
         # Verify module hints are present
         assert "accounts/" in content, "Should detect auth module URLs"
-        assert "billing/" not in content, "Should not surface billing placeholders"
+        assert "billing/" in content, "Should surface billing helper guidance"
         assert "teams/" not in content, "Should not surface teams placeholders"
 
         # Verify installation instructions
@@ -122,18 +122,18 @@ class TestErrorHandlerConfiguration:
             "Should point to custom_500_view"
         )
 
-    def test_debug_404_routes_exclude_placeholder_modules(
+    def test_debug_404_routes_include_billing_but_exclude_teams(
         self, generated_project_path: Path, project_name: str
     ) -> None:
-        """Test that HTML starter debug routes only keep shipped auth guidance."""
+        """Test that HTML starter debug routes keep shipped auth/billing guidance only."""
         urls_file = generated_project_path / project_name / "urls.py"
         content = urls_file.read_text()
 
         assert 're_path(r"^accounts/.*", custom_404_view)' in content, (
             "Should keep auth-specific debug guidance"
         )
-        assert 're_path(r"^billing/.*", custom_404_view)' not in content, (
-            "Should not add billing placeholder debug routes"
+        assert 're_path(r"^billing/.*", custom_404_view)' in content, (
+            "Should add billing debug routes"
         )
         assert 're_path(r"^teams/.*", custom_404_view)' not in content, (
             "Should not add teams placeholder debug routes"
@@ -160,18 +160,24 @@ class TestModuleInstallationHints:
             "Should keep auth guidance on the apply workflow"
         )
 
-    def test_placeholder_module_hints_removed(
-        self, generated_project_path: Path
-    ) -> None:
-        """Test that billing and teams placeholders do not leak into 404 output."""
+    def test_billing_module_hint(self, generated_project_path: Path) -> None:
+        """Test that 404 page detects billing module URLs and provides hints."""
         template_404 = generated_project_path / "templates" / "404.html"
         content = template_404.read_text()
 
-        assert "billing/" not in content, "Should not check for billing/ routes"
+        assert "billing/" in content, "Should check for billing/ in request path"
+        assert "Looking for billing" in content
+        assert "auth" in content
+        assert "/billing/pricing/" in content
+        assert "/billing/dashboard/" in content
+        assert "quickscale apply" in content
+
+    def test_teams_placeholder_hint_removed(self, generated_project_path: Path) -> None:
+        """Test that teams placeholder guidance does not leak into 404 output."""
+        template_404 = generated_project_path / "templates" / "404.html"
+        content = template_404.read_text()
+
         assert "teams/" not in content, "Should not check for teams/ routes"
-        assert "Billing Module" not in content, (
-            "Should not mention placeholder billing guidance"
-        )
         assert "Teams Module" not in content, (
             "Should not mention placeholder teams guidance"
         )

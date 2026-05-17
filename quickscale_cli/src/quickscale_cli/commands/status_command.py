@@ -136,12 +136,17 @@ def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> Non
         if reason is not None:
             click.echo(f"  • {reason}", err=True)
 
-    click.echo(
-        "\n💡 Billing remains internal-only and teams remains placeholder "
-        "inventory; neither can participate in public QuickScale plan, "
-        "quickscale.yml, apply, or status workflows yet.",
-        err=True,
+    guidance = (
+        "\n💡 Resolve the non-public-ready module state above before running "
+        "'quickscale status' again."
     )
+    if "teams" in not_ready:
+        guidance += (
+            " Teams remains placeholder inventory and cannot participate in "
+            "public QuickScale workflows yet."
+        )
+
+    click.echo(guidance, err=True)
     raise click.Abort()
 
 

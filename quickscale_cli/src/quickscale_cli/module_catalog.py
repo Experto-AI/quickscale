@@ -68,8 +68,7 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
     ModuleCatalogEntry(
         name="billing",
         description="Stripe integration",
-        ready=False,
-        experimental=True,
+        ready=True,
     ),
     ModuleCatalogEntry(
         name="teams",
