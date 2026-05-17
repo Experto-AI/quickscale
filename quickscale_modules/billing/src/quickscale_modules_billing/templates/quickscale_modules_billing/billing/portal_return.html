@@ -3,13 +3,90 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Billing portal return</title>
+    <title>Back from billing portal</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --page-bg: linear-gradient(180deg, #f1f3ff 0%, #f8fafc 100%);
+            --surface: rgba(255, 255, 255, 0.96);
+            --text: #272658;
+            --muted: #5f6391;
+            --border: rgba(39, 38, 88, 0.12);
+            --accent: #4b51b8;
+            --accent-soft: rgba(75, 81, 184, 0.14);
+            --shadow: 0 24px 60px rgba(39, 38, 88, 0.14);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 1.5rem;
+            font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+            background: var(--page-bg);
+            color: var(--text);
+        }
+
+        .status-card {
+            width: min(100%, 34rem);
+            padding: 2.2rem;
+            border-radius: 1.5rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .status-icon {
+            display: inline-grid;
+            place-items: center;
+            width: 4rem;
+            height: 4rem;
+            margin-bottom: 1rem;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-weight: 800;
+        }
+
+        h1 { margin: 0 0 0.85rem; font-size: clamp(2rem, 4vw, 2.8rem); }
+        p { margin: 0; line-height: 1.7; color: var(--muted); }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.8rem;
+            margin-top: 1.6rem;
+        }
+
+        .button {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 2.9rem;
+            padding: 0.85rem 1.25rem;
+            border-radius: 999px;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .button-primary { background: var(--accent); color: #ffffff; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: #ffffff; }
+    </style>
 </head>
 <body>
     <main>
-        <div id="billing-portal-root" data-portal-status="return">
-            <h1>Billing portal return</h1>
-            <p>You have returned from the billing portal. You can close this page and continue in the app.</p>
+        <div id="billing-portal-root" data-portal-status="return" class="status-card">
+            <div class="status-icon">-></div>
+            <h1>Back from billing portal</h1>
+            <p>You have returned from the Stripe billing portal. Recent plan or payment changes may take a moment to appear.</p>
+            <div class="actions">
+                <a class="button button-primary" href="{% url 'quickscale_billing:billing-dashboard' %}">Go to dashboard</a>
+                <a class="button button-secondary" href="/">Back to app</a>
+            </div>
         </div>
     </main>
 </body>

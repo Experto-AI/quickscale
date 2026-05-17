@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import json
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
-from django.urls import get_script_prefix
+from django.shortcuts import resolve_url
+from django.urls import get_script_prefix, reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -123,6 +126,20 @@ def _build_billing_portal_return_url(request: HttpRequest) -> str:
     from quickscale_modules_billing import urls as billing_urls
 
     return _build_redirect_url(request, path=billing_urls.PORTAL_RETURN_PATH)
+
+
+_ZERO_DECIMAL_PRICE_CURRENCIES = frozenset({"jpy"})
+
+
+def _format_price_cents(cents: int, currency: str) -> str:
+    normalized_currency = (currency or "usd").strip().lower() or "usd"
+    decimal_places = 0 if normalized_currency in _ZERO_DECIMAL_PRICE_CURRENCIES else 2
+    amount = Decimal(cents) / (Decimal(10) ** decimal_places)
+    amount_format = ",.0f" if decimal_places == 0 else ",.2f"
+    formatted_amount = format(amount, amount_format)
+    if normalized_currency == "usd":
+        return f"${formatted_amount}"
+    return f"{normalized_currency.upper()} {formatted_amount}"
 
 
 class _TransactionPagination(PageNumberPagination):
@@ -411,6 +428,31 @@ class PricingPageView(TemplateView):
     """Public billing pricing mount page."""
 
     template_name = "quickscale_modules_billing/pricing.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        plans = list(
+            Plan.objects.filter(is_active=True).order_by(
+                "billing_interval",
+                "price_cents",
+                "pk",
+            )
+        )
+        for plan in plans:
+            plan.price_display = _format_price_cents(plan.price_cents, plan.currency)
+
+        pricing_url = reverse("quickscale_billing:pricing-page")
+        context.update(
+            {
+                "plans": plans,
+                "dashboard_url": reverse("quickscale_billing:billing-dashboard"),
+                "pricing_login_url": (
+                    f"{resolve_url(settings.LOGIN_URL)}?next={pricing_url}"
+                ),
+                "viewer_is_authenticated": self.request.user.is_authenticated,
+            }
+        )
+        return context
 
 
 class BillingPortalReturnView(TemplateView):

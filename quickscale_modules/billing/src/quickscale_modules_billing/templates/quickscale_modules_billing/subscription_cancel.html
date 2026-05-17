@@ -3,13 +3,90 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Subscription checkout canceled</title>
+    <title>Subscription not started</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --page-bg: linear-gradient(180deg, #fff8ea 0%, #f8fafc 100%);
+            --surface: rgba(255, 255, 255, 0.96);
+            --text: #4a3417;
+            --muted: #6d5b45;
+            --border: rgba(74, 52, 23, 0.12);
+            --accent: #c27a1e;
+            --accent-soft: rgba(194, 122, 30, 0.14);
+            --shadow: 0 24px 60px rgba(74, 52, 23, 0.14);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 1.5rem;
+            font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+            background: var(--page-bg);
+            color: var(--text);
+        }
+
+        .status-card {
+            width: min(100%, 34rem);
+            padding: 2.2rem;
+            border-radius: 1.5rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .status-icon {
+            display: inline-grid;
+            place-items: center;
+            width: 4rem;
+            height: 4rem;
+            margin-bottom: 1rem;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-weight: 800;
+        }
+
+        h1 { margin: 0 0 0.85rem; font-size: clamp(2rem, 4vw, 2.8rem); }
+        p { margin: 0; line-height: 1.7; color: var(--muted); }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.8rem;
+            margin-top: 1.6rem;
+        }
+
+        .button {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 2.9rem;
+            padding: 0.85rem 1.25rem;
+            border-radius: 999px;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .button-primary { background: var(--accent); color: #ffffff; }
+        .button-secondary { border: 1px solid var(--border); color: var(--text); background: #ffffff; }
+    </style>
 </head>
 <body>
     <main>
-        <div id="billing-subscription-root" data-subscription-status="cancel">
-            <h1>Subscription checkout canceled</h1>
-            <p>Your recurring checkout was canceled before the subscription was started.</p>
+        <div id="billing-subscription-root" data-subscription-status="cancel" class="status-card">
+            <div class="status-icon">!</div>
+            <h1>Subscription not started</h1>
+            <p>You left checkout before Stripe started the subscription, so no charge was made.</p>
+            <div class="actions">
+                <a class="button button-primary" href="{% url 'quickscale_billing:pricing-page' %}">View plans</a>
+                <a class="button button-secondary" href="/">Back to app</a>
+            </div>
         </div>
     </main>
 </body>
