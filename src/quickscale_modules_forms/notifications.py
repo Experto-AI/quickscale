@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
@@ -20,7 +21,21 @@ _TRACKED_SUBMISSION_TEMPLATE_KEY = "notifications.forms_submission"
 
 
 def notify_submission(submission: "FormSubmission") -> None:
-    """Send email notification to form owners for a new non-spam submission"""
+    """Send email notification to form owners for a new non-spam submission.
+
+    Never raises — a notification failure must never affect the form submission response.
+    """
+    try:
+        _enqueue_notification(submission)
+    except Exception:
+        logger.warning(
+            "Unexpected error preparing notification for submission #%s",
+            submission.pk,
+            exc_info=True,
+        )
+
+
+def _enqueue_notification(submission: "FormSubmission") -> None:
     if submission.is_spam:
         return
 
@@ -33,32 +48,37 @@ def notify_submission(submission: "FormSubmission") -> None:
 
     notification_content = _build_submission_notification_content(submission)
 
-    try:
-        tracked_sender = _load_tracked_notification_sender()
-        if tracked_sender is None:
-            _send_untracked_submission_email(
-                recipients=recipients,
-                subject=notification_content["subject"],
-                plain_text_body=notification_content["plain_text_body"],
-                html_body=notification_content["html_body"],
-            )
-            return
+    tracked_sender = _load_tracked_notification_sender()
 
-        tracked_sender(
-            template_key=_TRACKED_SUBMISSION_TEMPLATE_KEY,
-            recipients=recipients,
-            context=notification_content["tracked_context"],
-            tags=["forms"],
-            metadata={"workflow": "form-submission"},
-        )
-    except Exception:
-        # Never block submission processing due to delivery failure
-        logger.warning(
-            "Failed to send notification email for submission #%s (form: %s)",
-            submission.pk,
-            form.slug,
-            exc_info=True,
-        )
+    def _dispatch() -> None:
+        try:
+            if tracked_sender is None:
+                _send_untracked_submission_email(
+                    recipients=recipients,
+                    subject=notification_content["subject"],
+                    plain_text_body=notification_content["plain_text_body"],
+                    html_body=notification_content["html_body"],
+                )
+                return
+
+            tracked_sender(
+                template_key=_TRACKED_SUBMISSION_TEMPLATE_KEY,
+                recipients=recipients,
+                context=notification_content["tracked_context"],
+                tags=["forms"],
+                metadata={"workflow": "form-submission"},
+            )
+        except Exception:
+            # Never block submission processing due to delivery failure
+            logger.warning(
+                "Failed to send notification email for submission #%s (form: %s)",
+                submission.pk,
+                form.slug,
+                exc_info=True,
+            )
+
+    # Run in a background thread — SMTP/delivery must never block or time out the web worker
+    threading.Thread(target=_dispatch, daemon=True).start()
 
 
 def _build_submission_notification_content(
