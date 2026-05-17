@@ -698,6 +698,27 @@ class TestReactThemeModuleActivationMatrix:
     ]
 
     @staticmethod
+    def _extract_named_imports(source: str, module: str) -> set[str]:
+        """Extract named imports for a module from generated TypeScript source."""
+        match = re.search(
+            rf"import\s*\{{(?P<body>.*?)\}}\s*from\s*'{re.escape(module)}'",
+            source,
+            re.DOTALL,
+        )
+        assert match is not None, f"Missing import from {module}"
+        return {
+            imported_name.strip()
+            for imported_name in match.group("body").split(",")
+            if imported_name.strip()
+        }
+
+    @staticmethod
+    def _assert_no_hardcoded_billing_paths(source: str) -> None:
+        """Billing navigation should flow through shared module path config."""
+        for hardcoded_path in ("/billing/pricing/", "/billing/dashboard/"):
+            assert hardcoded_path not in source
+
+    @staticmethod
     def _extract_template_module_app_map(index_html: str) -> dict[str, str]:
         """Extract module->Django app mapping from generated index.html template."""
         mapping: dict[str, str] = {}
@@ -813,6 +834,118 @@ class TestReactThemeModuleActivationMatrix:
 
         assert activation_pattern.search(index_html) is not None
         assert path_pattern.search(index_html) is not None
+
+    def test_react_theme_billing_window_config_flag(self, tmp_path):
+        """Generated React index template should expose billing in window config."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_billing_window_config"
+        generator.generate("react_billing_window_config", output_path)
+
+        index_html = (output_path / "templates" / "index.html").read_text()
+        window_config = index_html.split("window.__QUICKSCALE__ = {", 1)[1].split(
+            "};", 1
+        )[0]
+
+        assert (
+            "billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}"
+            "true{% else %}false{% endif %},"
+        ) in window_config
+        assert (
+            'billing: "{% if user.is_authenticated %}/billing/dashboard/{% else %}'
+            '/billing/pricing/{% endif %}"'
+        ) in window_config
+
+    def test_react_theme_billing_dashboard_card(self, tmp_path):
+        """Generated React dashboard should surface billing as a module-owned card."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_billing_dashboard_card"
+        generator.generate("react_billing_dashboard_card", output_path)
+
+        dashboard = (
+            output_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
+        ).read_text()
+        lucide_imports = self._extract_named_imports(dashboard, "lucide-react")
+        billing_card_match = re.search(
+            r"\{\n\s+key: 'billing',\n(?P<body>.*?)\n\s+\},",
+            dashboard,
+            re.DOTALL,
+        )
+
+        assert billing_card_match is not None
+        billing_card = billing_card_match.group("body")
+        assert "CreditCard" in lucide_imports
+        assert "name: 'Billing'" in billing_card
+        assert "icon: CreditCard" in billing_card
+        assert "href: billingPath" in billing_card
+        assert "reloadDocument: true" in billing_card
+        assert "actionLabel: 'Open billing'" in billing_card
+        assert "buildModuleInfo(modulePaths.social, modulePaths.billing)" in dashboard
+        self._assert_no_hardcoded_billing_paths(dashboard)
+
+    def test_react_theme_billing_sidebar_nav_entry(self, tmp_path):
+        """Generated React sidebar should link billing through the module path config."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_billing_sidebar_nav"
+        generator.generate("react_billing_sidebar_nav", output_path)
+
+        sidebar = (
+            output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
+        ).read_text()
+        lucide_imports = self._extract_named_imports(sidebar, "lucide-react")
+        billing_nav_match = re.search(
+            r"\{\n\s+name: 'Billing',\n(?P<body>.*?)\n\s+\},",
+            sidebar,
+            re.DOTALL,
+        )
+
+        assert billing_nav_match is not None
+        billing_nav = billing_nav_match.group("body")
+        assert "CreditCard" in lucide_imports
+        assert "href: modulePaths.billing" in billing_nav
+        assert "icon: CreditCard" in billing_nav
+        assert "show: modules.billing" in billing_nav
+        assert "reloadDocument: true" in billing_nav
+        self._assert_no_hardcoded_billing_paths(sidebar)
+
+    def test_react_theme_billing_no_spa_route(self, tmp_path):
+        """Generated React router should not claim a starter-owned billing route."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_billing_no_spa_route"
+        generator.generate("react_billing_no_spa_route", output_path)
+
+        app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
+
+        assert "BillingPage" not in app_tsx
+        assert 'path="/billing"' not in app_tsx
+        assert 'path="/billing/pricing"' not in app_tsx
+        assert 'path="/billing/dashboard"' not in app_tsx
+
+    def test_react_theme_billing_modules_hook_interface(self, tmp_path):
+        """Generated modules hook should expose billing through the shared config contract."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_billing_modules_hook"
+        generator.generate("react_billing_modules_hook", output_path)
+
+        use_modules = (
+            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+        modules_interface = use_modules.split("interface QuickScaleModules {", 1)[
+            1
+        ].split(
+            "\n}\n\ninterface QuickScaleModulePaths",
+            1,
+        )[0]
+        module_paths_interface = use_modules.split(
+            "interface QuickScaleModulePaths {", 1
+        )[1].split("\n}\n\nexport type PublicSocialSurface", 1)[0]
+        default_config = use_modules.split(
+            "const defaultConfig: QuickScaleConfig = {", 1
+        )[1].split("\n}\n\nexport function useModules", 1)[0]
+
+        assert "billing: boolean" in modules_interface
+        assert "billing: string" in module_paths_interface
+        assert "billing: false" in default_config
+        assert "billing: '/billing/pricing/'" in default_config
 
     def test_react_theme_storage_module_appears_in_frontend_config_and_dashboard(
         self, tmp_path

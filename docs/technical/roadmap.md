@@ -407,8 +407,8 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Implementation tasks**:
 
-- [ ] Audit each template file against the checklist above; fix any gaps before writing tests
-- [ ] `quickscale_core/tests/test_html_theme_integration.py` — add `test_html_theme_billing_card_and_auth_aware_links`:
+- [x] Audit each template file against the checklist above; fix any gaps before writing tests
+- [x] `quickscale_core/tests/test_html_theme_integration.py` — add `test_html_theme_billing_card_and_auth_aware_links`:
   - Generate a project with `theme="showcase_html"`
   - Read `templates/index.html` from the output
   - Assert `{% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}` guards the billing card
@@ -417,19 +417,19 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
   - Assert `/billing/dashboard/` link is present (the authenticated branch)
   - Assert `{% if user.is_authenticated %}` auth gate is present within the billing card
   - Assert the module note text about Django-owned pages is present (billing does not scaffold a starter-owned billing UI)
-- [ ] `test_html_theme_billing_navigation_section`:
+- [x] `test_html_theme_billing_navigation_section`:
   - Generate a project; read `templates/components/navigation.html` from the output
   - Assert `<span class="nav-section-title">Billing</span>` is present
   - Assert `/billing/pricing/` link appears unconditionally inside the billing nav block
   - Assert `/billing/dashboard/` link appears under an `{% if user.is_authenticated %}` guard
   - Assert a `nav-disabled-link` hint is present in the `{% else %}` branch for the billing nav
   - Assert `<span class="nav-section-title">Teams</span>` is NOT present
-- [ ] `test_html_theme_billing_installed_apps_guard`:
+- [x] `test_html_theme_billing_installed_apps_guard`:
   - Generate a project; read both `templates/index.html` and `templates/components/navigation.html`
   - Assert the billing card in `index.html` is wrapped in exactly one `INSTALLED_APPS` check for `quickscale_modules_billing`
   - Assert the billing nav block in `navigation.html` is wrapped in exactly one `INSTALLED_APPS` check for `quickscale_modules_billing`
   - Assert neither file contains any billing-related unconditional hardcoded URL strings outside the conditional blocks
-- [ ] `test_html_theme_billing_no_teams_entry`:
+- [x] `test_html_theme_billing_no_teams_entry`:
   - Generate a project; read both `templates/index.html` and `templates/components/navigation.html`
   - Assert `Teams` does not appear in either file (teams is not a shipped module in this release)
   - Assert `quickscale_modules_teams` does not appear in either file
