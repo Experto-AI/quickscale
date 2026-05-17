@@ -346,13 +346,13 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Implementation tasks**:
 
-- [ ] Audit each template file against the checklist above; fix any gaps before writing tests
-- [ ] `quickscale_core/tests/test_react_theme_integration.py` — add `test_react_theme_billing_window_config_flag`:
+- [x] Audit each template file against the checklist above; fix any gaps before writing tests
+- [x] `quickscale_core/tests/test_react_theme_integration.py` — add `test_react_theme_billing_window_config_flag`:
   - Generate a project with `theme="showcase_react"`
   - Read `templates/index.html` from the output
   - Assert the `billing:` module flag uses the conditional `INSTALLED_APPS` check (exact substring match)
   - Assert the `modulePaths.billing` entry uses the `{% if user.is_authenticated %}` auth-aware branch with `/billing/dashboard/` for authenticated and `/billing/pricing/` for unauthenticated
-- [ ] `test_react_theme_billing_dashboard_card`:
+- [x] `test_react_theme_billing_dashboard_card`:
   - Generate a project; read `src/pages/Dashboard.tsx` from the output
   - Assert `key: 'billing'` is present
   - Assert `icon: CreditCard` maps to the billing entry (not another module)
@@ -360,16 +360,16 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
   - Assert `actionLabel: 'Open billing'` is present
   - Assert `href: billingPath` is used (not a hardcoded `/billing/` string)
   - Assert `CreditCard` appears in the lucide-react import line
-- [ ] `test_react_theme_billing_sidebar_nav_entry`:
+- [x] `test_react_theme_billing_sidebar_nav_entry`:
   - Generate a project; read `src/components/layout/Sidebar.tsx` from the output
   - Assert billing `NavItem` has `name: 'Billing'`, `show: modules.billing`, `reloadDocument: true`
   - Assert `CreditCard` appears in the lucide-react import line
   - Assert `modulePaths.billing` is the `href` source (not a hardcoded string)
-- [ ] `test_react_theme_billing_no_spa_route`:
+- [x] `test_react_theme_billing_no_spa_route`:
   - Generate a project; read `src/App.tsx` from the output
   - Assert no `<Route` element with a path matching `/billing` is present
   - Assert no `BillingPage` import is present
-- [ ] `test_react_theme_billing_modules_hook_interface`:
+- [x] `test_react_theme_billing_modules_hook_interface`:
   - Generate a project; read `src/hooks/useModules.ts` from the output
   - Assert `billing: boolean` appears in the `QuickScaleModules` interface block
   - Assert `billing: false` appears in `defaultConfig.modules`
