@@ -20,31 +20,38 @@ logger = logging.getLogger(__name__)
 _TRACKED_SUBMISSION_TEMPLATE_KEY = "notifications.forms_submission"
 
 
-def notify_submission(submission: "FormSubmission") -> None:
+def notify_submission(submission: "FormSubmission") -> str:
     """Send email notification to form owners for a new non-spam submission.
 
     Never raises — a notification failure must never affect the form submission response.
+    Returns a status string: "queued", "no_recipients", "skipped_spam", or "enqueue_error".
     """
     try:
-        _enqueue_notification(submission)
+        return _enqueue_notification(submission)
     except Exception:
         logger.warning(
             "Unexpected error preparing notification for submission #%s",
             submission.pk,
             exc_info=True,
         )
+        return "enqueue_error"
 
 
-def _enqueue_notification(submission: "FormSubmission") -> None:
+def _enqueue_notification(submission: "FormSubmission") -> str:
     if submission.is_spam:
-        return
+        return "skipped_spam"
 
     form = submission.form
     recipients = [
         email.strip() for email in form.notify_emails.split(",") if email.strip()
     ]
     if not recipients:
-        return
+        logger.warning(
+            "No notify_emails configured for form '%s' (pk=%s) — notification skipped",
+            form.slug,
+            form.pk,
+        )
+        return "no_recipients"
 
     notification_content = _build_submission_notification_content(submission)
 
@@ -77,8 +84,15 @@ def _enqueue_notification(submission: "FormSubmission") -> None:
                 exc_info=True,
             )
 
+    logger.warning(
+        "Sending notification for submission #%s (form: %s) to %s",
+        submission.pk,
+        form.slug,
+        recipients,
+    )
     # Run in a background thread — SMTP/delivery must never block or time out the web worker
-    threading.Thread(target=_dispatch, daemon=True).start()
+    threading.Thread(target=_dispatch, daemon=False).start()
+    return "queued"
 
 
 def _build_submission_notification_content(
