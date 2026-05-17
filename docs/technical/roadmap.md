@@ -294,6 +294,60 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ---
 
+#### Phase 6c: Module-Owned Django Pages — Pricing Showcase
+
+**Estimated hours**: 3–4 h
+
+**Context**: Phase 6a shipped `pricing.html` and `dashboard.html` as minimal mount-point stubs (`<div id="billing-root" data-view="...">` only). This phase replaces those stubs with real server-rendered Django pages that are usable without any React frontend. The billing module owns these pages; no starter-theme files are touched.
+
+**Explicit scope boundary**: These pages must be self-contained Django HTML — no Vite, no React, no external JS dependencies. Inline CSS only. The `<div id="billing-root">` data attribute is preserved so a React layer can mount on top later if desired.
+
+**Delivers**: A functional public pricing page and all six Stripe redirect / portal landing pages with real layout and content.
+
+- [ ] `views.py` — `PricingPageView.get_context_data()` passes `plans` queryset (all active plans, ordered by `billing_interval`, `price_cents`); attach a `price_display` annotation on each plan using a module-local `_format_price_cents(cents, currency)` helper; `PurchaseSuccessView`, `PurchaseCancelView`, `SubscriptionSuccessView`, `SubscriptionCancelView`, `BillingPortalReturnView` remain plain `TemplateView` subclasses (no extra context needed)
+- [ ] `templates/quickscale_modules_billing/pricing.html` — self-contained inline-CSS page; plans grouped by `billing_interval` with inline `{% regroup %}`; each plan card shows name, interval, `price_display`, `credits_per_period`; auth-aware CTA: authenticated users see a "Go to dashboard →" primary button per plan (linking to `/billing/dashboard/`), unauthenticated users see a "Sign in to purchase" button linking to the login URL with `?next=/billing/pricing/`; empty-state card when no plans exist; footer note with dashboard/login link
+- [ ] `templates/quickscale_modules_billing/purchase_success.html` — centered card layout; green-tinted icon; heading "Purchase complete"; body explains credits may take a moment; two actions: "Go to dashboard" (primary) and "Back to app" (outline)
+- [ ] `templates/quickscale_modules_billing/purchase_cancel.html` — centered card layout; amber-tinted icon; heading "Purchase canceled"; body confirms no charge; two actions: "Try again" → `/billing/pricing/` (primary) and "Back to app" (outline)
+- [ ] `templates/quickscale_modules_billing/subscription_success.html` — centered card layout; indigo-tinted icon; heading "Subscription started"; body + processing-delay note; two actions: "Go to dashboard" (primary) and "Back to app" (outline)
+- [ ] `templates/quickscale_modules_billing/subscription_cancel.html` — centered card layout; amber-tinted icon; heading "Subscription not started"; body confirms no charge; two actions: "View plans" → `/billing/pricing/` (primary) and "Back to app" (outline)
+- [ ] `templates/quickscale_modules_billing/billing/portal_return.html` — centered card layout; indigo-tinted icon; heading "Back from billing portal"; body explains changes may take a moment; two actions: "Go to dashboard" (primary) and "Back to app" (outline)
+- [ ] `tests/test_views.py` — update `test_pricing_page_view_is_public_and_render` to add `@pytest.mark.django_db` (pricing view now queries DB) and match the new heading text; update `test_subscription_return_views_are_public_and_render` param for `subscription-success` to match "Subscription started"
+
+**Template constraints**:
+- All CSS is inline `<style>` in each file — no external stylesheet or `{% static %}` reference
+- Each file preserves the existing `id` and `data-*` attributes (`id="billing-root"`, `data-view`, `id="billing-purchase-root"`, `data-purchase-status`, etc.) so the React mount contract from Phase 6a is not broken
+- No JavaScript in any template — Stripe redirect landing pages are purely informational
+
+**Acceptance**: `GET /billing/pricing/` renders plan cards when plans exist and an empty-state card when none exist; `price_display` formats correctly for USD and non-USD currencies; all six redirect/portal landing pages respond 200 with meaningful headings and back-link actions; `pytest --cov-fail-under=90` passes; no `{% static %}` or external JS in any template.
+
+---
+
+#### Phase 6d: Module-Owned Django Pages — Dashboard Showcase
+
+**Estimated hours**: 4–5 h
+
+**Context**: Continues Phase 6c. The dashboard is login-gated and requires real context data — credit balance, current subscription, and recent transactions — to be useful. This phase delivers that context plumbing and the dashboard template.
+
+**Delivers**: A functional login-gated billing dashboard that shows a user's current credit balance, subscription status, and the 10 most recent credit transactions without requiring any React.
+
+- [ ] `views.py` — `BillingDashboardView.get_context_data()` passes: `balance` (from `CreditBalance.get_or_create_for_user(self.request.user)`); `recent_transactions` (last 10 `CreditTransaction` rows for the user ordered by `-created_at, -id`); `subscription` (newest current `Subscription` row via `Subscription.current_status_q()`, or `None`)
+- [ ] `templates/quickscale_modules_billing/dashboard.html` — self-contained inline-CSS page with:
+  - **Balance card**: shows `balance.balance` (int) with "available credits" label
+  - **Subscription card**: shows plan name + `get_status_display` badge if subscription exists; shows "No active subscription" with a "View plans →" link to `/billing/pricing/` otherwise
+  - **Active subscription block** (conditional on subscription): plan name + interval, `current_period_start/end` dates if set; "Manage via Stripe portal" button (`data-action="billing-portal"` for future JS wiring); "Cancel subscription" button (`data-action="cancel-subscription"`) shown only when `subscription.status` is `active` or `trialing`
+  - **No subscription block** (conditional): description copy + "View plans" primary button → `/billing/pricing/`
+  - **Recent transactions table**: date (`M j, Y`), transaction type badge colour-coded by `PLAN/PURCHASE/USAGE/REFUND/ADJUSTMENT`, signed amount, `balance_after`, description; empty-state row when no transactions
+- [ ] `tests/test_views.py` — extend `test_billing_dashboard_view_renders_for_authenticated_users` to assert `credit balance`, `id="billing-root"`, and `data-view="dashboard"` are present in the rendered output
+
+**Template constraints** (same as Phase 6c):
+- Inline CSS only; no external stylesheets or JS
+- Preserves `id="billing-root"` and `data-view="dashboard"` for the React mount contract
+- Uses `{% if subscription.status == 'active' or subscription.status == 'trialing' %}` (not `in` string membership) for the cancel button guard
+
+**Acceptance**: Dashboard redirects anonymous users to login (existing behaviour unchanged); authenticated users see their balance, subscription state, and transaction history; `BillingDashboardView.get_context_data()` is covered by the updated test; `pytest --cov-fail-under=90` passes; no external JS or CSS in the template.
+
+---
+
 #### Phase 7: QuickScale Distribution Enablement
 
 **Estimated hours**: 10–12 h
