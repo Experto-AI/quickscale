@@ -4,12 +4,460 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Billing dashboard</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --page-bg: linear-gradient(180deg, #f8fbff 0%, #f2efe8 100%);
+            --surface: rgba(255, 255, 255, 0.96);
+            --surface-muted: rgba(255, 255, 255, 0.78);
+            --text: #14253d;
+            --muted: #5a697c;
+            --border: rgba(20, 37, 61, 0.12);
+            --shadow: 0 24px 60px rgba(20, 37, 61, 0.12);
+            --accent: #1f6aa5;
+            --accent-strong: #184f7c;
+            --accent-soft: rgba(31, 106, 165, 0.12);
+            --success-soft: rgba(29, 111, 95, 0.12);
+            --success-text: #155347;
+            --warning-soft: rgba(201, 122, 28, 0.14);
+            --warning-text: #8a4e0d;
+            --danger-soft: rgba(179, 59, 48, 0.14);
+            --danger-text: #8f251d;
+            --neutral-soft: rgba(90, 105, 124, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+            background: var(--page-bg);
+            color: var(--text);
+        }
+
+        a {
+            color: inherit;
+        }
+
+        button {
+            font: inherit;
+        }
+
+        .page-shell {
+            width: min(1120px, calc(100% - 2rem));
+            margin: 0 auto;
+            padding: 3.5rem 0 4rem;
+        }
+
+        .hero {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .eyebrow {
+            margin: 0;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .hero h1,
+        .summary-card h2,
+        .detail-card h2 {
+            margin: 0;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.3rem, 4vw, 4rem);
+            line-height: 1;
+        }
+
+        .hero p,
+        .summary-copy,
+        .detail-copy,
+        .inline-note,
+        .transaction-description {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.65;
+        }
+
+        .hero-note {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+            font-weight: 600;
+        }
+
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .summary-card,
+        .detail-card {
+            display: grid;
+            gap: 0.9rem;
+            padding: 1.5rem;
+            border-radius: 1.4rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(8px);
+        }
+
+        .balance-value {
+            margin: 0;
+            font-size: clamp(2.6rem, 6vw, 4rem);
+            font-weight: 700;
+            letter-spacing: -0.05em;
+        }
+
+        .balance-caption {
+            margin: 0;
+            font-weight: 700;
+            color: var(--accent-strong);
+        }
+
+        .inline-link {
+            color: var(--accent-strong);
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .status-badge,
+        .type-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: fit-content;
+            min-height: 2rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+
+        .status-badge-active,
+        .status-badge-trialing,
+        .type-plan,
+        .type-purchase {
+            background: var(--success-soft);
+            color: var(--success-text);
+        }
+
+        .status-badge-past_due,
+        .status-badge-unpaid,
+        .status-badge-paused,
+        .type-usage,
+        .type-adjustment {
+            background: var(--warning-soft);
+            color: var(--warning-text);
+        }
+
+        .status-badge-canceled,
+        .status-badge-incomplete,
+        .status-badge-incomplete_expired,
+        .type-refund {
+            background: var(--danger-soft);
+            color: var(--danger-text);
+        }
+
+        .status-badge-none {
+            background: var(--neutral-soft);
+            color: var(--muted);
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+
+        .detail-item {
+            display: grid;
+            gap: 0.35rem;
+            padding: 1rem;
+            border-radius: 1.1rem;
+            background: var(--surface-muted);
+            border: 1px solid rgba(20, 37, 61, 0.08);
+        }
+
+        .detail-label {
+            margin: 0;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .detail-value {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .button {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 2.9rem;
+            padding: 0.85rem 1.2rem;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            text-decoration: none;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .button-primary {
+            background: var(--accent);
+            color: #ffffff;
+        }
+
+        .button-primary:hover,
+        .button-primary:focus-visible {
+            background: var(--accent-strong);
+        }
+
+        .button-secondary {
+            background: #ffffff;
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        .section-header {
+            display: grid;
+            gap: 0.45rem;
+        }
+
+        .table-shell {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 620px;
+        }
+
+        th,
+        td {
+            padding: 0.95rem 0.85rem;
+            text-align: left;
+            border-top: 1px solid rgba(20, 37, 61, 0.08);
+            vertical-align: top;
+        }
+
+        th {
+            border-top: none;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .amount-cell,
+        .balance-cell {
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .empty-row {
+            color: var(--muted);
+            text-align: center;
+        }
+
+        @media (max-width: 640px) {
+            .page-shell {
+                width: min(100% - 1.25rem, 1120px);
+                padding-top: 2.25rem;
+            }
+
+            .summary-card,
+            .detail-card {
+                padding: 1.2rem;
+            }
+
+            table {
+                min-width: 540px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <main>
+    <main class="page-shell">
         <div id="billing-root" data-view="dashboard">
-            <h1>Billing dashboard</h1>
-            <p>Manage your billing activity and subscription details from this page.</p>
+            <section class="hero">
+                <p class="eyebrow">QuickScale billing</p>
+                <h1>Billing dashboard</h1>
+                <p>
+                    Review your current credit balance, recurring plan status,
+                    and the latest account activity from one server-rendered page.
+                </p>
+                <p class="hero-note">This dashboard stays useful even before any client-side billing UI is added.</p>
+            </section>
+
+            <section class="overview-grid">
+                <article class="summary-card">
+                    <p class="eyebrow">Credit balance</p>
+                    <p class="balance-value">{{ balance.balance }}</p>
+                    <p class="balance-caption">available credits</p>
+                    <p class="summary-copy">
+                        Credits from subscriptions and one-time purchases stay visible here
+                        as soon as the balance is updated.
+                    </p>
+                </article>
+
+                <article class="summary-card">
+                    <p class="eyebrow">Subscription</p>
+                    {% if subscription %}
+                        <h2>{{ subscription.plan.name }}</h2>
+                        <span class="status-badge status-badge-{{ subscription.status }}">{{ subscription.get_status_display }}</span>
+                        <p class="summary-copy">
+                            {{ subscription.plan.get_billing_interval_display }} plan currently on file.
+                        </p>
+                    {% else %}
+                        <h2>No active subscription</h2>
+                        <span class="status-badge status-badge-none">Plan not started</span>
+                        <p class="summary-copy">
+                            Start a recurring plan to automate credit top-ups and keep billing changes centralized.
+                        </p>
+                        <a class="inline-link" href="{{ pricing_url }}">View plans &rarr;</a>
+                    {% endif %}
+                </article>
+            </section>
+
+            {% if subscription %}
+                <section class="detail-card">
+                    <div class="section-header">
+                        <p class="eyebrow">Current plan</p>
+                        <h2>Subscription details</h2>
+                        <p class="detail-copy">
+                            {{ subscription.plan.name }} keeps your credit balance topped up on a recurring schedule.
+                        </p>
+                    </div>
+
+                    <div class="detail-grid">
+                        <article class="detail-item">
+                            <p class="detail-label">Plan</p>
+                            <p class="detail-value">{{ subscription.plan.name }}</p>
+                        </article>
+                        <article class="detail-item">
+                            <p class="detail-label">Interval</p>
+                            <p class="detail-value">{{ subscription.plan.get_billing_interval_display }}</p>
+                        </article>
+                        {% if subscription.current_period_start %}
+                            <article class="detail-item">
+                                <p class="detail-label">Current period start</p>
+                                <p class="detail-value">{{ subscription.current_period_start|date:"M j, Y" }}</p>
+                            </article>
+                        {% endif %}
+                        {% if subscription.current_period_end %}
+                            <article class="detail-item">
+                                <p class="detail-label">Current period end</p>
+                                <p class="detail-value">{{ subscription.current_period_end|date:"M j, Y" }}</p>
+                            </article>
+                        {% endif %}
+                    </div>
+
+                    <div class="button-row">
+                        <button class="button button-primary" type="button" data-action="billing-portal">
+                            Manage via Stripe portal
+                        </button>
+                        {% if subscription.status == 'active' or subscription.status == 'trialing' %}
+                            <button class="button button-secondary" type="button" data-action="cancel-subscription">
+                                Cancel subscription
+                            </button>
+                        {% endif %}
+                    </div>
+                    <p class="inline-note">
+                        Portal and cancel controls keep their future client-side wiring hooks through the existing
+                        <code>data-action</code> attributes.
+                    </p>
+                </section>
+            {% else %}
+                <section class="detail-card">
+                    <div class="section-header">
+                        <p class="eyebrow">Recurring billing</p>
+                        <h2>No active subscription</h2>
+                        <p class="detail-copy">
+                            You can still buy one-time credits, or start a recurring plan for automatic top-ups and a live subscription summary here.
+                        </p>
+                    </div>
+                    <div class="button-row">
+                        <a class="button button-primary" href="{{ pricing_url }}">View plans &rarr;</a>
+                    </div>
+                </section>
+            {% endif %}
+
+            <section class="detail-card">
+                <div class="section-header">
+                    <p class="eyebrow">Activity</p>
+                    <h2>Recent transactions</h2>
+                    <p class="detail-copy">
+                        The latest ten credit ledger entries are shown here for quick review.
+                    </p>
+                </div>
+                <div class="table-shell">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Amount</th>
+                                <th scope="col">Balance after</th>
+                                <th scope="col">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for transaction in recent_transactions %}
+                                <tr>
+                                    <td>{{ transaction.created_at|date:"M j, Y" }}</td>
+                                    <td>
+                                        <span class="type-badge type-{{ transaction.transaction_type }}">{{ transaction.get_transaction_type_display }}</span>
+                                    </td>
+                                    <td class="amount-cell">
+                                        {% if transaction.amount > 0 %}+{% endif %}{{ transaction.amount }}
+                                    </td>
+                                    <td class="balance-cell">{{ transaction.balance_after }}</td>
+                                    <td class="transaction-description">
+                                        {% if transaction.description %}
+                                            {{ transaction.description }}
+                                        {% else %}
+                                            Account activity
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td class="empty-row" colspan="5">No credit activity yet.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
         </div>
     </main>
 </body>
