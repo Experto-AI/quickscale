@@ -204,13 +204,14 @@ class FormSubmitAPIView(CreateAPIView):
             self._create_field_values(submission, form, data)
 
         # Notifications run outside the transaction — delivery failure must not roll back submission
-        notify_submission(submission)
+        notification_status = notify_submission(submission)
         _capture_submission_analytics(submission, request)
 
         return Response(
             {
                 "message": form.success_message,
                 "redirect_url": form.redirect_url or None,
+                "notification_status": notification_status,
             },
             status=status.HTTP_201_CREATED,
         )
