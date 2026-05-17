@@ -254,6 +254,27 @@ def test_billing_dashboard_view_renders_for_authenticated_users(
     client: Client,
     user,
 ) -> None:
+    plan = _create_recurring_plan(
+        slug="growth-monthly-dashboard-view",
+        price_id="price_growth_monthly_dashboard_view",
+        name="Growth Monthly",
+    )
+    current_period_start = timezone.now()
+    CreditBalance.objects.create(user=user, balance=275)
+    Subscription.objects.create(
+        user=user,
+        plan=plan,
+        status=Subscription.Status.ACTIVE,
+        current_period_start=current_period_start,
+        current_period_end=current_period_start + timedelta(days=30),
+    )
+    for index in range(11):
+        _create_credit_transaction(
+            user=user,
+            amount=25,
+            balance_after=25 * (index + 1),
+            description=f"Dashboard entry {index + 1:02d}",
+        )
     client.force_login(user)
 
     response = client.get(reverse("quickscale_billing:billing-dashboard"))
@@ -261,6 +282,16 @@ def test_billing_dashboard_view_renders_for_authenticated_users(
 
     assert response.status_code == 200
     assert "Billing dashboard" in content
+    assert "Credit balance" in content
+    assert "275" in content
+    assert "available credits" in content
+    assert "Growth Monthly" in content
+    assert "Active" in content
+    assert "Manage via Stripe portal" in content
+    assert "Cancel subscription" in content
+    assert "Recent transactions" in content
+    assert "Dashboard entry 11" in content
+    assert "Dashboard entry 01" not in content
     assert 'id="billing-root"' in content
     assert 'data-view="dashboard"' in content
 

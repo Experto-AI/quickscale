@@ -423,6 +423,31 @@ class BillingDashboardView(LoginRequiredMixin, TemplateView):
 
     template_name = "quickscale_modules_billing/dashboard.html"
 
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        balance, _ = CreditBalance.get_or_create_for_user(self.request.user)
+        recent_transactions = list(
+            CreditTransaction.objects.filter(user=self.request.user).order_by(
+                "-created_at", "-id"
+            )[:10]
+        )
+        subscription = (
+            Subscription.objects.select_related("plan")
+            .filter(user=self.request.user)
+            .filter(Subscription.current_status_q())
+            .order_by("-id")
+            .first()
+        )
+        context.update(
+            {
+                "balance": balance,
+                "pricing_url": reverse("quickscale_billing:pricing-page"),
+                "recent_transactions": recent_transactions,
+                "subscription": subscription,
+            }
+        )
+        return context
+
 
 class PricingPageView(TemplateView):
     """Public billing pricing mount page."""

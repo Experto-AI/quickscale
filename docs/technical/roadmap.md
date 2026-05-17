@@ -330,14 +330,14 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Delivers**: A functional login-gated billing dashboard that shows a user's current credit balance, subscription status, and the 10 most recent credit transactions without requiring any React.
 
-- [ ] `views.py` — `BillingDashboardView.get_context_data()` passes: `balance` (from `CreditBalance.get_or_create_for_user(self.request.user)`); `recent_transactions` (last 10 `CreditTransaction` rows for the user ordered by `-created_at, -id`); `subscription` (newest current `Subscription` row via `Subscription.current_status_q()`, or `None`)
-- [ ] `templates/quickscale_modules_billing/dashboard.html` — self-contained inline-CSS page with:
+- [x] `views.py` — `BillingDashboardView.get_context_data()` passes: `balance` (from `CreditBalance.get_or_create_for_user(self.request.user)`); `recent_transactions` (last 10 `CreditTransaction` rows for the user ordered by `-created_at, -id`); `subscription` (newest current `Subscription` row via `Subscription.current_status_q()`, or `None`)
+- [x] `templates/quickscale_modules_billing/dashboard.html` — self-contained inline-CSS page with:
   - **Balance card**: shows `balance.balance` (int) with "available credits" label
   - **Subscription card**: shows plan name + `get_status_display` badge if subscription exists; shows "No active subscription" with a "View plans →" link to `/billing/pricing/` otherwise
   - **Active subscription block** (conditional on subscription): plan name + interval, `current_period_start/end` dates if set; "Manage via Stripe portal" button (`data-action="billing-portal"` for future JS wiring); "Cancel subscription" button (`data-action="cancel-subscription"`) shown only when `subscription.status` is `active` or `trialing`
   - **No subscription block** (conditional): description copy + "View plans" primary button → `/billing/pricing/`
   - **Recent transactions table**: date (`M j, Y`), transaction type badge colour-coded by `PLAN/PURCHASE/USAGE/REFUND/ADJUSTMENT`, signed amount, `balance_after`, description; empty-state row when no transactions
-- [ ] `tests/test_views.py` — extend `test_billing_dashboard_view_renders_for_authenticated_users` to assert `credit balance`, `id="billing-root"`, and `data-view="dashboard"` are present in the rendered output
+- [x] `tests/test_views.py` — extend `test_billing_dashboard_view_renders_for_authenticated_users` to assert `credit balance`, `id="billing-root"`, and `data-view="dashboard"` are present in the rendered output
 
 **Template constraints** (same as Phase 6c):
 - Inline CSS only; no external stylesheets or JS
