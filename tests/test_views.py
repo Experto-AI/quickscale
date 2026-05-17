@@ -54,6 +54,7 @@ def _create_recurring_plan(
     price_id: str = "price_starter_monthly",
     credits: int = 100,
     price_cents: int = 1900,
+    currency: str = "usd",
     interval: str = Plan.BillingInterval.MONTHLY,
     is_active: bool = True,
     name: str = "Starter Monthly",
@@ -64,7 +65,7 @@ def _create_recurring_plan(
         stripe_price_id=price_id,
         credits_per_period=credits,
         price_cents=price_cents,
-        currency="usd",
+        currency=currency,
         billing_interval=interval,
         is_active=is_active,
     )
@@ -264,14 +265,102 @@ def test_billing_dashboard_view_renders_for_authenticated_users(
     assert 'data-view="dashboard"' in content
 
 
+@pytest.mark.django_db
 def test_pricing_page_view_is_public_and_render(client: Client) -> None:
+    _create_recurring_plan(
+        slug="growth-monthly",
+        price_id="price_growth_monthly",
+        name="Growth Monthly",
+        price_cents=2900,
+        credits=200,
+    )
+    _create_recurring_plan(
+        slug="scale-yearly",
+        price_id="price_scale_yearly",
+        name="Scale Yearly",
+        price_cents=24900,
+        credits=3000,
+        currency="eur",
+        interval=Plan.BillingInterval.YEARLY,
+    )
+    _create_one_time_plan(
+        slug="credits-pack-pricing-page",
+        price_id="price_credits_pack_pricing_page",
+        credits=500,
+        price_cents=9900,
+    )
+
     response = client.get(reverse("quickscale_billing:pricing-page"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
-    assert "Billing pricing" in content
+    assert "Choose a billing plan" in content
     assert 'id="billing-root"' in content
     assert 'data-view="pricing"' in content
+    assert "Monthly plans" in content
+    assert "Yearly plans" in content
+    assert "One-time credits" in content
+    assert "Growth Monthly" in content
+    assert "$29.00" in content
+    assert "Scale Yearly" in content
+    assert "EUR 249.00" in content
+    assert "500 credits" in content
+    assert "Sign in to purchase" in content
+    assert f'href="{resolve_url(settings.LOGIN_URL)}?next=/billing/pricing/"' in content
+
+
+@pytest.mark.django_db
+def test_pricing_page_view_shows_dashboard_cta_for_authenticated_users(
+    client: Client,
+    user,
+) -> None:
+    _create_recurring_plan(
+        slug="starter-authenticated",
+        price_id="price_starter_authenticated",
+        name="Starter Monthly",
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("quickscale_billing:pricing-page"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Go to dashboard" in content
+    assert 'href="/billing/dashboard/"' in content
+    assert "Sign in to purchase" not in content
+
+
+@pytest.mark.django_db
+def test_pricing_page_view_formats_supported_zero_decimal_currency_without_fractional_division(
+    client: Client,
+) -> None:
+    _create_recurring_plan(
+        slug="jpy-monthly",
+        price_id="price_jpy_monthly",
+        name="Japan Monthly",
+        price_cents=4900,
+        credits=300,
+        currency="jpy",
+    )
+
+    response = client.get(reverse("quickscale_billing:pricing-page"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Japan Monthly" in content
+    assert "JPY 4,900" in content
+    assert "JPY 49.00" not in content
+
+
+@pytest.mark.django_db
+def test_pricing_page_view_renders_empty_state_when_no_active_plans(
+    client: Client,
+) -> None:
+    response = client.get(reverse("quickscale_billing:pricing-page"))
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "No billing plans are active right now." in content
 
 
 @pytest.mark.django_db
@@ -1002,10 +1091,15 @@ def test_purchase_return_views_are_public_and_render(
 
 
 @pytest.mark.parametrize(
-    ("route_name", "expected_text", "expected_subscription_status"),
+    (
+        "route_name",
+        "expected_text",
+        "expected_subscription_status",
+        "expected_primary_action",
+    ),
     [
-        ("subscription-success", "Subscription checkout complete", "success"),
-        ("subscription-cancel", "Subscription checkout canceled", "cancel"),
+        ("subscription-success", "Subscription started", "success", "Go to dashboard"),
+        ("subscription-cancel", "Subscription not started", "cancel", "View plans"),
     ],
 )
 def test_subscription_return_views_are_public_and_render(
@@ -1013,12 +1107,15 @@ def test_subscription_return_views_are_public_and_render(
     route_name: str,
     expected_text: str,
     expected_subscription_status: str,
+    expected_primary_action: str,
 ) -> None:
     response = client.get(reverse(f"quickscale_billing:{route_name}"))
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
     assert expected_text in content
+    assert expected_primary_action in content
+    assert "Back to app" in content
     assert 'id="billing-subscription-root"' in content
     assert 'id="billing-purchase-root"' not in content
     assert f'data-subscription-status="{expected_subscription_status}"' in content
@@ -1029,7 +1126,9 @@ def test_billing_portal_return_view_is_public_and_render(client: Client) -> None
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
-    assert "Billing portal return" in content
+    assert "Back from billing portal" in content
+    assert "Go to dashboard" in content
+    assert "Back to app" in content
     assert 'id="billing-portal-root"' in content
     assert 'data-portal-status="return"' in content
     assert 'id="billing-purchase-root"' not in content
