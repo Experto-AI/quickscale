@@ -9,17 +9,79 @@ The teams module enables a QuickScale-generated app to be sold as a SaaS product
 
 ---
 
+## Ownership Levels
+
+The system has two distinct ownership tiers that must not be confused.
+
+### Level 1: Platform Owner (Django Superuser)
+
+The platform owner is the person or team who deploys and operates the QuickScale SaaS. They:
+
+- Access only `/admin/` — they have no team-scoped dashboard
+- Hold `is_superuser=True` and `is_staff=True` in Django
+- See **all** tenants' data (PostgreSQL superuser bypasses RLS by design)
+- Own the Stripe account that receives subscription payments from customers
+- Deploy and upgrade the platform; enable or disable modules globally
+- Are the only ones who can create or delete teams via the admin panel in exceptional cases
+
+The platform owner is **not** a team member in the RBAC sense and does not appear in any `TeamMembership` record.
+
+### Level 2: Team Hierarchy (Customer Users)
+
+Each customer workspace (team) has its own internal hierarchy. All team users are isolated from other teams by PostgreSQL RLS.
+
+```
+Platform Owner (Django superuser)
+└── /admin/ — sees all tenants, bypasses RLS
+              ↓ operates
+    QuickScale SaaS Platform
+    (1 Railway: 1 app service + 1 PostgreSQL 18 service)
+              ↓
+    ┌─────────────────────┐   ┌─────────────────────┐
+    │  Team: Acme Corp    │   │  Team: Widget Co     │  …N tenants
+    │  slug: acme-corp    │   │  slug: widget-co     │
+    │  stripe_customer_id │   │  stripe_customer_id  │
+    └────────┬────────────┘   └──────────┬───────────┘
+             │                           │
+    alice@acme.com  OWNER       (same internal structure)
+    bob@acme.com    ADMIN
+    carol@acme.com  MEMBER
+    dave@acme.com   VIEWER
+
+PostgreSQL RLS:
+  Acme Corp users  → only see rows WHERE team_id = 'acme-uuid'
+  Widget Co users  → only see rows WHERE team_id = 'widget-uuid'
+  Platform owner   → bypasses RLS, sees everything
+```
+
+### Capability Matrix
+
+| Capability | Platform Owner | Team Owner | Team Admin | Team Member | Team Viewer |
+|---|---|---|---|---|---|
+| Access `/admin/` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| See all tenants' data | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Create / delete a team | ✅ (via admin) | ✅ (own team) | ❌ | ❌ | ❌ |
+| Manage team billing | ✅ (via admin) | ✅ (own team) | ❌ | ❌ | ❌ |
+| Invite team members | ✅ (via admin) | ✅ | ✅ | ❌ | ❌ |
+| Remove team members | ✅ (via admin) | ✅ | ✅ | ❌ | ❌ |
+| Change team settings | ✅ (via admin) | ✅ | ✅ | ❌ | ❌ |
+| Transfer ownership | ✅ (via admin) | ✅ | ❌ | ❌ | ❌ |
+| Use CRM / CMS / etc. | ✅ | ✅ | ✅ | ✅ | read-only |
+
+---
+
 ## Terminology
 
 | Term | Definition |
 |------|-----------|
+| **Platform Owner** | The operator who deploys and runs the SaaS. Has Django `is_superuser`. Not a team member. |
 | **Team** | The paying client unit. Equivalent to "organization", "workspace", or "tenant". |
 | **Member** | An individual user who belongs to one or more teams. |
 | **Role** | The member's permission level within a specific team. |
 | **Team Owner** | The member who created the team; the Stripe billing contact. |
 | **Invitation** | A pending email-based request to join a team before the recipient has a user account. |
 
-A user account is global (one email, one login). A user's role is team-scoped — the same person can be an Owner in one team and a Member in another.
+A user account is global (one email, one login). A user's role is team-scoped — the same person can be an Owner in one team and a Member in another. A user may belong to multiple teams simultaneously; a team switcher in the UI tracks the active context.
 
 ---
 
@@ -32,11 +94,13 @@ One Railway project: one application service and one PostgreSQL 18 service. All 
 ```
 Railway project
 ├── app service (Django + Gunicorn)
-│   └── TenantMiddleware → SET app.current_team_id per request
+│   └── TenantMiddleware → SET app.current_team_id per request (extracted from URL)
 └── postgres service (PostgreSQL 18)
     └── RLS policies on every tenant table
-        USING (team_id = current_setting('app.current_team_id')::uuid)
+        USING (team_id = current_setting('app.current_team_id', true)::uuid)
 ```
+
+The `true` second argument to `current_setting` returns `NULL` instead of raising an error when the setting is absent. This means an unguarded query returns an empty set rather than raising an exception — fail-safe, but requires the middleware to always set the context for tenant routes.
 
 ### Why This Architecture
 
@@ -47,10 +111,11 @@ Railway project
 
 ### Known Constraints
 
-- **Admin bypass**: PostgreSQL superuser connections and Django's `is_staff` admin bypass RLS. The Django admin panel must either use a restricted database role (`SET ROLE tenant_app_user`) or apply explicit `.filter(team=...)` on all admin querysets. This is non-negotiable — failure to address it creates a full data leak in the admin panel.
-- **Noisy neighbour**: One tenant running expensive queries slows response times for others. Acceptable at MVP scale; address with query timeouts (`statement_timeout`) and rate limiting if needed later.
+- **Admin bypass (intentional)**: PostgreSQL superuser connections bypass RLS. The platform owner's `/admin/` session sees all tenants' data by design — this is the intended operator view, not a bug. See [Decisions → Admin Panel Contract](#decisions).
+- **Noisy neighbour**: One tenant running expensive queries slows response times for others. Acceptable at MVP scale; address with `statement_timeout` and rate limiting later.
 - **Debugging**: RLS policy failures are silent (rows vanish; no exception is raised). Debugging requires checking `pg_policies` and PostgreSQL logs, not just Django stack traces.
 - **Migrations**: Migrations that add columns or change constraints on tenant tables run against all tenants at once. This is a feature (one migration), but large-table migrations need `CONCURRENTLY` indexes and zero-downtime patterns.
+- **`SET LOCAL` vs `SET`**: `SET LOCAL` scopes the team context to the current transaction. `SET` (session-level) is needed for PgBouncer compatibility. Choose based on connection pooling setup; document this in the deployment guide.
 
 ---
 
@@ -88,6 +153,15 @@ def team_settings(request, team_slug):
 
 The decorator resolves the current team from the URL (`team_slug`), looks up the `TeamMembership` for `request.user`, and returns HTTP 403 if the user is not a member or their role is below the minimum. The team is also stored on `request.team` for downstream use.
 
+```python
+ROLE_HIERARCHY = {
+    TeamRole.VIEWER: 0,
+    TeamRole.MEMBER: 1,
+    TeamRole.ADMIN:  2,
+    TeamRole.OWNER:  3,
+}
+```
+
 ---
 
 ## Data Model
@@ -99,7 +173,7 @@ Team
   id            UUID (PK, default uuid4)
   name          CharField(max_length=100)
   slug          SlugField(unique=True)        # URL identifier, e.g. "acme-corp"
-  stripe_customer_id  CharField(nullable)     # Stripe customer tied to the team
+  stripe_customer_id  CharField(blank=True)   # Stripe customer tied to the team
   created_at    DateTimeField(auto_now_add)
 
 TeamMembership
@@ -112,6 +186,8 @@ TeamMembership
 
   class Meta:
       unique_together = [('user', 'team')]
+      # A user may belong to multiple teams. unique_together is (user, team),
+      # NOT just (user). A team switcher in the UI tracks the active context.
 
 TeamInvitation
   id            UUID (PK)
@@ -126,20 +202,23 @@ TeamInvitation
   # A pending invitation is: accepted_at is None AND expires_at > now
 ```
 
-### Tenant FK on Existing Models
+### TenantModel Abstract Base
 
-Every model that holds tenant-scoped data gains a `team` foreign key:
+The teams module ships a `TenantModel` abstract base class. Any module that stores tenant-scoped data inherits from it to get the `team` FK, the RLS-required index, and shared queryset utilities in one place.
 
 ```python
-# Added to CRM, blog, forms, listings, storage, notifications, etc.
-team = models.ForeignKey(
-    'quickscale_modules_teams.Team',
-    on_delete=models.CASCADE,
-    db_index=True,
-)
+class TenantModel(models.Model):
+    team = models.ForeignKey(
+        'quickscale_modules_teams.Team',
+        on_delete=models.CASCADE,
+        db_index=True,
+    )
+
+    class Meta:
+        abstract = True
 ```
 
-The teams module ships a `TenantModel` abstract base class that modules can inherit to get this field, the RLS index, and any shared queryset utilities in one place. Cross-module migration dependency ordering must be documented in the teams release note.
+Modules affected: CRM, blog, forms, listings, storage, notifications. Cross-module migration dependency ordering must be documented in the teams release note.
 
 ---
 
@@ -154,26 +233,64 @@ Subscription.user  → FK → User
 CreditBalance.user → FK → User (OneToOne)
 ```
 
-This is wrong for a team SaaS. Clients pay for their team; individual members consume credits on behalf of the team. The billing contact is the team Owner, not an arbitrary user account.
+This is wrong for a team SaaS. Clients pay for their team; individual members consume credits on behalf of the team. The billing contact is the Team Owner, not an arbitrary user account.
 
 ### Resolution
 
 Add team-scoped fields to billing models:
 
 ```
-Subscription.team  → FK → Team (replaces .user for team billing context)
-CreditBalance.team → FK → Team (OneToOne, replaces per-user balance)
+Subscription.team  → FK → Team (nullable; required after migration)
+CreditBalance.team → OneToOneField → Team (replaces per-user balance)
+CreditTransaction.performed_by → FK → User (who acted within the team)
 ```
 
-`Team.stripe_customer_id` is the Stripe customer identifier. The team Owner's email is the Stripe billing email. When the Owner transfers ownership, the Stripe customer record stays with the team (not the departing user).
+`Team.stripe_customer_id` is the Stripe customer identifier. The Team Owner's email is the Stripe billing email. When the Owner transfers ownership, the Stripe customer record stays with the team (not the departing user).
 
-Credit transactions (`CreditTransaction`) are attributed to the acting user (`CreditTransaction.performed_by → User`) but deducted from the team's balance.
+Credit transactions (`CreditTransaction`) are attributed to the acting user (`performed_by`) but deducted from the team's balance.
 
-**Migration note**: Existing deployments using the v0.85.0 billing module have user-scoped subscriptions. The teams migration must handle this: either convert existing subscriptions to a new team created from that user, or keep user-scoped billing as a legacy path and add team-scoped billing as an additive field. The migration strategy must be decided before implementation begins.
+### Migration Path from v0.85.0
+
+For deployments already using v0.85.0 user-scoped billing: a management command `migrate_billing_to_teams` auto-creates a personal team (name: `"{username}'s Team"`, slug: `"{username}"`) for each existing user and migrates their `Subscription` and `CreditBalance` to that team. The command is idempotent and must be run once after deploying the teams module.
+
+### Module Access
+
+All modules (CRM, blog, forms, listings, etc.) are available to all teams equally. Plans differentiate by credit volume, not by feature gating. This keeps the billing model simple and avoids per-team feature flags in every module view.
+
+| Plan tier | Monthly credits | All modules |
+|-----------|----------------|-------------|
+| Starter   | 500            | ✅ |
+| Growth    | 2 000          | ✅ |
+| Pro       | Unlimited      | ✅ |
 
 ### Seat Pricing (Deferred)
 
-Per-seat billing (charging per `TeamMembership` count) is not in v0.86.0 scope. The billing module already supports recurring subscriptions with credits; teams will use that surface.
+Per-seat billing (charging per `TeamMembership` count) is not in v0.86.0 scope.
+
+---
+
+## Customer Onboarding Flow
+
+Customers self-provision without platform owner intervention:
+
+```
+1. /accounts/signup/      → customer creates a global user account (django-allauth)
+2. Redirect → /teams/new/ → customer creates their team (name, slug)
+3. Stripe checkout        → customer subscribes to a plan
+4. Redirect → /teams/<slug>/  → team dashboard, ready to use
+```
+
+**Post-signup guard**: Authenticated users with no `TeamMembership` are redirected to `/teams/new/` by `TenantMiddleware` for every request except `/accounts/*` and `/teams/new/` itself. This is enforced via a django-allauth adapter override:
+
+```python
+class TeamsAccountAdapter(DefaultAccountAdapter):
+    def get_login_redirect_url(self, request):
+        if not TeamMembership.objects.filter(user=request.user).exists():
+            return '/teams/new/'
+        return super().get_login_redirect_url(request)
+```
+
+Wired via `ACCOUNT_ADAPTER = 'quickscale_modules_teams.adapters.TeamsAccountAdapter'` in module settings.
 
 ---
 
@@ -192,36 +309,116 @@ Per-seat billing (charging per `TeamMembership` count) is not in v0.86.0 scope. 
 
 ## URL Structure
 
-Path routing (not subdomain). The team slug appears in the URL:
+Path routing (not subdomain). The team slug appears in every URL so the active team is always explicit, bookmarkable, and shareable.
 
 ```
-/teams/                          # List teams the current user belongs to
-/teams/new/                      # Create a new team
-/teams/<slug>/                   # Team dashboard
-/teams/<slug>/members/           # Member list and role management
-/teams/<slug>/invite/            # Send invitations
-/teams/<slug>/invite/<token>/accept/  # Accept an invitation
-/teams/<slug>/settings/          # Team settings (name, slug)
-/teams/<slug>/billing/           # Team billing (delegates to billing module)
+/teams/                                    # List teams the current user belongs to
+/teams/new/                                # Create a new team + Stripe checkout
+/teams/<slug>/                             # Team dashboard
+/teams/<slug>/members/                     # Member list and role management
+/teams/<slug>/invite/                      # Send invitations
+/teams/<slug>/invite/<token>/accept/       # Accept an invitation
+/teams/<slug>/settings/                    # Team settings (name, slug)
+/teams/<slug>/billing/                     # Team billing (delegates to billing module)
 
-# API equivalents under /api/teams/<slug>/...
+# All module routes are nested under the team slug:
+/teams/<slug>/crm/                         # CRM for this team
+/teams/<slug>/blog/                        # Blog for this team
+/teams/<slug>/forms/                       # Forms for this team
+/teams/<slug>/listings/                    # Listings for this team
+
+# API equivalents:
+/api/teams/<slug>/crm/                     # CRM API for this team
+/api/billing/...                           # Billing API (team resolved from session/auth)
 ```
 
-Subdomain routing (`acme.myapp.com`) is not in v0.86.0 scope. It requires DNS configuration that the operator must handle and is not automatable inside a Railway project without custom proxy infrastructure.
+The module wiring layer nests all `MODULE_URLPATTERNS` under `teams/<slug>/` when the teams module is active. The `TenantMiddleware` extracts the slug from the URL and sets `app.current_team_id` before any view runs.
+
+**React frontend routes** mirror the Django URL structure:
+
+```
+/teams                   → TeamListPage
+/teams/new               → TeamCreatePage
+/teams/:slug             → TeamDashboardPage  (rendered inside TeamLayout)
+/teams/:slug/members     → TeamMembersPage
+/teams/:slug/invite      → TeamInvitePage
+/teams/:slug/settings    → TeamSettingsPage
+/teams/:slug/billing     → BillingPage (reuses existing billing components)
+/teams/:slug/crm         → CrmPage (reuses existing CRM components)
+/teams/:slug/blog        → BlogPage
+/teams/:slug/forms       → FormsPage
+/teams/:slug/listings    → ListingsPage
+```
+
+`TeamLayout` is a React wrapper that injects `teamSlug` from `useParams()` into all nested pages. A team switcher in the sidebar shows the active team and lets the user navigate to another by changing the slug in the URL.
+
+Subdomain routing (`acme.myapp.com`) is not in v0.86.0 scope.
 
 ---
 
-## Open Questions
+## TenantMiddleware
 
-These must be resolved before implementation begins. They are recorded here, not in the roadmap, so they survive the roadmap closeout.
+```python
+class TenantMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
 
-1. **Multi-team membership**: Can a single user belong to more than one team? The data model above allows it (`unique_together` is `(user, team)`, not `user`). If yes, the UI needs an "active team" selector (session variable or URL-based). If no, the constraint becomes a `OneToOneField(User)` on `TeamMembership`, which simplifies routing but limits use cases like consultants.
+    def __call__(self, request):
+        # Guard: authenticated non-staff user with no team → /teams/new/
+        if request.user.is_authenticated and not request.user.is_staff:
+            exempt = request.path.startswith('/accounts') or \
+                     request.path.startswith('/teams/new')
+            if not exempt and not TeamMembership.objects.filter(user=request.user).exists():
+                return redirect('/teams/new/')
 
-2. **Team model location**: Should `Team` live in `quickscale_modules_teams` or in `quickscale_modules_auth`? The auth module already owns user identity; a case can be made that teams are an identity concern. The counter-argument is that auth should remain a standalone minimal module and teams should depend on auth, not the reverse.
+        # Extract team from URL and set RLS context
+        try:
+            match = resolve(request.path)
+            team_slug = match.kwargs.get('team_slug')
+        except Resolver404:
+            team_slug = None
 
-3. **Billing migration path**: How do apps currently using v0.85.0 user-scoped billing migrate to team-scoped billing? Options: (a) auto-create a personal team for each existing user and migrate their subscription there; (b) treat solo users as a "team of one" transparently; (c) break compatibility and require operators to run a migration script.
+        request.team = None
+        if team_slug and request.user.is_authenticated:
+            team = get_object_or_404(Team, slug=team_slug)
+            if not request.user.is_staff:
+                if not TeamMembership.objects.filter(user=request.user, team=team).exists():
+                    return HttpResponseForbidden()
+            request.team = team
+            with connection.cursor() as cursor:
+                cursor.execute("SET LOCAL app.current_team_id = %s", [str(team.id)])
 
-4. **Admin panel isolation**: The Django admin panel runs as `is_staff` which bypasses RLS. What is the explicit contract for how the admin panel accesses multi-tenant data? Options: (a) admin always sees all tenants (intended for the SaaS operator, not tenants); (b) use `SET ROLE` to enforce RLS even in admin; (c) disable per-tenant models in admin entirely.
+        return self.get_response(request)
+```
+
+**Connection pooling note**: `SET LOCAL` scopes the value to the current transaction. With PgBouncer in transaction-pooling mode, use `SET` (session-level) instead, combined with connection checkout/return hooks that reset the value. Document the chosen approach in `docs/deployment/railway.md`.
+
+---
+
+## Admin Panel Contract
+
+The platform owner's Django `/admin/` session connects as a PostgreSQL superuser. PostgreSQL superusers bypass RLS by default — no `SET ROLE` or policy exception is needed.
+
+**Intended behaviour**: The platform owner sees all tenants' data in all list views. This is correct — `/admin/` is an operator tool, not a tenant-facing interface. All admin list views for tenant models (CRM contacts, blog posts, etc.) expose a `team` column and a `team` list filter so the operator can focus on a specific client when needed.
+
+**No tenant should ever have `is_staff=True`.** Team-scoped administration happens through the team settings pages at `/teams/<slug>/settings/`, not through Django admin.
+
+---
+
+## Decisions
+
+All open questions from the original design were resolved before implementation began.
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| Multi-team membership? | **Yes** — user may belong to multiple teams | Supports consultants and agencies working across clients; team switcher in UI handles context |
+| `Team` model location? | **`quickscale_modules_teams`** | Auth stays minimal and standalone; teams depends on auth, not the reverse |
+| Billing migration path? | **Auto-create personal team per user** | Management command `migrate_billing_to_teams`; idempotent; zero manual operator work |
+| Admin panel isolation? | **Platform owner sees all** | Superuser bypasses RLS by design; `/admin/` is the operator control plane, not a tenant interface |
+| Active team routing? | **URL-based** — slug in every URL | Bookmarkable, shareable, no hidden session state; `/teams/<slug>/crm/` is always unambiguous |
+| Post-signup flow? | **Force `/teams/new/`** | Users cannot access the app without a team; allauth adapter redirects; middleware guards all routes |
+| Module access per plan? | **All modules for all teams** | Differentiate by credit volume only; no per-team feature flags |
+| Team provisioning? | **Self-service** | Customer signs up, creates team, pays Stripe — no manual platform owner action required |
 
 ---
 
@@ -232,24 +429,31 @@ These must be resolved before implementation begins. They are recorded here, not
 | `Team`, `TeamMembership`, `TeamInvitation` models | ✅ |
 | `TenantModel` abstract base class with `team` FK | ✅ |
 | PostgreSQL RLS migration for all tenant tables | ✅ |
-| `TenantMiddleware` (sets `app.current_team_id`) | ✅ |
-| `require_team_role` decorator | ✅ |
+| `TenantMiddleware` (sets `app.current_team_id` from URL slug) | ✅ |
+| `require_team_role` decorator + `TeamRoleMixin` | ✅ |
+| Post-signup redirect via allauth adapter | ✅ |
+| Self-service team creation flow + Stripe checkout | ✅ |
 | Invitation flow via notifications module | ✅ |
-| Billing bridge: `Subscription.team`, `CreditBalance.team` | ✅ |
-| React theme: dashboard, members, invite, settings pages | ✅ |
-| HTML theme: same pages | ✅ |
+| Billing bridge: `Subscription.team`, `CreditBalance.team`, `CreditTransaction.performed_by` | ✅ |
+| Management command: `migrate_billing_to_teams` | ✅ |
+| Django admin: Team, TeamMembership, TeamInvitation registration | ✅ |
+| React: team list, create, dashboard, members, invite, settings pages | ✅ |
+| React: `TeamLayout` + team switcher in sidebar | ✅ |
+| React: module routes moved under `/teams/:slug/` | ✅ |
+| HTML theme: team management pages | ✅ |
 | Unit + integration tests for isolation and permissions | ✅ |
 | Subdomain routing | ❌ deferred |
 | Seat-based pricing | ❌ deferred |
 | Per-tenant analytics | ❌ deferred |
-| Cross-team admin tooling | ❌ deferred |
+| Module-level feature gating per plan | ❌ deferred |
+| Cross-team admin tooling beyond basic `/admin/` | ❌ deferred |
 
 ---
 
 ## References
 
 - [`docs/legacy/tenancy-isolation-strategies.md`](../legacy/tenancy-isolation-strategies.md) — full RLS code examples, cost matrix, and real-world company comparisons
-- [`docs/deployment/railway.md`](../deployment/railway.md) — Railway deployment contract
+- [`docs/deployment/railway.md`](../deployment/railway.md) — Railway deployment contract (connection pooling notes)
 - [`docs/technical/decisions.md`](decisions.md) — architecture decision log
 - [`quickscale_modules/billing/`](../../quickscale_modules/billing/) — billing models to extend
 - [`quickscale_modules/auth/`](../../quickscale_modules/auth/) — User model base
