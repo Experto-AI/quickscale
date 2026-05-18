@@ -11,8 +11,7 @@ merge_strategy: append
   The module's pyproject.toml version and exported __version__ must match the manifest.
 - Modules are distributed to generated projects via the documented git-subtree workflow.
   Do not copy module files manually into generated project directories.
-- Packaged modules: analytics, auth, backups, blog, crm, forms, listings, notifications, social, storage.
-- In-repo packaged implementation line through Phase 6b (still gated from public plan/apply until Phase 7): billing.
+- Packaged modules: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, social, storage.
 - Placeholder-only (no tests/packaging yet): teams.
 
 # Adaptive

@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree, and starter themes are generated once into user-owned project code
 
-**Current Status**: The current published release is v0.83.0. See [Release v0.83.0](./docs/releases/release-v0.83.0.md) for the public summary and [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
+**Current Status**: The current published release is v0.84.0. [Release v0.84.0](./docs/releases/release-v0.84.0.md) remains the current public summary, and [Release v0.85.0](./docs/releases/release-v0.85.0.md) is the prepared public note awaiting official publication. See [roadmap.md](./docs/technical/roadmap.md) for active closeout status.
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -28,7 +28,7 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 | **Theme** | Frontend scaffolding (React default, HTML secondary option) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |
 | **Plan/Apply** | Terraform-style declarative workflow | [GLOSSARY.md](./GLOSSARY.md#planapply-workflow) |
-| **Release Note** | Official public summary for a tagged QuickScale version | [GLOSSARY.md](./GLOSSARY.md#release-note) |
+| **Release Note** | Official public summary for a QuickScale version; may be prepared before official publication if clearly labeled | [GLOSSARY.md](./GLOSSARY.md#release-note) |
 
 ---
 
@@ -197,7 +197,7 @@ Detailed contributor references to use as needed:
 - [overview/packages.md](./docs/overview/packages.md) - PyPI naming
 
 **Release History**:
-- [docs/releases/](./docs/releases/) - official public release notes linked from GitHub tags and release PRs
+- [docs/releases/](./docs/releases/) - public release notes, including clearly labeled release-prepared notes awaiting publication
 - [release_summary_template.md](./docs/technical/release_summary_template.md) - template for the single public release-note workflow
 
 ---
@@ -205,7 +205,7 @@ Detailed contributor references to use as needed:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-The current generator, starter-theme workflow, published first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases. The current published release is v0.83.0. See [Release v0.83.0](./docs/releases/release-v0.83.0.md) for the public summary and [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
+The current generator, starter-theme workflow, published first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases. The current published release is v0.84.0, and v0.85.0 is already documented as a release-prepared public note pending official publication. See [Release v0.84.0](./docs/releases/release-v0.84.0.md), [Release v0.85.0](./docs/releases/release-v0.85.0.md), and [roadmap.md](./docs/technical/roadmap.md).
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
@@ -222,12 +222,12 @@ See: [GLOSSARY.md - Historical Documentation Labels](./GLOSSARY.md#historical-re
 See: [deployment/railway.md](./docs/deployment/railway.md)
 
 ### "Where are the release notes?"
-Published release notes live in [docs/releases/](./docs/releases/). Each file there is the official public release note linked from the GitHub tag and release PR.
+Public release notes live in [docs/releases/](./docs/releases/). Each version there has a single public note, and a note may appear as a clearly labeled release-prepared artifact before official publication.
 [CHANGELOG.md](./CHANGELOG.md) remains the canonical all-version history index.
-Active or unreleased release status remains in [roadmap.md](./docs/technical/roadmap.md) until a tagged public release note exists.
+The current published release is v0.84.0, and v0.85.0 is prepared and pending publication. [roadmap.md](./docs/technical/roadmap.md) keeps the active closeout detail that does not belong in the public release note.
 
 ### "What modules are available?"
-Current published first-party modules include **analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage**. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
+Current published first-party modules include **analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage**. The prepared v0.85.0 release adds **billing** once publication is complete. The monorepo still contains the **teams** directory as placeholder inventory for follow-on module work.
 See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"
@@ -324,6 +324,7 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2026-05-03
-**QuickScale Version**: v0.83.0
+**Last Updated**: 2026-05-18
+**Published QuickScale Version**: v0.84.0
+**Prepared Release Note**: v0.85.0 pending publication
 **Feedback**: Open an issue if this guide needs improvement!

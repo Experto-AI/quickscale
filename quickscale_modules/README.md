@@ -15,6 +15,7 @@ These directories currently include packaging and implementation scaffolding. Us
 | Module | Notes |
 |--------|-------|
 | [auth](./auth/README.md) | Authentication module with local packaging, tests, and manifest |
+| [billing](./billing/README.md) | Credits-first Stripe billing module with local packaging, tests, manifest, and module-owned pricing/dashboard routes |
 | [blog](./blog/README.md) | Blog/content module with local packaging, tests, and manifest |
 | [crm](./crm/README.md) | CRM module with local packaging, tests, and manifest |
 | [forms](./forms/README.md) | Forms module with local packaging, tests, and manifest |
@@ -30,7 +31,6 @@ These directories currently act as placeholders or documentation stubs. They do 
 
 | Module | Notes |
 |--------|-------|
-| [billing](./billing/README.md) | Reserved module directory with README-only local context |
 | [teams](./teams/README.md) | Reserved module directory with README-only local context |
 
 ## Notes for maintainers

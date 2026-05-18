@@ -148,11 +148,12 @@ run_tests() {
     log_info "Running tests for all packages..."
 
     local failed=0
+    local repo_pythonpath="$ROOT/quickscale/src:$ROOT/quickscale_core/src:$ROOT/quickscale_cli/src"
 
     # Test quickscale_core
     log_info "Testing quickscale_core..."
     cd "$ROOT/quickscale_core"
-    if poetry run pytest; then
+    if PYTHONPATH="$repo_pythonpath${PYTHONPATH:+:$PYTHONPATH}" poetry run pytest; then
         log_success "quickscale_core tests passed"
     else
         log_error "quickscale_core tests failed"

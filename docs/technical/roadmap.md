@@ -53,18 +53,18 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.82.0 | ✅ Released | Disaster recovery & environment promotion | Public `quickscale dr` capture/plan/execute/report workflows with `snapshot_id` lookup, resumable capture/execute, rollback pins, conservative env-var sync, and source-side media sync; archived in release note and changelog |
 | v0.83.0 | ✅ Released | Hardening release | Repo-wide hardening release published; archived in the release note and changelog |
 | v0.84.0 | ✅ Released | Backups hardening release | Backup lifecycle hardening and runtime/tooling refresh archived in the release note and changelog |
-| v0.85.0 | 📋 Planned | Billing module | Stripe integration after v0.84.0 backups hardening closes the remaining backup lifecycle gaps |
+| v0.85.0 | 🟡 Release-prepared | Billing module | Billing ships in-repo with release-history closeout and quality gates green; maintainer tag/publish still pending |
 | v0.86.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
 | v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and teams milestones |
 
 **Legend:**
 - ✅ = Completed, released, or internally baselined
-- 🟡 = In progress in repo but not yet tagged/released
+- 🟡 = In progress in repo or release-prepared, but not yet tagged/published
 - 📋 = Planned/Not Started
 
 **Status:**
 - **Current release:** v0.84.0 is the published release
-- **Current in-repo milestone:** v0.85.0 billing module is the next planned roadmap milestone now that v0.84.0 is archived in the changelog and release note
+- **Current in-repo milestone:** v0.85.0 billing module is release-prepared in-repo with non-publish quality gates green; maintainer tag/publish is still pending before it moves to published-release history
 - **Next planned milestone:** v0.86.0 teams module after the billing milestone
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.86.0 - auth, billing, teams modules complete on top of the notifications foundation
@@ -92,7 +92,9 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ### v0.85.0: `quickscale_modules.billing` - Billing Module
 
-**Status**: 📋 Planned
+**Status**: 🟡 Release-prepared (pending maintainer publish/tag)
+
+**Release-prep note**: The billing module is implemented and the non-publish release gates are green via `make lint`, `make typecheck`, `make test`, `make version-check`, and `make ci-e2e`. Split-branch publishing plus the maintainer tag/release publication remain manual and are not claimed as complete here.
 
 **Dependency note**: This milestone starts only after v0.84.0 closes the backup hardening work for admin download, full backup completeness, upload-driven restore, and the repo-wide stable runtime/tooling refresh.
 
@@ -498,20 +500,22 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Delivers**: 90%+ coverage, mypy clean, `debit_user` API, decisions.md billing contract, full public README, and release/publishing readiness.
 
-- [ ] `services.py` — `debit_user(user, amount, description) -> CreditTransaction` with `InsufficientCreditsError(BillingError)` guard; uses `select_for_update()` inside `transaction.atomic()`
-- [ ] `tests/test_debit.py` — `debit_user` success, `InsufficientCreditsError` when balance zero, `balance_after` accuracy, `transaction_type="USAGE"`
-- [ ] `tests/test_apps.py` — `AppConfig` attributes; `ready()` does not raise
-- [ ] `tests/test_circular_import.py` — top-level import confirms no circular dependency (mirrors auth module pattern)
-- [ ] Monorepo verification — targeted CLI/core tests updated in Phase 7 pass alongside module tests
+**Current state**: Release-prepared in-repo. The billing milestone has fresh green evidence for `make lint`, `make typecheck`, `make test`, `make version-check`, and `make ci-e2e`; the remaining manual closeout is split-branch publishing plus maintainer tag/release publication.
+
+- [x] `services.py` — `debit_user(user, amount, description) -> CreditTransaction` with `InsufficientCreditsError(BillingError)` guard; uses `select_for_update()` inside `transaction.atomic()`
+- [x] `tests/test_debit.py` — `debit_user` success, `InsufficientCreditsError` when balance zero, `balance_after` accuracy, `transaction_type="USAGE"`
+- [x] `tests/test_apps.py` — `AppConfig` attributes; `ready()` does not raise
+- [x] `tests/test_circular_import.py` — top-level import confirms no circular dependency (mirrors auth module pattern)
+- [x] Monorepo verification — targeted CLI/core tests updated in Phase 7 pass alongside module tests
 - [ ] Coverage audit — run `pytest --cov-report=html`; close any branch below 80% per-file
-- [ ] `decisions.md` — add billing module contract section (mirrors notifications contract at line 928): authoritative config in env vars + `quickscale.yml`; `WebhookEvent` is the idempotency gate; `debit_user` is the approved credit-consumption API; Stripe keys never stored in DB
-- [ ] `README.md` — finalize public docs: env var list, Stripe dashboard setup, credits system explanation, Stripe-hosted portal usage, React UI integration guide, debit API usage example
-- [ ] `docs/technical/user_manual.md`, `generated_project_structure.md`, and any placeholder inventory notes — update the "billing is not shipped yet" wording to the released contract
-- [ ] `module.yml`, `pyproject.toml`, `__init__.py` — version `"0.85.0"` and dependency metadata all aligned
-- [ ] `mypy src/quickscale_modules_billing` — zero errors
+- [x] `decisions.md` — add billing module contract section (mirrors notifications contract at line 928): authoritative config in env vars + `quickscale.yml`; `WebhookEvent` is the idempotency gate; `debit_user` is the approved credit-consumption API; Stripe keys never stored in DB
+- [x] `README.md` — finalize public docs: env var list, Stripe dashboard setup, credits system explanation, Stripe-hosted portal usage, React UI integration guide, debit API usage example
+- [x] `docs/technical/user_manual.md`, `generated_project_structure.md`, and any placeholder inventory notes — update the "billing is not shipped yet" wording to the released contract
+- [x] `module.yml`, `pyproject.toml`, `__init__.py` — version `"0.85.0"` and dependency metadata all aligned
+- [x] `mypy src/quickscale_modules_billing` — zero errors
 - [ ] Split-branch publishing — run `./scripts/publish_module.sh billing` and verify `splits/billing-module`
 
-**Acceptance**: `pytest --cov-fail-under=90`; `mypy` clean; no circular imports; `decisions.md` billing contract section present; `debit_user` raises `InsufficientCreditsError` when balance insufficient; module selectable via `quickscale plan --add billing`; split branch and public docs are ready for release.
+**Acceptance**: `pytest --cov-fail-under=90`; `mypy` clean; no circular imports; `decisions.md` billing contract section present; `debit_user` raises `InsufficientCreditsError` when balance insufficient; module selectable via `quickscale plan --add billing`; split branch and maintainer publication remain the only open release-closeout steps.
 
 ---
 

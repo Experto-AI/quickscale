@@ -1,7 +1,7 @@
 [project]
 name = "quickscale-module-billing"
 version = "0.85.0"
-description = "QuickScale billing foundation with a Django-owned credits ledger and future direct Stripe integration"
+description = "QuickScale credits-first billing module with a Django-owned ledger and Stripe-backed checkout services"
 requires-python = ">=3.13,<3.15"
 readme = "README.md"
 license = "Apache-2.0"

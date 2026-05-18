@@ -18,6 +18,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _TRACKED_SUBMISSION_TEMPLATE_KEY = "notifications.forms_submission"
+_SYNC_EMAIL_BACKENDS = {
+    "django.core.mail.backends.console.EmailBackend",
+    "django.core.mail.backends.dummy.EmailBackend",
+    "django.core.mail.backends.filebased.EmailBackend",
+    "django.core.mail.backends.locmem.EmailBackend",
+}
 
 
 def notify_submission(submission: "FormSubmission") -> str:
@@ -90,7 +96,11 @@ def _enqueue_notification(submission: "FormSubmission") -> str:
         form.slug,
         recipients,
     )
-    # Run in a background thread — SMTP/delivery must never block or time out the web worker
+    if tracked_sender is not None or _should_send_untracked_inline():
+        _dispatch()
+        return "queued"
+
+    # Keep real backend delivery off the request thread for the legacy SMTP path.
     threading.Thread(target=_dispatch, daemon=False).start()
     return "queued"
 
@@ -152,6 +162,10 @@ def _load_tracked_notification_sender() -> Any | None:
         return None
     notifications_services = import_module("quickscale_modules_notifications.services")
     return getattr(notifications_services, "send_notification")
+
+
+def _should_send_untracked_inline() -> bool:
+    return str(getattr(settings, "EMAIL_BACKEND", "")).strip() in _SYNC_EMAIL_BACKENDS
 
 
 def _send_untracked_submission_email(

@@ -23,9 +23,11 @@ function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
       storage: false,
       backups: false,
       notifications: false,
+      billing: false,
       social: true,
     },
     modulePaths: {
+      billing: '/billing/pricing/',
       social: surface === 'link_tree' ? '/social' : '/social/embeds',
     },
     publicPage: {

@@ -67,10 +67,10 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ✅ Update decisions.md FIRST, then other docs
 - ✅ Contributing guides: `docs/contrib/*.md`
 - ✅ `CHANGELOG.md` is the canonical release history index for all versions
-- ✅ Published release notes: `docs/releases/release-vX.XX.X.md` are the single official release document linked from the GitHub tag and release PR
-- ✅ Use `docs/technical/release_summary_template.md` for every published release note
+- ✅ Release notes: `docs/releases/release-vX.XX.X.md` are the single public-facing release document for a version and may exist either as a clearly labeled release-prepared artifact before publish or as the linked note after tag/release publication
+- ✅ Use `docs/technical/release_summary_template.md` for every public release note, including prepared artifacts that are awaiting manual publish
 - ✅ Public release notes stay reader-facing and outcome-oriented; keep maintainer-only closeout detail in the release PR or active roadmap section instead of a second repository doc
-- ✅ Unreleased or internal-only versions stay in `roadmap.md` and `CHANGELOG.md` until a tagged public release exists
+- ✅ Unreleased or internal-only versions stay in `roadmap.md` and `CHANGELOG.md` until a maintainer intentionally prepares the single public release note for that version or publishes the tag/release
 - ❌ Do not maintain separate implementation/review release docs or release-archive trees
 - ❌ Never contradict decisions.md elsewhere
 
@@ -891,8 +891,8 @@ The authoritative current CLI command surface now lives in [implementation_contr
 - **repository_layout.md**: Maintainer-repository layout and naming/import matrix
 - **scaffolding.md**: Concise structure hub plus compatibility anchors and backlinks into the structure companions
 - **CHANGELOG.md**: Canonical all-version release history index
-- **docs/releases/**: Official published release notes linked from GitHub tags and release PRs
-- **docs/technical/release_summary_template.md**: Template for official published release notes
+- **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
+- **docs/technical/release_summary_template.md**: Template for public release notes and release-prepared artifacts
 - **roadmap.md**: Timeline, phases, tasks, and active or unreleased release closeout status
 - **README.md**: Project overview, user guide, repo-level navigation
 - **package README.md files**: Package-local installation and responsibility summaries (informational only)
@@ -935,6 +935,14 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - Runtime backend selection stays on Django's console email backend until live Resend delivery is fully configured. If the live Resend backend is active anyway and the placeholder sender or resolved API key is still missing, queued deliveries fail explicitly rather than degrading silently.
 - Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
 - Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
+
+### Billing Contract (v0.85.0 behavior)
+
+- Authoritative billing configuration lives in `quickscale.yml`, generated Django settings, and environment variables. Planner/apply may write env-var references into managed settings, but Stripe publishable keys, secret keys, and webhook secrets stay environment-only and never persist in QuickScale database rows.
+- Billing requires auth-backed users at apply/runtime; QuickScale does not support a standalone billing install without the auth module.
+- Billing ships module-owned Django routes for public pricing (`/billing/pricing/`) and the signed-in dashboard (`/billing/dashboard/`). Fresh starter output may link into those pages, but QuickScale does not generate a starter-owned billing React page and does not rewrite existing project React files to adopt billing automatically.
+- `WebhookEvent` is the transport-level replay/idempotency gate for incoming billing webhooks.
+- `debit_user` is the approved service API for credit consumption.
 
 **Not part of the current contract:**
 - ❌ Independent namespace-package distribution for published modules/themes

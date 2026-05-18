@@ -59,6 +59,20 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - Generated projects remain standalone even when modules are embedded.
 - When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
 
+<a id="billing-module-contract"></a>
+## Billing Module Contract
+
+`quickscale_modules.billing` is part of the current shipped module line in v0.85.0.
+
+Billing contract rules:
+- `quickscale.yml` is the authoritative desired-state source for billing configuration, including the env-var names that planner/apply write into generated settings.
+- Stripe publishable keys, secret keys, and webhook secrets stay environment-only and must never persist in QuickScale database rows.
+- Billing requires auth-backed users at apply/runtime; QuickScale does not support a standalone billing install without the auth module.
+- Billing ships module-owned Django routes for public pricing (`/billing/pricing/`) and the signed-in dashboard (`/billing/dashboard/`).
+- Fresh starter output may link into those module-owned pages, but QuickScale does not generate a starter-owned billing React page and does not rewrite existing project React files to adopt billing automatically.
+- `WebhookEvent` is the transport-level replay/idempotency gate for incoming billing webhooks.
+- `debit_user` is the approved service API for credit consumption.
+
 <a id="mvp-feature-matrix-authoritative"></a>
 ## Implementation Surface Matrix (authoritative)
 
@@ -96,6 +110,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | Comprehensive README with setup instructions | IN | Generated README content remains part of the starter output. |
 | **MODULES & DISTRIBUTION** |
 | `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distribute via git subtree split branches. Embed via `quickscale plan --add <name>` plus `quickscale apply`. |
+| Billing module (`quickscale_modules.billing`) | IN (v0.85.0) | Desired-state config lives in `quickscale.yml`; Stripe secrets remain env-only; billing ships module-owned pricing/dashboard routes and uses `debit_user` plus `WebhookEvent` as the stable credit-consumption and webhook gates. |
 | Themes (React default + HTML secondary option) | IN (v0.61.0+) | `showcase_react` and `showcase_html` ship as generator templates with one-time copy during apply. |
 | `quickscale_themes/` packaged themes | NOT CURRENT | Theme package distribution is out of contract unless a later release documents it explicitly. |
 | YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | Shipped as part of the plan/apply system. |
@@ -155,7 +170,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 - `quickscale_core`: scaffolding, templates, and shared generator/runtime support.
 - Directory-based frontends: scaffolded templates and starter-theme assets.
 - `quickscale_modules/*`: first-party module workspace inside the repository, with released modules documented per version.
-- Some first-party modules ship documented module-owned routed surfaces that QuickScale wires into generated projects, currently including blog, listings, CRM, forms, and notifications routes and webhooks.
+- Some first-party modules ship documented module-owned routed surfaces that QuickScale wires into generated projects, currently including blog, listings, CRM, forms, notifications, and billing pricing/dashboard routes plus billing and notifications webhook surfaces.
 - Independent package-registry distribution is not part of the current contract unless a release note and this file explicitly say so.
 
 **See:** [generated_project_structure.md](./generated_project_structure.md#mvp-structure) for generated-project layouts and [repository_layout.md](./repository_layout.md#post-mvp-structure) for maintainer-side placement.

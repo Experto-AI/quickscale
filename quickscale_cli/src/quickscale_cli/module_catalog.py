@@ -67,7 +67,7 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
     ),
     ModuleCatalogEntry(
         name="billing",
-        description="Stripe integration",
+        description="Stripe integration with credits-first pricing and dashboard routes",
         ready=True,
     ),
     ModuleCatalogEntry(
@@ -117,15 +117,6 @@ def get_module_readiness_reason(module_name: str) -> str | None:
     entry = get_module_entry(module_name)
     if entry is None or entry.ready:
         return None
-
-    if module_name == "billing":
-        return (
-            "Module 'billing' has an internal packaged Phase 1 foundation and is "
-            "not a placeholder-only directory, but it is not a public-ready "
-            "QuickScale module yet. Billing remains excluded from public quickscale "
-            "plan, quickscale.yml, quickscale apply, and quickscale status "
-            "workflows until later phases ship."
-        )
 
     module_display_name = module_name.replace("_", " ").title()
     return (

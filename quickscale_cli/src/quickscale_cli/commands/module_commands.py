@@ -208,25 +208,22 @@ def _sync_state_module_version(project_path: Path, module: str, version: str) ->
     state_manager.save(state)
 
 
-def _validate_module_readiness(module: str) -> bool:
-    """Reject placeholder modules from embed/apply flows."""
+def _validate_module_readiness(
+    module: str,
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> bool:
+    """Reject non-public modules from standalone embed/update flows."""
     readiness_reason = get_module_readiness_reason(module)
     if readiness_reason is None:
         return True
 
     click.secho(f"❌ Error: {readiness_reason}", fg="red", err=True)
-    if module == "billing":
-        click.echo(
-            "\n💡 Billing remains excluded from public quickscale embed and quickscale "
-            "update workflows until later phases ship.",
-            err=True,
-        )
-    else:
-        click.echo(
-            "\n💡 Placeholder directories remain in the repository for documentation and "
-            "future work only.",
-            err=True,
-        )
+    click.echo(
+        "\n💡 Placeholder directories remain in the repository for documentation and "
+        "future work only.",
+        err=True,
+    )
     return False
 
 
@@ -423,7 +420,10 @@ def embed_module(
         if not _validate_module_not_exists(project_path, module):
             return False
 
-        if not _validate_module_readiness(module):
+        if not _validate_module_readiness(
+            module,
+            execution_mode=execution_mode,
+        ):
             return False
 
         branch = f"splits/{module}-module"
