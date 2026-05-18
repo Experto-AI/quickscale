@@ -1,10 +1,10 @@
 # QuickScale Billing Module
 
-**Status**: Billing runtime phases through Phase 6b are implemented in-repo. Billing is still **not** publicly ready in `quickscale plan`, `quickscale.yml` validation, or `quickscale apply` until the Phase 7 distribution work lands.
+**Status**: Billing ships in v0.85.0 through the standard QuickScale module workflow. `quickscale.yml` plus env-var-backed runtime settings are authoritative, and Stripe keys plus webhook secrets stay environment-only.
 
-QuickScale billing is a credits-first module. Django owns plans, balances, transactions, subscription snapshots, and webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python SDK; the Django ledger remains the source of truth for credit accounting.
+QuickScale billing is a credits-first module. Django owns plans, balances, transactions, subscription snapshots, and webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python SDK; the Django ledger remains the source of truth for credit accounting, and billing requires auth-backed users at apply/runtime.
 
-## Current In-Repo Surface
+## Current Shipped Surface
 
 - Independently packaged Django module metadata under `quickscale_modules/billing/`
 - Five core models: `Plan`, `CreditBalance`, `CreditTransaction`, `Subscription`, and `WebhookEvent`
@@ -16,7 +16,7 @@ QuickScale billing is a credits-first module. Django owns plans, balances, trans
 
 ## Current Boundaries
 
-- Billing remains hidden from public planner and apply flows until the Phase 7 readiness flip lands
+- Billing requires auth-backed users at apply/runtime; QuickScale does not support a standalone billing install without auth
 - `GET /api/billing/plans/` is intentionally recurring-only; one-time credit packs are purchaseable but do not currently ship through a public catalog endpoint
 - Checkout success, cancel, and portal return URLs are server-owned; callers may not supply them in API requests
 - Stripe keys are resolved from environment variables at runtime and are never stored in the database
@@ -28,6 +28,7 @@ QuickScale billing is a credits-first module. Django owns plans, balances, trans
 - `CreditTransaction` records each credit mutation with balance snapshots and optional Stripe reference metadata
 - `Subscription` stores the local snapshot of recurring billing state and reservation-first checkout metadata
 - `WebhookEvent` is the transport-level idempotency gate for Stripe webhook processing
+- `debit_user` is the approved service API for credit consumption
 
 ## Explicit Non-Goals For v0.85.0
 
@@ -618,8 +619,8 @@ Frontend runtime wiring:
 - `SubscriptionStatusCard`: `Card`, `Badge`, `Alert`, `Button`
 - `TransactionHistory`: `Table`, `ScrollArea`, `Button`
 
-## Distribution And Release Gating
+## Distribution Notes
 
-Billing will ship through the standard QuickScale module packaging and split-branch workflow once later phases complete. Until then, maintainers can develop the package in-repo, but public QuickScale flows must continue to treat billing as not yet ready.
+Billing ships through the standard QuickScale module packaging and split-branch workflow. Follow-on roadmap work may tighten release evidence or adjacent docs, but this README describes the current shipped module contract.
 
 See [Technical Roadmap](../../docs/technical/roadmap.md) for the full v0.85.0 implementation plan.

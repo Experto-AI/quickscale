@@ -14,6 +14,7 @@ from typing import Any, cast
 from django.apps import apps
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from quickscale_modules_billing.models import (
@@ -71,6 +72,10 @@ _STRIPE_TO_LOCAL_SUBSCRIPTION_STATUS = {
 
 class BillingError(Exception):
     """Base error for billing runtime operations."""
+
+
+class InsufficientCreditsError(BillingError):
+    """Raised when a debit exceeds the available balance."""
 
 
 class BillingConfigurationError(BillingError):
@@ -783,7 +788,10 @@ def credit_user(
         if existing_transaction is not None:
             return existing_transaction
 
-        updated_balance = balance.balance + amount
+        updated_balance = _apply_locked_credit_balance_delta(
+            balance=balance,
+            delta=amount,
+        )
         transaction_row = CreditTransaction.objects.create(
             user=user,
             amount=amount,
@@ -794,9 +802,43 @@ def credit_user(
             description=description,
             balance_after=updated_balance,
         )
-        balance.balance = updated_balance
-        balance.save(update_fields=["balance", "updated_at"])
         return transaction_row
+
+
+def debit_user(
+    user: Any,
+    amount: int,
+    description: str = "",
+) -> CreditTransaction:
+    """Debit credits from a user and record the usage transaction."""
+    if amount <= 0:
+        raise BillingValidationError("Debit amount must be greater than zero.")
+
+    with transaction.atomic():
+        balance = CreditBalance.objects.select_for_update().filter(user=user).first()
+        if balance is None or int(balance.balance) < amount:
+            raise InsufficientCreditsError("User does not have enough credits.")
+
+        updated_balance = _apply_locked_credit_balance_delta(
+            balance=balance,
+            delta=-amount,
+        )
+        return CreditTransaction.objects.create(
+            user=user,
+            amount=-amount,
+            transaction_type=CreditTransaction.TransactionType.USAGE,
+            description=description,
+            balance_after=updated_balance,
+        )
+
+
+def _apply_locked_credit_balance_delta(*, balance: CreditBalance, delta: int) -> int:
+    CreditBalance.objects.filter(pk=balance.pk).update(
+        balance=F("balance") + delta,
+        updated_at=timezone.now(),
+    )
+    balance.refresh_from_db(fields=["balance", "updated_at"])
+    return int(balance.balance)
 
 
 def handle_stripe_event(
@@ -1924,6 +1966,7 @@ __all__ = [
     "BillingValidationError",
     "BillingWebhookError",
     "BillingWebhookSignatureError",
+    "debit_user",
     "StripeClient",
     "StripeWebhookResult",
     "create_billing_portal_session",
@@ -1933,4 +1976,5 @@ __all__ = [
     "get_or_create_stripe_customer",
     "get_stripe_client",
     "handle_stripe_event",
+    "InsufficientCreditsError",
 ]
