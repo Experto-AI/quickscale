@@ -54,8 +54,8 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.83.0 | ✅ Released | Hardening release | Repo-wide hardening release published; archived in the release note and changelog |
 | v0.84.0 | ✅ Released | Backups hardening release | Backup lifecycle hardening and runtime/tooling refresh archived in the release note and changelog |
 | v0.85.0 | ✅ Released | Billing module | Stripe-backed one-time credit purchases and recurring subscriptions, credits-first Django ledger, planner/apply readiness, module-owned pricing and dashboard pages, and starter-theme billing links; archived in release note and changelog |
-| v0.86.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
-| v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and teams milestones |
+| v0.86.0 | 📋 Planned | Organizations module | Multi-tenancy with Solo/SaaS runtime modes, PostgreSQL RLS, org-scoped billing, credits + feature gates, and self-service onboarding |
+| v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and organizations milestones |
 
 **Legend:**
 - ✅ = Completed, released, or internally baselined
@@ -64,9 +64,9 @@ This table is the single milestone summary for shipped history and the active fo
 
 **Status:**
 - **Current release:** v0.85.0 is the published release
-- **Next planned milestone:** v0.86.0 teams module after the billing milestone
+- **Next planned milestone:** v0.86.0 organizations module after the billing milestone
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.86.0 - auth, billing, teams modules complete on top of the notifications foundation
+- **SaaS Parity:** v0.86.0 - auth, billing, organizations modules complete on top of the notifications foundation
 
 ## Notes and References
 
@@ -89,246 +89,339 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ---
 
-### v0.86.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.86.0: `quickscale_modules.orgs` - Organizations / Multi-tenancy Module
 
 **Status**: 📋 Planned
 
-**Design document**: [`docs/technical/teams.md`](teams.md) — all architectural decisions, data models, and scope are recorded there. This section contains only the implementation task breakdown.
+**Design document**: [`docs/technical/organizations.md`](organizations.md) — all architectural decisions, data models, and scope are recorded there. This section contains only the implementation task breakdown.
 
-**Dependency note**: This milestone remains the SaaS-parity target after the v0.84.0 backups hardening release and the v0.85.0 billing milestone.
+**Dependency note**: This milestone remains the SaaS-parity target after the v0.84.0 backups hardening release and the v0.85.0 billing milestone. The billing module's `Subscription`, `CreditBalance`, and `Plan` models are extended here.
 
-**Architecture summary**: Single Railway deployment (1 app + 1 PostgreSQL 18). All tenants share one database; PostgreSQL RLS enforces isolation. URL-based team routing (`/teams/<slug>/crm/`). Platform owner (`is_superuser`) sees all tenants via `/admin/`. Self-service customer signup → team creation → Stripe checkout. Users may belong to multiple teams (team switcher in React UI).
+**Architecture summary**: Single Railway deployment (1 app + 1 PostgreSQL 18). All tenants share one database; PostgreSQL RLS enforces isolation per organization. Runtime `QUICKSCALE_MODE` setting switches between Solo mode (personal org auto-created, flat URLs) and SaaS mode (multi-org, `/orgs/<slug>/` routing, invitations enabled). Platform owner (`is_superuser`) bypasses RLS via `/admin/`. Self-service signup → org creation → Stripe checkout. Plans differentiate by credit volume + feature gates; optional seat pricing designed in.
 
 ---
 
 #### Phase 1 — Module scaffold + core models (4–6 h)
 
-Create the teams module package and define all three core models plus the `TenantModel` abstract base.
+Create the `quickscale_modules_orgs` package and define all core models, the `OrganizationManager`, and the `TenantModel` abstract base.
 
-**Files to create** (`quickscale_modules/teams/src/quickscale_modules_teams/`):
-- `__init__.py`
-- `apps.py` — `QuickscaleTeamsConfig` matching the billing/crm pattern
-- `models.py` — `TeamRole` (TextChoices), `Team`, `TeamMembership`, `TeamInvitation`, `TenantModel`
-- `admin.py` — register `Team`, `TeamMembership`, `TeamInvitation`; add `team` column and list filter to each
-- `migrations/__init__.py`
-- `migrations/0001_initial.py` — initial migration for the three models
-- `module.yml` — `name: teams`, `django_apps: [quickscale_modules_teams]`
+**Files to create** (`quickscale_modules/orgs/src/quickscale_modules_orgs/`):
+- [ ] `__init__.py`
+- [ ] `apps.py` — `QuickscaleOrgsConfig` matching the billing/crm pattern
+- [ ] `managers.py` — `OrganizationManager.create_personal_for(user)`: creates `Organization(is_personal=True, slug=username)` + OWNER `OrganizationMembership`; idempotent (returns existing on second call)
+- [ ] `models.py` — `OrgRole` (TextChoices: VIEWER/MEMBER/ADMIN/OWNER), `Organization` (id UUID, name, slug, stripe_customer_id, is_personal BooleanField default False, created_at), `OrganizationMembership` (user FK, organization FK, role, invited_by nullable FK, joined_at; `unique_together = [('user', 'organization')]`), `OrganizationInvitation` (id UUID, organization FK, email, role, invited_by FK, token UUID unique, expires_at, accepted_at nullable), `TenantModel` (abstract: `organization = ForeignKey(..., db_index=True)`)
+- [ ] `admin.py` — register `Organization` (list: name, slug, is_personal, created_at; filter: is_personal), `OrganizationMembership` (list: user, organization, role, joined_at; filter: role, organization), `OrganizationInvitation` (list: email, organization, role, expires_at, accepted_at; filter: organization)
+- [ ] `migrations/__init__.py`
+- [ ] `migrations/0001_initial.py` — initial migration for all four models
+- [ ] `module.yml` skeleton — `name: orgs`, `version: "0.86.0"`, `django_apps: [quickscale_modules_orgs]`
+- [ ] `README.md` — one-paragraph module description
 
 **Acceptance criteria**:
-- `python manage.py migrate` succeeds
-- All three models appear in `/admin/` with correct list columns
-- `TenantModel` is importable from `quickscale_modules_teams.models`
-- `module.yml` passes `quickscale plan` validation
+- [ ] `python manage.py migrate` succeeds with no errors
+- [ ] `Organization`, `OrganizationMembership`, `OrganizationInvitation` appear in `/admin/` with correct columns and filters
+- [ ] `TenantModel` importable from `quickscale_modules_orgs.models`; its `organization` FK references `quickscale_modules_orgs.Organization`
+- [ ] `Organization.objects.create_personal_for(user)` creates org with `is_personal=True`, slug from `user.username`, OWNER membership — second call returns existing org without creating duplicates
+- [ ] `unique_together = [('user', 'organization')]` enforced at DB level (constraint present in migration)
+- [ ] `module.yml` passes `quickscale plan` validation
 
 ---
 
-#### Phase 2 — TenantMiddleware + RBAC + post-signup adapter (4–6 h)
+#### Phase 2 — QUICKSCALE_MODE + TenantMiddleware + RBAC + post-signup adapter (5–7 h)
 
-Wire the tenant context into every request and enforce role-based access control.
+Wire the `QUICKSCALE_MODE` setting, tenant context per request, role-based access control, and post-signup routing for both modes. This phase affects every subsequent request — test each branch explicitly.
 
 **Files to create**:
-- `middleware.py` — `TenantMiddleware`: resolves `team_slug` from URL, sets `SET LOCAL app.current_team_id`, guards no-team users, returns 403 for non-members
-- `permissions.py` — `ROLE_HIERARCHY` dict, `require_team_role(min_role)` decorator, `TeamRoleMixin` for CBVs
-- `adapters.py` — `TeamsAccountAdapter(DefaultAccountAdapter)`: overrides `get_login_redirect_url` to redirect teamless users to `/teams/new/`
+- [ ] `middleware.py` — `TenantMiddleware`:
+  - [ ] `_resolve_org_slug(request, saas_mode)` — SaaS: reads `org_slug` from URL `resolve()` kwargs; Solo: queries user's personal org slug (no URL slug needed)
+  - [ ] No-membership guard: Solo mode calls `create_personal_for(request.user)`; SaaS mode redirects to `/orgs/new/` for all non-exempt paths (`/accounts/*`, `/orgs/new/`)
+  - [ ] Non-member requesting an org route → `HttpResponseForbidden()`
+  - [ ] Sets `SET LOCAL app.current_org_id = <uuid>` via `connection.cursor()`
+  - [ ] Sets `request.org` for all org-scoped requests; `None` for non-org routes
+- [ ] `permissions.py`:
+  - [ ] `ROLE_HIERARCHY = {OrgRole.VIEWER: 0, OrgRole.MEMBER: 1, OrgRole.ADMIN: 2, OrgRole.OWNER: 3}`
+  - [ ] `require_org_role(min_role)` decorator — resolves org from URL, checks membership + role, returns 403 on failure, sets `request.org`
+  - [ ] `OrgRoleMixin` — CBV equivalent of `require_org_role`
+  - [ ] `require_org_feature(feature_key)` decorator stub — reads `request.org.subscription.plan.features` (list); returns 402 when feature absent or no active subscription; fully wired in Phase 6
+- [ ] `adapters.py` — `OrgsAccountAdapter(DefaultAccountAdapter)`:
+  - [ ] Solo mode branch: calls `create_personal_for(request.user)`, returns `'/'`
+  - [ ] SaaS mode branch: returns `'/orgs/new/'` when no membership exists
 
 **Files to modify**:
-- `module.yml` — add `middleware: [quickscale_modules_teams.middleware.TenantMiddleware]` and `settings: {ACCOUNT_ADAPTER: ...}`
+- [ ] `module.yml` — add `middleware: [quickscale_modules_orgs.middleware.TenantMiddleware]`, `settings: {ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter, QUICKSCALE_MODE: solo}`
 
 **Acceptance criteria**:
-- A new signup with no team redirects to `/teams/new/` — cannot reach any other page
-- A request to `/teams/acme-corp/` by a non-member returns HTTP 403
-- `@require_team_role(min_role=TeamRole.ADMIN)` returns 403 for a MEMBER and 200 for an ADMIN
-- `request.team` is populated for all team-scoped requests
-- `SET LOCAL app.current_team_id` is confirmed via `SELECT current_setting('app.current_team_id', true)` in a test
+- [ ] **Solo mode**: new signup auto-creates personal org (`is_personal=True`); user lands at `/` without seeing org creation step
+- [ ] **SaaS mode**: new signup with no membership redirects to `/orgs/new/` for all non-exempt paths
+- [ ] Request to `/orgs/acme-corp/` by a non-member returns HTTP 403
+- [ ] `@require_org_role(min_role=OrgRole.ADMIN)` returns 403 for MEMBER, 403 for VIEWER, 200 for ADMIN, 200 for OWNER
+- [ ] `@require_org_role(min_role=OrgRole.OWNER)` returns 403 for ADMIN
+- [ ] `request.org` populated for org-scoped requests; `None` for non-org routes
+- [ ] `SET LOCAL app.current_org_id = <uuid>` confirmed via `SELECT current_setting('app.current_org_id', true)` in a test transaction
+- [ ] **Solo mode**: `_resolve_org_slug` returns personal org slug without reading from URL
+- [ ] Changing `QUICKSCALE_MODE` between `solo` and `saas` changes routing behaviour with no model changes
 
 ---
 
 #### Phase 3 — PostgreSQL RLS migration (6–8 h)
 
-Enable row-level security on all tenant tables and verify cross-tenant isolation end-to-end.
+Enable row-level security on all tenant tables and verify cross-org isolation end-to-end. This is the highest-risk phase — misconfigured RLS silently returns empty sets rather than raising errors.
 
 **Files to create**:
-- `migrations/0002_rls_tenant_isolation.py` — `RunSQL` migration that:
-  1. Enables RLS on each tenant table: `ALTER TABLE <table> ENABLE ROW LEVEL SECURITY`
-  2. Creates isolation policies: `CREATE POLICY tenant_isolation ON <table> USING (team_id = current_setting('app.current_team_id', true)::uuid)`
-  3. Tables covered: `quickscale_crm_*`, `quickscale_blog_*`, `quickscale_forms_*`, `quickscale_listings_*`, notifications, storage
+- [ ] `migrations/0002_rls_tenant_isolation.py` — `RunSQL` migration:
+  - [ ] For each tenant table: `ALTER TABLE <table> ENABLE ROW LEVEL SECURITY`
+  - [ ] For each tenant table: `CREATE POLICY tenant_isolation ON <table> USING (organization_id = current_setting('app.current_org_id', true)::uuid)`
+  - [ ] Reverse operations: `DROP POLICY tenant_isolation ON <table>` + `ALTER TABLE <table> DISABLE ROW LEVEL SECURITY`
+- [ ] `tests/test_rls_isolation.py` — integration tests (requires real PostgreSQL; mark with `@pytest.mark.django_db(transaction=True)`)
 
-**Tenant tables checklist** (confirm actual table names via `\dt` before writing SQL):
-- CRM: contacts, companies, deals, activities, pipeline stages, tags
-- Blog: posts, categories, comments
-- Forms: forms, submissions, fields
-- Listings: listings, listing images
-- Notifications: notifications, notification preferences
+**Tenant tables checklist** (confirm exact column and table names via `\dt` and `\d <table>` before writing SQL — Django generates names from app label + model name):
+- [ ] CRM: contacts, companies, deals, activities, pipeline stages, tags
+- [ ] Blog: posts, categories, comments
+- [ ] Forms: forms, submissions, fields
+- [ ] Listings: listings, listing images
+- [ ] Notifications: notifications, notification preferences
+- [ ] Storage: files (if org-scoped)
 
-**Files to create (tests)**:
-- `tests/test_rls_isolation.py` — integration test: create two teams, create a CRM contact under team A, assert team B user's queryset is empty for that contact
+**Disambiguation**:
+- The RLS policy column is `organization_id` (Django FK naming convention from `organization = ForeignKey(...)`). It is **not** `org_id` or `team_id`. Verify the actual column name in `0001_initial.py` before writing policy SQL.
+- `current_setting('app.current_org_id', true)` — the `true` flag returns `NULL` when unset instead of raising an exception. A `NULL` uuid matches no rows: correct fail-safe. Do **not** omit the `true` flag.
+- Platform owner (`is_superuser`) connects as PostgreSQL superuser, which bypasses RLS by default. No policy exception needed.
 
 **Acceptance criteria**:
-- `python manage.py migrate` applies the RLS migration without errors
-- Platform owner (`is_superuser`) sees all rows in all tables (RLS bypass confirmed)
-- Team A user cannot read Team B's rows in any tenant table
-- Empty queryset (not exception) is returned when `app.current_team_id` is not set
+- [ ] `python manage.py migrate` applies the RLS migration without errors on PostgreSQL 18
+- [ ] `python manage.py migrate orgs 0001` reverses the RLS migration cleanly (policies dropped, RLS disabled)
+- [ ] Platform owner (`is_superuser`) sees all rows across all tenant tables (RLS bypass confirmed)
+- [ ] Org A user cannot read Org B rows in any tenant table — queryset is empty, no exception raised
+- [ ] Empty queryset (not exception) returned when `app.current_org_id` is not set
+- [ ] **Solo mode**: RLS still enforced — user sees only their personal org's rows
+- [ ] CI test runner uses PostgreSQL (RLS is a PostgreSQL feature; add `DATABASE_URL` config note if tests currently run on SQLite)
 
 ---
 
-#### Phase 4 — Team management views + URLs (Django) (4–6 h)
+#### Phase 4 — Org management views + URL structure (Django) (4–6 h)
 
-Build the server-side views, forms, and URL routes for team lifecycle management.
+Build server-side views, forms, and the dual URL configuration. SaaS org management pages are only reachable in SaaS mode; Solo mode serves flat routes with no org slug.
 
 **Files to create**:
-- `views.py`:
-  - `TeamListView` — lists all teams the current user belongs to
-  - `TeamCreateView` — creates a team and redirects to Stripe checkout
-  - `TeamDashboardView` — team home page (member count, recent activity)
-  - `MemberListView` — lists `TeamMembership` rows; allows role change (ADMIN+) and removal (ADMIN+)
-  - `TeamSettingsView` — update team `name` and `slug` (ADMIN+)
-- `forms.py` — `TeamCreateForm` (name, slug with auto-slug), `TeamSettingsForm`, `RoleChangeForm`
-- `urls.py` — all `/teams/` routes (see URL structure in design doc)
-- `templates/quickscale_modules_teams/`:
-  - `team_list.html`
-  - `team_create.html`
-  - `team_dashboard.html`
-  - `members.html`
-  - `settings.html`
+- [ ] `views.py`:
+  - [ ] `OrgListView` — lists all orgs the current user belongs to (SaaS only)
+  - [ ] `OrgCreateView` — creates org, redirects to Stripe checkout (SaaS only)
+  - [ ] `OrgDashboardView` — org home: member count, active plan, credit balance, recent activity
+  - [ ] `MemberListView` — lists `OrganizationMembership` rows; role change (ADMIN+); remove member (ADMIN+); blocks demotion/removal of last OWNER
+  - [ ] `OrgSettingsView` — update org `name` and `slug` (ADMIN+); warns user that slug change breaks existing bookmarks
+- [ ] `forms.py`:
+  - [ ] `OrgCreateForm` — `name` field; auto-derives `slug` (server-side slugify + uniqueness check)
+  - [ ] `OrgSettingsForm` — `name`, `slug` fields with uniqueness validation
+  - [ ] `RoleChangeForm` — `role` choices exclude OWNER when acting user is not OWNER
+- [ ] `urls/saas.py` — all `/orgs/<org_slug>/` routes plus nested module routes
+- [ ] `urls/solo.py` — flat routes (`/`, `/blog/`, `/crm/`, `/forms/`, `/listings/`, `/billing/`); org resolved by middleware
+- [ ] `templates/quickscale_modules_orgs/`:
+  - [ ] `org_list.html`
+  - [ ] `org_create.html`
+  - [ ] `org_dashboard.html`
+  - [ ] `members.html`
+  - [ ] `settings.html`
 
 **Files to modify**:
-- `module.yml` — add `url_includes: [["teams/", "quickscale_modules_teams.urls"]]`
+- [ ] `module.yml` — add conditional `url_includes` (saas branch: `["orgs/", "...urls.saas"]`; solo branch: `["", "...urls.solo"]`)
+- [ ] Project `urls.py` template — conditional include driven by `settings.QUICKSCALE_MODE`
 
 **Acceptance criteria**:
-- `/teams/` lists a logged-in user's teams; empty state prompts to create one
-- `/teams/new/` creates a team and redirects to Stripe pricing
-- `/teams/<slug>/members/` shows the membership list; ADMIN can change roles; OWNER cannot be demoted
-- `/teams/<slug>/settings/` updates team name/slug (ADMIN only)
-- A MEMBER visiting `/teams/<slug>/settings/` receives HTTP 403
+- [ ] **SaaS mode**: `/orgs/` lists user's orgs; empty state shows "Create your organization" CTA
+- [ ] **SaaS mode**: `/orgs/new/` creates org and redirects to Stripe pricing
+- [ ] **SaaS mode**: `/orgs/<slug>/members/` — ADMIN can change roles; OWNER role cannot be assigned to a second member without transfer; last OWNER cannot be removed
+- [ ] **SaaS mode**: `/orgs/<slug>/settings/` updates name/slug (ADMIN only); a MEMBER receives HTTP 403
+- [ ] **Solo mode**: `/` serves org dashboard; `/blog/`, `/crm/` serve module pages without org slug
+- [ ] Non-existent org slug returns 404 (not 500) in both modes
 
 ---
 
 #### Phase 5 — Invitation flow (4–6 h)
 
-Build the full invite-send → email → accept pipeline using the existing notifications module.
+Build the full invite-send → email → accept pipeline using the existing notifications module. **SaaS mode only** — all invitation views return HTTP 404 in Solo mode.
 
 **Files to modify** (`views.py`):
-- `InviteView` — ADMIN+: creates `TeamInvitation`, triggers notification email
-- `AcceptInvitationView` — public: validates token, creates `TeamMembership` for existing user or redirects new user to signup with token in session
+- [ ] `InviteView` — requires ADMIN+; creates `OrganizationInvitation` (UUID token, 7-day expiry); sends email via notifications module
+- [ ] `RevokeInvitationView` — requires ADMIN+; deletes `OrganizationInvitation` row
+- [ ] `AcceptInvitationView` — public (no login required): validates token; existing user → creates `OrganizationMembership`; new user → stores token in session, redirects to signup
 
 **Files to create**:
-- `forms.py` additions — `InviteForm` (email, role)
-- `templates/quickscale_modules_teams/invite.html` — invite form page
-- `templates/quickscale_modules_teams/accept.html` — accept confirmation page
-- `templates/quickscale_modules_teams/email/invite.html` — email body (uses notifications module `send_notification`)
+- [ ] `forms.py` additions — `InviteForm` (email + role; OWNER excluded from role choices)
+- [ ] `templates/quickscale_modules_orgs/invite.html` — invite form + pending invitations list with revoke buttons
+- [ ] `templates/quickscale_modules_orgs/accept.html` — confirmation page after membership created
+- [ ] `templates/quickscale_modules_orgs/email/invite.html` — email body with accept URL; uses notifications `send_notification`
+- [ ] `signals.py` — connects to django-allauth `user_signed_up` signal: if session contains invitation token, creates `OrganizationMembership` and clears token from session
 
-**Edge cases to handle**:
-- Expired token → HTTP 410 with clear message
-- Already-accepted token → HTTP 410
-- Revoke invitation → DELETE `TeamInvitation` row; token URL becomes 404
-- Accept by new user → store token in session, complete membership on `user_signed_up` signal
+**Edge cases — each requires a dedicated test**:
+- [ ] Expired token (`expires_at < now`, `accepted_at is None`) → HTTP 410, message: "This invitation has expired. Ask an admin to send a new one."
+- [ ] Already-accepted token (`accepted_at is not None`) → HTTP 410, message: "This invitation has already been used."
+- [ ] Revoked invitation token URL → HTTP 404
+- [ ] Invitation email does not match logged-in user's email → HTTP 403
+- [ ] Invitation URL visited in Solo mode → HTTP 404
 
 **Acceptance criteria**:
-- ADMIN sends invite → email arrives with correct accept URL
-- Existing user clicks accept → `TeamMembership` created with correct role
-- New user clicks accept → redirected to signup → membership created after account creation
-- Expired token → 410 response with user-facing message
-- Revoked invitation URL → 404
+- [ ] ADMIN sends invite → email arrives with accept URL containing UUID token
+- [ ] Existing user (logged in) clicks accept → `OrganizationMembership` created with correct role; user lands on org dashboard
+- [ ] Existing user (not logged in) clicks accept → redirected to login; membership created after login; user lands on org dashboard
+- [ ] New user clicks accept → session stores token; signup completes; `user_signed_up` signal creates membership; user lands on org dashboard
+- [ ] Expired token → HTTP 410 with user-facing message (not 500, not 404)
+- [ ] Already-accepted token → HTTP 410 with user-facing message
+- [ ] Revoked invitation URL → HTTP 404
+- [ ] Solo mode invitation URL → HTTP 404
 
 ---
 
-#### Phase 6 — Billing bridge (4–6 h)
+#### Phase 6 — Billing bridge + plan feature gates (6–8 h)
 
-Migrate billing models from user-scoped to team-scoped and provide a migration path for existing deployments.
+Extend billing models to be org-scoped, add plan-level feature gates and seat fields, and provide migration commands for existing deployments.
 
 **Files to modify** (`quickscale_modules/billing/src/quickscale_modules_billing/models.py`):
-- `Subscription`: add `team = ForeignKey(Team, null=True, on_delete=SET_NULL, related_name='subscriptions')`
-- `CreditBalance`: add `team = OneToOneField(Team, null=True, on_delete=CASCADE, related_name='credit_balance')`
-- `CreditTransaction`: add `performed_by = ForeignKey(User, null=True, on_delete=SET_NULL, related_name='credit_actions')`
+- [ ] `Subscription`: add `organization = ForeignKey('quickscale_modules_orgs.Organization', null=True, on_delete=SET_NULL, related_name='subscriptions')`
+- [ ] `CreditBalance`: add `organization = OneToOneField('quickscale_modules_orgs.Organization', null=True, on_delete=CASCADE, related_name='credit_balance')`
+- [ ] `CreditTransaction`: add `performed_by = ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=SET_NULL, related_name='credit_actions')`
+- [ ] `Plan`: add `features = JSONField(default=list)` (list of module key strings e.g. `["blog", "crm", "forms"]`), `max_seats = IntegerField(default=0)` (0 = unlimited; UI-enforced only in v0.86.0 — add `# TODO: enforce at DB layer` comment), `seat_price_id = CharField(blank=True)` (Stripe price ID for per-seat addon)
 
 **Files to create** (`quickscale_modules/billing/src/quickscale_modules_billing/migrations/`):
-- `0003_team_billing_bridge.py` — adds nullable `team` FK to Subscription and CreditBalance, adds `performed_by` to CreditTransaction
+- [ ] `0003_org_billing_bridge.py` — nullable `organization` FK on Subscription and CreditBalance; `performed_by` on CreditTransaction; `features`, `max_seats`, `seat_price_id` on Plan
 
-**Files to create** (`quickscale_modules/teams/src/quickscale_modules_teams/management/commands/`):
-- `migrate_billing_to_teams.py` — idempotent command:
-  1. For each `User` with a `Subscription` or `CreditBalance` but no `TeamMembership`
-  2. Create `Team(name=f"{user.username}'s Team", slug=user.username)`
-  3. Create `TeamMembership(user, team, role=OWNER)`
-  4. Point `Subscription.team` and `CreditBalance.team` to the new team
+**Files to create** (`quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/`):
+- [ ] `migrate_billing_to_orgs.py` — idempotent:
+  - [ ] For each User with a Subscription or CreditBalance but no OrganizationMembership: call `create_personal_for(user)`, point Subscription/CreditBalance to new org
+  - [ ] Skips users who already have OrganizationMembership
+  - [ ] Prints per-user summary; exits 0 on success
+- [ ] `promote_to_saas.py` — idempotent:
+  - [ ] Ensures all `is_personal=True` orgs have a valid unique slug (fills from owner username if blank; appends `-2`, `-3` etc. on collision)
+  - [ ] Prints summary of orgs updated; prints the required `QUICKSCALE_MODE = 'saas'` settings change (cannot mutate `settings.py` directly); exits 0 on success
+
+**Wiring `require_org_feature`** (stubbed in Phase 2 — complete here):
+- [ ] Read `request.org.subscription.plan.features` (list); return 402 when feature absent
+- [ ] Return 402 when `request.org` has no active subscription (guard against silent feature leakage)
+- [ ] Update `Plan` admin to show `features` as an editable JSON field, `max_seats`, `seat_price_id`
 
 **Acceptance criteria**:
-- `python manage.py migrate_billing_to_teams` runs without error on a v0.85.0 dataset
-- After migration, every `Subscription` has a non-null `team`
-- Stripe checkout creates `Subscription.team` (verified in billing view)
-- Team's credit balance is debited on credit usage (not the individual user's balance)
-- `CreditTransaction.performed_by` records which team member spent the credits
+- [ ] `python manage.py migrate_billing_to_orgs` runs without error on a v0.85.0 fixture; all Subscriptions have non-null `organization` after run
+- [ ] Running `migrate_billing_to_orgs` twice produces no duplicate orgs or memberships
+- [ ] Stripe checkout creates `Subscription.organization` (assert `subscription.organization == request.org` in billing view test)
+- [ ] Org's `CreditBalance` debited on credit usage; no change to any user-level balance field
+- [ ] `CreditTransaction.performed_by` records the acting org member
+- [ ] `@require_org_feature('crm')` returns 200 when `'crm' in plan.features`; returns 402 when not present
+- [ ] `@require_org_feature('crm')` returns 402 when org has no active subscription
+- [ ] `python manage.py promote_to_saas` runs idempotently; all personal orgs have valid unique slugs after run
 
 ---
 
-#### Phase 7 — React frontend: team pages + team switcher (6–8 h)
+#### Phase 7 — React frontend: org pages + org switcher (6–8 h)
 
-Add all team management pages to the React SPA and move existing module routes under the team slug.
+Add all org management pages, wire Solo and SaaS route trees, and remove all legacy `Team*` components.
 
 **Files to modify** (`frontend/src/`):
-- `App.tsx` — add `/teams/*` route tree; move `/crm`, `/blog`, `/forms`, `/listings` to `/teams/:slug/*`
-- `components/layout/Sidebar.tsx` (or equivalent) — add team switcher component
+- [ ] `App.tsx` — SaaS mode: add `/orgs/*` route tree, move `/crm`/`/blog`/`/forms`/`/listings` under `/orgs/:slug/*`; Solo mode: keep flat routes; remove all `/teams/*` routes
+- [ ] `components/layout/Sidebar.tsx` (or equivalent) — render `OrgSwitcher` in SaaS mode; hide in Solo mode
 
-**Files to create** (`frontend/src/pages/teams/`):
-- `TeamListPage.tsx` — lists user's teams; "Create team" CTA
-- `TeamCreatePage.tsx` — name + slug form; on submit → Stripe checkout redirect
-- `TeamLayout.tsx` — wrapper that injects `teamSlug` from `useParams()` into nested pages
-- `TeamDashboardPage.tsx` — team home; member count, plan status
-- `TeamMembersPage.tsx` — member list, role selector (ADMIN+), remove button
-- `TeamInvitePage.tsx` — invite form (email + role)
-- `TeamSettingsPage.tsx` — name/slug update form
+**Files to create** (`frontend/src/pages/orgs/`):
+- [ ] `OrgListPage.tsx` — user's org list; "Create organization" CTA (SaaS only)
+- [ ] `OrgCreatePage.tsx` — name + auto-slug form; Stripe checkout redirect on submit (SaaS only)
+- [ ] `OrgLayout.tsx` — wrapper reading `orgSlug` from `useParams()`; renders 403 page if org fetch returns 403
+- [ ] `OrgDashboardPage.tsx` — org home: member count, plan tier, credit balance, recent activity feed
+- [ ] `OrgMembersPage.tsx` — member list with role selector (ADMIN+); remove button (ADMIN+); last OWNER's controls disabled with tooltip
+- [ ] `OrgInvitePage.tsx` — invite form (email + role) + pending invitations list with revoke button (SaaS only)
+- [ ] `OrgSettingsPage.tsx` — name/slug update form (ADMIN+)
 
-**Files to create** (`frontend/src/components/teams/`):
-- `TeamSwitcher.tsx` — dropdown showing active team; lists all user teams; "Create team" link; navigates by changing slug in URL
+**Files to create** (`frontend/src/components/orgs/`):
+- [ ] `OrgSwitcher.tsx` — dropdown: active org name, all user orgs, "Create organization" link; navigates to `/orgs/:slug` on selection (SaaS only)
 
 **Files to create** (`frontend/src/hooks/`):
-- `useTeams.ts` — `GET /api/teams/` → list user's teams
-- `useTeam.ts` — `GET /api/teams/:slug/` → single team detail
-- `useTeamMembers.ts` — `GET /api/teams/:slug/members/`
+- [ ] `useOrgs.ts` — `GET /api/orgs/` → user's org list
+- [ ] `useOrg.ts` — `GET /api/orgs/:slug/` → single org detail + plan + credit balance
+- [ ] `useOrgMembers.ts` — `GET /api/orgs/:slug/members/`
+
+**Files to remove**:
+- [ ] `frontend/src/pages/teams/` — entire directory removed
+- [ ] `frontend/src/components/teams/TeamSwitcher.tsx` — removed
+- [ ] `frontend/src/hooks/useTeams.ts`, `useTeam.ts`, `useTeamMembers.ts` — removed
 
 **Acceptance criteria**:
-- `/teams` lists the user's teams; clicking navigates to `/teams/:slug`
-- Team switcher dropdown appears in sidebar; switching changes the URL and reloads data
-- `/teams/new` creates a team; Stripe checkout opens
-- `/teams/:slug/members` shows all members; ADMIN can change roles
-- `/teams/:slug/crm` loads CRM data scoped to that team
-- Navigating directly to `/teams/other-team/crm` as a non-member shows an error
+- [ ] **SaaS mode**: `/orgs` lists user's orgs; clicking navigates to `/orgs/:slug`
+- [ ] **SaaS mode**: Org switcher in sidebar; switching changes URL slug and reloads all org-scoped data
+- [ ] **SaaS mode**: `/orgs/new` creates org; Stripe checkout opens
+- [ ] **SaaS mode**: `/orgs/:slug/members` — ADMIN can change roles; last OWNER's role selector is disabled
+- [ ] **SaaS mode**: `/orgs/:slug/crm` loads CRM scoped to that org; non-member navigating there sees 403 error page (not blank page, not crash)
+- [ ] **Solo mode**: flat routes `/crm`, `/blog` etc. work; no org switcher shown; `/orgs/*` routes not accessible
+- [ ] `grep -r "Team" frontend/src/pages frontend/src/components frontend/src/hooks` returns no matches related to org management (only incidental string matches acceptable)
 
 ---
 
 #### Phase 8 — Tests + module.yml finalization (4–6 h)
 
-Complete the test suite and finalize the module manifest for `quickscale plan` integration.
+Complete the test suite and finalize the module manifest. All tests involving RLS require a real PostgreSQL connection — mark with `@pytest.mark.django_db(transaction=True)`.
 
-**Test files to create** (`quickscale_modules/teams/tests/`):
-- `test_models.py` — role hierarchy constants, `unique_together` enforcement, last-owner protection
-- `test_permissions.py` — `require_team_role` returns 403/200 for each role at each threshold
-- `test_middleware.py` — team context set correctly; no-team user redirected; non-member returns 403
-- `test_rls_isolation.py` — two teams; team A data invisible to team B user
-- `test_invitation_flow.py` — full invite → email → accept cycle; expired token 410; revoke 404
-- `test_billing_bridge.py` — `CreditBalance.team` debited on usage; `Subscription.team` populated on checkout
+**Test files to create** (`quickscale_modules/orgs/tests/`):
+- [ ] `test_models.py`:
+  - [ ] `OrgRole` hierarchy values ordered correctly (VIEWER < MEMBER < ADMIN < OWNER)
+  - [ ] `unique_together = [('user', 'organization')]` raises `IntegrityError` on duplicate membership
+  - [ ] Last OWNER cannot be removed (test both model guard and view guard)
+  - [ ] `create_personal_for(user)` idempotent — second call returns existing org, no duplicate created
+  - [ ] `Organization.is_personal` set correctly; `is_personal=False` for user-named orgs
+- [ ] `test_permissions.py`:
+  - [ ] `require_org_role(ADMIN)`: 200 for ADMIN, 200 for OWNER, 403 for MEMBER, 403 for VIEWER, 403 for non-member
+  - [ ] `require_org_role(OWNER)`: 200 for OWNER only; 403 for all other roles
+  - [ ] `require_org_feature('crm')`: 200 when feature in plan, 402 when not present, 402 when no active subscription
+- [ ] `test_middleware.py`:
+  - [ ] **Solo mode**: new user auto-gets personal org; `request.org` set from personal org without URL slug
+  - [ ] **SaaS mode**: new user (no membership) redirected to `/orgs/new/`
+  - [ ] **SaaS mode**: authenticated non-member requesting `/orgs/acme-corp/` returns 403
+  - [ ] `app.current_org_id` set correctly in both modes
+  - [ ] `QUICKSCALE_MODE` switch changes behaviour with no model changes
+- [ ] `test_rls_isolation.py` (PostgreSQL + `transaction=True`):
+  - [ ] Org A user queryset for Org B contact is empty (not exception)
+  - [ ] Platform owner (`is_superuser`) queryset returns the contact (RLS bypass confirmed)
+  - [ ] Unset `app.current_org_id` → empty queryset (not exception)
+  - [ ] Solo mode: user sees only their personal org's rows
+- [ ] `test_invitation_flow.py`:
+  - [ ] Full cycle: invite → email sent (mocked) → existing user accepts → membership created with correct role
+  - [ ] Full cycle: new user accepts → signup → `user_signed_up` signal → membership created
+  - [ ] Expired token → 410 with user-facing message
+  - [ ] Already-accepted token → 410 with user-facing message
+  - [ ] Revoke → token URL becomes 404
+  - [ ] Email mismatch (logged-in user email ≠ invitation email) → 403
+  - [ ] Solo mode invitation URL → 404
+- [ ] `test_billing_bridge.py`:
+  - [ ] `CreditBalance.organization` debited on credit usage; user-level balance unchanged
+  - [ ] `Subscription.organization` set on Stripe checkout completion
+  - [ ] `CreditTransaction.performed_by` records acting user
+  - [ ] `migrate_billing_to_orgs` idempotent on v0.85.0 fixture
+  - [ ] `promote_to_saas` idempotent; all personal orgs have valid slugs after run
+- [ ] `test_mode_switch.py`:
+  - [ ] `QUICKSCALE_MODE = 'solo'`: flat routes work; `/orgs/new/` returns 404
+  - [ ] `QUICKSCALE_MODE = 'saas'`: `/orgs/new/` reachable; org management pages render; invitation URLs active
+  - [ ] After `promote_to_saas`: all personal orgs have slugs; invitation system operational
 
-**`module.yml` final fields**:
+**`module.yml` final**:
 ```yaml
-name: teams
+name: orgs
 version: "0.86.0"
-description: "Multi-tenant teams with PostgreSQL RLS, RBAC, and self-service onboarding"
+description: "Multi-tenant organizations with PostgreSQL RLS, RBAC, Solo/SaaS runtime mode, and self-service onboarding"
 dependencies:
-  - django-allauth>=0.63.0   # already required by auth module
+  - django-allauth>=0.63.0
 django_apps:
-  - quickscale_modules_teams
+  - quickscale_modules_orgs
 middleware:
-  - quickscale_modules_teams.middleware.TenantMiddleware
+  - quickscale_modules_orgs.middleware.TenantMiddleware
 settings:
-  ACCOUNT_ADAPTER: quickscale_modules_teams.adapters.TeamsAccountAdapter
+  ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter
+  QUICKSCALE_MODE: solo
 url_includes:
-  - ["teams/", "quickscale_modules_teams.urls"]
+  - conditional: QUICKSCALE_MODE
+    saas: ["orgs/", "quickscale_modules_orgs.urls.saas"]
+    solo: ["", "quickscale_modules_orgs.urls.solo"]
 ```
 
 **Acceptance criteria**:
-- `python manage.py test quickscale_modules_teams` passes
-- `quickscale plan` lists `teams` as a selectable module
-- `quickscale apply` adds the middleware, adapter setting, and URL include to the generated project
-- All 10 verification items from the design doc pass on a fresh generated project
+- [ ] `python manage.py test quickscale_modules_orgs` passes — all test files, PostgreSQL backend
+- [ ] `quickscale plan` lists `orgs` as a selectable module with correct metadata
+- [ ] `quickscale apply` injects `TenantMiddleware`, `ACCOUNT_ADAPTER`, `QUICKSCALE_MODE = 'solo'` (default), and conditional URL includes into the generated project
+- [ ] **Solo end-to-end**: signup → personal org auto-created → org dashboard at `/` reachable — no org creation step shown
+- [ ] **SaaS end-to-end**: signup → `/orgs/new/` → org created → Stripe checkout → org dashboard at `/orgs/<slug>/`
+- [ ] Cross-module migration dependency ordering documented in v0.86.0 release note: `quickscale_modules_orgs` must migrate before CRM, blog, forms, listings, notifications apply RLS policies
 
 ---
 
