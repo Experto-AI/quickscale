@@ -106,23 +106,23 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 Create the `quickscale_modules_orgs` package and define all core models, the `OrganizationManager`, and the `TenantModel` abstract base.
 
 **Files to create** (`quickscale_modules/orgs/src/quickscale_modules_orgs/`):
-- [ ] `__init__.py`
-- [ ] `apps.py` — `QuickscaleOrgsConfig` matching the billing/crm pattern
-- [ ] `managers.py` — `OrganizationManager.create_personal_for(user)`: creates `Organization(is_personal=True, slug=username)` + OWNER `OrganizationMembership`; idempotent (returns existing on second call)
-- [ ] `models.py` — `OrgRole` (TextChoices: VIEWER/MEMBER/ADMIN/OWNER), `Organization` (id UUID, name, slug, stripe_customer_id, is_personal BooleanField default False, created_at), `OrganizationMembership` (user FK, organization FK, role, invited_by nullable FK, joined_at; `unique_together = [('user', 'organization')]`), `OrganizationInvitation` (id UUID, organization FK, email, role, invited_by FK, token UUID unique, expires_at, accepted_at nullable), `TenantModel` (abstract: `organization = ForeignKey(..., db_index=True)`)
-- [ ] `admin.py` — register `Organization` (list: name, slug, is_personal, created_at; filter: is_personal), `OrganizationMembership` (list: user, organization, role, joined_at; filter: role, organization), `OrganizationInvitation` (list: email, organization, role, expires_at, accepted_at; filter: organization)
-- [ ] `migrations/__init__.py`
-- [ ] `migrations/0001_initial.py` — initial migration for all four models
-- [ ] `module.yml` skeleton — `name: orgs`, `version: "0.86.0"`, `django_apps: [quickscale_modules_orgs]`
-- [ ] `README.md` — one-paragraph module description
+- [x] `__init__.py`
+- [x] `apps.py` — `QuickscaleOrgsConfig` matching the billing/crm pattern
+- [x] `managers.py` — `OrganizationManager.create_personal_for(user)`: creates `Organization(is_personal=True, slug=username)` + OWNER `OrganizationMembership`; idempotent (returns existing on second call)
+- [x] `models.py` — `OrgRole` (TextChoices: VIEWER/MEMBER/ADMIN/OWNER), `Organization` (id UUID, name, slug, stripe_customer_id, is_personal BooleanField default False, created_at), `OrganizationMembership` (user FK, organization FK, role, invited_by nullable FK, joined_at; `unique_together = [('user', 'organization')]`), `OrganizationInvitation` (id UUID, organization FK, email, role, invited_by FK, token UUID unique, expires_at, accepted_at nullable), `TenantModel` (abstract: `organization = ForeignKey(..., db_index=True)`)
+- [x] `admin.py` — register `Organization` (list: name, slug, is_personal, created_at; filter: is_personal), `OrganizationMembership` (list: user, organization, role, joined_at; filter: role, organization), `OrganizationInvitation` (list: email, organization, role, expires_at, accepted_at; filter: organization)
+- [x] `migrations/__init__.py`
+- [x] `migrations/0001_initial.py` — initial migration for all four models
+- [x] `module.yml` skeleton — `name: orgs`, `version: "0.86.0"`, `django_apps: [quickscale_modules_orgs]`
+- [x] `README.md` — one-paragraph module description
 
 **Acceptance criteria**:
-- [ ] `python manage.py migrate` succeeds with no errors
-- [ ] `Organization`, `OrganizationMembership`, `OrganizationInvitation` appear in `/admin/` with correct columns and filters
-- [ ] `TenantModel` importable from `quickscale_modules_orgs.models`; its `organization` FK references `quickscale_modules_orgs.Organization`
-- [ ] `Organization.objects.create_personal_for(user)` creates org with `is_personal=True`, slug from `user.username`, OWNER membership — second call returns existing org without creating duplicates
-- [ ] `unique_together = [('user', 'organization')]` enforced at DB level (constraint present in migration)
-- [ ] `module.yml` passes `quickscale plan` validation
+- [x] `python manage.py migrate` succeeds with no errors
+- [x] `Organization`, `OrganizationMembership`, `OrganizationInvitation` appear in `/admin/` with correct columns and filters
+- [x] `TenantModel` importable from `quickscale_modules_orgs.models`; its `organization` FK references `quickscale_modules_orgs.Organization`
+- [x] `Organization.objects.create_personal_for(user)` creates org with `is_personal=True`, slug from `user.username`, OWNER membership — second call returns existing org without creating duplicates
+- [x] `unique_together = [('user', 'organization')]` enforced at DB level (constraint present in migration)
+- [x] `module.yml` passes `quickscale plan` validation
 
 ---
 

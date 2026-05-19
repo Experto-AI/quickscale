@@ -71,6 +71,11 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         ready=True,
     ),
     ModuleCatalogEntry(
+        name="orgs",
+        description="Organizations and multi-tenant foundations with memberships and invitations",
+        ready=True,
+    ),
+    ModuleCatalogEntry(
         name="teams",
         description="Multi-tenancy and team management",
         ready=False,

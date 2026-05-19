@@ -1,0 +1,12 @@
+name: orgs
+version: "0.86.0"
+description: "Organizations and multi-tenant foundations with memberships and invitations"
+
+config:
+  mutable: {}
+  immutable: {}
+
+dependencies: []
+
+django_apps:
+  - quickscale_modules_orgs
