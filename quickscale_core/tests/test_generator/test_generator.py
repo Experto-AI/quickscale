@@ -175,6 +175,32 @@ class TestProjectGeneratorGeneration:
         urls_content = (output_path / project_name / "urls.py").read_text()
         assert project_name in urls_content
 
+    def test_generated_urls_modules_exports_placeholder_buckets(self, tmp_path):
+        """Generated urls_modules.py should expose raw placeholder buckets."""
+        generator = ProjectGenerator(theme="showcase_html")
+        project_name = "myapp"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        urls_modules_content = (
+            output_path / project_name / "urls_modules.py"
+        ).read_text()
+
+        assert (
+            "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []"
+            in urls_modules_content
+        )
+        assert (
+            "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []"
+            in urls_modules_content
+        )
+        assert "MODULE_URLPATTERNS: list[ManagedURLPattern] = (" in urls_modules_content
+        assert (
+            "PRE_HOME_MODULE_URLPATTERNS + POST_HOME_MODULE_URLPATTERNS"
+            in urls_modules_content
+        )
+
     def test_generated_python_files_are_valid(self, tmp_path):
         """Generated Python files should be syntactically valid"""
         generator = ProjectGenerator(theme="showcase_html")
@@ -188,6 +214,7 @@ class TestProjectGeneratorGeneration:
             output_path / "manage.py",
             output_path / project_name / "__init__.py",
             output_path / project_name / "urls.py",
+            output_path / project_name / "urls_modules.py",
             output_path / project_name / "wsgi.py",
             output_path / project_name / "asgi.py",
             output_path / project_name / "settings" / "base.py",

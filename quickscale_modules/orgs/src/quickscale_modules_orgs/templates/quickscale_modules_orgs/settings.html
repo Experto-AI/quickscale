@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ organization.name }} settings</title>
+</head>
+<body>
+    <h1>{{ organization.name }} settings</h1>
+    <p>Changing the slug will break existing bookmarks that point at this organization.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Save settings</button>
+    </form>
+</body>
+</html>

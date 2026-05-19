@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pformat
 import shutil
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, TypeVar
+
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -20,11 +23,12 @@ class ModuleWiringSpec:
     apps: tuple[str, ...] = ()
     middleware: tuple[str, ...] = ()
     settings: Mapping[str, Any] = field(default_factory=dict)
+    pre_home_url_includes: tuple[tuple[str, str], ...] = ()
     url_includes: tuple[tuple[str, str], ...] = ()
     managed_files: Mapping[str, str] = field(default_factory=dict)
 
 
-def _merge_unique(items: list[str], additions: Iterable[str]) -> None:
+def _merge_unique(items: list[T], additions: Iterable[T]) -> None:
     """Append additions to items while preserving first-seen order."""
     seen = set(items)
     for value in additions:
@@ -57,12 +61,25 @@ def collect_wiring(
         for key, value in spec.settings.items():
             settings[key] = value
 
-        for route, include_target in spec.url_includes:
-            include_tuple = (route, include_target)
-            if include_tuple not in urls:
-                urls.append(include_tuple)
+    pre_home_urls, post_home_urls = collect_url_wiring(module_specs)
+    urls.extend(pre_home_urls)
+    urls.extend(post_home_urls)
 
     return apps, middleware, settings, urls
+
+
+def collect_url_wiring(
+    module_specs: Mapping[str, ModuleWiringSpec],
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Collect managed URL includes grouped by pre-home and post-home order."""
+    pre_home_urls: list[tuple[str, str]] = []
+    post_home_urls: list[tuple[str, str]] = []
+
+    for _, spec in _sort_module_items(module_specs):
+        _merge_unique(pre_home_urls, spec.pre_home_url_includes)
+        _merge_unique(post_home_urls, spec.url_includes)
+
+    return pre_home_urls, post_home_urls
 
 
 def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
@@ -85,7 +102,7 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
 
 def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
     """Render `<package>/urls_modules.py` content."""
-    _, _, _, urls = collect_wiring(module_specs)
+    pre_home_urls, post_home_urls = collect_url_wiring(module_specs)
 
     header = (
         '"""QuickScale managed module URL wiring.\n\n'
@@ -93,24 +110,38 @@ def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
         '"""\n\n'
     )
 
-    if urls:
+    def _pattern_lines(urls: list[tuple[str, str]]) -> str:
         pattern_lines = [
             f'    path("{route}", include("{include_target}")),'
             for route, include_target in urls
         ]
-        patterns_body = "\n".join(pattern_lines)
+        return "\n".join(pattern_lines)
+
+    if pre_home_urls or post_home_urls:
+        pre_home_body = _pattern_lines(pre_home_urls)
+        post_home_body = _pattern_lines(post_home_urls)
         return (
             header
-            + "from django.urls import include, path\n\n"
-            + "MODULE_URLPATTERNS = [\n"
-            + f"{patterns_body}\n"
-            + "]\n"
+            + "from django.urls import URLPattern, URLResolver, include, path\n\n"
+            + "ManagedURLPattern = URLPattern | URLResolver\n\n"
+            + "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
+            + f"{pre_home_body}\n"
+            + "]\n\n"
+            + "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
+            + f"{post_home_body}\n"
+            + "]\n\n"
+            + "MODULE_URLPATTERNS: list[ManagedURLPattern] = (\n"
+            + "    PRE_HOME_MODULE_URLPATTERNS + POST_HOME_MODULE_URLPATTERNS\n"
+            + ")\n"
         )
     else:
         return (
             header
-            + "from django.urls import URLPattern\n\n"
-            + "MODULE_URLPATTERNS: list[URLPattern] = []\n"
+            + "from django.urls import URLPattern, URLResolver\n\n"
+            + "ManagedURLPattern = URLPattern | URLResolver\n\n"
+            + "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
+            + "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
+            + "MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
         )
 
 

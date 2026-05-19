@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.http import Http404
 from django.test import RequestFactory
+from django.test import override_settings
 
 from quickscale_modules_orgs.middleware import TenantMiddleware
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
@@ -16,6 +17,7 @@ from quickscale_modules_orgs.views import org_detail_view, org_index_view, org_n
 
 
 @pytest.mark.django_db
+@override_settings(ROOT_URLCONF="tests.urls_pre_home")
 def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
     client, settings
 ) -> None:
@@ -30,7 +32,8 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
     response = client.get("/")
 
     assert response.status_code == 200
-    assert response.content.decode().startswith("alice|")
+    assert "Organization dashboard" in response.content.decode()
+    assert "alice" in response.content.decode()
     assert Organization.objects.filter(
         is_personal=True, memberships__user=user
     ).exists()
@@ -134,7 +137,7 @@ def test_anonymous_saas_org_routes_redirect_to_login(client, settings, path) -> 
 
 
 @pytest.mark.django_db
-def test_saas_mode_org_index_redirects_members_to_their_org(client, settings) -> None:
+def test_saas_mode_org_index_lists_memberships(client, settings) -> None:
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="erin",
@@ -151,12 +154,13 @@ def test_saas_mode_org_index_redirects_members_to_their_org(client, settings) ->
 
     response = client.get("/orgs/")
 
-    assert response.status_code == 302
-    assert response.headers["Location"] == f"/orgs/{organization.slug}/"
+    assert response.status_code == 200
+    assert organization.name in response.content.decode()
+    assert organization.slug in response.content.decode()
 
 
 @pytest.mark.django_db
-def test_saas_mode_org_index_redirects_users_without_memberships_to_org_creation(
+def test_saas_mode_org_index_shows_empty_state_without_memberships(
     client, settings
 ) -> None:
     settings.QUICKSCALE_MODE = "saas"
@@ -169,8 +173,8 @@ def test_saas_mode_org_index_redirects_users_without_memberships_to_org_creation
 
     response = client.get("/orgs/")
 
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/orgs/new/"
+    assert response.status_code == 200
+    assert "Create your organization" in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -188,11 +192,11 @@ def test_saas_mode_org_new_is_available_to_authenticated_users(
     response = client.get("/orgs/new/")
 
     assert response.status_code == 200
-    assert response.content.decode() == "orgs-new"
+    assert "Create your organization" in response.content.decode()
 
 
 @pytest.mark.django_db
-def test_saas_mode_org_detail_returns_member_org_slug(client, settings) -> None:
+def test_saas_mode_org_detail_renders_dashboard(client, settings) -> None:
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="harper",
@@ -210,7 +214,9 @@ def test_saas_mode_org_detail_returns_member_org_slug(client, settings) -> None:
     response = client.get(f"/orgs/{organization.slug}/")
 
     assert response.status_code == 200
-    assert response.content.decode() == organization.slug
+    assert "Organization dashboard" in response.content.decode()
+    assert organization.name in response.content.decode()
+    assert organization.slug in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -269,7 +275,8 @@ def test_saas_mode_superusers_can_access_org_routes_without_membership(
     response = client.get(f"/orgs/{organization.slug}/")
 
     assert response.status_code == 200
-    assert response.content.decode() == organization.slug
+    assert organization.name in response.content.decode()
+    assert organization.slug in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -333,14 +340,18 @@ def test_switching_mode_changes_route_behaviour_without_model_changes(
     )
     client.force_login(user)
 
-    settings.QUICKSCALE_MODE = "solo"
-    solo_response = client.get("/")
+    with override_settings(
+        QUICKSCALE_MODE="solo",
+        ROOT_URLCONF="tests.urls_pre_home",
+    ):
+        solo_response = client.get("/")
 
-    settings.QUICKSCALE_MODE = "saas"
-    saas_response = client.get("/")
+    with override_settings(QUICKSCALE_MODE="saas"):
+        with override_settings(ROOT_URLCONF="tests.urls"):
+            saas_response = client.get("/")
 
     assert solo_response.status_code == 200
-    assert solo_response.content.decode().startswith("frank|")
+    assert "Organization dashboard" in solo_response.content.decode()
     assert saas_response.status_code == 200
     assert saas_response.content.decode() == "none|none"
 

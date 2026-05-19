@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Your organizations</title>
+</head>
+<body>
+    <h1>Your organizations</h1>
+    {% if organizations %}
+    <ul>
+        {% for organization in organizations %}
+        <li>
+            <a href="/orgs/{{ organization.slug }}/">{{ organization.name }}</a>
+            <span>{{ organization.slug }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>Create your organization to start inviting members and enabling org-scoped modules.</p>
+    <p><a href="/orgs/new/">Create your organization</a></p>
+    {% endif %}
+</body>
+</html>

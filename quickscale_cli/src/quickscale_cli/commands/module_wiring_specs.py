@@ -107,14 +107,21 @@ def _auth_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
 
 
 def _orgs_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    mode = str(options.get("mode", "solo")).strip().lower() or "solo"
+    if mode not in {"solo", "saas"}:
+        mode = "solo"
+
+    root_include = (("", "quickscale_modules_orgs.urls"),)
+
     return ModuleWiringSpec(
         apps=("quickscale_modules_orgs",),
         middleware=("quickscale_modules_orgs.middleware.TenantMiddleware",),
         settings={
             "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
-            "QUICKSCALE_MODE": str(options.get("mode", "solo")),
+            "QUICKSCALE_MODE": mode,
         },
-        url_includes=(("", "quickscale_modules_orgs.urls"),),
+        pre_home_url_includes=root_include if mode == "solo" else (),
+        url_includes=root_include if mode == "saas" else (),
     )
 
 

@@ -9,6 +9,7 @@ from quickscale_core.module_wiring import (
     _merge_unique,
     _sort_module_items,
     collect_wiring,
+    collect_url_wiring,
     render_settings_modules_py,
     render_urls_modules_py,
     write_managed_wiring,
@@ -149,6 +150,38 @@ class TestCollectWiring:
         assert ("a/", "mod_a.urls") in urls
         assert ("b/", "mod_b.urls") in urls
 
+    def test_collect_wiring_places_pre_home_urls_before_post_home_urls(self) -> None:
+        """Pre-home URLs are returned ahead of post-home URLs regardless of module sort."""
+        specs = {
+            "auth": ModuleWiringSpec(url_includes=(("accounts/", "allauth.urls"),)),
+            "orgs": ModuleWiringSpec(
+                pre_home_url_includes=(("", "quickscale_modules_orgs.urls"),)
+            ),
+        }
+        _, _, _, urls = collect_wiring(specs)
+        assert urls == [
+            ("", "quickscale_modules_orgs.urls"),
+            ("accounts/", "allauth.urls"),
+        ]
+
+
+class TestCollectUrlWiring:
+    """Tests for collect_url_wiring."""
+
+    def test_collect_url_wiring_separates_pre_home_and_post_home(self) -> None:
+        """URL includes are grouped into pre-home and post-home buckets."""
+        specs = {
+            "auth": ModuleWiringSpec(url_includes=(("accounts/", "allauth.urls"),)),
+            "orgs": ModuleWiringSpec(
+                pre_home_url_includes=(("", "quickscale_modules_orgs.urls"),)
+            ),
+        }
+
+        pre_home_urls, post_home_urls = collect_url_wiring(specs)
+
+        assert pre_home_urls == [("", "quickscale_modules_orgs.urls")]
+        assert post_home_urls == [("accounts/", "allauth.urls")]
+
 
 class TestRenderSettingsModulesPy:
     """Tests for render_settings_modules_py."""
@@ -195,10 +228,12 @@ class TestRenderUrlsModulesPy:
     """Tests for render_urls_modules_py."""
 
     def test_render_urls_modules_py_empty_produces_empty_list(self) -> None:
-        """No URL specs renders an empty MODULE_URLPATTERNS list."""
+        """No URL specs renders empty pre-home and post-home lists."""
         content = render_urls_modules_py({})
-        assert "MODULE_URLPATTERNS: list[URLPattern] = []" in content
-        assert "from django.urls import URLPattern" in content
+        assert "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []" in content
+        assert "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []" in content
+        assert "MODULE_URLPATTERNS: list[ManagedURLPattern] = []" in content
+        assert "from django.urls import URLPattern, URLResolver" in content
 
     def test_render_urls_modules_py_empty_header(self) -> None:
         """Empty URL output still has the DO-NOT-EDIT header."""
@@ -207,14 +242,17 @@ class TestRenderUrlsModulesPy:
         assert "QuickScale managed module URL wiring" in content
 
     def test_render_urls_modules_py_with_urls(self) -> None:
-        """URL patterns appear in the MODULE_URLPATTERNS list."""
+        """Post-home URL patterns appear in the rendered output."""
         specs = {
             "auth": ModuleWiringSpec(url_includes=(("accounts/", "allauth.urls"),))
         }
         content = render_urls_modules_py(specs)
         assert 'path("accounts/", include("allauth.urls"))' in content
-        assert "MODULE_URLPATTERNS = [" in content
-        assert "from django.urls import include, path" in content
+        assert "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [" in content
+        assert "MODULE_URLPATTERNS: list[ManagedURLPattern] = (" in content
+        assert (
+            "from django.urls import URLPattern, URLResolver, include, path" in content
+        )
 
     def test_render_urls_modules_py_multiple_patterns(self) -> None:
         """Multiple URL patterns all appear in the output."""
@@ -225,6 +263,20 @@ class TestRenderUrlsModulesPy:
         content = render_urls_modules_py(specs)
         assert "accounts/" in content
         assert "api/" in content
+
+    def test_render_urls_modules_py_separates_pre_home_patterns(self) -> None:
+        """Pre-home URL patterns are rendered into their dedicated bucket."""
+        specs = {
+            "orgs": ModuleWiringSpec(
+                pre_home_url_includes=(("", "quickscale_modules_orgs.urls"),)
+            ),
+            "auth": ModuleWiringSpec(url_includes=(("accounts/", "allauth.urls"),)),
+        }
+        content = render_urls_modules_py(specs)
+        assert "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [" in content
+        assert 'path("", include("quickscale_modules_orgs.urls"))' in content
+        assert "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [" in content
+        assert "PRE_HOME_MODULE_URLPATTERNS + POST_HOME_MODULE_URLPATTERNS" in content
 
     def test_render_urls_modules_py_is_valid_python(self) -> None:
         """Rendered URL output can be compiled as valid Python."""
@@ -353,6 +405,7 @@ class TestModuleWiringSpec:
         assert spec.apps == ()
         assert spec.middleware == ()
         assert spec.settings == {}
+        assert spec.pre_home_url_includes == ()
         assert spec.url_includes == ()
         assert spec.managed_files == {}
 
@@ -362,11 +415,13 @@ class TestModuleWiringSpec:
             apps=("app1", "app2"),
             middleware=("mw1",),
             settings={"K": "V"},
+            pre_home_url_includes=(("", "pkg.pre_home_urls"),),
             url_includes=(("path/", "pkg.urls"),),
         )
         assert spec.apps == ("app1", "app2")
         assert spec.middleware == ("mw1",)
         assert spec.settings == {"K": "V"}
+        assert spec.pre_home_url_includes == (("", "pkg.pre_home_urls"),)
         assert spec.url_includes == (("path/", "pkg.urls"),)
 
     def test_spec_is_frozen(self) -> None:
@@ -374,3 +429,28 @@ class TestModuleWiringSpec:
         spec = ModuleWiringSpec(apps=("app1",))
         with pytest.raises(Exception):
             spec.apps = ("app2",)  # type: ignore[misc]
+
+
+def test_generated_urls_template_places_pre_home_patterns_before_home() -> None:
+    """Generated project URLs should place pre-home module routes before '/'."""
+    template_path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "quickscale_core"
+        / "generator"
+        / "templates"
+        / "project_name"
+        / "urls.py.j2"
+    )
+    content = template_path.read_text()
+
+    pre_home_marker = "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
+    home_marker = (
+        'path("", TemplateView.as_view(template_name="index.html"), name="home"),'
+    )
+    post_home_marker = "urlpatterns += POST_HOME_MODULE_URLPATTERNS"
+
+    assert pre_home_marker in content
+    assert post_home_marker in content
+    assert content.index(pre_home_marker) < content.index(home_marker)
+    assert content.index(post_home_marker) > content.index(home_marker)

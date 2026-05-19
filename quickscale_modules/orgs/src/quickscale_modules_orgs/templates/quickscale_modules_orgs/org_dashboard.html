@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ organization.name }}</title>
+</head>
+<body>
+    <h1>{{ organization.name }}</h1>
+    <p>Organization dashboard</p>
+
+    <dl>
+        <dt>Slug</dt>
+        <dd>{{ organization.slug }}</dd>
+        <dt>Members</dt>
+        <dd>{{ member_count }}</dd>
+        <dt>Plan</dt>
+        <dd>{% if active_plan %}{{ active_plan }}{% else %}Billing integration pending{% endif %}</dd>
+        <dt>Credits</dt>
+        <dd>{% if credit_balance is not None %}{{ credit_balance }}{% else %}Pending billing bridge{% endif %}</dd>
+    </dl>
+
+    {% if saas_mode %}
+    <nav>
+        <a href="/orgs/{{ organization.slug }}/members/">Members</a>
+        <a href="/orgs/{{ organization.slug }}/settings/">Settings</a>
+    </nav>
+    {% endif %}
+
+    {% if recent_activity %}
+    <ul>
+        {% for event in recent_activity %}
+        <li>{{ event }}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No recent activity is available yet.</p>
+    {% endif %}
+</body>
+</html>

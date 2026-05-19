@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation slice only: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, and RBAC guards. Ordinary requests are still isolated in the application layer. PostgreSQL RLS activation, downstream tenant-table adoption, billing bridge work, invitations, and org-management UI remain planned follow-on work unless a later section explicitly says otherwise.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, and org settings pages. Ordinary requests are still isolated in the application layer. PostgreSQL RLS activation, downstream tenant-table adoption, the org-billing bridge, invitations, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
 
 ---
 
@@ -632,7 +632,8 @@ This section records the current repository slice, not the eventual end-state de
 | Post-signup: auto-create personal org (Solo) or redirect to `/orgs/new/` (SaaS) | ✅ implemented |
 | PostgreSQL RLS migration for downstream tenant tables | ❌ deferred until those tables carry concrete `organization_id` columns |
 | PostgreSQL cross-org isolation test suite | ❌ deferred with the RLS migration; requires real PostgreSQL |
-| Self-service org creation flow, invitations, billing bridge, and org-management UI surfaces | ❌ planned follow-on work |
+| Server-rendered self-service org creation, dashboard, members, settings, and import-compatible org URL surfaces | ✅ implemented |
+| Invitation flow, billing bridge, and React org-management UI surfaces | ❌ planned follow-on work |
 | `migrate_billing_to_orgs` / `promote_to_saas` management commands | ❌ planned follow-on work |
 | Subdomain routing | ❌ future-ready (middleware decoupled; DNS/NGINX config deferred) |
 | Hard seat-count enforcement at DB layer | ❌ deferred |

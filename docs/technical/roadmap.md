@@ -195,36 +195,35 @@ Establish the runtime prerequisites for future PostgreSQL RLS without shipping u
 Build server-side views, forms, and the dual URL configuration. SaaS org management pages are only reachable in SaaS mode; Solo mode serves flat routes with no org slug.
 
 **Files to create**:
-- [ ] `views.py`:
-  - [ ] `OrgListView` — lists all orgs the current user belongs to (SaaS only)
-  - [ ] `OrgCreateView` — creates org, redirects to Stripe checkout (SaaS only)
-  - [ ] `OrgDashboardView` — org home: member count, active plan, credit balance, recent activity
-  - [ ] `MemberListView` — lists `OrganizationMembership` rows; role change (ADMIN+); remove member (ADMIN+); blocks demotion/removal of last OWNER
-  - [ ] `OrgSettingsView` — update org `name` and `slug` (ADMIN+); warns user that slug change breaks existing bookmarks
-- [ ] `forms.py`:
-  - [ ] `OrgCreateForm` — `name` field; auto-derives `slug` (server-side slugify + uniqueness check)
-  - [ ] `OrgSettingsForm` — `name`, `slug` fields with uniqueness validation
-  - [ ] `RoleChangeForm` — `role` choices exclude OWNER when acting user is not OWNER
-- [ ] `urls/saas.py` — all `/orgs/<org_slug>/` routes plus nested module routes
-- [ ] `urls/solo.py` — flat routes (`/`, `/blog/`, `/crm/`, `/forms/`, `/listings/`, `/billing/`); org resolved by middleware
-- [ ] `templates/quickscale_modules_orgs/`:
-  - [ ] `org_list.html`
-  - [ ] `org_create.html`
-  - [ ] `org_dashboard.html`
-  - [ ] `members.html`
-  - [ ] `settings.html`
+- [x] `views.py`:
+  - [x] `OrgListView` — lists all orgs the current user belongs to (SaaS only)
+  - [x] `OrgCreateView` — creates org, redirects to billing pricing (SaaS only)
+  - [x] `OrgDashboardView` — org home with thin dashboard context until the billing bridge lands
+  - [x] `MemberListView` — lists `OrganizationMembership` rows; role change (ADMIN+); remove member (ADMIN+); blocks second-owner assignment without transfer and blocks demotion/removal of the last OWNER
+  - [x] `OrgSettingsView` — updates org `name` and `slug` (ADMIN+); warns that slug changes break existing bookmarks
+- [x] `forms.py`:
+  - [x] `OrgCreateForm` — `name` field; auto-derives a unique `slug` server-side
+  - [x] `OrgSettingsForm` — `name`, `slug` fields with normalization and uniqueness validation
+  - [x] `RoleChangeForm` — `role` choices exclude OWNER when the acting user is not owner-like
+- [x] `urls.py` — preserves the `quickscale_modules_orgs.urls` import target while serving solo `/` through the pre-home include and SaaS `/orgs/*` pages through the post-home include
+- [x] `templates/quickscale_modules_orgs/`:
+  - [x] `org_list.html`
+  - [x] `org_create.html`
+  - [x] `org_dashboard.html`
+  - [x] `members.html`
+  - [x] `settings.html`
 
 **Files to modify**:
-- [ ] `module.yml` — add conditional `url_includes` (saas branch: `["orgs/", "...urls.saas"]`; solo branch: `["", "...urls.solo"]`)
-- [ ] Project `urls.py` template — conditional include driven by `settings.QUICKSCALE_MODE`
+- [x] `module.yml` — runtime-mode routing metadata completed in the earlier Phase 1 wiring slice while preserving `quickscale_modules_orgs.urls`
+- [x] Project `urls.py` template — pre-home vs post-home include behaviour completed in the earlier Phase 1 wiring slice
 
 **Acceptance criteria**:
-- [ ] **SaaS mode**: `/orgs/` lists user's orgs; empty state shows "Create your organization" CTA
-- [ ] **SaaS mode**: `/orgs/new/` creates org and redirects to Stripe pricing
-- [ ] **SaaS mode**: `/orgs/<slug>/members/` — ADMIN can change roles; OWNER role cannot be assigned to a second member without transfer; last OWNER cannot be removed
-- [ ] **SaaS mode**: `/orgs/<slug>/settings/` updates name/slug (ADMIN only); a MEMBER receives HTTP 403
-- [ ] **Solo mode**: `/` serves org dashboard; `/blog/`, `/crm/` serve module pages without org slug
-- [ ] Non-existent org slug returns 404 (not 500) in both modes
+- [x] **SaaS mode**: `/orgs/` lists the user's orgs; empty state shows "Create your organization" CTA
+- [x] **SaaS mode**: `/orgs/new/` creates an org and redirects to billing pricing
+- [x] **SaaS mode**: `/orgs/<slug>/members/` — ADMIN can change roles; OWNER role cannot be assigned to a second member without transfer; the last OWNER cannot be removed or demoted
+- [x] **SaaS mode**: `/orgs/<slug>/settings/` updates name/slug (ADMIN only); a MEMBER receives HTTP 403
+- [x] **Solo mode**: `/` serves the org dashboard; downstream module pages remain flat and unslugged because `/orgs/*` stays hidden in solo mode
+- [x] Non-existent org slug returns 404 (not 500) in both runtime modes
 
 ---
 

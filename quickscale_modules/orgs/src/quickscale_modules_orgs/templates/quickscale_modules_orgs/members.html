@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ organization.name }} members</title>
+</head>
+<body>
+    <h1>{{ organization.name }} members</h1>
+    <p>The last owner cannot be removed or demoted.</p>
+
+    {% if form_error %}
+    <p>{{ form_error }}</p>
+    {% endif %}
+
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Update role</th>
+                <th>Remove</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for membership in memberships %}
+            <tr>
+                <td>{{ membership.user.username|default:membership.user.email }}</td>
+                <td>{{ membership.get_role_display }}</td>
+                <td>
+                    {% if actor_is_owner_like or membership.role != owner_role %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="change-role">
+                        <input type="hidden" name="membership_id" value="{{ membership.pk }}">
+                        <select name="role">
+                            {% for value, label in role_choices %}
+                            <option value="{{ value }}"{% if membership.role == value %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Update role</button>
+                    </form>
+                    {% else %}
+                    Owner transfer required
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="remove">
+                        <input type="hidden" name="membership_id" value="{{ membership.pk }}">
+                        <button type="submit">Remove member</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
