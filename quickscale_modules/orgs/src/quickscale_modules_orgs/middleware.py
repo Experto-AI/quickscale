@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import cast
+
 from django.conf import settings
 from django.db import connection, transaction
 from django.http import (
@@ -19,39 +22,60 @@ EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
 ORG_NAMESPACE_PREFIX = "/orgs/"
 ORG_ONBOARDING_PATHS = {"/orgs/", "/orgs/new/"}
 
+GetResponse = Callable[[HttpRequest], HttpResponse]
+
+
+class OrganizationRequest(HttpRequest):
+    """HttpRequest carrying the resolved organization for the request cycle."""
+
+    org: Organization | None
+
 
 class TenantMiddleware:
     """Attach request.org and database tenant context for org-scoped requests."""
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: GetResponse) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        request.org = None
+        org_request = cast(OrganizationRequest, request)
+        org_request.org = None
 
-        if self._is_exempt_path(request.path_info):
-            return self.get_response(request)
-        if not self._is_authenticated_user(request):
-            return self.get_response(request)
+        if self._is_exempt_path(org_request.path_info):
+            return self.get_response(org_request)
+        if not self._is_authenticated_user(org_request):
+            return self.get_response(org_request)
 
-        saas_mode = self._is_saas_mode()
-        if not saas_mode and self._is_org_namespace(request.path_info):
+        if self._is_saas_mode():
+            return self._handle_saas_request(org_request)
+        return self._handle_solo_request(org_request)
+
+    def _handle_solo_request(self, request: OrganizationRequest) -> HttpResponse:
+        if self._is_org_namespace(request.path_info):
             return HttpResponseNotFound()
+        organization = self._get_personal_org(request)
+        return self._call_with_org(request, organization)
 
-        org_slug = self._resolve_org_slug(request, saas_mode)
-        if not saas_mode:
-            organization = getattr(request, "_resolved_org", None)
-            if organization is None:
-                organization = Organization.objects.create_personal_for(request.user)
-            return self._call_with_org(request, organization)
-
+    def _handle_saas_request(self, request: OrganizationRequest) -> HttpResponse:
+        org_slug = self._resolve_org_slug(request, saas_mode=True)
         if org_slug is None:
-            if request.path_info in ORG_ONBOARDING_PATHS:
-                return self.get_response(request)
-            if not OrganizationMembership.objects.filter(user=request.user).exists():
-                return redirect("/orgs/new/")
-            return self.get_response(request)
+            return self._handle_saas_bootstrap_request(request)
+        return self._handle_saas_org_request(request, org_slug)
 
+    def _handle_saas_bootstrap_request(
+        self, request: OrganizationRequest
+    ) -> HttpResponse:
+        if request.path_info in ORG_ONBOARDING_PATHS:
+            return self.get_response(request)
+        if not OrganizationMembership.objects.filter(user=request.user).exists():
+            return redirect("/orgs/new/")
+        return self.get_response(request)
+
+    def _handle_saas_org_request(
+        self,
+        request: OrganizationRequest,
+        org_slug: str,
+    ) -> HttpResponse:
         organization = Organization.objects.filter(slug=org_slug).first()
         if organization is None:
             return HttpResponseNotFound()
@@ -66,21 +90,31 @@ class TenantMiddleware:
             return HttpResponseForbidden()
         return self._call_with_org(request, organization)
 
-    def _resolve_org_slug(self, request: HttpRequest, saas_mode: bool) -> str | None:
+    def _resolve_org_slug(
+        self,
+        request: OrganizationRequest,
+        saas_mode: bool | None = None,
+    ) -> str | None:
+        if saas_mode is None:
+            saas_mode = self._is_saas_mode()
         if not saas_mode:
-            organization = Organization.objects.create_personal_for(request.user)
-            request._resolved_org = organization
-            return organization.slug
+            return cast(str, self._get_personal_org(request).slug)
 
         try:
             match = resolve(request.path_info)
         except Resolver404:
             return None
-        return match.kwargs.get("org_slug")
+        return cast(str | None, match.kwargs.get("org_slug"))
+
+    @staticmethod
+    def _get_personal_org(request: OrganizationRequest) -> Organization:
+        return cast(
+            Organization, Organization.objects.create_personal_for(request.user)
+        )
 
     def _call_with_org(
         self,
-        request: HttpRequest,
+        request: OrganizationRequest,
         organization: Organization,
     ) -> HttpResponse:
         request.org = organization
@@ -88,7 +122,7 @@ class TenantMiddleware:
             self._set_current_org_id(organization.id)
             return self.get_response(request)
 
-    def _set_current_org_id(self, organization_id) -> None:
+    def _set_current_org_id(self, organization_id: int | str) -> None:
         if connection.vendor != "postgresql":
             return
         with connection.cursor() as cursor:

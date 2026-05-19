@@ -54,7 +54,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.83.0 | ✅ Released | Hardening release | Repo-wide hardening release published; archived in the release note and changelog |
 | v0.84.0 | ✅ Released | Backups hardening release | Backup lifecycle hardening and runtime/tooling refresh archived in the release note and changelog |
 | v0.85.0 | ✅ Released | Billing module | Stripe-backed one-time credit purchases and recurring subscriptions, credits-first Django ledger, planner/apply readiness, module-owned pricing and dashboard pages, and starter-theme billing links; archived in release note and changelog |
-| v0.86.0 | 📋 Planned | Organizations module | Multi-tenancy with Solo/SaaS runtime modes, PostgreSQL RLS, org-scoped billing, credits + feature gates, and self-service onboarding |
+| v0.86.0 | 📋 Planned | Organizations module | Multi-tenancy with Solo/SaaS runtime modes, an org-scoping foundation for future PostgreSQL RLS, org-scoped billing, credits + feature gates, and self-service onboarding |
 | v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and organizations milestones |
 
 **Legend:**
@@ -97,7 +97,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Dependency note**: This milestone remains the SaaS-parity target after the v0.84.0 backups hardening release and the v0.85.0 billing milestone. The billing module's `Subscription`, `CreditBalance`, and `Plan` models are extended here.
 
-**Architecture summary**: Single Railway deployment (1 app + 1 PostgreSQL 18). All tenants share one database; PostgreSQL RLS enforces isolation per organization. Runtime `QUICKSCALE_MODE` setting switches between Solo mode (personal org auto-created, flat URLs) and SaaS mode (multi-org, `/orgs/<slug>/` routing, invitations enabled). Platform owner (`is_superuser`) bypasses RLS via `/admin/`. Self-service signup → org creation → Stripe checkout. Plans differentiate by credit volume + feature gates; optional seat pricing designed in.
+**Architecture summary**: Single Railway deployment (1 app + 1 PostgreSQL 18). All tenants share one database; ordinary requests are still isolated by the org middleware and permission layer, while PostgreSQL RLS remains a future hardening step until downstream modules carry concrete `organization_id` columns. Runtime `QUICKSCALE_MODE` setting switches between Solo mode (personal org auto-created, flat URLs) and SaaS mode (multi-org, `/orgs/<slug>/` routing, invitations enabled). Platform owner access remains governed by Django/admin permissions in this slice; no database-level RLS bypass is assumed. Self-service signup → org creation → Stripe checkout. Plans differentiate by credit volume + feature gates; optional seat pricing designed in.
 
 ---
 
@@ -162,38 +162,31 @@ Wire the `QUICKSCALE_MODE` setting, tenant context per request, role-based acces
 
 ---
 
-#### Phase 3 — PostgreSQL RLS migration (6–8 h)
+#### Phase 3 — Org RLS foundation + guarded activation prep (completed foundation slice)
 
-Enable row-level security on all tenant tables and verify cross-org isolation end-to-end. This is the highest-risk phase — misconfigured RLS silently returns empty sets rather than raising errors.
+Establish the runtime prerequisites for future PostgreSQL RLS without shipping unsafe database policies yet. This slice keeps ordinary request isolation in the application layer, ensures org context is set consistently for scoped requests, and records the hard prerequisites for the later PostgreSQL activation work.
 
-**Files to create**:
-- [ ] `migrations/0002_rls_tenant_isolation.py` — `RunSQL` migration:
-  - [ ] For each tenant table: `ALTER TABLE <table> ENABLE ROW LEVEL SECURITY`
-  - [ ] For each tenant table: `CREATE POLICY tenant_isolation ON <table> USING (organization_id = current_setting('app.current_org_id', true)::uuid)`
-  - [ ] Reverse operations: `DROP POLICY tenant_isolation ON <table>` + `ALTER TABLE <table> DISABLE ROW LEVEL SECURITY`
-- [ ] `tests/test_rls_isolation.py` — integration tests (requires real PostgreSQL; mark with `@pytest.mark.django_db(transaction=True)`)
+**Files modified in the foundation slice**:
+- [x] `middleware.py`
+  - [x] Split bootstrap/exempt-path handling from org-scoped request handling so only scoped requests participate in org resolution and DB session setup
+  - [x] Keep `SET LOCAL app.current_org_id = <uuid>` limited to resolved org-scoped requests, leaving non-org and exempt paths unset
+  - [x] Preserve Solo and SaaS membership/slug resolution semantics while tightening the branch that future RLS will depend on
+- [x] `tests/test_middleware.py`
+  - [x] Expand caller-parity coverage for bootstrap/exempt paths versus org-scoped paths
+  - [x] Verify the scoped branch sets `request.org` and the DB session org context only when an organization is actually resolved
 
-**Tenant tables checklist** (confirm exact column and table names via `\dt` and `\d <table>` before writing SQL — Django generates names from app label + model name):
-- [ ] CRM: contacts, companies, deals, activities, pipeline stages, tags
-- [ ] Blog: posts, categories, comments
-- [ ] Forms: forms, submissions, fields
-- [ ] Listings: listings, listing images
-- [ ] Notifications: notifications, notification preferences
-- [ ] Storage: files (if org-scoped)
-
-**Disambiguation**:
-- The RLS policy column is `organization_id` (Django FK naming convention from `organization = ForeignKey(...)`). It is **not** `org_id` or `team_id`. Verify the actual column name in `0001_initial.py` before writing policy SQL.
-- `current_setting('app.current_org_id', true)` — the `true` flag returns `NULL` when unset instead of raising an exception. A `NULL` uuid matches no rows: correct fail-safe. Do **not** omit the `true` flag.
-- Platform owner (`is_superuser`) connects as PostgreSQL superuser, which bypasses RLS by default. No policy exception needed.
+**Deferred activation checklist**:
+- [ ] Add concrete `organization_id` columns to downstream tenant tables before any RLS SQL ships
+- [ ] Create a dedicated PostgreSQL migration that enables RLS only on tables proven to be org-scoped
+- [ ] Add PostgreSQL-only integration tests for cross-org isolation and unset-context fail-safe behavior
+- [x] Document the shipped application-layer superuser operator path explicitly without assuming Django `is_superuser` implies a database-level RLS bypass
 
 **Acceptance criteria**:
-- [ ] `python manage.py migrate` applies the RLS migration without errors on PostgreSQL 18
-- [ ] `python manage.py migrate orgs 0001` reverses the RLS migration cleanly (policies dropped, RLS disabled)
-- [ ] Platform owner (`is_superuser`) sees all rows across all tenant tables (RLS bypass confirmed)
-- [ ] Org A user cannot read Org B rows in any tenant table — queryset is empty, no exception raised
-- [ ] Empty queryset (not exception) returned when `app.current_org_id` is not set
-- [ ] **Solo mode**: RLS still enforced — user sees only their personal org's rows
-- [ ] CI test runner uses PostgreSQL (RLS is a PostgreSQL feature; add `DATABASE_URL` config note if tests currently run on SQLite)
+- [x] Org-scoped requests continue to set `app.current_org_id` via middleware for future PostgreSQL policy activation
+- [x] Bootstrap and exempt paths avoid the scoped branch and preserve caller parity across Solo and SaaS modes
+- [x] The roadmap states clearly that current tenant isolation for ordinary requests is still enforced in the application layer
+- [x] No PostgreSQL RLS migration ships in this slice because downstream business modules do not yet provide complete `organization_id` coverage
+- [ ] Actual PostgreSQL RLS activation remains a later milestone once downstream tenant tables are ready
 
 ---
 
@@ -373,7 +366,7 @@ Complete the test suite and finalize the module manifest. All tests involving RL
   - [ ] `QUICKSCALE_MODE` switch changes behaviour with no model changes
 - [ ] `test_rls_isolation.py` (PostgreSQL + `transaction=True`):
   - [ ] Org A user queryset for Org B contact is empty (not exception)
-  - [ ] Platform owner (`is_superuser`) queryset returns the contact (RLS bypass confirmed)
+- [ ] Platform owner query behavior follows the explicitly implemented operator policy for the RLS rollout; do not assume Django `is_superuser` bypasses PostgreSQL policies automatically
   - [ ] Unset `app.current_org_id` → empty queryset (not exception)
   - [ ] Solo mode: user sees only their personal org's rows
 - [ ] `test_invitation_flow.py`:
