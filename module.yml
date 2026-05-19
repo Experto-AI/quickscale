@@ -3,7 +3,14 @@ version: "0.86.0"
 description: "Organizations and multi-tenant foundations with memberships and invitations"
 
 config:
-  mutable: {}
+  mutable:
+    mode:
+      type: string
+      default: "solo"
+      django_setting: QUICKSCALE_MODE
+      description: "Organization runtime mode (solo or saas)"
+      validation:
+        choices: ["solo", "saas"]
   immutable: {}
 
 dependencies:
