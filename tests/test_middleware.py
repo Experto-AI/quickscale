@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.db import connection
+from django.http import Http404
 from django.test import RequestFactory
 
 from quickscale_modules_orgs.middleware import TenantMiddleware
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
+from quickscale_modules_orgs.views import org_detail_view, org_index_view, org_new_view
 
 
 @pytest.mark.django_db
@@ -33,6 +37,22 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("path", ["/orgs/", "/orgs/new/", "/orgs/acme/"])
+def test_solo_mode_hides_org_namespace_routes(client, settings, path) -> None:
+    settings.QUICKSCALE_MODE = "solo"
+    user = get_user_model().objects.create_user(
+        username="alice-hidden",
+        email="alice-hidden@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.get(path)
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 def test_saas_mode_redirects_unscoped_requests_without_membership(
     client, settings
 ) -> None:
@@ -51,7 +71,19 @@ def test_saas_mode_redirects_unscoped_requests_without_membership(
 
 
 @pytest.mark.django_db
-def test_saas_mode_returns_403_for_non_member_org_route(client, settings) -> None:
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/orgs/{slug}/",
+        "/orgs/{slug}/current-org-id/",
+        "/orgs/{slug}/admin-only/",
+        "/orgs/{slug}/owner-only/",
+        "/orgs/{slug}/admin-mixin/",
+    ],
+)
+def test_saas_mode_returns_403_for_non_member_org_routes(
+    client, settings, path
+) -> None:
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="carol",
@@ -61,40 +93,183 @@ def test_saas_mode_returns_403_for_non_member_org_route(client, settings) -> Non
     organization = Organization.objects.create(name="Acme", slug="acme")
     client.force_login(user)
 
-    response = client.get(f"/orgs/{organization.slug}/")
+    response = client.get(path.format(slug=organization.slug))
 
     assert response.status_code == 403
 
 
 @pytest.mark.django_db
-def test_request_org_is_none_for_non_org_routes(client, settings) -> None:
+@pytest.mark.parametrize("path", ["/healthcheck/", "/accounts/profile/"])
+def test_request_org_is_none_for_exempt_routes(client, settings, path) -> None:
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="dave",
         email="dave@example.com",
         password="secret123",
     )
-    Organization.objects.create_personal_for(user)
+    organization = Organization.objects.create(name="Delta", slug="delta")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
     client.force_login(user)
 
-    response = client.get("/healthcheck/")
+    response = client.get(path)
 
     assert response.status_code == 200
     assert response.content.decode() == "none|none"
 
 
 @pytest.mark.django_db
-def test_anonymous_saas_org_routes_redirect_to_login(client, settings) -> None:
+@pytest.mark.parametrize("path", ["/orgs/", "/orgs/new/", "/orgs/{slug}/"])
+def test_anonymous_saas_org_routes_redirect_to_login(client, settings, path) -> None:
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Delta", slug="delta")
 
-    index_response = client.get("/orgs/")
-    detail_response = client.get(f"/orgs/{organization.slug}/")
+    response = client.get(path.format(slug=organization.slug))
 
-    assert index_response.status_code == 302
-    assert index_response.headers["Location"].startswith("/accounts/login/")
-    assert detail_response.status_code == 302
-    assert detail_response.headers["Location"].startswith("/accounts/login/")
+    assert response.status_code == 302
+    assert response.headers["Location"].startswith("/accounts/login/")
+
+
+@pytest.mark.django_db
+def test_saas_mode_org_index_redirects_members_to_their_org(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="erin",
+        email="erin@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Echo", slug="echo")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    response = client.get("/orgs/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"/orgs/{organization.slug}/"
+
+
+@pytest.mark.django_db
+def test_saas_mode_org_index_redirects_users_without_memberships_to_org_creation(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="frank",
+        email="frank@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.get("/orgs/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/orgs/new/"
+
+
+@pytest.mark.django_db
+def test_saas_mode_org_new_is_available_to_authenticated_users(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="grace",
+        email="grace@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.get("/orgs/new/")
+
+    assert response.status_code == 200
+    assert response.content.decode() == "orgs-new"
+
+
+@pytest.mark.django_db
+def test_saas_mode_org_detail_returns_member_org_slug(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="harper",
+        email="harper@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Harbor", slug="harbor")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    response = client.get(f"/orgs/{organization.slug}/")
+
+    assert response.status_code == 200
+    assert response.content.decode() == organization.slug
+
+
+@pytest.mark.django_db
+def test_saas_mode_returns_404_for_unknown_org_routes(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="irene",
+        email="irene@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.get("/orgs/missing/")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_current_org_id_route_returns_member_org_context(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="ivy",
+        email="ivy@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Indigo", slug="indigo")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    response = client.get(f"/orgs/{organization.slug}/current-org-id/")
+
+    assert response.status_code == 200
+    expected_current_org_id = (
+        str(organization.id) if connection.vendor == "postgresql" else "none"
+    )
+    assert response.content.decode() == expected_current_org_id
+
+
+@pytest.mark.django_db
+def test_saas_mode_superusers_can_access_org_routes_without_membership(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_superuser(
+        username="jules",
+        email="jules@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Jade", slug="jade")
+    client.force_login(user)
+
+    response = client.get(f"/orgs/{organization.slug}/")
+
+    assert response.status_code == 200
+    assert response.content.decode() == organization.slug
 
 
 @pytest.mark.django_db
@@ -112,6 +287,32 @@ def test_resolve_org_slug_uses_personal_org_in_solo_mode(settings) -> None:
     org_slug = middleware._resolve_org_slug(request, saas_mode=False)
 
     assert org_slug == "erin"
+
+
+def test_resolve_org_slug_returns_none_for_unmatched_paths_in_saas_mode() -> None:
+    request = RequestFactory().get("/not-a-route/")
+    middleware = TenantMiddleware(lambda _: None)
+
+    org_slug = middleware._resolve_org_slug(request, saas_mode=True)
+
+    assert org_slug is None
+
+
+@pytest.mark.parametrize(
+    ("view", "path", "kwargs"),
+    [
+        (org_index_view, "/orgs/", {}),
+        (org_new_view, "/orgs/new/", {}),
+        (org_detail_view, "/orgs/acme/", {"org_slug": "acme"}),
+    ],
+)
+def test_org_views_raise_404_in_solo_mode(settings, view, path, kwargs) -> None:
+    settings.QUICKSCALE_MODE = "solo"
+    request = RequestFactory().get(path)
+    request.user = SimpleNamespace(is_authenticated=True)
+
+    with pytest.raises(Http404):
+        view(request, **kwargs)
 
 
 @pytest.mark.django_db
