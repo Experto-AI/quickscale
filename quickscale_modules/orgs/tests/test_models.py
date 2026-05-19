@@ -59,6 +59,40 @@ def test_duplicate_membership_hits_database_constraint() -> None:
             )
 
 
+@pytest.mark.django_db
+def test_create_personal_for_retries_when_username_slug_is_taken() -> None:
+    """Personal org creation should fall back when the username slug already exists."""
+    user = get_user_model().objects.create_user(
+        username="acme",
+        email="acme@example.com",
+        password="secret123",
+    )
+    Organization.objects.create(name="Acme", slug="acme")
+
+    organization = Organization.objects.create_personal_for(user)
+
+    assert organization.slug == "acmeexamplecom"
+    assert organization.is_personal is True
+
+
+@pytest.mark.django_db
+def test_create_personal_for_uses_suffixed_slug_after_multiple_collisions() -> None:
+    """Personal org creation should keep trying deterministic suffixes after base collisions."""
+    user = get_user_model().objects.create_user(
+        username="omega",
+        email="omega@example.com",
+        password="secret123",
+    )
+    Organization.objects.create(name="Omega", slug="omega")
+    Organization.objects.create(name="Omega Email", slug="omegaexamplecom")
+    Organization.objects.create(name="Omega User", slug=f"user-{user.pk}")
+
+    organization = Organization.objects.create_personal_for(user)
+
+    assert organization.slug == "omega-2"
+    assert organization.is_personal is True
+
+
 def test_tenant_model_declares_org_foreign_key() -> None:
     """TenantModel should expose the org foreign key expected by later phases."""
     organization_field = TenantModel._meta.get_field("organization")

@@ -106,6 +106,18 @@ def _auth_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     )
 
 
+def _orgs_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    return ModuleWiringSpec(
+        apps=("quickscale_modules_orgs",),
+        middleware=("quickscale_modules_orgs.middleware.TenantMiddleware",),
+        settings={
+            "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
+            "QUICKSCALE_MODE": str(options.get("mode", "solo")),
+        },
+        url_includes=(("", "quickscale_modules_orgs.urls"),),
+    )
+
+
 def _blog_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     posts_per_page = int(options.get("posts_per_page", 10))
     enable_rss = bool(options.get("enable_rss", True))
@@ -609,6 +621,7 @@ def _social_wiring(
 
 MODULE_WIRING_BUILDERS = {
     "auth": _auth_wiring,
+    "orgs": _orgs_wiring,
     "blog": _blog_wiring,
     "listings": _listings_wiring,
     "crm": _crm_wiring,

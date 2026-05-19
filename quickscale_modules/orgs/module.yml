@@ -6,7 +6,15 @@ config:
   mutable: {}
   immutable: {}
 
-dependencies: []
+dependencies:
+  - django-allauth>=65.14.1,<66.0.0
 
 django_apps:
   - quickscale_modules_orgs
+
+middleware:
+  - quickscale_modules_orgs.middleware.TenantMiddleware
+
+settings:
+  ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter
+  QUICKSCALE_MODE: solo

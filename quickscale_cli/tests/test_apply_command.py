@@ -204,6 +204,23 @@ modules:
             in error_output
         )
 
+    def test_apply_orgs_requires_auth_module(self, capsys):
+        """Orgs apply should fail early when auth is not selected."""
+        qs_config = SimpleNamespace(modules={"orgs": SimpleNamespace(options={})})
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert (
+            "Organizations requires the auth module before apply can continue"
+            in error_output
+        )
+        assert (
+            "Add 'auth' under modules in quickscale.yml before applying orgs"
+            in error_output
+        )
+
     def test_abort_for_not_ready_modules_reports_teams_reason(self, capsys):
         """Teams should remain blocked by the non-public-ready apply helper."""
         with pytest.raises(click.Abort):

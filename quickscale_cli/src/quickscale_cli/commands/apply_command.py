@@ -721,6 +721,25 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
 
 def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     """Validate actionable module-specific prerequisites before apply proceeds."""
+    if "orgs" in qs_config.modules and "auth" not in qs_config.modules:
+        click.secho(
+            "\n❌ Organizations requires the auth module before apply can continue:",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "  • Add 'auth' under modules in quickscale.yml before applying orgs.",
+            err=True,
+        )
+        click.echo(
+            "\n💡 Organizations relies on the QuickScale auth login flow and "
+            "django-allauth account adapter hooks. Re-run 'quickscale plan "
+            "--reconfigure --configure-modules' or edit quickscale.yml to add "
+            "auth, then re-run 'quickscale apply'.",
+            err=True,
+        )
+        raise click.Abort()
+
     billing_config = qs_config.modules.get("billing")
     if billing_config is not None:
         billing_issues = validate_billing_module_options(billing_config.options or {})

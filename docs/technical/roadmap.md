@@ -131,34 +131,34 @@ Create the `quickscale_modules_orgs` package and define all core models, the `Or
 Wire the `QUICKSCALE_MODE` setting, tenant context per request, role-based access control, and post-signup routing for both modes. This phase affects every subsequent request — test each branch explicitly.
 
 **Files to create**:
-- [ ] `middleware.py` — `TenantMiddleware`:
-  - [ ] `_resolve_org_slug(request, saas_mode)` — SaaS: reads `org_slug` from URL `resolve()` kwargs; Solo: queries user's personal org slug (no URL slug needed)
-  - [ ] No-membership guard: Solo mode calls `create_personal_for(request.user)`; SaaS mode redirects to `/orgs/new/` for all non-exempt paths (`/accounts/*`, `/orgs/new/`)
-  - [ ] Non-member requesting an org route → `HttpResponseForbidden()`
-  - [ ] Sets `SET LOCAL app.current_org_id = <uuid>` via `connection.cursor()`
-  - [ ] Sets `request.org` for all org-scoped requests; `None` for non-org routes
-- [ ] `permissions.py`:
-  - [ ] `ROLE_HIERARCHY = {OrgRole.VIEWER: 0, OrgRole.MEMBER: 1, OrgRole.ADMIN: 2, OrgRole.OWNER: 3}`
-  - [ ] `require_org_role(min_role)` decorator — resolves org from URL, checks membership + role, returns 403 on failure, sets `request.org`
-  - [ ] `OrgRoleMixin` — CBV equivalent of `require_org_role`
-  - [ ] `require_org_feature(feature_key)` decorator stub — reads `request.org.subscription.plan.features` (list); returns 402 when feature absent or no active subscription; fully wired in Phase 6
-- [ ] `adapters.py` — `OrgsAccountAdapter(DefaultAccountAdapter)`:
-  - [ ] Solo mode branch: calls `create_personal_for(request.user)`, returns `'/'`
-  - [ ] SaaS mode branch: returns `'/orgs/new/'` when no membership exists
+- [x] `middleware.py` — `TenantMiddleware`:
+  - [x] `_resolve_org_slug(request, saas_mode)` — SaaS: reads `org_slug` from URL `resolve()` kwargs; Solo: queries user's personal org slug (no URL slug needed)
+  - [x] No-membership guard: Solo mode calls `create_personal_for(request.user)`; SaaS mode redirects to `/orgs/new/` for all non-exempt paths (`/accounts/*`, `/orgs/new/`)
+  - [x] Non-member requesting an org route → `HttpResponseForbidden()`
+  - [x] Sets `SET LOCAL app.current_org_id = <uuid>` via `connection.cursor()`
+  - [x] Sets `request.org` for all org-scoped requests; `None` for non-org routes
+- [x] `permissions.py`:
+  - [x] `ROLE_HIERARCHY = {OrgRole.VIEWER: 0, OrgRole.MEMBER: 1, OrgRole.ADMIN: 2, OrgRole.OWNER: 3}`
+  - [x] `require_org_role(min_role)` decorator — resolves org from URL, checks membership + role, returns 403 on failure, sets `request.org`
+  - [x] `OrgRoleMixin` — CBV equivalent of `require_org_role`
+  - [x] `require_org_feature(feature_key)` decorator stub — reads `request.org.subscription.plan.features` (list); returns 402 when feature absent or no active subscription; fully wired in Phase 6
+- [x] `adapters.py` — `OrgsAccountAdapter(DefaultAccountAdapter)`:
+  - [x] Solo mode branch: calls `create_personal_for(request.user)`, returns `'/'`
+  - [x] SaaS mode branch: returns `'/orgs/new/'` when no membership exists
 
 **Files to modify**:
-- [ ] `module.yml` — add `middleware: [quickscale_modules_orgs.middleware.TenantMiddleware]`, `settings: {ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter, QUICKSCALE_MODE: solo}`
+- [x] `module.yml` — add `middleware: [quickscale_modules_orgs.middleware.TenantMiddleware]`, `settings: {ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter, QUICKSCALE_MODE: solo}`
 
 **Acceptance criteria**:
-- [ ] **Solo mode**: new signup auto-creates personal org (`is_personal=True`); user lands at `/` without seeing org creation step
-- [ ] **SaaS mode**: new signup with no membership redirects to `/orgs/new/` for all non-exempt paths
-- [ ] Request to `/orgs/acme-corp/` by a non-member returns HTTP 403
-- [ ] `@require_org_role(min_role=OrgRole.ADMIN)` returns 403 for MEMBER, 403 for VIEWER, 200 for ADMIN, 200 for OWNER
-- [ ] `@require_org_role(min_role=OrgRole.OWNER)` returns 403 for ADMIN
-- [ ] `request.org` populated for org-scoped requests; `None` for non-org routes
-- [ ] `SET LOCAL app.current_org_id = <uuid>` confirmed via `SELECT current_setting('app.current_org_id', true)` in a test transaction
-- [ ] **Solo mode**: `_resolve_org_slug` returns personal org slug without reading from URL
-- [ ] Changing `QUICKSCALE_MODE` between `solo` and `saas` changes routing behaviour with no model changes
+- [x] **Solo mode**: new signup auto-creates personal org (`is_personal=True`); user lands at `/` without seeing org creation step
+- [x] **SaaS mode**: new signup with no membership redirects to `/orgs/new/` for all non-exempt paths
+- [x] Request to `/orgs/acme-corp/` by a non-member returns HTTP 403
+- [x] `@require_org_role(min_role=OrgRole.ADMIN)` returns 403 for MEMBER, 403 for VIEWER, 200 for ADMIN, 200 for OWNER
+- [x] `@require_org_role(min_role=OrgRole.OWNER)` returns 403 for ADMIN
+- [x] `request.org` populated for org-scoped requests; `None` for non-org routes
+- [x] `SET LOCAL app.current_org_id = <uuid>` confirmed via `SELECT current_setting('app.current_org_id', true)` in a test transaction
+- [x] **Solo mode**: `_resolve_org_slug` returns personal org slug without reading from URL
+- [x] Changing `QUICKSCALE_MODE` between `solo` and `saas` changes routing behaviour with no model changes
 
 ---
 
