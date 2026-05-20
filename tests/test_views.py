@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -9,11 +10,21 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.http import Http404
+from django.shortcuts import resolve_url
 from django.test import override_settings
+from django.utils import timezone
 
 from quickscale_modules_orgs import forms as org_forms
 from quickscale_modules_orgs import views as org_views
-from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
+from quickscale_modules_orgs.constants import (
+    PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
+)
+from quickscale_modules_orgs.models import (
+    OrgRole,
+    Organization,
+    OrganizationInvitation,
+    OrganizationMembership,
+)
 
 
 class DummyOrganizationContextView(org_views.OrganizationContextMixin):
@@ -40,7 +51,7 @@ def test_saas_org_create_post_creates_org_and_redirects_to_billing(
         organization=organization,
     )
     assert response.status_code == 302
-    assert response.headers["Location"] == "/billing/pricing/"
+    assert response.headers["Location"] == "/orgs/acme-labs/billing/pricing/"
     assert membership.role == OrgRole.OWNER
     assert organization.is_personal is False
 
@@ -173,6 +184,129 @@ def test_org_settings_form_clean_name_rejects_blank_values() -> None:
 
     with pytest.raises(ValidationError, match="This field is required"):
         form.clean_name()
+
+
+@pytest.mark.django_db
+def test_invite_form_rejects_existing_members_by_normalized_email() -> None:
+    organization = Organization.objects.create(name="Atlas", slug="atlas")
+    owner = get_user_model().objects.create_user(
+        username="atlas-owner",
+        email="Owner@Example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    form = org_forms.InviteForm(
+        {"email": "owner@example.com", "role": OrgRole.ADMIN},
+        organization=organization,
+        invited_by=owner,
+        owner_like=True,
+    )
+
+    assert not form.is_valid()
+    assert form.errors["email"] == ["This email already belongs to a current member."]
+
+
+@pytest.mark.django_db
+def test_invite_form_rejects_duplicate_pending_invites_by_normalized_email() -> None:
+    organization = Organization.objects.create(name="Nebula", slug="nebula")
+    owner = get_user_model().objects.create_user(
+        username="nebula-owner",
+        email="nebula-owner@example.com",
+        password="secret123",
+    )
+    OrganizationInvitation.objects.create(
+        organization=organization,
+        email="Invitee@Example.com",
+        role=OrgRole.MEMBER,
+        invited_by=owner,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    form = org_forms.InviteForm(
+        {"email": "invitee@example.com", "role": OrgRole.ADMIN},
+        organization=organization,
+        invited_by=owner,
+        owner_like=True,
+    )
+
+    assert not form.is_valid()
+    assert form.errors["email"] == ["This email already has a pending invitation."]
+
+
+@pytest.mark.django_db
+def test_invite_form_allows_reinviting_after_expiry() -> None:
+    organization = Organization.objects.create(name="Comet", slug="comet")
+    owner = get_user_model().objects.create_user(
+        username="comet-owner",
+        email="comet-owner@example.com",
+        password="secret123",
+    )
+    expired_invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="Invitee@Example.com",
+        role=OrgRole.MEMBER,
+        invited_by=owner,
+        expires_at=timezone.now() - timedelta(minutes=1),
+    )
+    form = org_forms.InviteForm(
+        {"email": "invitee@example.com", "role": OrgRole.ADMIN},
+        organization=organization,
+        invited_by=owner,
+        owner_like=True,
+    )
+
+    assert form.is_valid(), form.errors
+
+    invitation = form.save()
+
+    assert invitation.pk != expired_invitation.pk
+    assert invitation.email == "invitee@example.com"
+    assert invitation.role == OrgRole.ADMIN
+    assert invitation.expires_at > timezone.now()
+
+
+@pytest.mark.django_db
+def test_invite_form_save_rejects_duplicate_created_after_validation() -> None:
+    organization = Organization.objects.create(name="Pioneer", slug="pioneer")
+    owner = get_user_model().objects.create_user(
+        username="pioneer-owner",
+        email="pioneer-owner@example.com",
+        password="secret123",
+    )
+    form = org_forms.InviteForm(
+        {"email": "invitee@example.com", "role": OrgRole.ADMIN},
+        organization=organization,
+        invited_by=owner,
+        owner_like=True,
+    )
+
+    assert form.is_valid(), form.errors
+
+    OrganizationInvitation.objects.create(
+        organization=organization,
+        email="INVITEE@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=owner,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        form.save()
+
+    invitations = OrganizationInvitation.objects.filter(
+        organization=organization,
+        email__iexact="invitee@example.com",
+        accepted_at__isnull=True,
+    )
+
+    assert exc_info.value.message_dict == {
+        "email": ["This email already has a pending invitation."]
+    }
+    assert invitations.count() == 1
+    assert invitations.get().role == OrgRole.MEMBER
 
 
 @pytest.mark.django_db
@@ -338,6 +472,578 @@ def test_member_list_requires_admin_role(client, settings) -> None:
     assert admin_response.status_code == 200
     assert "Update role" in admin_response.content.decode()
     assert member_response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_member_list_renders_pending_invitations(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Northwind", slug="northwind")
+    admin_user = get_user_model().objects.create_user(
+        username="northwind-admin",
+        email="northwind-admin@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    OrganizationInvitation.objects.create(
+        organization=organization,
+        email="invitee@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=admin_user,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    client.force_login(admin_user)
+
+    response = client.get(f"/orgs/{organization.slug}/members/")
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Pending invitations" in content
+    assert "invitee@example.com" in content
+    assert "Revoke invitation" in content
+
+
+@pytest.mark.django_db
+def test_invite_view_creates_invitation_and_dispatches_notification(
+    client,
+    settings,
+    monkeypatch,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Helios", slug="helios")
+    admin_user = get_user_model().objects.create_user(
+        username="helios-admin",
+        email="helios-admin@example.com",
+        password="secret123",
+        first_name="Helios",
+        last_name="Admin",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    captured_calls: list[dict[str, object]] = []
+
+    def fake_sender(**kwargs: object) -> object:
+        captured_calls.append(dict(kwargs))
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: fake_sender,
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/orgs/{organization.slug}/members/invite/",
+        {"email": "Invitee@Example.com", "role": OrgRole.ADMIN},
+    )
+
+    invitation = OrganizationInvitation.objects.get(organization=organization)
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"/orgs/{organization.slug}/members/"
+    assert invitation.email == "invitee@example.com"
+    assert invitation.role == OrgRole.ADMIN
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["template_key"] == "notifications.org_invitation"
+    assert captured_calls[0]["recipients"] == ["invitee@example.com"]
+    assert captured_calls[0]["tags"] == ["auth"]
+    assert captured_calls[0]["metadata"] == {"workflow": "org-invitation"}
+    assert captured_calls[0]["context"] == {
+        "organization_name": organization.name,
+        "invitee_email": "invitee@example.com",
+        "inviter_name": "Helios Admin",
+        "role_display": "Admin",
+        "accept_url": (
+            f"http://testserver/orgs/invitations/{invitation.token}/accept/"
+        ),
+        "expires_at": invitation.expires_at.astimezone(timezone.UTC).isoformat(),
+    }
+
+
+@pytest.mark.django_db
+def test_invite_view_rejects_existing_member_without_sending_notification(
+    client,
+    settings,
+    monkeypatch,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Nova", slug="nova")
+    admin_user = get_user_model().objects.create_user(
+        username="nova-admin",
+        email="nova-admin@example.com",
+        password="secret123",
+    )
+    member_user = get_user_model().objects.create_user(
+        username="nova-member",
+        email="member@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    OrganizationMembership.objects.create(
+        user=member_user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    dispatched: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: lambda **kwargs: dispatched.append(dict(kwargs)),
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/orgs/{organization.slug}/members/invite/",
+        {"email": "MEMBER@example.com", "role": OrgRole.ADMIN},
+    )
+
+    assert response.status_code == 400
+    assert OrganizationInvitation.objects.count() == 0
+    assert dispatched == []
+    assert "already belongs to a current member" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_invite_view_rejects_save_time_validation_without_sending_notification(
+    client,
+    settings,
+    monkeypatch,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Pioneer", slug="pioneer")
+    admin_user = get_user_model().objects.create_user(
+        username="pioneer-admin",
+        email="pioneer-admin@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    dispatched: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: lambda **kwargs: dispatched.append(dict(kwargs)),
+    )
+
+    def rejecting_save(self: org_forms.InviteForm) -> OrganizationInvitation:
+        raise ValidationError(
+            {"email": ["This email already has a pending invitation."]}
+        )
+
+    monkeypatch.setattr(org_forms.InviteForm, "save", rejecting_save)
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/orgs/{organization.slug}/members/invite/",
+        {"email": "invitee@example.com", "role": OrgRole.ADMIN},
+    )
+
+    assert response.status_code == 400
+    assert OrganizationInvitation.objects.filter(organization=organization).count() == 0
+    assert dispatched == []
+    assert "already has a pending invitation" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_redeems_matching_authenticated_user_and_clears_session(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="accept-inviter",
+        email="accept-inviter@example.com",
+        password="secret123",
+    )
+    invited_user = get_user_model().objects.create_user(
+        username="accept-invitee",
+        email="Invitee@Example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Aperture", slug="aperture")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="invitee@example.com",
+        role=OrgRole.ADMIN,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    client.force_login(invited_user)
+    session = client.session
+    session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
+    session.save()
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    invitation.refresh_from_db()
+    membership = OrganizationMembership.objects.get(
+        user=invited_user,
+        organization=organization,
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"/orgs/{organization.slug}/"
+    assert membership.role == OrgRole.ADMIN
+    assert membership.invited_by == inviter
+    assert invitation.accepted_at is not None
+    assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_is_idempotent_for_existing_member_with_matching_email(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="idempotent-inviter",
+        email="idempotent-inviter@example.com",
+        password="secret123",
+    )
+    invited_user = get_user_model().objects.create_user(
+        username="idempotent-invitee",
+        email="invitee@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Atlas", slug="atlas")
+    membership = OrganizationMembership.objects.create(
+        user=invited_user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="INVITEE@example.com",
+        role=OrgRole.ADMIN,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    client.force_login(invited_user)
+    session = client.session
+    session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
+    session.save()
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    invitation.refresh_from_db()
+    membership.refresh_from_db()
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"/orgs/{organization.slug}/"
+    assert (
+        OrganizationMembership.objects.filter(
+            user=invited_user,
+            organization=organization,
+        ).count()
+        == 1
+    )
+    assert membership.role == OrgRole.MEMBER
+    assert invitation.accepted_at is not None
+    assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_redirects_anonymous_user_to_login_and_stores_session(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="anon-inviter",
+        email="anon-inviter@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Beacon", slug="beacon")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="invitee@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == (
+        f"{resolve_url(settings.LOGIN_URL)}"
+        f"?next=/orgs/invitations/{invitation.token}/accept/"
+    )
+    assert client.session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] == str(
+        invitation.token
+    )
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_rejects_authenticated_email_mismatch_and_clears_session(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="mismatch-inviter",
+        email="mismatch-inviter@example.com",
+        password="secret123",
+    )
+    invited_user = get_user_model().objects.create_user(
+        username="mismatch-invitee",
+        email="other@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Beacon", slug="beacon")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="invitee@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    client.force_login(invited_user)
+    session = client.session
+    session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
+    session.save()
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    invitation.refresh_from_db()
+    content = response.content.decode()
+    assert response.status_code == 403
+    assert not OrganizationMembership.objects.filter(
+        user=invited_user,
+        organization=organization,
+    ).exists()
+    assert invitation.accepted_at is None
+    assert "Invitation email mismatch" in content
+    assert "only be accepted by the invited email address" in content
+    assert invited_user.email in content
+    assert invitation.email in content
+    assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_returns_410_and_clears_session_for_expired_invitation(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="expired-inviter",
+        email="expired-inviter@example.com",
+        password="secret123",
+    )
+    invited_user = get_user_model().objects.create_user(
+        username="expired-invitee",
+        email="expired-invitee@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Comet", slug="comet")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email=invited_user.email,
+        role=OrgRole.MEMBER,
+        invited_by=inviter,
+        expires_at=timezone.now() - timedelta(minutes=1),
+    )
+    client.force_login(invited_user)
+    session = client.session
+    session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
+    session.save()
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    invitation.refresh_from_db()
+    content = response.content.decode()
+    assert response.status_code == 410
+    assert not OrganizationMembership.objects.filter(
+        user=invited_user,
+        organization=organization,
+    ).exists()
+    assert invitation.accepted_at is None
+    assert "Invitation expired" in content
+    assert "Ask an organization admin to send you a new invite" in content
+    assert organization.name in content
+    assert invitation.email in content
+    assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_returns_410_and_clears_session_for_used_invitation(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="used-inviter",
+        email="used-inviter@example.com",
+        password="secret123",
+    )
+    invited_user = get_user_model().objects.create_user(
+        username="used-invitee",
+        email="used-invitee@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Delta", slug="delta")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email=invited_user.email,
+        role=OrgRole.MEMBER,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+        accepted_at=timezone.now() - timedelta(minutes=1),
+    )
+    client.force_login(invited_user)
+    session = client.session
+    session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
+    session.save()
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    content = response.content.decode()
+    assert response.status_code == 410
+    assert not OrganizationMembership.objects.filter(
+        user=invited_user,
+        organization=organization,
+    ).exists()
+    assert "Invitation already used" in content
+    assert "already been redeemed" in content
+    assert organization.name in content
+    assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_fails_closed_for_persisted_owner_invitation(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="owner-gap-inviter",
+        email="owner-gap-inviter@example.com",
+        password="secret123",
+    )
+    invited_user = get_user_model().objects.create_user(
+        username="owner-gap-invitee",
+        email="owner-gap-invitee@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Vertex", slug="vertex")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email=invited_user.email,
+        role=OrgRole.ADMIN,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    OrganizationInvitation.objects.filter(pk=invitation.pk).update(role=OrgRole.OWNER)
+    client.force_login(invited_user)
+    session = client.session
+    session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
+    session.save()
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    invitation.refresh_from_db()
+    content = response.content.decode()
+    assert response.status_code == 410
+    assert not OrganizationMembership.objects.filter(
+        user=invited_user,
+        organization=organization,
+    ).exists()
+    assert invitation.accepted_at is None
+    assert "Invitation unavailable" in content
+    assert "owner invitations are not supported" in content
+    assert (
+        "Ask Vertex to send a new invitation to owner-gap-invitee@example.com "
+        "for a supported role." in content
+    )
+    assert "to join as Owner" not in content
+    assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_invitation_accept_view_returns_404_and_clears_session_for_revoked_invitation(
+    client,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="revoked-inviter",
+        email="revoked-inviter@example.com",
+        password="secret123",
+    )
+    invited_user = get_user_model().objects.create_user(
+        username="revoked-invitee",
+        email="revoked-invitee@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Echo", slug="echo")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email=invited_user.email,
+        role=OrgRole.MEMBER,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    invitation_token = invitation.token
+    invitation.delete()
+    client.force_login(invited_user)
+    session = client.session
+    session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation_token)
+    session.save()
+
+    response = client.get(f"/orgs/invitations/{invitation_token}/accept/")
+
+    assert response.status_code == 404
+    assert not OrganizationMembership.objects.filter(
+        user=invited_user,
+        organization=organization,
+    ).exists()
+    assert PENDING_ORG_INVITATION_TOKEN_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_revoke_invitation_view_deletes_pending_invitation(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Summit", slug="summit")
+    admin_user = get_user_model().objects.create_user(
+        username="summit-admin",
+        email="summit-admin@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="invitee@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=admin_user,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/orgs/{organization.slug}/members/invitations/{invitation.pk}/revoke/"
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"/orgs/{organization.slug}/members/"
+    assert not OrganizationInvitation.objects.filter(pk=invitation.pk).exists()
 
 
 @pytest.mark.django_db

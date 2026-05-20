@@ -1,8 +1,30 @@
 """Django admin configuration for the QuickScale organizations module."""
 
+from django import forms
 from django.contrib import admin
 
-from .models import Organization, OrganizationInvitation, OrganizationMembership
+from .models import (
+    OrgRole,
+    Organization,
+    OrganizationInvitation,
+    OrganizationMembership,
+)
+
+
+class OrganizationInvitationAdminForm(forms.ModelForm):
+    """Admin form that preserves the non-owner invitation invariant."""
+
+    class Meta:
+        model = OrganizationInvitation
+        fields = "__all__"
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["role"].choices = OrganizationInvitation.supported_role_choices(
+            include_unsupported_owner=(
+                self.instance.pk is not None and self.instance.role == OrgRole.OWNER
+            )
+        )
 
 
 @admin.register(Organization)
@@ -30,6 +52,7 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
 class OrganizationInvitationAdmin(admin.ModelAdmin):
     """Admin configuration for organization invitations."""
 
+    form = OrganizationInvitationAdminForm
     list_display = ["email", "organization", "role", "expires_at", "accepted_at"]
     list_filter = ["organization"]
     search_fields = ["email", "organization__name", "invited_by__username"]
