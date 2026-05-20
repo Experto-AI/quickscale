@@ -112,8 +112,13 @@ class FakePurchaseStripeClient:
     retrieved_payment_intent_ids: list[str] = field(default_factory=list)
     construct_calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def search_customers(self, *, user_reference: str) -> list[dict[str, Any]]:
-        self.searched_references.append(user_reference)
+    def search_customers(
+        self,
+        *,
+        user_reference: str = "",
+        organization_reference: str = "",
+    ) -> list[dict[str, Any]]:
+        self.searched_references.append(organization_reference or user_reference)
         return list(self.customers)
 
     def create_customer(

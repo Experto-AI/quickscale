@@ -72,6 +72,7 @@ class PlanAdmin(admin.ModelAdmin):
         "name",
         "slug",
         "billing_interval",
+        "feature_flags",
         "credits_per_period",
         "price_cents",
         "currency",
@@ -81,13 +82,20 @@ class PlanAdmin(admin.ModelAdmin):
     search_fields = ["name", "slug", "stripe_price_id"]
     prepopulated_fields = {"slug": ["name"]}
 
+    @admin.display(description="Features")
+    def feature_flags(self, obj: Plan) -> str:
+        feature_keys = [str(feature) for feature in obj.features]
+        if not feature_keys:
+            return "-"
+        return ", ".join(feature_keys)
+
 
 @admin.register(CreditBalance)
 class CreditBalanceAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     """Read-only admin for per-user balance snapshots."""
 
-    list_display = ["user", "balance", "updated_at"]
-    list_select_related = ["user"]
+    list_display = ["organization", "user", "balance", "updated_at"]
+    list_select_related = ["organization", "user"]
 
 
 @admin.register(CreditTransaction)
@@ -95,6 +103,7 @@ class CreditTransactionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     """Read-only admin for credit transaction history."""
 
     list_display = [
+        "organization",
         "user",
         "transaction_type",
         "amount",
@@ -103,7 +112,7 @@ class CreditTransactionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["transaction_type", "created_at"]
-    list_select_related = ["user"]
+    list_select_related = ["organization", "user"]
 
 
 @admin.register(Subscription)
@@ -111,6 +120,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
     """Editable admin surface for local subscription snapshots."""
 
     list_display = [
+        "organization",
         "user",
         "plan",
         "status",
@@ -118,8 +128,13 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "current_period_end",
     ]
     list_filter = ["status", "plan"]
-    list_select_related = ["user", "plan"]
-    search_fields = ["stripe_subscription_id", "stripe_customer_id"]
+    list_select_related = ["organization", "user", "plan"]
+    search_fields = [
+        "organization__name",
+        "organization__slug",
+        "stripe_subscription_id",
+        "stripe_customer_id",
+    ]
 
 
 @admin.register(WebhookEvent)

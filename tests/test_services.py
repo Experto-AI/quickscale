@@ -33,6 +33,7 @@ from quickscale_modules_billing.services import (
     get_stripe_client,
     handle_stripe_event,
 )
+from quickscale_modules_orgs.models import Organization
 
 
 def _create_plan(*, price_id: str = "price_starter") -> Plan:
@@ -49,6 +50,10 @@ def _create_plan(*, price_id: str = "price_starter") -> Plan:
 
 def _user_reference(user: Any) -> str:
     return f"{user._meta.label_lower}:{user.pk}"
+
+
+def _organization_reference(organization: Organization) -> str:
+    return f"{organization._meta.label_lower}:{organization.pk}"
 
 
 def _invoice_paid_event(
@@ -95,6 +100,7 @@ class FakeStripeClient:
     event: dict[str, Any] | None = None
     construct_error: Exception | None = None
     searched_references: list[str] = field(default_factory=list)
+    searched_reference_kinds: list[str] = field(default_factory=list)
     created_payloads: list[dict[str, Any]] = field(default_factory=list)
     created_customers_by_idempotency_key: dict[str, dict[str, Any]] = field(
         default_factory=dict
@@ -111,8 +117,18 @@ class FakeStripeClient:
     subscriptions: dict[str, dict[str, Any]] = field(default_factory=dict)
     retrieved_subscription_ids: list[str] = field(default_factory=list)
 
-    def search_customers(self, *, user_reference: str) -> list[dict[str, Any]]:
-        self.searched_references.append(user_reference)
+    def search_customers(
+        self,
+        *,
+        user_reference: str = "",
+        organization_reference: str = "",
+    ) -> list[dict[str, Any]]:
+        if organization_reference:
+            self.searched_references.append(organization_reference)
+            self.searched_reference_kinds.append("organization")
+        else:
+            self.searched_references.append(user_reference)
+            self.searched_reference_kinds.append("user")
         return list(self.customers)
 
     def create_customer(
@@ -339,6 +355,27 @@ def test_get_or_create_stripe_customer_prefers_existing_subscription(
 
 
 @pytest.mark.django_db
+def test_get_or_create_stripe_customer_prefers_authoritative_org_customer(user) -> None:
+    organization = Organization.objects.create(
+        name="Atlas",
+        slug="atlas",
+        stripe_customer_id="cus_org_authoritative",
+    )
+    fake_client = FakeStripeClient()
+
+    customer_id, created = get_or_create_stripe_customer(
+        user,
+        organization=organization,
+        stripe_client=fake_client,
+    )
+
+    assert customer_id == "cus_org_authoritative"
+    assert created is False
+    assert fake_client.searched_references == []
+    assert fake_client.created_payloads == []
+
+
+@pytest.mark.django_db
 def test_get_or_create_stripe_customer_searches_remote_metadata_before_create(
     user,
 ) -> None:
@@ -381,6 +418,41 @@ def test_get_or_create_stripe_customer_creates_remote_customer_when_missing(
         "idempotency_key": fake_client.created_payloads[0]["idempotency_key"],
     }
     assert fake_client.created_payloads[0]["idempotency_key"]
+
+
+@pytest.mark.django_db
+def test_get_or_create_stripe_customer_creates_and_persists_org_customer_with_org_first_metadata(
+    user,
+) -> None:
+    organization = Organization.objects.create(name="Beacon", slug="beacon")
+    fake_client = FakeStripeClient()
+
+    customer_id, created = get_or_create_stripe_customer(
+        user,
+        organization=organization,
+        stripe_client=fake_client,
+    )
+    organization.refresh_from_db()
+
+    assert customer_id == "cus_created"
+    assert created is True
+    assert organization.stripe_customer_id == "cus_created"
+    assert fake_client.searched_reference_kinds == ["organization"]
+    assert fake_client.searched_references == [_organization_reference(organization)]
+    assert len(fake_client.created_payloads) == 1
+    assert list(fake_client.created_payloads[0]["metadata"].keys())[:3] == [
+        "quickscale_org_reference",
+        "quickscale_org_model",
+        "quickscale_org_pk",
+    ]
+    assert fake_client.created_payloads[0]["metadata"] == {
+        "quickscale_org_reference": _organization_reference(organization),
+        "quickscale_org_model": organization._meta.label_lower,
+        "quickscale_org_pk": str(organization.pk),
+        "quickscale_user_reference": _user_reference(user),
+        "quickscale_user_model": user._meta.label_lower,
+        "quickscale_user_pk": str(user.pk),
+    }
 
 
 @pytest.mark.django_db
@@ -792,6 +864,59 @@ def test_handle_stripe_event_credits_subscription_user_and_records_event(
             "webhook_secret": "whsec_runtime",
         }
     ]
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org_balance(
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _create_plan(price_id="price_org_runtime")
+    organization = Organization.objects.create(name="Nova", slug="nova")
+    Subscription.objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_subscription_id="sub_org_runtime",
+        status=Subscription.Status.ACTIVE,
+    )
+    event = _invoice_paid_event(
+        event_id="evt_org_runtime",
+        invoice_id="in_org_runtime",
+        customer_id="cus_org_runtime",
+        price_id=plan.stripe_price_id,
+        user_reference=_user_reference(user),
+    )
+    event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
+    fake_client = FakeStripeClient(event=event)
+    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_org_runtime")
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_org_runtime"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+    organization.refresh_from_db()
+
+    balance = CreditBalance.objects.get(organization=organization)
+    transaction_row = CreditTransaction.objects.get(organization=organization)
+    subscription = Subscription.objects.get(organization=organization)
+
+    assert result.status == "processed"
+    assert organization.stripe_customer_id == "cus_org_runtime"
+    assert balance.balance == 100
+    assert balance.user is None
+    assert transaction_row.user == user
+    assert transaction_row.organization == organization
+    assert transaction_row.stripe_reference_data == {
+        "invoice_id": "in_org_runtime",
+        "stripe_customer_id": "cus_org_runtime",
+        "stripe_price_id": plan.stripe_price_id,
+        "stripe_subscription_id": "sub_123",
+    }
+    assert subscription.stripe_customer_id == "cus_org_runtime"
 
 
 @pytest.mark.django_db
