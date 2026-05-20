@@ -1,0 +1,12 @@
+{% extends "quickscale_modules_notifications/notifications/base_email.html" %}
+
+{% block title %}You're invited to join {{ organization_name }}{% endblock %}
+{% block heading %}You're invited to join {{ organization_name }}{% endblock %}
+
+{% block content %}
+<p style="margin-top:0;">{{ inviter_name }} invited {{ invitee_email }} to join <strong>{{ organization_name }}</strong> as {{ role_display }}.</p>
+<p>
+  <a href="{{ accept_url }}" style="display:inline-block;padding:12px 18px;background:#8a6c4a;color:#ffffff;text-decoration:none;">Accept invitation</a>
+</p>
+<p style="margin-bottom:0;">This invitation expires at {{ expires_at }}.</p>
+{% endblock %}

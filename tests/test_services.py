@@ -90,6 +90,20 @@ def _create_submission(form: Form) -> FormSubmission:
     return submission
 
 
+def _org_invitation_context() -> dict[str, str]:
+    return {
+        "organization_name": "Acme Labs",
+        "invitee_email": "invitee@example.com",
+        "inviter_name": "Helios Admin",
+        "role_display": "Admin",
+        "accept_url": (
+            "https://example.com/orgs/invitations/"
+            "00000000-0000-0000-0000-000000000000/accept/"
+        ),
+        "expires_at": "2026-05-26T12:00:00+00:00",
+    }
+
+
 @pytest.mark.django_db
 def test_ensure_default_settings_prevents_snapshot_drift(
     notification_settings_row,
@@ -115,6 +129,25 @@ def test_render_notification_requires_declared_context_keys() -> None:
             template_key="notifications.generic",
             context={"headline": "Missing body"},
         )
+
+
+def test_render_notification_renders_org_invitation_template() -> None:
+    context = _org_invitation_context()
+
+    rendered = render_notification(
+        template_key="notifications.org_invitation",
+        context=context,
+    )
+
+    assert rendered.subject == "You're invited to join Acme Labs"
+    assert (
+        "Helios Admin invited invitee@example.com to join Acme Labs as Admin."
+        in rendered.text_body
+    )
+    assert context["accept_url"] in rendered.text_body
+    assert context["expires_at"] in rendered.text_body
+    assert "Accept invitation" in rendered.html_body
+    assert context["accept_url"] in rendered.html_body
 
 
 @pytest.mark.django_db
@@ -172,6 +205,41 @@ def test_send_notification_tracks_each_recipient_and_sanitizes_provider_metadata
         "workflow": "password-reset",
         "template": "notifications-generic",
     }
+
+
+@pytest.mark.django_db
+def test_send_notification_supports_org_invitation_template(
+    notification_settings_row,
+    django_capture_on_commit_callbacks,
+) -> None:
+    del notification_settings_row
+    context = _org_invitation_context()
+
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        message = send_notification(
+            template_key="notifications.org_invitation",
+            recipients=["Invitee@Example.com"],
+            context=context,
+            tags=["auth"],
+            metadata={"workflow": "org-invitation"},
+            mailer=lambda mail: f"provider::{mail.to[0]}",
+        )
+
+    message.refresh_from_db()
+    delivery = message.deliveries.get()
+
+    assert len(callbacks) == 1
+    assert message.subject == "You're invited to join Acme Labs"
+    assert message.status == NotificationMessage.STATUS_SENT
+    assert message.tags_json == ["quickscale", "transactional", "auth"]
+    assert message.metadata_json == {
+        "template": "notifications-org-invitation",
+        "workflow": "org-invitation",
+    }
+    assert delivery.recipient_email == "invitee@example.com"
+    assert delivery.status == NotificationDelivery.STATUS_SENT
+    assert delivery.provider_message_id == "provider::invitee@example.com"
+    assert "Accept invitation" in message.rendered_html
 
 
 @pytest.mark.django_db

@@ -1,0 +1,6 @@
+{{ inviter_name }} invited {{ invitee_email }} to join {{ organization_name }} as {{ role_display }}.
+
+Accept invitation:
+{{ accept_url }}
+
+This invitation expires at {{ expires_at }}.
