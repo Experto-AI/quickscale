@@ -12,6 +12,69 @@
     <p>{{ form_error }}</p>
     {% endif %}
 
+    <h2>Invite a member</h2>
+
+    {% if invite_form.non_field_errors %}
+    {% for error in invite_form.non_field_errors %}
+    <p>{{ error }}</p>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post" action="{% url 'org-members-invite' org_slug=organization.slug %}">
+        {% csrf_token %}
+        <p>
+            <label for="{{ invite_form.email.id_for_label }}">Email</label>
+            {{ invite_form.email }}
+        </p>
+        {% for error in invite_form.email.errors %}
+        <p>{{ error }}</p>
+        {% endfor %}
+
+        <p>
+            <label for="{{ invite_form.role.id_for_label }}">Role</label>
+            {{ invite_form.role }}
+        </p>
+        {% for error in invite_form.role.errors %}
+        <p>{{ error }}</p>
+        {% endfor %}
+
+        <button type="submit">Send invitation</button>
+    </form>
+
+    <h2>Pending invitations</h2>
+
+    {% if pending_invitations %}
+    <table>
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Invited by</th>
+                <th>Expires</th>
+                <th>Revoke</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invitation in pending_invitations %}
+            <tr>
+                <td>{{ invitation.email }}</td>
+                <td>{{ invitation.get_role_display }}</td>
+                <td>{{ invitation.invited_by.username|default:invitation.invited_by.email }}</td>
+                <td>{{ invitation.expires_at }}</td>
+                <td>
+                    <form method="post" action="{% url 'org-members-invitation-revoke' org_slug=organization.slug invitation_id=invitation.pk %}">
+                        {% csrf_token %}
+                        <button type="submit">Revoke invitation</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No pending invitations.</p>
+    {% endif %}
+
     <table>
         <thead>
             <tr>

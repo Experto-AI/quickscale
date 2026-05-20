@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.test import RequestFactory
 
+from quickscale_modules_billing.models import Plan, Subscription
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 from quickscale_modules_orgs.permissions import ROLE_HIERARCHY, require_org_feature
 
@@ -139,15 +138,40 @@ def test_role_hierarchy_matches_roadmap_order() -> None:
     }
 
 
-def test_require_org_feature_returns_200_when_feature_is_enabled() -> None:
-    request = RequestFactory().get("/")
-    request.user = SimpleNamespace(is_authenticated=True)
-    request.org = SimpleNamespace(
-        subscription=SimpleNamespace(
-            is_active=True,
-            plan=SimpleNamespace(features=["crm", "billing"]),
-        )
+def _create_plan(*, slug: str, features: list[str]) -> Plan:
+    return Plan.objects.create(
+        name="Growth",
+        slug=slug,
+        stripe_price_id=f"price_{slug}",
+        credits_per_period=250,
+        price_cents=4900,
+        currency="usd",
+        billing_interval=Plan.BillingInterval.MONTHLY,
+        features=features,
     )
+
+
+def _build_feature_request(*, organization: Organization):
+    request = RequestFactory().get("/")
+    request.user = get_user_model().objects.create_user(
+        username=f"feature-user-{organization.slug}",
+        email=f"feature-user-{organization.slug}@example.com",
+        password="secret123",
+    )
+    request.org = organization
+    return request
+
+
+@pytest.mark.django_db
+def test_require_org_feature_returns_200_when_feature_is_enabled() -> None:
+    organization = Organization.objects.create(name="Acme", slug="acme")
+    plan = _create_plan(slug="growth-with-crm", features=["crm", "billing"])
+    Subscription.objects.create(
+        organization=organization,
+        plan=plan,
+        status=Subscription.Status.ACTIVE,
+    )
+    request = _build_feature_request(organization=organization)
 
     @require_org_feature("crm")
     def feature_view(request, org_slug: str):
@@ -158,39 +182,72 @@ def test_require_org_feature_returns_200_when_feature_is_enabled() -> None:
     assert response.status_code == 200
 
 
+@pytest.mark.django_db
 def test_require_org_feature_returns_402_without_feature() -> None:
-    request = RequestFactory().get("/")
-    request.user = SimpleNamespace(is_authenticated=True)
-    request.org = SimpleNamespace(
-        subscription=SimpleNamespace(
-            is_active=True,
-            plan=SimpleNamespace(features=["billing"]),
-        )
+    organization = Organization.objects.create(name="Bravo", slug="bravo")
+    plan = _create_plan(slug="growth-without-crm", features=["billing"])
+    Subscription.objects.create(
+        organization=organization,
+        plan=plan,
+        status=Subscription.Status.ACTIVE,
     )
+    request = _build_feature_request(organization=organization)
 
     @require_org_feature("crm")
     def feature_view(request, org_slug: str):
         return HttpResponse("ok")
 
-    response = feature_view(request, org_slug="acme")
+    response = feature_view(request, org_slug="bravo")
 
     assert response.status_code == 402
 
 
+@pytest.mark.django_db
 def test_require_org_feature_returns_402_without_active_subscription() -> None:
-    request = RequestFactory().get("/")
-    request.user = SimpleNamespace(is_authenticated=True)
-    request.org = SimpleNamespace(
-        subscription=SimpleNamespace(
-            is_active=False,
-            plan=SimpleNamespace(features=["crm"]),
-        )
+    organization = Organization.objects.create(name="Charlie", slug="charlie")
+    plan = _create_plan(slug="growth-trialing-crm", features=["crm"])
+    Subscription.objects.create(
+        organization=organization,
+        plan=plan,
+        status=Subscription.Status.TRIALING,
     )
+    request = _build_feature_request(organization=organization)
 
     @require_org_feature("crm")
     def feature_view(request, org_slug: str):
         return HttpResponse("ok")
 
-    response = feature_view(request, org_slug="acme")
+    response = feature_view(request, org_slug="charlie")
+
+    assert response.status_code == 402
+
+
+@pytest.mark.django_db
+def test_require_org_feature_ignores_request_subscription_stub_and_uses_orm() -> None:
+    organization = Organization.objects.create(name="Delta", slug="delta")
+    plan = _create_plan(slug="growth-delta-billing", features=["billing"])
+    Subscription.objects.create(
+        organization=organization,
+        plan=plan,
+        status=Subscription.Status.ACTIVE,
+    )
+    request = RequestFactory().get("/")
+    request.user = get_user_model().objects.create_user(
+        username="feature-user-delta",
+        email="feature-user-delta@example.com",
+        password="secret123",
+    )
+    request.org = organization
+    request.org.subscription = type(
+        "SubscriptionStub",
+        (),
+        {"plan": type("PlanStub", (), {"features": ["crm"]})()},
+    )()
+
+    @require_org_feature("crm")
+    def feature_view(request, org_slug: str):
+        return HttpResponse("ok")
+
+    response = feature_view(request, org_slug="delta")
 
     assert response.status_code == 402

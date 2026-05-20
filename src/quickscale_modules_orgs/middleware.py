@@ -16,6 +16,7 @@ from django.http import (
 from django.shortcuts import redirect
 from django.urls import Resolver404, resolve
 
+from .constants import ORG_INVITATION_ACCEPT_URL_NAME
 from .models import Organization, OrganizationMembership
 
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
@@ -65,7 +66,7 @@ class TenantMiddleware:
     def _handle_saas_bootstrap_request(
         self, request: OrganizationRequest
     ) -> HttpResponse:
-        if request.path_info in ORG_ONBOARDING_PATHS:
+        if self._is_allowed_saas_bootstrap_path(request.path_info):
             return self.get_response(request)
         if not OrganizationMembership.objects.filter(user=request.user).exists():
             return redirect("/orgs/new/")
@@ -108,9 +109,7 @@ class TenantMiddleware:
 
     @staticmethod
     def _get_personal_org(request: OrganizationRequest) -> Organization:
-        return cast(
-            Organization, Organization.objects.create_personal_for(request.user)
-        )
+        return Organization.objects.create_personal_for(request.user)
 
     def _call_with_org(
         self,
@@ -140,6 +139,17 @@ class TenantMiddleware:
     @staticmethod
     def _is_org_namespace(path: str) -> bool:
         return path.startswith(ORG_NAMESPACE_PREFIX)
+
+    @staticmethod
+    def _is_allowed_saas_bootstrap_path(path: str) -> bool:
+        if path in ORG_ONBOARDING_PATHS:
+            return True
+
+        try:
+            match = resolve(path)
+        except Resolver404:
+            return False
+        return match.url_name == ORG_INVITATION_ACCEPT_URL_NAME
 
     @staticmethod
     def _is_saas_mode() -> bool:
