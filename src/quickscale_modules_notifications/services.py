@@ -283,6 +283,27 @@ _TEMPLATE_REGISTRY = {
             {"form_title", "submitted_at", "fields", "ip_address", "status"}
         ),
     ),
+    "notifications.org_invitation": NotificationTemplateDefinition(
+        subject_template=(
+            "quickscale_modules_notifications/notifications/org_invitation_subject.txt"
+        ),
+        text_template=(
+            "quickscale_modules_notifications/notifications/org_invitation_body.txt"
+        ),
+        html_template=(
+            "quickscale_modules_notifications/notifications/org_invitation_body.html"
+        ),
+        required_context=frozenset(
+            {
+                "organization_name",
+                "invitee_email",
+                "inviter_name",
+                "role_display",
+                "accept_url",
+                "expires_at",
+            }
+        ),
+    ),
 }
 
 
@@ -951,10 +972,10 @@ def _parse_event_datetime(value: Any) -> datetime | None:
     if value in (None, ""):
         return None
     if isinstance(value, (int, float)):
-        return timezone.datetime.fromtimestamp(value, tz=timezone.utc)
+        return timezone.datetime.fromtimestamp(value, tz=timezone.UTC)
     parsed_value = parse_datetime(str(value))
     if parsed_value is None:
         return None
     if timezone.is_naive(parsed_value):
-        return timezone.make_aware(parsed_value, timezone.utc)
+        return timezone.make_aware(parsed_value, timezone.UTC)
     return parsed_value
