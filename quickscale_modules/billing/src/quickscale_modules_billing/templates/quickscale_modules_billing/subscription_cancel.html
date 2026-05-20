@@ -84,7 +84,7 @@
             <h1>Subscription not started</h1>
             <p>You left checkout before Stripe started the subscription, so no charge was made.</p>
             <div class="actions">
-                <a class="button button-primary" href="{% url 'quickscale_billing:pricing-page' %}">View plans</a>
+                <a class="button button-primary" href="{{ pricing_url }}">View plans</a>
                 <a class="button button-secondary" href="/">Back to app</a>
             </div>
         </div>

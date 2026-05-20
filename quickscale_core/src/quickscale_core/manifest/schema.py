@@ -35,6 +35,7 @@ class ModuleManifest:
     description: str = ""
     mutable_options: dict[str, ConfigOption] = field(default_factory=dict)
     immutable_options: dict[str, ConfigOption] = field(default_factory=dict)
+    required_modules: list[str] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
     django_apps: list[str] = field(default_factory=list)
 

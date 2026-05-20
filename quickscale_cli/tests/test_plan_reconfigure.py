@@ -7,6 +7,7 @@ import yaml
 from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import _get_project_info_for_reconfig, plan
+from quickscale_cli.notifications_contract import default_notifications_module_options
 
 
 class TestPlanReconfigureBasic:
@@ -331,6 +332,134 @@ class TestPlanReconfigureAddModules:
                 with open("quickscale.yml") as f:
                     content = f.read()
                 assert "auth" in content
+
+    def test_plan_reconfigure_auto_adds_default_notifications_when_orgs_selected(
+        self,
+    ) -> None:
+        """Adding orgs during reconfigure should materialize default notifications."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--reconfigure"], input="y\norgs\nn\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
+
+    def test_plan_reconfigure_preserves_explicit_notifications_when_adding_orgs(
+        self,
+    ) -> None:
+        """Adding orgs should not overwrite an existing notifications config."""
+        runner = CliRunner()
+        notifications_config = {
+            "enabled": True,
+            "sender_name": "Ops",
+            "sender_email": "ops@example.com",
+            "reply_to_email": "support@example.com",
+            "resend_domain": "mg.example.com",
+            "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+            "webhook_secret_env_var": "OPS_NOTIFICATIONS_WEBHOOK_SECRET",
+            "default_tags": ["quickscale", "ops"],
+            "allowed_tags": ["quickscale", "ops", "transactional"],
+            "webhook_ttl_seconds": 600,
+        }
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            },
+                            "notifications": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": notifications_config,
+                            },
+                        },
+                    },
+                    f,
+                )
+
+            with open("quickscale.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {
+                            "auth": None,
+                            "notifications": notifications_config,
+                        },
+                        "docker": {"start": False},
+                    },
+                    f,
+                )
+
+            result = runner.invoke(plan, ["--reconfigure"], input="y\norgs\nn\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "orgs" in modules
+            assert modules["notifications"] == notifications_config
 
     def test_plan_reconfigure_supports_billing_and_rejects_teams_with_experimental_picker(
         self,

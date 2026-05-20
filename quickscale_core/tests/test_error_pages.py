@@ -169,7 +169,9 @@ class TestModuleInstallationHints:
         assert "Looking for billing" in content
         assert "auth" in content
         assert "/billing/pricing/" in content
+        assert "/orgs/&lt;slug&gt;/billing/dashboard/" in content
         assert "/billing/dashboard/" in content
+        assert "compatibility redirect" in content
         assert "quickscale apply" in content
 
     def test_teams_placeholder_hint_removed(self, generated_project_path: Path) -> None:

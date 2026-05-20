@@ -56,13 +56,13 @@ class TestHtmlThemeIntegration:
         )
         assert "Billing" in index_html
         assert "/billing/pricing/" in index_html
-        assert "/billing/dashboard/" in index_html
+        assert "{{ modules.billing.url }}" in index_html
         assert "Teams" not in index_html
 
         assert '<span class="nav-section-title">Social</span>' not in navigation
         assert '<span class="nav-section-title">Billing</span>' in navigation
         assert "/billing/pricing/" in navigation
-        assert "/billing/dashboard/" in navigation
+        assert "{{ modules.billing.url }}" in navigation
         assert '<span class="nav-section-title">Teams</span>' not in navigation
         assert "{% if user.is_staff %}" in navigation
         assert "CRM dashboard access is limited to staff users." in navigation
@@ -102,10 +102,11 @@ class TestHtmlThemeIntegration:
         assert billing_actions.count(ELSE_GUARD) == 1
         assert "/billing/" not in actions_prefix
         assert (
-            '<a class="module-link" href="/billing/dashboard/">Open billing '
-            "dashboard</a>" in authenticated_actions
+            '<a class="module-link" href="{{ modules.billing.url }}">Open billing</a>'
+            in authenticated_actions
         )
         assert "/billing/pricing/" not in authenticated_actions
+        assert "/billing/dashboard/" not in authenticated_actions
         assert (
             '<a class="module-link" href="/billing/pricing/">View pricing</a>'
             in unauthenticated_actions
@@ -139,10 +140,11 @@ class TestHtmlThemeIntegration:
         assert "/billing/dashboard/" not in submenu_prefix
         assert "nav-disabled-link" not in submenu_prefix
         assert (
-            '<li><a href="/billing/dashboard/">Billing Dashboard</a></li>'
+            '<li><a href="{{ modules.billing.url }}">Billing</a></li>'
             in authenticated_items
         )
         assert "/billing/pricing/" not in authenticated_items
+        assert "/billing/dashboard/" not in authenticated_items
         assert "nav-disabled-link" not in authenticated_items
         assert (
             '<li><span class="nav-disabled-link">Sign in to open the billing '
@@ -168,7 +170,8 @@ class TestHtmlThemeIntegration:
         assert "/billing/" not in index_prefix
         assert "/billing/" not in index_suffix
         assert index_billing_block.count("/billing/pricing/") == 1
-        assert index_billing_block.count("/billing/dashboard/") == 1
+        assert index_billing_block.count("{{ modules.billing.url }}") == 1
+        assert "/billing/dashboard/" not in index_billing_block
         assert index_billing_block.rstrip().endswith("{% endif %}")
 
         assert navigation.count(BILLING_GUARD) == 1
@@ -177,7 +180,8 @@ class TestHtmlThemeIntegration:
         assert "/billing/" not in nav_prefix
         assert "/billing/" not in nav_suffix
         assert nav_billing_block.count("/billing/pricing/") == 1
-        assert nav_billing_block.count("/billing/dashboard/") == 1
+        assert nav_billing_block.count("{{ modules.billing.url }}") == 1
+        assert "/billing/dashboard/" not in nav_billing_block
         assert nav_billing_block.count(AUTH_GUARD) == 1
         assert nav_billing_block.rstrip().endswith("{% endif %}")
 

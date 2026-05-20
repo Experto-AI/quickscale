@@ -40,6 +40,9 @@ from quickscale_cli.notifications_contract import (
     resolve_notifications_module_options,
     validate_notifications_module_options,
 )
+from quickscale_cli.commands.implied_module_defaults import (
+    get_implied_module_default_configs,
+)
 from quickscale_cli.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
@@ -64,6 +67,7 @@ from quickscale_cli.utils.module_dependency_sync import (
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
+    ModuleConfig,
     QuickScaleConfig,
     generate_yaml,
     validate_config,
@@ -681,6 +685,21 @@ def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     return sanitized_modules
 
 
+def _materialize_implied_module_configs(qs_config: QuickScaleConfig) -> list[str]:
+    """Add explicit module config blocks required by selected modules."""
+    implied_configs = get_implied_module_default_configs(qs_config.modules.keys())
+    if not implied_configs:
+        return []
+
+    for module_name, options in implied_configs.items():
+        qs_config.modules[module_name] = ModuleConfig(
+            name=module_name,
+            options=sanitize_module_options(module_name, options),
+        )
+
+    return list(implied_configs.keys())
+
+
 def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
     """Load and validate configuration from file."""
     if not config_path.exists():
@@ -699,16 +718,24 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
         qs_config = validate_config(yaml_content)
         original_data = yaml.safe_load(yaml_content) or {}
         original_modules = original_data.get("modules") or {}
-        _sanitize_loaded_module_configs(qs_config)
+        sanitized_modules = _sanitize_loaded_module_configs(qs_config)
+        implied_modules = _materialize_implied_module_configs(qs_config)
         normalized_yaml = generate_yaml(qs_config)
         normalized_data = yaml.safe_load(normalized_yaml) or {}
         normalized_modules = normalized_data.get("modules") or {}
         if normalized_modules != original_modules:
             config_path.write_text(normalized_yaml)
-            click.secho(
-                "✅ Sanitized legacy module config keys in quickscale.yml",
-                fg="green",
-            )
+            if sanitized_modules:
+                click.secho(
+                    "✅ Sanitized legacy module config keys in quickscale.yml",
+                    fg="green",
+                )
+            if implied_modules:
+                click.secho(
+                    "✅ Added implied module config to quickscale.yml: "
+                    + ", ".join(implied_modules),
+                    fg="green",
+                )
         _validate_module_prerequisites(qs_config)
         return qs_config
     except ConfigValidationError as e:

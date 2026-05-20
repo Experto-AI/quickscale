@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, and org settings pages. Ordinary requests are still isolated in the application layer. PostgreSQL RLS activation, downstream tenant-table adoption, the org-billing bridge, invitations, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, and the current org-billing bridge (authoritative org billing ownership fields, canonical org-scoped billing pages/APIs with flat compatibility shims, migration/promote commands, and ORM-backed plan feature gating). Ordinary requests are still isolated in the application layer. PostgreSQL RLS activation, downstream tenant-table adoption, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
 
 ---
 
@@ -77,7 +77,7 @@ QUICKSCALE_MODE = 'saas'
 python manage.py promote_to_saas
 ```
 
-`promote_to_saas` is the intended follow-on upgrade command once the later billing-bridge and onboarding phases land. It does not ship in the current foundation slice.
+`promote_to_saas` now ships as part of the current org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_MODE = 'saas'` settings change instead of mutating settings files directly.
 
 ---
 
@@ -299,7 +299,7 @@ Modules affected: CRM, blog, forms, listings, storage, notifications. Cross-modu
 
 ---
 
-**Planned follow-on design note**: the remaining sections describe the intended billing, onboarding, invitation, URL, and frontend shape for later v0.86.0 phases. They do not ship in the current foundation slice unless the implementation-scope section below marks them implemented.
+**Planned follow-on design note**: the remaining sections mix the shipped server-rendered contract with later v0.86.0 follow-on design. Billing bridge, React org-management, and PostgreSQL RLS activation remain planned follow-on work; the invitation flow and org URL notes below call out the current shipped contract where relevant.
 
 ---
 
@@ -318,27 +318,33 @@ This is wrong for a team SaaS. Clients pay for their organization; individual me
 
 ### Resolution
 
-Add org-scoped fields to billing models:
+Phase 6 now makes the organization the authoritative billing owner while retaining a narrow user-level provenance bridge for compatibility during the cutover:
 
 ```
-Subscription.organization  → FK → Organization (nullable; required after migration)
-CreditBalance.organization → OneToOneField → Organization (replaces per-user balance)
-CreditTransaction.performed_by → FK → User (who acted within the org)
+Subscription.organization  → FK → Organization (authoritative owner)
+Subscription.user          → nullable FK → User (provenance / compatibility only)
+CreditBalance.organization → OneToOneField → Organization (authoritative balance owner)
+CreditBalance.user         → nullable OneToOneField → User (provenance / compatibility only)
+CreditTransaction.organization → FK → Organization (authoritative ledger scope)
+CreditTransaction.user     → nullable FK → User (acting org member provenance / audit actor)
+Plan.features             → JSONField(default=list) (sole entitlement source)
 ```
 
 `Organization.stripe_customer_id` is the Stripe customer identifier. The Org Owner's email is the Stripe billing email. When the Owner transfers ownership, the Stripe customer record stays with the organization (not the departing user).
 
-Credit transactions (`CreditTransaction`) are attributed to the acting user (`performed_by`) but deducted from the organization's balance.
+Credit transactions stay attributed to the acting user (`CreditTransaction.user`) while debiting the authoritative organization balance, and that user link now nulls cleanly on deletion so the org ledger row remains intact.
+
+PostgreSQL RLS activation is still deferred. The org-billing bridge ships first at the ORM/application layer; later DB hardening still depends on downstream tenant tables carrying concrete `organization_id` columns.
 
 ### Hybrid Billing Model: Credits + Feature Gates + Optional Seats
 
-QuickScale combines the credit-pool model (QuickScale's core mechanic) with plan-level feature gating and optional seat pricing (both proven by SaaS Pegasus). These are complementary, not alternatives.
+QuickScale currently combines the credit-pool model (QuickScale's core mechanic) with plan-level feature gating. Optional seat pricing remains future design work; the current Phase 6 contract does not yet ship `max_seats` or seat-addon Stripe prices.
 
 **Credits** measure consumption — AI operations, API calls, or any metered action. Every plan includes a monthly credit allocation. Credits do not expire within the billing period and roll over at the operator's discretion.
 
 **Feature gates** control which modules are available at each plan tier. This gives operators a tool to upsell without requiring a custom per-org flag system.
 
-**Seat pricing** (optional) charges per `OrganizationMembership` count. It is additive on top of the base plan price. Operators may enable it via a settings flag; it is not required.
+**Seat pricing** remains optional follow-on work. The design below stays as a future-ready reference, but the current shipped bridge does not yet expose seat fields or seat billing enforcement.
 
 | Plan tier | Monthly credits | Modules included | Max seats (optional) |
 |-----------|-----------------|-----------------|----------------------|
@@ -370,11 +376,11 @@ def crm_index(request, org_slug):
     ...
 ```
 
-This decorator checks `request.org.subscription.plan.features` and returns HTTP 402 with an upgrade prompt if the feature is not in the plan.
+This decorator resolves the current organization's active subscription through the billing ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent.
 
 ### Migration Path from v0.85.0
 
-For deployments already using v0.85.0 user-scoped billing: a management command `migrate_billing_to_orgs` auto-creates a personal organization (name: `"{username}'s Org"`, slug: `"{username}"`, `is_personal=True`) for each existing user and migrates their `Subscription` and `CreditBalance` to that organization. The command is idempotent and must be run once after deploying the organizations module.
+For deployments already using v0.85.0 user-scoped billing, `migrate_billing_to_orgs` ships as the idempotent bridge command. It reuses a sole existing organization when one is already resolvable for the billing user; otherwise it creates a personal org via the standard helper, migrates authoritative `Subscription`, `CreditBalance`, and `CreditTransaction` ownership to that organization, syncs a sole Stripe customer id when safe, and aborts ambiguous cases instead of guessing. Run it once after deploying the organizations module.
 
 ---
 
@@ -391,7 +397,7 @@ Customers self-provision without platform owner intervention:
 4. Redirect → /orgs/<slug>/  → org dashboard, ready to use
 ```
 
-**Post-signup guard**: Authenticated users with no `OrganizationMembership` are redirected to `/orgs/new/` by `TenantMiddleware` for every request except `/accounts/*` and `/orgs/new/` itself.
+**Post-signup guard**: Authenticated users with no `OrganizationMembership` are redirected to `/orgs/new/` by `TenantMiddleware` for ordinary requests. The shipped carveout is the slugless invitation continuation path under `/orgs/invitations/<token>/accept/`, which stays reachable so a pending invite can resume after auth instead of being forced through org creation.
 
 ### Solo Mode
 
@@ -420,16 +426,24 @@ Wired via `ACCOUNT_ADAPTER = 'quickscale_modules_orgs.adapters.OrgsAccountAdapte
 
 ## Invitation Flow
 
-Invitations are only active in SaaS mode. In Solo mode the invitation views return HTTP 404.
+Invitations are active only in SaaS mode. In Solo mode the invitation views stay hidden behind HTTP 404.
 
-1. An Admin or Owner submits an invite form with an email address and role.
+1. An Admin or Owner opens the org members/admin surface and submits an invite form with an email address and role.
 2. The system creates an `OrganizationInvitation` record with a UUID token and a 7-day expiry.
-3. The notifications module sends the invite email: `orgs/email/invite.html` with the accept URL.
-4. Accept URL: `GET /orgs/<org_slug>/invite/<token>/accept/`
-   - If the email has an existing account: log in (or confirm login) and create `OrganizationMembership`.
-   - If the email is new: redirect to signup, then complete membership creation on account creation.
+3. The notifications module renders and sends the registry-backed `org_invitation` email with the public accept URL.
+4. Accept URL: `GET /orgs/invitations/<token>/accept/`
+    - The URL is intentionally slugless so invite redemption can continue before org membership resolution exists.
+    - Unauthenticated visitors are redirected through auth and then resumed back into `AcceptInvitationView`.
+    - Redemption happens in `AcceptInvitationView` after auth, and membership side effects run only when the signed-in email matches the invitation email after normalization.
+    - New users can complete signup first; the same accept view resumes and redeems the invite after auth succeeds.
 5. Expired or already-accepted tokens return HTTP 410 with a user-facing message.
-6. Revoking an invitation deletes the `OrganizationInvitation` row; the token URL becomes 404.
+6. Revoking an invitation deletes the `OrganizationInvitation` row; the token URL becomes HTTP 404.
+7. Ordinary SaaS no-membership traffic still goes to `/orgs/new/`; the public invitation accept path is the narrow bootstrap carveout for pending invite continuation.
+
+### Focused Validation Notes
+
+- Coverage stays focused on invite send/revoke, the slugless accept continuation path, auth redirect/resume behavior, normalized-email redemption guards, and Solo-mode 404 handling.
+- Shipping this slice did not require the deferred Phase 3 PostgreSQL RLS activation work or the later Phase 7 React org-management work.
 
 ---
 
@@ -443,11 +457,11 @@ Path routing (not subdomain). The org slug appears in every URL so the active or
 /orgs/                                     # List orgs the current user belongs to
 /orgs/new/                                 # Create a new org + Stripe checkout
 /orgs/<slug>/                              # Org dashboard
-/orgs/<slug>/members/                      # Member list and role management
-/orgs/<slug>/invite/                       # Send invitations
-/orgs/<slug>/invite/<token>/accept/        # Accept an invitation
+/orgs/<slug>/members/                      # Member list, role management, invite send/revoke
+/orgs/invitations/<token>/accept/          # Public invitation accept / continuation
 /orgs/<slug>/settings/                     # Org settings (name, slug)
-/orgs/<slug>/billing/                      # Org billing (delegates to billing module)
+/orgs/<slug>/billing/dashboard/            # Canonical authenticated billing dashboard
+/orgs/<slug>/billing/pricing/              # Canonical org-scoped pricing page
 
 # All module routes are nested under the org slug:
 /orgs/<slug>/crm/                          # CRM for this org
@@ -457,7 +471,9 @@ Path routing (not subdomain). The org slug appears in every URL so the active or
 
 # API equivalents:
 /api/orgs/<slug>/crm/                      # CRM API for this org
-/api/billing/...                           # Billing API (org resolved from session/auth)
+/orgs/<slug>/api/billing/...               # Canonical org-scoped billing API surface
+
+Flat authenticated billing routes (`/billing/dashboard/`, `/api/billing/...`) remain compatibility shims for Solo mode and for older non-org callers while SaaS callers move to the canonical org-scoped paths above.
 ```
 
 ### Solo Mode
@@ -468,7 +484,8 @@ Path routing (not subdomain). The org slug appears in every URL so the active or
 /crm/                  # CRM
 /forms/                # Forms
 /listings/             # Listings
-/billing/              # Billing
+/billing/pricing/      # Public pricing
+/billing/dashboard/    # Authenticated billing dashboard
 /account/settings/     # User settings
 ```
 
@@ -482,10 +499,9 @@ No org management pages are exposed in solo mode.
 /orgs                   → OrgListPage
 /orgs/new               → OrgCreatePage
 /orgs/:slug             → OrgDashboardPage  (rendered inside OrgLayout)
-/orgs/:slug/members     → OrgMembersPage
-/orgs/:slug/invite      → OrgInvitePage
+/orgs/:slug/members     → OrgMembersPage (member list, role changes, invite send/revoke)
 /orgs/:slug/settings    → OrgSettingsPage
-/orgs/:slug/billing     → BillingPage (reuses existing billing components)
+/orgs/:slug/billing/dashboard → BillingPage (reuses existing billing components)
 /orgs/:slug/crm         → CrmPage (reuses existing CRM components)
 /orgs/:slug/blog        → BlogPage
 /orgs/:slug/forms       → FormsPage
@@ -502,7 +518,8 @@ No org management pages are exposed in solo mode.
 /crm                    → CrmPage
 /forms                  → FormsPage
 /listings               → ListingsPage
-/billing                → BillingPage
+/billing/dashboard      → BillingPage
+/billing/pricing        → PricingPage
 ```
 
 No `OrgLayout` or org switcher is rendered.
@@ -541,7 +558,8 @@ class TenantMiddleware:
             has_membership = OrganizationMembership.objects.filter(user=request.user).exists()
             if not has_membership:
                 exempt = request.path.startswith('/accounts') or \
-                         request.path.startswith('/orgs/new')
+                         request.path.startswith('/orgs/new') or \
+                         (request.path.startswith('/orgs/invitations/') and request.path.endswith('/accept/'))
                 if saas_mode and not exempt:
                     return redirect('/orgs/new/')
                 elif not saas_mode:
@@ -628,13 +646,15 @@ This section records the current repository slice, not the eventual end-state de
 | `TenantMiddleware` (Solo/SaaS org resolution, `request.org`, `app.current_org_id`) | ✅ implemented |
 | Middleware caller-parity coverage for bootstrap/exempt vs org-scoped paths | ✅ implemented |
 | `require_org_role` decorator + `OrgRoleMixin` | ✅ implemented |
-| `require_org_feature` decorator | ✅ implemented as a foundation stub for later billing-plan enforcement |
+| `require_org_feature` decorator | ✅ implemented with ORM-backed active-subscription lookup and `Plan.features` entitlement checks |
 | Post-signup: auto-create personal org (Solo) or redirect to `/orgs/new/` (SaaS) | ✅ implemented |
 | PostgreSQL RLS migration for downstream tenant tables | ❌ deferred until those tables carry concrete `organization_id` columns |
 | PostgreSQL cross-org isolation test suite | ❌ deferred with the RLS migration; requires real PostgreSQL |
 | Server-rendered self-service org creation, dashboard, members, settings, and import-compatible org URL surfaces | ✅ implemented |
-| Invitation flow, billing bridge, and React org-management UI surfaces | ❌ planned follow-on work |
-| `migrate_billing_to_orgs` / `promote_to_saas` management commands | ❌ planned follow-on work |
+| Server-rendered invitation flow: invite send/revoke on org admin surfaces, notifications registry-backed email, and slugless public accept continuation under `/orgs` | ✅ implemented |
+| Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, flat compatibility shims, and ORM-backed feature gating) | ✅ implemented |
+| `migrate_billing_to_orgs` / `promote_to_saas` management commands | ✅ implemented |
+| React org-management UI surfaces | ❌ planned follow-on work |
 | Subdomain routing | ❌ future-ready (middleware decoupled; DNS/NGINX config deferred) |
 | Hard seat-count enforcement at DB layer | ❌ deferred |
 | Per-tenant analytics | ❌ deferred |

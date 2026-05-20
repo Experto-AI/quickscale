@@ -12,6 +12,7 @@ from quickscale_cli.backups_contract import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
 )
+from quickscale_cli.notifications_contract import default_notifications_module_options
 from quickscale_cli.social_contract import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
@@ -622,7 +623,7 @@ class TestLoadAndValidateConfig:
             _load_and_validate_config(config)
 
     def test_billing_module_requires_auth_on_load(self, tmp_path, capsys):
-        """Apply load should reject billing until auth is present in the desired config."""
+        """Apply load should reject billing until auth is present for implied orgs."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -641,11 +642,12 @@ class TestLoadAndValidateConfig:
 
         error_output = capsys.readouterr().err
         assert (
-            "Billing requires the auth module before apply can continue" in error_output
+            "Organizations requires the auth module before apply can continue"
+            in error_output
         )
 
     def test_billing_module_loads_with_auth_on_load(self, tmp_path):
-        """Apply load should accept billing once auth is also configured."""
+        """Apply load should materialize orgs and notifications for billing."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -661,8 +663,22 @@ class TestLoadAndValidateConfig:
         )
 
         result = _load_and_validate_config(config)
+        rewritten = config.read_text()
 
-        assert set(result.modules.keys()) == {"auth", "billing"}
+        assert set(result.modules.keys()) == {
+            "auth",
+            "billing",
+            "notifications",
+            "orgs",
+        }
+        assert result.modules["orgs"].options == {}
+        assert result.modules["notifications"].options == (
+            default_notifications_module_options()
+        )
+        assert "orgs:" in rewritten
+        assert "notifications:" in rewritten
+        assert "sender_email: noreply@example.com" in rewritten
+        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
 
     def test_orgs_module_requires_auth_on_load(self, tmp_path, capsys):
         """Apply load should reject orgs until auth is present in the desired config."""
@@ -689,7 +705,7 @@ class TestLoadAndValidateConfig:
         )
 
     def test_orgs_module_loads_with_auth_on_load(self, tmp_path):
-        """Apply load should accept orgs once auth is also configured."""
+        """Apply load should materialize notifications once auth and orgs are configured."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -705,8 +721,15 @@ class TestLoadAndValidateConfig:
         )
 
         result = _load_and_validate_config(config)
+        rewritten = config.read_text()
 
-        assert set(result.modules.keys()) == {"auth", "orgs"}
+        assert set(result.modules.keys()) == {"auth", "orgs", "notifications"}
+        assert result.modules["notifications"].options == (
+            default_notifications_module_options()
+        )
+        assert "notifications:" in rewritten
+        assert "sender_email: noreply@example.com" in rewritten
+        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
 
     def test_legacy_backups_secrets_are_sanitized_on_load(self, tmp_path):
         """Legacy raw backup secrets should be rewritten to env-var references."""

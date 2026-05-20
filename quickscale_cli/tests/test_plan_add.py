@@ -7,6 +7,7 @@ from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
 from quickscale_cli.module_catalog import get_module_names
+from quickscale_cli.notifications_contract import default_notifications_module_options
 
 
 class TestPlanAddBasic:
@@ -358,6 +359,67 @@ docker:
             assert "public_base_url: https://cdn.example.com/media" in content
             assert "auth:" in content
 
+    def test_plan_add_auto_adds_default_notifications_when_orgs_selected(self) -> None:
+        """Selecting orgs should also materialize default notifications config."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--add"], input="orgs\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
+
+    def test_plan_add_auto_adds_orgs_and_notifications_when_billing_selected(
+        self,
+    ) -> None:
+        """Selecting billing should materialize the org-backed dependency chain."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--add"], input="billing\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "billing" in modules
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
+
     def test_plan_add_prunes_legacy_storage_custom_domain(self) -> None:
         """Adding modules should drop legacy storage-only custom_domain keys."""
         runner = CliRunner()
@@ -446,6 +508,24 @@ class TestPlanNewProjectConfigureModules:
                 content = f.read()
             assert "storage:" in content
             assert "public_base_url: https://cdn.example.com/media" in content
+
+    def test_plan_new_project_auto_adds_default_notifications_for_orgs(self) -> None:
+        """New-project planning should make implied notifications explicit for orgs."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp"],
+                input=("\n\nauth,orgs\nn\ny\n"),
+            )
+
+            assert result.exit_code == 0
+            with open("myapp/quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
 
 
 class TestPlanAddNoModulesSelected:

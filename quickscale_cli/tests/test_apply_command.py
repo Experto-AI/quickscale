@@ -2,18 +2,22 @@
 
 import click
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from quickscale_cli.commands.apply_command import (
     _abort_for_not_ready_modules,
+    _load_and_validate_config,
     _regenerate_managed_wiring_for_apply,
     _validate_module_prerequisites,
     apply,
 )
+from quickscale_cli.notifications_contract import default_notifications_module_options
 
 
 def _make_apply_context(project_path, *, package_name="myapp"):
@@ -220,6 +224,64 @@ modules:
             "Add 'auth' under modules in quickscale.yml before applying orgs"
             in error_output
         )
+
+    def test_apply_orgs_with_notifications_still_requires_auth_module(self, capsys):
+        """Implied notifications must not weaken the explicit orgs->auth prerequisite."""
+        qs_config = SimpleNamespace(
+            modules={
+                "orgs": SimpleNamespace(options={}),
+                "notifications": SimpleNamespace(
+                    options=default_notifications_module_options()
+                ),
+            }
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert (
+            "Organizations requires the auth module before apply can continue"
+            in error_output
+        )
+
+    def test_load_and_validate_config_auto_adds_orgs_and_notifications_for_billing(
+        self,
+    ):
+        """Apply should materialize the billing org dependency chain into quickscale.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+  theme: showcase_html
+modules:
+  auth:
+  billing:
+docker:
+  start: false
+"""
+                )
+
+            qs_config = _load_and_validate_config(Path("quickscale.yml"))
+
+            assert set(qs_config.modules.keys()) == {
+                "auth",
+                "billing",
+                "orgs",
+                "notifications",
+            }
+
+            with open("quickscale.yml") as f:
+                persisted = yaml.safe_load(f)
+
+            modules = (persisted or {}).get("modules") or {}
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
 
     def test_abort_for_not_ready_modules_reports_teams_reason(self, capsys):
         """Teams should remain blocked by the non-public-ready apply helper."""

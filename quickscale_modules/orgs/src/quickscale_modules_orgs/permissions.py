@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
+from django.apps import apps
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.urls import Resolver404, resolve
 
@@ -16,6 +17,27 @@ ROLE_HIERARCHY = {
     OrgRole.ADMIN: 2,
     OrgRole.OWNER: 3,
 }
+
+
+def user_has_org_role(
+    user: Any,
+    organization: Organization,
+    min_role: OrgRole,
+) -> bool:
+    """Return whether the user satisfies the requested org role threshold."""
+
+    if not bool(user is not None and getattr(user, "is_authenticated", False)):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+
+    membership = OrganizationMembership.objects.filter(
+        user=user,
+        organization=organization,
+    ).first()
+    if membership is None:
+        return False
+    return ROLE_HIERARCHY[membership.role] >= ROLE_HIERARCHY[min_role]
 
 
 def require_org_role(min_role: OrgRole) -> Callable:
@@ -31,20 +53,11 @@ def require_org_role(min_role: OrgRole) -> Callable:
             organization = _resolve_request_org(request, kwargs)
             if organization is None:
                 return HttpResponseForbidden()
-            request.org = organization
+            setattr(request, "org", organization)
 
-            if getattr(request.user, "is_superuser", False):
-                return view_func(request, *args, **kwargs)
-
-            membership = OrganizationMembership.objects.filter(
-                user=request.user,
-                organization=organization,
-            ).first()
-            if membership is None:
+            if not user_has_org_role(request.user, organization, min_role):
                 return HttpResponseForbidden()
-            if ROLE_HIERARCHY[membership.role] < ROLE_HIERARCHY[min_role]:
-                return HttpResponseForbidden()
-            return view_func(request, *args, **kwargs)
+            return cast(HttpResponse, view_func(request, *args, **kwargs))
 
         return wrapped
 
@@ -64,19 +77,15 @@ class OrgRoleMixin:
         organization = _resolve_request_org(request, kwargs)
         if organization is None:
             return HttpResponseForbidden()
-        request.org = organization
+        setattr(request, "org", organization)
 
-        if not getattr(request.user, "is_superuser", False):
-            membership = OrganizationMembership.objects.filter(
-                user=request.user,
-                organization=organization,
-            ).first()
-            if membership is None:
-                return HttpResponseForbidden()
-            if ROLE_HIERARCHY[membership.role] < ROLE_HIERARCHY[self.min_org_role]:
-                return HttpResponseForbidden()
+        if not user_has_org_role(request.user, organization, self.min_org_role):
+            return HttpResponseForbidden()
 
-        return super().dispatch(request, *args, **kwargs)
+        return cast(
+            HttpResponse,
+            cast(Any, super()).dispatch(request, *args, **kwargs),
+        )
 
 
 def require_org_feature(feature_key: str) -> Callable:
@@ -90,25 +99,47 @@ def require_org_feature(feature_key: str) -> Callable:
                 return HttpResponse(status=402)
 
             organization = _resolve_request_org(request, kwargs)
-            if organization is not None:
-                request.org = organization
+            if organization is None:
+                return HttpResponse(status=402)
+            setattr(request, "org", organization)
 
-            subscription = getattr(getattr(request, "org", None), "subscription", None)
+            subscription = _get_active_org_subscription(organization)
             plan = getattr(subscription, "plan", None)
             features = getattr(plan, "features", None)
-            is_active = getattr(subscription, "is_active", True)
-            if subscription is None or plan is None or not is_active:
+            if subscription is None or plan is None:
                 return HttpResponse(status=402)
             if (
                 not isinstance(features, (list, tuple, set))
                 or feature_key not in features
             ):
                 return HttpResponse(status=402)
-            return view_func(request, *args, **kwargs)
+            return cast(HttpResponse, view_func(request, *args, **kwargs))
 
         return wrapped
 
     return decorator
+
+
+def _get_active_org_subscription(organization: Organization) -> Any | None:
+    if not apps.is_installed("quickscale_modules_billing"):
+        return None
+
+    try:
+        subscription_model = apps.get_model(
+            "quickscale_modules_billing",
+            "Subscription",
+        )
+    except LookupError:
+        return None
+
+    return (
+        subscription_model.objects.select_related("plan")
+        .filter(
+            organization=organization,
+            status=subscription_model.Status.ACTIVE,
+        )
+        .first()
+    )
 
 
 def _resolve_request_org(

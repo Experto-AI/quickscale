@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Accept organization invitation</title>
+</head>
+<body>
+    <h1>{{ invitation_page_title }}</h1>
+    <p>{{ invitation_page_message }}</p>
+    {% if invitation_page_state == "email_mismatch" %}
+    <p>
+        You are signed in as {{ request.user.email|default:"another account" }}. Sign out and continue with
+        {{ invitation.email }} to accept this invitation.
+    </p>
+    {% elif invitation_page_state == "invalid_role" %}
+    <p>Ask {{ organization.name }} to send a new invitation to {{ invitation.email }} for a supported role.</p>
+    {% elif invitation_page_state == "accepted" %}
+    <p>Contact {{ organization.name }} if you still need access to this organization.</p>
+    {% elif invitation_page_state == "expired" %}
+    <p>Ask {{ organization.name }} to send a new invitation to {{ invitation.email }}.</p>
+    {% else %}
+    <p>{{ organization.name }} invited {{ invitation.email }} to join as {{ invitation.get_role_display }}.</p>
+    {% endif %}
+</body>
+</html>

@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any, cast
 
 from django import forms
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from django.utils.text import slugify
 
-from .models import OrgRole, Organization, OrganizationMembership
+from .models import (
+    OrgRole,
+    Organization,
+    OrganizationInvitation,
+    OrganizationMembership,
+)
+
+
+_INVITATION_EXPIRY_DAYS = 7
 
 
 def _generated_slug_candidates(name: str) -> Iterator[str]:
@@ -21,7 +31,8 @@ def _generated_slug_candidates(name: str) -> Iterator[str]:
             "Enter a name that contains at least one letter or number."
         )
 
-    max_length = Organization._meta.get_field("slug").max_length or len(base_slug)
+    slug_field = cast(Any, Organization._meta.get_field("slug"))
+    max_length = cast(int | None, slug_field.max_length) or len(base_slug)
     truncated_base = base_slug[:max_length].strip("-")
     if not truncated_base:
         raise forms.ValidationError(
@@ -130,6 +141,115 @@ class OrgSettingsForm(forms.ModelForm):
         )
 
 
+class InviteForm(forms.Form):
+    """Create a pending organization invitation with deterministic validation."""
+
+    _CURRENT_MEMBER_ERROR = "This email already belongs to a current member."
+    _PENDING_INVITATION_ERROR = "This email already has a pending invitation."
+
+    email = forms.EmailField()
+    role = forms.ChoiceField(choices=OrgRole.choices)
+
+    def __init__(
+        self,
+        *args: Any,
+        organization: Organization,
+        invited_by: Any,
+        owner_like: bool,
+        **kwargs: Any,
+    ) -> None:
+        self.organization = organization
+        self.invited_by = invited_by
+        super().__init__(*args, **kwargs)
+        role_field = cast(forms.ChoiceField, self.fields["role"])
+        role_field.choices = self.available_role_choices(owner_like=owner_like)
+        self.initial.setdefault("role", OrgRole.MEMBER)
+
+    @staticmethod
+    def available_role_choices(*, owner_like: bool) -> list[tuple[str, str]]:
+        """Return inviteable roles while keeping owner assignment out of the UI."""
+
+        return [
+            (str(value), str(label))
+            for value, label in RoleChangeForm.available_role_choices(
+                owner_like=owner_like
+            )
+            if value != OrgRole.OWNER
+        ]
+
+    def clean_email(self) -> str:
+        """Reject current members and active duplicate invitations deterministically."""
+
+        email = self._normalize_email(self.cleaned_data["email"])
+        error_message = self._get_email_availability_error(email)
+        if error_message is not None:
+            raise forms.ValidationError(error_message)
+
+        return email
+
+    def clean_role(self) -> str:
+        """Reject unsupported owner invitations even for tampered submissions."""
+
+        role = cast(str, self.cleaned_data["role"])
+        if role == OrgRole.OWNER:
+            raise forms.ValidationError(
+                "Ownership transfer is not available until a transfer flow exists."
+            )
+        return role
+
+    def save(self) -> OrganizationInvitation:
+        """Persist a normalized pending invitation for the target organization."""
+
+        email = self._normalize_email(self.cleaned_data["email"])
+
+        with transaction.atomic():
+            organization = Organization.objects.select_for_update().get(
+                pk=self.organization.pk
+            )
+            error_message = self._get_email_availability_error(
+                email,
+                organization=organization,
+            )
+            if error_message is not None:
+                raise forms.ValidationError({"email": error_message})
+
+            return OrganizationInvitation.objects.create(
+                organization=organization,
+                email=email,
+                role=cast(str, self.cleaned_data["role"]),
+                invited_by=self.invited_by,
+                expires_at=timezone.now() + timedelta(days=_INVITATION_EXPIRY_DAYS),
+            )
+
+    @staticmethod
+    def _normalize_email(value: Any) -> str:
+        return str(value).strip().lower()
+
+    def _get_email_availability_error(
+        self,
+        email: str,
+        *,
+        organization: Organization | None = None,
+    ) -> str | None:
+        target_organization = organization or self.organization
+
+        if OrganizationMembership.objects.filter(
+            organization=target_organization,
+            user__email__iexact=email,
+        ).exists():
+            return self._CURRENT_MEMBER_ERROR
+
+        if OrganizationInvitation.objects.filter(
+            organization=target_organization,
+            email__iexact=email,
+            accepted_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).exists():
+            return self._PENDING_INVITATION_ERROR
+
+        return None
+
+
 class RoleChangeForm(forms.Form):
     """Change an existing member's role while enforcing ownership guardrails."""
 
@@ -204,7 +324,10 @@ class RoleChangeForm(forms.Form):
         return self.target_membership
 
     def _owner_count(self) -> int:
-        return OrganizationMembership.objects.filter(
-            organization=self.target_membership.organization,
-            role=OrgRole.OWNER,
-        ).count()
+        return cast(
+            int,
+            OrganizationMembership.objects.filter(
+                organization=self.target_membership.organization,
+                role=OrgRole.OWNER,
+            ).count(),
+        )

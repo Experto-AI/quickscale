@@ -67,11 +67,13 @@ class TestModuleManifest:
             version="0.71.0",
             mutable_options={"registration_enabled": mutable_option},
             immutable_options={"auth_method": immutable_option},
+            required_modules=["orgs"],
         )
         assert manifest.name == "auth"
         assert manifest.version == "0.71.0"
         assert len(manifest.mutable_options) == 1
         assert len(manifest.immutable_options) == 1
+        assert manifest.required_modules == ["orgs"]
 
     def test_get_option_mutable(self) -> None:
         """Test get_option returns mutable option"""

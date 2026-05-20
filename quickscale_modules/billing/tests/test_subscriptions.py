@@ -170,8 +170,13 @@ class FakeSubscriptionStripeClient:
     retrieved_checkout_session_ids: list[str] = field(default_factory=list)
     construct_calls: list[dict[str, Any]] = field(default_factory=list)
 
-    def search_customers(self, *, user_reference: str) -> list[dict[str, Any]]:
-        self.searched_references.append(user_reference)
+    def search_customers(
+        self,
+        *,
+        user_reference: str = "",
+        organization_reference: str = "",
+    ) -> list[dict[str, Any]]:
+        self.searched_references.append(organization_reference or user_reference)
         return list(self.customers)
 
     def create_customer(
@@ -267,6 +272,7 @@ def _simulate_subscription_reservation_conflict(
     def resolve_with_recovered_row(
         *,
         user: Any | None = None,
+        organization: Any | None = None,
         customer_id: str = "",
         for_update: bool = False,
     ) -> Subscription | None:
@@ -277,7 +283,10 @@ def _simulate_subscription_reservation_conflict(
                 recovered_reservation.status = Subscription.Status.INCOMPLETE
                 recovered_reservation.save(update_fields=["status"])
         return original_resolve(
-            user=user, customer_id=customer_id, for_update=for_update
+            user=user,
+            organization=organization,
+            customer_id=customer_id,
+            for_update=for_update,
         )
 
     target_user = user

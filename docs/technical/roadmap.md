@@ -95,7 +95,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Design document**: [`docs/technical/organizations.md`](organizations.md) — all architectural decisions, data models, and scope are recorded there. This section contains only the implementation task breakdown.
 
-**Dependency note**: This milestone remains the SaaS-parity target after the v0.84.0 backups hardening release and the v0.85.0 billing milestone. The billing module's `Subscription`, `CreditBalance`, and `Plan` models are extended here.
+**Dependency note**: This milestone remains the SaaS-parity target after the v0.84.0 backups hardening release and the v0.85.0 billing milestone. The billing module's `Subscription`, `CreditBalance`, and `Plan` models are extended here, and the current maintainer-repo planner/apply contract now auto-materializes `orgs` whenever billing is selected so standalone billing is no longer advertised.
 
 **Architecture summary**: Single Railway deployment (1 app + 1 PostgreSQL 18). All tenants share one database; ordinary requests are still isolated by the org middleware and permission layer, while PostgreSQL RLS remains a future hardening step until downstream modules carry concrete `organization_id` columns. Runtime `QUICKSCALE_MODE` setting switches between Solo mode (personal org auto-created, flat URLs) and SaaS mode (multi-org, `/orgs/<slug>/` routing, invitations enabled). Platform owner access remains governed by Django/admin permissions in this slice; no database-level RLS bypass is assumed. Self-service signup → org creation → Stripe checkout. Plans differentiate by credit volume + feature gates; optional seat pricing designed in.
 
@@ -141,7 +141,7 @@ Wire the `QUICKSCALE_MODE` setting, tenant context per request, role-based acces
   - [x] `ROLE_HIERARCHY = {OrgRole.VIEWER: 0, OrgRole.MEMBER: 1, OrgRole.ADMIN: 2, OrgRole.OWNER: 3}`
   - [x] `require_org_role(min_role)` decorator — resolves org from URL, checks membership + role, returns 403 on failure, sets `request.org`
   - [x] `OrgRoleMixin` — CBV equivalent of `require_org_role`
-  - [x] `require_org_feature(feature_key)` decorator stub — reads `request.org.subscription.plan.features` (list); returns 402 when feature absent or no active subscription; fully wired in Phase 6
+  - [x] `require_org_feature(feature_key)` decorator — resolves the current org's active subscription through the billing ORM and checks `Plan.features`; returns 402 when the feature is absent or when no active org subscription exists
 - [x] `adapters.py` — `OrgsAccountAdapter(DefaultAccountAdapter)`:
   - [x] Solo mode branch: calls `create_personal_for(request.user)`, returns `'/'`
   - [x] SaaS mode branch: returns `'/orgs/new/'` when no membership exists
@@ -229,75 +229,84 @@ Build server-side views, forms, and the dual URL configuration. SaaS org managem
 
 #### Phase 5 — Invitation flow (4–6 h)
 
-Build the full invite-send → email → accept pipeline using the existing notifications module. **SaaS mode only** — all invitation views return HTTP 404 in Solo mode.
+Build the shipped invite-send -> email -> accept pipeline on top of the notifications module. This slice shipped independently of the still-open Phase 3 RLS activation work and the later Phase 6/7 billing and frontend follow-ons. **SaaS mode only** — Solo mode keeps invitation URLs hidden with HTTP 404, and ordinary SaaS no-membership traffic still goes to `/orgs/new/` unless a pending invitation is being continued.
 
 **Files to modify** (`views.py`):
-- [ ] `InviteView` — requires ADMIN+; creates `OrganizationInvitation` (UUID token, 7-day expiry); sends email via notifications module
-- [ ] `RevokeInvitationView` — requires ADMIN+; deletes `OrganizationInvitation` row
-- [ ] `AcceptInvitationView` — public (no login required): validates token; existing user → creates `OrganizationMembership`; new user → stores token in session, redirects to signup
+- [x] `InviteView` — requires ADMIN+; creates `OrganizationInvitation` (UUID token, 7-day expiry) from the org admin members surface and sends the invite through the notifications registry-backed `org_invitation` email
+- [x] `RevokeInvitationView` — requires ADMIN+; revokes a pending invitation from the org admin members surface
+- [x] `AcceptInvitationView` — public slugless accept path at `/orgs/invitations/<token>/accept/`; validates token, redirects unauthenticated users through auth, and completes redemption after auth only when the signed-in email matches the invitation email after normalization
 
 **Files to create**:
-- [ ] `forms.py` additions — `InviteForm` (email + role; OWNER excluded from role choices)
-- [ ] `templates/quickscale_modules_orgs/invite.html` — invite form + pending invitations list with revoke buttons
-- [ ] `templates/quickscale_modules_orgs/accept.html` — confirmation page after membership created
-- [ ] `templates/quickscale_modules_orgs/email/invite.html` — email body with accept URL; uses notifications `send_notification`
-- [ ] `signals.py` — connects to django-allauth `user_signed_up` signal: if session contains invitation token, creates `OrganizationMembership` and clears token from session
+- [x] `forms.py` additions — `InviteForm` (email + role; OWNER excluded from role choices)
+- [x] `templates/quickscale_modules_orgs/members.html` — org members/admin surface with the invite form, pending invitations list, and revoke actions
+- [x] `templates/quickscale_modules_orgs/org_invitation_accept.html` — invitation continuation plus confirmation/error states for invitation redemption
+- [x] Notifications registry wiring — `org_invitation` email rendering and delivery moved through the notifications module registry instead of an org-owned template send path
+- [x] Auth continuation storage — pending invitation continuation is carried through auth and redeemed back in `AcceptInvitationView`, so no separate signup signal handler is required for this shipped contract
 
 **Edge cases — each requires a dedicated test**:
-- [ ] Expired token (`expires_at < now`, `accepted_at is None`) → HTTP 410, message: "This invitation has expired. Ask an admin to send a new one."
-- [ ] Already-accepted token (`accepted_at is not None`) → HTTP 410, message: "This invitation has already been used."
-- [ ] Revoked invitation token URL → HTTP 404
-- [ ] Invitation email does not match logged-in user's email → HTTP 403
-- [ ] Invitation URL visited in Solo mode → HTTP 404
+- [x] Expired token (`expires_at < now`, `accepted_at is None`) -> HTTP 410, message: "This invitation has expired. Ask an admin to send a new one."
+- [x] Already-accepted token (`accepted_at is not None`) -> HTTP 410, message: "This invitation has already been used."
+- [x] Revoked invitation token URL -> HTTP 404
+- [x] Invitation email does not match the logged-in user's normalized email -> HTTP 403 before membership side effects
+- [x] Invitation URL visited in Solo mode -> HTTP 404
 
 **Acceptance criteria**:
-- [ ] ADMIN sends invite → email arrives with accept URL containing UUID token
-- [ ] Existing user (logged in) clicks accept → `OrganizationMembership` created with correct role; user lands on org dashboard
-- [ ] Existing user (not logged in) clicks accept → redirected to login; membership created after login; user lands on org dashboard
-- [ ] New user clicks accept → session stores token; signup completes; `user_signed_up` signal creates membership; user lands on org dashboard
-- [ ] Expired token → HTTP 410 with user-facing message (not 500, not 404)
-- [ ] Already-accepted token → HTTP 410 with user-facing message
-- [ ] Revoked invitation URL → HTTP 404
-- [ ] Solo mode invitation URL → HTTP 404
+- [x] ADMIN sends invite -> email arrives with the slugless accept URL `/orgs/invitations/<token>/accept/`
+- [x] Existing user (logged in) clicks accept -> `OrganizationMembership` created with the correct role; user lands on the org dashboard
+- [x] Existing user (not logged in) clicks accept -> redirected through auth; membership created after login; user lands on the org dashboard
+- [x] New user clicks accept -> auth continuation stores the pending token; `AcceptInvitationView` redeems it after signup/login when the normalized email matches; user lands on the org dashboard
+- [x] Expired token -> HTTP 410 with a user-facing message (not 500, not 404)
+- [x] Already-accepted token -> HTTP 410 with a user-facing message
+- [x] Revoked invitation URL -> HTTP 404
+- [x] Solo mode invitation URL -> HTTP 404
+- [x] Shipping this slice did not require the still-open Phase 3 activation checklist or any Phase 6/7 billing/frontend work
+
+**Focused validation notes**:
+- [x] Validation stays scoped to invitation send/revoke, slugless accept continuation, auth redirect/resume, normalized-email redemption guards, and Solo-mode 404 behavior
+- [x] Phase 5 closeout depends on targeted invitation-flow coverage rather than on deferred Phase 3 RLS activation or later Phase 6/7 integration work
 
 ---
 
 #### Phase 6 — Billing bridge + plan feature gates (6–8 h)
 
-Extend billing models to be org-scoped, add plan-level feature gates and seat fields, and provide migration commands for existing deployments.
+Extend billing models to be org-scoped, ship plan-level feature gates, and provide migration commands for existing deployments. The authoritative org-billing ownership fields, migration/promote commands, canonical org-keyed billing routes, flat compatibility shims, and ORM-backed `require_org_feature` wiring are now shipped; optional seat-pricing fields remain follow-on work.
 
 **Files to modify** (`quickscale_modules/billing/src/quickscale_modules_billing/models.py`):
-- [ ] `Subscription`: add `organization = ForeignKey('quickscale_modules_orgs.Organization', null=True, on_delete=SET_NULL, related_name='subscriptions')`
-- [ ] `CreditBalance`: add `organization = OneToOneField('quickscale_modules_orgs.Organization', null=True, on_delete=CASCADE, related_name='credit_balance')`
-- [ ] `CreditTransaction`: add `performed_by = ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=SET_NULL, related_name='credit_actions')`
-- [ ] `Plan`: add `features = JSONField(default=list)` (list of module key strings e.g. `["blog", "crm", "forms"]`), `max_seats = IntegerField(default=0)` (0 = unlimited; UI-enforced only in v0.86.0 — add `# TODO: enforce at DB layer` comment), `seat_price_id = CharField(blank=True)` (Stripe price ID for per-seat addon)
+- [x] `Subscription`: add authoritative `organization = ForeignKey('quickscale_modules_orgs.Organization', null=True, on_delete=SET_NULL, related_name='subscriptions')`; keep nullable `user` as provenance / compatibility only
+- [x] `CreditBalance`: add authoritative `organization = OneToOneField('quickscale_modules_orgs.Organization', null=True, on_delete=CASCADE, related_name='credit_balance')`; keep nullable `user` as provenance / compatibility only
+- [x] `CreditTransaction`: add authoritative `organization = ForeignKey('quickscale_modules_orgs.Organization', null=True, on_delete=SET_NULL, related_name='credit_transactions')` while keeping `user` as the acting org member / audit actor
+- [x] `Plan`: add `features = JSONField(default=list)` (list of module key strings e.g. `["blog", "crm", "forms"]`)
+- [ ] `Plan`: add `max_seats = IntegerField(default=0)` (0 = unlimited; UI-enforced only when seat billing ships)
+- [ ] `Plan`: add `seat_price_id = CharField(blank=True)` (Stripe price ID for per-seat addon)
 
 **Files to create** (`quickscale_modules/billing/src/quickscale_modules_billing/migrations/`):
-- [ ] `0003_org_billing_bridge.py` — nullable `organization` FK on Subscription and CreditBalance; `performed_by` on CreditTransaction; `features`, `max_seats`, `seat_price_id` on Plan
+- [x] `0003_org_authoritative_billing_contract.py` — authoritative `organization` ownership fields, org backfill rules, nullable provenance/compatibility retention for `Subscription.user` and `CreditBalance.user`, and `Plan.features`
 
 **Files to create** (`quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/`):
-- [ ] `migrate_billing_to_orgs.py` — idempotent:
-  - [ ] For each User with a Subscription or CreditBalance but no OrganizationMembership: call `create_personal_for(user)`, point Subscription/CreditBalance to new org
-  - [ ] Skips users who already have OrganizationMembership
-  - [ ] Prints per-user summary; exits 0 on success
-- [ ] `promote_to_saas.py` — idempotent:
-  - [ ] Ensures all `is_personal=True` orgs have a valid unique slug (fills from owner username if blank; appends `-2`, `-3` etc. on collision)
-  - [ ] Prints summary of orgs updated; prints the required `QUICKSCALE_MODE = 'saas'` settings change (cannot mutate `settings.py` directly); exits 0 on success
+- [x] `migrate_billing_to_orgs.py` — idempotent:
+  - [x] Reuses the sole resolvable org when one already exists; otherwise creates a personal org and points authoritative billing rows to it
+  - [x] Refuses ambiguous membership cases instead of guessing
+  - [x] Prints per-user summary; exits 0 on success
+- [x] `promote_to_saas.py` — idempotent:
+  - [x] Ensures all `is_personal=True` orgs have a valid unique slug (fills from owner username if blank; appends `-2`, `-3` etc. on collision)
+  - [x] Prints summary of orgs updated plus the required `QUICKSCALE_MODE = 'saas'` settings change (cannot mutate `settings.py` directly); exits 0 on success
 
-**Wiring `require_org_feature`** (stubbed in Phase 2 — complete here):
-- [ ] Read `request.org.subscription.plan.features` (list); return 402 when feature absent
-- [ ] Return 402 when `request.org` has no active subscription (guard against silent feature leakage)
-- [ ] Update `Plan` admin to show `features` as an editable JSON field, `max_seats`, `seat_price_id`
+**Wiring `require_org_feature`** (completed in the current Phase 6 slice):
+- [x] Resolve the current org's active subscription through the billing ORM instead of trusting `request.org.subscription`
+- [x] Check `Plan.features` as the sole entitlement source and return 402 when the feature is absent
+- [x] Return 402 when the org has no active subscription (guard against silent feature leakage)
+- [x] Update `Plan` admin to surface plan feature flags on the editable plan record
+- [ ] Extend `Plan` admin for `max_seats` / `seat_price_id` when seat fields ship
 
 **Acceptance criteria**:
-- [ ] `python manage.py migrate_billing_to_orgs` runs without error on a v0.85.0 fixture; all Subscriptions have non-null `organization` after run
-- [ ] Running `migrate_billing_to_orgs` twice produces no duplicate orgs or memberships
-- [ ] Stripe checkout creates `Subscription.organization` (assert `subscription.organization == request.org` in billing view test)
-- [ ] Org's `CreditBalance` debited on credit usage; no change to any user-level balance field
-- [ ] `CreditTransaction.performed_by` records the acting org member
-- [ ] `@require_org_feature('crm')` returns 200 when `'crm' in plan.features`; returns 402 when not present
-- [ ] `@require_org_feature('crm')` returns 402 when org has no active subscription
-- [ ] `python manage.py promote_to_saas` runs idempotently; all personal orgs have valid unique slugs after run
+- [x] `python manage.py migrate_billing_to_orgs` runs without error on a v0.85.0 fixture; authoritative subscription/balance ownership is migrated to organizations
+- [x] Running `migrate_billing_to_orgs` twice produces no duplicate orgs or memberships
+- [x] Stripe checkout creates `Subscription.organization` (assert `subscription.organization == request.org` in billing view test)
+- [x] Org's `CreditBalance` is treated as authoritative on credit usage; `CreditBalance.user` remains nullable provenance / compatibility only
+- [x] `CreditTransaction.user` continues to record the acting org member while `organization` carries authoritative scope
+- [x] `@require_org_feature('crm')` returns 200 when `'crm' in plan.features`; returns 402 when not present
+- [x] `@require_org_feature('crm')` returns 402 when org has no active subscription
+- [x] `python manage.py promote_to_saas` runs idempotently; all personal orgs have valid unique slugs after run
 
 ---
 
@@ -370,7 +379,7 @@ Complete the test suite and finalize the module manifest. All tests involving RL
   - [ ] Solo mode: user sees only their personal org's rows
 - [ ] `test_invitation_flow.py`:
   - [ ] Full cycle: invite → email sent (mocked) → existing user accepts → membership created with correct role
-  - [ ] Full cycle: new user accepts → signup → `user_signed_up` signal → membership created
+  - [ ] Full cycle: new user accepts → auth continuation stores the pending token → `AcceptInvitationView` redeems it after signup/login when the normalized email matches
   - [ ] Expired token → 410 with user-facing message
   - [ ] Already-accepted token → 410 with user-facing message
   - [ ] Revoke → token URL becomes 404
@@ -379,7 +388,7 @@ Complete the test suite and finalize the module manifest. All tests involving RL
 - [ ] `test_billing_bridge.py`:
   - [ ] `CreditBalance.organization` debited on credit usage; user-level balance unchanged
   - [ ] `Subscription.organization` set on Stripe checkout completion
-  - [ ] `CreditTransaction.performed_by` records acting user
+  - [ ] `CreditTransaction.user` records acting-user provenance
   - [ ] `migrate_billing_to_orgs` idempotent on v0.85.0 fixture
   - [ ] `promote_to_saas` idempotent; all personal orgs have valid slugs after run
 - [ ] `test_mode_switch.py`:

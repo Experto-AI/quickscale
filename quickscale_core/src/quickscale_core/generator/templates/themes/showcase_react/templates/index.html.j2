@@ -26,7 +26,7 @@
           social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %}
         },
         modulePaths: {
-          billing: "{% if user.is_authenticated %}/billing/dashboard/{% else %}/billing/pricing/{% endif %}",
+          billing: "{{ modules.billing.url|escapejs }}",
           social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}"
         }
       };

@@ -36,6 +36,7 @@ DEFAULT_CONFIG_FACTORIES = {
 }
 
 BASE_RUNTIME_DEPENDENCY_NAMES = {"django", "python"}
+FIRST_PARTY_MODULE_PACKAGE_PREFIX = "quickscale-module-"
 MANIFEST_DEPENDENCY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+")
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 VERSION_EXPORT_PATTERN = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
@@ -100,6 +101,27 @@ def _runtime_dependency_names(module_name: str) -> set[str]:
         dependency_name.lower()
         for dependency_name in poetry_dependencies
         if dependency_name.lower() not in BASE_RUNTIME_DEPENDENCY_NAMES
+        and not dependency_name.lower().startswith(FIRST_PARTY_MODULE_PACKAGE_PREFIX)
+    }
+
+
+def _runtime_module_dependency_names(module_name: str) -> set[str]:
+    pyproject = _pyproject_data(module_name)
+    poetry_dependencies = pyproject["tool"]["poetry"]["dependencies"]
+    assert isinstance(poetry_dependencies, dict)
+
+    return {
+        dependency_name.lower()
+        for dependency_name in poetry_dependencies
+        if dependency_name.lower().startswith(FIRST_PARTY_MODULE_PACKAGE_PREFIX)
+    }
+
+
+def _required_module_package_names(module_name: str) -> set[str]:
+    manifest = load_manifest_from_path(_manifest_path(module_name))
+    return {
+        f"{FIRST_PARTY_MODULE_PACKAGE_PREFIX}{required_module}".lower()
+        for required_module in manifest.required_modules
     }
 
 
@@ -171,7 +193,7 @@ def test_ready_packaged_module_versions_match_manifest_version() -> None:
 def test_ready_packaged_module_dependency_names_match_pyproject_runtime_dependencies() -> (
     None
 ):
-    """Ready packaged modules must keep manifest dependency names aligned with pyproject."""
+    """Ready packaged modules must keep third-party dependency names aligned."""
     for entry in get_module_entries(include_experimental=False):
         module_name = entry.name
         manifest_dependency_names = _manifest_dependency_names(module_name)
@@ -181,6 +203,22 @@ def test_ready_packaged_module_dependency_names_match_pyproject_runtime_dependen
             f"{module_name} manifest dependencies should match pyproject runtime packages: "
             f"manifest={sorted(manifest_dependency_names)} "
             f"pyproject={sorted(runtime_dependency_names)}"
+        )
+
+
+def test_ready_packaged_module_required_modules_match_pyproject_first_party_dependencies() -> (
+    None
+):
+    """Required module metadata must align with first-party package dependencies."""
+    for entry in get_module_entries(include_experimental=False):
+        module_name = entry.name
+        required_module_packages = _required_module_package_names(module_name)
+        runtime_module_dependencies = _runtime_module_dependency_names(module_name)
+
+        assert required_module_packages == runtime_module_dependencies, (
+            f"{module_name} required_modules should match first-party package dependencies: "
+            f"manifest={sorted(required_module_packages)} "
+            f"pyproject={sorted(runtime_module_dependencies)}"
         )
 
 

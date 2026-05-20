@@ -14,6 +14,7 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "allauth",
     "allauth.account",
+    "quickscale_modules_billing",
     "quickscale_modules_orgs",
 ]
 

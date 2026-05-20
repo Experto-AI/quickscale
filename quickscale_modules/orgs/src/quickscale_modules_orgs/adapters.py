@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
+from uuid import UUID
 
 from allauth.account.adapter import DefaultAccountAdapter
 from django.conf import settings
+from django.urls import reverse
+from django.utils import timezone
 
-from .models import Organization, OrganizationMembership
+from .constants import (
+    ORG_INVITATION_ACCEPT_URL_NAME,
+    PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
+)
+from .models import Organization, OrganizationInvitation, OrganizationMembership
 
 try:
     from quickscale_modules_auth.adapters import (  # type: ignore
@@ -20,26 +27,60 @@ except ImportError:  # pragma: no cover - auth is optional in isolated module te
 class OrgsAccountAdapter(_BaseAccountAdapter):
     """Account adapter that applies the org-aware post-auth redirect contract."""
 
+    @staticmethod
+    def _get_pending_invitation_redirect_url(request: Any) -> str | None:
+        session = getattr(request, "session", None)
+        if session is None:
+            return None
+
+        invitation_token = session.get(PENDING_ORG_INVITATION_TOKEN_SESSION_KEY)
+        if invitation_token is None:
+            return None
+
+        try:
+            normalized_token = UUID(str(invitation_token))
+        except (TypeError, ValueError, AttributeError):
+            session.pop(PENDING_ORG_INVITATION_TOKEN_SESSION_KEY, None)
+            return None
+
+        if not OrganizationInvitation.objects.filter(
+            token=normalized_token,
+            accepted_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).exists():
+            session.pop(PENDING_ORG_INVITATION_TOKEN_SESSION_KEY, None)
+            return None
+
+        return reverse(
+            ORG_INVITATION_ACCEPT_URL_NAME,
+            kwargs={"token": normalized_token},
+        )
+
     def get_login_redirect_url(self, request: Any) -> str:
         user = getattr(request, "user", None)
         if user is None or not getattr(user, "is_authenticated", False):
-            return super().get_login_redirect_url(request)
+            return cast(str, super().get_login_redirect_url(request))
 
         saas_mode = getattr(settings, "QUICKSCALE_MODE", "solo") == "saas"
-        if (
-            not saas_mode
-            and not OrganizationMembership.objects.filter(user=user).exists()
-        ):
+        has_membership = OrganizationMembership.objects.filter(user=user).exists()
+        if not saas_mode and not has_membership:
             Organization.objects.create_personal_for(user)
-            return super().get_login_redirect_url(request)
-        if saas_mode and not OrganizationMembership.objects.filter(user=user).exists():
-            return "/orgs/new/"
-        return super().get_login_redirect_url(request)
+            return cast(str, super().get_login_redirect_url(request))
+
+        if saas_mode:
+            pending_invitation_redirect = self._get_pending_invitation_redirect_url(
+                request
+            )
+            if pending_invitation_redirect is not None:
+                return pending_invitation_redirect
+            if not has_membership:
+                return "/orgs/new/"
+        return cast(str, super().get_login_redirect_url(request))
 
     def get_signup_redirect_url(self, request: Any) -> str:
         user = getattr(request, "user", None)
         if user is None or not getattr(user, "is_authenticated", False):
-            return super().get_signup_redirect_url(request)
+            return cast(str, super().get_signup_redirect_url(request))
 
         saas_mode = getattr(settings, "QUICKSCALE_MODE", "solo") == "saas"
         if not saas_mode:
@@ -47,5 +88,9 @@ class OrgsAccountAdapter(_BaseAccountAdapter):
             return "/"
 
         if OrganizationMembership.objects.filter(user=user).exists():
-            return super().get_signup_redirect_url(request)
+            return cast(str, super().get_signup_redirect_url(request))
+
+        pending_invitation_redirect = self._get_pending_invitation_redirect_url(request)
+        if pending_invitation_redirect is not None:
+            return pending_invitation_redirect
         return "/orgs/new/"
