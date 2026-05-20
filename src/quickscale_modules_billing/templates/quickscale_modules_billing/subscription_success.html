@@ -86,7 +86,7 @@
             <p>Your recurring checkout finished successfully. Subscription details and credits may take a moment to appear.</p>
             <p class="status-note">If the dashboard looks unchanged right away, give Stripe a moment to finish its return processing.</p>
             <div class="actions">
-                <a class="button button-primary" href="{% url 'quickscale_billing:billing-dashboard' %}">Go to dashboard</a>
+                <a class="button button-primary" href="{{ dashboard_url }}">Go to dashboard</a>
                 <a class="button button-secondary" href="/">Back to app</a>
             </div>
         </div>

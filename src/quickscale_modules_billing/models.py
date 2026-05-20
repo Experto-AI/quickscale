@@ -49,6 +49,7 @@ class Plan(models.Model):
         choices=BillingInterval.choices,
         default=BillingInterval.MONTHLY,
     )
+    features = models.JSONField(default=list, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -62,10 +63,19 @@ class Plan(models.Model):
 class CreditBalance(models.Model):
     """Current credit balance snapshot for a single user."""
 
+    organization = models.OneToOneField(
+        "quickscale_modules_orgs.Organization",
+        related_name="credit_balance",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         related_name="credit_balance",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     balance = models.IntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
@@ -104,7 +114,16 @@ class CreditTransaction(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="credit_transactions",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        related_name="credit_transactions",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     amount = models.IntegerField()
     transaction_type = models.CharField(max_length=20, choices=TransactionType.choices)
@@ -120,7 +139,8 @@ class CreditTransaction(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.user} {self.transaction_type} {self.amount}"
+        actor = self.user or self.organization or "Unknown actor"
+        return f"{actor} {self.transaction_type} {self.amount}"
 
 
 class SubscriptionQuerySet(models.QuerySet["Subscription"]):
@@ -147,10 +167,19 @@ class Subscription(models.Model):
 
     CURRENT_STATUSES = CURRENT_SUBSCRIPTION_STATUSES
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        related_name="subscriptions",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="billing_subscriptions",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     plan = models.ForeignKey(
         Plan,
@@ -195,9 +224,10 @@ class Subscription(models.Model):
                 name="quickscale_billing_unique_stripe_checkout_session_id_present",
             ),
             models.UniqueConstraint(
-                fields=["user"],
-                condition=current_subscription_status_q(),
-                name="quickscale_billing_unique_current_subscription_per_user",
+                fields=["organization"],
+                condition=current_subscription_status_q()
+                & models.Q(organization__isnull=False),
+                name="quickscale_billing_unique_current_subscription_per_organization",
             ),
         ]
 

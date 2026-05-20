@@ -15,6 +15,7 @@ packages = [{include = "quickscale_modules_billing", from = "src"}]
 python = ">=3.13,<3.15"
 Django = ">=6.0.5,<6.1.0"
 djangorestframework = "^3.16.1"
+quickscale-module-orgs = ">=0.86.0,<0.87.0"
 stripe = ">=15.0.0,<16.0.0"
 
 [tool.poetry.group.dev.dependencies]
@@ -37,7 +38,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = [".", "src"]
+pythonpath = [".", "src", "../orgs/src"]
 python_files = ["test_*.py"]
 norecursedirs = [".*", "build", "dist", "node_modules", "quickscale_cli", "quickscale_core", "analytics", "auth", "backups", "blog", "crm", "forms", "listings", "notifications", "social", "storage"]
 testpaths = ["tests"]

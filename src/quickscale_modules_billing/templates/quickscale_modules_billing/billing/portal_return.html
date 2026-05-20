@@ -84,7 +84,7 @@
             <h1>Back from billing portal</h1>
             <p>You have returned from the Stripe billing portal. Recent plan or payment changes may take a moment to appear.</p>
             <div class="actions">
-                <a class="button button-primary" href="{% url 'quickscale_billing:billing-dashboard' %}">Go to dashboard</a>
+                <a class="button button-primary" href="{{ dashboard_url }}">Go to dashboard</a>
                 <a class="button button-secondary" href="/">Back to app</a>
             </div>
         </div>

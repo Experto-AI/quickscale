@@ -14,7 +14,7 @@ from typing import Any, cast
 from django.apps import apps
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from quickscale_modules_billing.models import (
@@ -43,6 +43,7 @@ _BUSINESS_OBJECT_REFERENCE_KEYS = (
     "credit_grant_id",
     "stripe_subscription_id",
 )
+_ORG_REFERENCE_METADATA_KEY = "quickscale_org_reference"
 _USER_METADATA_KEY = "quickscale_user_reference"
 _PLAN_SLUG_METADATA_KEY = "quickscale_plan_slug"
 _PLAN_CREDITS_METADATA_KEY = "quickscale_plan_credits"
@@ -181,10 +182,20 @@ class StripeClient:
         self._stripe_module = stripe_module
         self._api_key = api_key
 
-    def search_customers(self, *, user_reference: str) -> list[dict[str, Any]]:
-        """Search Stripe customers by the schema-neutral user metadata key."""
+    def search_customers(
+        self,
+        *,
+        user_reference: str = "",
+        organization_reference: str = "",
+    ) -> list[dict[str, Any]]:
+        """Search Stripe customers by the authoritative local metadata reference."""
         self._activate_api_key()
-        query = f"metadata['{_USER_METADATA_KEY}']:'{user_reference}'"
+        if organization_reference:
+            query = (
+                f"metadata['{_ORG_REFERENCE_METADATA_KEY}']:'{organization_reference}'"
+            )
+        else:
+            query = f"metadata['{_USER_METADATA_KEY}']:'{user_reference}'"
         search_result = self._stripe_module.Customer.search(query=query, limit=1)
         data = getattr(search_result, "data", None)
         if data is None and isinstance(search_result, Mapping):
@@ -429,6 +440,7 @@ def get_stripe_client(
 def get_or_create_stripe_customer(
     user: Any,
     *,
+    organization: Any | None = None,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> tuple[str, bool]:
@@ -436,20 +448,30 @@ def get_or_create_stripe_customer(
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
     _ensure_billing_enabled(snapshot)
 
-    authoritative_subscription = _resolve_authoritative_subscription_reservation(
-        user=user,
-    )
-    if authoritative_subscription is not None:
-        existing_customer_id = str(
-            authoritative_subscription.stripe_customer_id or ""
-        ).strip()
+    if organization is not None:
+        existing_customer_id = _resolve_authoritative_organization_customer_id(
+            organization=organization,
+        )
         if existing_customer_id:
             return existing_customer_id, False
+    else:
+        authoritative_subscription = _resolve_authoritative_subscription_reservation(
+            user=user,
+        )
+        if authoritative_subscription is not None:
+            existing_customer_id = str(
+                authoritative_subscription.stripe_customer_id or ""
+            ).strip()
+            if existing_customer_id:
+                return existing_customer_id, False
 
     resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
-    customer_metadata = _build_customer_metadata(user)
+    customer_metadata = _build_customer_metadata(user, organization=organization)
     remote_customers = resolved_client.search_customers(
-        user_reference=customer_metadata[_USER_METADATA_KEY]
+        user_reference=str(customer_metadata.get(_USER_METADATA_KEY) or ""),
+        organization_reference=str(
+            customer_metadata.get(_ORG_REFERENCE_METADATA_KEY) or ""
+        ),
     )
     if remote_customers:
         remote_customer_id = str(remote_customers[0].get("id") or "").strip()
@@ -457,19 +479,26 @@ def get_or_create_stripe_customer(
             raise BillingWebhookError(
                 "Stripe customer search returned a customer without an id."
             )
+        if organization is not None:
+            _sync_organization_customer_id(organization, remote_customer_id)
         return remote_customer_id, False
 
+    idempotency_reference = (
+        _organization_reference(organization)
+        if organization is not None
+        else customer_metadata[_USER_METADATA_KEY]
+    )
     created_customer = resolved_client.create_customer(
         email="",
         name="",
         metadata=customer_metadata,
-        idempotency_key=_build_customer_create_idempotency_key(
-            customer_metadata[_USER_METADATA_KEY]
-        ),
+        idempotency_key=_build_customer_create_idempotency_key(idempotency_reference),
     )
     created_customer_id = str(created_customer.get("id") or "").strip()
     if not created_customer_id:
         raise BillingWebhookError("Stripe customer creation did not return an id.")
+    if organization is not None:
+        _sync_organization_customer_id(organization, created_customer_id)
     return created_customer_id, True
 
 
@@ -479,6 +508,7 @@ def create_checkout_session(
     success_url: str,
     cancel_url: str,
     *,
+    organization: Any | None = None,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> str:
@@ -499,10 +529,15 @@ def create_checkout_session(
 
     customer_id, _ = get_or_create_stripe_customer(
         user,
+        organization=organization,
         stripe_client=resolved_client,
         settings_snapshot=snapshot,
     )
-    session_metadata = _build_checkout_session_metadata(user, plan)
+    session_metadata = _build_checkout_session_metadata(
+        user,
+        plan,
+        organization=organization,
+    )
     checkout_session = resolved_client.create_checkout_session(
         customer_id=customer_id,
         price_id=plan.stripe_price_id,
@@ -526,6 +561,7 @@ def create_subscription_checkout_session(
     success_url: str,
     cancel_url: str,
     *,
+    organization: Any | None = None,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> str:
@@ -546,13 +582,18 @@ def create_subscription_checkout_session(
 
     with transaction.atomic():
         reservation, recovered_from_create_conflict = (
-            _prepare_subscription_checkout_reservation(user=user, plan=plan)
+            _prepare_subscription_checkout_reservation(
+                user=user,
+                organization=organization,
+                plan=plan,
+            )
         )
 
     customer_id = str(reservation.stripe_customer_id or "").strip()
     if not customer_id:
         customer_id, _ = get_or_create_stripe_customer(
             user,
+            organization=organization,
             stripe_client=resolved_client,
             settings_snapshot=snapshot,
         )
@@ -585,6 +626,7 @@ def create_subscription_checkout_session(
                 reservation, recovered_from_replacement_conflict = (
                     _create_subscription_reservation(
                         user=user,
+                        organization=organization,
                         plan=plan,
                         stripe_customer_id=customer_id or None,
                     )
@@ -600,7 +642,11 @@ def create_subscription_checkout_session(
             raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
 
     try:
-        session_metadata = _build_checkout_session_metadata(user, plan)
+        session_metadata = _build_checkout_session_metadata(
+            user,
+            plan,
+            organization=organization,
+        )
         checkout_session = resolved_client.create_subscription_checkout_session(
             customer_id=customer_id,
             price_id=plan.stripe_price_id,
@@ -660,6 +706,7 @@ def create_billing_portal_session(
     user: Any,
     return_url: str,
     *,
+    organization: Any | None = None,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> str:
@@ -674,6 +721,7 @@ def create_billing_portal_session(
     resolved_client = stripe_client or get_stripe_client(settings_snapshot=snapshot)
     customer_id, _ = get_or_create_stripe_customer(
         user,
+        organization=organization,
         stripe_client=resolved_client,
         settings_snapshot=snapshot,
     )
@@ -692,6 +740,7 @@ def create_billing_portal_session(
 def cancel_current_subscription(
     user: Any,
     *,
+    organization: Any | None = None,
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> Subscription:
@@ -699,7 +748,10 @@ def cancel_current_subscription(
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
     _ensure_billing_enabled(snapshot)
 
-    subscription = _resolve_authoritative_subscription_reservation(user=user)
+    subscription = _resolve_authoritative_subscription_reservation(
+        user=user,
+        organization=organization,
+    )
     if subscription is None:
         raise BillingValidationError(
             "User does not have a current recurring subscription."
@@ -758,6 +810,11 @@ def cancel_current_subscription(
                 "current_period_end",
             ]
         )
+        if organization is not None:
+            _sync_organization_customer_id(
+                organization,
+                subscription.stripe_customer_id or "",
+            )
     return subscription
 
 
@@ -770,6 +827,7 @@ def credit_user(
     stripe_event_id: str = "",
     stripe_object_id: str = "",
     stripe_reference_data: Mapping[str, Any] | None = None,
+    organization: Any | None = None,
 ) -> CreditTransaction:
     """Credit a user once for a Stripe-backed business object."""
     if amount <= 0:
@@ -777,9 +835,13 @@ def credit_user(
 
     normalized_reference_data = _normalize_mapping(stripe_reference_data or {})
     with transaction.atomic():
-        balance, _ = CreditBalance.get_or_create_for_user(user)
+        balance, _ = _get_or_create_credit_balance(
+            user=user,
+            organization=organization,
+        )
         existing_transaction = _find_existing_credit_transaction(
             user=user,
+            organization=organization,
             transaction_type=transaction_type,
             stripe_event_id=stripe_event_id,
             stripe_object_id=stripe_object_id,
@@ -794,6 +856,7 @@ def credit_user(
         )
         transaction_row = CreditTransaction.objects.create(
             user=user,
+            organization=organization,
             amount=amount,
             transaction_type=transaction_type,
             stripe_event_id=stripe_event_id,
@@ -809,13 +872,15 @@ def debit_user(
     user: Any,
     amount: int,
     description: str = "",
+    *,
+    organization: Any | None = None,
 ) -> CreditTransaction:
     """Debit credits from a user and record the usage transaction."""
     if amount <= 0:
         raise BillingValidationError("Debit amount must be greater than zero.")
 
     with transaction.atomic():
-        balance = CreditBalance.objects.select_for_update().filter(user=user).first()
+        balance = _get_locked_credit_balance(user=user, organization=organization)
         if balance is None or int(balance.balance) < amount:
             raise InsufficientCreditsError("User does not have enough credits.")
 
@@ -825,11 +890,41 @@ def debit_user(
         )
         return CreditTransaction.objects.create(
             user=user,
+            organization=organization,
             amount=-amount,
             transaction_type=CreditTransaction.TransactionType.USAGE,
             description=description,
             balance_after=updated_balance,
         )
+
+
+def _get_or_create_credit_balance(
+    *,
+    user: Any,
+    organization: Any | None,
+) -> tuple[CreditBalance, bool]:
+    if organization is None:
+        return CreditBalance.get_or_create_for_user(user)
+
+    balance, created = CreditBalance.objects.get_or_create(
+        organization=organization,
+        defaults={"balance": 0, "user": None},
+    )
+    return CreditBalance.objects.select_for_update().get(pk=balance.pk), created
+
+
+def _get_locked_credit_balance(
+    *,
+    user: Any,
+    organization: Any | None,
+) -> CreditBalance | None:
+    if organization is not None:
+        return (
+            CreditBalance.objects.select_for_update()
+            .filter(organization=organization)
+            .first()
+        )
+    return CreditBalance.objects.select_for_update().filter(user=user).first()
 
 
 def _apply_locked_credit_balance_delta(*, balance: CreditBalance, delta: int) -> int:
@@ -964,12 +1059,16 @@ def _handle_invoice_paid_event(
     if plan is None:
         raise BillingWebhookError(f"No billing plan matches Stripe price {price_id}.")
 
+    resolved_organization = _resolve_organization_for_invoice(
+        invoice_payload=invoice_payload,
+    )
     resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
     subscription_id = str(invoice_payload.get("subscription") or "").strip()
     customer_id = str(invoice_payload.get("customer") or "").strip()
     subscription = _resolve_subscription_for_runtime_event(
         stripe_subscription_id=subscription_id,
         customer_id=customer_id,
+        organization=resolved_organization,
         user=resolved_user,
         for_update=True,
     )
@@ -979,6 +1078,7 @@ def _handle_invoice_paid_event(
             invoice_payload=invoice_payload,
             stripe_client=stripe_client,
             fallback_user=resolved_user,
+            fallback_organization=resolved_organization,
             expected_plan=plan,
         )
     elif subscription.status in {
@@ -990,9 +1090,23 @@ def _handle_invoice_paid_event(
         subscription = _activate_subscription_for_paid_invoice(
             subscription=subscription,
             plan=plan,
+            organization=resolved_organization,
+            user=resolved_user,
             customer_id=customer_id,
             stripe_subscription_id=subscription_id,
         )
+    else:
+        subscription = _sync_subscription_authority(
+            subscription=subscription,
+            organization=resolved_organization,
+            user=resolved_user,
+            customer_id=customer_id,
+            stripe_subscription_id=subscription_id,
+        )
+
+    organization = resolved_organization
+    if organization is None and subscription is not None:
+        organization = subscription.organization
 
     user = resolved_user
     if user is None and subscription is not None:
@@ -1012,6 +1126,7 @@ def _handle_invoice_paid_event(
 
     return credit_user(
         user,
+        organization=organization,
         amount=plan.credits_per_period,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         description=f"{plan.name} credits from Stripe invoice {invoice_id}",
@@ -1029,16 +1144,20 @@ def _handle_invoice_payment_failed_event(
     if not invoice_id:
         raise BillingWebhookError("Stripe invoice payload is missing an id.")
 
+    resolved_organization = _resolve_organization_for_invoice(
+        invoice_payload=invoice_payload,
+    )
     resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
     subscription = _resolve_subscription_for_runtime_event(
         stripe_subscription_id=str(invoice_payload.get("subscription") or "").strip(),
         customer_id=str(invoice_payload.get("customer") or "").strip(),
+        organization=resolved_organization,
         user=resolved_user,
         for_update=True,
     )
 
     if subscription is None:
-        if resolved_user is None:
+        if resolved_user is None and resolved_organization is None:
             raise BillingWebhookError(
                 "Could not resolve a local user for the Stripe invoice."
             )
@@ -1048,27 +1167,21 @@ def _handle_invoice_payment_failed_event(
             raise BillingWebhookError(
                 f"No billing plan matches Stripe price {price_id}."
             )
-        subscription = Subscription(user=resolved_user, plan=plan)
+        subscription = Subscription(
+            user=resolved_user,
+            organization=resolved_organization,
+            plan=plan,
+        )
 
     subscription.status = Subscription.Status.PAST_DUE
-    subscription.stripe_customer_id = (
-        str(invoice_payload.get("customer") or "").strip()
-        or subscription.stripe_customer_id
+    subscription = _sync_subscription_authority(
+        subscription=subscription,
+        organization=resolved_organization,
+        user=resolved_user,
+        customer_id=str(invoice_payload.get("customer") or "").strip(),
+        stripe_subscription_id=str(invoice_payload.get("subscription") or "").strip(),
+        update_fields=["status"],
     )
-    subscription.stripe_subscription_id = (
-        str(invoice_payload.get("subscription") or "").strip()
-        or subscription.stripe_subscription_id
-    )
-    if subscription.pk is None:
-        subscription.save()
-    else:
-        subscription.save(
-            update_fields=[
-                "status",
-                "stripe_customer_id",
-                "stripe_subscription_id",
-            ]
-        )
     return subscription
 
 
@@ -1076,6 +1189,8 @@ def _activate_subscription_for_paid_invoice(
     *,
     subscription: Subscription,
     plan: Plan,
+    organization: Any | None,
+    user: Any | None,
     customer_id: str,
     stripe_subscription_id: str,
 ) -> Subscription:
@@ -1086,26 +1201,14 @@ def _activate_subscription_for_paid_invoice(
     if subscription.status != Subscription.Status.ACTIVE:
         subscription.status = Subscription.Status.ACTIVE
         update_fields.append("status")
-
-    normalized_customer_id = customer_id.strip()
-    if (
-        normalized_customer_id
-        and subscription.stripe_customer_id != normalized_customer_id
-    ):
-        subscription.stripe_customer_id = normalized_customer_id
-        update_fields.append("stripe_customer_id")
-
-    normalized_subscription_id = stripe_subscription_id.strip()
-    if (
-        normalized_subscription_id
-        and subscription.stripe_subscription_id != normalized_subscription_id
-    ):
-        subscription.stripe_subscription_id = normalized_subscription_id
-        update_fields.append("stripe_subscription_id")
-
-    if update_fields:
-        subscription.save(update_fields=update_fields)
-    return subscription
+    return _sync_subscription_authority(
+        subscription=subscription,
+        organization=organization,
+        user=user,
+        customer_id=customer_id,
+        stripe_subscription_id=stripe_subscription_id,
+        update_fields=update_fields,
+    )
 
 
 def _backfill_missing_subscription_for_paid_invoice(
@@ -1113,6 +1216,7 @@ def _backfill_missing_subscription_for_paid_invoice(
     invoice_payload: Mapping[str, Any],
     stripe_client: Any | None,
     fallback_user: Any | None,
+    fallback_organization: Any | None,
     expected_plan: Plan,
 ) -> Subscription:
     stripe_subscription_id = str(invoice_payload.get("subscription") or "").strip()
@@ -1133,6 +1237,7 @@ def _backfill_missing_subscription_for_paid_invoice(
     return _upsert_subscription_from_payload(
         subscription_payload,
         fallback_user=fallback_user,
+        fallback_organization=fallback_organization,
         expected_plan=expected_plan,
     )
 
@@ -1141,6 +1246,7 @@ def _upsert_subscription_from_payload(
     subscription_payload: Mapping[str, Any],
     *,
     fallback_user: Any | None = None,
+    fallback_organization: Any | None = None,
     expected_plan: Plan | None = None,
     fallback_status: str = "",
 ) -> Subscription:
@@ -1159,10 +1265,16 @@ def _upsert_subscription_from_payload(
             "Stripe subscription does not match the invoiced billing plan."
         )
 
+    organization = _resolve_organization_for_subscription(
+        subscription_payload=subscription_payload
+    )
+    if organization is None:
+        organization = fallback_organization
+
     user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
     if user is None:
         user = fallback_user
-    if user is None:
+    if user is None and organization is None:
         raise BillingWebhookError(
             "Could not resolve a local user for the Stripe subscription."
         )
@@ -1170,18 +1282,22 @@ def _upsert_subscription_from_payload(
     subscription = _resolve_subscription_for_runtime_event(
         stripe_subscription_id=stripe_subscription_id,
         customer_id=str(subscription_payload.get("customer") or "").strip(),
+        organization=organization,
         user=user,
         for_update=True,
     )
     if subscription is None:
-        subscription = Subscription(user=user, plan=plan)
+        subscription = Subscription(user=user, organization=organization, plan=plan)
 
     subscription.plan = plan
     subscription.status = local_status
-    subscription.stripe_subscription_id = stripe_subscription_id
-    subscription.stripe_customer_id = (
-        str(subscription_payload.get("customer") or "").strip()
-        or subscription.stripe_customer_id
+    subscription = _sync_subscription_authority(
+        subscription=subscription,
+        organization=organization,
+        user=user,
+        customer_id=str(subscription_payload.get("customer") or "").strip(),
+        stripe_subscription_id=stripe_subscription_id,
+        update_fields=["plan", "status"],
     )
     subscription.current_period_start = _stripe_timestamp_to_datetime(
         subscription_payload.get("current_period_start")
@@ -1189,19 +1305,14 @@ def _upsert_subscription_from_payload(
     subscription.current_period_end = _stripe_timestamp_to_datetime(
         subscription_payload.get("current_period_end")
     )
-    if subscription.pk is None:
-        subscription.save()
-    else:
-        subscription.save(
-            update_fields=[
-                "plan",
-                "status",
-                "stripe_subscription_id",
-                "stripe_customer_id",
-                "current_period_start",
-                "current_period_end",
-            ]
-        )
+    subscription.save(
+        update_fields=[
+            "current_period_start",
+            "current_period_end",
+        ]
+        if subscription.pk is not None
+        else None
+    )
     return subscription
 
 
@@ -1254,6 +1365,10 @@ def _handle_checkout_session_completed_event(
         checkout_session_payload=checkout_session_payload,
         payment_intent_payload=payment_intent_payload,
     )
+    organization = _resolve_organization_for_checkout_session(
+        checkout_session_payload=checkout_session_payload,
+        payment_intent_payload=payment_intent_payload,
+    )
     user = _resolve_user_for_checkout_session(
         checkout_session_payload=checkout_session_payload,
         payment_intent_payload=payment_intent_payload,
@@ -1277,6 +1392,7 @@ def _handle_checkout_session_completed_event(
 
     return credit_user(
         user,
+        organization=organization,
         amount=credited_amount,
         transaction_type=CreditTransaction.TransactionType.PURCHASE,
         description=f"{plan.name} credits from Stripe checkout session {checkout_session_id}",
@@ -1378,6 +1494,7 @@ def _resolve_subscription_for_runtime_event(
     *,
     stripe_subscription_id: str,
     customer_id: str,
+    organization: Any | None,
     user: Any | None,
     for_update: bool = False,
 ) -> Subscription | None:
@@ -1394,11 +1511,18 @@ def _resolve_subscription_for_runtime_event(
 
     if customer_id.strip():
         subscription = _resolve_authoritative_subscription_reservation(
+            organization=organization,
             customer_id=customer_id,
             for_update=for_update,
         )
         if subscription is not None:
             return subscription
+
+    if organization is not None:
+        return _resolve_authoritative_subscription_reservation(
+            organization=organization,
+            for_update=for_update,
+        )
 
     if user is not None:
         return _resolve_authoritative_subscription_reservation(
@@ -1407,6 +1531,24 @@ def _resolve_subscription_for_runtime_event(
         )
 
     return None
+
+
+def _resolve_organization_for_invoice(
+    *,
+    invoice_payload: Mapping[str, Any],
+) -> Any | None:
+    customer_id = str(invoice_payload.get("customer") or "").strip()
+    if customer_id:
+        organization = _resolve_organization_by_customer_id(customer_id)
+        if organization is not None:
+            return organization
+
+    metadata_sources = [
+        invoice_payload,
+        _normalize_mapping(invoice_payload.get("subscription_details") or {}),
+        _normalize_mapping(invoice_payload.get("parent") or {}),
+    ]
+    return _resolve_organization_from_metadata_sources(metadata_sources)
 
 
 def _resolve_user_for_invoice(*, invoice_payload: Mapping[str, Any]) -> Any | None:
@@ -1440,6 +1582,18 @@ def _resolve_user_for_subscription(
     return _resolve_user_from_metadata_sources([subscription_payload])
 
 
+def _resolve_organization_for_subscription(
+    *, subscription_payload: Mapping[str, Any]
+) -> Any | None:
+    customer_id = str(subscription_payload.get("customer") or "").strip()
+    if customer_id:
+        organization = _resolve_organization_by_customer_id(customer_id)
+        if organization is not None:
+            return organization
+
+    return _resolve_organization_from_metadata_sources([subscription_payload])
+
+
 def _resolve_user_for_checkout_session(
     *,
     checkout_session_payload: Mapping[str, Any],
@@ -1458,6 +1612,22 @@ def _resolve_user_for_checkout_session(
     )
 
 
+def _resolve_organization_for_checkout_session(
+    *,
+    checkout_session_payload: Mapping[str, Any],
+    payment_intent_payload: Mapping[str, Any],
+) -> Any | None:
+    customer_id = str(checkout_session_payload.get("customer") or "").strip()
+    if customer_id:
+        organization = _resolve_organization_by_customer_id(customer_id)
+        if organization is not None:
+            return organization
+
+    return _resolve_organization_from_metadata_sources(
+        [checkout_session_payload, payment_intent_payload]
+    )
+
+
 def _resolve_user_from_metadata_sources(
     metadata_sources: list[Mapping[str, Any]],
 ) -> Any | None:
@@ -1471,6 +1641,24 @@ def _resolve_user_from_metadata_sources(
         user = _resolve_user_from_reference(user_reference)
         if user is not None:
             return user
+    return None
+
+
+def _resolve_organization_from_metadata_sources(
+    metadata_sources: list[Mapping[str, Any]],
+) -> Any | None:
+    for metadata_source in metadata_sources:
+        metadata = metadata_source.get("metadata")
+        if not isinstance(metadata, Mapping):
+            continue
+        organization_reference = str(
+            metadata.get(_ORG_REFERENCE_METADATA_KEY) or ""
+        ).strip()
+        if not organization_reference:
+            continue
+        organization = _resolve_organization_from_reference(organization_reference)
+        if organization is not None:
+            return organization
     return None
 
 
@@ -1602,8 +1790,13 @@ def _validate_completed_checkout_plan(
         )
 
 
-def _build_checkout_session_metadata(user: Any, plan: Plan) -> dict[str, str]:
-    metadata = _build_customer_metadata(user)
+def _build_checkout_session_metadata(
+    user: Any,
+    plan: Plan,
+    *,
+    organization: Any | None = None,
+) -> dict[str, str]:
+    metadata = _build_customer_metadata(user, organization=organization)
     metadata.update(
         {
             _PLAN_SLUG_METADATA_KEY: plan.slug,
@@ -1665,20 +1858,26 @@ def _validate_stripe_price_parity(
 def _resolve_authoritative_subscription_reservation(
     *,
     user: Any | None = None,
+    organization: Any | None = None,
     customer_id: str = "",
     for_update: bool = False,
 ) -> Subscription | None:
     normalized_customer_id = customer_id.strip()
-    if user is None and not normalized_customer_id:
+    if user is None and organization is None and not normalized_customer_id:
         return None
 
     queryset = Subscription.objects.select_related("user", "plan").order_by("-pk")
     if for_update:
         queryset = queryset.select_for_update()
+    if organization is not None:
+        queryset = queryset.filter(organization=organization)
     if user is not None:
         queryset = queryset.filter(user=user)
     if normalized_customer_id:
-        queryset = queryset.filter(stripe_customer_id=normalized_customer_id)
+        queryset = queryset.filter(
+            Q(stripe_customer_id=normalized_customer_id)
+            | Q(organization__stripe_customer_id=normalized_customer_id)
+        )
     return queryset.filter(Subscription.current_status_q()).first()
 
 
@@ -1713,6 +1912,7 @@ def _expire_subscription_reservation(reservation: Subscription) -> None:
 def _create_subscription_reservation(
     *,
     user: Any,
+    organization: Any | None,
     plan: Plan,
     stripe_customer_id: str | None = None,
 ) -> tuple[Subscription, bool]:
@@ -1721,6 +1921,7 @@ def _create_subscription_reservation(
             return (
                 Subscription.objects.create(
                     user=user,
+                    organization=organization,
                     plan=plan,
                     stripe_customer_id=stripe_customer_id,
                     status=Subscription.Status.INCOMPLETE,
@@ -1730,6 +1931,7 @@ def _create_subscription_reservation(
     except IntegrityError as exc:
         recovered_reservation = _recover_conflicting_subscription_reservation(
             user=user,
+            organization=organization,
             plan=plan,
         )
         if recovered_reservation is not None:
@@ -1740,11 +1942,13 @@ def _create_subscription_reservation(
 def _recover_conflicting_subscription_reservation(
     *,
     user: Any,
+    organization: Any | None,
     plan: Plan,
 ) -> Subscription | None:
     with transaction.atomic():
         current_reservation = _resolve_authoritative_subscription_reservation(
             user=user,
+            organization=organization,
             for_update=True,
         )
         if current_reservation is None:
@@ -1759,14 +1963,20 @@ def _recover_conflicting_subscription_reservation(
 def _prepare_subscription_checkout_reservation(
     *,
     user: Any,
+    organization: Any | None,
     plan: Plan,
 ) -> tuple[Subscription, bool]:
     current_reservation = _resolve_authoritative_subscription_reservation(
         user=user,
+        organization=organization,
         for_update=True,
     )
     if current_reservation is None:
-        return _create_subscription_reservation(user=user, plan=plan)
+        return _create_subscription_reservation(
+            user=user,
+            organization=organization,
+            plan=plan,
+        )
 
     if not _subscription_reservation_can_be_reused(current_reservation, plan=plan):
         raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
@@ -1778,6 +1988,7 @@ def _prepare_subscription_checkout_reservation(
         _expire_subscription_reservation(current_reservation)
         return _create_subscription_reservation(
             user=user,
+            organization=organization,
             plan=plan,
             stripe_customer_id=persisted_customer_id or None,
         )
@@ -1867,17 +2078,49 @@ def _resolve_user_from_reference(user_reference: str) -> Any | None:
     return model_class._default_manager.filter(pk=pk_value).first()
 
 
-def _build_customer_metadata(user: Any) -> dict[str, str]:
-    return {
-        _USER_METADATA_KEY: _user_reference(user),
-        "quickscale_user_model": str(user._meta.label_lower),
-        "quickscale_user_pk": str(user.pk),
-    }
+def _resolve_organization_from_reference(organization_reference: str) -> Any | None:
+    model_label, separator, pk_value = organization_reference.partition(":")
+    if not separator or "." not in model_label or not pk_value:
+        return None
+    app_label, _, model_name = model_label.partition(".")
+    try:
+        model_class = apps.get_model(app_label, model_name)
+    except LookupError:
+        return None
+    return model_class._default_manager.filter(pk=pk_value).first()
+
+
+def _build_customer_metadata(
+    user: Any,
+    *,
+    organization: Any | None = None,
+) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    if organization is not None:
+        metadata.update(
+            {
+                _ORG_REFERENCE_METADATA_KEY: _organization_reference(organization),
+                "quickscale_org_model": str(organization._meta.label_lower),
+                "quickscale_org_pk": str(organization.pk),
+            }
+        )
+    metadata.update(
+        {
+            _USER_METADATA_KEY: _user_reference(user),
+            "quickscale_user_model": str(user._meta.label_lower),
+            "quickscale_user_pk": str(user.pk),
+        }
+    )
+    return metadata
 
 
 def _build_customer_create_idempotency_key(user_reference: str) -> str:
     digest = hashlib.sha256(user_reference.encode("utf-8")).hexdigest()
     return f"quickscale-billing-customer:{digest}"
+
+
+def _organization_reference(organization: Any) -> str:
+    return f"{organization._meta.label_lower}:{organization.pk}"
 
 
 def _user_reference(user: Any) -> str:
@@ -1900,15 +2143,19 @@ def _string_field(instance: Any, field_name: str) -> str:
 def _find_existing_credit_transaction(
     *,
     user: Any,
+    organization: Any | None,
     transaction_type: str,
     stripe_event_id: str,
     stripe_object_id: str,
     stripe_reference_data: Mapping[str, Any],
 ) -> CreditTransaction | None:
     candidate_queryset = CreditTransaction.objects.select_for_update().filter(
-        user=user,
         transaction_type=transaction_type,
     )
+    if organization is not None:
+        candidate_queryset = candidate_queryset.filter(organization=organization)
+    else:
+        candidate_queryset = candidate_queryset.filter(user=user)
     if stripe_object_id:
         existing = candidate_queryset.filter(stripe_object_id=stripe_object_id).first()
         if existing is not None:
@@ -1955,6 +2202,122 @@ def _normalize_mapping(value: Any) -> dict[str, Any]:
         return {}
     serialized = json.dumps(dict(value), default=str)
     return cast(dict[str, Any], json.loads(serialized))
+
+
+def _resolve_authoritative_organization_customer_id(*, organization: Any) -> str:
+    existing_customer_id = str(
+        getattr(organization, "stripe_customer_id", "") or ""
+    ).strip()
+    if existing_customer_id:
+        return existing_customer_id
+
+    authoritative_subscription = _resolve_authoritative_subscription_reservation(
+        organization=organization,
+    )
+    if authoritative_subscription is None:
+        return ""
+
+    existing_customer_id = str(
+        authoritative_subscription.stripe_customer_id or ""
+    ).strip()
+    if existing_customer_id:
+        _sync_organization_customer_id(organization, existing_customer_id)
+    return existing_customer_id
+
+
+def _sync_organization_customer_id(organization: Any, customer_id: str) -> None:
+    normalized_customer_id = customer_id.strip()
+    if organization is None or not normalized_customer_id:
+        return
+
+    if (
+        str(getattr(organization, "stripe_customer_id", "") or "").strip()
+        == normalized_customer_id
+    ):
+        return
+
+    type(organization).objects.filter(pk=organization.pk).update(
+        stripe_customer_id=normalized_customer_id
+    )
+    organization.stripe_customer_id = normalized_customer_id
+
+
+def _resolve_organization_by_customer_id(customer_id: str) -> Any | None:
+    normalized_customer_id = customer_id.strip()
+    if not normalized_customer_id:
+        return None
+
+    organization_model = apps.get_model(
+        "quickscale_modules_orgs",
+        "Organization",
+    )
+    matches = list(
+        organization_model._default_manager.filter(
+            stripe_customer_id=normalized_customer_id,
+        ).order_by("pk")[:2]
+    )
+    if len(matches) > 1:
+        raise BillingWebhookError(
+            "Multiple organizations match the Stripe customer id on this billing event."
+        )
+    if matches:
+        return matches[0]
+
+    subscription = (
+        Subscription.objects.select_related("organization")
+        .filter(stripe_customer_id=normalized_customer_id)
+        .order_by("-pk")
+        .first()
+    )
+    if subscription is None:
+        return None
+    return subscription.organization
+
+
+def _sync_subscription_authority(
+    *,
+    subscription: Subscription,
+    organization: Any | None,
+    user: Any | None,
+    customer_id: str,
+    stripe_subscription_id: str,
+    update_fields: list[str] | None = None,
+) -> Subscription:
+    fields_to_update = list(update_fields or [])
+
+    if organization is not None and subscription.organization_id != organization.pk:
+        subscription.organization = organization
+        fields_to_update.append("organization")
+
+    if user is not None and subscription.user_id is None:
+        subscription.user = user
+        fields_to_update.append("user")
+
+    normalized_customer_id = customer_id.strip()
+    if (
+        normalized_customer_id
+        and subscription.stripe_customer_id != normalized_customer_id
+    ):
+        subscription.stripe_customer_id = normalized_customer_id
+        fields_to_update.append("stripe_customer_id")
+
+    normalized_subscription_id = stripe_subscription_id.strip()
+    if (
+        normalized_subscription_id
+        and subscription.stripe_subscription_id != normalized_subscription_id
+    ):
+        subscription.stripe_subscription_id = normalized_subscription_id
+        fields_to_update.append("stripe_subscription_id")
+
+    unique_fields = list(dict.fromkeys(fields_to_update))
+    if subscription.pk is None:
+        subscription.save()
+    elif unique_fields:
+        subscription.save(update_fields=unique_fields)
+
+    if organization is not None and normalized_customer_id:
+        _sync_organization_customer_id(organization, normalized_customer_id)
+    return subscription
 
 
 __all__ = [
