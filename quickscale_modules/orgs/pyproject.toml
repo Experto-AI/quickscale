@@ -28,7 +28,7 @@ target-version = "py313"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = [".", "src"]
+pythonpath = [".", "src", "../billing/src"]
 python_files = ["test_*.py"]
 norecursedirs = [".*", "build", "dist", "node_modules", "quickscale_cli", "quickscale_core", "analytics", "auth", "backups", "billing", "blog", "crm", "forms", "listings", "notifications", "social", "storage", "teams"]
 testpaths = ["tests"]

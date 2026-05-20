@@ -111,7 +111,7 @@
                 <p class="module-note">QuickScale keeps billing on module-owned Django pages rather than generating a starter-owned frontend billing app.</p>
                 <div class="module-card-actions">
                     {% if user.is_authenticated %}
-                    <a class="module-link" href="/billing/dashboard/">Open billing dashboard</a>
+                    <a class="module-link" href="{{ modules.billing.url }}">Open billing</a>
                     {% else %}
                     <a class="module-link" href="/billing/pricing/">View pricing</a>
                     {% endif %}

@@ -87,7 +87,7 @@
             <p>Your credit purchase has been confirmed. Credits may take a moment to appear on your balance.</p>
             <p class="status-note">If Stripe has just redirected you back, refresh the dashboard after processing finishes.</p>
             <div class="actions">
-                <a class="button button-primary" href="{% url 'quickscale_billing:billing-dashboard' %}">Go to dashboard</a>
+                <a class="button button-primary" href="{{ dashboard_url }}">Go to dashboard</a>
                 <a class="button button-secondary" href="/">Back to app</a>
             </div>
         </div>

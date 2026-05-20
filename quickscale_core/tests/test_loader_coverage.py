@@ -94,6 +94,20 @@ class TestLoadManifestEdgeCases:
         with pytest.raises(ManifestError, match="dependencies"):
             load_manifest(yaml_content, "mymod")
 
+    def test_load_manifest_required_modules_not_list_raises(self) -> None:
+        """required_modules field that is not a list raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nrequired_modules: not_a_list\n"
+        with pytest.raises(ManifestError, match="required_modules"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_required_modules_round_trip(self) -> None:
+        """required_modules should be preserved on the loaded manifest."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nrequired_modules:\n  - orgs\n"
+
+        manifest = load_manifest(yaml_content, "mymod")
+
+        assert manifest.required_modules == ["orgs"]
+
     def test_load_manifest_django_apps_not_list_raises(self) -> None:
         """django_apps field that is not a list raises ManifestError."""
         yaml_content = "name: mymod\nversion: '1.0.0'\ndjango_apps: not_a_list\n"

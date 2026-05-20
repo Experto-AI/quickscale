@@ -143,6 +143,7 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     _validate_mutable_options(mutable_options, module_name)
 
     # Parse list fields
+    required_modules = _validate_list_field(data, "required_modules", module_name)
     dependencies = _validate_list_field(data, "dependencies", module_name)
     django_apps = _validate_list_field(data, "django_apps", module_name)
 
@@ -152,6 +153,7 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         description=data.get("description", ""),
         mutable_options=mutable_options,
         immutable_options=immutable_options,
+        required_modules=required_modules,
         dependencies=dependencies,
         django_apps=django_apps,
     )

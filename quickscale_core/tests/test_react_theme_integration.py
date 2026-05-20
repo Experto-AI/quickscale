@@ -850,10 +850,8 @@ class TestReactThemeModuleActivationMatrix:
             "billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}"
             "true{% else %}false{% endif %},"
         ) in window_config
-        assert (
-            'billing: "{% if user.is_authenticated %}/billing/dashboard/{% else %}'
-            '/billing/pricing/{% endif %}"'
-        ) in window_config
+        assert 'billing: "{{ modules.billing.url|escapejs }}"' in window_config
+        assert "/billing/dashboard/" not in window_config
 
     def test_react_theme_billing_dashboard_card(self, tmp_path):
         """Generated React dashboard should surface billing as a module-owned card."""

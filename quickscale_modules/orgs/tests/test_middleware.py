@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -10,9 +11,18 @@ from django.db import connection
 from django.http import Http404
 from django.test import RequestFactory
 from django.test import override_settings
+from django.utils import timezone
 
+from quickscale_modules_orgs.constants import (
+    PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
+)
 from quickscale_modules_orgs.middleware import TenantMiddleware
-from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
+from quickscale_modules_orgs.models import (
+    OrgRole,
+    Organization,
+    OrganizationInvitation,
+    OrganizationMembership,
+)
 from quickscale_modules_orgs.views import org_detail_view, org_index_view, org_new_view
 
 
@@ -40,7 +50,15 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("path", ["/orgs/", "/orgs/new/", "/orgs/acme/"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/orgs/",
+        "/orgs/new/",
+        "/orgs/acme/",
+        "/orgs/invitations/00000000-0000-0000-0000-000000000000/accept/",
+    ],
+)
 def test_solo_mode_hides_org_namespace_routes(client, settings, path) -> None:
     settings.QUICKSCALE_MODE = "solo"
     user = get_user_model().objects.create_user(
@@ -68,6 +86,54 @@ def test_saas_mode_redirects_unscoped_requests_without_membership(
     client.force_login(user)
 
     response = client.get("/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/orgs/new/"
+
+
+@pytest.mark.django_db
+def test_saas_mode_allows_public_invitation_accept_without_membership(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    inviter = get_user_model().objects.create_user(
+        username="beck",
+        email="beck@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Beacon", slug="beacon")
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="blair@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+
+    response = client.get(f"/orgs/invitations/{invitation.token}/accept/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == (
+        f"/accounts/login/?next=/orgs/invitations/{invitation.token}/accept/"
+    )
+    assert client.session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] == str(
+        invitation.token
+    )
+
+
+@pytest.mark.django_db
+def test_saas_mode_keeps_non_accept_invitation_paths_redirecting_to_org_creation(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="blake",
+        email="blake@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.get("/orgs/invitations/pending/")
 
     assert response.status_code == 302
     assert response.headers["Location"] == "/orgs/new/"

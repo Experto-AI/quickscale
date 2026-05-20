@@ -84,7 +84,7 @@
             <h1>Purchase canceled</h1>
             <p>Your checkout session ended before Stripe completed the payment, so no charge was made.</p>
             <div class="actions">
-                <a class="button button-primary" href="{% url 'quickscale_billing:pricing-page' %}">Try again</a>
+                <a class="button button-primary" href="{{ pricing_url }}">Try again</a>
                 <a class="button button-secondary" href="/">Back to app</a>
             </div>
         </div>

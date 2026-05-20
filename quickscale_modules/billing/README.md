@@ -1,8 +1,8 @@
 # QuickScale Billing Module
 
-**Status**: Billing ships in v0.85.0 through the standard QuickScale module workflow. `quickscale.yml` plus env-var-backed runtime settings are authoritative, and Stripe keys plus webhook secrets stay environment-only.
+**Status**: Billing ships in v0.85.0 through the standard QuickScale module workflow. `quickscale.yml` plus env-var-backed runtime settings are authoritative, Stripe keys plus webhook secrets stay environment-only, and billing now depends on the `orgs` module for its org-authoritative ledger/runtime contract.
 
-QuickScale billing is a credits-first module. Django owns plans, balances, transactions, subscription snapshots, and webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python SDK; the Django ledger remains the source of truth for credit accounting, and billing requires auth-backed users at apply/runtime.
+QuickScale billing is a credits-first org-backed module. Django owns plans, balances, transactions, subscription snapshots, and webhook idempotency records. Stripe is the payment trigger through the direct `stripe` Python SDK; the Django ledger remains the source of truth for credit accounting, and billing requires the `orgs` plus `auth` modules at plan/apply/runtime.
 
 ## Current Shipped Surface
 
@@ -11,12 +11,14 @@ QuickScale billing is a credits-first module. Django owns plans, balances, trans
 - Django admin registration for plans, balances, transactions, subscriptions, and webhook events
 - Stripe webhook handling for purchases and recurring subscription lifecycle events
 - Authenticated JSON APIs for balance, transactions, purchase checkout, subscription checkout, subscription status, subscription cancel, billing portal, and publishable-key discovery
-- Module-owned Django pages for dashboard, pricing, purchase return routes, subscription return routes, and the billing portal return route
+- Module-owned Django pages for canonical org-scoped dashboard/pricing, flat compatibility shims, purchase return routes, subscription return routes, and the billing portal return route
 - Manual React adoption guidance so generated frontend files remain user-owned
 
 ## Current Boundaries
 
-- Billing requires auth-backed users at apply/runtime; QuickScale does not support a standalone billing install without auth
+- Billing requires the `orgs` and `auth` modules at plan/apply/runtime; QuickScale does not support a standalone billing install without those foundations
+- Planner/apply now auto-materialize the `orgs` module when billing is selected, and `orgs` continues to auto-materialize default notifications config; auth remains an explicit prerequisite
+- In SaaS/org-aware installs, canonical authenticated billing pages and APIs are org-scoped under `/orgs/<slug>/...`; flat authenticated billing routes remain compatibility shims for Solo mode and older non-org callers
 - `GET /api/billing/plans/` is intentionally recurring-only; one-time credit packs are purchaseable but do not currently ship through a public catalog endpoint
 - Checkout success, cancel, and portal return URLs are server-owned; callers may not supply them in API requests
 - Stripe keys are resolved from environment variables at runtime and are never stored in the database
@@ -24,17 +26,17 @@ QuickScale billing is a credits-first module. Django owns plans, balances, trans
 ## Credits-First Domain Contract
 
 - `Plan` stores QuickScale-owned display metadata plus the authoritative Stripe Price reference used for checkout validation
-- `CreditBalance` tracks the current per-user credit balance
+- `CreditBalance` tracks the current authoritative per-organization credit balance; nullable user links remain provenance / compatibility only
 - `CreditTransaction` records each credit mutation with balance snapshots and optional Stripe reference metadata
-- `Subscription` stores the local snapshot of recurring billing state and reservation-first checkout metadata
+- `Subscription` stores the local snapshot of recurring billing state keyed authoritatively to the organization; nullable user links remain provenance / compatibility only
 - `WebhookEvent` is the transport-level idempotency gate for Stripe webhook processing
 - `debit_user` is the approved service API for credit consumption
 
-## Explicit Non-Goals For v0.85.0
+## Explicit Non-Goals For The Current Contract
 
 - No Stripe catalog authoring from Django admin
-- No coupons, tax/VAT workflows, metered billing, seat billing, or custom invoice-history UI
-- No teams-aware shared balances
+- No coupons, tax/VAT workflows, metered billing, or custom invoice-history UI
+- No seat billing, seat-limit fields, or seat-based enforcement yet
 - No rewrites of user-owned frontend files
 
 ## React Integration Guide
@@ -51,6 +53,8 @@ This phase documents how to wire the billing module into a generated React front
 
 ### API Contract
 
+Canonical SaaS callers should use the org-scoped `/orgs/<slug>/api/billing/...` endpoints. The flat `/api/billing/...` routes documented below remain compatibility shims for Solo mode and older non-org integrations.
+
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `/api/billing/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": "Stripe publishable key is not configured in the runtime environment."}` when missing. |
@@ -65,10 +69,12 @@ This phase documents how to wire the billing module into a generated React front
 
 ### Module-Owned Billing Pages
 
-The module already ships Django pages that you can either use directly or treat as mount points for your React frontend:
+The module already ships Django pages that you can either use directly or treat as mount points for your React frontend. In SaaS/org-aware installs, canonical authenticated pages are org-scoped and the flat authenticated route remains a compatibility shim:
 
-- `GET /billing/dashboard/` renders a login-gated page with `<div id="billing-root" data-view="dashboard">`
-- `GET /billing/pricing/` renders a public page with `<div id="billing-root" data-view="pricing">`
+- `GET /orgs/<slug>/billing/dashboard/` renders the canonical authenticated billing page with `<div id="billing-root" data-view="dashboard">`
+- `GET /orgs/<slug>/billing/pricing/` renders the canonical org-scoped pricing page with `<div id="billing-root" data-view="pricing">`
+- `GET /billing/dashboard/` remains the served authenticated dashboard route in Solo mode and the flat compatibility route for older non-org callers in SaaS installs
+- `GET /billing/pricing/` remains the flat public pricing page
 - `GET /billing/purchase/success/` and `GET /billing/purchase/cancel/` render purchase return pages
 - `GET /billing/subscription/success/` and `GET /billing/subscription/cancel/` render subscription return pages
 - `GET /billing/portal/return/` renders the Stripe billing-portal return page
@@ -621,6 +627,6 @@ Frontend runtime wiring:
 
 ## Distribution Notes
 
-Billing ships through the standard QuickScale module packaging and split-branch workflow. Follow-on roadmap work may tighten release evidence or adjacent docs, but this README describes the current shipped module contract.
+Billing ships through the standard QuickScale module packaging and split-branch workflow. The module manifest declares `required_modules: [orgs]`, and the package metadata declares `quickscale-module-orgs` so standalone package consumers and QuickScale planner/apply flows advertise the same dependency contract. Follow-on roadmap work may tighten release evidence or adjacent docs, but this README describes the current shipped module contract.
 
 See [Technical Roadmap](../../docs/technical/roadmap.md) for the full v0.85.0 implementation plan.

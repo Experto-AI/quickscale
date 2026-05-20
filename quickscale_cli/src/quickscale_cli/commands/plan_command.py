@@ -13,6 +13,9 @@ import click
 
 from quickscale_cli.auth_contract import format_auth_desired_config_contract
 from quickscale_cli.backups_contract import sanitize_module_options
+from quickscale_cli.commands.implied_module_defaults import (
+    get_implied_module_default_configs,
+)
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATORS
 from quickscale_cli.module_catalog import (
     ModuleCatalogEntry,
@@ -234,6 +237,32 @@ def _merge_module_names(*module_groups: list[str]) -> list[str]:
             if module_name not in merged:
                 merged.append(module_name)
     return merged
+
+
+def _materialize_implied_module_configs(
+    module_names: list[str],
+    module_options: dict[str, dict[str, Any]],
+) -> tuple[list[str], dict[str, dict[str, Any]], list[str]]:
+    """Add explicit config blocks for modules that are implied by selection."""
+    present_module_names = _merge_module_names(
+        module_names, list(module_options.keys())
+    )
+    implied_configs = get_implied_module_default_configs(present_module_names)
+    if not implied_configs:
+        return present_module_names, module_options, []
+
+    merged_module_names = _merge_module_names(
+        present_module_names,
+        list(implied_configs.keys()),
+    )
+    merged_module_options = dict(module_options)
+    for module_name, options in implied_configs.items():
+        merged_module_options[module_name] = _copy_module_options(
+            options,
+            module_name=module_name,
+        )
+
+    return merged_module_names, merged_module_options, list(implied_configs.keys())
 
 
 def _get_existing_module_options(
@@ -655,6 +684,15 @@ def _handle_add_modules(
         for module_name in new_modules:
             existing_options.setdefault(module_name, {})
 
+    all_modules, existing_options, implied_modules = (
+        _materialize_implied_module_configs(
+            all_modules,
+            existing_options,
+        )
+    )
+    if implied_modules:
+        new_modules = _merge_module_names(new_modules, implied_modules)
+
     if existing_config is not None:
         docker_config = existing_config.docker
         project_config = existing_config.project
@@ -815,6 +853,11 @@ def _handle_reconfigure(
                 allow_reconfigure_existing=True,
             )
         )
+
+    all_modules, module_options, _ = _materialize_implied_module_configs(
+        all_modules,
+        module_options,
+    )
 
     # Configure Docker
     docker_start, docker_build, docker_create_superuser = _configure_docker()
@@ -1133,6 +1176,11 @@ def plan(
                 new_modules=set(selected_modules),
             )
         )
+
+    selected_modules, module_options, _ = _materialize_implied_module_configs(
+        selected_modules,
+        module_options,
+    )
 
     # Build configuration
     modules = _build_module_configs(selected_modules, module_options)

@@ -243,9 +243,17 @@
                                             {% endif %}
                                         </p>
                                         <div class="button-row">
-                                            <a class="button button-primary" href="{% if viewer_is_authenticated %}{{ dashboard_url }}{% else %}{{ pricing_login_url }}{% endif %}">
+                                            <a class="button button-primary" href="{% if viewer_is_authenticated %}{{ billing_url }}{% else %}{{ pricing_login_url }}{% endif %}">
                                                 {% if viewer_is_authenticated %}
-                                                    Go to dashboard &rarr;
+                                                    {% if billing_destination_kind == "dashboard" %}
+                                                        Go to dashboard &rarr;
+                                                    {% elif billing_destination_kind == "organization-selection" %}
+                                                        Choose organization &rarr;
+                                                    {% elif billing_destination_kind == "organization-create" %}
+                                                        Create organization &rarr;
+                                                    {% else %}
+                                                        View pricing &rarr;
+                                                    {% endif %}
                                                 {% else %}
                                                     Sign in to purchase
                                                 {% endif %}
@@ -266,9 +274,17 @@
                         or sign in to review your existing billing details.
                     </p>
                     <div class="button-row">
-                        <a class="button button-primary" href="{% if viewer_is_authenticated %}{{ dashboard_url }}{% else %}{{ pricing_login_url }}{% endif %}">
+                        <a class="button button-primary" href="{% if viewer_is_authenticated %}{{ billing_url }}{% else %}{{ pricing_login_url }}{% endif %}">
                             {% if viewer_is_authenticated %}
-                                Go to dashboard &rarr;
+                                {% if billing_destination_kind == "dashboard" %}
+                                    Go to dashboard &rarr;
+                                {% elif billing_destination_kind == "organization-selection" %}
+                                    Choose organization &rarr;
+                                {% elif billing_destination_kind == "organization-create" %}
+                                    Create organization &rarr;
+                                {% else %}
+                                    View pricing &rarr;
+                                {% endif %}
                             {% else %}
                                 Sign in to continue
                             {% endif %}
@@ -280,8 +296,19 @@
             <footer class="footer-card">
                 <p class="footer-copy">
                     {% if viewer_is_authenticated %}
-                        Already managing credits or subscriptions?
-                        <a href="{{ dashboard_url }}">Open your billing dashboard.</a>
+                        {% if billing_destination_kind == "dashboard" %}
+                            Already managing credits or subscriptions?
+                            <a href="{{ billing_url }}">Open your billing dashboard.</a>
+                        {% elif billing_destination_kind == "organization-selection" %}
+                            Billing access requires choosing an organization first.
+                            <a href="{{ billing_url }}">Choose your organization.</a>
+                        {% elif billing_destination_kind == "organization-create" %}
+                            Create an organization before starting billing.
+                            <a href="{{ billing_url }}">Create your organization.</a>
+                        {% else %}
+                            Billing changes require an organization owner.
+                            <a href="{{ billing_url }}">Review pricing for your organization.</a>
+                        {% endif %}
                     {% else %}
                         Already have an account?
                         <a href="{{ pricing_login_url }}">Sign in to continue from this pricing page.</a>

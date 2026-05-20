@@ -131,6 +131,16 @@
 			],
 			"isBackground": false,
 			"group": "test"
+		},
+		{
+			"label": "quality-gate: make test-unit",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"test-unit"
+			],
+			"isBackground": false,
+			"group": "test"
 		}
 	]
 }
