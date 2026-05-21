@@ -54,8 +54,8 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.83.0 | ✅ Released | Hardening release | Repo-wide hardening release published; archived in the release note and changelog |
 | v0.84.0 | ✅ Released | Backups hardening release | Backup lifecycle hardening and runtime/tooling refresh archived in the release note and changelog |
 | v0.85.0 | ✅ Released | Billing module | Stripe-backed one-time credit purchases and recurring subscriptions, credits-first Django ledger, planner/apply readiness, module-owned pricing and dashboard pages, and starter-theme billing links; archived in release note and changelog |
-| v0.86.0 | 📋 Planned | Organizations module | Multi-tenancy with Solo/SaaS runtime modes, an org-scoping foundation for future PostgreSQL RLS, org-scoped billing, credits + feature gates, and self-service onboarding |
-| v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the hardening, billing, and organizations milestones |
+| v0.86.0 | 📋 Planned | Organizations module | Multi-tenancy with Solo/SaaS runtime modes, org-scoped billing, billing wiring fix + wiring regression guard, and self-service onboarding |
+| v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the billing and organizations milestones |
 
 **Legend:**
 - ✅ = Completed, released, or internally baselined
@@ -67,6 +67,7 @@ This table is the single milestone summary for shipped history and the active fo
 - **Next planned milestone:** v0.86.0 organizations module after the billing milestone
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.86.0 - auth, billing, organizations modules complete on top of the notifications foundation
+- **Billing wiring fix:** v0.86.0 - billing absent from generated wiring; `_billing_wiring` added to `MODULE_WIRING_BUILDERS`; wiring regression guard test added to `test_module_manifest_contract.py`
 
 ## Notes and References
 
@@ -407,6 +408,27 @@ settings:
 - [x] Org module catalog, manifest alignment, and generated apply wiring contract tests pass in the maintainer repo (`poetry run pytest -o addopts='' quickscale_cli/tests/test_orgs_contract.py quickscale_cli/tests/test_module_manifest_contract.py quickscale_core/tests/test_module_wiring.py`)
 - [x] The shipped `module.yml` remains authoritative; runtime-mode routing is validated by planner/apply wiring tests rather than a separate manifest `url_includes` block
 - [x] Phase 8 closes without implementing deferred PostgreSQL RLS activation, seat-pricing fields, or release-note dependency-ordering work
+
+
+#### Phase 9 — Billing wiring fix + regression guard
+
+Harden the plan/apply pipeline against silent module omissions discovered during the v0.85.0 + v0.86.0 integration.
+
+**Root cause (fixed)**: `_billing_wiring` was absent from `MODULE_WIRING_BUILDERS`, causing every project generated with billing selected to silently omit `quickscale_modules_billing` from `INSTALLED_APPS`, billing settings, and URL wiring. Both themes gate billing nav on `'quickscale_modules_billing' in settings.INSTALLED_APPS`, so billing links were hidden everywhere.
+
+**Files modified**:
+- [x] `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` — added `_billing_wiring()` and registered `"billing": _billing_wiring` in `MODULE_WIRING_BUILDERS`
+- [x] `quickscale_cli/tests/test_module_manifest_contract.py` — added `test_all_catalog_modules_have_wiring_builder()` regression guard: asserts every catalog module is either present in `MODULE_WIRING_BUILDERS` or has a documented special-case handler (currently only `social`)
+
+**Files to modify** (remaining):
+- [ ] `quickscale_cli/src/quickscale_cli/commands/apply_command.py` — add `_sync_billing_env_example` alongside the existing notifications/analytics env-example sync (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET`)
+- [ ] `quickscale_cli/tests/commands/test_module_wiring_specs_billing.py` (create) — unit tests for `_billing_wiring`: default settings, env-var normalization, app list, URL include prefix
+
+**Acceptance criteria**:
+- [x] `quickscale_modules_billing` appears in `MODULE_INSTALLED_APPS` of generated `settings/modules.py` when billing is selected
+- [x] `test_all_catalog_modules_have_wiring_builder` added and passes — any future module added to the catalog without a wiring builder will fail this test immediately
+- [ ] Billing env-example block (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET`) present in generated `.env.example` after `quickscale apply`
+- [ ] `_billing_wiring` unit tests pass
 
 ---
 

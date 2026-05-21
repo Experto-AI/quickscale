@@ -16,6 +16,13 @@ from quickscale_cli.backups_contract import (
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     normalize_backups_module_options,
 )
+from quickscale_cli.billing_contract import (
+    DEFAULT_BILLING_CURRENCY,
+    DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
+    DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
+    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
+    normalize_billing_module_options,
+)
 from quickscale_cli.notifications_contract import (
     NOTIFICATIONS_LIVE_EMAIL_BACKEND,
     notifications_runtime_email_backend,
@@ -626,9 +633,36 @@ def _social_wiring(
     )
 
 
+def _billing_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    opts = normalize_billing_module_options(options)
+
+    settings: dict[str, Any] = {
+        "QUICKSCALE_BILLING_ENABLED": bool(opts.get("enabled", True)),
+        "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR": str(
+            opts.get("publishable_key_env_var", DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR)
+        ),
+        "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR": str(
+            opts.get("secret_key_env_var", DEFAULT_BILLING_SECRET_KEY_ENV_VAR)
+        ),
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR": str(
+            opts.get("webhook_secret_env_var", DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR)
+        ),
+        "QUICKSCALE_BILLING_CURRENCY": str(
+            opts.get("billing_currency", DEFAULT_BILLING_CURRENCY)
+        ),
+    }
+
+    return ModuleWiringSpec(
+        apps=("rest_framework", "quickscale_modules_billing"),
+        settings=settings,
+        url_includes=(("", "quickscale_modules_billing.urls"),),
+    )
+
+
 MODULE_WIRING_BUILDERS = {
     "auth": _auth_wiring,
     "orgs": _orgs_wiring,
+    "billing": _billing_wiring,
     "blog": _blog_wiring,
     "listings": _listings_wiring,
     "crm": _crm_wiring,

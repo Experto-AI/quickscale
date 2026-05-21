@@ -17,6 +17,7 @@ from quickscale_cli.commands.module_config import (
     get_default_social_config,
     get_default_storage_config,
 )
+from quickscale_cli.commands.module_wiring_specs import MODULE_WIRING_BUILDERS
 from quickscale_cli.module_catalog import get_module_entries
 from quickscale_core.manifest.loader import load_manifest_from_path
 
@@ -254,3 +255,37 @@ def test_blog_api_rate_limit_default_matches_manifest_contract() -> None:
 
     assert option.django_setting == "BLOG_API_RATE_LIMIT"
     assert option.default == defaults["api_rate_limit"] == "5/hour"
+
+
+# Modules with special-case handling inside build_module_wiring_specs that are
+# intentionally absent from MODULE_WIRING_BUILDERS (e.g. social generates managed
+# backend transport files and therefore needs project_package at wiring time).
+_SPECIAL_CASE_WIRING_MODULES: frozenset[str] = frozenset({"social"})
+
+
+def test_all_catalog_modules_have_wiring_builder() -> None:
+    """Every selectable catalog module must have a registered wiring builder.
+
+    Prevents silent omissions like the v0.86.0 billing regression where
+    'billing' was missing from MODULE_WIRING_BUILDERS and every generated
+    project quietly had no billing INSTALLED_APPS entry, no billing settings,
+    and no billing URL wiring.
+
+    When adding a new module: add a _<name>_wiring() function in
+    module_wiring_specs.py and register it in MODULE_WIRING_BUILDERS, or add
+    the module name to _SPECIAL_CASE_WIRING_MODULES if it requires custom
+    handling inside build_module_wiring_specs.
+    """
+    unwired = [
+        entry.name
+        for entry in get_module_entries(include_experimental=False)
+        if entry.name not in MODULE_WIRING_BUILDERS
+        and entry.name not in _SPECIAL_CASE_WIRING_MODULES
+    ]
+
+    assert not unwired, (
+        f"Modules missing from MODULE_WIRING_BUILDERS: {unwired}. "
+        "Add a wiring builder function and register it in MODULE_WIRING_BUILDERS, "
+        "or add the module name to _SPECIAL_CASE_WIRING_MODULES in this test file "
+        "if it has custom handling in build_module_wiring_specs."
+    )
