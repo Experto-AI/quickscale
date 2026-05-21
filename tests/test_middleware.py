@@ -24,6 +24,7 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
 )
 from quickscale_modules_orgs.views import org_detail_view, org_index_view, org_new_view
+from tests.urls import home_view
 
 
 @pytest.mark.django_db
@@ -47,6 +48,29 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
     assert Organization.objects.filter(
         is_personal=True, memberships__user=user
     ).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_solo_mode_sets_current_org_id_for_request_org(settings) -> None:
+    settings.QUICKSCALE_MODE = "solo"
+    user = get_user_model().objects.create_user(
+        username="solo-current-org",
+        email="solo-current-org@example.com",
+        password="secret123",
+    )
+    request = RequestFactory().get("/")
+    request.user = user
+
+    response = TenantMiddleware(home_view)(request)
+    organization = Organization.objects.get(is_personal=True, memberships__user=user)
+    expected_current_org_id = (
+        str(organization.id) if connection.vendor == "postgresql" else "none"
+    )
+
+    assert response.status_code == 200
+    assert response.content.decode() == (
+        f"{organization.slug}|{expected_current_org_id}"
+    )
 
 
 @pytest.mark.django_db
