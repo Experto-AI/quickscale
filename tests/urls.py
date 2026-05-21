@@ -46,6 +46,10 @@ def current_org_id_view(request, org_slug: str):
     return HttpResponse(_current_org_id())
 
 
+def api_org_context_view(request, org_slug: str):
+    return HttpResponse(f"{_current_org_slug(request)}|{_current_org_id()}")
+
+
 @require_org_role(OrgRole.ADMIN)
 def admin_only_view(request, org_slug: str):
     return HttpResponse(_current_org_slug(request))
@@ -72,6 +76,11 @@ urlpatterns = [
     path("", home_view, name="home"),
     path("healthcheck/", healthcheck_view, name="healthcheck"),
     path("accounts/profile/", accounts_profile_view, name="accounts-profile"),
+    path(
+        "api/orgs/<slug:org_slug>/context/",
+        api_org_context_view,
+        name="api-org-context",
+    ),
     path(
         "orgs/<slug:org_slug>/current-org-id/",
         current_org_id_view,
