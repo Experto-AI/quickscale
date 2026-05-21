@@ -21,7 +21,14 @@ from quickscale_cli.analytics_contract import (
     resolve_analytics_module_options,
     validate_analytics_module_options,
 )
-from quickscale_cli.billing_contract import validate_billing_module_options
+from quickscale_cli.billing_contract import (
+    DEFAULT_BILLING_CURRENCY,
+    DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
+    DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
+    DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
+    resolve_billing_module_options,
+    validate_billing_module_options,
+)
 from quickscale_cli.backups_contract import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -1087,6 +1094,95 @@ def _sync_analytics_env_example(
         click.secho("✅ Removed analytics env vars from .env.example", fg="green")
     else:
         click.secho("✅ Updated .env.example with analytics env vars", fg="green")
+    return True
+
+
+def _render_billing_env_example_block(
+    options: Mapping[str, Any] | None,
+) -> str:
+    """Render the managed billing section for `.env.example`."""
+    resolved = resolve_billing_module_options(options)
+    publishable_key_env_var = str(
+        resolved.get(
+            "publishable_key_env_var",
+            DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
+        )
+        or DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR
+    ).strip()
+    secret_key_env_var = str(
+        resolved.get(
+            "secret_key_env_var",
+            DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
+        )
+        or DEFAULT_BILLING_SECRET_KEY_ENV_VAR
+    ).strip()
+    webhook_secret_env_var = str(
+        resolved.get(
+            "webhook_secret_env_var",
+            DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
+        )
+        or DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR
+    ).strip()
+    billing_currency = str(
+        resolved.get("billing_currency", DEFAULT_BILLING_CURRENCY)
+        or DEFAULT_BILLING_CURRENCY
+    ).strip()
+
+    return "\n".join(
+        [
+            "# QuickScale Billing (managed)",
+            "# Runtime Stripe variables for the backend billing module.",
+            f"# Billing currency from quickscale.yml: {billing_currency}",
+            f"{publishable_key_env_var}=",
+            f"{secret_key_env_var}=",
+            f"{webhook_secret_env_var}=",
+            "# End QuickScale Billing",
+        ]
+    )
+
+
+def _sync_billing_env_example(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Keep `.env.example` aligned with the billing env-var names."""
+    billing_config = qs_config.modules.get("billing")
+    env_example_path = output_path / ".env.example"
+    if billing_config is None or not env_example_path.exists():
+        return True
+
+    start_marker = "# QuickScale Billing (managed)"
+    end_marker = "# End QuickScale Billing"
+    rendered_block = _render_billing_env_example_block(billing_config.options or {})
+
+    try:
+        content = env_example_path.read_text()
+    except OSError as e:
+        click.secho(
+            f"⚠️  Failed to read .env.example for billing wiring: {e}",
+            fg="yellow",
+        )
+        return False
+
+    if start_marker in content and end_marker in content:
+        before, remainder = content.split(start_marker, maxsplit=1)
+        _, after = remainder.split(end_marker, maxsplit=1)
+        replacement = rendered_block + after
+        updated_content = before + replacement
+    else:
+        suffix = "" if content.endswith("\n") else "\n"
+        updated_content = content + suffix + "\n" + rendered_block + "\n"
+
+    try:
+        env_example_path.write_text(updated_content)
+    except OSError as e:
+        click.secho(
+            f"⚠️  Failed to update .env.example for billing wiring: {e}",
+            fg="yellow",
+        )
+        return False
+
+    click.secho("✅ Updated .env.example with billing env vars", fg="green")
     return True
 
 
@@ -2263,6 +2359,14 @@ def _execute_apply_steps(
             embedded_modules,
             failed_step="analytics env example sync",
             reason="Unable to update .env.example with the configured analytics env-var names.",
+        )
+
+    if not _sync_billing_env_example(ctx.output_path, ctx.qs_config):
+        _abort_after_post_embed_failure(
+            ctx,
+            embedded_modules,
+            failed_step="billing env example sync",
+            reason="Unable to update .env.example with the configured billing env-var names.",
         )
 
     if not _sync_project_module_dependencies_for_apply(

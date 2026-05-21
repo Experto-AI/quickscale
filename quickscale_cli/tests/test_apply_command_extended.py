@@ -43,6 +43,7 @@ from quickscale_cli.commands.apply_command import (
     _load_module_manifests,
     _normalize_backups_gitignore_entry,
     _prepare_apply_context,
+    _render_billing_env_example_block,
     _run_command,
     _run_migrations,
     _run_migrations_in_docker,
@@ -51,6 +52,7 @@ from quickscale_cli.commands.apply_command import (
     _run_post_generation_steps,
     _render_analytics_env_example_block,
     _save_project_state,
+    _sync_billing_env_example,
     _sync_project_module_dependencies_for_apply,
     _start_docker,
     _sync_analytics_env_example,
@@ -2390,6 +2392,83 @@ class TestAnalyticsEnvExampleSync:
         assert "KEEP_ME=1" in updated
 
 
+class TestBillingEnvExampleSync:
+    """Tests for billing `.env.example` synchronization."""
+
+    def test_render_billing_env_example_block_uses_default_env_vars(self):
+        """Billing env-example rendering should expose the default Stripe env vars."""
+        block = _render_billing_env_example_block({})
+
+        assert "# QuickScale Billing (managed)" in block
+        assert "STRIPE_PUBLISHABLE_KEY=" in block
+        assert "STRIPE_SECRET_KEY=" in block
+        assert "QUICKSCALE_BILLING_WEBHOOK_SECRET=" in block
+        assert "# Billing currency from quickscale.yml: usd" in block
+
+    def test_sync_billing_env_example_appends_normalized_managed_block(self, tmp_path):
+        env_example = tmp_path / ".env.example"
+        env_example.write_text("SECRET_KEY=test\n")
+        qs_config = Mock()
+        qs_config.modules = {
+            "billing": Mock(
+                options={
+                    "publishable_key_env_var": " OPS_STRIPE_PUBLISHABLE_KEY ",
+                    "secret_key_env_var": " OPS_STRIPE_SECRET_KEY ",
+                    "webhook_secret_env_var": " OPS_BILLING_WEBHOOK_SECRET ",
+                    "billing_currency": " EUR ",
+                }
+            )
+        }
+
+        result = _sync_billing_env_example(tmp_path, qs_config)
+
+        assert result is True
+        updated = env_example.read_text()
+        assert "SECRET_KEY=test" in updated
+        assert "OPS_STRIPE_PUBLISHABLE_KEY=" in updated
+        assert "OPS_STRIPE_SECRET_KEY=" in updated
+        assert "OPS_BILLING_WEBHOOK_SECRET=" in updated
+        assert "# Billing currency from quickscale.yml: eur" in updated
+
+    def test_sync_billing_env_example_replaces_managed_block(self, tmp_path):
+        env_example = tmp_path / ".env.example"
+        env_example.write_text(
+            "SECRET_KEY=test\n"
+            "# QuickScale Billing (managed)\n"
+            "OLD_STRIPE_PUBLISHABLE_KEY=\n"
+            "OLD_STRIPE_SECRET_KEY=\n"
+            "OLD_BILLING_WEBHOOK_SECRET=\n"
+            "# End QuickScale Billing\n"
+            "KEEP_ME=1\n"
+        )
+        qs_config = Mock()
+        qs_config.modules = {
+            "billing": Mock(
+                options={
+                    "publishable_key_env_var": "OPS_STRIPE_PUBLISHABLE_KEY",
+                    "secret_key_env_var": "OPS_STRIPE_SECRET_KEY",
+                    "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
+                    "billing_currency": "EUR",
+                }
+            )
+        }
+
+        result = _sync_billing_env_example(tmp_path, qs_config)
+
+        assert result is True
+        updated = env_example.read_text()
+        assert "OLD_STRIPE_PUBLISHABLE_KEY" not in updated
+        assert "OLD_STRIPE_SECRET_KEY" not in updated
+        assert "OLD_BILLING_WEBHOOK_SECRET" not in updated
+        assert updated.count("# QuickScale Billing (managed)") == 1
+        assert updated.count("# End QuickScale Billing") == 1
+        assert "OPS_STRIPE_PUBLISHABLE_KEY=" in updated
+        assert "OPS_STRIPE_SECRET_KEY=" in updated
+        assert "OPS_BILLING_WEBHOOK_SECRET=" in updated
+        assert "# Billing currency from quickscale.yml: eur" in updated
+        assert "KEEP_ME=1" in updated
+
+
 # ============================================================================
 # Backups-specific helpers
 # ============================================================================
@@ -2922,6 +3001,83 @@ class TestExecuteApplySteps:
             [],
             ctx.delta,
         )
+        mock_run_post.assert_not_called()
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_billing_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_billing_env_sync_failure_aborts_apply(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_billing_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Apply should abort cleanly if billing env-example sync fails."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_billing_env_sync.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"billing": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+        ) as mock_save_recovery:
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        mock_save_state.assert_not_called()
+        mock_save_recovery.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            [],
+            ctx.delta,
+        )
+        mock_sync_module_dependencies.assert_not_called()
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
