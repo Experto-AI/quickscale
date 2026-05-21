@@ -106,10 +106,7 @@ function buildOrgBillingApiPath(orgSlug: string, path: string): string {
   return `/orgs/${orgSlug}/api/billing${normalizedPath}`
 }
 
-function invalidateOrgQueries(
-  queryClient: ReturnType<typeof useQueryClient>,
-  orgSlug: string,
-) {
+function invalidateOrgQueries(queryClient: ReturnType<typeof useQueryClient>, orgSlug: string) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: ['orgs'] }),
     queryClient.invalidateQueries({ queryKey: ['orgs', orgSlug] }),
@@ -259,4 +256,5 @@ export function useOrgBilling(orgSlug: string, enabled = true) {
     balance,
   }
 }
-{% endraw -%}
+
+{%- endraw %}

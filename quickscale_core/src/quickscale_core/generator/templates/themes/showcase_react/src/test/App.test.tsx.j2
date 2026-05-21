@@ -9,9 +9,11 @@ const fetchMock = vi.fn()
 
 vi.stubGlobal('fetch', fetchMock)
 
-function applyRuntimeConfig(config: {
-  owner?: { currentOrgSlug: string | null; mode: 'saas' | 'solo' }
-} = {}) {
+function applyRuntimeConfig(
+  config: {
+    owner?: { currentOrgSlug: string | null; mode: 'saas' | 'solo' }
+  } = {},
+) {
   window.__QUICKSCALE__ = {
     projectName: 'QuickScale Test Project',
     modules: {
@@ -88,4 +90,5 @@ describe('App', () => {
     expect(screen.getByText(/no organizations yet/i)).toBeInTheDocument()
   })
 })
-{% endraw -%}
+
+{%- endraw %}

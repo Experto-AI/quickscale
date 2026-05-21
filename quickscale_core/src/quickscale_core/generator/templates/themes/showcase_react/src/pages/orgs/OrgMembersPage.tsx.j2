@@ -6,7 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { OrgStatePanel } from '@/components/orgs/OrgStatePanel'
 import { getApiErrorMessage, getApiFieldErrors } from '@/hooks/useApi'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
@@ -68,7 +74,10 @@ export function OrgMembersPage() {
       <OrgStatePanel
         actionHref={appPaths.dashboard}
         actionLabel="Back to organization"
-        description={getApiErrorMessage(membersQuery.error, 'The members roster could not be loaded.')}
+        description={getApiErrorMessage(
+          membersQuery.error,
+          'The members roster could not be loaded.',
+        )}
         icon={ShieldAlert}
         title="Unable to load members"
       />
@@ -161,7 +170,8 @@ export function OrgMembersPage() {
         <CardHeader>
           <CardTitle>Invite member</CardTitle>
           <CardDescription>
-            Send an invitation to join {organization.name}. Owner invites stay excluded until ownership transfer ships.
+            Send an invitation to join {organization.name}. Owner invites stay excluded until
+            ownership transfer ships.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -203,7 +213,11 @@ export function OrgMembersPage() {
               <p className="text-sm text-destructive">{inviteFieldErrors.non_field_errors[0]}</p>
             )}
 
-            <Button type="submit" disabled={inviteMutation.isPending || !inviteEmail.trim()} className="w-full">
+            <Button
+              type="submit"
+              disabled={inviteMutation.isPending || !inviteEmail.trim()}
+              className="w-full"
+            >
               <UserPlus className="mr-2 h-4 w-4" />
               {inviteMutation.isPending ? 'Sending invite...' : 'Send invitation'}
             </Button>
@@ -235,10 +249,14 @@ export function OrgMembersPage() {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="font-medium">{member.user.display_name || member.user.username}</p>
+                        <p className="font-medium">
+                          {member.user.display_name || member.user.username}
+                        </p>
                         <Badge variant="secondary">{member.role_label}</Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">{member.user.email || member.user.username}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {member.user.email || member.user.username}
+                      </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Joined {new Date(member.joined_at).toLocaleDateString()}
                       </p>
@@ -286,17 +304,22 @@ export function OrgMembersPage() {
           <CardHeader>
             <CardTitle>Pending invitations</CardTitle>
             <CardDescription>
-              Outstanding org invitations stay visible until they are accepted, expire, or are revoked.
+              Outstanding org invitations stay visible until they are accepted, expire, or are
+              revoked.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {pendingInvitations.length > 0 ? (
               pendingInvitations.map((invitation) => (
-                <div key={invitation.id} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div
+                  key={invitation.id}
+                  className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
                   <div>
                     <p className="font-medium">{invitation.email}</p>
                     <p className="text-sm text-muted-foreground">
-                      {invitation.role_label} invite expiring {new Date(invitation.expires_at).toLocaleDateString()}
+                      {invitation.role_label} invite expiring{' '}
+                      {new Date(invitation.expires_at).toLocaleDateString()}
                     </p>
                   </div>
                   <Button
@@ -317,4 +340,5 @@ export function OrgMembersPage() {
     </div>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

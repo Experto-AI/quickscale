@@ -2,7 +2,13 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { Building2, Loader2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { buildOrgPath } from '@/hooks/useModules'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
 import { useOrgs } from '@/hooks/useOrgs'
@@ -44,7 +50,10 @@ export function OrgSwitcher() {
           Loading organizations...
         </div>
       ) : organizations.length > 0 ? (
-        <Select value={currentOrgSlug ?? undefined} onValueChange={(slug) => navigate(buildOrgPath(slug))}>
+        <Select
+          value={currentOrgSlug ?? undefined}
+          onValueChange={(slug) => navigate(buildOrgPath(slug))}
+        >
           <SelectTrigger className="border-sidebar-border bg-sidebar text-sidebar-foreground">
             <SelectValue placeholder="Choose an organization" />
           </SelectTrigger>
@@ -70,4 +79,5 @@ export function OrgSwitcher() {
     </div>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

@@ -33,24 +33,35 @@ export function Sidebar() {
   const { modules, modulePaths } = useProjectConfig()
   const { appPaths, currentOrgSlug, hasOrgContext, isSaas } = useOrgNavigation()
   const orgQuery = useOrg(currentOrgSlug ?? '')
-  const billingPath = isSaas && currentOrgSlug
-    ? buildOrgPath(
-        currentOrgSlug,
-        orgQuery.data?.actor.is_owner_like ? 'billing/dashboard/' : 'billing/pricing/',
-      )
-    : modulePaths.billing
+  const billingPath =
+    isSaas && currentOrgSlug
+      ? buildOrgPath(
+          currentOrgSlug,
+          orgQuery.data?.actor.is_owner_like ? 'billing/dashboard/' : 'billing/pricing/',
+        )
+      : modulePaths.billing
 
   const navigation: NavItem[] = [
     { name: 'Organizations', href: appPaths.orgList, icon: Building2, show: isSaas, end: true },
     { name: 'Dashboard', href: appPaths.dashboard, icon: Home, show: true, end: true },
-    { name: 'Blog', href: appPaths.blog, icon: BookOpen, show: modules.blog && (!isSaas || hasOrgContext) },
+    {
+      name: 'Blog',
+      href: appPaths.blog,
+      icon: BookOpen,
+      show: modules.blog && (!isSaas || hasOrgContext),
+    },
     {
       name: 'Listings',
       href: appPaths.listings,
       icon: Store,
       show: modules.listings && (!isSaas || hasOrgContext),
     },
-    { name: 'CRM', href: appPaths.crm, icon: Briefcase, show: modules.crm && (!isSaas || hasOrgContext) },
+    {
+      name: 'CRM',
+      href: appPaths.crm,
+      icon: Briefcase,
+      show: modules.crm && (!isSaas || hasOrgContext),
+    },
     {
       name: 'Forms',
       href: appPaths.forms,
@@ -89,7 +100,11 @@ export function Sidebar() {
       <div className="p-6 pb-4">
         <h1 className="text-xl font-bold text-sidebar-foreground">{% endraw %}{{ project_name }}{% raw %}</h1>
       </div>
-      {isSaas && <div className="px-4 pb-4"><OrgSwitcher /></div>}
+      {isSaas && (
+        <div className="px-4 pb-4">
+          <OrgSwitcher />
+        </div>
+      )}
       <Separator />
       <nav className="flex-1 space-y-1 p-4">
         {navigation
@@ -140,4 +155,5 @@ export function Sidebar() {
     </aside>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

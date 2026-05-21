@@ -17,12 +17,18 @@ export function OrgDashboardPage() {
   const canManageOrganization = isOrgAdminLike(actor)
   const canReadBilling = billingEnabled && actor.is_owner_like
   const { balance, subscription } = useOrgBilling(currentOrgSlug ?? '', canReadBilling)
-  const actorRoleLabel = organization.role_label ?? (actor.is_owner_like ? 'Owner-like access' : null)
-  const billingPath = billingEnabled && currentOrgSlug
-    ? buildOrgPath(currentOrgSlug, actor.is_owner_like ? 'billing/dashboard/' : 'billing/pricing/')
-    : null
+  const actorRoleLabel =
+    organization.role_label ?? (actor.is_owner_like ? 'Owner-like access' : null)
+  const billingPath =
+    billingEnabled && currentOrgSlug
+      ? buildOrgPath(
+          currentOrgSlug,
+          actor.is_owner_like ? 'billing/dashboard/' : 'billing/pricing/',
+        )
+      : null
   const hasSubscription = Boolean(subscription.data)
-  const subscriptionMissing = subscription.error instanceof ApiError && subscription.error.status === 404
+  const subscriptionMissing =
+    subscription.error instanceof ApiError && subscription.error.status === 404
 
   return (
     <div className="space-y-8">
@@ -38,7 +44,10 @@ export function OrgDashboardPage() {
               : `Org-aware dashboard for /${organization.slug} with membership data loaded from the new SaaS contract.`}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {organization.member_count === 1 ? '1 member' : `${organization.member_count ?? 0} members`} currently belong to this organization.
+            {organization.member_count === 1
+              ? '1 member'
+              : `${organization.member_count ?? 0} members`}{' '}
+            currently belong to this organization.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -60,7 +69,9 @@ export function OrgDashboardPage() {
         </div>
       </div>
 
-      <div className={`grid gap-4 md:grid-cols-2 ${canReadBilling ? 'xl:grid-cols-4' : 'xl:grid-cols-2'}`}>
+      <div
+        className={`grid gap-4 md:grid-cols-2 ${canReadBilling ? 'xl:grid-cols-4' : 'xl:grid-cols-2'}`}
+      >
         {canReadBilling && (
           <Card>
             <CardHeader>
@@ -69,7 +80,11 @@ export function OrgDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {subscription.isLoading ? '…' : hasSubscription ? subscription.data?.plan.name : 'No active plan'}
+                {subscription.isLoading
+                  ? '…'
+                  : hasSubscription
+                    ? subscription.data?.plan.name
+                    : 'No active plan'}
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 {hasSubscription
@@ -89,7 +104,9 @@ export function OrgDashboardPage() {
               <CardDescription>Read from the org-scoped billing balance API.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{balance.isLoading ? '…' : balance.data?.balance ?? 0}</div>
+              <div className="text-2xl font-bold">
+                {balance.isLoading ? '…' : (balance.data?.balance ?? 0)}
+              </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 {balance.data?.updated_at
                   ? `Updated ${new Date(balance.data.updated_at).toLocaleString()}`
@@ -102,7 +119,9 @@ export function OrgDashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Your access</CardTitle>
-            <CardDescription>The org detail API remains the source of truth for role and owner-like access.</CardDescription>
+            <CardDescription>
+              The org detail API remains the source of truth for role and owner-like access.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{actorRoleLabel ?? 'Viewer'}</div>
@@ -148,4 +167,5 @@ export function OrgDashboardPage() {
     </div>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

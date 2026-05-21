@@ -65,7 +65,8 @@ export function OrgSettingsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Organization settings</h1>
         <p className="mt-1 text-muted-foreground">
-          Update the display name and slug for {organization.name}. Slug changes move every org-aware URL.
+          Update the display name and slug for {organization.name}. Slug changes move every
+          org-aware URL.
         </p>
       </div>
 
@@ -73,7 +74,8 @@ export function OrgSettingsPage() {
         <CardHeader>
           <CardTitle>General</CardTitle>
           <CardDescription>
-            Changes are saved through `/api/orgs/:slug/settings/`. Slug changes require a full document reload to land on the new canonical URL.
+            Changes are saved through `/api/orgs/:slug/settings/`. Slug changes require a full
+            document reload to land on the new canonical URL.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,7 +91,9 @@ export function OrgSettingsPage() {
                   setGlobalError(null)
                 }}
               />
-              {fieldErrors.name?.[0] && <p className="text-sm text-destructive">{fieldErrors.name[0]}</p>}
+              {fieldErrors.name?.[0] && (
+                <p className="text-sm text-destructive">{fieldErrors.name[0]}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -105,7 +109,9 @@ export function OrgSettingsPage() {
                 autoCapitalize="none"
                 autoCorrect="off"
               />
-              {fieldErrors.slug?.[0] && <p className="text-sm text-destructive">{fieldErrors.slug[0]}</p>}
+              {fieldErrors.slug?.[0] && (
+                <p className="text-sm text-destructive">{fieldErrors.slug[0]}</p>
+              )}
               <p className="text-sm text-muted-foreground">
                 Existing bookmarks and deep links will need the new slug after this change.
               </p>
@@ -139,4 +145,5 @@ export function OrgSettingsPage() {
     </div>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

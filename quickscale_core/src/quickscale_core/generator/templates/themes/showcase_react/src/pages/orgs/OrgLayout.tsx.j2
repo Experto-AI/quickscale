@@ -6,6 +6,7 @@ import { ApiError, getApiErrorMessage } from '@/hooks/useApi'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
 import { useOrg, type OrgDetailResponse } from '@/hooks/useOrgs'
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useOrgPageContext() {
   return useOutletContext<OrgDetailResponse>()
 }
@@ -56,7 +57,10 @@ export function OrgLayout() {
       <OrgStatePanel
         actionHref={appPaths.orgList}
         actionLabel="Back to organizations"
-        description={getApiErrorMessage(orgQuery.error, 'The organization dashboard could not be loaded right now.')}
+        description={getApiErrorMessage(
+          orgQuery.error,
+          'The organization dashboard could not be loaded right now.',
+        )}
         icon={SearchX}
         title="Unable to load organization"
       />
@@ -65,4 +69,5 @@ export function OrgLayout() {
 
   return <Outlet context={orgQuery.data} />
 }
-{% endraw -%}
+
+{%- endraw %}

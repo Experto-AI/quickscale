@@ -448,10 +448,7 @@ class TestReactThemeGeneration:
             "def orgs_react_shell_view(request: HttpRequest) -> HttpResponse:"
             in views_py
         )
-        assert (
-            'return TemplateView.as_view(template_name="index.html")(request)'
-            in views_py
-        )
+        assert 'return render(request, "index.html")' in views_py
         assert 'path("", react_shell_view, name="home")' in react_shell_prelude
         assert 're_path(r"^orgs/?$", orgs_react_shell_view)' in react_shell_prelude
         assert 're_path(r"^orgs/new/?$", orgs_react_shell_view)' in react_shell_prelude

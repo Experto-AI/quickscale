@@ -11,8 +11,16 @@ interface ApiListResponse {
 }
 
 function useCrmStats(crmApiBase: string) {
-  const contacts = useApiData<ApiListResponse>(`${crmApiBase}contacts/`, ['crm', crmApiBase, 'contacts'])
-  const companies = useApiData<ApiListResponse>(`${crmApiBase}companies/`, ['crm', crmApiBase, 'companies'])
+  const contacts = useApiData<ApiListResponse>(`${crmApiBase}contacts/`, [
+    'crm',
+    crmApiBase,
+    'contacts',
+  ])
+  const companies = useApiData<ApiListResponse>(`${crmApiBase}companies/`, [
+    'crm',
+    crmApiBase,
+    'companies',
+  ])
   const deals = useApiData<ApiListResponse>(`${crmApiBase}deals/`, ['crm', crmApiBase, 'deals'])
   const tags = useApiData<ApiListResponse>(`${crmApiBase}tags/`, ['crm', crmApiBase, 'tags'])
 
@@ -25,36 +33,37 @@ function useCrmStats(crmApiBase: string) {
   }
 }
 
-const buildCrmSections = (crmApiBase: string) => [
-  {
-    key: 'contacts',
-    name: 'Contacts',
-    icon: UserCircle,
-    description: 'Manage customer contacts and communication',
-    apiPath: `${crmApiBase}contacts/`,
-  },
-  {
-    key: 'companies',
-    name: 'Companies',
-    icon: Building2,
-    description: 'Track companies and organizations',
-    apiPath: `${crmApiBase}companies/`,
-  },
-  {
-    key: 'deals',
-    name: 'Deals',
-    icon: Briefcase,
-    description: 'Manage deals and sales pipeline',
-    apiPath: `${crmApiBase}deals/`,
-  },
-  {
-    key: 'tags',
-    name: 'Tags',
-    icon: Tag,
-    description: 'Organize records with tags',
-    apiPath: `${crmApiBase}tags/`,
-  },
-] as const
+const buildCrmSections = (crmApiBase: string) =>
+  [
+    {
+      key: 'contacts',
+      name: 'Contacts',
+      icon: UserCircle,
+      description: 'Manage customer contacts and communication',
+      apiPath: `${crmApiBase}contacts/`,
+    },
+    {
+      key: 'companies',
+      name: 'Companies',
+      icon: Building2,
+      description: 'Track companies and organizations',
+      apiPath: `${crmApiBase}companies/`,
+    },
+    {
+      key: 'deals',
+      name: 'Deals',
+      icon: Briefcase,
+      description: 'Manage deals and sales pipeline',
+      apiPath: `${crmApiBase}deals/`,
+    },
+    {
+      key: 'tags',
+      name: 'Tags',
+      icon: Tag,
+      description: 'Organize records with tags',
+      apiPath: `${crmApiBase}tags/`,
+    },
+  ] as const
 
 export function CrmPage() {
   const { appPaths, documentPaths } = useOrgNavigation()
@@ -67,8 +76,8 @@ export function CrmPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">CRM Workspace</h1>
           <p className="text-muted-foreground">
-            API-backed CRM workspace at {appPaths.crm} for contacts, companies, deals, and
-            pipeline. The Django dashboard at {documentPaths.crmDashboard} remains staff-only.
+            API-backed CRM workspace at {appPaths.crm} for contacts, companies, deals, and pipeline.
+            The Django dashboard at {documentPaths.crmDashboard} remains staff-only.
           </p>
         </div>
         <div className="flex gap-2">
@@ -119,7 +128,11 @@ export function CrmPage() {
             </a>
           </Button>
           <Button variant="outline" asChild>
-            <a href={`${documentPaths.crmApiBase}contacts/`} target="_blank" rel="noopener noreferrer">
+            <a
+              href={`${documentPaths.crmApiBase}contacts/`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Contacts API <ExternalLink className="ml-1 h-3 w-3" />
             </a>
           </Button>
@@ -133,4 +146,5 @@ export function CrmPage() {
     </div>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

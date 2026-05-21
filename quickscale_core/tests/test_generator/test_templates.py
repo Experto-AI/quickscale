@@ -324,9 +324,7 @@ class TestTemplateRendering:
         template = jinja_env.get_template("project_name/urls.py.j2")
         output = template.render({**test_context, "theme": "showcase_react"})
 
-        assert (
-            're_path(r".*", TemplateView.as_view(template_name="index.html"))' in output
-        )
+        assert 're_path(r".*", react_shell_view)' in output
 
         # The comment should be top-level (not indented under if settings.DEBUG).
         react_catchall_comment = next(

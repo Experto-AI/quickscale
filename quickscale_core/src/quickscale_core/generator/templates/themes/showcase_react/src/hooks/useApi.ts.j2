@@ -112,16 +112,14 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 }
 
 export function getApiFieldErrors(error: unknown): Record<string, string[]> {
-  if (
-    error instanceof ApiError &&
-    isRecord(error.data) &&
-    isRecord(error.data.errors)
-  ) {
+  if (error instanceof ApiError && isRecord(error.data) && isRecord(error.data.errors)) {
     const fieldErrors = error.data.errors as Record<string, unknown>
     return Object.fromEntries(
       Object.entries(fieldErrors).map(([key, value]) => [
         key,
-        Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [],
+        Array.isArray(value)
+          ? value.filter((entry): entry is string => typeof entry === 'string')
+          : [],
       ]),
     )
   }
@@ -162,4 +160,5 @@ export function useApiData<T>(
     retry: options.retry ?? false,
   })
 }
-{% endraw -%}
+
+{%- endraw %}

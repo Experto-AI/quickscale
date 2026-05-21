@@ -53,14 +53,14 @@ export function useOrgNavigation() {
       },
       documentPaths: {
         blogIndex: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'blog')) : '/blog/',
-        blogFeed: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'blog/feed')) : '/blog/feed/',
+        blogFeed: orgBasePath
+          ? withTrailingSlash(joinPath(orgBasePath, 'blog/feed'))
+          : '/blog/feed/',
         listingsIndex: orgBasePath
           ? withTrailingSlash(joinPath(orgBasePath, 'listings'))
           : '/listings/',
         crmDashboard: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'crm')) : '/crm/',
-        crmApiBase: orgBasePath
-          ? withTrailingSlash(joinPath(orgBasePath, 'crm/api'))
-          : '/crm/api/',
+        crmApiBase: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'crm/api')) : '/crm/api/',
         formsApiBase: orgBasePath
           ? withTrailingSlash(joinPath(orgBasePath, 'api/forms'))
           : '/api/forms/',
@@ -68,4 +68,5 @@ export function useOrgNavigation() {
     }
   }, [currentOrgSlug, isSaas])
 }
-{% endraw -%}
+
+{%- endraw %}

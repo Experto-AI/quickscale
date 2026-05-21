@@ -37,7 +37,9 @@ export function OrgCreatePage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Create organization</h1>
         <p className="mt-1 text-muted-foreground">
-          Name the organization, then QuickScale will send you to the next onboarding step. Billing pricing opens when that module is installed; otherwise the new org dashboard opens directly.
+          Name the organization, then QuickScale will send you to the next onboarding step. Billing
+          pricing opens when that module is installed; otherwise the new org dashboard opens
+          directly.
         </p>
       </div>
 
@@ -45,7 +47,8 @@ export function OrgCreatePage() {
         <CardHeader>
           <CardTitle>Organization details</CardTitle>
           <CardDescription>
-            Slugs are generated on the server. The returned onboarding URL opens with a full document redirect.
+            Slugs are generated on the server. The returned onboarding URL opens with a full
+            document redirect.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -62,7 +65,9 @@ export function OrgCreatePage() {
                 placeholder="Acme Labs"
                 autoComplete="organization"
               />
-              {fieldErrors.name?.[0] && <p className="text-sm text-destructive">{fieldErrors.name[0]}</p>}
+              {fieldErrors.name?.[0] && (
+                <p className="text-sm text-destructive">{fieldErrors.name[0]}</p>
+              )}
             </div>
 
             {globalError && (
@@ -90,14 +95,21 @@ export function OrgCreatePage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>1. QuickScale creates the organization and records you as the owner.</p>
-          <p>2. The frontend performs a full redirect to the onboarding URL returned by `/api/orgs/`.</p>
-          <p>3. Billing pricing opens when available; otherwise QuickScale lands on the new org-aware dashboard under your slug.</p>
+          <p>
+            2. The frontend performs a full redirect to the onboarding URL returned by `/api/orgs/`.
+          </p>
+          <p>
+            3. Billing pricing opens when available; otherwise QuickScale lands on the new org-aware
+            dashboard under your slug.
+          </p>
           <div className="pt-2 text-foreground">
-            Billing remains module-owned, so that onboarding step stays a Django page rather than a starter-owned React route. <ExternalLink className="ml-1 inline h-3 w-3" />
+            Billing remains module-owned, so that onboarding step stays a Django page rather than a
+            starter-owned React route. <ExternalLink className="ml-1 inline h-3 w-3" />
           </div>
         </CardContent>
       </Card>
     </div>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

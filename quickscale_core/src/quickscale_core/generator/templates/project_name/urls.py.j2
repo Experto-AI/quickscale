@@ -43,6 +43,8 @@ def healthcheck(request: HttpRequest) -> HttpResponse:
 
 
 {%- if theme == 'showcase_react' %}
+
+
 react_shell_view = TemplateView.as_view(template_name="index.html")
 
 react_shell_urlpatterns = [
