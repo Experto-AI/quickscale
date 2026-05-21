@@ -1,0 +1,73 @@
+{% raw -%}
+import { Link, useNavigate } from 'react-router-dom'
+import { Building2, Loader2, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { buildOrgPath } from '@/hooks/useModules'
+import { useOrgNavigation } from '@/hooks/useOrgNavigation'
+import { useOrgs } from '@/hooks/useOrgs'
+
+export function OrgSwitcher() {
+  const navigate = useNavigate()
+  const { appPaths, currentOrgSlug, isSaas } = useOrgNavigation()
+  const orgsQuery = useOrgs()
+
+  if (!isSaas) {
+    return null
+  }
+
+  const organizations = orgsQuery.data?.organizations ?? []
+
+  return (
+    <div className="space-y-3 rounded-lg bg-sidebar-accent/40 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-sidebar-foreground">
+          <Building2 className="h-4 w-4" />
+          Organization
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          asChild
+          className="h-8 px-2 text-sidebar-foreground hover:text-sidebar-accent-foreground"
+        >
+          <Link to={appPaths.orgCreate}>
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            New
+          </Link>
+        </Button>
+      </div>
+
+      {orgsQuery.isLoading ? (
+        <div className="flex items-center gap-2 rounded-md border border-sidebar-border/60 px-3 py-2 text-sm text-sidebar-foreground/70">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading organizations...
+        </div>
+      ) : organizations.length > 0 ? (
+        <Select value={currentOrgSlug ?? undefined} onValueChange={(slug) => navigate(buildOrgPath(slug))}>
+          <SelectTrigger className="border-sidebar-border bg-sidebar text-sidebar-foreground">
+            <SelectValue placeholder="Choose an organization" />
+          </SelectTrigger>
+          <SelectContent>
+            {organizations.map((organization) => (
+              <SelectItem key={organization.id} value={organization.slug}>
+                {organization.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Button variant="outline" asChild className="w-full justify-start">
+          <Link to={appPaths.orgCreate}>Create your first organization</Link>
+        </Button>
+      )}
+
+      {organizations.length > 0 && !currentOrgSlug && (
+        <p className="text-xs text-sidebar-foreground/70">
+          Choose an organization to unlock the org-scoped workspace routes.
+        </p>
+      )}
+    </div>
+  )
+}
+{% endraw -%}

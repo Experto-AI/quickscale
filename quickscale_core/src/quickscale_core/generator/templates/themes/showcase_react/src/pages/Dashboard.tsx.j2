@@ -33,7 +33,11 @@ type ModuleCard = {
   actionLabel?: string
 }
 
-const buildModuleInfo = (socialPath: string, billingPath: string): ModuleCard[] => [
+const buildModuleInfo = (
+  crmPath: string,
+  socialPath: string,
+  billingPath: string,
+): ModuleCard[] => [
   {
     key: 'auth',
     name: 'Authentication',
@@ -60,7 +64,7 @@ const buildModuleInfo = (socialPath: string, billingPath: string): ModuleCard[] 
     name: 'CRM',
     icon: Briefcase,
     description: 'Contact management, companies, deals, and pipeline tracking',
-    href: '/crm-workspace',
+    href: crmPath,
     actionLabel: 'Open workspace',
   },
   {
@@ -125,9 +129,11 @@ const gettingStarted = [
 export function Dashboard() {
   const modules = useModules()
   const { modulePaths } = useProjectConfig()
-  const installedModules = buildModuleInfo(modulePaths.social, modulePaths.billing).filter(
-    (m) => modules[m.key],
-  )
+  const installedModules = buildModuleInfo(
+    modulePaths.crm,
+    modulePaths.social,
+    modulePaths.billing,
+  ).filter((m) => modules[m.key])
   const hasModules = installedModules.length > 0
 
   return (

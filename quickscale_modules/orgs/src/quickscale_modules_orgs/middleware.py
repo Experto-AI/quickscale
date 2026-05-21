@@ -22,6 +22,7 @@ from .models import Organization, OrganizationMembership
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
 ORG_NAMESPACE_PREFIX = "/orgs/"
 ORG_ONBOARDING_PATHS = {"/orgs/", "/orgs/new/"}
+ORG_API_BOOTSTRAP_PATHS = {"/api/orgs/"}
 
 GetResponse = Callable[[HttpRequest], HttpResponse]
 
@@ -143,6 +144,8 @@ class TenantMiddleware:
     @staticmethod
     def _is_allowed_saas_bootstrap_path(path: str) -> bool:
         if path in ORG_ONBOARDING_PATHS:
+            return True
+        if path in ORG_API_BOOTSTRAP_PATHS:
             return True
 
         try:

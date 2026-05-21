@@ -431,8 +431,10 @@ class TestModuleWiringSpec:
             spec.apps = ("app2",)  # type: ignore[misc]
 
 
-def test_generated_urls_template_places_pre_home_patterns_before_home() -> None:
-    """Generated project URLs should place pre-home module routes before '/'."""
+def test_generated_urls_template_places_react_shell_reservations_before_modules() -> (
+    None
+):
+    """React shell routes should outrank managed module URLs without broad wildcards."""
     template_path = (
         Path(__file__).resolve().parents[1]
         / "src"
@@ -444,13 +446,20 @@ def test_generated_urls_template_places_pre_home_patterns_before_home() -> None:
     )
     content = template_path.read_text()
 
+    react_shell_marker = "urlpatterns += react_shell_urlpatterns"
     pre_home_marker = "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
-    home_marker = (
+    post_home_marker = "urlpatterns += POST_HOME_MODULE_URLPATTERNS"
+    non_react_home_marker = (
         'path("", TemplateView.as_view(template_name="index.html"), name="home"),'
     )
-    post_home_marker = "urlpatterns += POST_HOME_MODULE_URLPATTERNS"
 
+    assert react_shell_marker in content
     assert pre_home_marker in content
     assert post_home_marker in content
-    assert content.index(pre_home_marker) < content.index(home_marker)
-    assert content.index(post_home_marker) > content.index(home_marker)
+    assert r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$" in content
+    assert r"^orgs/[^/]+/forms/[^/]+/?$" in content
+    assert r"^orgs/[^/]+/billing/" not in content
+    assert r"^orgs/invitations/" not in content
+    assert content.index(react_shell_marker) < content.index(pre_home_marker)
+    assert content.index(pre_home_marker) < content.index(non_react_home_marker)
+    assert content.index(post_home_marker) > content.index(non_react_home_marker)

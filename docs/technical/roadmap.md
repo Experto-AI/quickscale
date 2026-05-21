@@ -310,44 +310,44 @@ Extend billing models to be org-scoped, ship plan-level feature gates, and provi
 
 ---
 
-#### Phase 7 — React frontend: org pages + org switcher (6–8 h)
+#### Phase 7 — React frontend: org pages + org switcher (completed)
 
-Add all org management pages, wire Solo and SaaS route trees, and remove all legacy `Team*` components.
+Fresh `showcase_react` generations now ship the org-aware React shell. The final URL-reservation slice landed the generated Django precedence needed to serve the `/orgs/*` shell ahead of overlapping module URLs while keeping billing, invitation, and social routes under Django ownership. The shipped starter also consolidated some earlier file-by-file roadmap guesses: invite + pending-invitation UI lives inside `OrgMembersPage.tsx`, and `useOrgs.ts` exports the single-org and members hooks instead of splitting them into separate files. The older `Team*` cleanup bullets were stale no-ops because those files do not exist in the current `showcase_react` template inventory.
 
 **Files to modify** (`frontend/src/`):
-- [ ] `App.tsx` — SaaS mode: add `/orgs/*` route tree, move `/crm`/`/blog`/`/forms`/`/listings` under `/orgs/:slug/*`; Solo mode: keep flat routes; remove all `/teams/*` routes
-- [ ] `components/layout/Sidebar.tsx` (or equivalent) — render `OrgSwitcher` in SaaS mode; hide in Solo mode
+- [x] `App.tsx` — SaaS mode adds the `/orgs/*` route tree, keeps the flat legacy redirects, and the generated Django `urls.py` now reserves the React shell ahead of overlapping module URLs; Solo mode keeps the flat route tree with no `/teams/*` routes
+- [x] `components/layout/Sidebar.tsx` (or equivalent) — renders `OrgSwitcher` in SaaS mode and hides it in Solo mode
 
 **Files to create** (`frontend/src/pages/orgs/`):
-- [ ] `OrgListPage.tsx` — user's org list; "Create organization" CTA (SaaS only)
-- [ ] `OrgCreatePage.tsx` — name + auto-slug form; Stripe checkout redirect on submit (SaaS only)
-- [ ] `OrgLayout.tsx` — wrapper reading `orgSlug` from `useParams()`; renders 403 page if org fetch returns 403
-- [ ] `OrgDashboardPage.tsx` — org home: member count, plan tier, credit balance, recent activity feed
-- [ ] `OrgMembersPage.tsx` — member list with role selector (ADMIN+); remove button (ADMIN+); last OWNER's controls disabled with tooltip
-- [ ] `OrgInvitePage.tsx` — invite form (email + role) + pending invitations list with revoke button (SaaS only)
-- [ ] `OrgSettingsPage.tsx` — name/slug update form (ADMIN+)
+- [x] `OrgListPage.tsx` — user's org list with a "Create organization" CTA (SaaS only)
+- [x] `OrgCreatePage.tsx` — name + server-derived slug flow with billing checkout redirect on submit (SaaS only)
+- [x] `OrgLayout.tsx` — wrapper reading `orgSlug` from `useParams()` and rendering the shipped 403 page when the org fetch returns 403
+- [x] `OrgDashboardPage.tsx` — org home with member count, plan tier, credit balance, and current org overview
+- [x] `OrgMembersPage.tsx` — member list with role selector, remove controls, invite form, pending invitations list, revoke actions, and the last-owner guardrails
+- [x] Invite + pending-invitation UI shipped inside `OrgMembersPage.tsx`; no separate `OrgInvitePage.tsx` is generated in the current starter
+- [x] `OrgSettingsPage.tsx` — name/slug update form (ADMIN+)
 
 **Files to create** (`frontend/src/components/orgs/`):
-- [ ] `OrgSwitcher.tsx` — dropdown: active org name, all user orgs, "Create organization" link; navigates to `/orgs/:slug` on selection (SaaS only)
+- [x] `OrgSwitcher.tsx` — dropdown with the active org, org list, and a "Create organization" link; navigates to `/orgs/:slug` on selection (SaaS only)
 
 **Files to create** (`frontend/src/hooks/`):
-- [ ] `useOrgs.ts` — `GET /api/orgs/` → user's org list
-- [ ] `useOrg.ts` — `GET /api/orgs/:slug/` → single org detail + plan + credit balance
-- [ ] `useOrgMembers.ts` — `GET /api/orgs/:slug/members/`
+- [x] `useOrgs.ts` — exports `useOrgs()`, `useOrg()`, `useOrgMembers()`, invite/revoke/remove mutations, settings updates, and org billing helpers from one consolidated hook module
+- [x] No separate `useOrg.ts` file ships; `useOrg()` is exported from `useOrgs.ts`
+- [x] No separate `useOrgMembers.ts` file ships; `useOrgMembers()` is exported from `useOrgs.ts`
 
 **Files to remove**:
-- [ ] `frontend/src/pages/teams/` — entire directory removed
-- [ ] `frontend/src/components/teams/TeamSwitcher.tsx` — removed
-- [ ] `frontend/src/hooks/useTeams.ts`, `useTeam.ts`, `useTeamMembers.ts` — removed
+- [x] No `frontend/src/pages/teams/` directory exists in the current `showcase_react` starter; cleanup was a no-op
+- [x] No `frontend/src/components/teams/TeamSwitcher.tsx` file exists in the current `showcase_react` starter; cleanup was a no-op
+- [x] No `frontend/src/hooks/useTeams.ts`, `useTeam.ts`, or `useTeamMembers.ts` files exist in the current `showcase_react` starter; cleanup was a no-op
 
 **Acceptance criteria**:
-- [ ] **SaaS mode**: `/orgs` lists user's orgs; clicking navigates to `/orgs/:slug`
-- [ ] **SaaS mode**: Org switcher in sidebar; switching changes URL slug and reloads all org-scoped data
-- [ ] **SaaS mode**: `/orgs/new` creates org; Stripe checkout opens
-- [ ] **SaaS mode**: `/orgs/:slug/members` — ADMIN can change roles; last OWNER's role selector is disabled
-- [ ] **SaaS mode**: `/orgs/:slug/crm` loads CRM scoped to that org; non-member navigating there sees 403 error page (not blank page, not crash)
-- [ ] **Solo mode**: flat routes `/crm`, `/blog` etc. work; no org switcher shown; `/orgs/*` routes not accessible
-- [ ] `grep -r "Team" frontend/src/pages frontend/src/components frontend/src/hooks` returns no matches related to org management (only incidental string matches acceptable)
+- [x] **SaaS mode**: `/orgs` lists the user's orgs and the generated shell navigates to `/orgs/:slug`
+- [x] **SaaS mode**: Org switcher appears in the sidebar; switching changes the URL slug and reloads org-scoped data
+- [x] **SaaS mode**: `/orgs/new` creates an org and opens the billing checkout redirect
+- [x] **SaaS mode**: `/orgs/:slug/members` lets admins manage roles, invite members, revoke invitations, and keeps the last OWNER guarded
+- [x] **SaaS mode**: `/orgs/:slug/crm` runs inside the org-scoped shell, and non-members get the shipped 403 error page instead of a blank screen or crash
+- [x] **Solo mode**: flat routes such as `/crm` and `/blog` continue to work, no org switcher is shown, and the `/orgs/*` shell stays inaccessible from the Solo route tree
+- [x] The current `showcase_react` template inventory contains no `Team*` org-management files; only incidental copy such as `teammate@example.com` remains
 
 ---
 

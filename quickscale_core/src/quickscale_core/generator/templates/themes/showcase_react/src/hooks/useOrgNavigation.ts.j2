@@ -1,0 +1,71 @@
+{% raw -%}
+import { useMemo } from 'react'
+import { useParams } from 'react-router-dom'
+import { buildOrgPath, useCurrentOrgSlug, useOwnerMode } from '@/hooks/useModules'
+
+function stripTrailingSlash(path: string): string {
+  if (path !== '/' && path.endsWith('/')) {
+    return path.slice(0, -1)
+  }
+
+  return path
+}
+
+function joinPath(basePath: string, path = ''): string {
+  if (!path) {
+    return stripTrailingSlash(basePath)
+  }
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${stripTrailingSlash(basePath)}${normalizedPath}`
+}
+
+function withTrailingSlash(path: string): string {
+  return path.endsWith('/') ? path : `${path}/`
+}
+
+export function useOrgNavigation() {
+  const { orgSlug: routeOrgSlug } = useParams<{ orgSlug: string }>()
+  const ownerMode = useOwnerMode()
+  const fallbackOrgSlug = useCurrentOrgSlug()
+  const currentOrgSlug = routeOrgSlug ?? fallbackOrgSlug
+  const isSaas = ownerMode === 'saas'
+
+  return useMemo(() => {
+    const hasOrgContext = Boolean(isSaas && currentOrgSlug)
+    const orgBasePath = hasOrgContext && currentOrgSlug ? buildOrgPath(currentOrgSlug) : null
+
+    return {
+      isSaas,
+      hasOrgContext,
+      currentOrgSlug: orgBasePath ? currentOrgSlug : null,
+      appPaths: {
+        orgList: '/orgs',
+        orgCreate: '/orgs/new',
+        dashboard: orgBasePath ?? (isSaas ? '/orgs' : '/'),
+        blog: orgBasePath ? joinPath(orgBasePath, 'blog') : '/blog',
+        listings: orgBasePath ? joinPath(orgBasePath, 'listings') : '/listings',
+        crm: orgBasePath ? joinPath(orgBasePath, 'crm') : '/crm',
+        forms: orgBasePath ? joinPath(orgBasePath, 'forms/contact') : '/forms/contact',
+        members: orgBasePath ? joinPath(orgBasePath, 'members') : '/orgs',
+        settings: orgBasePath ? joinPath(orgBasePath, 'settings') : '/settings',
+        profile: '/profile',
+      },
+      documentPaths: {
+        blogIndex: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'blog')) : '/blog/',
+        blogFeed: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'blog/feed')) : '/blog/feed/',
+        listingsIndex: orgBasePath
+          ? withTrailingSlash(joinPath(orgBasePath, 'listings'))
+          : '/listings/',
+        crmDashboard: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'crm')) : '/crm/',
+        crmApiBase: orgBasePath
+          ? withTrailingSlash(joinPath(orgBasePath, 'crm/api'))
+          : '/crm/api/',
+        formsApiBase: orgBasePath
+          ? withTrailingSlash(joinPath(orgBasePath, 'api/forms'))
+          : '/api/forms/',
+      },
+    }
+  }, [currentOrgSlug, isSaas])
+}
+{% endraw -%}

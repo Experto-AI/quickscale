@@ -14,6 +14,7 @@ import type { FormFieldSchema } from '@/hooks/useFormSchema'
 
 interface FormRendererProps {
   slug: string
+  apiBasePath?: string
 }
 
 type FormValues = Record<string, string>
@@ -73,10 +74,16 @@ function buildDefaultValues(fields: FormFieldSchema[]): FormValues {
   return defaults
 }
 
-export function FormRenderer({ slug }: FormRendererProps) {
-  const { data: schema, isLoading, isError, error } = useFormSchema(slug)
+function normalizeApiBasePath(apiBasePath?: string): string {
+  const basePath = apiBasePath ?? '/api/forms/'
+  return basePath.endsWith('/') ? basePath : `${basePath}/`
+}
+
+export function FormRenderer({ slug, apiBasePath }: FormRendererProps) {
+  const { data: schema, isLoading, isError, error } = useFormSchema(slug, apiBasePath)
   const [submitted, setSubmitted] = useState(false)
   const [globalError, setGlobalError] = useState<string | null>(null)
+  const formsApiBasePath = normalizeApiBasePath(apiBasePath)
 
   const zodSchema = useMemo(() => (schema ? buildZodSchema(schema.fields) : z.object({})), [schema])
 
@@ -97,7 +104,7 @@ export function FormRenderer({ slug }: FormRendererProps) {
   async function onSubmit(data: FormValues) {
     setGlobalError(null)
     try {
-      const response = await fetch(`/api/forms/${slug}/submit/`, {
+      const response = await fetch(`${formsApiBasePath}${slug}/submit/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
         body: JSON.stringify(data),

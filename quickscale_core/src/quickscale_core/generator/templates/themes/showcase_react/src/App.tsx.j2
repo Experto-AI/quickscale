@@ -1,5 +1,5 @@
 {% raw -%}
-import { Routes, Route } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { BlogPage } from '@/pages/BlogPage'
@@ -9,15 +9,69 @@ import { ProfilePage } from '@/pages/ProfilePage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { FormsPage } from '@/pages/FormsPage'
 import { NotFound } from '@/pages/NotFound'
+import { buildOrgPath, useCurrentOrgSlug, useOwnerMode } from '@/hooks/useModules'
+import { OrgCreatePage } from '@/pages/orgs/OrgCreatePage'
+import { OrgDashboardPage } from '@/pages/orgs/OrgDashboardPage'
+import { OrgLayout } from '@/pages/orgs/OrgLayout'
+import { OrgListPage } from '@/pages/orgs/OrgListPage'
+import { OrgMembersPage } from '@/pages/orgs/OrgMembersPage'
+import { OrgSettingsPage } from '@/pages/orgs/OrgSettingsPage'
+
+function LegacySaasRedirect({ path = '' }: { path?: string }) {
+  const currentOrgSlug = useCurrentOrgSlug()
+
+  return <Navigate to={currentOrgSlug ? buildOrgPath(currentOrgSlug, path) : '/orgs'} replace />
+}
+
+function LegacyFormsRedirect() {
+  const { slug } = useParams<{ slug: string }>()
+
+  return <LegacySaasRedirect path={slug ? `forms/${slug}` : 'forms/contact'} />
+}
 
 function App() {
+  const ownerMode = useOwnerMode()
+  const currentOrgSlug = useCurrentOrgSlug()
+
+  if (ownerMode === 'saas') {
+    const defaultOrgDestination = currentOrgSlug ? buildOrgPath(currentOrgSlug) : '/orgs'
+
+    return (
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Navigate to={defaultOrgDestination} replace />} />
+          <Route path="/orgs" element={<OrgListPage />} />
+          <Route path="/orgs/new" element={<OrgCreatePage />} />
+          <Route path="/orgs/:orgSlug" element={<OrgLayout />}>
+            <Route index element={<OrgDashboardPage />} />
+            <Route path="blog" element={<BlogPage />} />
+            <Route path="listings" element={<ListingsPage />} />
+            <Route path="crm" element={<CrmPage />} />
+            <Route path="forms" element={<Navigate to="contact" replace />} />
+            <Route path="forms/:slug" element={<FormsPage />} />
+            <Route path="members" element={<OrgMembersPage />} />
+            <Route path="settings" element={<OrgSettingsPage />} />
+          </Route>
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/blog" element={<LegacySaasRedirect path="blog" />} />
+          <Route path="/listings" element={<LegacySaasRedirect path="listings" />} />
+          <Route path="/crm" element={<LegacySaasRedirect path="crm" />} />
+          <Route path="/forms" element={<LegacySaasRedirect path="forms/contact" />} />
+          <Route path="/forms/:slug" element={<LegacyFormsRedirect />} />
+          <Route path="/settings" element={<LegacySaasRedirect path="settings" />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    )
+  }
+
   return (
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/blog" element={<BlogPage />} />
         <Route path="/listings" element={<ListingsPage />} />
-        <Route path="/crm-workspace" element={<CrmPage />} />
+        <Route path="/crm" element={<CrmPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/forms" element={<FormsPage />} />

@@ -27,8 +27,13 @@ function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
       social: true,
     },
     modulePaths: {
+      crm: '/crm',
       billing: '/billing/pricing/',
       social: surface === 'link_tree' ? '/social' : '/social/embeds',
+    },
+    owner: {
+      mode: 'solo',
+      currentOrgSlug: null,
     },
     publicPage: {
       module: 'social',

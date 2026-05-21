@@ -1,30 +1,91 @@
 {% raw -%}
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../App'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: false,
-    },
-  },
-})
+const fetchMock = vi.fn()
 
-function renderWithProviders(ui: React.ReactElement) {
+vi.stubGlobal('fetch', fetchMock)
+
+function applyRuntimeConfig(config: {
+  owner?: { currentOrgSlug: string | null; mode: 'saas' | 'solo' }
+} = {}) {
+  window.__QUICKSCALE__ = {
+    projectName: 'QuickScale Test Project',
+    modules: {
+      auth: false,
+      blog: false,
+      listings: false,
+      crm: false,
+      forms: false,
+      storage: false,
+      backups: false,
+      notifications: false,
+      billing: false,
+      social: false,
+    },
+    modulePaths: {
+      crm: '/crm',
+      billing: '/billing/pricing/',
+      social: '/social',
+    },
+    owner: config.owner ?? {
+      mode: 'solo',
+      currentOrgSlug: null,
+    },
+  }
+}
+
+function renderWithProviders(ui: React.ReactElement, initialEntries: string[] = ['/']) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+
   return render(
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>{ui}</BrowserRouter>
+      <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
     </QueryClientProvider>,
   )
 }
 
+afterEach(() => {
+  fetchMock.mockReset()
+  delete window.__QUICKSCALE__
+})
+
 describe('App', () => {
   it('renders dashboard heading', () => {
+    applyRuntimeConfig()
     renderWithProviders(<App />)
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
+  })
+
+  it('renders the org list shell in saas mode', async () => {
+    applyRuntimeConfig({
+      owner: {
+        mode: 'saas',
+        currentOrgSlug: null,
+      },
+    })
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {
+        get: () => 'application/json',
+      },
+      json: async () => ({ organizations: [] }),
+    })
+
+    renderWithProviders(<App />, ['/orgs'])
+
+    expect(await screen.findByText('Organizations')).toBeInTheDocument()
+    expect(screen.getByText(/no organizations yet/i)).toBeInTheDocument()
   })
 })
 {% endraw -%}

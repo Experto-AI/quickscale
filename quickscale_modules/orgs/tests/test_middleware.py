@@ -92,6 +92,24 @@ def test_saas_mode_redirects_unscoped_requests_without_membership(
 
 
 @pytest.mark.django_db
+def test_saas_mode_allows_org_api_bootstrap_without_membership(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="bob-api",
+        email="bob-api@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.get("/api/orgs/")
+
+    assert response.status_code == 200
+    assert response.json() == {"organizations": []}
+
+
+@pytest.mark.django_db
 def test_saas_mode_allows_public_invitation_accept_without_membership(
     client, settings
 ) -> None:
@@ -144,6 +162,7 @@ def test_saas_mode_keeps_non_accept_invitation_paths_redirecting_to_org_creation
     "path",
     [
         "/orgs/{slug}/",
+        "/api/orgs/{slug}/context/",
         "/orgs/{slug}/current-org-id/",
         "/orgs/{slug}/admin-only/",
         "/orgs/{slug}/owner-only/",
@@ -323,6 +342,31 @@ def test_current_org_id_route_returns_member_org_context(client, settings) -> No
         str(organization.id) if connection.vendor == "postgresql" else "none"
     )
     assert response.content.decode() == expected_current_org_id
+
+
+@pytest.mark.django_db
+def test_api_org_routes_set_request_org_and_current_org_id(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="ivy-api",
+        email="ivy-api@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Indigo API", slug="indigo-api")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    response = client.get(f"/api/orgs/{organization.slug}/context/")
+
+    assert response.status_code == 200
+    expected_current_org_id = (
+        str(organization.id) if connection.vendor == "postgresql" else "none"
+    )
+    assert response.content.decode() == f"{organization.slug}|{expected_current_org_id}"
 
 
 @pytest.mark.django_db
