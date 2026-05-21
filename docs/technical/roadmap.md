@@ -414,21 +414,26 @@ settings:
 
 Harden the plan/apply pipeline against silent module omissions discovered during the v0.85.0 + v0.86.0 integration.
 
-**Root cause (fixed)**: `_billing_wiring` was absent from `MODULE_WIRING_BUILDERS`, causing every project generated with billing selected to silently omit `quickscale_modules_billing` from `INSTALLED_APPS`, billing settings, and URL wiring. Both themes gate billing nav on `'quickscale_modules_billing' in settings.INSTALLED_APPS`, so billing links were hidden everywhere.
+**Root causes (both fixed)**:
+1. `_billing_wiring` was absent from `MODULE_WIRING_BUILDERS`, causing every project generated with billing selected to silently omit `quickscale_modules_billing` from `INSTALLED_APPS`, billing settings, and URL wiring. Both themes gate billing nav on `'quickscale_modules_billing' in settings.INSTALLED_APPS`, so billing links were hidden everywhere.
+2. `quickscale_core.context_processors.installed_modules` was missing from `TEMPLATES.context_processors` in the generated `settings/base.py`. Without it, `modules.billing.url` in `index.html` rendered as `""`, which overrode the React default `/billing/pricing/` path, causing the billing link to navigate to `/` instead.
 
 **Files modified**:
 - [x] `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` — added `_billing_wiring()` and registered `"billing": _billing_wiring` in `MODULE_WIRING_BUILDERS`
+- [x] `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2` — added `quickscale_core.context_processors.installed_modules` to `TEMPLATES` context_processors so that `modules.billing.url` resolves in `index.html`
 - [x] `quickscale_cli/tests/test_module_manifest_contract.py` — added `test_all_catalog_modules_have_wiring_builder()` regression guard: asserts every catalog module is either present in `MODULE_WIRING_BUILDERS` or has a documented special-case handler (currently only `social`)
+- [x] `quickscale_core/tests/test_react_theme_integration.py` — added `test_generated_settings_registers_installed_modules_context_processor()` to `TestReactThemeBaseTemplate`
 
-**Files modified**:
-- [x] `quickscale_cli/src/quickscale_cli/commands/apply_command.py` — add `_sync_billing_env_example` alongside the existing notifications/analytics env-example sync (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET`)
-- [x] `quickscale_cli/tests/commands/test_module_wiring_specs_billing.py` (create) — unit tests for `_billing_wiring`: default settings, env-var normalization, app list, URL include prefix
+**Still open**:
+- [ ] `quickscale_cli/src/quickscale_cli/commands/apply_command.py` — add `_sync_billing_env_example` alongside the existing notifications/analytics env-example sync (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET`)
+- [ ] `quickscale_cli/tests/commands/test_module_wiring_specs_billing.py` (create) — unit tests for `_billing_wiring`: default settings, env-var normalization, app list, URL include prefix
 
 **Acceptance criteria**:
 - [x] `quickscale_modules_billing` appears in `MODULE_INSTALLED_APPS` of generated `settings/modules.py` when billing is selected
 - [x] `test_all_catalog_modules_have_wiring_builder` added and passes — any future module added to the catalog without a wiring builder will fail this test immediately
-- [x] Billing env-example block (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET`) present in generated `.env.example` after `quickscale apply`
-- [x] `_billing_wiring` unit tests pass
+- [x] `quickscale_core.context_processors.installed_modules` registered in generated `settings/base.py` — `test_generated_settings_registers_installed_modules_context_processor` added and passes
+- [ ] Billing env-example block (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET`) present in generated `.env.example` after `quickscale apply`
+- [ ] `_billing_wiring` unit tests pass
 
 ---
 

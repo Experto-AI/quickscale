@@ -713,6 +713,30 @@ class TestReactThemeBaseTemplate:
         # Verify base.html exists so the extends chain works
         assert (output_path / "templates" / "base.html").exists()
 
+    def test_generated_settings_registers_installed_modules_context_processor(
+        self, tmp_path
+    ):
+        """Generated settings/base.py must register the installed_modules context
+        processor so that modules.billing.url resolves in the index.html template.
+
+        Without this entry, modules is undefined in the Django template context,
+        window.__QUICKSCALE__.modulePaths.billing becomes an empty string, and
+        React Router's <Link to="" reloadDocument> navigates to / instead of the
+        billing page.
+        """
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_context_proc_test"
+        output_path = tmp_path / project_name
+        generator.generate(project_name, output_path)
+
+        # settings/base.py lives inside the project package subdirectory
+        base_py = (output_path / project_name / "settings" / "base.py").read_text()
+
+        assert "quickscale_core.context_processors.installed_modules" in base_py, (
+            "settings/base.py must include quickscale_core.context_processors.installed_modules "
+            "in TEMPLATES context_processors so that modules.billing.url resolves in index.html"
+        )
+
 
 @pytest.mark.integration
 class TestReactThemeAuthUrls:
