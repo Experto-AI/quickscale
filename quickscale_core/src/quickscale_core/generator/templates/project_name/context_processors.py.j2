@@ -17,3 +17,26 @@ def project_settings(request: HttpRequest) -> dict[str, Any]:
     return {
         "settings": django_settings,
     }
+
+
+def _billing_dashboard_url(request: HttpRequest) -> str:
+    """Return the billing URL appropriate for the current user and deployment mode."""
+    user = getattr(request, "user", None)
+    if user is None or not getattr(user, "is_authenticated", False):
+        return "/billing/pricing/"
+    mode = getattr(django_settings, "QUICKSCALE_MODE", "solo")
+    if mode == "saas":
+        org = getattr(request, "org", None)
+        org_slug = getattr(org, "slug", None) if org else None
+        if isinstance(org_slug, str) and org_slug:
+            return f"/orgs/{org_slug}/billing/pricing/"
+    return "/billing/dashboard/"
+
+
+def installed_modules(request: HttpRequest) -> dict[str, Any]:
+    """Provide installed module context for templates (e.g. billing URL)."""
+    try:
+        billing_url = _billing_dashboard_url(request)
+    except Exception:
+        billing_url = "/billing/pricing/"
+    return {"modules": {"billing": {"url": billing_url}}}

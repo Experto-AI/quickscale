@@ -716,13 +716,16 @@ class TestReactThemeBaseTemplate:
     def test_generated_settings_registers_installed_modules_context_processor(
         self, tmp_path
     ):
-        """Generated settings/base.py must register the installed_modules context
-        processor so that modules.billing.url resolves in the index.html template.
+        """Generated settings/base.py must register the project-owned installed_modules
+        context processor so that modules.billing.url resolves in the index.html template.
 
         Without this entry, modules is undefined in the Django template context,
         window.__QUICKSCALE__.modulePaths.billing becomes an empty string, and
         React Router's <Link to="" reloadDocument> navigates to / instead of the
         billing page.
+
+        The context processor must be the project-owned one (not quickscale_core),
+        because quickscale_core is not a runtime dependency of the generated project.
         """
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "react_context_proc_test"
@@ -732,9 +735,13 @@ class TestReactThemeBaseTemplate:
         # settings/base.py lives inside the project package subdirectory
         base_py = (output_path / project_name / "settings" / "base.py").read_text()
 
-        assert "quickscale_core.context_processors.installed_modules" in base_py, (
-            "settings/base.py must include quickscale_core.context_processors.installed_modules "
+        assert f"{project_name}.context_processors.installed_modules" in base_py, (
+            f"settings/base.py must include {project_name}.context_processors.installed_modules "
             "in TEMPLATES context_processors so that modules.billing.url resolves in index.html"
+        )
+        assert "quickscale_core.context_processors" not in base_py, (
+            "settings/base.py must not reference quickscale_core context processors — "
+            "quickscale_core is the generator tool and is not available in deployed projects"
         )
 
 
