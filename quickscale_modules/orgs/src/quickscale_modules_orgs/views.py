@@ -782,7 +782,16 @@ class MemberListView(
                 error = form.errors.get("role", ["Unable to update role."])[0]
                 context = self.get_context_data(form_error=error)
                 return self.render_to_response(context, status=400)
-            form.save()
+            try:
+                form.save()
+            except ValidationError as error:
+                context = self.get_context_data(
+                    form_error=_first_error_message(
+                        error,
+                        fallback="Unable to update role.",
+                    )
+                )
+                return self.render_to_response(context, status=400)
         elif action == "remove":
             owner_count = OrganizationMembership.objects.filter(
                 organization=organization,
@@ -793,7 +802,16 @@ class MemberListView(
                     form_error="You cannot remove the last owner."
                 )
                 return self.render_to_response(context, status=400)
-            membership.delete()
+            try:
+                membership.delete()
+            except ValidationError as error:
+                context = self.get_context_data(
+                    form_error=_first_error_message(
+                        error,
+                        fallback="You cannot remove the last owner.",
+                    )
+                )
+                return self.render_to_response(context, status=400)
         else:
             context = self.get_context_data(form_error="Unknown member action.")
             return self.render_to_response(context, status=400)
@@ -1127,7 +1145,10 @@ class OrgApiMemberRoleView(
         if not form.is_valid():
             return JsonResponse({"errors": _form_error_data(form)}, status=400)
 
-        updated_membership = form.save()
+        try:
+            updated_membership = form.save()
+        except ValidationError as error:
+            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
         return JsonResponse({"member": _serialize_membership(updated_membership)})
 
 
@@ -1167,7 +1188,10 @@ class OrgApiMemberRemoveView(
             )
 
         removed_member_id = membership.pk
-        membership.delete()
+        try:
+            membership.delete()
+        except ValidationError as error:
+            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
         return JsonResponse({"status": "removed", "member_id": removed_member_id})
 
 

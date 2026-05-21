@@ -1563,6 +1563,66 @@ def test_subscription_checkout_view_creates_session_with_server_owned_redirect_u
 
 
 @pytest.mark.django_db
+def test_org_subscription_checkout_view_creates_session_with_org_scoped_redirect_urls(
+    client: Client,
+    user,
+    monkeypatch: pytest.MonkeyPatch,
+    settings,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Aperture", slug="aperture")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    plan = _create_recurring_plan(slug="starter-org-checkout-view")
+    captured_call: dict[str, Any] = {}
+
+    def fake_create_subscription_checkout_session(
+        auth_user,
+        auth_plan,
+        success_url: str,
+        cancel_url: str,
+        *,
+        organization: Any | None = None,
+    ) -> str:
+        captured_call["user"] = auth_user
+        captured_call["plan"] = auth_plan
+        captured_call["success_url"] = success_url
+        captured_call["cancel_url"] = cancel_url
+        captured_call["organization"] = organization
+        return "https://checkout.stripe.test/subscription/org-view"
+
+    monkeypatch.setattr(
+        "quickscale_modules_billing.views.create_subscription_checkout_session",
+        fake_create_subscription_checkout_session,
+    )
+    client.force_login(user)
+
+    response = client.post(
+        reverse(
+            "quickscale_billing:org-subscription-checkout",
+            kwargs={"org_slug": organization.slug},
+        ),
+        data=json.dumps({"plan_slug": plan.slug}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "checkout_url": "https://checkout.stripe.test/subscription/org-view"
+    }
+    assert captured_call == {
+        "user": user,
+        "plan": plan,
+        "success_url": "http://testserver/orgs/aperture/billing/subscription/success/",
+        "cancel_url": "http://testserver/orgs/aperture/billing/subscription/cancel/",
+        "organization": organization,
+    }
+
+
+@pytest.mark.django_db
 def test_subscription_checkout_view_blocks_while_current_subscription_exists(
     client: Client,
     user,

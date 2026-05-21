@@ -18,6 +18,17 @@ from quickscale_modules_orgs.models import (
 )
 
 
+def test_org_role_preserves_expected_hierarchy_order() -> None:
+    """OrgRole should keep the documented low-to-high privilege ordering."""
+
+    assert [role.value for role in OrgRole] == [
+        OrgRole.VIEWER,
+        OrgRole.MEMBER,
+        OrgRole.ADMIN,
+        OrgRole.OWNER,
+    ]
+
+
 @pytest.mark.django_db
 def test_create_personal_for_is_idempotent() -> None:
     """create_personal_for should return the same personal org on repeat calls."""
@@ -63,6 +74,165 @@ def test_duplicate_membership_hits_database_constraint() -> None:
                 organization=organization,
                 role=OrgRole.MEMBER,
             )
+
+
+@pytest.mark.django_db
+def test_last_owner_cannot_be_demoted_via_model_save() -> None:
+    """Direct ORM role changes should not allow an org to lose its last owner."""
+
+    user = get_user_model().objects.create_user(
+        username="owner",
+        email="owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Acme", slug="acme")
+    membership = OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    membership.role = OrgRole.ADMIN
+
+    with pytest.raises(ValidationError) as exc_info:
+        membership.save(update_fields=["role"])
+
+    membership.refresh_from_db()
+    assert exc_info.value.message_dict == {
+        "role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]
+    }
+    assert membership.role == OrgRole.OWNER
+
+
+@pytest.mark.django_db
+def test_last_owner_cannot_be_removed_via_model_delete() -> None:
+    """Direct ORM deletes should not remove an organization's final owner."""
+
+    user = get_user_model().objects.create_user(
+        username="remove-owner",
+        email="remove-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Orbit", slug="orbit")
+    membership = OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        membership.delete()
+
+    assert exc_info.value.messages == [
+        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+    ]
+    assert OrganizationMembership.objects.filter(pk=membership.pk).exists()
+
+
+@pytest.mark.django_db
+def test_last_owner_save_uses_locked_persisted_role_for_stale_instances() -> None:
+    """Stale membership saves should validate against the locked persisted role."""
+
+    first_owner = get_user_model().objects.create_user(
+        username="save-first-owner",
+        email="save-first-owner@example.com",
+        password="secret123",
+    )
+    promoted_user = get_user_model().objects.create_user(
+        username="save-promoted-owner",
+        email="save-promoted-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Apex", slug="apex")
+    existing_owner_membership = OrganizationMembership.objects.create(
+        user=first_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    promoted_membership = OrganizationMembership.objects.create(
+        user=promoted_user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    stale_membership = OrganizationMembership.objects.get(pk=promoted_membership.pk)
+
+    OrganizationMembership.objects.filter(pk=promoted_membership.pk).update(
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.filter(pk=existing_owner_membership.pk).update(
+        role=OrgRole.ADMIN,
+    )
+
+    stale_membership.role = OrgRole.ADMIN
+    original_persisted_owner_state = OrganizationMembership._persisted_owner_state
+
+    def simulated_racy_persisted_owner_state(
+        self: OrganizationMembership,
+        *,
+        for_update: bool = False,
+    ) -> tuple[object | None, str | None]:
+        if not for_update:
+            return organization.pk, OrgRole.MEMBER
+        return original_persisted_owner_state(self, for_update=True)
+
+    with patch.object(
+        OrganizationMembership,
+        "_persisted_owner_state",
+        autospec=True,
+        side_effect=simulated_racy_persisted_owner_state,
+    ) as persisted_owner_state:
+        with pytest.raises(ValidationError) as exc_info:
+            stale_membership.save(update_fields=["role"])
+
+    persisted_owner_state.assert_called_once_with(stale_membership, for_update=True)
+    stale_membership.refresh_from_db()
+    assert exc_info.value.message_dict == {
+        "role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]
+    }
+    assert stale_membership.role == OrgRole.OWNER
+
+
+@pytest.mark.django_db
+def test_last_owner_delete_uses_persisted_role_for_stale_instances() -> None:
+    """Stale membership instances should still respect the persisted owner guard."""
+
+    first_owner = get_user_model().objects.create_user(
+        username="first-owner",
+        email="first-owner@example.com",
+        password="secret123",
+    )
+    promoted_user = get_user_model().objects.create_user(
+        username="promoted-owner",
+        email="promoted-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Vertex", slug="vertex")
+    existing_owner_membership = OrganizationMembership.objects.create(
+        user=first_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    promoted_membership = OrganizationMembership.objects.create(
+        user=promoted_user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    stale_membership = OrganizationMembership.objects.get(pk=promoted_membership.pk)
+
+    OrganizationMembership.objects.filter(pk=promoted_membership.pk).update(
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.filter(pk=existing_owner_membership.pk).update(
+        role=OrgRole.ADMIN,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        stale_membership.delete()
+
+    assert exc_info.value.messages == [
+        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+    ]
+    assert OrganizationMembership.objects.filter(pk=promoted_membership.pk).exists()
 
 
 @pytest.mark.django_db

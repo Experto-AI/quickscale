@@ -351,78 +351,62 @@ Fresh `showcase_react` generations now ship the org-aware React shell. The final
 
 ---
 
-#### Phase 8 — Tests + module.yml finalization (4–6 h)
+#### Phase 8 — Tests + module.yml finalization (completed validation slice)
 
-Complete the test suite and finalize the module manifest. All tests involving RLS require a real PostgreSQL connection — mark with `@pytest.mark.django_db(transaction=True)`.
+Complete the validation pass and reconcile the roadmap with the shipped orgs contract. The earlier Phase 8 checklist drifted from the repository: orgs coverage already lives across `test_adapters.py`, `test_admin.py`, `test_management_commands.py`, `test_middleware.py`, `test_models.py`, `test_permissions.py`, `test_views.py`, adjacent billing checkout tests, and CLI/core contract tests. This slice closes the remaining Phase 8 gaps without reopening deferred PostgreSQL RLS activation or seat-pricing work.
 
-**Test files to create** (`quickscale_modules/orgs/tests/`):
-- [ ] `test_models.py`:
-  - [ ] `OrgRole` hierarchy values ordered correctly (VIEWER < MEMBER < ADMIN < OWNER)
-  - [ ] `unique_together = [('user', 'organization')]` raises `IntegrityError` on duplicate membership
-  - [ ] Last OWNER cannot be removed (test both model guard and view guard)
-  - [ ] `create_personal_for(user)` idempotent — second call returns existing org, no duplicate created
-  - [ ] `Organization.is_personal` set correctly; `is_personal=False` for user-named orgs
-- [ ] `test_permissions.py`:
-  - [ ] `require_org_role(ADMIN)`: 200 for ADMIN, 200 for OWNER, 403 for MEMBER, 403 for VIEWER, 403 for non-member
-  - [ ] `require_org_role(OWNER)`: 200 for OWNER only; 403 for all other roles
-  - [ ] `require_org_feature('crm')`: 200 when feature in plan, 402 when not present, 402 when no active subscription
-- [ ] `test_middleware.py`:
-  - [ ] **Solo mode**: new user auto-gets personal org; `request.org` set from personal org without URL slug
-  - [ ] **SaaS mode**: new user (no membership) redirected to `/orgs/new/`
-  - [ ] **SaaS mode**: authenticated non-member requesting `/orgs/acme-corp/` returns 403
-  - [ ] `app.current_org_id` set correctly in both modes
-  - [ ] `QUICKSCALE_MODE` switch changes behaviour with no model changes
-- [ ] `test_rls_isolation.py` (PostgreSQL + `transaction=True`):
-  - [ ] Org A user queryset for Org B contact is empty (not exception)
-- [ ] Platform owner query behavior follows the explicitly implemented operator policy for the RLS rollout; do not assume Django `is_superuser` bypasses PostgreSQL policies automatically
-  - [ ] Unset `app.current_org_id` → empty queryset (not exception)
-  - [ ] Solo mode: user sees only their personal org's rows
-- [ ] `test_invitation_flow.py`:
-  - [ ] Full cycle: invite → email sent (mocked) → existing user accepts → membership created with correct role
-  - [ ] Full cycle: new user accepts → auth continuation stores the pending token → `AcceptInvitationView` redeems it after signup/login when the normalized email matches
-  - [ ] Expired token → 410 with user-facing message
-  - [ ] Already-accepted token → 410 with user-facing message
-  - [ ] Revoke → token URL becomes 404
-  - [ ] Email mismatch (logged-in user email ≠ invitation email) → 403
-  - [ ] Solo mode invitation URL → 404
-- [ ] `test_billing_bridge.py`:
-  - [ ] `CreditBalance.organization` debited on credit usage; user-level balance unchanged
-  - [ ] `Subscription.organization` set on Stripe checkout completion
-  - [ ] `CreditTransaction.user` records acting-user provenance
-  - [ ] `migrate_billing_to_orgs` idempotent on v0.85.0 fixture
-  - [ ] `promote_to_saas` idempotent; all personal orgs have valid slugs after run
-- [ ] `test_mode_switch.py`:
-  - [ ] `QUICKSCALE_MODE = 'solo'`: flat routes work; `/orgs/new/` returns 404
-  - [ ] `QUICKSCALE_MODE = 'saas'`: `/orgs/new/` reachable; org management pages render; invitation URLs active
-  - [ ] After `promote_to_saas`: all personal orgs have slugs; invitation system operational
+**Validated test inventory**:
+- [x] `test_models.py` — `OrgRole` ordering, duplicate-membership DB constraint, personal-org idempotence, `Organization.is_personal` behavior, and the last-owner model guard
+- [x] `test_permissions.py` — `require_org_role()` and `require_org_feature()` coverage across allowed and denied roles/states
+- [x] `test_middleware.py` — solo personal-org bootstrap, SaaS no-membership redirect/403 behavior, `app.current_org_id` coverage in both runtime modes, and mode switching without model churn
+- [x] `test_views.py` + `test_adapters.py` — signup routing, invitation flow, org management guardrails, and the last-owner view guard
+- [x] `test_management_commands.py` + billing view/service coverage — org-authoritative billing bridge, org-scoped checkout routing, `migrate_billing_to_orgs`, and `promote_to_saas`
+- [x] CLI/core contract tests — orgs module selectability, manifest/version alignment, and generated apply wiring
 
-**`module.yml` final**:
+**Earlier pending items not required for this phase**:
+- PostgreSQL RLS activation and cross-org queryset isolation remain a later milestone after downstream tenant tables gain concrete `organization_id` coverage
+- Seat-pricing follow-ons (`Plan.max_seats`, `Plan.seat_price_id`, and related admin UI) remain Phase 6 follow-on work
+- Cross-module migration dependency ordering remains a v0.86.0 release-note closeout task, not a blocker for this engineering validation slice
+
+**`module.yml` shipped contract**:
 ```yaml
 name: orgs
 version: "0.86.0"
-description: "Multi-tenant organizations with PostgreSQL RLS, RBAC, Solo/SaaS runtime mode, and self-service onboarding"
+description: "Organizations and multi-tenant foundations with memberships and invitations"
+
+config:
+  mutable:
+    mode:
+      type: string
+      default: "solo"
+      django_setting: QUICKSCALE_MODE
+      description: "Organization runtime mode (solo or saas)"
+      validation:
+        choices: ["solo", "saas"]
+  immutable: {}
+
 dependencies:
-  - django-allauth>=0.63.0
+  - django-allauth>=65.14.1,<66.0.0
+
 django_apps:
   - quickscale_modules_orgs
+
 middleware:
   - quickscale_modules_orgs.middleware.TenantMiddleware
+
 settings:
   ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter
   QUICKSCALE_MODE: solo
-url_includes:
-  - conditional: QUICKSCALE_MODE
-    saas: ["orgs/", "quickscale_modules_orgs.urls.saas"]
-    solo: ["", "quickscale_modules_orgs.urls.solo"]
 ```
 
 **Acceptance criteria**:
-- [ ] `python manage.py test quickscale_modules_orgs` passes — all test files, PostgreSQL backend
-- [ ] `quickscale plan` lists `orgs` as a selectable module with correct metadata
-- [ ] `quickscale apply` injects `TenantMiddleware`, `ACCOUNT_ADAPTER`, `QUICKSCALE_MODE = 'solo'` (default), and conditional URL includes into the generated project
-- [ ] **Solo end-to-end**: signup → personal org auto-created → org dashboard at `/` reachable — no org creation step shown
-- [ ] **SaaS end-to-end**: signup → `/orgs/new/` → org created → Stripe checkout → org dashboard at `/orgs/<slug>/`
-- [ ] Cross-module migration dependency ordering documented in v0.86.0 release note: `quickscale_modules_orgs` must migrate before CRM, blog, forms, listings, notifications apply RLS policies
+- [x] The current orgs module test suite passes in the maintainer repo (`poetry run pytest -o addopts='' tests` in `quickscale_modules/orgs`)
+- [x] The last-owner invariant is covered at both the model and view layers
+- [x] `app.current_org_id` is asserted in both Solo and SaaS runtime coverage where middleware sets org context
+- [x] Org-scoped recurring checkout success is covered alongside the existing org purchase checkout flow
+- [x] Org module catalog, manifest alignment, and generated apply wiring contract tests pass in the maintainer repo (`poetry run pytest -o addopts='' quickscale_cli/tests/test_orgs_contract.py quickscale_cli/tests/test_module_manifest_contract.py quickscale_core/tests/test_module_wiring.py`)
+- [x] The shipped `module.yml` remains authoritative; runtime-mode routing is validated by planner/apply wiring tests rather than a separate manifest `url_includes` block
+- [x] Phase 8 closes without implementing deferred PostgreSQL RLS activation, seat-pricing fields, or release-note dependency-ordering work
 
 ---
 

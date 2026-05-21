@@ -1139,6 +1139,74 @@ def test_member_list_blocks_last_owner_demotion_and_removal(client, settings) ->
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("json_request", [False, True], ids=["html", "json"])
+def test_member_role_updates_translate_save_time_validation_errors(
+    client,
+    settings,
+    monkeypatch,
+    json_request,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Aster", slug="aster")
+    acting_owner = get_user_model().objects.create_user(
+        username=f"aster-acting-{json_request}",
+        email=f"aster-acting-{json_request}@example.com",
+        password="secret123",
+    )
+    target_owner = get_user_model().objects.create_user(
+        username=f"aster-target-{json_request}",
+        email=f"aster-target-{json_request}@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=acting_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    def rejecting_save(self: org_forms.RoleChangeForm) -> OrganizationMembership:
+        raise ValidationError(
+            {"role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]}
+        )
+
+    monkeypatch.setattr(org_forms.RoleChangeForm, "save", rejecting_save)
+    client.force_login(acting_owner)
+
+    if json_request:
+        response = client.post(
+            f"/api/orgs/{organization.slug}/members/{target_membership.pk}/role/",
+            data=json.dumps({"role": OrgRole.ADMIN}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {
+            "errors": {"role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]}
+        }
+    else:
+        response = client.post(
+            f"/orgs/{organization.slug}/members/",
+            {
+                "action": "change-role",
+                "membership_id": target_membership.pk,
+                "role": OrgRole.ADMIN,
+            },
+        )
+        assert response.status_code == 400
+        assert (
+            OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE
+            in response.content.decode()
+        )
+
+    target_membership.refresh_from_db()
+    assert target_membership.role == OrgRole.OWNER
+
+
+@pytest.mark.django_db
 def test_member_list_changes_role_and_redirects_on_success(client, settings) -> None:
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
@@ -1887,6 +1955,77 @@ def test_org_api_member_remove_returns_json(client, settings) -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "removed", "member_id": membership.pk}
     assert not OrganizationMembership.objects.filter(pk=membership.pk).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("json_request", [False, True], ids=["html", "json"])
+def test_member_removals_translate_delete_time_validation_errors(
+    client,
+    settings,
+    monkeypatch,
+    json_request,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Lyra", slug="lyra")
+    acting_owner = get_user_model().objects.create_user(
+        username=f"lyra-acting-{json_request}",
+        email=f"lyra-acting-{json_request}@example.com",
+        password="secret123",
+    )
+    target_owner = get_user_model().objects.create_user(
+        username=f"lyra-target-{json_request}",
+        email=f"lyra-target-{json_request}@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=acting_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    def rejecting_delete(
+        self: OrganizationMembership,
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[int, dict[str, int]]:
+        del self, args, kwargs
+        raise ValidationError(OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE)
+
+    monkeypatch.setattr(OrganizationMembership, "delete", rejecting_delete)
+    client.force_login(acting_owner)
+
+    if json_request:
+        response = client.post(
+            f"/api/orgs/{organization.slug}/members/{target_membership.pk}/remove/",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {
+            "errors": {
+                "non_field_errors": [OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE]
+            }
+        }
+    else:
+        response = client.post(
+            f"/orgs/{organization.slug}/members/",
+            {
+                "action": "remove",
+                "membership_id": target_membership.pk,
+            },
+        )
+        assert response.status_code == 400
+        assert (
+            OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+            in response.content.decode()
+        )
+
+    assert OrganizationMembership.objects.filter(pk=target_membership.pk).exists()
 
 
 @pytest.mark.django_db
