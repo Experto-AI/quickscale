@@ -9,7 +9,13 @@ from django.test import RequestFactory
 
 from quickscale_modules_billing.models import Plan, Subscription
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
-from quickscale_modules_orgs.permissions import ROLE_HIERARCHY, require_org_feature
+from quickscale_modules_orgs.permissions import (
+    ROLE_HIERARCHY,
+    _get_active_org_subscription,
+    _resolve_request_org,
+    require_org_feature,
+    user_has_org_role,
+)
 
 
 @pytest.mark.django_db
@@ -251,3 +257,185 @@ def test_require_org_feature_ignores_request_subscription_stub_and_uses_orm() ->
     response = feature_view(request, org_slug="delta")
 
     assert response.status_code == 402
+
+
+# ---------------------------------------------------------------------------
+# Direct unit tests for uncovered lines
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_user_has_org_role_returns_false_for_anonymous_user() -> None:
+    """user_has_org_role: unauthenticated user should be denied (line 30)."""
+    organization = Organization.objects.create(name="Anon", slug="anon")
+    anon = type(
+        "AnonymousUser", (), {"is_authenticated": False, "is_superuser": False}
+    )()
+    assert user_has_org_role(anon, organization, OrgRole.VIEWER) is False
+
+
+def test_user_has_org_role_returns_false_for_none_user() -> None:
+    """user_has_org_role: None user should be denied without hitting DB."""
+    from unittest.mock import MagicMock
+
+    org = MagicMock()
+    result = user_has_org_role(None, org, OrgRole.VIEWER)
+    assert result is False
+
+
+@pytest.mark.django_db
+def test_user_has_org_role_returns_false_when_no_membership() -> None:
+    """user_has_org_role: authenticated user with no membership should be denied (line 39)."""
+    organization = Organization.objects.create(name="NoMember", slug="nomember")
+    user = get_user_model().objects.create_user(
+        username="nomember-user",
+        email="nomember@example.com",
+        password="secret123",
+    )
+    # No OrganizationMembership created deliberately
+    assert user_has_org_role(user, organization, OrgRole.VIEWER) is False
+
+
+@pytest.mark.django_db
+def test_require_org_role_returns_403_when_org_not_found(client, settings) -> None:
+    """require_org_role: org not found in DB should return 403 via direct view call (line 55)."""
+    from quickscale_modules_orgs.permissions import require_org_role
+
+    user = get_user_model().objects.create_user(
+        username="lost-user",
+        email="lost@example.com",
+        password="secret123",
+    )
+    request = RequestFactory().get("/orgs/nonexistent/admin-only/")
+    request.user = user
+    request.org = None  # bypass middleware
+
+    @require_org_role(OrgRole.ADMIN)
+    def my_view(request, org_slug: str):
+        return HttpResponse("ok")  # pragma: no cover
+
+    response = my_view(request, org_slug="nonexistent")
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_org_role_mixin_returns_403_when_org_not_found(client, settings) -> None:
+    """OrgRoleMixin.dispatch: org not found in DB should return 403 via direct call (line 79)."""
+    from django.views import View
+    from quickscale_modules_orgs.permissions import OrgRoleMixin
+
+    user = get_user_model().objects.create_user(
+        username="mixin-lost",
+        email="mixin-lost@example.com",
+        password="secret123",
+    )
+    request = RequestFactory().get("/orgs/nonexistent/admin-mixin/")
+    request.user = user
+    request.org = None  # bypass middleware
+
+    class MyMixinView(OrgRoleMixin, View):
+        min_org_role = OrgRole.ADMIN
+
+        def get(self, request, org_slug: str):
+            return HttpResponse("ok")  # pragma: no cover
+
+    response = MyMixinView.as_view()(request, org_slug="nonexistent")
+    assert response.status_code == 403
+
+
+def test_require_org_feature_returns_402_for_anonymous_user() -> None:
+    """require_org_feature: anonymous user should receive 402 (line 99)."""
+    from django.contrib.auth.models import AnonymousUser
+
+    request = RequestFactory().get("/orgs/anything/feature/")
+    request.user = AnonymousUser()
+    request.org = None
+
+    @require_org_feature("crm")
+    def feature_view(request, org_slug: str):
+        return HttpResponse("ok")  # pragma: no cover
+
+    response = feature_view(request, org_slug="anything")
+    assert response.status_code == 402
+
+
+@pytest.mark.django_db
+def test_require_org_feature_returns_402_when_org_not_found(client, settings) -> None:
+    """require_org_feature: unknown org slug should return 402 (line 103)."""
+    user = get_user_model().objects.create_user(
+        username="feature-lost",
+        email="feature-lost@example.com",
+        password="secret123",
+    )
+    request = RequestFactory().get("/orgs/nonexistent/feature/")
+    request.user = user
+    request.org = None  # bypass middleware
+
+    @require_org_feature("crm")
+    def feature_view(request, org_slug: str):
+        return HttpResponse("ok")  # pragma: no cover
+
+    response = feature_view(request, org_slug="nonexistent")
+    assert response.status_code == 402
+
+
+@pytest.mark.django_db
+def test_get_active_org_subscription_returns_none_when_billing_not_installed() -> None:
+    """_get_active_org_subscription: returns None when billing app not installed (line 125)."""
+    from unittest.mock import patch
+
+    organization = Organization.objects.create(name="NoBilling", slug="nobilling")
+    with patch(
+        "quickscale_modules_orgs.permissions.apps.is_installed", return_value=False
+    ):
+        result = _get_active_org_subscription(organization)
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_get_active_org_subscription_returns_none_on_lookup_error() -> None:
+    """_get_active_org_subscription: returns None on LookupError (lines 132-133)."""
+    from unittest.mock import patch
+
+    organization = Organization.objects.create(name="LookupFail", slug="lookupfail")
+    with (
+        patch(
+            "quickscale_modules_orgs.permissions.apps.is_installed", return_value=True
+        ),
+        patch(
+            "quickscale_modules_orgs.permissions.apps.get_model",
+            side_effect=LookupError("no model"),
+        ),
+    ):
+        result = _get_active_org_subscription(organization)
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_resolve_request_org_resolves_via_url_pattern() -> None:
+    """_resolve_request_org: should resolve org slug via URL resolver (lines 153-162)."""
+    organization = Organization.objects.create(name="UrlResolved", slug="urlresolved")
+    request = RequestFactory().get(f"/orgs/{organization.slug}/admin-only/")
+    request.org = None  # no org set on request
+
+    # Pass empty kwargs so the function falls through to URL resolution
+    result = _resolve_request_org(request, {})
+    assert result is not None
+    assert result.slug == "urlresolved"
+
+
+def test_resolve_request_org_returns_none_on_resolver404() -> None:
+    """_resolve_request_org: returns None when URL can't be resolved (line 158)."""
+    request = RequestFactory().get("/not-a-real-path-xyz/")
+    request.org = None
+    result = _resolve_request_org(request, {})
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_resolve_request_org_returns_none_when_slug_not_in_url() -> None:
+    """_resolve_request_org: returns None when URL resolves but has no org_slug (line 160-161)."""
+    request = RequestFactory().get("/")
+    request.org = None
+    result = _resolve_request_org(request, {})
+    assert result is None
