@@ -1,5 +1,7 @@
 """Tests for theme system functionality"""
 
+import os
+
 import pytest
 
 from quickscale_core.generator import ProjectGenerator
@@ -152,6 +154,35 @@ class TestProjectGenerationWithTheme:
         assert "FROM node:24-slim as frontend-builder" in dockerfile
         assert "pnpm run build" in dockerfile
 
+    @pytest.mark.parametrize(
+        ("theme", "project_name", "expects_frontend"),
+        [
+            ("showcase_html", "testproject_html", False),
+            ("showcase_react", "testproject_react", True),
+        ],
+    )
+    def test_generated_makefile_respects_frontend_presence(
+        self, tmp_path, theme, project_name, expects_frontend
+    ):
+        """Generated Makefile should guard frontend targets based on frontend presence."""
+        generator = ProjectGenerator(theme=theme)
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        makefile = (output_path / "Makefile").read_text()
+
+        if expects_frontend:
+            assert (output_path / "frontend" / "package.json").exists()
+            assert "cd frontend && pnpm test:coverage;" in makefile
+            return
+
+        assert not (output_path / "frontend" / "package.json").exists()
+        assert "No frontend/package.json found, skipping frontend install." in makefile
+        assert "No frontend/package.json found, skipping frontend lint." in makefile
+        assert "No frontend/package.json found, skipping frontend format." in makefile
+        assert "No frontend/package.json found, skipping frontend tests." in makefile
+
     def test_react_theme_vite_config_has_consistent_filenames(self, tmp_path):
         """Vite config should use consistent filenames for Django compatibility"""
         generator = ProjectGenerator(theme="showcase_react")
@@ -179,17 +210,18 @@ class TestProjectGenerationWithTheme:
         assert 'STORAGES["staticfiles"]' in production_settings
         assert "whitenoise.storage.CompressedStaticFilesStorage" in production_settings
 
-    def test_generated_output_matches_v060(self, tmp_path):
-        """Generated project structure should match v0.60.0 output"""
+    def test_generated_output_matches_current_scaffold_contract(self, tmp_path):
+        """Generated project structure should match the current scaffold contract."""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
         output_path = tmp_path / project_name
 
         generator.generate(project_name, output_path)
 
-        # List of files that should exist (from v0.60.0)
+        # Broad output contract for the generated project scaffold.
         expected_files = [
             "README.md",
+            "Makefile",
             "manage.py",
             "pyproject.toml",
             ".gitignore",
@@ -198,6 +230,7 @@ class TestProjectGenerationWithTheme:
             "docker-compose.yml",
             "railway.json",
             ".env.example",
+            "scripts/lint.sh",
             "templates/base.html",
             "templates/index.html",
             "static/css/style.css",
@@ -214,6 +247,12 @@ class TestProjectGenerationWithTheme:
 
         for file_path in expected_files:
             assert (output_path / file_path).exists(), f"Missing file: {file_path}"
+
+        lint_script = output_path / "scripts" / "lint.sh"
+        assert os.access(lint_script, os.X_OK), (
+            "scripts/lint.sh should stay executable because the generated Makefile "
+            "invokes it directly"
+        )
 
 
 class TestBackwardCompatibility:

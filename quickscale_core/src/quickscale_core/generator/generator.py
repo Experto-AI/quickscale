@@ -217,6 +217,7 @@ class ProjectGenerator:
         # Format: (template_path, output_path, executable)
         file_mappings = [
             # Root level files
+            ("Makefile.j2", "Makefile", False),
             ("README.md.j2", "README.md", False),
             ("manage.py.j2", "manage.py", True),
             ("pyproject.toml.j2", "pyproject.toml", False),

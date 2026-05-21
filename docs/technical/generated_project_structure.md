@@ -14,6 +14,8 @@ Key rules:
 - The generated project is user-owned code.
 - `showcase_react` is the default starter theme.
 - `showcase_html` remains the secondary starter option.
+- Fresh generations include a root `Makefile` with generic `setup`, `lint`, `format`, `test`, `check`, and `ci` entrypoints; frontend-only targets guard on `frontend/package.json` and skip cleanly for `showcase_html`.
+- Fresh generations also ship `scripts/lint.sh` as the shared helper surface behind `make lint` and `make check`.
 - Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages in v0.83.0.
 - Generated starter output surfaces billing as module flags, cards, and navigation links into module-owned Django pages (`/billing/pricing/` public and `/billing/dashboard/` for signed-in users) without generating a starter-owned billing React page; teams placeholder routes, navigation, cards, and flags remain excluded.
 - Modules embed into the generated project and can later be updated through the documented git-subtree workflow.
@@ -25,6 +27,7 @@ Key rules:
 myapp/
 ├── manage.py
 ├── quickscale.yml
+├── Makefile
 ├── myapp/
 │   ├── __init__.py
 │   ├── settings/
@@ -43,6 +46,8 @@ myapp/
 │   └── vite.config.ts
 ├── templates/
 ├── static/
+├── scripts/
+│   └── lint.sh
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -55,6 +60,9 @@ myapp/
 Notes:
 - `quickscale.yml` is created during planning and remains the user-owned desired-state file.
 - `.quickscale/state.yml` and `.quickscale/config.yml` appear after apply writes state and module metadata.
+- `Makefile` is always generated at the project root and is the preferred local entrypoint for setup, lint, format, test, check, and ci workflows.
+- `scripts/lint.sh` is generated alongside the root `Makefile` and backs the shared `make lint` and `make check` workflows.
+- Frontend-specific Makefile targets run only when `frontend/package.json` exists; on `showcase_html` they report a skip instead of failing.
 - `frontend/` is omitted for the HTML starter when the user selects `showcase_html`.
 
 ### Generated Project with Embedded Modules
@@ -65,6 +73,7 @@ myapp/
 │   ├── state.yml
 │   └── config.yml
 ├── quickscale.yml
+├── Makefile
 ├── modules/
 │   ├── auth/
 │   ├── listings/
@@ -116,6 +125,7 @@ This section is the detailed reference for what QuickScale currently materialize
 myapp/
 ├── manage.py
 ├── quickscale.yml
+├── Makefile
 ├── myapp/
 │   ├── __init__.py
 │   ├── settings/
@@ -167,6 +177,7 @@ When the user selects `showcase_html`, the frontend stays server-rendered.
 myapp/
 ├── manage.py
 ├── quickscale.yml
+├── Makefile
 ├── myapp/
 ├── templates/
 │   ├── base.html
@@ -215,6 +226,8 @@ If you intentionally adopt a manual inheritance or extraction pattern:
 | Requirement | Artifact |
 |---|---|
 | Desired state | `quickscale.yml` |
+| Local developer workflow entrypoints | `Makefile` |
+| Lint/check helper surface | `scripts/lint.sh` |
 | Applied state | `.quickscale/state.yml` |
 | Module metadata | `.quickscale/config.yml` |
 | Project generation | `quickscale_core/generator/` templates and generator logic |

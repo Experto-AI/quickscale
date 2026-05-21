@@ -1,0 +1,65 @@
+.DEFAULT_GOAL := help
+
+FRONTEND_PACKAGE := frontend/package.json
+
+.PHONY: help setup lint lint-backend lint-frontend format test test-backend test-frontend check ci
+
+help: ## Show available targets
+	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+setup: ## Install backend dependencies and frontend dependencies when present
+	poetry install
+	@if [ -f "$(FRONTEND_PACKAGE)" ]; then \
+		if ! command -v pnpm >/dev/null 2>&1; then \
+			echo "pnpm is required to install frontend dependencies."; \
+			exit 1; \
+		fi; \
+		cd frontend && pnpm install; \
+	else \
+		echo "No frontend/package.json found, skipping frontend install."; \
+	fi
+
+lint: ## Run all available lint checks
+	./scripts/lint.sh
+
+lint-backend: ## Run backend lint checks
+	./scripts/lint.sh --python
+
+lint-frontend: ## Run frontend lint checks when frontend exists
+	@if [ -f "$(FRONTEND_PACKAGE)" ]; then \
+		./scripts/lint.sh --frontend; \
+	else \
+		echo "No frontend/package.json found, skipping frontend lint."; \
+	fi
+
+format: ## Format backend code and frontend sources when frontend exists
+	poetry run ruff format .
+	@if [ -f "$(FRONTEND_PACKAGE)" ]; then \
+		if ! command -v pnpm >/dev/null 2>&1; then \
+			echo "pnpm is required to format frontend sources."; \
+			exit 1; \
+		fi; \
+		cd frontend && pnpm format; \
+	else \
+		echo "No frontend/package.json found, skipping frontend format."; \
+	fi
+
+test: test-backend test-frontend ## Run backend tests and frontend tests when frontend exists
+
+test-backend: ## Run backend tests
+	poetry run pytest
+
+test-frontend: ## Run frontend tests when frontend exists
+	@if [ -f "$(FRONTEND_PACKAGE)" ]; then \
+		if ! command -v pnpm >/dev/null 2>&1; then \
+			echo "pnpm is required to run frontend tests."; \
+			exit 1; \
+		fi; \
+		cd frontend && pnpm test:coverage; \
+	else \
+		echo "No frontend/package.json found, skipping frontend tests."; \
+	fi
+
+check: lint test ## Run the standard local quality checks
+
+ci: check ## Alias for check

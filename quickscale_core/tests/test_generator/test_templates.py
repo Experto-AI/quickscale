@@ -202,6 +202,11 @@ class TestTemplateLoading:
         template = jinja_env.get_template("manage.py.j2")
         assert template is not None
 
+    def test_readme_loads(self, jinja_env: Environment) -> None:
+        """Test generated README template loads without errors."""
+        template = jinja_env.get_template("README.md.j2")
+        assert template is not None
+
     def test_project_init_loads(self, jinja_env: Environment) -> None:
         """Test project __init__.py template loads without errors."""
         template = jinja_env.get_template("project_name/__init__.py.j2")
@@ -898,6 +903,11 @@ class TestMissingVariableErrors:
 class TestDevOpsTemplateLoading:
     """Verify all DevOps templates can be loaded by Jinja2."""
 
+    def test_makefile_loads(self, jinja_env: Environment) -> None:
+        """Test generated Makefile template loads without errors."""
+        template = jinja_env.get_template("Makefile.j2")
+        assert template is not None
+
     def test_pyproject_toml_loads(self, jinja_env: Environment) -> None:
         """Test pyproject.toml template loads without errors."""
         template = jinja_env.get_template("pyproject.toml.j2")
@@ -956,6 +966,64 @@ class TestDevOpsTemplateLoading:
 
 class TestDevOpsTemplateRendering:
     """Verify DevOps templates render correctly with sample context data."""
+
+    def test_makefile_renders_expected_targets(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Makefile should render the shipped generic workflow contract."""
+        template = jinja_env.get_template("Makefile.j2")
+        output = template.render(test_context)
+
+        assert output is not None
+        assert ".DEFAULT_GOAL := help" in output
+        assert (
+            "setup: ## Install backend dependencies and frontend dependencies when present"
+            in output
+        )
+        assert (
+            "lint-frontend: ## Run frontend lint checks when frontend exists" in output
+        )
+        assert (
+            "test: test-backend test-frontend ## Run backend tests and frontend tests when frontend exists"
+            in output
+        )
+        assert "cd frontend && pnpm test:coverage;" in output
+        assert "No frontend/package.json found, skipping frontend tests." in output
+
+    def test_readme_renders_make_first_workflow_for_html(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """HTML starter README should prefer make targets without implying a frontend."""
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render({**test_context, "theme": "showcase_html"})
+
+        assert "The generated root `Makefile` is the default local entrypoint" in output
+        assert "make setup" in output
+        assert "make test" in output
+        assert "make lint" in output
+        assert "make check" in output
+        assert "### Frontend Code Quality" not in output
+        assert (
+            "Node.js 24+ installed for the generated `frontend/` workspace"
+            not in output
+        )
+        assert "pnpm available for frontend setup and checks" not in output
+        assert "make lint-frontend" not in output
+        assert "make test-frontend" not in output
+
+    def test_readme_renders_react_frontend_workflow(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """React starter README should expose the delegated frontend workflow."""
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render({**test_context, "theme": "showcase_react"})
+
+        assert "### Frontend Code Quality" in output
+        assert "Node.js 24+ installed for the generated `frontend/` workspace" in output
+        assert "pnpm available for frontend setup and checks" in output
+        assert "make lint-frontend" in output
+        assert "make test-frontend" in output
+        assert "pnpm test:coverage" in output
 
     def test_pyproject_toml_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
