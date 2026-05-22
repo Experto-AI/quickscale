@@ -31,6 +31,9 @@ from {{ package_name }}.urls_modules import (
     PRE_HOME_MODULE_URLPATTERNS,
 )
 from {{ package_name }}.views import custom_404_view, orgs_react_shell_view  # noqa: F401
+{%- if theme == 'showcase_html' %}
+from {{ package_name }}.views import social_embeds_view, social_link_tree_view
+{%- endif %}
 
 
 def healthcheck(request: HttpRequest) -> HttpResponse:
@@ -88,6 +91,10 @@ urlpatterns += [
         TemplateView.as_view(template_name="social/embeds.html"),
         name="social-embeds",
     ),
+{%- endif %}
+{%- if theme == 'showcase_html' %}
+    re_path(r"^social/?$", social_link_tree_view, name="social-link-tree"),
+    re_path(r"^social/embeds/?$", social_embeds_view, name="social-embeds"),
 {%- endif %}
 ]
 urlpatterns += POST_HOME_MODULE_URLPATTERNS

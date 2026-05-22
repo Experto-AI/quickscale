@@ -41,8 +41,8 @@ class TestHtmlThemeIntegration:
             output_path / "templates" / "components" / "navigation.html"
         ).read_text()
 
-        assert "Open social" not in index_html
-        assert "/social/embeds" not in navigation
+        assert "quickscale_modules_social" in index_html
+        assert "/social/embeds" in navigation
         assert "Open notifications" in index_html
         assert "/admin/quickscale_modules_notifications/" in index_html
         assert "Open backup ops" in index_html
@@ -59,7 +59,7 @@ class TestHtmlThemeIntegration:
         assert "{{ modules.billing.url }}" in index_html
         assert "Teams" not in index_html
 
-        assert '<span class="nav-section-title">Social</span>' not in navigation
+        assert '<span class="nav-section-title">Social</span>' in navigation
         assert '<span class="nav-section-title">Billing</span>' in navigation
         assert "/billing/pricing/" in navigation
         assert "{{ modules.billing.url }}" in navigation
@@ -200,10 +200,10 @@ class TestHtmlThemeIntegration:
             assert "Teams" not in generated_file
             assert "quickscale_modules_teams" not in generated_file
 
-    def test_html_theme_does_not_generate_public_social_templates(
+    def test_html_theme_generates_public_social_templates_and_routes(
         self, tmp_path: Path
     ) -> None:
-        """showcase_html should not scaffold the public social pages or routes."""
+        """showcase_html should scaffold server-rendered public social pages and routes."""
         generator = ProjectGenerator(theme="showcase_html")
         output_path = tmp_path / "html_social_templates"
         generator.generate("html_social_templates", output_path)
@@ -212,10 +212,12 @@ class TestHtmlThemeIntegration:
         link_tree_template = output_path / "templates" / "social" / "link_tree.html"
         embeds_template = output_path / "templates" / "social" / "embeds.html"
 
-        assert 'r"^social/?$"' not in urls_py
-        assert 'r"^social/embeds/?$"' not in urls_py
-        assert not link_tree_template.exists()
-        assert not embeds_template.exists()
+        assert 'r"^social/?$"' in urls_py
+        assert 'r"^social/embeds/?$"' in urls_py
+        assert link_tree_template.exists()
+        assert embeds_template.exists()
+        assert "social_link_tree_view" in urls_py
+        assert "social_embeds_view" in urls_py
 
     def test_html_theme_dockerfile_keeps_postgresql_client_for_backup_ops(
         self, tmp_path: Path

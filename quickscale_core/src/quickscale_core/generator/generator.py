@@ -333,6 +333,20 @@ class ProjectGenerator:
                         "static/images/favicon.svg",
                         False,
                     ),
+                    (
+                        self._get_theme_template_path(
+                            "templates/social/link_tree.html.j2"
+                        ),
+                        "templates/social/link_tree.html",
+                        False,
+                    ),
+                    (
+                        self._get_theme_template_path(
+                            "templates/social/embeds.html.j2"
+                        ),
+                        "templates/social/embeds.html",
+                        False,
+                    ),
                 ]
             )
 

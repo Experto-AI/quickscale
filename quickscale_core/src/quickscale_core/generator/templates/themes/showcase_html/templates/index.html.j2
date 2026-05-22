@@ -169,7 +169,39 @@
             </article>
             {% endif %}
 
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS and 'quickscale_modules_analytics' not in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_social' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Social</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Managed social link-tree and embed feeds exposed through fixed public routes.</p>
+                <div class="module-card-actions">
+                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+                    <a class="module-link" href="/social/">Open link tree</a>
+                    {% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+                    <a class="module-link" href="/social/embeds/">Open embeds</a>
+                    {% else %}
+                    <a class="module-link" href="/social/">Open social</a>
+                    {% endif %}
+                </div>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Organizations</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Multi-tenant organization management with membership, invitations, and Solo/SaaS mode support.</p>
+                <div class="module-card-actions">
+                    <a class="module-link" href="/orgs/">Open organizations</a>
+                </div>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS and 'quickscale_modules_analytics' not in settings.INSTALLED_APPS and 'quickscale_modules_social' not in settings.INSTALLED_APPS and 'quickscale_modules_orgs' not in settings.INSTALLED_APPS %}
             <article class="module-card empty-state">
                 <div class="module-card-header">
                     <h3>No modules installed</h3>

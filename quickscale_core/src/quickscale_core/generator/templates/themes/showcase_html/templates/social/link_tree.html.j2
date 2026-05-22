@@ -1,0 +1,145 @@
+{%raw%}{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Social Link Tree | {% endraw %}{{ project_name }}{%raw%}{% endblock %}
+
+{% block content %}
+<div class="qs-social-shell">
+
+    {# --- Rail (sidebar) --- #}
+    <aside class="qs-social-rail">
+        <span class="qs-social-rail-eyebrow">Public social routing</span>
+        <h1>Social Link Tree</h1>
+
+        {% if social %}
+        <div class="qs-social-rail-group">
+            <dl class="qs-social-meta">
+                <div>
+                    <dt class="qs-social-rail-label">Public route</dt>
+                    <dd>{{ social.public_path }}</dd>
+                </div>
+                <div>
+                    <dt class="qs-social-rail-label">Visible links</dt>
+                    <dd>{{ social.total_links }}</dd>
+                </div>
+                <div>
+                    <dt class="qs-social-rail-label">Layout</dt>
+                    <dd>
+                        {% if social.layout_variant == 'cards' %}Cards layout
+                        {% elif social.layout_variant == 'grid' %}Grid layout
+                        {% else %}List layout{% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+        {% endif %}
+
+        <nav class="qs-social-nav" aria-label="Social surfaces">
+            <a class="qs-social-nav-link qs-social-nav-link-active" href="/social/" aria-current="page">Link Tree</a>
+            <a class="qs-social-nav-link" href="/social/embeds/">Embeds</a>
+            <a class="qs-social-nav-link" href="/">Home</a>
+        </nav>
+    </aside>
+
+    {# --- Main content --- #}
+    <div class="qs-social-stack">
+
+        {% if social is None %}
+        {# Social module not installed #}
+        <section class="qs-social-card qs-social-empty">
+            <h2>Social module not active</h2>
+            <p>
+                This page reserves <code>/social</code>, but the managed public link tree only renders
+                when the social module is installed and link-tree publishing is enabled.
+            </p>
+            <p>
+                Use <code>quickscale plan --add social</code> then <code>quickscale apply</code> to
+                enable the module.
+            </p>
+        </section>
+
+        {% elif social.status == 'error' %}
+        <section class="qs-social-card" style="border-color: #fecaca; background: #fef2f2;">
+            <h2>Social configuration needs attention</h2>
+            <p style="color: #991b1b;">{{ social.error }}</p>
+            <p style="color: #991b1b;">Fix the social settings and reload to restore the public link tree.</p>
+        </section>
+
+        {% elif social.status == 'disabled' %}
+        <section class="qs-social-card" style="border-color: #fde68a; background: #fffbeb;">
+            <h2>Link tree paused</h2>
+            <p style="color: #92400e;">
+                The route still resolves publicly, but link-tree publishing is currently disabled in the
+                managed social settings.
+            </p>
+            <p style="color: #92400e;">
+                When link-tree publishing is re-enabled, this route will immediately start rendering
+                curated links.
+            </p>
+        </section>
+
+        {% elif social.total_links == 0 %}
+        <section class="qs-social-card qs-social-empty" style="border-color: #bfdbfe; background: #eff6ff;">
+            <h2>Ready for the first link</h2>
+            <p>
+                The public route is live, but no curated destinations have been published yet.
+            </p>
+            <p>
+                Once the social module publishes its first link, this page will become a shareable
+                public directory.
+                The active layout is
+                <strong>{% if social.layout_variant == 'cards' %}cards{% elif social.layout_variant == 'grid' %}grid{% else %}list{% endif %}</strong>,
+                and the cap is <strong>{{ social.links_per_page }}</strong> links per page.
+            </p>
+            <p>
+                <a class="module-link" href="/admin/quickscale_modules_social/sociallink/add/">Add first link in admin</a>
+            </p>
+        </section>
+
+        {% else %}
+        {# Links are available — render grid or list #}
+        <section class="qs-social-card">
+            <div class="module-card-header" style="margin-bottom: 0.75rem;">
+                <span class="qs-social-pill">
+                    {% if social.layout_variant == 'cards' %}Cards layout
+                    {% elif social.layout_variant == 'grid' %}Grid layout
+                    {% else %}List layout{% endif %}
+                </span>
+                <span class="module-note" style="margin-left: auto;">{{ social.total_links }} published destination{{ social.total_links|pluralize }}</span>
+            </div>
+            <h2>Curated destinations</h2>
+            <p class="qs-social-copy">
+                Every link is rendered from the managed data, so the public page stays in sync without
+                any client-side JavaScript.
+            </p>
+        </section>
+
+        <div class="qs-social-grid">
+            {% for link in social.links %}
+            <article class="qs-social-card">
+                <div class="module-card-header">
+                    <span class="qs-social-pill">{{ link.provider_display_name }}</span>
+                    <span class="module-note" style="margin-left: auto;">#{{ link.display_order }}</span>
+                </div>
+                <h2>{{ link.title }}</h2>
+                {% if link.description %}
+                <p>{{ link.description }}</p>
+                {% endif %}
+                <ul class="qs-social-list" style="margin: 0.5rem 0; list-style: none; padding: 0;">
+                    <li style="font-size: 0.9rem; color: #475569; word-break: break-all;">
+                        <strong>URL:</strong> {{ link.url }}
+                    </li>
+                </ul>
+                <div class="module-card-actions">
+                    <a class="module-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">
+                        Visit ↗
+                    </a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}{%endraw%}

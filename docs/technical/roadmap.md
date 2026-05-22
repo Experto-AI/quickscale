@@ -103,7 +103,20 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Scope**: Cross-cutting theme correctness fixes discovered after v0.86.0.
 
-- Analytics module visibility gap: analytics was installed but never wired into `window.__QUICKSCALE__.modules`, the TypeScript registry, or the Dashboard card list in `showcase_react`; same gap in `showcase_html`
-- Other theme-parity regressions surfaced during the showcase demo review
+**showcase_react gaps (analytics)**
+- [ ] Wire analytics into `window.__QUICKSCALE__.modules` in the main shell template (`main.tsx.j2`)
+- [ ] Add analytics to the TypeScript module registry (`useModules` hook)
+- [ ] Add Analytics dashboard card to `Dashboard.tsx.j2`
+
+**showcase_html parity gaps**
+- [x] Add Social module card to `showcase_html/templates/index.html.j2` dashboard
+- [x] Add Orgs module card to `showcase_html/templates/index.html.j2` dashboard
+- [x] Fix empty-state condition to include `quickscale_modules_social` and `quickscale_modules_orgs`
+- [x] Add Social navigation section to `showcase_html/templates/components/navigation.html.j2`
+- [x] Add Orgs navigation section to `showcase_html/templates/components/navigation.html.j2`
+- [x] Create `showcase_html/templates/social/link_tree.html.j2` — server-rendered public link tree using `.qs-social-*` CSS classes
+- [x] Create `showcase_html/templates/social/embeds.html.j2` — server-rendered public embeds gallery
+- [x] Add `social_link_tree_view` and `social_embeds_view` to `generator/templates/project_name/views.py.j2` (showcase_html block)
+- [x] Add `/social/` and `/social/embeds/` URL patterns to `generator/templates/project_name/urls.py.j2` (showcase_html block)
 
 ---

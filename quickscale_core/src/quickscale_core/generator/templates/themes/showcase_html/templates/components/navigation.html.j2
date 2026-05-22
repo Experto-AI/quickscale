@@ -8,6 +8,18 @@
         <ul class="nav-menu">
             <li class="nav-home"><a href="/">Dashboard</a></li>
 
+            {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS %}
+            <li class="nav-section">
+                <span class="nav-section-title">Organizations</span>
+                <ul class="nav-submenu">
+                    <li><a href="/orgs/">All Organizations</a></li>
+                    {% if user.is_authenticated %}
+                    <li><a href="/orgs/new/">New Organization</a></li>
+                    {% endif %}
+                </ul>
+            </li>
+            {% endif %}
+
             {% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}
             <li class="nav-section">
                 <span class="nav-section-title">Authentication</span>
@@ -87,6 +99,23 @@
                 <span class="nav-section-title">Storage</span>
                 <ul class="nav-submenu">
                     <li><span class="nav-disabled-link">Configure S3/CDN in quickscale.yml and deployment environment variables; there is no admin config page.</span></li>
+                </ul>
+            </li>
+            {% endif %}
+
+            {% if 'quickscale_modules_social' in settings.INSTALLED_APPS %}
+            <li class="nav-section">
+                <span class="nav-section-title">Social</span>
+                <ul class="nav-submenu">
+                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+                    <li><a href="/social/">Link Tree</a></li>
+                    {% endif %}
+                    {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+                    <li><a href="/social/embeds/">Embeds</a></li>
+                    {% endif %}
+                    {% if not settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED and not settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+                    <li><span class="nav-disabled-link">Enable link tree or embeds in quickscale.yml to publish public social surfaces.</span></li>
+                    {% endif %}
                 </ul>
             </li>
             {% endif %}
