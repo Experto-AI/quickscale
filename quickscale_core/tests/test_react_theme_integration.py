@@ -241,6 +241,9 @@ class TestReactThemeGeneration:
         # Should have consistent filenames for Django static files
         assert "entryFileNames" in vite_config
         assert "assetFileNames" in vite_config
+        assert "manualChunks" in vite_config
+        assert "react-vendor" in vite_config
+        assert "analytics" in vite_config
         assert "'/_quickscale'" in vite_config
         assert "'/social'" in vite_config
 
@@ -325,6 +328,10 @@ class TestReactThemeGeneration:
         # Should build frontend with canonical package manager
         assert "pnpm" in dockerfile
         assert re.search(r"RUN\\s+npm\\s", dockerfile) is None
+        assert "pnpm-workspace.yaml" in dockerfile
+        assert dockerfile.index("pnpm-workspace.yaml") < dockerfile.index(
+            "RUN pnpm install"
+        )
 
         # Should copy built assets
         assert "staticfiles" in dockerfile or "static" in dockerfile
