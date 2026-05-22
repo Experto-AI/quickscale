@@ -1,321 +1,327 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Choose a billing plan</title>
-    <style>
-        :root {
-            color-scheme: light;
-            --page-bg: linear-gradient(180deg, #fff9ee 0%, #f4f7fb 100%);
-            --surface: rgba(255, 255, 255, 0.94);
-            --surface-strong: #ffffff;
-            --text: #132238;
-            --muted: #526173;
-            --border: rgba(19, 34, 56, 0.12);
-            --accent: #1d6f5f;
-            --accent-strong: #155347;
-            --accent-soft: rgba(29, 111, 95, 0.12);
-            --shadow: 0 24px 60px rgba(19, 34, 56, 0.12);
+{% extends "base.html" %}
+
+{% block title %}Choose a billing plan{% endblock %}
+
+{% block extra_css %}
+{{ block.super }}
+<style>
+    #billing-root {
+        --billing-surface: rgba(255, 255, 255, 0.94);
+        --billing-surface-strong: #ffffff;
+        --billing-text: #132238;
+        --billing-muted: #526173;
+        --billing-border: rgba(19, 34, 56, 0.12);
+        --billing-accent: #1d6f5f;
+        --billing-accent-strong: #155347;
+        --billing-accent-soft: rgba(29, 111, 95, 0.12);
+        --billing-shadow: 0 24px 60px rgba(19, 34, 56, 0.12);
+        color: var(--billing-text);
+    }
+
+    #billing-root,
+    #billing-root *,
+    #billing-root *::before,
+    #billing-root *::after {
+        box-sizing: border-box;
+    }
+
+    #billing-root a {
+        color: inherit;
+    }
+
+    #billing-root .billing-pricing {
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3.25rem 0 4rem;
+    }
+
+    #billing-root .billing-pricing__hero {
+        display: grid;
+        gap: 1rem;
+        padding: clamp(1.5rem, 3vw, 2.5rem);
+        margin-bottom: 2rem;
+        border: 1px solid var(--billing-border);
+        border-radius: 1.75rem;
+        background: linear-gradient(
+            135deg,
+            rgba(255, 249, 238, 0.96) 0%,
+            rgba(244, 247, 251, 0.95) 100%
+        );
+        box-shadow: var(--billing-shadow);
+    }
+
+    #billing-root .billing-pricing__eyebrow {
+        margin: 0;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--billing-accent);
+    }
+
+    #billing-root .billing-pricing__title {
+        margin: 0;
+        font-size: clamp(2.3rem, 4vw, 4rem);
+        line-height: 1;
+    }
+
+    #billing-root .billing-pricing__copy,
+    #billing-root .billing-pricing__note,
+    #billing-root .billing-pricing__footer-copy,
+    #billing-root .billing-pricing__plan-meta,
+    #billing-root .billing-pricing__plan-copy,
+    #billing-root .billing-pricing__empty-state p {
+        margin: 0;
+        color: var(--billing-muted);
+        line-height: 1.6;
+    }
+
+    #billing-root .billing-pricing__copy {
+        max-width: 44rem;
+        font-size: 1.05rem;
+        line-height: 1.7;
+    }
+
+    #billing-root .billing-pricing__note {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 0.55rem 0.9rem;
+        border-radius: 999px;
+        background: var(--billing-accent-soft);
+        color: var(--billing-accent-strong);
+        font-weight: 600;
+    }
+
+    #billing-root .billing-pricing__groups {
+        display: grid;
+        gap: 1.75rem;
+    }
+
+    #billing-root .billing-pricing__group {
+        padding: 1.6rem;
+        border: 1px solid var(--billing-border);
+        border-radius: 1.5rem;
+        background: var(--billing-surface);
+        box-shadow: var(--billing-shadow);
+        backdrop-filter: blur(8px);
+    }
+
+    #billing-root .billing-pricing__group-header {
+        display: grid;
+        gap: 0.4rem;
+        margin-bottom: 1.4rem;
+    }
+
+    #billing-root .billing-pricing__group-title,
+    #billing-root .billing-pricing__empty-state h2 {
+        margin: 0;
+        font-size: 1.5rem;
+    }
+
+    #billing-root .billing-pricing__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+
+    #billing-root .billing-pricing__card,
+    #billing-root .billing-pricing__empty-state {
+        display: grid;
+        gap: 0.85rem;
+        padding: 1.35rem;
+        border-radius: 1.2rem;
+        background: var(--billing-surface-strong);
+        border: 1px solid rgba(19, 34, 56, 0.08);
+    }
+
+    #billing-root .billing-pricing__card h3 {
+        margin: 0;
+        font-size: 1.25rem;
+    }
+
+    #billing-root .billing-pricing__price {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+    }
+
+    #billing-root .billing-pricing__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 0.25rem;
+    }
+
+    #billing-root .billing-pricing__button {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 2.9rem;
+        padding: 0.85rem 1.2rem;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 700;
+        transition: background-color 0.2s ease;
+    }
+
+    #billing-root .billing-pricing__button--primary {
+        background: var(--billing-accent);
+        color: #ffffff;
+    }
+
+    #billing-root .billing-pricing__button--primary:hover,
+    #billing-root .billing-pricing__button--primary:focus-visible {
+        background: var(--billing-accent-strong);
+    }
+
+    #billing-root .billing-pricing__footer {
+        margin-top: 1.75rem;
+        padding: 1.2rem 1.35rem;
+        border-radius: 1.2rem;
+        border: 1px solid var(--billing-border);
+        background: rgba(255, 255, 255, 0.88);
+    }
+
+    #billing-root .billing-pricing__footer a {
+        color: var(--billing-accent-strong);
+        font-weight: 700;
+    }
+
+    @media (max-width: 640px) {
+        #billing-root .billing-pricing {
+            width: min(100% - 1.25rem, 1120px);
+            padding-top: 2.25rem;
         }
 
-        * {
-            box-sizing: border-box;
+        #billing-root .billing-pricing__hero,
+        #billing-root .billing-pricing__group,
+        #billing-root .billing-pricing__empty-state {
+            padding: 1.15rem;
         }
+    }
+</style>
+{% endblock %}
 
-        body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: "Avenir Next", "Helvetica Neue", sans-serif;
-            background: var(--page-bg);
-            color: var(--text);
-        }
+{% block content %}
+<div id="billing-root" data-view="pricing">
+    <main class="billing-pricing">
+        <section class="billing-pricing__hero">
+            <p class="billing-pricing__eyebrow">QuickScale billing</p>
+            <h1 class="billing-pricing__title">Choose a billing plan</h1>
+            <p class="billing-pricing__copy">
+                Compare one-time credit packs and recurring subscriptions.
+                Billing stays on module-owned Django pages, so this catalog
+                works even before a React layer is added.
+            </p>
+            <p class="billing-pricing__note">Pricing remains public. Checkout starts after sign-in.</p>
+        </section>
 
-        a {
-            color: inherit;
-        }
-
-        .page-shell {
-            width: min(1120px, calc(100% - 2rem));
-            margin: 0 auto;
-            padding: 3.5rem 0 4rem;
-        }
-
-        .hero {
-            display: grid;
-            gap: 1rem;
-            margin-bottom: 2.5rem;
-        }
-
-        .eyebrow {
-            margin: 0;
-            font-size: 0.82rem;
-            font-weight: 700;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: var(--accent);
-        }
-
-        .hero h1 {
-            margin: 0;
-            font-size: clamp(2.3rem, 4vw, 4rem);
-            line-height: 1;
-        }
-
-        .hero p {
-            margin: 0;
-            max-width: 44rem;
-            font-size: 1.05rem;
-            line-height: 1.7;
-            color: var(--muted);
-        }
-
-        .hero-note {
-            display: inline-flex;
-            align-items: center;
-            width: fit-content;
-            padding: 0.55rem 0.9rem;
-            border-radius: 999px;
-            background: var(--accent-soft);
-            color: var(--accent-strong);
-            font-weight: 600;
-        }
-
-        .plan-groups {
-            display: grid;
-            gap: 1.75rem;
-        }
-
-        .plan-group {
-            padding: 1.6rem;
-            border: 1px solid var(--border);
-            border-radius: 1.5rem;
-            background: var(--surface);
-            box-shadow: var(--shadow);
-            backdrop-filter: blur(8px);
-        }
-
-        .plan-group-header {
-            display: grid;
-            gap: 0.4rem;
-            margin-bottom: 1.4rem;
-        }
-
-        .plan-group-header h2 {
-            margin: 0;
-            font-size: 1.5rem;
-        }
-
-        .plan-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-        }
-
-        .plan-card,
-        .empty-state {
-            display: grid;
-            gap: 0.85rem;
-            padding: 1.35rem;
-            border-radius: 1.2rem;
-            background: var(--surface-strong);
-            border: 1px solid rgba(19, 34, 56, 0.08);
-        }
-
-        .plan-card h3,
-        .empty-state h2 {
-            margin: 0;
-            font-size: 1.25rem;
-        }
-
-        .plan-meta,
-        .plan-copy,
-        .empty-state p,
-        .footer-copy {
-            margin: 0;
-            color: var(--muted);
-            line-height: 1.6;
-        }
-
-        .plan-price {
-            margin: 0;
-            font-size: 2rem;
-            font-weight: 700;
-            letter-spacing: -0.04em;
-        }
-
-        .button-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            margin-top: 0.25rem;
-        }
-
-        .button {
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 2.9rem;
-            padding: 0.85rem 1.2rem;
-            border-radius: 999px;
-            text-decoration: none;
-            font-weight: 700;
-        }
-
-        .button-primary {
-            background: var(--accent);
-            color: #ffffff;
-        }
-
-        .button-primary:hover,
-        .button-primary:focus-visible {
-            background: var(--accent-strong);
-        }
-
-        .footer-card {
-            margin-top: 1.75rem;
-            padding: 1.2rem 1.35rem;
-            border-radius: 1.2rem;
-            border: 1px solid var(--border);
-            background: rgba(255, 255, 255, 0.88);
-        }
-
-        .footer-card a {
-            color: var(--accent-strong);
-            font-weight: 700;
-        }
-
-        @media (max-width: 640px) {
-            .page-shell {
-                width: min(100% - 1.25rem, 1120px);
-                padding-top: 2.25rem;
-            }
-
-            .plan-group {
-                padding: 1.15rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <main class="page-shell">
-        <div id="billing-root" data-view="pricing">
-            <section class="hero">
-                <p class="eyebrow">QuickScale billing</p>
-                <h1>Choose a billing plan</h1>
-                <p>
-                    Compare one-time credit packs and recurring subscriptions.
-                    Billing stays on module-owned Django pages, so this catalog
-                    works even before a React layer is added.
-                </p>
-                <p class="hero-note">Pricing remains public. Checkout starts after sign-in.</p>
-            </section>
-
-            {% if plans %}
-                {% regroup plans by billing_interval as plan_groups %}
-                <div class="plan-groups">
-                    {% for plan_group in plan_groups %}
-                        <section class="plan-group" data-billing-interval="{{ plan_group.grouper }}">
-                            <div class="plan-group-header">
-                                <p class="eyebrow">{{ plan_group.grouper|cut:"_" }}</p>
-                                <h2>
-                                    {% if plan_group.grouper == "monthly" %}
-                                        Monthly plans
-                                    {% elif plan_group.grouper == "yearly" %}
-                                        Yearly plans
-                                    {% else %}
-                                        One-time credits
-                                    {% endif %}
-                                </h2>
-                            </div>
-                            <div class="plan-grid">
-                                {% for plan in plan_group.list %}
-                                    <article class="plan-card" data-plan-slug="{{ plan.slug }}">
-                                        <p class="plan-meta">{{ plan.get_billing_interval_display }}</p>
-                                        <h3>{{ plan.name }}</h3>
-                                        <p class="plan-price">{{ plan.price_display }}</p>
-                                        <p class="plan-copy">
-                                            {{ plan.credits_per_period }} credits
-                                            {% if plan.billing_interval == "one_time" %}
-                                                on purchase
-                                            {% else %}
-                                                per {{ plan.get_billing_interval_display|lower }}
-                                            {% endif %}
-                                        </p>
-                                        <div class="button-row">
-                                            <a class="button button-primary" href="{% if viewer_is_authenticated %}{{ billing_url }}{% else %}{{ pricing_login_url }}{% endif %}">
-                                                {% if viewer_is_authenticated %}
-                                                    {% if billing_destination_kind == "dashboard" %}
-                                                        Go to dashboard &rarr;
-                                                    {% elif billing_destination_kind == "organization-selection" %}
-                                                        Choose organization &rarr;
-                                                    {% elif billing_destination_kind == "organization-create" %}
-                                                        Create organization &rarr;
-                                                    {% else %}
-                                                        View pricing &rarr;
-                                                    {% endif %}
-                                                {% else %}
-                                                    Sign in to purchase
-                                                {% endif %}
-                                            </a>
-                                        </div>
-                                    </article>
-                                {% endfor %}
-                            </div>
-                        </section>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <section class="empty-state">
-                    <p class="eyebrow">Catalog update in progress</p>
-                    <h2>No billing plans are active right now.</h2>
-                    <p>
-                        Check back soon for new credit packs and subscriptions,
-                        or sign in to review your existing billing details.
-                    </p>
-                    <div class="button-row">
-                        <a class="button button-primary" href="{% if viewer_is_authenticated %}{{ billing_url }}{% else %}{{ pricing_login_url }}{% endif %}">
-                            {% if viewer_is_authenticated %}
-                                {% if billing_destination_kind == "dashboard" %}
-                                    Go to dashboard &rarr;
-                                {% elif billing_destination_kind == "organization-selection" %}
-                                    Choose organization &rarr;
-                                {% elif billing_destination_kind == "organization-create" %}
-                                    Create organization &rarr;
+        {% if plans %}
+            {% regroup plans by billing_interval as plan_groups %}
+            <div class="billing-pricing__groups">
+                {% for plan_group in plan_groups %}
+                    <section class="billing-pricing__group" data-billing-interval="{{ plan_group.grouper }}">
+                        <div class="billing-pricing__group-header">
+                            <p class="billing-pricing__eyebrow">{{ plan_group.grouper|cut:"_" }}</p>
+                            <h2 class="billing-pricing__group-title">
+                                {% if plan_group.grouper == "monthly" %}
+                                    Monthly plans
+                                {% elif plan_group.grouper == "yearly" %}
+                                    Yearly plans
                                 {% else %}
-                                    View pricing &rarr;
+                                    One-time credits
                                 {% endif %}
-                            {% else %}
-                                Sign in to continue
-                            {% endif %}
-                        </a>
-                    </div>
-                </section>
-            {% endif %}
-
-            <footer class="footer-card">
-                <p class="footer-copy">
-                    {% if viewer_is_authenticated %}
-                        {% if billing_destination_kind == "dashboard" %}
-                            Already managing credits or subscriptions?
-                            <a href="{{ billing_url }}">Open your billing dashboard.</a>
-                        {% elif billing_destination_kind == "organization-selection" %}
-                            Billing access requires choosing an organization first.
-                            <a href="{{ billing_url }}">Choose your organization.</a>
-                        {% elif billing_destination_kind == "organization-create" %}
-                            Create an organization before starting billing.
-                            <a href="{{ billing_url }}">Create your organization.</a>
-                        {% else %}
-                            Billing changes require an organization owner.
-                            <a href="{{ billing_url }}">Review pricing for your organization.</a>
-                        {% endif %}
-                    {% else %}
-                        Already have an account?
-                        <a href="{{ pricing_login_url }}">Sign in to continue from this pricing page.</a>
-                    {% endif %}
+                            </h2>
+                        </div>
+                        <div class="billing-pricing__grid">
+                            {% for plan in plan_group.list %}
+                                <article class="billing-pricing__card" data-plan-slug="{{ plan.slug }}">
+                                    <p class="billing-pricing__plan-meta">{{ plan.get_billing_interval_display }}</p>
+                                    <h3>{{ plan.name }}</h3>
+                                    <p class="billing-pricing__price">{{ plan.price_display }}</p>
+                                    <p class="billing-pricing__plan-copy">
+                                        {{ plan.credits_per_period }} credits
+                                        {% if plan.billing_interval == "one_time" %}
+                                            on purchase
+                                        {% else %}
+                                            per {{ plan.get_billing_interval_display|lower }}
+                                        {% endif %}
+                                    </p>
+                                    <div class="billing-pricing__actions">
+                                        <a class="billing-pricing__button billing-pricing__button--primary" href="{% if viewer_is_authenticated %}{{ billing_url }}{% else %}{{ pricing_login_url }}{% endif %}">
+                                            {% if viewer_is_authenticated %}
+                                                {% if billing_destination_kind == "dashboard" %}
+                                                    Go to dashboard &rarr;
+                                                {% elif billing_destination_kind == "organization-selection" %}
+                                                    Choose organization &rarr;
+                                                {% elif billing_destination_kind == "organization-create" %}
+                                                    Create organization &rarr;
+                                                {% else %}
+                                                    View pricing &rarr;
+                                                {% endif %}
+                                            {% else %}
+                                                Sign in to purchase
+                                            {% endif %}
+                                        </a>
+                                    </div>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endfor %}
+            </div>
+        {% else %}
+            <section class="billing-pricing__empty-state">
+                <p class="billing-pricing__eyebrow">Catalog update in progress</p>
+                <h2>No billing plans are active right now.</h2>
+                <p>
+                    Check back soon for new credit packs and subscriptions,
+                    or sign in to review your existing billing details.
                 </p>
-            </footer>
-        </div>
+                <div class="billing-pricing__actions">
+                    <a class="billing-pricing__button billing-pricing__button--primary" href="{% if viewer_is_authenticated %}{{ billing_url }}{% else %}{{ pricing_login_url }}{% endif %}">
+                        {% if viewer_is_authenticated %}
+                            {% if billing_destination_kind == "dashboard" %}
+                                Go to dashboard &rarr;
+                            {% elif billing_destination_kind == "organization-selection" %}
+                                Choose organization &rarr;
+                            {% elif billing_destination_kind == "organization-create" %}
+                                Create organization &rarr;
+                            {% else %}
+                                View pricing &rarr;
+                            {% endif %}
+                        {% else %}
+                            Sign in to continue
+                        {% endif %}
+                    </a>
+                </div>
+            </section>
+        {% endif %}
+
+        <footer class="billing-pricing__footer">
+            <p class="billing-pricing__footer-copy">
+                {% if viewer_is_authenticated %}
+                    {% if billing_destination_kind == "dashboard" %}
+                        Already managing credits or subscriptions?
+                        <a href="{{ billing_url }}">Open your billing dashboard.</a>
+                    {% elif billing_destination_kind == "organization-selection" %}
+                        Billing access requires choosing an organization first.
+                        <a href="{{ billing_url }}">Choose your organization.</a>
+                    {% elif billing_destination_kind == "organization-create" %}
+                        Create an organization before starting billing.
+                        <a href="{{ billing_url }}">Create your organization.</a>
+                    {% else %}
+                        Billing changes require an organization owner.
+                        <a href="{{ billing_url }}">Review pricing for your organization.</a>
+                    {% endif %}
+                {% else %}
+                    Already have an account?
+                    <a href="{{ pricing_login_url }}">Sign in to continue from this pricing page.</a>
+                {% endif %}
+            </p>
+        </footer>
     </main>
-</body>
-</html>
+</div>
+{% endblock %}
