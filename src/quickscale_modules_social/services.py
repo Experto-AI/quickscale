@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from django.core.cache import cache
+from django.db.utils import OperationalError, ProgrammingError
 
 from quickscale_modules_social.contracts import (
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
@@ -29,6 +30,45 @@ from quickscale_modules_social.contracts import (
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 _CACHE_MISS = object()
+
+
+def _database_error_messages(exc: BaseException) -> tuple[str, ...]:
+    messages: list[str] = []
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        message = str(current).strip()
+        if message:
+            messages.append(message.lower())
+
+        next_exc = current.__cause__
+        if not isinstance(next_exc, BaseException):
+            next_exc = (
+                current.__context__
+                if isinstance(current.__context__, BaseException)
+                else None
+            )
+        current = next_exc
+
+    return tuple(messages)
+
+
+def _is_missing_social_table_error(exc: BaseException, *, table_name: str) -> bool:
+    if not isinstance(exc, (OperationalError, ProgrammingError)):
+        return False
+
+    normalized_table_name = table_name.lower()
+    for message in _database_error_messages(exc):
+        if (
+            f'relation "{normalized_table_name}" does not exist' in message
+            or f"relation '{normalized_table_name}' does not exist" in message
+            or f"no such table: {normalized_table_name}" in message
+            or f"no such table: main.{normalized_table_name}" in message
+        ):
+            return True
+
+    return False
 
 
 @dataclass(frozen=True)
@@ -292,14 +332,21 @@ def list_published_social_links(
         None if cached_payload is _CACHE_MISS else _load_link_records(cached_payload)
     )
     if records is None:
-        records = tuple(
-            SocialLinkRecord.from_model(link)
-            for link in SocialLink.objects.filter(is_published=True).order_by(
-                "display_order",
-                "title",
-                "pk",
+        try:
+            records = tuple(
+                SocialLinkRecord.from_model(link)
+                for link in SocialLink.objects.filter(is_published=True).order_by(
+                    "display_order",
+                    "title",
+                    "pk",
+                )
             )
-        )
+        except (OperationalError, ProgrammingError) as exc:
+            if _is_missing_social_table_error(
+                exc, table_name=SocialLink._meta.db_table
+            ):
+                return ()
+            raise
         cache.set(
             SOCIAL_LINKS_CACHE_KEY,
             _serialize_records(records),
@@ -327,14 +374,22 @@ def list_published_social_embeds(
         None if cached_payload is _CACHE_MISS else _load_embed_records(cached_payload)
     )
     if records is None:
-        records = tuple(
-            SocialEmbedRecord.from_model(embed)
-            for embed in SocialEmbed.objects.filter(is_published=True).order_by(
-                "display_order",
-                "title",
-                "pk",
+        try:
+            records = tuple(
+                SocialEmbedRecord.from_model(embed)
+                for embed in SocialEmbed.objects.filter(is_published=True).order_by(
+                    "display_order",
+                    "title",
+                    "pk",
+                )
             )
-        )
+        except (OperationalError, ProgrammingError) as exc:
+            if _is_missing_social_table_error(
+                exc,
+                table_name=SocialEmbed._meta.db_table,
+            ):
+                return ()
+            raise
         cache.set(
             SOCIAL_EMBEDS_CACHE_KEY,
             _serialize_records(records),
