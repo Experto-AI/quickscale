@@ -55,7 +55,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.84.0 | ✅ Released | Backups hardening release | Backup lifecycle hardening and runtime/tooling refresh archived in the release note and changelog |
 | v0.85.0 | ✅ Released | Billing module | Stripe-backed one-time credit purchases and recurring subscriptions, credits-first Django ledger, planner/apply readiness, module-owned pricing and dashboard pages, and starter-theme billing links; archived in release note and changelog |
 | v0.86.0 | ✅ Released | Organizations module | Multi-tenancy with Solo/SaaS runtime modes, org-scoped billing, billing wiring fix + wiring regression guard, and self-service onboarding; archived in release note and changelog |
-| v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance after the billing and organizations milestones |
+| v0.87.0 | 📋 Planned | Hardening release | Cross-cutting theme correctness fixes: analytics visibility gap closed in showcase_react and showcase_html, and other theme-parity regressions |
 
 **Legend:**
 - ✅ = Completed, released, or internally baselined
@@ -64,7 +64,7 @@ This table is the single milestone summary for shipped history and the active fo
 
 **Status:**
 - **Current release:** v0.86.0 is the published release
-- **Next planned milestone:** v0.87.0+ HTML theme polish
+- **Next planned milestone:** v0.87.0 Hardening release
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.86.0 ✅ Complete - auth, billing, organizations modules shipped on top of the notifications foundation
 
@@ -97,14 +97,13 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ---
 
-### v0.87.0+: HTML Secondary Theme Polish (Optional)
+### v0.87.0: Hardening Release
 
-**Status**: 📋 Planned (low priority, after SaaS Feature Parity)
+**Status**: 📋 Planned
 
-**Rationale**: React theme is now the default (v0.74.0). The HTML theme remains the lightweight secondary option for users preferring a simpler server-rendered stack. Any blocking HTML contract corrections discovered in v0.83.0 belong to the hardening release; this later milestone is for optional polish after the shipped contract is stable again.
+**Scope**: Cross-cutting theme correctness fixes discovered after v0.86.0.
 
-**See**: [user_manual.md](../technical/user_manual.md) for current theme architecture and user-facing theme selection guidance.
-
-**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation guidance covering the supported React default and HTML secondary theme set.
+- Analytics module visibility gap: analytics was installed but never wired into `window.__QUICKSCALE__.modules`, the TypeScript registry, or the Dashboard card list in `showcase_react`; same gap in `showcase_html`
+- Other theme-parity regressions surfaced during the showcase demo review
 
 ---

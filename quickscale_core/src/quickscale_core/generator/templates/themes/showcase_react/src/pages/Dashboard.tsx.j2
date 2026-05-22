@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
 import {
   Archive,
+  BarChart2,
   Bell,
   BookOpen,
   Briefcase,
@@ -116,6 +117,13 @@ const buildModuleInfo = (
     href: '/admin/quickscale_modules_notifications/',
     reloadDocument: true,
     actionLabel: 'Open admin',
+  },
+  {
+    key: 'analytics',
+    name: 'Analytics',
+    icon: BarChart2,
+    description: 'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
+    href: '/settings',
   },
 ]
 

@@ -158,7 +158,18 @@
             </article>
             {% endif %}
 
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_analytics' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Analytics</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.</p>
+                <p class="module-note">Analytics are configured via environment variables (POSTHOG_API_KEY). There is no Django Admin configuration surface for analytics secrets.</p>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS and 'quickscale_modules_analytics' not in settings.INSTALLED_APPS %}
             <article class="module-card empty-state">
                 <div class="module-card-header">
                     <h3>No modules installed</h3>
