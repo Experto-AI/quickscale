@@ -8,6 +8,7 @@ from django.urls import include, path
 from tests.urls import (
     AdminOnlyMixinView,
     accounts_profile_view,
+    api_org_context_view,
     admin_only_view,
     current_org_id_view,
     feature_view,
@@ -22,6 +23,11 @@ urlpatterns = [
     path("", home_view, name="home"),
     path("healthcheck/", healthcheck_view, name="healthcheck"),
     path("accounts/profile/", accounts_profile_view, name="accounts-profile"),
+    path(
+        "api/orgs/<slug:org_slug>/context/",
+        api_org_context_view,
+        name="api-org-context",
+    ),
     path(
         "orgs/<slug:org_slug>/current-org-id/",
         current_org_id_view,
