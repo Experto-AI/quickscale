@@ -51,6 +51,20 @@ class TestTemplateCSSLoading:
         assert response.status_code == 200
         assert b"quickscale_modules_auth/css/auth.css" in response.content
 
+    def test_login_page_uses_shared_shell_and_login_specific_structure(
+        self, anonymous_client
+    ):
+        """Test login page stays inside the project shell while using login-specific markup."""
+        response = anonymous_client.get(reverse("account_login"))
+        assert response.status_code == 200
+
+        content = response.content.decode("utf-8")
+        assert 'class="site-nav"' in content
+        assert "quickscale_modules_auth/css/auth.css" in content
+        assert 'data-auth-view="login"' in content
+        assert 'class="auth-login"' in content
+        assert "auth-form-container--login" in content
+
     def test_css_loading_order_in_module_templates(self, authenticated_client):
         """Test that main CSS loads before auth CSS in our module templates"""
         response = authenticated_client.get(reverse("quickscale_auth:profile"))

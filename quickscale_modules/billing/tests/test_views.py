@@ -566,6 +566,7 @@ def test_pricing_page_view_is_public_and_render(client: Client) -> None:
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
+    assert 'class="site-nav"' in content
     assert "Choose a billing plan" in content
     assert 'id="billing-root"' in content
     assert 'data-view="pricing"' in content

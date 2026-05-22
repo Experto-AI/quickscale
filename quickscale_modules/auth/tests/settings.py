@@ -11,9 +11,9 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "quickscale_modules_auth",
     "allauth",
     "allauth.account",
-    "quickscale_modules_auth",
 ]
 
 DATABASES = {
