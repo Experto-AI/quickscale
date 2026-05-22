@@ -55,7 +55,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.84.0 | ✅ Released | Backups hardening release | Backup lifecycle hardening and runtime/tooling refresh archived in the release note and changelog |
 | v0.85.0 | ✅ Released | Billing module | Stripe-backed one-time credit purchases and recurring subscriptions, credits-first Django ledger, planner/apply readiness, module-owned pricing and dashboard pages, and starter-theme billing links; archived in release note and changelog |
 | v0.86.0 | ✅ Released | Organizations module | Multi-tenancy with Solo/SaaS runtime modes, org-scoped billing, billing wiring fix + wiring regression guard, and self-service onboarding; archived in release note and changelog |
-| v0.87.0 | 📋 Planned | Hardening release | Cross-cutting theme correctness fixes: analytics visibility gap closed in showcase_react and showcase_html, and other theme-parity regressions |
+| v0.87.0 | 🟡 In progress | Hardening release | Cross-cutting theme hardening across the refreshed showcase_html shell/navigation/dashboard and remaining showcase_react analytics parity work |
 
 **Legend:**
 - ✅ = Completed, released, or internally baselined
@@ -64,7 +64,7 @@ This table is the single milestone summary for shipped history and the active fo
 
 **Status:**
 - **Current release:** v0.86.0 is the published release
-- **Next planned milestone:** v0.87.0 Hardening release
+- **Active milestone:** v0.87.0 Hardening release
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.86.0 ✅ Complete - auth, billing, organizations modules shipped on top of the notifications foundation
 
@@ -99,7 +99,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ### v0.87.0: Hardening Release
 
-**Status**: 📋 Planned
+**Status**: 🟡 In progress
 
 **Scope**: Cross-cutting theme correctness fixes discovered after v0.86.0.
 
@@ -108,7 +108,11 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [ ] Add analytics to the TypeScript module registry (`useModules` hook)
 - [ ] Add Analytics dashboard card to `Dashboard.tsx.j2`
 
-**showcase_html parity gaps**
+**showcase_html hardening**
+- [x] Refresh `showcase_html/templates/base.html.j2` and `showcase_html/static/css/style.css.j2` toward the lighter `showcase_react` shell while remaining server-rendered and JS-free
+- [x] Simplify `showcase_html/templates/components/navigation.html.j2` to a topbar-style nav while keeping auth-aware links and starter-safe module entry points
+- [x] Refresh `showcase_html/templates/index.html.j2` so the home/dashboard hierarchy aligns more closely with the `showcase_react` dashboard structure
+- [x] Update narrow generator assertions for the refreshed HTML starter shell
 - [x] Add Social module card to `showcase_html/templates/index.html.j2` dashboard
 - [x] Add Orgs module card to `showcase_html/templates/index.html.j2` dashboard
 - [x] Fix empty-state condition to include `quickscale_modules_social` and `quickscale_modules_orgs`

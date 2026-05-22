@@ -1,10 +1,14 @@
+import types
 from pathlib import Path
+
+from django.template import Context, Engine
 
 from quickscale_core.generator.generator import ProjectGenerator
 
 
 BILLING_GUARD = "{% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}"
 STORAGE_GUARD = "{% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}"
+SOCIAL_GUARD = "{% if 'quickscale_modules_social' in settings.INSTALLED_APPS %}"
 AUTH_GUARD = "{% if user.is_authenticated %}"
 ELSE_GUARD = "{% else %}"
 ENDIF_GUARD = "{% endif %}"
@@ -20,11 +24,42 @@ def _billing_block(rendered_template: str) -> str:
     return _slice_between(rendered_template, BILLING_GUARD, STORAGE_GUARD)
 
 
+def _billing_navigation_block(rendered_template: str) -> str:
+    return _slice_between(rendered_template, BILLING_GUARD, SOCIAL_GUARD)
+
+
 def _split_auth_branches(scoped_block: str) -> tuple[str, str, str]:
     prefix, auth_remainder = scoped_block.split(AUTH_GUARD, 1)
     authenticated_branch, remaining = auth_remainder.split(ELSE_GUARD, 1)
     unauthenticated_branch, _ = remaining.split(ENDIF_GUARD, 1)
     return prefix, authenticated_branch, unauthenticated_branch
+
+
+def _render_navigation(
+    templates_dir: Path,
+    *,
+    project_name: str,
+    installed_apps: list[str],
+    link_tree_enabled: bool,
+    embeds_enabled: bool,
+) -> str:
+    engine = Engine(dirs=[str(templates_dir)])
+    return engine.get_template("components/navigation.html").render(
+        Context(
+            {
+                "project_name": project_name,
+                "settings": types.SimpleNamespace(
+                    INSTALLED_APPS=installed_apps,
+                    QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=link_tree_enabled,
+                    QUICKSCALE_SOCIAL_EMBEDS_ENABLED=embeds_enabled,
+                ),
+                "user": types.SimpleNamespace(
+                    is_authenticated=False,
+                    is_staff=False,
+                ),
+            }
+        )
+    )
 
 
 class TestHtmlThemeIntegration:
@@ -59,13 +94,20 @@ class TestHtmlThemeIntegration:
         assert "{{ modules.billing.url }}" in index_html
         assert "Teams" not in index_html
 
-        assert '<span class="nav-section-title">Social</span>' in navigation
-        assert '<span class="nav-section-title">Billing</span>' in navigation
+        assert 'class="qs-topbar"' in navigation
+        assert 'class="qs-topbar-brand"' in navigation
+        assert "Showcase HTML starter" in navigation
+        assert ">App</a>" in navigation
+        assert ">Organizations</a>" in navigation
         assert "/billing/pricing/" in navigation
         assert "{{ modules.billing.url }}" in navigation
-        assert '<span class="nav-section-title">Teams</span>' not in navigation
+        assert "{% url 'account_login' %}" in navigation
+        assert "{% url 'account_signup' %}" in navigation
+        assert "{% url 'account_logout' %}" in navigation
         assert "{% if user.is_staff %}" in navigation
-        assert "CRM dashboard access is limited to staff users." in navigation
+        assert ">CRM</a>" in navigation
+        assert 'class="qs-topbar-status"' in navigation
+        assert ">Docs</a>" in navigation
         assert "Notifications" not in navigation
         assert "Backups" not in navigation
 
@@ -122,33 +164,24 @@ class TestHtmlThemeIntegration:
         navigation = (
             output_path / "templates" / "components" / "navigation.html"
         ).read_text()
-        billing_block = _billing_block(navigation)
-        billing_submenu = _slice_between(
-            billing_block,
-            '<ul class="nav-submenu">',
-            "</ul>",
-        )
-        submenu_prefix, authenticated_items, unauthenticated_items = (
-            _split_auth_branches(billing_submenu)
+        billing_block = _billing_navigation_block(navigation)
+        billing_prefix, authenticated_items, unauthenticated_items = (
+            _split_auth_branches(billing_block)
         )
 
         assert BILLING_GUARD in navigation
-        assert '<span class="nav-section-title">Billing</span>' in billing_block
-        assert '<li><a href="/billing/pricing/">Pricing</a></li>' in submenu_prefix
-        assert billing_submenu.count(AUTH_GUARD) == 1
-        assert billing_submenu.count(ELSE_GUARD) == 1
-        assert "/billing/dashboard/" not in submenu_prefix
-        assert "nav-disabled-link" not in submenu_prefix
+        assert billing_block.count(AUTH_GUARD) == 1
+        assert billing_block.count(ELSE_GUARD) == 1
+        assert "/billing/dashboard/" not in billing_prefix
         assert (
-            '<li><a href="{{ modules.billing.url }}">Billing</a></li>'
+            '<a href="{{ modules.billing.url }}" class="qs-topbar-link">Billing</a>'
             in authenticated_items
         )
         assert "/billing/pricing/" not in authenticated_items
         assert "/billing/dashboard/" not in authenticated_items
-        assert "nav-disabled-link" not in authenticated_items
         assert (
-            '<li><span class="nav-disabled-link">Sign in to open the billing '
-            "dashboard.</span></li>" in unauthenticated_items
+            '<a href="/billing/pricing/" class="qs-topbar-link">Pricing</a>'
+            in unauthenticated_items
         )
         assert "/billing/dashboard/" not in unauthenticated_items
         assert '<span class="nav-section-title">Teams</span>' not in navigation
@@ -176,7 +209,7 @@ class TestHtmlThemeIntegration:
 
         assert navigation.count(BILLING_GUARD) == 1
         nav_prefix, nav_remainder = navigation.split(BILLING_GUARD, 1)
-        nav_billing_block, nav_suffix = nav_remainder.split(STORAGE_GUARD, 1)
+        nav_billing_block, nav_suffix = nav_remainder.split(SOCIAL_GUARD, 1)
         assert "/billing/" not in nav_prefix
         assert "/billing/" not in nav_suffix
         assert nav_billing_block.count("/billing/pricing/") == 1
@@ -218,6 +251,38 @@ class TestHtmlThemeIntegration:
         assert embeds_template.exists()
         assert "social_link_tree_view" in urls_py
         assert "social_embeds_view" in urls_py
+
+    def test_html_theme_navigation_renders_both_public_social_links_by_default(
+        self, tmp_path: Path
+    ) -> None:
+        """showcase_html should render both public social links when both flags are enabled."""
+        generator = ProjectGenerator(theme="showcase_html")
+        output_path = tmp_path / "html_social_navigation"
+        generator.generate("html_social_navigation", output_path)
+
+        rendered_navigation = _render_navigation(
+            output_path / "templates",
+            project_name=output_path.name,
+            installed_apps=["quickscale_modules_social"],
+            link_tree_enabled=True,
+            embeds_enabled=True,
+        )
+        social_link = '<a href="/social/" class="qs-topbar-link">Social</a>'
+        embeds_link = '<a href="/social/embeds/" class="qs-topbar-link">Embeds</a>'
+
+        assert (
+            "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}"
+            not in rendered_navigation
+        )
+        assert (
+            "{% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
+            not in rendered_navigation
+        )
+        assert rendered_navigation.count(social_link) == 1
+        assert rendered_navigation.count(embeds_link) == 1
+        assert rendered_navigation.index(social_link) < rendered_navigation.index(
+            embeds_link
+        )
 
     def test_html_theme_dockerfile_keeps_postgresql_client_for_backup_ops(
         self, tmp_path: Path

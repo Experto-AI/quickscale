@@ -1,6 +1,7 @@
 """Tests for theme system functionality"""
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -10,22 +11,22 @@ from quickscale_core.generator import ProjectGenerator
 class TestThemeInitialization:
     """Test theme parameter initialization"""
 
-    def test_default_theme(self, tmp_path):
+    def test_default_theme(self, tmp_path: Path) -> None:
         """Generator should use showcase_react as default theme"""
         generator = ProjectGenerator()
         assert generator.theme == "showcase_react"
 
-    def test_explicit_theme(self, tmp_path):
+    def test_explicit_theme(self, tmp_path: Path) -> None:
         """Generator should accept explicit theme parameter"""
         generator = ProjectGenerator(theme="showcase_html")
         assert generator.theme == "showcase_html"
 
-    def test_invalid_theme_name(self, tmp_path):
+    def test_invalid_theme_name(self, tmp_path: Path) -> None:
         """Generator should reject invalid theme names"""
         with pytest.raises(ValueError, match="Invalid theme 'invalid_theme'"):
             ProjectGenerator(theme="invalid_theme")
 
-    def test_available_themes_list(self, tmp_path):
+    def test_available_themes_list(self, tmp_path: Path) -> None:
         """Error message should list available themes"""
         with pytest.raises(ValueError, match="Available themes"):
             ProjectGenerator(theme="nonexistent")
@@ -34,18 +35,18 @@ class TestThemeInitialization:
 class TestThemeValidation:
     """Test theme directory validation"""
 
-    def test_showcase_html_theme_exists(self):
+    def test_showcase_html_theme_exists(self) -> None:
         """showcase_html theme directory should exist"""
         generator = ProjectGenerator(theme="showcase_html")
         theme_dir = generator.template_dir / "themes" / "showcase_html"
         assert theme_dir.exists()
 
-    def test_htmx_theme_is_not_supported(self):
+    def test_htmx_theme_is_not_supported(self) -> None:
         """showcase_htmx should be rejected as an unsupported theme."""
         with pytest.raises(ValueError, match="showcase_htmx"):
             ProjectGenerator(theme="showcase_htmx")
 
-    def test_react_theme_placeholder_exists(self):
+    def test_react_theme_placeholder_exists(self) -> None:
         """showcase_react should have placeholder directory"""
         generator = ProjectGenerator(theme="showcase_html")
         theme_dir = generator.template_dir / "themes" / "showcase_react"
@@ -57,7 +58,7 @@ class TestThemeValidation:
 class TestThemeTemplateResolution:
     """Test theme-specific template path resolution"""
 
-    def test_theme_template_path_resolution(self):
+    def test_theme_template_path_resolution(self) -> None:
         """_get_theme_template_path should resolve theme-specific templates"""
         generator = ProjectGenerator(theme="showcase_html")
 
@@ -65,7 +66,7 @@ class TestThemeTemplateResolution:
         path = generator._get_theme_template_path("templates/base.html.j2")
         assert "themes/showcase_html" in path
 
-    def test_theme_static_path_resolution(self):
+    def test_theme_static_path_resolution(self) -> None:
         """_get_theme_template_path should resolve theme-specific static files"""
         generator = ProjectGenerator(theme="showcase_html")
 
@@ -73,7 +74,7 @@ class TestThemeTemplateResolution:
         path = generator._get_theme_template_path("static/css/style.css.j2")
         assert "themes/showcase_html" in path
 
-    def test_common_template_fallback(self):
+    def test_common_template_fallback(self) -> None:
         """_get_theme_template_path should fall back to common templates"""
         generator = ProjectGenerator(theme="showcase_html")
 
@@ -86,7 +87,7 @@ class TestThemeTemplateResolution:
 class TestProjectGenerationWithTheme:
     """Test complete project generation with themes"""
 
-    def test_generate_with_default_theme(self, tmp_path):
+    def test_generate_with_default_theme(self, tmp_path: Path) -> None:
         """Generate project with default theme"""
         generator = ProjectGenerator()
         project_name = "testproject"
@@ -105,7 +106,7 @@ class TestProjectGenerationWithTheme:
         assert (output_path / "manage.py").exists()
         assert (output_path / "pyproject.toml").exists()
 
-    def test_generate_with_explicit_theme(self, tmp_path):
+    def test_generate_with_explicit_theme(self, tmp_path: Path) -> None:
         """Generate project with explicit showcase_html theme"""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
@@ -116,9 +117,24 @@ class TestProjectGenerationWithTheme:
         # Verify all files created
         assert (output_path / "templates" / "base.html").exists()
         assert (output_path / "templates" / "index.html").exists()
+        assert (output_path / "templates" / "components" / "navigation.html").exists()
         assert (output_path / "static" / "css" / "style.css").exists()
 
-    def test_generate_with_react_theme(self, tmp_path):
+        base_html = (output_path / "templates" / "base.html").read_text()
+        index_html = (output_path / "templates" / "index.html").read_text()
+        navigation_html = (
+            output_path / "templates" / "components" / "navigation.html"
+        ).read_text()
+
+        assert 'class="qs-main"' in base_html
+        assert 'class="qs-topbar"' in navigation_html
+        assert 'class="dashboard-intro"' in index_html
+        assert (
+            "Your Django project has been successfully generated with QuickScale."
+            in index_html
+        )
+
+    def test_generate_with_react_theme(self, tmp_path: Path) -> None:
         """Generate project with showcase_react theme"""
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "testproject_react"
@@ -162,8 +178,12 @@ class TestProjectGenerationWithTheme:
         ],
     )
     def test_generated_makefile_respects_frontend_presence(
-        self, tmp_path, theme, project_name, expects_frontend
-    ):
+        self,
+        tmp_path: Path,
+        theme: str,
+        project_name: str,
+        expects_frontend: bool,
+    ) -> None:
         """Generated Makefile should guard frontend targets based on frontend presence."""
         generator = ProjectGenerator(theme=theme)
         output_path = tmp_path / project_name
@@ -183,7 +203,9 @@ class TestProjectGenerationWithTheme:
         assert "No frontend/package.json found, skipping frontend format." in makefile
         assert "No frontend/package.json found, skipping frontend tests." in makefile
 
-    def test_react_theme_vite_config_has_consistent_filenames(self, tmp_path):
+    def test_react_theme_vite_config_has_consistent_filenames(
+        self, tmp_path: Path
+    ) -> None:
         """Vite config should use consistent filenames for Django compatibility"""
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "testproject_react"
@@ -196,7 +218,9 @@ class TestProjectGenerationWithTheme:
         assert "entryFileNames: 'assets/[name].js'" in vite_config
         assert "assetFileNames: 'assets/[name].[ext]'" in vite_config
 
-    def test_react_theme_production_settings_override_static_storage(self, tmp_path):
+    def test_react_theme_production_settings_override_static_storage(
+        self, tmp_path: Path
+    ) -> None:
         """React theme should disable manifest URL rewriting for staticfiles storage."""
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "testproject_react"
@@ -210,7 +234,9 @@ class TestProjectGenerationWithTheme:
         assert 'STORAGES["staticfiles"]' in production_settings
         assert "whitenoise.storage.CompressedStaticFilesStorage" in production_settings
 
-    def test_generated_output_matches_current_scaffold_contract(self, tmp_path):
+    def test_generated_output_matches_current_scaffold_contract(
+        self, tmp_path: Path
+    ) -> None:
         """Generated project structure should match the current scaffold contract."""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
@@ -258,7 +284,7 @@ class TestProjectGenerationWithTheme:
 class TestBackwardCompatibility:
     """Test backward compatibility with existing code"""
 
-    def test_generator_without_theme_parameter(self, tmp_path):
+    def test_generator_without_theme_parameter(self, tmp_path: Path) -> None:
         """Generator should work without theme parameter (backward compatible)"""
         # Old code: ProjectGenerator()
         generator = ProjectGenerator()
@@ -269,7 +295,7 @@ class TestBackwardCompatibility:
         generator.generate(project_name, output_path)
         assert output_path.exists()
 
-    def test_generated_templates_identical_to_v060(self, tmp_path):
+    def test_generated_templates_identical_to_v060(self, tmp_path: Path) -> None:
         """Generated templates should be identical to v0.60.0"""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
@@ -291,7 +317,7 @@ class TestReactThemeBuildCompatibility:
     without TypeScript errors, ensuring production deployments succeed.
     """
 
-    def test_react_theme_no_unused_imports(self, tmp_path):
+    def test_react_theme_no_unused_imports(self, tmp_path: Path) -> None:
         """Verify React theme files have no unused imports.
 
         This is a critical test because unused imports cause TypeScript
@@ -345,7 +371,7 @@ class TestReactThemeBuildCompatibility:
                                     f"This will cause TypeScript build to fail."
                                 )
 
-    def test_react_theme_dockerfile_correct_paths(self, tmp_path):
+    def test_react_theme_dockerfile_correct_paths(self, tmp_path: Path) -> None:
         """Verify Dockerfile copies frontend assets correctly.
 
         The Dockerfile must copy built assets with correct ownership

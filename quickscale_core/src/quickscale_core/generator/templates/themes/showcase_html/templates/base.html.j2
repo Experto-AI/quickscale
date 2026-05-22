@@ -11,15 +11,15 @@
     {% endblock %}{%endraw%}
 </head>
 <body>
-    <header>
+    <header class="qs-header">
         {%raw%}{% include "components/navigation.html" %}{%endraw%}
     </header>
 
-    <main>
+    <main class="qs-main">
         {%raw%}{% if messages %}
-        <div class="messages-container">
+        <div class="qs-messages">
             {% for message in messages %}
-            <div class="alert alert-{{ message.tags }}">
+            <div class="qs-alert qs-alert-{{ message.tags }}">
                 {{ message }}
             </div>
             {% endfor %}
@@ -30,7 +30,7 @@
         {% endblock %}{%endraw%}
     </main>
 
-    <footer>
+    <footer class="qs-footer">
         <p>&copy; {%raw%}{% now "Y" %} {% endraw %}{{ project_name }}. Built with QuickScale.</p>
     </footer>
 

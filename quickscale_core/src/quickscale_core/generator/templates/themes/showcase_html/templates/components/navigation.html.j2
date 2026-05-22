@@ -1,132 +1,60 @@
-{%raw%}<nav class="site-nav">
-    <div class="nav-container">
-        <div class="nav-header">
-            <a href="/" class="nav-brand">{% endraw %}{{ project_name }}{%raw%}</a>
-            <p class="nav-tagline">Showcase HTML starter</p>
-        </div>
+{%raw%}<nav class="qs-topbar">
+    <div class="qs-brand-stack">
+        <a href="/" class="qs-topbar-brand">{% endraw %}{{ project_name }}{%raw%}</a>
+        <span class="qs-topbar-label">Showcase HTML starter</span>
+    </div>
 
-        <ul class="nav-menu">
-            <li class="nav-home"><a href="/">Dashboard</a></li>
+    <div class="qs-topbar-nav">
+        <a href="/" class="qs-topbar-link">App</a>
 
-            {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Organizations</span>
-                <ul class="nav-submenu">
-                    <li><a href="/orgs/">All Organizations</a></li>
-                    {% if user.is_authenticated %}
-                    <li><a href="/orgs/new/">New Organization</a></li>
-                    {% endif %}
-                </ul>
-            </li>
+        {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS %}
+        <a href="/orgs/" class="qs-topbar-link">Organizations</a>
+        {% endif %}
+
+        {% if 'quickscale_modules_blog' in settings.INSTALLED_APPS %}
+        <a href="{% url 'quickscale_blog:post_list' %}" class="qs-topbar-link">Blog</a>
+        {% endif %}
+
+        {% if 'quickscale_modules_listings' in settings.INSTALLED_APPS %}
+        <a href="{% url 'quickscale_listings:listing_list' %}" class="qs-topbar-link">Listings</a>
+        {% endif %}
+
+        {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}
+        {% if user.is_staff %}
+        <a href="{% url 'quickscale_crm:dashboard' %}" class="qs-topbar-link">CRM</a>
+        {% endif %}
+        {% endif %}
+
+        {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
+        {% if user.is_authenticated %}
+        <a href="{{ modules.billing.url }}" class="qs-topbar-link">Billing</a>
+        {% else %}
+        <a href="/billing/pricing/" class="qs-topbar-link">Pricing</a>
+        {% endif %}
+        {% endif %}
+
+        {% if 'quickscale_modules_social' in settings.INSTALLED_APPS %}
+        {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+        <a href="/social/" class="qs-topbar-link">Social</a>
             {% endif %}
+            {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+        <a href="/social/embeds/" class="qs-topbar-link">Embeds</a>
+        {% endif %}
+        {% endif %}
 
-            {% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Authentication</span>
-                <ul class="nav-submenu">
-                    {% if user.is_authenticated %}
-                    <li><a href="{% url 'quickscale_auth:profile' %}">Profile</a></li>
-                    <li><a href="{% url 'quickscale_auth:profile-edit' %}">Edit Profile</a></li>
-                    <li><a href="{% url 'account_change_password' %}">Change Password</a></li>
-                    <li><a href="{% url 'account_logout' %}">Logout</a></li>
-                    {% else %}
-                    <li><a href="{% url 'account_login' %}">Login</a></li>
-                    <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
-                    <li><a href="{% url 'account_reset_password' %}">Reset Password</a></li>
-                    {% endif %}
-                </ul>
-            </li>
-            {% endif %}
+        {% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}
+        {% if user.is_authenticated %}
+        <a href="{% url 'quickscale_auth:profile' %}" class="qs-topbar-link">Profile</a>
+        <a href="{% url 'account_logout' %}" class="qs-topbar-link">Logout</a>
+        <span class="qs-topbar-status">Signed in</span>
+        {% else %}
+        <a href="{% url 'account_login' %}" class="qs-topbar-link">Sign in</a>
+        <a href="{% url 'account_signup' %}" class="qs-topbar-link">Sign up</a>
+        <span class="qs-topbar-status qs-topbar-status-muted">Guest</span>
+        {% endif %}
+        {% endif %}
 
-            {% if 'quickscale_modules_blog' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Blog</span>
-                <ul class="nav-submenu">
-                    <li><a href="{% url 'quickscale_blog:post_list' %}">All Posts</a></li>
-                    <li><a href="{% url 'quickscale_blog:feed' %}">RSS Feed</a></li>
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_listings' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Listings</span>
-                <ul class="nav-submenu">
-                    <li><a href="{% url 'quickscale_listings:listing_list' %}">All Listings</a></li>
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">CRM</span>
-                <ul class="nav-submenu">
-                    {% if user.is_staff %}
-                    <li><a href="{% url 'quickscale_crm:dashboard' %}">Dashboard</a></li>
-                    {% else %}
-                    <li><span class="nav-disabled-link">CRM dashboard access is limited to staff users.</span></li>
-                    {% endif %}
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_forms' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Forms</span>
-                <ul class="nav-submenu">
-                    <li><a href="/admin/">Manage forms in Django Admin</a></li>
-                    <li><span class="nav-disabled-link">Open public forms at /forms/&lt;slug&gt;/ after creating them.</span></li>
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Billing</span>
-                <ul class="nav-submenu">
-                    <li><a href="/billing/pricing/">Pricing</a></li>
-                    {% if user.is_authenticated %}
-                    <li><a href="{{ modules.billing.url }}">Billing</a></li>
-                    {% else %}
-                    <li><span class="nav-disabled-link">Sign in to open the billing dashboard.</span></li>
-                    {% endif %}
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Storage</span>
-                <ul class="nav-submenu">
-                    <li><span class="nav-disabled-link">Configure S3/CDN in quickscale.yml and deployment environment variables; there is no admin config page.</span></li>
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_social' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Social</span>
-                <ul class="nav-submenu">
-                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
-                    <li><a href="/social/">Link Tree</a></li>
-                    {% endif %}
-                    {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-                    <li><a href="/social/embeds/">Embeds</a></li>
-                    {% endif %}
-                    {% if not settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED and not settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-                    <li><span class="nav-disabled-link">Enable link tree or embeds in quickscale.yml to publish public social surfaces.</span></li>
-                    {% endif %}
-                </ul>
-            </li>
-            {% endif %}
-
-            <li class="nav-section">
-                <span class="nav-section-title">Resources</span>
-                <ul class="nav-submenu">
-                    <li><a href="/admin/">Django Admin</a></li>
-                    <li><a href="https://github.com/Experto-AI/quickscale" target="_blank" rel="noopener noreferrer">QuickScale Docs</a></li>
-                </ul>
-            </li>
-        </ul>
+        <a href="/admin/" class="qs-topbar-link">Admin</a>
+        <a href="https://github.com/Experto-AI/quickscale" target="_blank" rel="noopener noreferrer" class="qs-topbar-link">Docs</a>
     </div>
 </nav>{%endraw%}
