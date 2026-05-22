@@ -43,7 +43,7 @@
             </article>
             {% endif %}
 
-            {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS and settings.QUICKSCALE_MODE == 'saas' %}
             <article class="module-card">
                 <div class="module-card-header">
                     <h3>Organizations</h3>
@@ -201,13 +201,15 @@
             </article>
             {% endif %}
 
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS and 'quickscale_modules_analytics' not in settings.INSTALLED_APPS and 'quickscale_modules_social' not in settings.INSTALLED_APPS and 'quickscale_modules_orgs' not in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS and 'quickscale_modules_analytics' not in settings.INSTALLED_APPS and 'quickscale_modules_social' not in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_orgs' not in settings.INSTALLED_APPS or settings.QUICKSCALE_MODE != 'saas' %}
             <article class="module-card empty-state">
                 <div class="module-card-header">
                     <h3>No modules installed</h3>
                 </div>
                 <p>No modules installed yet. Use <code>quickscale plan --add &lt;module&gt;</code> to add modules before running <code>quickscale apply</code>.</p>
             </article>
+            {% endif %}
             {% endif %}{%endraw%}
         </div>
     </section>

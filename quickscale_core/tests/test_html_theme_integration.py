@@ -1,6 +1,8 @@
 import types
 from pathlib import Path
 
+import django
+from django.conf import settings
 from django.template import Context, Engine
 
 from quickscale_core.generator.generator import ProjectGenerator
@@ -58,6 +60,50 @@ def _render_navigation(
                 "user": types.SimpleNamespace(
                     is_authenticated=False,
                     is_staff=False,
+                ),
+            }
+        )
+    )
+
+
+def _render_index(
+    templates_dir: Path,
+    *,
+    project_name: str,
+    installed_apps: list[str],
+    mode: str = "solo",
+) -> str:
+    if not settings.configured:
+        settings.configure(
+            INSTALLED_APPS=[],
+            SECRET_KEY="quickscale-test-key",
+            STATIC_URL="/static/",
+            USE_I18N=False,
+            USE_TZ=False,
+        )
+        django.setup()
+
+    engine = Engine(
+        dirs=[str(templates_dir)],
+        libraries={"static": "django.templatetags.static"},
+    )
+    return engine.get_template("index.html").render(
+        Context(
+            {
+                "project_name": project_name,
+                "package_name": project_name,
+                "settings": types.SimpleNamespace(
+                    INSTALLED_APPS=installed_apps,
+                    QUICKSCALE_MODE=mode,
+                    QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=False,
+                    QUICKSCALE_SOCIAL_EMBEDS_ENABLED=False,
+                ),
+                "user": types.SimpleNamespace(
+                    is_authenticated=False,
+                    is_staff=False,
+                ),
+                "modules": types.SimpleNamespace(
+                    billing=types.SimpleNamespace(url="/billing/dashboard/")
                 ),
             }
         )
@@ -329,6 +375,38 @@ class TestHtmlThemeIntegration:
         assert solo_navigation.count(forms_link) == 1
         assert saas_navigation.count(orgs_link) == 1
         assert saas_navigation.count(forms_link) == 1
+
+    def test_html_theme_index_hides_orgs_card_in_solo_mode(
+        self, tmp_path: Path
+    ) -> None:
+        """showcase_html should only surface the organizations card in SaaS mode."""
+        generator = ProjectGenerator(theme="showcase_html")
+        output_path = tmp_path / "html_orgs_card_modes"
+        generator.generate("html_orgs_card_modes", output_path)
+
+        installed_apps = ["quickscale_modules_orgs"]
+        orgs_card_copy = "Multi-tenant organization management"
+        orgs_link = '<a class="module-link" href="/orgs/">Open organizations</a>'
+
+        solo_index = _render_index(
+            output_path / "templates",
+            project_name=output_path.name,
+            installed_apps=installed_apps,
+            mode="solo",
+        )
+        saas_index = _render_index(
+            output_path / "templates",
+            project_name=output_path.name,
+            installed_apps=installed_apps,
+            mode="saas",
+        )
+
+        assert orgs_card_copy not in solo_index
+        assert orgs_link not in solo_index
+        assert "No modules installed yet." in solo_index
+        assert orgs_card_copy in saas_index
+        assert orgs_link in saas_index
+        assert "No modules installed yet." not in saas_index
 
     def test_html_theme_dockerfile_keeps_postgresql_client_for_backup_ops(
         self, tmp_path: Path
