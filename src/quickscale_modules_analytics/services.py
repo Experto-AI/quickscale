@@ -8,7 +8,6 @@ import logging
 import os
 from threading import Lock
 from typing import Any, Protocol, cast
-import warnings
 
 from django.conf import settings
 from django.http import HttpRequest
@@ -214,12 +213,6 @@ def configure_analytics_client() -> bool:
 
         api_key = snapshot.resolve_posthog_api_key()
         if not api_key:
-            if not bool(getattr(settings, "DEBUG", False)):
-                warnings.warn(
-                    "QuickScale analytics is enabled but the PostHog API key env var is blank. Analytics capture remains disabled.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
             return _set_disabled_state(snapshot, "missing-api-key")
 
         try:

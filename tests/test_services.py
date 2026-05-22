@@ -6,6 +6,7 @@ import logging
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
+import warnings
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -188,12 +189,14 @@ def test_configure_analytics_client_disables_in_debug_mode() -> None:
 
 
 @override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_configure_analytics_client_warns_when_api_key_missing() -> None:
-    """Missing PostHog API keys should disable runtime capture safely."""
-    with patch("quickscale_modules_analytics.services.warnings.warn") as mock_warn:
+def test_configure_analytics_client_disables_when_api_key_missing() -> None:
+    """Missing PostHog API keys should disable runtime capture without warnings."""
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        warnings.simplefilter("always")
         assert services.configure_analytics_client() is False
 
-    mock_warn.assert_called_once()
+    assert caught_warnings == []
+    assert services._ANALYTICS_DISABLED_REASON == "missing-api-key"
     assert services.is_analytics_active() is False
 
 
