@@ -192,6 +192,124 @@
     text-decoration: underline;
 }
 
+/* Login page shell alignment */
+.auth-login {
+    --auth-login-text: #132238;
+    --auth-login-muted: #526173;
+    --auth-login-border: rgba(19, 34, 56, 0.12);
+    --auth-login-accent: #1d6f5f;
+    --auth-login-accent-strong: #155347;
+    --auth-login-accent-soft: rgba(29, 111, 95, 0.12);
+    --auth-login-shadow: 0 24px 60px rgba(19, 34, 56, 0.12);
+    width: min(1040px, 100%);
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 480px);
+    gap: 2rem;
+    align-items: center;
+    color: var(--auth-login-text);
+}
+
+.auth-login__intro {
+    display: grid;
+    gap: 1rem;
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    border: 1px solid var(--auth-login-border);
+    border-radius: 1.75rem;
+    background: linear-gradient(135deg, rgba(255, 249, 238, 0.96) 0%, rgba(244, 247, 251, 0.95) 100%);
+    box-shadow: var(--auth-login-shadow);
+}
+
+.auth-login__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin: 0;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    background: var(--auth-login-accent-soft);
+    color: var(--auth-login-accent-strong);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.auth-login__title {
+    margin: 0;
+    font-size: clamp(2.3rem, 4vw, 3.75rem);
+    line-height: 1;
+}
+
+.auth-login__copy {
+    margin: 0;
+    max-width: 36rem;
+    color: var(--auth-login-muted);
+    font-size: 1.05rem;
+    line-height: 1.7;
+}
+
+.auth-form-container--login {
+    border: 1px solid var(--auth-login-border);
+    border-radius: 1.75rem;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: var(--auth-login-shadow);
+}
+
+.auth-form-container--login h2 {
+    text-align: left;
+}
+
+.auth-form-container--login .auth-subtitle {
+    margin-bottom: 1.75rem;
+    max-width: 28rem;
+    text-align: left;
+    color: var(--auth-login-muted);
+}
+
+.auth-form-container--login .form-group label {
+    color: var(--auth-login-text);
+}
+
+.auth-form-container--login .form-group input[type="text"],
+.auth-form-container--login .form-group input[type="email"],
+.auth-form-container--login .form-group input[type="password"] {
+    padding: 0.85rem 1rem;
+    border-color: rgba(19, 34, 56, 0.14);
+    border-radius: 999px;
+    background: rgba(244, 247, 251, 0.82);
+}
+
+.auth-form-container--login .form-group input:focus {
+    border-color: var(--auth-login-accent);
+    box-shadow: 0 0 0 4px rgba(29, 111, 95, 0.14);
+}
+
+.auth-form-container--login .btn-primary {
+    min-height: 3rem;
+    border-radius: 999px;
+    background: var(--auth-login-accent);
+}
+
+.auth-form-container--login .btn-primary:hover,
+.auth-form-container--login .btn-primary:focus-visible {
+    background: var(--auth-login-accent-strong);
+}
+
+.auth-form-container--login .auth-links {
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top-color: rgba(19, 34, 56, 0.1);
+    text-align: left;
+}
+
+.auth-form-container--login .auth-links p {
+    color: var(--auth-login-muted);
+}
+
+.auth-form-container--login .auth-links a {
+    color: var(--auth-login-accent-strong);
+}
+
 /* Messages */
 .messages {
     margin-bottom: 1.5rem;
@@ -278,5 +396,14 @@
 
     .auth-header h1 {
         font-size: 1.5rem;
+    }
+
+    .auth-login {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+
+    .auth-login__intro {
+        padding: 1.5rem;
     }
 }
