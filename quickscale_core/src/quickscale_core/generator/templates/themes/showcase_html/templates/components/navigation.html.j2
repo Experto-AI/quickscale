@@ -7,7 +7,7 @@
     <div class="qs-topbar-nav">
         <a href="/" class="qs-topbar-link">App</a>
 
-        {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS %}
+        {% if 'quickscale_modules_orgs' in settings.INSTALLED_APPS and settings.QUICKSCALE_MODE == 'saas' %}
         <a href="/orgs/" class="qs-topbar-link">Organizations</a>
         {% endif %}
 
@@ -23,6 +23,10 @@
         {% if user.is_staff %}
         <a href="{% url 'quickscale_crm:dashboard' %}" class="qs-topbar-link">CRM</a>
         {% endif %}
+        {% endif %}
+
+        {% if 'quickscale_modules_forms' in settings.INSTALLED_APPS %}
+        <a href="/admin/quickscale_modules_forms/form/" class="qs-topbar-link">Forms</a>
         {% endif %}
 
         {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}

@@ -42,6 +42,7 @@ def _render_navigation(
     installed_apps: list[str],
     link_tree_enabled: bool,
     embeds_enabled: bool,
+    mode: str = "solo",
 ) -> str:
     engine = Engine(dirs=[str(templates_dir)])
     return engine.get_template("components/navigation.html").render(
@@ -52,6 +53,7 @@ def _render_navigation(
                     INSTALLED_APPS=installed_apps,
                     QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=link_tree_enabled,
                     QUICKSCALE_SOCIAL_EMBEDS_ENABLED=embeds_enabled,
+                    QUICKSCALE_MODE=mode,
                 ),
                 "user": types.SimpleNamespace(
                     is_authenticated=False,
@@ -98,9 +100,13 @@ class TestHtmlThemeIntegration:
         assert 'class="qs-topbar-brand"' in navigation
         assert "Showcase HTML starter" in navigation
         assert ">App</a>" in navigation
-        assert ">Organizations</a>" in navigation
+        assert "settings.QUICKSCALE_MODE == 'saas'" in navigation
         assert "/billing/pricing/" in navigation
         assert "{{ modules.billing.url }}" in navigation
+        assert (
+            'href="/admin/quickscale_modules_forms/form/" '
+            'class="qs-topbar-link">Forms</a>' in navigation
+        )
         assert "{% url 'account_login' %}" in navigation
         assert "{% url 'account_signup' %}" in navigation
         assert "{% url 'account_logout' %}" in navigation
@@ -283,6 +289,46 @@ class TestHtmlThemeIntegration:
         assert rendered_navigation.index(social_link) < rendered_navigation.index(
             embeds_link
         )
+
+    def test_html_theme_navigation_hides_orgs_in_solo_mode_and_shows_forms_admin(
+        self, tmp_path: Path
+    ) -> None:
+        """showcase_html should keep org links SaaS-only while surfacing forms admin."""
+        generator = ProjectGenerator(theme="showcase_html")
+        output_path = tmp_path / "html_navigation_modes"
+        generator.generate("html_navigation_modes", output_path)
+
+        installed_apps = [
+            "quickscale_modules_orgs",
+            "quickscale_modules_forms",
+        ]
+        orgs_link = '<a href="/orgs/" class="qs-topbar-link">Organizations</a>'
+        forms_link = (
+            '<a href="/admin/quickscale_modules_forms/form/" '
+            'class="qs-topbar-link">Forms</a>'
+        )
+
+        solo_navigation = _render_navigation(
+            output_path / "templates",
+            project_name=output_path.name,
+            installed_apps=installed_apps,
+            link_tree_enabled=False,
+            embeds_enabled=False,
+            mode="solo",
+        )
+        saas_navigation = _render_navigation(
+            output_path / "templates",
+            project_name=output_path.name,
+            installed_apps=installed_apps,
+            link_tree_enabled=False,
+            embeds_enabled=False,
+            mode="saas",
+        )
+
+        assert orgs_link not in solo_navigation
+        assert solo_navigation.count(forms_link) == 1
+        assert saas_navigation.count(orgs_link) == 1
+        assert saas_navigation.count(forms_link) == 1
 
     def test_html_theme_dockerfile_keeps_postgresql_client_for_backup_ops(
         self, tmp_path: Path
