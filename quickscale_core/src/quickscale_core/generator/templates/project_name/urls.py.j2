@@ -75,11 +75,13 @@ urlpatterns = [
 {%- if theme == 'showcase_react' %}
 urlpatterns += react_shell_urlpatterns
 {%- endif %}
+{%- if theme != 'showcase_react' %}
+urlpatterns += [
+    path("", TemplateView.as_view(template_name="index.html"), name="home"),
+]
+{%- endif %}
 urlpatterns += PRE_HOME_MODULE_URLPATTERNS
 urlpatterns += [
-{%- if theme != 'showcase_react' %}
-    path("", TemplateView.as_view(template_name="index.html"), name="home"),
-{%- endif %}
 {%- if theme == 'showcase_react' %}
     re_path(
         r"^social/?$",

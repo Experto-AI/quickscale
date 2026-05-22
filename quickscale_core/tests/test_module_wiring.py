@@ -434,7 +434,7 @@ class TestModuleWiringSpec:
 def test_generated_urls_template_places_react_shell_reservations_before_modules() -> (
     None
 ):
-    """React shell routes should outrank managed module URLs without broad wildcards."""
+    """React and HTML home routes should outrank managed module URLs."""
     template_path = (
         Path(__file__).resolve().parents[1]
         / "src"
@@ -461,5 +461,5 @@ def test_generated_urls_template_places_react_shell_reservations_before_modules(
     assert r"^orgs/[^/]+/billing/" not in content
     assert r"^orgs/invitations/" not in content
     assert content.index(react_shell_marker) < content.index(pre_home_marker)
-    assert content.index(pre_home_marker) < content.index(non_react_home_marker)
+    assert content.index(non_react_home_marker) < content.index(pre_home_marker)
     assert content.index(post_home_marker) > content.index(non_react_home_marker)
