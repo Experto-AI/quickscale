@@ -47,14 +47,34 @@ class TestReactThemeGeneration:
         assert (frontend_path / "src" / "App.tsx").exists()
         assert (frontend_path / "src" / "index.css").exists()
         assert (frontend_path / "src" / "posthog-js.d.ts").exists()
+        assert (frontend_path / "src" / "hooks" / "useOrgNavigation.ts").exists()
+        assert (frontend_path / "src" / "hooks" / "useOrgs.ts").exists()
         assert (frontend_path / "src" / "hooks" / "usePublicSocialSurface.ts").exists()
         assert (
             frontend_path / "src" / "components" / "social" / "PublicSocialShell.tsx"
         ).exists()
         assert (
+            frontend_path / "src" / "components" / "orgs" / "OrgSwitcher.tsx"
+        ).exists()
+        assert (
+            frontend_path / "src" / "components" / "orgs" / "OrgStatePanel.tsx"
+        ).exists()
+        assert (
             frontend_path / "src" / "pages" / "SocialLinkTreePublicPage.tsx"
         ).exists()
         assert (frontend_path / "src" / "pages" / "SocialEmbedsPublicPage.tsx").exists()
+        assert (frontend_path / "src" / "pages" / "orgs" / "OrgListPage.tsx").exists()
+        assert (frontend_path / "src" / "pages" / "orgs" / "OrgCreatePage.tsx").exists()
+        assert (frontend_path / "src" / "pages" / "orgs" / "OrgLayout.tsx").exists()
+        assert (
+            frontend_path / "src" / "pages" / "orgs" / "OrgDashboardPage.tsx"
+        ).exists()
+        assert (
+            frontend_path / "src" / "pages" / "orgs" / "OrgMembersPage.tsx"
+        ).exists()
+        assert (
+            frontend_path / "src" / "pages" / "orgs" / "OrgSettingsPage.tsx"
+        ).exists()
         assert (frontend_path / "src" / "test" / "PublicSocialPages.test.tsx").exists()
 
         # Components directory
@@ -221,6 +241,9 @@ class TestReactThemeGeneration:
         # Should have consistent filenames for Django static files
         assert "entryFileNames" in vite_config
         assert "assetFileNames" in vite_config
+        assert "manualChunks" in vite_config
+        assert "react-vendor" in vite_config
+        assert "analytics" in vite_config
         assert "'/_quickscale'" in vite_config
         assert "'/social'" in vite_config
 
@@ -305,6 +328,10 @@ class TestReactThemeGeneration:
         # Should build frontend with canonical package manager
         assert "pnpm" in dockerfile
         assert re.search(r"RUN\\s+npm\\s", dockerfile) is None
+        assert "pnpm-workspace.yaml" in dockerfile
+        assert dockerfile.index("pnpm-workspace.yaml") < dockerfile.index(
+            "RUN pnpm install"
+        )
 
         # Should copy built assets
         assert "staticfiles" in dockerfile or "static" in dockerfile
@@ -338,6 +365,117 @@ class TestReactThemeGeneration:
 
         # Build script should include TypeScript check
         assert "tsc" in scripts["build"] or "typescript" in scripts["build"]
+
+    def test_react_theme_generates_org_shell_components_and_hooks(self, tmp_path):
+        """The React starter should ship the org-aware SaaS shell artifacts."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_org_shell"
+        generator.generate("react_org_shell", output_path)
+
+        use_org_navigation = (
+            output_path / "frontend" / "src" / "hooks" / "useOrgNavigation.ts"
+        ).read_text()
+        use_orgs = (
+            output_path / "frontend" / "src" / "hooks" / "useOrgs.ts"
+        ).read_text()
+        sidebar = (
+            output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
+        ).read_text()
+        app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
+        org_layout = (
+            output_path / "frontend" / "src" / "pages" / "orgs" / "OrgLayout.tsx"
+        ).read_text()
+        org_create = (
+            output_path / "frontend" / "src" / "pages" / "orgs" / "OrgCreatePage.tsx"
+        ).read_text()
+        org_dashboard = (
+            output_path / "frontend" / "src" / "pages" / "orgs" / "OrgDashboardPage.tsx"
+        ).read_text()
+        org_members = (
+            output_path / "frontend" / "src" / "pages" / "orgs" / "OrgMembersPage.tsx"
+        ).read_text()
+
+        assert "buildOrgApiPath" in use_orgs
+        assert "buildOrgBillingApiPath" in use_orgs
+        assert "next_url: string" in use_orgs
+        assert "billing_pricing_url: string | null" in use_orgs
+        assert "member_count?: number" in use_orgs
+        assert (
+            "export function useOrgBilling(orgSlug: string, enabled = true)" in use_orgs
+        )
+        assert "const billingEnabled = enabled && Boolean(orgSlug)" in use_orgs
+        assert "buildOrgPath" in use_org_navigation
+        assert "OrgSwitcher" in sidebar
+        assert "useOrgNavigation" in sidebar
+        assert 'path="/orgs"' in app_tsx
+        assert 'path="/orgs/new"' in app_tsx
+        assert 'path="/orgs/:orgSlug"' in app_tsx
+        assert "LegacySaasRedirect" in app_tsx
+        assert "Access denied" in org_layout
+        assert "window.location.assign(response.next_url)" in org_create
+        assert "organization.member_count" in org_dashboard
+        assert (
+            "organization.role_label ?? (actor.is_owner_like ? 'Owner-like access' : null)"
+            in org_dashboard
+        )
+        assert "const modules = useModules()" in org_dashboard
+        assert (
+            "const billingEnabled = modules.billing && Boolean(currentOrgSlug)"
+            in org_dashboard
+        )
+        assert (
+            "const canReadBilling = billingEnabled && actor.is_owner_like"
+            in org_dashboard
+        )
+        assert "useOrgBilling(currentOrgSlug ?? '', canReadBilling)" in org_dashboard
+        assert (
+            "Billing links stay hidden until the billing module is installed."
+            in org_dashboard
+        )
+        assert "final owner cannot be removed or demoted" in org_members.lower()
+
+    def test_react_theme_reserves_org_shell_routes_ahead_of_module_urls(self, tmp_path):
+        """Generated React URLs should reserve org shell routes ahead of module URLs."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_org_shell_routes"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        urls_py = (output_path / project_name / "urls.py").read_text()
+        views_py = (output_path / project_name / "views.py").read_text()
+        react_shell_prelude = urls_py.split("\nurlpatterns = [", 1)[0]
+
+        assert (
+            'react_shell_view = TemplateView.as_view(template_name="index.html")'
+            in react_shell_prelude
+        )
+        assert "@login_required" in views_py
+        assert (
+            "def orgs_react_shell_view(request: HttpRequest) -> HttpResponse:"
+            in views_py
+        )
+        assert 'return render(request, "index.html")' in views_py
+        assert 'path("", react_shell_view, name="home")' in react_shell_prelude
+        assert 're_path(r"^orgs/?$", orgs_react_shell_view)' in react_shell_prelude
+        assert 're_path(r"^orgs/new/?$", orgs_react_shell_view)' in react_shell_prelude
+        assert (
+            're_path(r"^orgs/[^/]+/?$", orgs_react_shell_view)' in react_shell_prelude
+        )
+        assert (
+            'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"'
+            in react_shell_prelude
+        )
+        assert 'r"^orgs/[^/]+/forms/?$"' in react_shell_prelude
+        assert 'r"^orgs/[^/]+/forms/[^/]+/?$"' in react_shell_prelude
+        assert 'r"^(profile|blog|listings|crm|settings)/?$"' in react_shell_prelude
+        assert 'r"^forms/[^/]+/?$"' in react_shell_prelude
+        assert 'r"^orgs/[^/]+/billing/"' not in react_shell_prelude
+        assert 'r"^orgs/invitations/"' not in react_shell_prelude
+        assert 'r"^social/?$"' not in react_shell_prelude
+        assert urls_py.index("urlpatterns += react_shell_urlpatterns") < urls_py.index(
+            "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
+        )
 
     def test_react_theme_analytics_support_stays_dormant_and_frontend_only(
         self, tmp_path
@@ -581,6 +719,37 @@ class TestReactThemeBaseTemplate:
 
         # Verify base.html exists so the extends chain works
         assert (output_path / "templates" / "base.html").exists()
+
+    def test_generated_settings_registers_installed_modules_context_processor(
+        self, tmp_path
+    ):
+        """Generated settings/base.py must register the project-owned installed_modules
+        context processor so that modules.billing.url resolves in the index.html template.
+
+        Without this entry, modules is undefined in the Django template context,
+        window.__QUICKSCALE__.modulePaths.billing becomes an empty string, and
+        React Router's <Link to="" reloadDocument> navigates to / instead of the
+        billing page.
+
+        The context processor must be the project-owned one (not quickscale_core),
+        because quickscale_core is not a runtime dependency of the generated project.
+        """
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_context_proc_test"
+        output_path = tmp_path / project_name
+        generator.generate(project_name, output_path)
+
+        # settings/base.py lives inside the project package subdirectory
+        base_py = (output_path / project_name / "settings" / "base.py").read_text()
+
+        assert f"{project_name}.context_processors.installed_modules" in base_py, (
+            f"settings/base.py must include {project_name}.context_processors.installed_modules "
+            "in TEMPLATES context_processors so that modules.billing.url resolves in index.html"
+        )
+        assert "quickscale_core.context_processors" not in base_py, (
+            "settings/base.py must not reference quickscale_core context processors — "
+            "quickscale_core is the generator tool and is not available in deployed projects"
+        )
 
 
 @pytest.mark.integration
@@ -877,7 +1046,10 @@ class TestReactThemeModuleActivationMatrix:
         assert "href: billingPath" in billing_card
         assert "reloadDocument: true" in billing_card
         assert "actionLabel: 'Open billing'" in billing_card
-        assert "buildModuleInfo(modulePaths.social, modulePaths.billing)" in dashboard
+        assert re.search(
+            r"buildModuleInfo\(\s*modulePaths\.crm,\s*modulePaths\.social,\s*modulePaths\.billing,\s*\)",
+            dashboard,
+        )
         self._assert_no_hardcoded_billing_paths(dashboard)
 
     def test_react_theme_billing_sidebar_nav_entry(self, tmp_path):
@@ -899,9 +1071,11 @@ class TestReactThemeModuleActivationMatrix:
         assert billing_nav_match is not None
         billing_nav = billing_nav_match.group("body")
         assert "CreditCard" in lucide_imports
-        assert "href: modulePaths.billing" in billing_nav
+        assert "billingPath" in sidebar
+        assert "buildOrgPath(" in sidebar
+        assert "href: billingPath" in billing_nav
         assert "icon: CreditCard" in billing_nav
-        assert "show: modules.billing" in billing_nav
+        assert "show: modules.billing && (!isSaas || hasOrgContext)" in billing_nav
         assert "reloadDocument: true" in billing_nav
         self._assert_no_hardcoded_billing_paths(sidebar)
 
@@ -936,14 +1110,22 @@ class TestReactThemeModuleActivationMatrix:
         module_paths_interface = use_modules.split(
             "interface QuickScaleModulePaths {", 1
         )[1].split("\n}\n\nexport type PublicSocialSurface", 1)[0]
+        owner_interface = use_modules.split("interface QuickScaleOwnerConfig {", 1)[
+            1
+        ].split("\n}\n\nexport type PublicSocialSurface", 1)[0]
         default_config = use_modules.split(
             "const defaultConfig: QuickScaleConfig = {", 1
-        )[1].split("\n}\n\nexport function useModules", 1)[0]
+        )[1].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
 
         assert "billing: boolean" in modules_interface
         assert "billing: string" in module_paths_interface
+        assert "mode: QuickScaleOwnerMode" in owner_interface
+        assert "currentOrgSlug: string | null" in owner_interface
         assert "billing: false" in default_config
         assert "billing: '/billing/pricing/'" in default_config
+        assert "owner: {" in default_config
+        assert "mode: 'solo'" in default_config
+        assert "currentOrgSlug: null" in default_config
 
     def test_react_theme_storage_module_appears_in_frontend_config_and_dashboard(
         self, tmp_path
@@ -976,12 +1158,14 @@ class TestReactThemeModuleActivationMatrix:
         use_modules = (
             output_path / "frontend" / "src" / "hooks" / "useModules.ts"
         ).read_text()
+        index_html = (output_path / "templates" / "index.html").read_text()
         dashboard = (
             output_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
         ).read_text()
         sidebar = (
             output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
         ).read_text()
+        app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
         crm_page = (
             output_path / "frontend" / "src" / "pages" / "CrmPage.tsx"
         ).read_text()
@@ -996,8 +1180,17 @@ class TestReactThemeModuleActivationMatrix:
         assert "social: false" in use_modules
         assert "teams: false" not in use_modules
         assert "modulePaths" in use_modules
+        assert "owner:" in use_modules
+        assert "crm: string" in use_modules
+        assert "crm: '/crm'" in use_modules
         assert "billing: '/billing/pricing/'" in use_modules
         assert "social: '/social'" in use_modules
+        assert "QuickScaleOwnerMode" in use_modules
+        assert (
+            "mode: \"{% if settings.QUICKSCALE_MODE == 'saas' %}saas{% else %}solo{% endif %}\""
+            in index_html
+        )
+        assert "request.org.slug|escapejs" in index_html
 
         assert "key: 'backups'" in dashboard
         assert "name: 'Backups'" in dashboard
@@ -1011,26 +1204,42 @@ class TestReactThemeModuleActivationMatrix:
         assert "key: 'billing'" in dashboard
         assert "name: 'Billing'" in dashboard
         assert "modulePaths.billing" in dashboard
-        assert "href: '/crm-workspace'" in dashboard
+        assert "modulePaths.crm" in dashboard
         assert "actionLabel: 'Open workspace'" in dashboard
         assert "key: 'teams'" not in dashboard
         assert "reloadDocument={mod.reloadDocument}" in dashboard
         assert "lg:grid-cols-4" in dashboard
 
-        assert "href: '/crm-workspace'" in sidebar
+        assert "OrgSwitcher" in sidebar
+        assert "useOrgNavigation" in sidebar
+        assert "name: 'Organizations'" in sidebar
+        assert "name: 'Members'" in sidebar
+        assert "href: appPaths.crm" in sidebar
         assert "name: 'Social'" in sidebar
         assert "modulePaths.social" in sidebar
         assert "name: 'Billing'" in sidebar
-        assert "modulePaths.billing" in sidebar
+        assert "billingPath" in sidebar
         assert "name: 'Teams'" not in sidebar
         assert "name: 'Notifications'" not in sidebar
         assert "name: 'Backups'" not in sidebar
         assert "reloadDocument={item.reloadDocument}" in sidebar
 
+        assert "const ownerMode = useOwnerMode()" in app_tsx
+        assert 'path="/orgs"' in app_tsx
+        assert 'path="/orgs/new"' in app_tsx
+        assert 'path="/orgs/:orgSlug"' in app_tsx
+        assert "OrgLayout" in app_tsx
+        assert "OrgDashboardPage" in app_tsx
+        assert "OrgMembersPage" in app_tsx
+        assert "OrgSettingsPage" in app_tsx
+        assert "LegacySaasRedirect" in app_tsx
         assert "CRM Workspace" in crm_page
-        assert (
-            "The Django dashboard at /crm/ remains staff-only." in normalized_crm_page
-        )
+        assert "useOrgNavigation" in crm_page
+        assert "appPaths.crm" in crm_page
+        assert "documentPaths.crmApiBase" in crm_page
+        assert "The Django dashboard at" in normalized_crm_page
+        assert "documentPaths.crmDashboard" in crm_page
+        assert "remains staff-only." in normalized_crm_page
         assert "Staff CRM Dashboard" in crm_page
 
         assert "Storage & CDN" in settings_page
@@ -1096,7 +1305,7 @@ class TestReactThemeModuleActivationMatrix:
         assert social_route in urls_py
         assert embeds_route in urls_py
         assert urls_py.index('r"^social/?$"') < urls_py.index(
-            're_path(r".*", TemplateView.as_view(template_name="index.html"))'
+            're_path(r".*", react_shell_view)'
         )
         assert 'href="/social"' in base_template
         assert 'href="/social/embeds"' in base_template
@@ -1187,9 +1396,21 @@ class TestReactThemeModuleActivationMatrix:
 
         app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
 
-        for path in ["/blog", "/listings", "/crm-workspace", "/profile"]:
+        for path in ["/blog", "/listings", "/profile", "/orgs", "/orgs/new"]:
             assert f'path="{path}"' in app_tsx, f"Missing route for {path}"
-        assert 'path="/crm"' not in app_tsx
+        for nested_path in [
+            'path="/orgs/:orgSlug"',
+            'path="blog"',
+            'path="listings"',
+            'path="crm"',
+            'path="members"',
+            'path="settings"',
+        ]:
+            assert nested_path in app_tsx, f"Missing route for {nested_path}"
+        assert 'path="/crm"' in app_tsx
+        assert 'path="/forms/:slug"' in app_tsx
+        assert "LegacySaasRedirect" in app_tsx
+        assert 'path="/crm-workspace"' not in app_tsx
         assert 'path="/billing"' not in app_tsx
         assert 'path="/teams"' not in app_tsx
 

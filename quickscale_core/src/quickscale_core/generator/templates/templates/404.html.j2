@@ -128,7 +128,7 @@
         <h3>Add QuickScale billing with auth</h3>
         <p>Add <code>auth</code> and <code>billing</code> to <code>quickscale.yml</code>, then apply the change:</p>
         <pre><code>quickscale apply</code></pre>
-        <p>Billing keeps its public pricing page at <code>/billing/pricing/</code>. Authenticated org billing pages live under <code>/orgs/&lt;slug&gt;/billing/dashboard/</code>; the legacy <code>/billing/dashboard/</code> URL remains a compatibility redirect after installation.</p>
+        <p>Billing keeps its public pricing page at <code>/billing/pricing/</code>. In Solo mode, <code>/billing/dashboard/</code> remains the served authenticated dashboard route. In SaaS installs, authenticated org billing pages live under <code>/orgs/&lt;slug&gt;/billing/dashboard/</code>, and the flat <code>/billing/dashboard/</code> URL remains only as a compatibility redirect.</p>
     </div>
     {% else %}
     <div class="error-help">

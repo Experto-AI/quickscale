@@ -49,6 +49,9 @@ class Organization(models.Model):
 class OrganizationMembership(models.Model):
     """A user's membership and role within an organization."""
 
+    LAST_OWNER_DEMOTION_MESSAGE = "You cannot demote the last owner."
+    LAST_OWNER_REMOVAL_MESSAGE = "You cannot remove the last owner."
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -77,6 +80,115 @@ class OrganizationMembership(models.Model):
         app_label = "quickscale_modules_orgs"
         ordering = ["organization_id", "user_id"]
         unique_together = [("user", "organization")]
+
+    @classmethod
+    def _has_other_owner(
+        cls,
+        *,
+        organization_id: uuid.UUID | None,
+        exclude_pk: int | None,
+    ) -> bool:
+        if organization_id is None:
+            return False
+
+        return (
+            cls.objects.filter(
+                organization_id=organization_id,
+                role=OrgRole.OWNER,
+            )
+            .exclude(pk=exclude_pk)
+            .exists()
+        )
+
+    def _persisted_owner_state(
+        self,
+        *,
+        for_update: bool = False,
+    ) -> tuple[uuid.UUID | None, str | None]:
+        if self.pk is None:
+            return None, None
+
+        queryset = type(self).objects.all()
+        if for_update:
+            queryset = queryset.select_for_update()
+
+        state = (
+            queryset.filter(pk=self.pk)
+            .values(
+                "organization_id",
+                "role",
+            )
+            .first()
+        )
+        if state is None:
+            return None, None
+
+        return state["organization_id"], state["role"]
+
+    def _validate_last_owner_invariant(
+        self,
+        *,
+        previous_organization_id: uuid.UUID | None,
+        previous_role: str | None,
+    ) -> None:
+        if previous_role != OrgRole.OWNER:
+            return
+
+        if (
+            self.organization_id == previous_organization_id
+            and self.role == OrgRole.OWNER
+        ):
+            return
+
+        if not type(self)._has_other_owner(
+            organization_id=previous_organization_id,
+            exclude_pk=self.pk,
+        ):
+            raise ValidationError({"role": self.LAST_OWNER_DEMOTION_MESSAGE})
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        with transaction.atomic():
+            previous_organization_id, previous_role = self._persisted_owner_state(
+                for_update=True,
+            )
+            lock_ids = {
+                organization_id
+                for organization_id in (self.organization_id, previous_organization_id)
+                if organization_id is not None
+            }
+            if lock_ids:
+                list(
+                    Organization.objects.select_for_update()
+                    .filter(pk__in=lock_ids)
+                    .order_by("pk")
+                )
+            self._validate_last_owner_invariant(
+                previous_organization_id=previous_organization_id,
+                previous_role=previous_role,
+            )
+            super().save(*args, **kwargs)
+
+    def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
+        with transaction.atomic():
+            persisted_organization_id, persisted_role = self._persisted_owner_state(
+                for_update=True,
+            )
+            organization_id = (
+                persisted_organization_id
+                if persisted_organization_id is not None
+                else self.organization_id
+            )
+
+            if organization_id is not None:
+                Organization.objects.select_for_update().get(pk=organization_id)
+
+            if persisted_role == OrgRole.OWNER and not type(self)._has_other_owner(
+                organization_id=organization_id,
+                exclude_pk=self.pk,
+            ):
+                raise ValidationError(self.LAST_OWNER_REMOVAL_MESSAGE)
+
+            return super().delete(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.user} @ {self.organization} ({self.get_role_display()})"

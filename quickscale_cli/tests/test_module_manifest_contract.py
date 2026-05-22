@@ -17,11 +17,34 @@ from quickscale_cli.commands.module_config import (
     get_default_social_config,
     get_default_storage_config,
 )
+from quickscale_cli.commands.module_wiring_specs import MODULE_WIRING_BUILDERS
 from quickscale_cli.module_catalog import get_module_entries
 from quickscale_core.manifest.loader import load_manifest_from_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULES_ROOT = REPO_ROOT / "quickscale_modules"
+
+# Generator template directories used by the React/HTML showcase contract tests.
+REACT_TEMPLATES_DIR = (
+    REPO_ROOT
+    / "quickscale_core"
+    / "src"
+    / "quickscale_core"
+    / "generator"
+    / "templates"
+    / "themes"
+    / "showcase_react"
+)
+HTML_TEMPLATES_DIR = (
+    REPO_ROOT
+    / "quickscale_core"
+    / "src"
+    / "quickscale_core"
+    / "generator"
+    / "templates"
+    / "themes"
+    / "showcase_html"
+)
 
 DEFAULT_CONFIG_FACTORIES = {
     "analytics": get_default_analytics_config,
@@ -254,3 +277,210 @@ def test_blog_api_rate_limit_default_matches_manifest_contract() -> None:
 
     assert option.django_setting == "BLOG_API_RATE_LIMIT"
     assert option.default == defaults["api_rate_limit"] == "5/hour"
+
+
+# Modules with special-case handling inside build_module_wiring_specs that are
+# intentionally absent from MODULE_WIRING_BUILDERS (e.g. social generates managed
+# backend transport files and therefore needs project_package at wiring time).
+_SPECIAL_CASE_WIRING_MODULES: frozenset[str] = frozenset({"social"})
+
+
+def test_all_catalog_modules_have_wiring_builder() -> None:
+    """Every selectable catalog module must have a registered wiring builder.
+
+    Prevents silent omissions like the v0.86.0 billing regression where
+    'billing' was missing from MODULE_WIRING_BUILDERS and every generated
+    project quietly had no billing INSTALLED_APPS entry, no billing settings,
+    and no billing URL wiring.
+
+    When adding a new module: add a _<name>_wiring() function in
+    module_wiring_specs.py and register it in MODULE_WIRING_BUILDERS, or add
+    the module name to _SPECIAL_CASE_WIRING_MODULES if it requires custom
+    handling inside build_module_wiring_specs.
+    """
+    unwired = [
+        entry.name
+        for entry in get_module_entries(include_experimental=False)
+        if entry.name not in MODULE_WIRING_BUILDERS
+        and entry.name not in _SPECIAL_CASE_WIRING_MODULES
+    ]
+
+    assert not unwired, (
+        f"Modules missing from MODULE_WIRING_BUILDERS: {unwired}. "
+        "Add a wiring builder function and register it in MODULE_WIRING_BUILDERS, "
+        "or add the module name to _SPECIAL_CASE_WIRING_MODULES in this test file "
+        "if it has custom handling in build_module_wiring_specs."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Theme showcase coverage contracts
+#
+# These frozensets document *intentional* omissions from the two showcase
+# themes.  Before adding a new module to the catalog ask: does it have a
+# user-facing content card?  If not, add its name here with a comment.
+#
+# _REACT_UI_EXCLUDED_MODULES  – modules that must NOT appear in
+#     window.__QUICKSCALE__.modules (index.html.j2) or the QuickScaleModules
+#     TypeScript interface (useModules.ts.j2).
+#
+# _HTML_THEME_EXCLUDED_MODULES – modules that must NOT have a card in the
+#     HTML showcase module grid (showcase_html/templates/index.html.j2).
+# ---------------------------------------------------------------------------
+
+_REACT_UI_EXCLUDED_MODULES: frozenset[str] = frozenset(
+    {
+        "orgs",  # transparent infrastructure (TenantMiddleware + multi-tenancy), no content page
+        "analytics",  # background PostHog tracking, no content page
+    }
+)
+
+_HTML_THEME_EXCLUDED_MODULES: frozenset[str] = frozenset(
+    {
+        "orgs",  # transparent infrastructure (TenantMiddleware + multi-tenancy), no content page
+        "analytics",  # background PostHog tracking, no content page
+        "social",  # surfaced in base.html top-nav via QUICKSCALE_SOCIAL_*_ENABLED flags, not a card
+    }
+)
+
+
+def test_all_catalog_modules_in_react_index_html_modules_block() -> None:
+    """Every UI-visible catalog module must appear in window.__QUICKSCALE__.modules
+    in the React theme's index.html.j2.
+
+    Without this entry the module's presence flag is never set in the React
+    runtime config, so every React component that gates on modules.{name} will
+    silently never activate.
+
+    When adding a new module: add a line to the modules: { } block in
+    index.html.j2, or add the name to _REACT_UI_EXCLUDED_MODULES if the module
+    is intentionally infrastructure-only with no UI card.
+    """
+    index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
+    # Extract just the modules: { ... } object (terminates before owner: {)
+    modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
+
+    missing = [
+        entry.name
+        for entry in get_module_entries(include_experimental=False)
+        if entry.name not in _REACT_UI_EXCLUDED_MODULES
+        and f"{entry.name}:" not in modules_block
+    ]
+    assert not missing, (
+        f"Modules missing from window.__QUICKSCALE__.modules in index.html.j2: {missing!r}. "
+        "Add the module entry or add the name to _REACT_UI_EXCLUDED_MODULES."
+    )
+
+
+def test_all_catalog_modules_in_react_typescript_interface() -> None:
+    """Every UI-visible catalog module must appear in the QuickScaleModules
+    TypeScript interface in useModules.ts.j2.
+
+    A missing field means TypeScript does not know the module flag exists, so
+    reading modules.{name} in any React component is a compile-time type error.
+
+    When adding a new module: add a '{name}: boolean' line to the
+    QuickScaleModules interface, or add the name to _REACT_UI_EXCLUDED_MODULES.
+    """
+    use_modules = (
+        REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2"
+    ).read_text()
+    # Extract only the QuickScaleModules interface body
+    interface_block = use_modules.split("interface QuickScaleModules {")[1].split("}")[
+        0
+    ]
+
+    missing = [
+        entry.name
+        for entry in get_module_entries(include_experimental=False)
+        if entry.name not in _REACT_UI_EXCLUDED_MODULES
+        and f"{entry.name}: boolean" not in interface_block
+    ]
+    assert not missing, (
+        f"Modules missing from QuickScaleModules interface in useModules.ts.j2: {missing!r}. "
+        "Add the field or add the name to _REACT_UI_EXCLUDED_MODULES."
+    )
+
+
+def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -> None:
+    """The module keys in index.html.j2 and useModules.ts.j2 must be identical.
+
+    Asymmetry means the React runtime config and the TypeScript type declarations
+    disagree: either a runtime key has no matching type or a typed field is never
+    set at runtime.
+    """
+    index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
+    use_modules = (
+        REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2"
+    ).read_text()
+
+    modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
+    html_modules = set(re.findall(r"\b(\w+):\s+\{%", modules_block))
+
+    interface_block = use_modules.split("interface QuickScaleModules {")[1].split("}")[
+        0
+    ]
+    ts_modules = set(re.findall(r"^\s+(\w+):\s+boolean", interface_block, re.MULTILINE))
+
+    assert html_modules == ts_modules, (
+        "index.html.j2 and useModules.ts.j2 module sets diverge.\n"
+        f"  In index.html.j2 only: {sorted(html_modules - ts_modules)}\n"
+        f"  In useModules.ts.j2 only: {sorted(ts_modules - html_modules)}"
+    )
+
+
+def test_all_catalog_modules_have_html_theme_card() -> None:
+    """Every UI-visible catalog module must have a module card in the HTML
+    showcase's index.html.j2.
+
+    Without a card the module is silently invisible on the HTML theme landing
+    page — the user has no entry point to the installed module.
+
+    When adding a new module: add a card block guarded by
+    {% if 'quickscale_modules_{name}' in settings.INSTALLED_APPS %}, or add
+    the name to _HTML_THEME_EXCLUDED_MODULES if the module is intentionally
+    excluded from the HTML grid.
+    """
+    index_html = (HTML_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
+
+    missing = [
+        entry.name
+        for entry in get_module_entries(include_experimental=False)
+        if entry.name not in _HTML_THEME_EXCLUDED_MODULES
+        and f"quickscale_modules_{entry.name}" not in index_html
+    ]
+    assert not missing, (
+        f"Modules missing from HTML theme index.html.j2 module grid: {missing!r}. "
+        "Add a module card or add the name to _HTML_THEME_EXCLUDED_MODULES."
+    )
+
+
+def test_html_theme_empty_state_includes_all_card_modules() -> None:
+    """The HTML theme empty-state guard must cover every module that has a card.
+
+    The empty-state message ('No modules installed') is shown only when none of
+    the known card modules are in INSTALLED_APPS.  If a module has a card but is
+    absent from the guard, the empty-state hides as soon as that module is active
+    but re-appears for any combination that omits only the missing module.
+
+    When adding a new HTML theme card: also add the module to the
+    {% if 'quickscale_modules_{name}' not in settings.INSTALLED_APPS and ... %}
+    empty-state condition at the bottom of the module-grid section.
+    """
+    index_html = (HTML_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
+
+    card_modules = [
+        entry.name
+        for entry in get_module_entries(include_experimental=False)
+        if entry.name not in _HTML_THEME_EXCLUDED_MODULES
+    ]
+    not_in_empty_state = [
+        name
+        for name in card_modules
+        if f"'quickscale_modules_{name}' not in settings.INSTALLED_APPS"
+        not in index_html
+    ]
+    assert not not_in_empty_state, (
+        f"Modules with cards but absent from HTML empty-state guard: {not_in_empty_state!r}. "
+        "Add each module to the final {% if ... not in ... %} empty-state condition."
+    )

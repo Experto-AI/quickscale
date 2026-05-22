@@ -116,6 +116,26 @@ class TestProjectGeneratorPathChecks:
 class TestProjectGeneratorGeneration:
     """Tests for successful project generation"""
 
+    @pytest.mark.parametrize(
+        ("theme", "project_name"),
+        [
+            ("showcase_html", "testproject_html"),
+            ("showcase_react", "testproject_react"),
+        ],
+    )
+    def test_generate_emits_root_makefile_for_supported_themes(
+        self, tmp_path, theme, project_name
+    ):
+        """Supported themes should always emit the generated root Makefile."""
+        generator = ProjectGenerator(theme=theme)
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        makefile = output_path / "Makefile"
+        assert makefile.exists()
+        assert ".DEFAULT_GOAL := help" in makefile.read_text()
+
     def test_generate_creates_project_structure(self, tmp_path):
         """Should create complete project structure"""
         generator = ProjectGenerator(theme="showcase_html")

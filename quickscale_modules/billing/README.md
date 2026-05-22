@@ -73,7 +73,7 @@ The module already ships Django pages that you can either use directly or treat 
 
 - `GET /orgs/<slug>/billing/dashboard/` renders the canonical authenticated billing page with `<div id="billing-root" data-view="dashboard">`
 - `GET /orgs/<slug>/billing/pricing/` renders the canonical org-scoped pricing page with `<div id="billing-root" data-view="pricing">`
-- `GET /billing/dashboard/` remains available as a compatibility redirect for Solo mode and older non-org callers
+- `GET /billing/dashboard/` remains the served authenticated dashboard route in Solo mode and the flat compatibility route for older non-org callers in SaaS installs
 - `GET /billing/pricing/` remains the flat public pricing page
 - `GET /billing/purchase/success/` and `GET /billing/purchase/cancel/` render purchase return pages
 - `GET /billing/subscription/success/` and `GET /billing/subscription/cancel/` render subscription return pages

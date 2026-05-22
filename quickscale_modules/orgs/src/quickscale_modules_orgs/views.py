@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC
 from importlib import import_module
 from typing import Any, cast
@@ -13,7 +14,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
 from django.db.models import QuerySet
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -31,7 +32,7 @@ from .models import (
     OrganizationInvitation,
     OrganizationMembership,
 )
-from .permissions import OrgRoleMixin
+from .permissions import OrgRoleMixin, user_has_org_role
 
 
 _UNSET = object()
@@ -74,14 +75,128 @@ def _load_invitation_notification_sender() -> Any | None:
     return getattr(notifications_services, "send_notification", None)
 
 
-def _canonical_org_billing_pricing_path(organization: Organization) -> str:
+def _canonical_org_detail_path(organization: Organization) -> str:
+    try:
+        return reverse(
+            "org-detail",
+            kwargs={"org_slug": organization.slug},
+        )
+    except NoReverseMatch:
+        return f"/orgs/{organization.slug}/"
+
+
+def _billing_pricing_path(organization: Organization) -> str | None:
     try:
         return reverse(
             "quickscale_billing:org-pricing-page",
             kwargs={"org_slug": organization.slug},
         )
     except NoReverseMatch:
-        return f"/orgs/{organization.slug}/billing/pricing/"
+        return None
+
+
+def _org_creation_redirect_urls(organization: Organization) -> dict[str, str | None]:
+    billing_pricing_url = _billing_pricing_path(organization)
+    return {
+        "next_url": billing_pricing_url or _canonical_org_detail_path(organization),
+        "billing_pricing_url": billing_pricing_url,
+    }
+
+
+def _get_inviter_display_name(user: Any) -> str:
+    get_full_name = getattr(user, "get_full_name", None)
+    full_name = str(get_full_name()).strip() if callable(get_full_name) else ""
+    if full_name:
+        return full_name
+
+    get_username = getattr(user, "get_username", None)
+    username = str(get_username()).strip() if callable(get_username) else ""
+    if username:
+        return username
+
+    email = str(getattr(user, "email", "")).strip()
+    return email or "QuickScale"
+
+
+def _serialize_organization(
+    organization: Organization,
+    *,
+    role: str | None = None,
+    member_count: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": str(organization.id),
+        "name": organization.name,
+        "slug": organization.slug,
+        "is_personal": organization.is_personal,
+    }
+    if role is not None:
+        payload["role"] = role
+        payload["role_label"] = str(OrgRole(role).label)
+    if member_count is not None:
+        payload["member_count"] = member_count
+    return payload
+
+
+def _serialize_membership(membership: OrganizationMembership) -> dict[str, Any]:
+    return {
+        "id": membership.pk,
+        "role": membership.role,
+        "role_label": str(OrgRole(membership.role).label),
+        "joined_at": membership.joined_at.astimezone(UTC).isoformat(),
+        "user": {
+            "id": str(membership.user.pk),
+            "username": str(membership.user.get_username()),
+            "email": str(getattr(membership.user, "email", "")),
+            "display_name": _get_inviter_display_name(membership.user),
+        },
+    }
+
+
+def _serialize_invitation(invitation: OrganizationInvitation) -> dict[str, Any]:
+    return {
+        "id": str(invitation.pk),
+        "email": invitation.email,
+        "role": invitation.role,
+        "role_label": str(OrgRole(invitation.role).label),
+        "expires_at": invitation.expires_at.astimezone(UTC).isoformat(),
+    }
+
+
+def _serialize_role_choices(
+    role_choices: list[tuple[str, str]],
+) -> list[dict[str, str]]:
+    return [{"value": str(value), "label": str(label)} for value, label in role_choices]
+
+
+def _form_error_data(form: Any) -> dict[str, list[str]]:
+    errors: dict[str, list[str]] = {}
+    for field, messages in form.errors.items():
+        error_key = "non_field_errors" if field == "__all__" else str(field)
+        errors[error_key] = [str(message) for message in messages]
+    return errors
+
+
+def _validation_error_data(error: ValidationError) -> dict[str, list[str]]:
+    if hasattr(error, "message_dict"):
+        return {
+            ("non_field_errors" if field == "__all__" else str(field)): [
+                str(message) for message in messages
+            ]
+            for field, messages in error.message_dict.items()
+        }
+    return {"non_field_errors": [str(message) for message in error.messages]}
+
+
+def _first_error_message(
+    error: ValidationError,
+    *,
+    fallback: str,
+) -> str:
+    for messages in _validation_error_data(error).values():
+        if messages:
+            return messages[0]
+    return fallback
 
 
 class SaasModeRequiredMixin:
@@ -95,6 +210,65 @@ class SaasModeRequiredMixin:
     ) -> HttpResponse:
         if not _is_saas_mode():
             raise Http404("Org routes are hidden in solo mode.")
+        next_dispatch = getattr(super(), "dispatch")
+        return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
+
+
+class JsonApiMixin:
+    """Helpers for additive org JSON endpoints."""
+
+    def json_error(
+        self,
+        message: str,
+        *,
+        status: int,
+        **payload: Any,
+    ) -> JsonResponse:
+        response_payload: dict[str, Any] = {"error": message}
+        response_payload.update(payload)
+        return JsonResponse(response_payload, status=status)
+
+    def http_method_not_allowed(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del request, args, kwargs
+        return self.json_error(
+            "Method not allowed",
+            status=405,
+            allowed_methods=list(self._allowed_methods()),
+        )
+
+    def get_json_payload(
+        self,
+        request: HttpRequest,
+    ) -> tuple[dict[str, Any] | None, JsonResponse | None]:
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except UnicodeDecodeError:
+            return None, self.json_error("Invalid JSON payload", status=400)
+        except json.JSONDecodeError:
+            return None, self.json_error("Invalid JSON payload", status=400)
+
+        if not isinstance(payload, dict):
+            return None, self.json_error("JSON object payload expected", status=400)
+        return payload, None
+
+
+class JsonAuthenticationRequiredMixin(JsonApiMixin):
+    """Return JSON 401 responses for unauthenticated API requests."""
+
+    def dispatch(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> HttpResponse:
+        user = getattr(request, "user", None)
+        if not bool(user is not None and getattr(user, "is_authenticated", False)):
+            return self.json_error("Authentication required", status=401)
         next_dispatch = getattr(super(), "dispatch")
         return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
 
@@ -149,6 +323,30 @@ class OrganizationContextMixin:
         )
 
 
+class JsonOrganizationAccessMixin(JsonApiMixin, OrganizationContextMixin):
+    """Resolve org access for JSON endpoints while preserving role rules."""
+
+    min_org_role = OrgRole.VIEWER
+
+    def dispatch(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> HttpResponse:
+        try:
+            organization = self.get_organization()
+        except Http404 as error:
+            return self.json_error(str(error), status=404)
+
+        setattr(request, "org", organization)
+        if not user_has_org_role(request.user, organization, self.min_org_role):
+            return self.json_error("Forbidden", status=403)
+
+        next_dispatch = getattr(super(), "dispatch")
+        return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
+
+
 class OrgListView(SaasModeRequiredMixin, LoginRequiredMixin, ListView):
     """List the organizations the current user belongs to."""
 
@@ -164,14 +362,14 @@ class OrgListView(SaasModeRequiredMixin, LoginRequiredMixin, ListView):
 
 
 class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
-    """Create a new organization and hand off to pricing."""
+    """Create a new organization and hand off to the next onboarding step."""
 
     form_class = OrgCreateForm
     template_name = "quickscale_modules_orgs/org_create.html"
 
     def form_valid(self, form: OrgCreateForm) -> HttpResponse:
         organization = form.save(user=self.request.user)
-        return redirect(_canonical_org_billing_pricing_path(organization))
+        return redirect(_org_creation_redirect_urls(organization)["next_url"])
 
 
 class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
@@ -400,6 +598,37 @@ class MemberManagementContextMixin(OrganizationContextMixin):
             owner_like=self.acting_user_is_owner_like(),
         )
 
+    def get_membership_for_action(
+        self,
+        membership_id: Any,
+    ) -> OrganizationMembership:
+        try:
+            parsed_membership_id = int(membership_id)
+        except (TypeError, ValueError) as error:
+            raise ValidationError(
+                {"membership_id": ["Invalid member selection."]}
+            ) from error
+
+        membership_pk_lower_bound, membership_pk_upper_bound = (
+            connection.ops.integer_field_range(
+                OrganizationMembership._meta.pk.get_internal_type()
+            )
+        )
+        if (
+            membership_pk_lower_bound is not None
+            and parsed_membership_id < membership_pk_lower_bound
+        ) or (
+            membership_pk_upper_bound is not None
+            and parsed_membership_id > membership_pk_upper_bound
+        ):
+            raise ValidationError({"membership_id": ["Invalid member selection."]})
+
+        return get_object_or_404(
+            OrganizationMembership.objects.select_related("user"),
+            pk=parsed_membership_id,
+            organization=self.get_organization(),
+        )
+
     def get_members_context(
         self,
         *,
@@ -427,6 +656,62 @@ class MemberManagementContextMixin(OrganizationContextMixin):
                 kwargs={"org_slug": self.get_organization().slug},
             )
         )
+
+
+class InvitationNotificationMixin:
+    """Shared invitation send + validation flow for HTML and JSON views."""
+
+    request: HttpRequest
+
+    def save_invitation_form(self, form: InviteForm) -> OrganizationInvitation | None:
+        sender = _load_invitation_notification_sender()
+        if sender is None:
+            form.add_error(
+                None,
+                "Organization invitations require the notifications module to send email.",
+            )
+            return None
+
+        try:
+            with transaction.atomic():
+                invitation = form.save()
+                sender(
+                    template_key=_ORG_INVITATION_TEMPLATE_KEY,
+                    recipients=[invitation.email],
+                    context=self.get_notification_context(invitation),
+                    tags=["auth"],
+                    metadata={"workflow": "org-invitation"},
+                )
+        except ValidationError as error:
+            if hasattr(error, "error_dict"):
+                for field, field_errors in error.error_dict.items():
+                    form.add_error(field, field_errors)
+            else:
+                form.add_error(None, error)
+            return None
+
+        return invitation
+
+    def get_notification_context(
+        self,
+        invitation: OrganizationInvitation,
+    ) -> dict[str, str]:
+        return {
+            "organization_name": invitation.organization.name,
+            "invitee_email": invitation.email,
+            "inviter_name": self.get_inviter_display_name(),
+            "role_display": str(OrgRole(invitation.role).label),
+            "accept_url": self.request.build_absolute_uri(
+                reverse(
+                    ORG_INVITATION_ACCEPT_URL_NAME,
+                    kwargs={"token": invitation.token},
+                )
+            ),
+            "expires_at": invitation.expires_at.astimezone(UTC).isoformat(),
+        }
+
+    def get_inviter_display_name(self) -> str:
+        return _get_inviter_display_name(self.request.user)
 
 
 class MemberListView(
@@ -497,7 +782,16 @@ class MemberListView(
                 error = form.errors.get("role", ["Unable to update role."])[0]
                 context = self.get_context_data(form_error=error)
                 return self.render_to_response(context, status=400)
-            form.save()
+            try:
+                form.save()
+            except ValidationError as error:
+                context = self.get_context_data(
+                    form_error=_first_error_message(
+                        error,
+                        fallback="Unable to update role.",
+                    )
+                )
+                return self.render_to_response(context, status=400)
         elif action == "remove":
             owner_count = OrganizationMembership.objects.filter(
                 organization=organization,
@@ -508,7 +802,16 @@ class MemberListView(
                     form_error="You cannot remove the last owner."
                 )
                 return self.render_to_response(context, status=400)
-            membership.delete()
+            try:
+                membership.delete()
+            except ValidationError as error:
+                context = self.get_context_data(
+                    form_error=_first_error_message(
+                        error,
+                        fallback="You cannot remove the last owner.",
+                    )
+                )
+                return self.render_to_response(context, status=400)
         else:
             context = self.get_context_data(form_error="Unknown member action.")
             return self.render_to_response(context, status=400)
@@ -517,6 +820,7 @@ class MemberListView(
 
 
 class InviteView(
+    InvitationNotificationMixin,
     SaasModeRequiredMixin,
     LoginRequiredMixin,
     OrgRoleMixin,
@@ -556,63 +860,11 @@ class InviteView(
         )
 
     def form_valid(self, form: InviteForm) -> HttpResponse:
-        sender = _load_invitation_notification_sender()
-        if sender is None:
-            form.add_error(
-                None,
-                "Organization invitations require the notifications module to send email.",
-            )
-            return self.form_invalid(form)
-
-        try:
-            with transaction.atomic():
-                invitation = form.save()
-                sender(
-                    template_key=_ORG_INVITATION_TEMPLATE_KEY,
-                    recipients=[invitation.email],
-                    context=self.get_notification_context(invitation),
-                    tags=["auth"],
-                    metadata={"workflow": "org-invitation"},
-                )
-        except ValidationError as error:
-            if hasattr(error, "error_dict"):
-                for field, field_errors in error.error_dict.items():
-                    form.add_error(field, field_errors)
-            else:
-                form.add_error(None, error)
+        invitation = self.save_invitation_form(form)
+        if invitation is None:
             return self.form_invalid(form)
 
         return self.get_members_redirect()
-
-    def get_notification_context(
-        self,
-        invitation: OrganizationInvitation,
-    ) -> dict[str, str]:
-        return {
-            "organization_name": invitation.organization.name,
-            "invitee_email": invitation.email,
-            "inviter_name": self.get_inviter_display_name(),
-            "role_display": str(OrgRole(invitation.role).label),
-            "accept_url": self.request.build_absolute_uri(
-                reverse(
-                    ORG_INVITATION_ACCEPT_URL_NAME,
-                    kwargs={"token": invitation.token},
-                )
-            ),
-            "expires_at": invitation.expires_at.astimezone(UTC).isoformat(),
-        }
-
-    def get_inviter_display_name(self) -> str:
-        get_full_name = getattr(self.request.user, "get_full_name", None)
-        full_name = str(get_full_name()).strip() if callable(get_full_name) else ""
-        if full_name:
-            return full_name
-        get_username = getattr(self.request.user, "get_username", None)
-        username = str(get_username()).strip() if callable(get_username) else ""
-        if username:
-            return username
-        email = str(getattr(self.request.user, "email", "")).strip()
-        return email or "QuickScale"
 
 
 class RevokeInvitationView(
@@ -673,6 +925,331 @@ class OrgSettingsView(
                 kwargs={"org_slug": organization.slug},
             )
         )
+
+
+class OrgApiListCreateView(
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    View,
+):
+    """Return the acting user's org list or create a new org from JSON."""
+
+    def get(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del args, kwargs
+        memberships = (
+            OrganizationMembership.objects.select_related("organization")
+            .filter(user=request.user)
+            .order_by("organization__name")
+        )
+        return JsonResponse(
+            {
+                "organizations": [
+                    _serialize_organization(
+                        membership.organization, role=membership.role
+                    )
+                    for membership in memberships
+                ]
+            }
+        )
+
+    def post(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del args, kwargs
+        payload, error_response = self.get_json_payload(request)
+        if error_response is not None:
+            return error_response
+
+        form = OrgCreateForm(payload)
+        if not form.is_valid():
+            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+
+        organization = form.save(user=request.user)
+        redirect_urls = _org_creation_redirect_urls(organization)
+        return JsonResponse(
+            {
+                "organization": _serialize_organization(
+                    organization, role=OrgRole.OWNER
+                ),
+                "next_url": redirect_urls["next_url"],
+                "billing_pricing_url": redirect_urls["billing_pricing_url"],
+            },
+            status=201,
+        )
+
+
+class OrgApiDetailView(
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    JsonOrganizationAccessMixin,
+    View,
+):
+    """Return JSON metadata for the active organization."""
+
+    min_org_role = OrgRole.VIEWER
+
+    def get(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del request, args, kwargs
+        organization = self.get_organization()
+        acting_membership = self.get_acting_membership()
+        return JsonResponse(
+            {
+                "organization": _serialize_organization(
+                    organization,
+                    role=(
+                        None if acting_membership is None else acting_membership.role
+                    ),
+                    member_count=OrganizationMembership.objects.filter(
+                        organization=organization,
+                    ).count(),
+                ),
+                "actor": {
+                    "role": (
+                        None if acting_membership is None else acting_membership.role
+                    ),
+                    "is_owner_like": self.acting_user_is_owner_like(),
+                },
+            }
+        )
+
+
+class OrgApiMembersView(
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    JsonOrganizationAccessMixin,
+    MemberManagementContextMixin,
+    View,
+):
+    """Return JSON members and pending invitations for org admins."""
+
+    min_org_role = OrgRole.ADMIN
+
+    def get(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del request, args, kwargs
+        owner_like = self.acting_user_is_owner_like()
+        acting_membership = self.get_acting_membership()
+        return JsonResponse(
+            {
+                "organization": _serialize_organization(self.get_organization()),
+                "actor": {
+                    "role": (
+                        None if acting_membership is None else acting_membership.role
+                    ),
+                    "is_owner_like": owner_like,
+                },
+                "members": [
+                    _serialize_membership(membership)
+                    for membership in self.get_memberships()
+                ],
+                "pending_invitations": [
+                    _serialize_invitation(invitation)
+                    for invitation in self.get_pending_invitations()
+                ],
+                "role_choices": _serialize_role_choices(
+                    RoleChangeForm.available_role_choices(owner_like=owner_like)
+                ),
+            }
+        )
+
+
+class OrgApiInviteView(
+    InvitationNotificationMixin,
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    JsonOrganizationAccessMixin,
+    MemberManagementContextMixin,
+    View,
+):
+    """Create an organization invitation from a JSON payload."""
+
+    min_org_role = OrgRole.ADMIN
+
+    def post(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del args, kwargs
+        payload, error_response = self.get_json_payload(request)
+        if error_response is not None:
+            return error_response
+
+        form = self.get_invite_form(data=payload)
+        if not form.is_valid():
+            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+
+        invitation = self.save_invitation_form(form)
+        if invitation is None:
+            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+
+        return JsonResponse(
+            {"invitation": _serialize_invitation(invitation)},
+            status=201,
+        )
+
+
+class OrgApiMemberRoleView(
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    JsonOrganizationAccessMixin,
+    MemberManagementContextMixin,
+    View,
+):
+    """Update a member role from a JSON payload."""
+
+    min_org_role = OrgRole.ADMIN
+
+    def post(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del args
+        payload, error_response = self.get_json_payload(request)
+        if error_response is not None:
+            return error_response
+
+        try:
+            membership = self.get_membership_for_action(kwargs["membership_id"])
+        except ValidationError as error:
+            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
+        except Http404:
+            return self.json_error("Member not found", status=404)
+
+        form = RoleChangeForm(
+            payload,
+            target_membership=membership,
+            acting_membership=self.get_acting_membership(),
+            acting_user_is_superuser=getattr(request.user, "is_superuser", False),
+        )
+        if not form.is_valid():
+            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+
+        try:
+            updated_membership = form.save()
+        except ValidationError as error:
+            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
+        return JsonResponse({"member": _serialize_membership(updated_membership)})
+
+
+class OrgApiMemberRemoveView(
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    JsonOrganizationAccessMixin,
+    MemberManagementContextMixin,
+    View,
+):
+    """Remove an organization member."""
+
+    min_org_role = OrgRole.ADMIN
+
+    def post(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del request, args
+        try:
+            membership = self.get_membership_for_action(kwargs["membership_id"])
+        except ValidationError as error:
+            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
+        except Http404:
+            return self.json_error("Member not found", status=404)
+
+        owner_count = OrganizationMembership.objects.filter(
+            organization=self.get_organization(),
+            role=OrgRole.OWNER,
+        ).count()
+        if membership.role == OrgRole.OWNER and owner_count <= 1:
+            return JsonResponse(
+                {"errors": {"non_field_errors": ["You cannot remove the last owner."]}},
+                status=400,
+            )
+
+        removed_member_id = membership.pk
+        try:
+            membership.delete()
+        except ValidationError as error:
+            return JsonResponse({"errors": _validation_error_data(error)}, status=400)
+        return JsonResponse({"status": "removed", "member_id": removed_member_id})
+
+
+class OrgApiRevokeInvitationView(
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    JsonOrganizationAccessMixin,
+    MemberManagementContextMixin,
+    View,
+):
+    """Revoke an active pending organization invitation."""
+
+    min_org_role = OrgRole.ADMIN
+
+    def post(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del request, args
+        invitation = get_object_or_404(
+            self.get_pending_invitations(),
+            pk=kwargs["invitation_id"],
+            organization=self.get_organization(),
+        )
+        invitation_id = str(invitation.pk)
+        invitation.delete()
+        return JsonResponse({"status": "revoked", "invitation_id": invitation_id})
+
+
+class OrgApiSettingsView(
+    SaasModeRequiredMixin,
+    JsonAuthenticationRequiredMixin,
+    JsonOrganizationAccessMixin,
+    View,
+):
+    """Update the active organization's display name and slug from JSON."""
+
+    min_org_role = OrgRole.ADMIN
+
+    def post(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del args, kwargs
+        payload, error_response = self.get_json_payload(request)
+        if error_response is not None:
+            return error_response
+
+        form = OrgSettingsForm(payload, instance=self.get_organization())
+        if not form.is_valid():
+            return JsonResponse({"errors": _form_error_data(form)}, status=400)
+
+        organization = form.save()
+        return JsonResponse({"organization": _serialize_organization(organization)})
 
 
 org_index_view = OrgListView.as_view()

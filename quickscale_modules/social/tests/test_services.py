@@ -7,9 +7,12 @@ from typing import TypeVar, cast
 
 import pytest
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from django.db.utils import OperationalError, ProgrammingError
 from django.test import override_settings
 
 from quickscale_modules_social.contracts import (
+    SOCIAL_EMBEDS_CACHE_KEY,
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
     SOCIAL_EMBEDS_PATH,
@@ -25,6 +28,10 @@ from quickscale_modules_social.contracts import (
     SOCIAL_STATUS_ERROR,
     SocialConfigurationError,
     get_social_runtime_settings,
+    normalize_social_provider_allowlist,
+    normalize_social_url,
+    resolve_social_embed_metadata,
+    resolve_social_target,
     social_payload_status_code,
 )
 from quickscale_modules_social.models import SocialEmbed, SocialLink
@@ -134,6 +141,43 @@ def test_list_published_social_links_recovers_from_corrupt_cache_payload() -> No
     ]
 
 
+def test_build_social_link_tree_payload_uses_empty_state_for_missing_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing link tables should degrade to the existing empty public payload."""
+
+    def raise_missing_table(*args: object, **kwargs: object) -> object:
+        raise OperationalError(
+            'relation "quickscale_modules_social_sociallink" does not exist'
+        )
+
+    cache.delete(SOCIAL_LINKS_CACHE_KEY)
+    monkeypatch.setattr(SocialLink.objects, "filter", raise_missing_table)
+
+    payload = build_social_link_tree_payload()
+
+    assert payload["status"] == SOCIAL_STATUS_EMPTY
+    assert payload["enabled"] is True
+    assert payload["links"] == []
+    assert payload["total_links"] == 0
+    assert payload["error"] is None
+    assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+
+
+def test_list_published_social_links_reraises_unrelated_database_faults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only missing-table faults should be absorbed by the public fallback."""
+
+    def raise_unrelated_error(*args: object, **kwargs: object) -> object:
+        raise OperationalError("database is locked")
+
+    monkeypatch.setattr(SocialLink.objects, "filter", raise_unrelated_error)
+
+    with pytest.raises(OperationalError, match="database is locked"):
+        list_published_social_links()
+
+
 @django_db
 def test_list_published_social_embeds_honors_runtime_toggle_and_filtering() -> None:
     """Published embed payloads should respect embed toggles and provider filtering."""
@@ -177,6 +221,28 @@ def test_list_published_social_embeds_honors_runtime_toggle_and_filtering() -> N
         disabled_records = list_published_social_embeds()
 
     assert disabled_records == ()
+
+
+@django_db
+def test_list_published_social_embeds_recovers_from_non_list_cache_payload() -> None:
+    """Non-list embed cache payloads should be ignored and refreshed from the DB."""
+    SocialEmbed.objects.create(
+        title="QuickScale on YouTube",
+        provider_name="",
+        url="https://www.youtube.com/shorts/alpha123",
+        display_order=10,
+    )
+    cache.set(SOCIAL_EMBEDS_CACHE_KEY, {"broken": True}, timeout=300)
+
+    records = list_published_social_embeds()
+    cached_payload = cast(list[dict[str, object]], cache.get(SOCIAL_EMBEDS_CACHE_KEY))
+
+    assert [record.provider_name for record in records] == ["youtube"]
+    assert cached_payload[0]["id"] == records[0].id
+    assert cached_payload[0]["provider_name"] == "youtube"
+    assert (
+        cached_payload[0]["embed_url"] == "https://www.youtube.com/embed/alpha123?rel=0"
+    )
 
 
 @django_db
@@ -246,6 +312,148 @@ def test_build_social_link_tree_payload_freezes_enabled_and_empty_semantics() ->
         },
     ]
     assert social_payload_status_code(enabled_payload["status"]) == 200
+
+
+def test_contract_helpers_normalize_urls_and_raise_specific_errors() -> None:
+    """Contract helpers should keep normalization and validation edge cases stable."""
+    assert normalize_social_provider_allowlist(None) == []
+    assert normalize_social_provider_allowlist(" youtube , twitter ") == [
+        "youtube",
+        "x",
+    ]
+    assert normalize_social_provider_allowlist(123) == ["123"]
+    assert social_payload_status_code("unexpected") == 503
+    assert normalize_social_url("//youtu.be/abc123?si=share") == (
+        "https://www.youtube.com/watch?v=abc123"
+    )
+    assert (
+        normalize_social_url(
+            "youtube.com/watch?v=abc123&list=PL123&utm_source=share&ref=campaign"
+        )
+        == "https://www.youtube.com/watch?v=abc123&list=PL123"
+    )
+    assert normalize_social_url("x.com/quickscale///") == "https://x.com/quickscale"
+
+    youtube_embed = resolve_social_embed_metadata(
+        "https://www.youtube.com/watch?v=abc123&list=PL123&utm_source=share",
+        provider="youtube",
+    )
+    assert youtube_embed.embed_url == (
+        "https://www.youtube.com/embed/abc123?rel=0&list=PL123"
+    )
+
+    with pytest.raises(ValueError, match="Social URLs cannot be blank"):
+        normalize_social_url("   ")
+    with pytest.raises(ValueError, match="Social URLs must use http or https"):
+        normalize_social_url("ftp://www.linkedin.com/company/quickscale")
+    with pytest.raises(ValueError, match="Unsupported social provider"):
+        resolve_social_target(
+            "https://www.youtube.com/watch?v=abc123",
+            provider="mastodon",
+        )
+    with pytest.raises(ValueError, match="does not match the declared provider"):
+        resolve_social_target(
+            "https://www.youtube.com/watch?v=abc123",
+            provider="linkedin",
+        )
+    with pytest.raises(
+        ValueError,
+        match="Embeds support only TikTok and YouTube in v0.79.0.",
+    ):
+        resolve_social_embed_metadata("https://www.linkedin.com/company/quickscale")
+    with pytest.raises(
+        ValueError,
+        match="derive a canonical YouTube video id",
+    ):
+        resolve_social_embed_metadata("https://www.youtube.com/watch?list=PL123")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (
+            {"QUICKSCALE_SOCIAL_LINK_TREE_ENABLED": "sometimes"},
+            "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED must be a boolean",
+        ),
+        (
+            {"QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE": 0},
+            "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE must be at least 1",
+        ),
+        (
+            {"QUICKSCALE_SOCIAL_LAYOUT_VARIANT": "mosaic"},
+            "QUICKSCALE_SOCIAL_LAYOUT_VARIANT must be one of: list, cards, grid",
+        ),
+        (
+            {"QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": []},
+            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST cannot be empty",
+        ),
+        (
+            {"QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": ["youtube", "mastodon"]},
+            "contains unsupported providers: mastodon",
+        ),
+        (
+            {"QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": ["linkedin"]},
+            "must include TikTok or YouTube when embeds are enabled",
+        ),
+    ],
+)
+def test_get_social_runtime_settings_rejects_additional_invalid_values(
+    overrides: dict[str, object],
+    message: str,
+) -> None:
+    """Runtime settings should reject invalid types and unsupported provider mixes."""
+    with override_settings(**overrides):
+        with pytest.raises(SocialConfigurationError, match=message):
+            get_social_runtime_settings()
+
+
+@django_db
+def test_social_models_enforce_guardrails_and_invalidate_cache() -> None:
+    """Social models should validate runtime guardrails and clear their cache keys."""
+    cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
+    link = SocialLink.objects.create(
+        title="QuickScale on YouTube",
+        provider_name="youtube",
+        url="https://youtu.be/abc123?si=share",
+        display_order=10,
+    )
+
+    assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+
+    cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
+    link.delete()
+
+    assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+
+    with override_settings(QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"]):
+        invalid_link = SocialLink(
+            title="QuickScale on LinkedIn",
+            provider_name="",
+            url="https://www.linkedin.com/company/quickscale/",
+            display_order=10,
+        )
+        with pytest.raises(ValidationError) as exc_info:
+            invalid_link.full_clean()
+
+    assert exc_info.value.message_dict["provider_name"] == [
+        "This provider is not allowlisted by QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST."
+    ]
+
+    with override_settings(
+        QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["linkedin", "youtube"]
+    ):
+        invalid_embed = SocialEmbed(
+            title="QuickScale on LinkedIn",
+            provider_name="",
+            url="https://www.linkedin.com/company/quickscale/",
+            display_order=10,
+        )
+        with pytest.raises(ValidationError) as exc_info:
+            invalid_embed.full_clean()
+
+    assert exc_info.value.message_dict["provider_name"] == [
+        "Embeds support only TikTok and YouTube in v0.79.0."
+    ]
 
 
 def test_build_social_link_tree_payload_freezes_disabled_and_error_semantics() -> None:
@@ -394,3 +602,24 @@ def test_build_social_embeds_payload_freezes_enabled_disabled_and_error_semantic
     assert error_payload["total_embeds"] == 0
     assert "must include TikTok or YouTube" in error_message
     assert social_payload_status_code(error_payload["status"]) == 503
+
+
+def test_build_social_embeds_payload_uses_empty_state_for_missing_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing embed tables should degrade to the existing empty public payload."""
+
+    def raise_missing_table(*args: object, **kwargs: object) -> object:
+        raise ProgrammingError("no such table: quickscale_modules_social_socialembed")
+
+    cache.delete(SOCIAL_EMBEDS_CACHE_KEY)
+    monkeypatch.setattr(SocialEmbed.objects, "filter", raise_missing_table)
+
+    payload = build_social_embeds_payload()
+
+    assert payload["status"] == SOCIAL_STATUS_EMPTY
+    assert payload["enabled"] is True
+    assert payload["embeds"] == []
+    assert payload["total_embeds"] == 0
+    assert payload["error"] is None
+    assert cache.get(SOCIAL_EMBEDS_CACHE_KEY) is None

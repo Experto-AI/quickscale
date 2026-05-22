@@ -25,7 +25,12 @@
           billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
           social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %}
         },
+        owner: {
+          mode: "{% if settings.QUICKSCALE_MODE == 'saas' %}saas{% else %}solo{% endif %}",
+          currentOrgSlug: {% if request.org and request.org.slug %}"{{ request.org.slug|escapejs }}"{% else %}null{% endif %}
+        },
         modulePaths: {
+          crm: "{% if settings.QUICKSCALE_MODE == 'saas' and request.org and request.org.slug %}/orgs/{{ request.org.slug|escapejs }}/crm{% else %}/crm{% endif %}",
           billing: "{{ modules.billing.url|escapejs }}",
           social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}"
         }

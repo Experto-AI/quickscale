@@ -3,7 +3,11 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from quickscale_core.context_processors import installed_modules
+from quickscale_core.context_processors import (
+    _resolve_compatibility_organization_for_user,
+    _user_has_owner_billing_access,
+    installed_modules,
+)
 
 
 class TestInstalledModulesContextProcessor:
@@ -273,3 +277,246 @@ class TestInstalledModulesContextProcessor:
 
             assert "modules" in result
             assert result["modules"] == {}
+
+
+class TestResolveCompatibilityOrganizationForUser:
+    """Direct unit tests for _resolve_compatibility_organization_for_user (lines 23-44)"""
+
+    def test_returns_none_false_when_orgs_not_installed(self):
+        user = MagicMock(is_authenticated=True)
+        with (
+            patch(
+                "quickscale_core.context_processors._is_saas_mode", return_value=True
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=False,
+            ),
+        ):
+            result = _resolve_compatibility_organization_for_user(user)
+        assert result == (None, False)
+
+    def test_returns_none_false_when_apps_get_model_raises(self):
+        user = MagicMock(is_authenticated=True)
+        with (
+            patch(
+                "quickscale_core.context_processors._is_saas_mode", return_value=True
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                side_effect=Exception("LookupError"),
+            ),
+        ):
+            result = _resolve_compatibility_organization_for_user(user)
+        assert result == (None, False)
+
+    def test_returns_none_false_when_db_query_raises(self):
+        user = MagicMock(is_authenticated=True)
+        mock_qs = MagicMock()
+        mock_qs.select_related.return_value.filter.return_value.order_by.return_value.__getitem__ = MagicMock(
+            side_effect=Exception("DB error")
+        )
+        mock_model = MagicMock()
+        mock_model.objects = mock_qs
+        with (
+            patch(
+                "quickscale_core.context_processors._is_saas_mode", return_value=True
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                return_value=mock_model,
+            ),
+        ):
+            result = _resolve_compatibility_organization_for_user(user)
+        assert result == (None, False)
+
+    def test_returns_none_false_when_no_memberships(self):
+        user = MagicMock(is_authenticated=True)
+        mock_model = MagicMock()
+        mock_model.objects.select_related.return_value.filter.return_value.order_by.return_value.__getitem__ = MagicMock(
+            return_value=[]
+        )
+        with (
+            patch(
+                "quickscale_core.context_processors._is_saas_mode", return_value=True
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "quickscale_core.context_processors.list",
+                return_value=[],
+            ),
+        ):
+            result = _resolve_compatibility_organization_for_user(user)
+        assert result == (None, False)
+
+    def test_returns_org_false_when_single_membership(self):
+        user = MagicMock(is_authenticated=True)
+        org = SimpleNamespace(slug="solo")
+        membership = SimpleNamespace(organization=org)
+        mock_model = MagicMock()
+        with (
+            patch(
+                "quickscale_core.context_processors._is_saas_mode", return_value=True
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "quickscale_core.context_processors.list",
+                return_value=[membership],
+            ),
+        ):
+            result = _resolve_compatibility_organization_for_user(user)
+        assert result == (org, False)
+
+    def test_returns_none_true_when_multiple_memberships(self):
+        user = MagicMock(is_authenticated=True)
+        org1 = SimpleNamespace(slug="alpha")
+        org2 = SimpleNamespace(slug="beta")
+        m1 = SimpleNamespace(organization=org1)
+        m2 = SimpleNamespace(organization=org2)
+        mock_model = MagicMock()
+        with (
+            patch(
+                "quickscale_core.context_processors._is_saas_mode", return_value=True
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                return_value=mock_model,
+            ),
+            patch(
+                "quickscale_core.context_processors.list",
+                return_value=[m1, m2],
+            ),
+        ):
+            result = _resolve_compatibility_organization_for_user(user)
+        assert result == (None, True)
+
+
+class TestUserHasOwnerBillingAccess:
+    """Direct unit tests for _user_has_owner_billing_access (lines 61, 65-90)"""
+
+    def test_returns_false_when_organization_is_none(self):
+        user = MagicMock(is_authenticated=True, is_superuser=False)
+        result = _user_has_owner_billing_access(user=user, organization=None)
+        assert result is False
+
+    def test_returns_false_when_user_not_authenticated(self):
+        user = MagicMock(is_authenticated=False, is_superuser=False)
+        org = SimpleNamespace(slug="test")
+        result = _user_has_owner_billing_access(user=user, organization=org)
+        assert result is False
+
+    def test_returns_true_for_superuser(self):
+        user = MagicMock(is_authenticated=True, is_superuser=True)
+        org = SimpleNamespace(slug="test")
+        result = _user_has_owner_billing_access(user=user, organization=org)
+        assert result is True
+
+    def test_returns_false_when_orgs_not_installed(self):
+        user = MagicMock(is_authenticated=True, is_superuser=False)
+        org = SimpleNamespace(slug="test")
+        with (
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=False,
+            ),
+        ):
+            result = _user_has_owner_billing_access(user=user, organization=org)
+        assert result is False
+
+    def test_returns_false_when_apps_get_model_raises(self):
+        user = MagicMock(is_authenticated=True, is_superuser=False)
+        org = SimpleNamespace(slug="test")
+        with (
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                side_effect=Exception("LookupError"),
+            ),
+        ):
+            result = _user_has_owner_billing_access(user=user, organization=org)
+        assert result is False
+
+    def test_returns_true_when_owner_membership_exists(self):
+        user = MagicMock(is_authenticated=True, is_superuser=False)
+        org = SimpleNamespace(slug="test")
+        mock_model = MagicMock()
+        mock_model.objects.filter.return_value.exists.return_value = True
+        with (
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                return_value=mock_model,
+            ),
+        ):
+            result = _user_has_owner_billing_access(user=user, organization=org)
+        assert result is True
+
+    def test_returns_false_when_no_owner_membership(self):
+        user = MagicMock(is_authenticated=True, is_superuser=False)
+        org = SimpleNamespace(slug="test")
+        mock_model = MagicMock()
+        mock_model.objects.filter.return_value.exists.return_value = False
+        with (
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                return_value=mock_model,
+            ),
+        ):
+            result = _user_has_owner_billing_access(user=user, organization=org)
+        assert result is False
+
+    def test_returns_false_when_db_query_raises(self):
+        user = MagicMock(is_authenticated=True, is_superuser=False)
+        org = SimpleNamespace(slug="test")
+        mock_model = MagicMock()
+        mock_model.objects.filter.return_value.exists.side_effect = Exception(
+            "DB error"
+        )
+        with (
+            patch(
+                "quickscale_core.context_processors.apps.is_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_core.context_processors.apps.get_model",
+                return_value=mock_model,
+            ),
+        ):
+            result = _user_has_owner_billing_access(user=user, organization=org)
+        assert result is False

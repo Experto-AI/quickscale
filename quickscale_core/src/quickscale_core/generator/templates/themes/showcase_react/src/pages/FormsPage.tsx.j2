@@ -1,12 +1,14 @@
 {%- raw -%}
 import { useParams, Navigate } from 'react-router-dom'
 import { FormRenderer } from '@/components/forms/FormRenderer'
+import { useOrgNavigation } from '@/hooks/useOrgNavigation'
 
 export function FormsPage() {
   const { slug } = useParams<{ slug: string }>()
+  const { appPaths, documentPaths } = useOrgNavigation()
 
   if (!slug) {
-    return <Navigate to="/forms/contact" replace />
+    return <Navigate to={appPaths.forms} replace />
   }
 
   return (
@@ -17,7 +19,7 @@ export function FormsPage() {
           Fill out the form below and we'll get back to you.
         </p>
       </div>
-      <FormRenderer slug={slug} />
+      <FormRenderer slug={slug} apiBasePath={documentPaths.formsApiBase} />
     </div>
   )
 }

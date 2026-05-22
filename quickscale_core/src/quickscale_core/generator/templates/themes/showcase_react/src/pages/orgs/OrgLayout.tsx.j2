@@ -1,0 +1,73 @@
+{% raw -%}
+import { Loader2, SearchX, ShieldAlert } from 'lucide-react'
+import { Navigate, Outlet, useOutletContext, useParams } from 'react-router-dom'
+import { OrgStatePanel } from '@/components/orgs/OrgStatePanel'
+import { ApiError, getApiErrorMessage } from '@/hooks/useApi'
+import { useOrgNavigation } from '@/hooks/useOrgNavigation'
+import { useOrg, type OrgDetailResponse } from '@/hooks/useOrgs'
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useOrgPageContext() {
+  return useOutletContext<OrgDetailResponse>()
+}
+
+export function OrgLayout() {
+  const { orgSlug } = useParams<{ orgSlug: string }>()
+  const { appPaths } = useOrgNavigation()
+  const orgQuery = useOrg(orgSlug ?? '')
+
+  if (!orgSlug) {
+    return <Navigate to={appPaths.orgList} replace />
+  }
+
+  if (orgQuery.isLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (orgQuery.error instanceof ApiError && orgQuery.error.status === 403) {
+    return (
+      <OrgStatePanel
+        actionHref={appPaths.orgList}
+        actionLabel="Back to organizations"
+        description="You do not have access to this organization. Ask an admin to invite you or choose a different workspace."
+        icon={ShieldAlert}
+        title="Access denied"
+      />
+    )
+  }
+
+  if (orgQuery.error instanceof ApiError && orgQuery.error.status === 404) {
+    return (
+      <OrgStatePanel
+        actionHref={appPaths.orgList}
+        actionLabel="Choose another organization"
+        description="The organization in this URL could not be found. It may have been renamed or removed."
+        icon={SearchX}
+        title="Organization not found"
+      />
+    )
+  }
+
+  if (orgQuery.isError || !orgQuery.data) {
+    return (
+      <OrgStatePanel
+        actionHref={appPaths.orgList}
+        actionLabel="Back to organizations"
+        description={getApiErrorMessage(
+          orgQuery.error,
+          'The organization dashboard could not be loaded right now.',
+        )}
+        icon={SearchX}
+        title="Unable to load organization"
+      />
+    )
+  }
+
+  return <Outlet context={orgQuery.data} />
+}
+
+{%- endraw %}

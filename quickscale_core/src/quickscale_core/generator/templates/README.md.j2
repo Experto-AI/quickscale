@@ -2,19 +2,25 @@
 
 A Django project generated with QuickScale - a production-ready starter with best practices built-in.
 
+The generated root `Makefile` is the default local entrypoint for setup, linting, formatting, and tests. Run `make help` to list the shipped workflow targets.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.13+ installed
 - Poetry installed (`pip install poetry`)
+{% if theme == "showcase_react" %}
+- Node.js 24+ installed for the generated `frontend/` workspace
+- pnpm available for frontend setup and checks (`corepack enable pnpm` is the simplest option)
+{% endif %}
 - Docker and Docker Compose v2 (optional, for containerized development)
 
 ### Setup (Local Development)
 
 ```bash
-# 1. Install dependencies
-poetry install
+# 1. Install project dependencies
+make setup
 
 # 2. Copy environment variables
 cp .env.example .env
@@ -31,6 +37,8 @@ poetry run python manage.py createsuperuser
 # 5. Run the development server
 poetry run python manage.py runserver
 ```
+
+`make setup` installs frontend dependencies only when `frontend/package.json` exists.
 
 Visit http://127.0.0.1:8000 to see your application.
 
@@ -65,6 +73,7 @@ Visit http://127.0.0.1:8000 to see your application.
 
 This project comes pre-configured with:
 
+- ✅ **Generated Makefile** - Root `make` targets for setup, lint, format, test, and CI-friendly checks
 - ✅ **Django 6.0+** - Latest stable Django version
 - ✅ **PostgreSQL** - Local and production database (no SQLite fallback)
 - ✅ **Docker** - Containerized development and production deployment
@@ -81,10 +90,13 @@ This project comes pre-configured with:
 ### Running Tests
 
 ```bash
-# Run all tests
-poetry run pytest
+# Run the standard local test workflow
+make test
 
-# Run with coverage
+# Run backend tests only
+make test-backend
+
+# Run backend tests with coverage
 poetry run pytest --cov={{ package_name }} --cov-report=html
 
 # Run specific test file
@@ -99,14 +111,20 @@ View coverage report: `open htmlcov/index.html`
 ### Code Quality
 
 ```bash
-# Lint the entire project (Python + React frontend)
-./scripts/lint.sh
+# Run the standard local quality checks
+make check
+
+# Lint all available code
+make lint
 
 # Lint Python only
-./scripts/lint.sh --python
+make lint-backend
 
-# Lint React frontend only
-./scripts/lint.sh --frontend
+# Format backend code and generated frontend sources when present
+make format
+
+# CI-friendly alias for the standard checks
+make ci
 
 # ── Python Commands ──
 
@@ -126,11 +144,19 @@ poetry run mypy {{ package_name }}/
 poetry run pre-commit run --all-files
 ```
 
+{% if theme == "showcase_react" %}
 ### Frontend Code Quality
 
-If your project uses the React frontend (in `frontend/`):
+The React starter includes `frontend/` plus root Makefile targets that delegate into it:
 
 ```bash
+# Run frontend lint checks from the project root
+make lint-frontend
+
+# Run frontend tests from the project root
+make test-frontend
+
+# Work directly inside frontend/ when needed
 cd frontend
 
 # Lint with ESLint
@@ -150,7 +176,11 @@ pnpm format
 
 # Check formatting (CI-friendly)
 pnpm format:check
+
+# Run frontend tests with coverage
+pnpm test:coverage
 ```
+{% endif %}
 
 ### Database Management
 
@@ -276,6 +306,7 @@ docker compose -f docker-compose.yml up -d
 
 ```
 {{ project_name }}/
+├── Makefile                      # Generated local workflow entrypoints
 ├── {{ package_name }}/           # Main Django project package
 │   ├── settings/                 # Split settings (base, local, production)
 │   ├── urls.py                   # Root URL configuration

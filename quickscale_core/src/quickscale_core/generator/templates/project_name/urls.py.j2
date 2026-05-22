@@ -30,7 +30,7 @@ from {{ package_name }}.urls_modules import (
     POST_HOME_MODULE_URLPATTERNS,
     PRE_HOME_MODULE_URLPATTERNS,
 )
-from {{ package_name }}.views import custom_404_view  # noqa: F401
+from {{ package_name }}.views import custom_404_view, orgs_react_shell_view  # noqa: F401
 
 
 def healthcheck(request: HttpRequest) -> HttpResponse:
@@ -42,13 +42,41 @@ def healthcheck(request: HttpRequest) -> HttpResponse:
     return HttpResponse("OK", content_type="text/plain", status=200)
 
 
+{%- if theme == 'showcase_react' %}
+
+
+react_shell_view = TemplateView.as_view(template_name="index.html")
+
+react_shell_urlpatterns = [
+    path("", react_shell_view, name="home"),
+    re_path(r"^orgs/?$", orgs_react_shell_view),
+    re_path(r"^orgs/new/?$", orgs_react_shell_view),
+    re_path(r"^orgs/[^/]+/?$", orgs_react_shell_view),
+    re_path(
+        r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$",
+        orgs_react_shell_view,
+    ),
+    re_path(r"^orgs/[^/]+/forms/?$", orgs_react_shell_view),
+    re_path(r"^orgs/[^/]+/forms/[^/]+/?$", orgs_react_shell_view),
+    re_path(r"^(profile|blog|listings|crm|settings)/?$", react_shell_view),
+    re_path(r"^forms/?$", react_shell_view),
+    re_path(r"^forms/[^/]+/?$", react_shell_view),
+]
+{%- endif %}
+
+
 urlpatterns = [
     path("healthcheck/", healthcheck, name="healthcheck"),
     path("admin/", admin.site.urls),
 ]
+{%- if theme == 'showcase_react' %}
+urlpatterns += react_shell_urlpatterns
+{%- endif %}
 urlpatterns += PRE_HOME_MODULE_URLPATTERNS
 urlpatterns += [
+{%- if theme != 'showcase_react' %}
     path("", TemplateView.as_view(template_name="index.html"), name="home"),
+{%- endif %}
 {%- if theme == 'showcase_react' %}
     re_path(
         r"^social/?$",
@@ -100,6 +128,6 @@ if settings.DEBUG:
 # This must be enabled in both local and production environments so
 # direct navigation to routes like /settings works on Railway.
 urlpatterns += [
-    re_path(r".*", TemplateView.as_view(template_name="index.html")),
+    re_path(r".*", react_shell_view),
 ]
 {%- endif %}

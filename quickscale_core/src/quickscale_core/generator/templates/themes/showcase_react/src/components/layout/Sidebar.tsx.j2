@@ -1,6 +1,7 @@
 {% raw -%}
 import { NavLink } from 'react-router-dom'
 import {
+  Building2,
   Home,
   Settings,
   BookOpen,
@@ -10,10 +11,14 @@ import {
   UserCircle,
   ClipboardList,
   Share2,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
-import { useProjectConfig } from '@/hooks/useModules'
+import { OrgSwitcher } from '@/components/orgs/OrgSwitcher'
+import { buildOrgPath, useProjectConfig } from '@/hooks/useModules'
+import { useOrgNavigation } from '@/hooks/useOrgNavigation'
+import { useOrg } from '@/hooks/useOrgs'
 
 interface NavItem {
   name: string
@@ -26,18 +31,49 @@ interface NavItem {
 
 export function Sidebar() {
   const { modules, modulePaths } = useProjectConfig()
+  const { appPaths, currentOrgSlug, hasOrgContext, isSaas } = useOrgNavigation()
+  const orgQuery = useOrg(currentOrgSlug ?? '')
+  const billingPath =
+    isSaas && currentOrgSlug
+      ? buildOrgPath(
+          currentOrgSlug,
+          orgQuery.data?.actor.is_owner_like ? 'billing/dashboard/' : 'billing/pricing/',
+        )
+      : modulePaths.billing
 
   const navigation: NavItem[] = [
-    { name: 'Dashboard', href: '/', icon: Home, show: true, end: true },
-    { name: 'Blog', href: '/blog', icon: BookOpen, show: modules.blog },
-    { name: 'Listings', href: '/listings', icon: Store, show: modules.listings },
-    { name: 'CRM', href: '/crm-workspace', icon: Briefcase, show: modules.crm },
-    { name: 'Forms', href: '/forms', icon: ClipboardList, show: modules.forms },
+    { name: 'Organizations', href: appPaths.orgList, icon: Building2, show: isSaas, end: true },
+    { name: 'Dashboard', href: appPaths.dashboard, icon: Home, show: true, end: true },
+    {
+      name: 'Blog',
+      href: appPaths.blog,
+      icon: BookOpen,
+      show: modules.blog && (!isSaas || hasOrgContext),
+    },
+    {
+      name: 'Listings',
+      href: appPaths.listings,
+      icon: Store,
+      show: modules.listings && (!isSaas || hasOrgContext),
+    },
+    {
+      name: 'CRM',
+      href: appPaths.crm,
+      icon: Briefcase,
+      show: modules.crm && (!isSaas || hasOrgContext),
+    },
+    {
+      name: 'Forms',
+      href: appPaths.forms,
+      icon: ClipboardList,
+      show: modules.forms && (!isSaas || hasOrgContext),
+    },
+    { name: 'Members', href: appPaths.members, icon: Users, show: isSaas && hasOrgContext },
     {
       name: 'Billing',
-      href: modulePaths.billing,
+      href: billingPath,
       icon: CreditCard,
-      show: modules.billing,
+      show: modules.billing && (!isSaas || hasOrgContext),
       reloadDocument: true,
     },
     {
@@ -51,14 +87,24 @@ export function Sidebar() {
 
   const bottomNavigation: NavItem[] = [
     { name: 'Auth', href: '/profile', icon: UserCircle, show: modules.auth },
-    { name: 'Settings', href: '/settings', icon: Settings, show: true },
+    {
+      name: isSaas ? 'Org Settings' : 'Settings',
+      href: appPaths.settings,
+      icon: Settings,
+      show: !isSaas || hasOrgContext,
+    },
   ]
 
   return (
     <aside className="hidden min-h-screen w-64 flex-col border-r bg-sidebar lg:flex">
-      <div className="p-6">
+      <div className="p-6 pb-4">
         <h1 className="text-xl font-bold text-sidebar-foreground">{% endraw %}{{ project_name }}{% raw %}</h1>
       </div>
+      {isSaas && (
+        <div className="px-4 pb-4">
+          <OrgSwitcher />
+        </div>
+      )}
       <Separator />
       <nav className="flex-1 space-y-1 p-4">
         {navigation
@@ -109,4 +155,5 @@ export function Sidebar() {
     </aside>
   )
 }
-{% endraw -%}
+
+{%- endraw %}

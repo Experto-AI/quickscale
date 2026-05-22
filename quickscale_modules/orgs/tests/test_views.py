@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -33,7 +34,7 @@ class DummyOrganizationContextView(org_views.OrganizationContextMixin):
 
 @pytest.mark.django_db
 def test_saas_org_create_post_creates_org_and_redirects_to_billing(
-    client, settings
+    client, settings, monkeypatch
 ) -> None:
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
@@ -42,6 +43,11 @@ def test_saas_org_create_post_creates_org_and_redirects_to_billing(
         password="secret123",
     )
     client.force_login(user)
+    monkeypatch.setattr(
+        org_views,
+        "_billing_pricing_path",
+        lambda organization: f"/orgs/{organization.slug}/billing/pricing/",
+    )
 
     response = client.post("/orgs/new/", {"name": "Acme Labs"})
 
@@ -54,6 +60,26 @@ def test_saas_org_create_post_creates_org_and_redirects_to_billing(
     assert response.headers["Location"] == "/orgs/acme-labs/billing/pricing/"
     assert membership.role == OrgRole.OWNER
     assert organization.is_personal is False
+
+
+@pytest.mark.django_db
+def test_saas_org_create_post_falls_back_to_org_dashboard_without_billing(
+    client, settings, monkeypatch
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="fallback-builder",
+        email="fallback-builder@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+    monkeypatch.setattr(org_views, "_billing_pricing_path", lambda organization: None)
+
+    response = client.post("/orgs/new/", {"name": "Fallback Labs"})
+
+    organization = Organization.objects.get(slug="fallback-labs")
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"/orgs/{organization.slug}/"
 
 
 @pytest.mark.django_db
@@ -1113,6 +1139,74 @@ def test_member_list_blocks_last_owner_demotion_and_removal(client, settings) ->
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("json_request", [False, True], ids=["html", "json"])
+def test_member_role_updates_translate_save_time_validation_errors(
+    client,
+    settings,
+    monkeypatch,
+    json_request,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Aster", slug="aster")
+    acting_owner = get_user_model().objects.create_user(
+        username=f"aster-acting-{json_request}",
+        email=f"aster-acting-{json_request}@example.com",
+        password="secret123",
+    )
+    target_owner = get_user_model().objects.create_user(
+        username=f"aster-target-{json_request}",
+        email=f"aster-target-{json_request}@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=acting_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    def rejecting_save(self: org_forms.RoleChangeForm) -> OrganizationMembership:
+        raise ValidationError(
+            {"role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]}
+        )
+
+    monkeypatch.setattr(org_forms.RoleChangeForm, "save", rejecting_save)
+    client.force_login(acting_owner)
+
+    if json_request:
+        response = client.post(
+            f"/api/orgs/{organization.slug}/members/{target_membership.pk}/role/",
+            data=json.dumps({"role": OrgRole.ADMIN}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {
+            "errors": {"role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]}
+        }
+    else:
+        response = client.post(
+            f"/orgs/{organization.slug}/members/",
+            {
+                "action": "change-role",
+                "membership_id": target_membership.pk,
+                "role": OrgRole.ADMIN,
+            },
+        )
+        assert response.status_code == 400
+        assert (
+            OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE
+            in response.content.decode()
+        )
+
+    target_membership.refresh_from_db()
+    assert target_membership.role == OrgRole.OWNER
+
+
+@pytest.mark.django_db
 def test_member_list_changes_role_and_redirects_on_success(client, settings) -> None:
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Helios", slug="helios")
@@ -1474,3 +1568,534 @@ def test_solo_pre_home_root_route_renders_org_dashboard(client, settings) -> Non
         is_personal=True,
         memberships__user=user,
     ).exists()
+
+
+@pytest.mark.django_db
+def test_saas_org_api_create_requires_authentication(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+
+    response = client.post(
+        "/api/orgs/",
+        data=json.dumps({"name": "Acme Labs"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Authentication required"}
+
+
+@pytest.mark.django_db
+def test_saas_org_api_create_post_creates_org_and_returns_json(
+    client, settings, monkeypatch
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="api-builder",
+        email="api-builder@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+    monkeypatch.setattr(
+        org_views,
+        "_billing_pricing_path",
+        lambda organization: f"/orgs/{organization.slug}/billing/pricing/",
+    )
+
+    response = client.post(
+        "/api/orgs/",
+        data=json.dumps({"name": "Acme Labs"}),
+        content_type="application/json",
+    )
+
+    organization = Organization.objects.get(slug="acme-labs")
+    membership = OrganizationMembership.objects.get(
+        user=user,
+        organization=organization,
+    )
+    assert response.status_code == 201
+    assert response.json() == {
+        "organization": {
+            "id": str(organization.id),
+            "name": "Acme Labs",
+            "slug": "acme-labs",
+            "is_personal": False,
+            "role": OrgRole.OWNER,
+            "role_label": "Owner",
+        },
+        "next_url": "/orgs/acme-labs/billing/pricing/",
+        "billing_pricing_url": "/orgs/acme-labs/billing/pricing/",
+    }
+    assert membership.role == OrgRole.OWNER
+    assert organization.is_personal is False
+
+
+@pytest.mark.django_db
+def test_saas_org_api_create_falls_back_to_org_dashboard_without_billing(
+    client, settings, monkeypatch
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="api-fallback-builder",
+        email="api-fallback-builder@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+    monkeypatch.setattr(org_views, "_billing_pricing_path", lambda organization: None)
+
+    response = client.post(
+        "/api/orgs/",
+        data=json.dumps({"name": "Fallback Labs"}),
+        content_type="application/json",
+    )
+
+    organization = Organization.objects.get(slug="fallback-labs")
+    assert response.status_code == 201
+    assert response.json()["next_url"] == f"/orgs/{organization.slug}/"
+    assert response.json()["billing_pricing_url"] is None
+
+
+@pytest.mark.django_db
+def test_saas_org_api_list_returns_memberships(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="erin-api",
+        email="erin-api@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Echo", slug="echo")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    response = client.get("/api/orgs/")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "organizations": [
+            {
+                "id": str(organization.id),
+                "name": "Echo",
+                "slug": "echo",
+                "is_personal": False,
+                "role": OrgRole.MEMBER,
+                "role_label": "Member",
+            }
+        ]
+    }
+
+
+@pytest.mark.django_db
+def test_saas_org_api_list_returns_empty_state_without_memberships(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="frank-api",
+        email="frank-api@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    response = client.get("/api/orgs/")
+
+    assert response.status_code == 200
+    assert response.json() == {"organizations": []}
+
+
+@pytest.mark.django_db
+def test_saas_org_api_detail_returns_org_payload(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="harper-api",
+        email="harper-api@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Harbor", slug="harbor")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    response = client.get(f"/api/orgs/{organization.slug}/")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "organization": {
+            "id": str(organization.id),
+            "name": "Harbor",
+            "slug": "harbor",
+            "is_personal": False,
+            "role": OrgRole.MEMBER,
+            "role_label": "Member",
+            "member_count": 1,
+        },
+        "actor": {
+            "role": OrgRole.MEMBER,
+            "is_owner_like": False,
+        },
+    }
+
+
+@pytest.mark.django_db
+def test_saas_org_api_detail_returns_403_for_non_member(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="harper-api-403",
+        email="harper-api-403@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Harbor", slug="harbor")
+    client.force_login(user)
+
+    response = client.get(f"/api/orgs/{organization.slug}/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_org_api_members_returns_members_and_pending_invitations(
+    client, settings
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Northwind", slug="northwind")
+    admin_user = get_user_model().objects.create_user(
+        username="northwind-admin-api",
+        email="northwind-admin-api@example.com",
+        password="secret123",
+    )
+    member_user = get_user_model().objects.create_user(
+        username="northwind-member-api",
+        email="northwind-member-api@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    OrganizationMembership.objects.create(
+        user=member_user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="invitee@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=admin_user,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    client.force_login(admin_user)
+
+    response = client.get(f"/api/orgs/{organization.slug}/members/")
+
+    payload = response.json()
+    member_payloads = {member["user"]["email"]: member for member in payload["members"]}
+    assert response.status_code == 200
+    assert payload["organization"] == {
+        "id": str(organization.id),
+        "name": organization.name,
+        "slug": organization.slug,
+        "is_personal": False,
+    }
+    assert payload["actor"] == {"role": OrgRole.ADMIN, "is_owner_like": False}
+    assert set(member_payloads) == {
+        admin_user.email,
+        member_user.email,
+    }
+    assert member_payloads[admin_user.email]["role"] == OrgRole.ADMIN
+    assert member_payloads[member_user.email]["role"] == OrgRole.MEMBER
+    assert payload["pending_invitations"] == [
+        {
+            "id": str(invitation.pk),
+            "email": "invitee@example.com",
+            "role": OrgRole.MEMBER,
+            "role_label": "Member",
+            "expires_at": invitation.expires_at.astimezone(timezone.UTC).isoformat(),
+        }
+    ]
+    assert payload["role_choices"] == [
+        {"value": OrgRole.VIEWER, "label": "Viewer"},
+        {"value": OrgRole.MEMBER, "label": "Member"},
+        {"value": OrgRole.ADMIN, "label": "Admin"},
+    ]
+
+
+@pytest.mark.django_db
+def test_org_api_invite_creates_invitation_and_dispatches_notification(
+    client,
+    settings,
+    monkeypatch,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Helios", slug="helios")
+    admin_user = get_user_model().objects.create_user(
+        username="helios-admin-api",
+        email="helios-admin-api@example.com",
+        password="secret123",
+        first_name="Helios",
+        last_name="Admin",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    captured_calls: list[dict[str, object]] = []
+
+    def fake_sender(**kwargs: object) -> object:
+        captured_calls.append(dict(kwargs))
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        org_views,
+        "_load_invitation_notification_sender",
+        lambda: fake_sender,
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/api/orgs/{organization.slug}/members/invite/",
+        data=json.dumps({"email": "Invitee@Example.com", "role": OrgRole.ADMIN}),
+        content_type="application/json",
+    )
+
+    invitation = OrganizationInvitation.objects.get(organization=organization)
+    assert response.status_code == 201
+    assert response.json() == {
+        "invitation": {
+            "id": str(invitation.pk),
+            "email": "invitee@example.com",
+            "role": OrgRole.ADMIN,
+            "role_label": "Admin",
+            "expires_at": invitation.expires_at.astimezone(timezone.UTC).isoformat(),
+        }
+    }
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["template_key"] == "notifications.org_invitation"
+    assert captured_calls[0]["recipients"] == ["invitee@example.com"]
+
+
+@pytest.mark.django_db
+def test_org_api_member_role_update_returns_json(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Helios", slug="helios")
+    owner = get_user_model().objects.create_user(
+        username="helios-owner-api",
+        email="helios-owner-api@example.com",
+        password="secret123",
+    )
+    member = get_user_model().objects.create_user(
+        username="helios-member-api",
+        email="helios-member-api@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    member_membership = OrganizationMembership.objects.create(
+        user=member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(owner)
+
+    response = client.post(
+        f"/api/orgs/{organization.slug}/members/{member_membership.pk}/role/",
+        data=json.dumps({"role": OrgRole.ADMIN}),
+        content_type="application/json",
+    )
+
+    member_membership.refresh_from_db()
+    assert response.status_code == 200
+    assert response.json()["member"]["id"] == member_membership.pk
+    assert response.json()["member"]["role"] == OrgRole.ADMIN
+    assert member_membership.role == OrgRole.ADMIN
+
+
+@pytest.mark.django_db
+def test_org_api_member_remove_returns_json(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Nova", slug="nova")
+    admin_user = get_user_model().objects.create_user(
+        username="nova-admin-api",
+        email="nova-admin-api@example.com",
+        password="secret123",
+    )
+    member_user = get_user_model().objects.create_user(
+        username="nova-member-api",
+        email="nova-member-api@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    membership = OrganizationMembership.objects.create(
+        user=member_user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/api/orgs/{organization.slug}/members/{membership.pk}/remove/",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "removed", "member_id": membership.pk}
+    assert not OrganizationMembership.objects.filter(pk=membership.pk).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("json_request", [False, True], ids=["html", "json"])
+def test_member_removals_translate_delete_time_validation_errors(
+    client,
+    settings,
+    monkeypatch,
+    json_request,
+) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Lyra", slug="lyra")
+    acting_owner = get_user_model().objects.create_user(
+        username=f"lyra-acting-{json_request}",
+        email=f"lyra-acting-{json_request}@example.com",
+        password="secret123",
+    )
+    target_owner = get_user_model().objects.create_user(
+        username=f"lyra-target-{json_request}",
+        email=f"lyra-target-{json_request}@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=acting_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    target_membership = OrganizationMembership.objects.create(
+        user=target_owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+
+    def rejecting_delete(
+        self: OrganizationMembership,
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[int, dict[str, int]]:
+        del self, args, kwargs
+        raise ValidationError(OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE)
+
+    monkeypatch.setattr(OrganizationMembership, "delete", rejecting_delete)
+    client.force_login(acting_owner)
+
+    if json_request:
+        response = client.post(
+            f"/api/orgs/{organization.slug}/members/{target_membership.pk}/remove/",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert response.json() == {
+            "errors": {
+                "non_field_errors": [OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE]
+            }
+        }
+    else:
+        response = client.post(
+            f"/orgs/{organization.slug}/members/",
+            {
+                "action": "remove",
+                "membership_id": target_membership.pk,
+            },
+        )
+        assert response.status_code == 400
+        assert (
+            OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+            in response.content.decode()
+        )
+
+    assert OrganizationMembership.objects.filter(pk=target_membership.pk).exists()
+
+
+@pytest.mark.django_db
+def test_org_api_revoke_invitation_returns_json(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Summit", slug="summit")
+    admin_user = get_user_model().objects.create_user(
+        username="summit-admin-api",
+        email="summit-admin-api@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    invitation = OrganizationInvitation.objects.create(
+        organization=organization,
+        email="invitee@example.com",
+        role=OrgRole.MEMBER,
+        invited_by=admin_user,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/api/orgs/{organization.slug}/members/invitations/{invitation.pk}/revoke/",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "revoked",
+        "invitation_id": str(invitation.pk),
+    }
+    assert not OrganizationInvitation.objects.filter(pk=invitation.pk).exists()
+
+
+@pytest.mark.django_db
+def test_org_api_settings_updates_slug_and_returns_json(client, settings) -> None:
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Beacon", slug="beacon")
+    admin_user = get_user_model().objects.create_user(
+        username="beacon-admin-api",
+        email="beacon-admin-api@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/api/orgs/{organization.slug}/settings/",
+        data=json.dumps({"name": "Beacon Labs", "slug": "beacon-labs"}),
+        content_type="application/json",
+    )
+
+    organization.refresh_from_db()
+    assert response.status_code == 200
+    assert response.json() == {
+        "organization": {
+            "id": str(organization.id),
+            "name": "Beacon Labs",
+            "slug": "beacon-labs",
+            "is_personal": False,
+        }
+    }
+    assert organization.name == "Beacon Labs"
+    assert organization.slug == "beacon-labs"

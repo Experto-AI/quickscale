@@ -1,5 +1,7 @@
 """Django settings for QuickScale billing module tests."""
 
+import os
+
 SECRET_KEY = "test-secret-key-for-billing-module"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
@@ -30,7 +32,7 @@ ROOT_URLCONF = "tests.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [os.path.join(os.path.dirname(__file__), "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
