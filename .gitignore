@@ -228,6 +228,8 @@ quickscale_core/*_test_*/
 # Code quality reports (generated, not tracked)
 quality_report.json
 quality_report.md
+coverage.json
+pytest_cov_log.txt
 
 # Marketing content drafts (generated content not tracked in repo)
 marketing/

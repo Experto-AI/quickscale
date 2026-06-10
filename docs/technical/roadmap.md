@@ -448,10 +448,10 @@ One real-subtree-embed e2e per theme (even just `auth`, the simplest full app) w
 ## Phased Implementation Plan
 
 ### Phase 1 — Quick wins (< 1 day each, no architectural risk)
-- [ ] Delete `quickscale_core/src/quickscale_core/context_processors.py` and `test_context_processors.py` (Finding 16)
-- [ ] Add `tomllib.loads(new_content)` post-write validation in all three TOML writers in dependency sync (Finding 14)
-- [ ] Untrack `coverage.json` and `pytest_cov_log.txt` from git; add both to `.gitignore` (Finding 8)
-- [ ] Merge or delete `*_coverage.py` branch-chasing tests; fold any real coverage into behavioral suites (Finding 8)
+- [x] Delete `quickscale_core/src/quickscale_core/context_processors.py` and `test_context_processors.py` (Finding 16)
+- [x] Add `tomllib.loads(new_content)` post-write validation in all three TOML writers in dependency sync (Finding 14)
+- [x] Untrack `coverage.json` and `pytest_cov_log.txt` from git; add both to `.gitignore` (Finding 8)
+- [x] Merge or delete `*_coverage.py` branch-chasing tests; fold any real coverage into behavioral suites (Finding 8)
 
 ### Phase 2 — Correctness and safety fixes (contained, safety-critical)
 - [ ] Fix apply recovery: pass post-embed state (not `ctx.existing_state`) to `_abort_after_post_embed_failure` (Finding 12)

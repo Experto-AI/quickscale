@@ -1,7 +1,7 @@
-"""Tests for manifest loader"""
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-from pathlib import Path
 
 from quickscale_core.manifest.loader import (
     ManifestError,
@@ -105,6 +105,111 @@ description: Module without name
             load_manifest(yaml_content, "fallback_name")
         assert "name" in str(exc_info.value).lower()
 
+    def test_load_manifest_non_dict_yaml_raises(self) -> None:
+        """YAML that is not a mapping raises ManifestError."""
+        with pytest.raises(ManifestError, match="YAML mapping"):
+            load_manifest("just a string", "testmod")
+
+    def test_load_manifest_yaml_list_raises(self) -> None:
+        """YAML list payloads should also fail manifest parsing."""
+        with pytest.raises(ManifestError, match="YAML mapping"):
+            load_manifest("- item1\n- item2", "testmod")
+
+    def test_load_manifest_missing_version_raises(self) -> None:
+        """Manifest without a version field raises ManifestError."""
+        yaml_content = "name: mymod\ndescription: no version"
+        with pytest.raises(ManifestError, match="version"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_empty_version_raises(self) -> None:
+        """Manifest with an empty version string raises ManifestError."""
+        yaml_content = "name: mymod\nversion: ''"
+        with pytest.raises(ManifestError, match="version"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_non_string_version_raises(self) -> None:
+        """Manifest with a non-string version raises ManifestError."""
+        yaml_content = "name: mymod\nversion: 123"
+        with pytest.raises(ManifestError):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_config_not_dict_raises(self) -> None:
+        """Top-level config that is not a mapping raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nconfig: not_a_dict"
+        with pytest.raises(ManifestError, match="config"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_mutable_section_not_dict_raises(self) -> None:
+        """config.mutable must be a mapping."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\nconfig:\n  mutable: not_a_mapping\n"
+        )
+        with pytest.raises(ManifestError, match="mutable"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_immutable_section_not_dict_raises(self) -> None:
+        """config.immutable must be a mapping."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\nconfig:\n  immutable:\n    - item\n"
+        )
+        with pytest.raises(ManifestError, match="immutable"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_data_not_dict_raises(self) -> None:
+        """Each option payload must be a mapping when present."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n    my_option: not_a_mapping\n"
+        )
+        with pytest.raises(ManifestError):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_error_includes_module_name(self) -> None:
+        """ManifestError message includes the module name when provided."""
+        with pytest.raises(ManifestError) as exc_info:
+            load_manifest("just a string", "my_module")
+        assert "my_module" in str(exc_info.value)
+
+    def test_load_manifest_error_without_module_name(self) -> None:
+        """ManifestError without module name formats cleanly."""
+        with pytest.raises(ManifestError) as exc_info:
+            load_manifest("just a string")
+        assert "YAML mapping" in str(exc_info.value)
+
+    def test_load_manifest_dependencies_not_list_raises(self) -> None:
+        """dependencies field that is not a list raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\ndependencies: not_a_list\n"
+        with pytest.raises(ManifestError, match="dependencies"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_required_modules_not_list_raises(self) -> None:
+        """required_modules field that is not a list raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nrequired_modules: not_a_list\n"
+        with pytest.raises(ManifestError, match="required_modules"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_required_modules_round_trip(self) -> None:
+        """required_modules should be preserved on the loaded manifest."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nrequired_modules:\n  - orgs\n"
+
+        manifest = load_manifest(yaml_content, "mymod")
+
+        assert manifest.required_modules == ["orgs"]
+
+    def test_load_manifest_django_apps_not_list_raises(self) -> None:
+        """django_apps field that is not a list raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\ndjango_apps: not_a_list\n"
+        with pytest.raises(ManifestError, match="django_apps"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_none_value_allowed(self) -> None:
+        """A config option with null/None value is accepted."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\nconfig:\n  immutable:\n    my_option:\n"
+        )
+        manifest = load_manifest(yaml_content, "mymod")
+        assert "my_option" in manifest.immutable_options
+
 
 class TestLoadManifestFromPath:
     """Tests for load_manifest_from_path function"""
@@ -137,6 +242,29 @@ config:
             load_manifest_from_path(fake_path)
 
         assert "not found" in str(exc_info.value).lower()
+
+    def test_load_from_path_read_error_raises(self, tmp_path: Path) -> None:
+        """OSError while reading the file raises ManifestError."""
+        manifest_path = tmp_path / "auth" / "module.yml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text("name: auth\nversion: '1.0.0'\n")
+
+        with patch("pathlib.Path.read_text", side_effect=OSError("disk error")):
+            with pytest.raises(ManifestError, match="Failed to read manifest"):
+                load_manifest_from_path(manifest_path)
+
+    def test_load_from_path_uses_parent_name_as_module_name(
+        self, tmp_path: Path
+    ) -> None:
+        """Module name in errors is taken from the parent directory name."""
+        module_dir = tmp_path / "my_module"
+        module_dir.mkdir()
+        manifest_path = module_dir / "module.yml"
+        manifest_path.write_text("just a string")
+
+        with pytest.raises(ManifestError) as exc_info:
+            load_manifest_from_path(manifest_path)
+        assert "my_module" in str(exc_info.value)
 
 
 class TestGetManifestForModule:
@@ -212,3 +340,13 @@ version: "0.71.0"
         manifest = get_manifest_for_module(project_path, "auth")
         assert manifest is not None
         assert manifest.name == "auth"
+
+    def test_get_manifest_returns_none_on_manifest_error(self, tmp_path: Path) -> None:
+        """If the manifest file exists but is invalid, None is returned silently."""
+        project_path = tmp_path / "project"
+        module_dir = project_path / "modules" / "broken"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text("- invalid\n- list\n")
+
+        result = get_manifest_for_module(project_path, "broken")
+        assert result is None

@@ -215,6 +215,18 @@ def _render_toml_literal(value: Any) -> str:
     raise DependencySyncError(f"Unsupported TOML dependency value: {value!r}")
 
 
+def _write_validated_toml(path: Path, content: str) -> None:
+    """Write TOML content only after validating the rewritten document."""
+    try:
+        tomllib.loads(content)
+    except tomllib.TOMLDecodeError as error:
+        raise DependencySyncError(
+            f"Refusing to write invalid TOML to {path}: {error}"
+        ) from error
+
+    path.write_text(content)
+
+
 def _append_dependency_entries(
     pyproject_path: Path,
     entries: list[tuple[str, Any]],
@@ -263,7 +275,7 @@ def _append_dependency_entries(
         + lines[insertion_index:section_end]
         + lines[section_end:]
     )
-    pyproject_path.write_text("\n".join(updated_lines) + "\n")
+    _write_validated_toml(pyproject_path, "\n".join(updated_lines) + "\n")
 
 
 def sync_project_module_dependencies(

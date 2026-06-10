@@ -3,6 +3,7 @@
 Covers CRM, listings apply, auth apply, and edge cases.
 """
 
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -63,6 +64,7 @@ from quickscale_cli.utils.module_dependency_sync import sync_project_module_depe
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
     ProjectDependencySyncResult,
+    _append_dependency_entries,
     _extract_dependency_name,
     _extract_version_tuple,
     _load_poetry_dependencies,
@@ -387,6 +389,22 @@ class TestSharedModuleDependencySyncHelpers:
             DependencySyncError, match="Unsupported TOML dependency value"
         ):
             _render_toml_literal(object())
+
+    def test_append_dependency_entries_rejects_invalid_rewritten_toml(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        original = '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        pyproject.write_text(original)
+
+        with patch(
+            "quickscale_cli.utils.module_dependency_sync.tomllib.loads",
+            side_effect=tomllib.TOMLDecodeError("bad toml", original, 0),
+        ):
+            with pytest.raises(
+                DependencySyncError, match="Refusing to write invalid TOML"
+            ):
+                _append_dependency_entries(pyproject, [("django-allauth", "^0.65.0")])
+
+        assert pyproject.read_text() == original
 
 
 # ============================================================================
@@ -1486,6 +1504,28 @@ class TestStorageModuleConfig:
 
         assert pyproject.read_text() == original
 
+    def test_add_django_allauth_dependency_aborts_on_invalid_rewritten_toml(
+        self, tmp_path
+    ):
+        """Abort instead of writing a corrupt auth dependency rewrite."""
+        pyproject = tmp_path / "pyproject.toml"
+        original = '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
+        pyproject.write_text(original)
+        auth_dir = tmp_path / "modules" / "auth"
+        auth_dir.mkdir(parents=True)
+        (auth_dir / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
+        )
+
+        with patch(
+            "quickscale_cli.commands.module_config.tomllib.loads",
+            side_effect=tomllib.TOMLDecodeError("bad toml", original, 0),
+        ):
+            with pytest.raises(click.Abort):
+                _add_django_allauth_dependency(tmp_path, pyproject)
+
+        assert pyproject.read_text() == original
+
     def test_add_storage_dependencies_handles_missing_dependencies_section(
         self, tmp_path
     ):
@@ -1503,6 +1543,28 @@ class TestStorageModuleConfig:
         _add_storage_dependencies(tmp_path, pyproject)
 
         assert "django-storages" not in pyproject.read_text()
+
+    def test_add_storage_dependencies_aborts_on_invalid_rewritten_toml(self, tmp_path):
+        """Abort instead of writing a corrupt storage dependency rewrite."""
+        pyproject = tmp_path / "pyproject.toml"
+        original = '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
+        pyproject.write_text(original)
+        storage_dir = tmp_path / "modules" / "storage"
+        storage_dir.mkdir(parents=True)
+        (storage_dir / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'django-storages = "^1.14.4"\n'
+            'boto3 = "^1.35.0"\n'
+        )
+
+        with patch(
+            "quickscale_cli.commands.module_config.tomllib.loads",
+            side_effect=tomllib.TOMLDecodeError("bad toml", original, 0),
+        ):
+            with pytest.raises(click.Abort):
+                _add_storage_dependencies(tmp_path, pyproject)
+
+        assert pyproject.read_text() == original
 
     @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
     def test_apply_storage_configuration_cloud_only_regenerates_wiring(

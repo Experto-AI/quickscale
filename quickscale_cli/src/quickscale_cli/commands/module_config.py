@@ -7,6 +7,7 @@ including interactive configuration prompts and settings application.
 import json
 import re
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional
@@ -404,8 +405,7 @@ def _add_django_allauth_dependency(project_path: Path, pyproject_path: Path) -> 
             dependencies_section, updated_dependencies
         )
 
-        with open(pyproject_path, "w") as f:
-            f.write(pyproject_content)
+        _write_validated_pyproject_content(pyproject_path, pyproject_content)
 
         click.secho("  ✅ Added django-allauth to pyproject.toml", fg="green")
     else:
@@ -773,6 +773,24 @@ def _get_dependency_version(content: str, package: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def _write_validated_pyproject_content(pyproject_path: Path, content: str) -> None:
+    """Persist rewritten pyproject content only when it remains valid TOML."""
+    try:
+        tomllib.loads(content)
+    except tomllib.TOMLDecodeError as error:
+        click.secho(
+            "❌ Error: Rewritten pyproject.toml would be invalid TOML.",
+            fg="red",
+            err=True,
+        )
+        click.echo(f"File: {pyproject_path}", err=True)
+        click.echo(f"Parse error: {error}", err=True)
+        raise click.Abort() from error
+
+    with open(pyproject_path, "w") as f:
+        f.write(content)
+
+
 def _get_crm_settings_addition(config: dict[str, Any]) -> str:
     """Generate settings addition for CRM module."""
     return f"""
@@ -1102,8 +1120,7 @@ def _add_storage_dependencies(project_path: Path, pyproject_path: Path) -> None:
         dependencies_section, updated_dependencies
     )
 
-    with open(pyproject_path, "w") as f:
-        f.write(pyproject_content)
+    _write_validated_pyproject_content(pyproject_path, pyproject_content)
 
     if storages_version:
         click.secho("  ✅ Added django-storages to pyproject.toml", fg="green")
