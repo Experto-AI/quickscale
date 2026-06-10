@@ -981,6 +981,196 @@ class TestUpdateSingleModule:
         mock_sync_state.assert_not_called()
         mock_commit.assert_not_called()
 
+    def test_update_local_guard_blocks_before_subtree_pull_on_option_drift(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        """Known local desired/applied drift should block update before subtree pull."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "\n".join(
+                [
+                    'version: "1"',
+                    "project:",
+                    "  slug: myproject",
+                    "  package: myproject",
+                    "  theme: showcase_html",
+                    '  created_at: "2025-01-01T00:00:00"',
+                    '  last_applied: "2025-01-01T00:00:00"',
+                    "modules:",
+                    "  blog:",
+                    "    name: blog",
+                    '    version: "0.71.0"',
+                    '    commit_sha: "abc123"',
+                    '    embedded_at: "2025-01-01T00:00:00"',
+                    "    options:",
+                    "      enable_rss: true",
+                ]
+            )
+            + "\n"
+        )
+        (tmp_path / "quickscale.yml").write_text(
+            "\n".join(
+                [
+                    'version: "1"',
+                    "project:",
+                    "  slug: myproject",
+                    "  package: myproject",
+                    "  theme: showcase_html",
+                    "modules:",
+                    "  blog:",
+                    "    enable_rss: false",
+                    "docker:",
+                    "  start: false",
+                ]
+            )
+            + "\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/blog", branch="splits/blog-module")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+            ) as mock_pull,
+            patch(
+                "quickscale_cli.commands.module_commands.update_module_version"
+            ) as mock_update_version,
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version"
+            ) as mock_sync_state,
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update"
+            ) as mock_commit,
+        ):
+            result = _update_single_module(
+                "blog",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=False,
+            )
+
+        captured = capsys.readouterr()
+
+        assert result is False
+        assert "Pre-pull local guard blocked update for blog" in captured.err
+        assert "quickscale apply" in captured.err
+        assert "blog.enable_rss" in captured.err
+        mock_pull.assert_not_called()
+        mock_update_version.assert_not_called()
+        mock_sync_state.assert_not_called()
+        mock_commit.assert_not_called()
+
+    def test_update_restores_pre_pull_snapshot_after_post_pull_failure(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """Post-pull failures should restore module and tracking files from snapshot."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        module_manifest = module_dir / "module.yml"
+        module_manifest.write_text('name: auth\nversion: "0.71.0"\n')
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        legacy_config_path = quickscale_dir / "config.yml"
+        legacy_config_path.write_text(
+            "modules:\n  auth:\n    installed_version: 0.71.0\n"
+        )
+        state_path = quickscale_dir / "state.yml"
+        original_state = (
+            "\n".join(
+                [
+                    'version: "1"',
+                    "project:",
+                    "  slug: myproject",
+                    "  package: myproject",
+                    "  theme: showcase_html",
+                    '  created_at: "2025-01-01T00:00:00"',
+                    '  last_applied: "2025-01-01T00:00:00"',
+                    "modules:",
+                    "  auth:",
+                    "    name: auth",
+                    '    version: "0.71.0"',
+                    '    commit_sha: "abc123"',
+                    '    embedded_at: "2025-01-01T00:00:00"',
+                    "    options: {}",
+                ]
+            )
+            + "\n"
+        )
+        state_path.write_text(original_state)
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        def _fake_subtree_pull(*, prefix: str, remote: str, branch: str, squash: bool):
+            del remote, branch, squash
+            (tmp_path / prefix / "module.yml").write_text(
+                'name: auth\nversion: "0.82.0"\n'
+            )
+            return "updated"
+
+        def _fake_update_module_version(
+            module_name: str,
+            version: str,
+            project_path: Path,
+        ) -> None:
+            del module_name
+            (project_path / ".quickscale" / "config.yml").write_text(
+                f"modules:\n  auth:\n    installed_version: {version}\n"
+            )
+
+        def _fake_sync_state_module_version(
+            project_path: Path,
+            module_name: str,
+            version: str,
+        ) -> None:
+            del module_name
+            (project_path / ".quickscale" / "state.yml").write_text(
+                original_state.replace('version: "0.71.0"', f'version: "{version}"', 1)
+            )
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                side_effect=_fake_subtree_pull,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.82.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.update_module_version",
+                side_effect=_fake_update_module_version,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                side_effect=_fake_sync_state_module_version,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+                side_effect=Exception("commit failed after staging"),
+            ),
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is False
+        assert module_manifest.read_text() == 'name: auth\nversion: "0.71.0"\n'
+        assert (
+            legacy_config_path.read_text()
+            == "modules:\n  auth:\n    installed_version: 0.71.0\n"
+        )
+        assert state_path.read_text() == original_state
+
     @patch("quickscale_cli.commands.module_commands._commit_module_update")
     @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
     @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")

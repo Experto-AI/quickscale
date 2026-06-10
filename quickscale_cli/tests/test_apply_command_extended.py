@@ -21,8 +21,6 @@ from quickscale_cli.social_contract import (
 )
 from quickscale_cli.commands.apply_command import (
     EmbedModulesResult,
-    _apply_mutable_config,
-    _check_immutable_config_changes,
     _check_output_directory,
     _commit_pending_config_changes,
     _determine_output_path,
@@ -244,15 +242,22 @@ class TestGitOperations:
         mock_run.return_value = (False, "error")
         assert _init_git(Path("/tmp/proj")) is False
 
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
     @patch("quickscale_cli.commands.apply_command._run_command")
-    def test_git_commit_success(self, mock_run):
+    def test_git_commit_success(self, mock_run, mock_subprocess):
         """Test successful git commit"""
+        mock_subprocess.return_value = Mock(returncode=0, stdout="tree123\n", stderr="")
         mock_run.return_value = (True, "")
         assert _git_commit(Path("/tmp/proj"), "msg") is True
 
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
     @patch("quickscale_cli.commands.apply_command._run_command")
-    def test_git_commit_add_fails(self, mock_run):
+    def test_git_commit_add_fails(self, mock_run, mock_subprocess):
         """Test git commit when git add fails"""
+        mock_subprocess.side_effect = [
+            Mock(returncode=0, stdout="tree123\n", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
+        ]
         mock_run.return_value = (False, "error")
         assert _git_commit(Path("/tmp/proj"), "msg") is False
 
@@ -456,68 +461,6 @@ class TestLoadModuleManifests:
 
         with pytest.raises(ManifestError, match="auth"):
             _load_module_manifests(Path("/tmp"), ["auth"], strict=True)
-
-
-# ============================================================================
-# _apply_mutable_config / _check_immutable_config_changes
-# ============================================================================
-
-
-class TestConfigChanges:
-    """Tests for mutable/immutable config change handling"""
-
-    def test_apply_mutable_no_changes(self):
-        """Test apply mutable when no changes"""
-        delta = Mock()
-        delta.has_mutable_config_changes = False
-        assert _apply_mutable_config(Path("/tmp"), delta, {}) is True
-
-    @patch("quickscale_cli.commands.apply_command.apply_mutable_config_changes")
-    def test_apply_mutable_success(self, mock_apply):
-        """Test successful mutable config application"""
-        mock_apply.return_value = [("SETTING", True, "Updated")]
-        delta = Mock()
-        delta.has_mutable_config_changes = True
-        change = Mock()
-        change.django_setting = "MY_SETTING"
-        change.new_value = "new_val"
-        delta.get_all_mutable_changes.return_value = [("auth", change)]
-
-        result = _apply_mutable_config(Path("/tmp"), delta, {})
-        assert result is True
-
-    @patch("quickscale_cli.commands.apply_command.apply_mutable_config_changes")
-    def test_apply_mutable_failure(self, mock_apply):
-        """Test failed mutable config application"""
-        mock_apply.return_value = [("SETTING", False, "Failed")]
-        delta = Mock()
-        delta.has_mutable_config_changes = True
-        change = Mock()
-        change.django_setting = "MY_SETTING"
-        change.new_value = "new_val"
-        delta.get_all_mutable_changes.return_value = [("auth", change)]
-
-        result = _apply_mutable_config(Path("/tmp"), delta, {})
-        assert result is False
-
-    def test_check_immutable_no_changes(self):
-        """Test no immutable changes"""
-        delta = Mock()
-        delta.has_immutable_config_changes = False
-        assert _check_immutable_config_changes(delta) is True
-
-    def test_check_immutable_has_changes(self):
-        """Test immutable changes detected"""
-        delta = Mock()
-        delta.has_immutable_config_changes = True
-        change = Mock()
-        change.option_name = "auth_method"
-        change.old_value = "email"
-        change.new_value = "username"
-        delta.get_all_immutable_changes.return_value = [("auth", change)]
-
-        result = _check_immutable_config_changes(delta)
-        assert result is False
 
 
 # ============================================================================
@@ -1441,6 +1384,7 @@ class TestCommitPendingConfigChanges:
             Mock(returncode=0, stdout="", stderr=""),
             Mock(returncode=0, stdout="quickscale.yml\n", stderr=""),
             Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="tree123\n", stderr=""),
         ]
         mock_run_command.side_effect = [(True, ""), (True, "")]
 
@@ -1493,6 +1437,7 @@ class TestCommitPendingConfigChanges:
                 stderr="",
             ),
             Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="tree123\n", stderr=""),
         ]
         mock_run_command.side_effect = [(True, ""), (True, "")]
 
@@ -1613,6 +1558,7 @@ class TestCommitPendingConfigChanges:
                 stderr="",
             ),
             Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=0, stdout="tree123\n", stderr=""),
         ]
         mock_run_command.side_effect = [(True, ""), (True, "")]
 
@@ -2728,13 +2674,15 @@ class TestExecuteApplySteps:
             False,
         )
         mock_init_git.assert_called_once_with(ctx.output_path)
-        mock_save_state.assert_called_once_with(
+        mock_save_state.assert_called_once()
+        assert mock_save_state.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             ["auth"],
             ctx.delta,
         )
+        assert "state_snapshot" not in mock_save_state.call_args.kwargs
         mock_save_recovery.assert_not_called()
         mock_regenerate_wiring.assert_not_called()
         mock_backups_gitignore.assert_not_called()
@@ -2862,13 +2810,15 @@ class TestExecuteApplySteps:
 
         mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
@@ -2926,13 +2876,17 @@ class TestExecuteApplySteps:
         assert "managed module wiring generation failed" in text
         assert ".quickscale/apply-recovery.yml" in text
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             ["auth"],
             ctx.delta,
         )
+        state_snapshot = mock_save_recovery.call_args.kwargs["state_snapshot"]
+        assert state_snapshot is not None
+        assert list(state_snapshot.modules) == ["auth"]
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
@@ -2994,13 +2948,15 @@ class TestExecuteApplySteps:
                 )
 
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
@@ -3070,13 +3026,15 @@ class TestExecuteApplySteps:
                 )
 
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_sync_module_dependencies.assert_not_called()
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
@@ -3142,13 +3100,15 @@ class TestExecuteApplySteps:
                 )
 
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             ["backups"],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_notifications_env_sync.assert_not_called()
         mock_analytics_env_sync.assert_not_called()
         mock_sync_module_dependencies.assert_not_called()
@@ -3424,7 +3384,17 @@ class TestExecuteApplySteps:
         mock_run_migrations.return_value = False
 
         ctx = Mock()
-        ctx.existing_state = Mock()
+        ctx.existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={},
+        )
         ctx.had_existing_state = True
         ctx.output_path = Path("/tmp/proj")
         ctx.manifests = {}
@@ -3450,13 +3420,15 @@ class TestExecuteApplySteps:
 
         mock_run_migrations.assert_called_once_with(ctx.output_path)
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
@@ -3524,13 +3496,15 @@ class TestExecuteApplySteps:
         mock_run_migrations_in_docker.assert_not_called()
         mock_run_migrations.assert_not_called()
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
@@ -3599,13 +3573,15 @@ class TestExecuteApplySteps:
         mock_run_migrations_in_docker.assert_called_once_with(ctx.output_path)
         mock_run_migrations.assert_not_called()
         mock_save_state.assert_not_called()
-        mock_save_recovery.assert_called_once_with(
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
@@ -3682,20 +3658,24 @@ class TestExecuteApplySteps:
         assert "authoritative state persistence" in text
         assert ".quickscale/state.yml" in text
         assert ".quickscale/apply-recovery.yml" in text
-        mock_save_state.assert_called_once_with(
+        mock_save_state.assert_called_once()
+        assert mock_save_state.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
-        mock_save_recovery.assert_called_once_with(
+        assert mock_save_state.call_args.kwargs["state_snapshot"] is not None
+        mock_save_recovery.assert_called_once()
+        assert mock_save_recovery.call_args.args == (
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
             [],
             ctx.delta,
         )
+        assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_clear_recovery.assert_not_called()
         mock_display_next_steps.assert_not_called()
 

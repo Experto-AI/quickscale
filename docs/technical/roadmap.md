@@ -454,12 +454,12 @@ One real-subtree-embed e2e per theme (even just `auth`, the simplest full app) w
 - [x] Merge or delete `*_coverage.py` branch-chasing tests; fold any real coverage into behavioral suites (Finding 8)
 
 ### Phase 2 — Correctness and safety fixes (contained, safety-critical)
-- [ ] Fix apply recovery: pass post-embed state (not `ctx.existing_state`) to `_abort_after_post_embed_failure` (Finding 12)
-- [ ] Replace `.git/index` raw-byte snapshot in apply with `git stash`/`git read-tree` plumbing (Finding 13)
-- [ ] Add pre-pull mutable-file snapshot and version/compat check to `_update_single_module` before the subtree pull (Finding 13)
-- [ ] Remove regex patching from `settings_manager.py`; route all mutable module options through `modules.py` regeneration (Finding 4)
-- [ ] Add one real e2e test: generate → `git subtree` embed → wiring regeneration → Django boots → module URL responds, for `auth` in both themes (Finding 18)
-- [ ] Emit a clear safe-path error at apply time for asymmetric cases (removal, immutable option change); implement full declarative removal if safe-path error is insufficient (Finding 11)
+- [x] Fix apply recovery: pass post-embed state (not `ctx.existing_state`) to `_abort_after_post_embed_failure` (Finding 12)
+- [x] Replace `.git/index` raw-byte snapshot in apply with `git stash`/`git read-tree` plumbing (Finding 13)
+- [x] Add pre-pull mutable-file snapshot and version/compat check to `_update_single_module` before the subtree pull (Finding 13)
+- [x] Remove regex patching from `settings_manager.py`; route all mutable module options through `modules.py` regeneration (Finding 4)
+- [x] Add one real e2e test: generate → `git subtree` embed → wiring regeneration → Django boots → module URL responds, for `auth` in both themes (Finding 18)
+- [x] Emit a clear safe-path error at apply time for asymmetric cases (removal, immutable option change); implement full declarative removal if safe-path error is insufficient (Finding 11)
 
 ### Phase 3 — Architecture improvements (medium effort, bounded scope)
 - [ ] Move `config_schema.py`, `state_schema.py`, and `delta.py` from `quickscale_cli` into `quickscale_core` (Finding 6)

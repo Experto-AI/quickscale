@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import time
 import tomllib
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -1044,6 +1045,10 @@ class TestFullE2EWorkflow:
         # Create a test settings file that uses the test database
         test_settings = project_path / project_name / "settings" / "test_e2e.py"
 
+        parsed = urllib.parse.urlparse(postgres_url)
+        db_host = parsed.hostname or "localhost"
+        db_port = parsed.port or "5432"
+
         settings_content = f'''"""E2E test settings - uses test PostgreSQL."""
 from .base import *
 
@@ -1053,8 +1058,8 @@ DATABASES = {{
         'NAME': 'test_db',
         'USER': 'test_user',
         'PASSWORD': 'test_password',
-        'HOST': '{postgres_url.split("@")[1].split(":")[0]}',
-        'PORT': '{postgres_url.split(":")[-1].split("/")[0]}',
+        'HOST': '{db_host}',
+        'PORT': '{db_port}',
     }}
 }}
 
@@ -1276,6 +1281,301 @@ LOGGING = {{
             assert "frontend/assets/index" in html, (
                 f"React JS bundle not referenced for route: {url}"
             )
+
+
+@pytest.mark.e2e
+class TestModuleEmbedE2E(TestFullE2EWorkflow):
+    """End-to-end coverage for the full module embed workflow.
+
+    Validates: generate -> real git subtree embed -> wiring regeneration ->
+    Django boots -> module URL responds, for the auth module in both the
+    HTML and React starter themes.
+
+    The auth module's wiring spec (see module_wiring_specs._auth_wiring)
+    mounts allauth and the module's own URLs at the ``accounts/`` prefix,
+    so the login URL served by the module is ``/accounts/login/``.
+    """
+
+    def _get_local_repo_branch(self) -> str:
+        """Return the current branch of the local maintainer repo."""
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        branch = result.stdout.strip()
+        if not branch:
+            # Detached HEAD fallback - subtree add accepts a commit-ish.
+            return "HEAD"
+        return branch
+
+    def _run_git(
+        self, project_path: Path, *args: str
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a git command inside the generated project directory."""
+        return subprocess.run(
+            ["git", *args],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+    def _embed_auth_module_via_subtree(self, project_path: Path) -> str:
+        """Init a git repo, commit the scaffold, and embed the auth module.
+
+        Returns the branch name used for the subtree add so callers can log it.
+        """
+        # Initialise a fresh repo so subtree add has a clean parent.
+        init_result = self._run_git(project_path, "init")
+        assert init_result.returncode == 0, f"git init failed: {init_result.stderr}"
+        self._run_git(
+            project_path,
+            "config",
+            "user.email",
+            "quickscale-e2e@example.com",
+        )
+        self._run_git(project_path, "config", "user.name", "QuickScale E2E")
+        self._run_git(
+            project_path,
+            "config",
+            "commit.gpgsign",
+            "false",
+        )
+
+        # Subtree add requires at least one commit on the parent branch.
+        add_result = self._run_git(project_path, "add", ".")
+        assert add_result.returncode == 0, f"git add failed: {add_result.stderr}"
+        commit_result = self._run_git(project_path, "commit", "-m", "initial scaffold")
+        assert commit_result.returncode == 0, (
+            f"Initial commit failed: {commit_result.stderr}"
+        )
+
+        branch = self._get_local_repo_branch()
+        subtree_result = self._run_git(
+            project_path,
+            "subtree",
+            "add",
+            "--prefix=modules/auth",
+            "--squash",
+            str(REPO_ROOT),
+            branch,
+        )
+        assert subtree_result.returncode == 0, (
+            f"git subtree add failed (branch={branch!r}):\n"
+            f"stdout: {subtree_result.stdout}\n"
+            f"stderr: {subtree_result.stderr}"
+        )
+
+        # Sanity-check that the embed actually landed.
+        assert (project_path / "modules" / "auth" / "module.yml").exists(), (
+            "Auth module manifest missing after git subtree add"
+        )
+        assert (project_path / "modules" / "auth" / "pyproject.toml").exists(), (
+            "Auth module pyproject.toml missing after git subtree add"
+        )
+        assert (
+            project_path / "modules" / "auth" / "src" / "quickscale_modules_auth"
+        ).is_dir(), "Auth module source tree missing after git subtree add"
+
+        return branch
+
+    def _write_quickscale_yml_with_auth(
+        self,
+        project_path: Path,
+        project_name: str,
+        theme: str,
+        auth_options: dict[str, object],
+    ) -> None:
+        """Write a minimal quickscale.yml that declares the auth module."""
+        import yaml
+
+        config_payload = {
+            "version": "1",
+            "project": {
+                "slug": project_name,
+                "package": project_name,
+                "theme": theme,
+            },
+            "docker": {"start": False},
+            "modules": {"auth": dict(auth_options)},
+        }
+        rendered = yaml.safe_dump(
+            config_payload,
+            sort_keys=False,
+            default_flow_style=False,
+        )
+        (project_path / "quickscale.yml").write_text(rendered)
+
+    def _sync_auth_module_dependency(
+        self, project_path: Path, auth_options: dict[str, object]
+    ) -> None:
+        """Add the embedded auth module as a Poetry path dependency.
+
+        Regenerating managed wiring only writes settings/URL files; it does
+        not register the module with Poetry. Without this step the module's
+        Python package is not importable from the generated project venv.
+        """
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+
+        sync_result = sync_project_module_dependencies(
+            project_path, {"auth": auth_options}
+        )
+        assert "quickscale-module-auth" in sync_result.added_path_dependencies, (
+            "sync_project_module_dependencies did not register the auth module "
+            f"as a path dependency: {sync_result}"
+        )
+
+    def _regenerate_wiring(self, project_path: Path) -> None:
+        """Regenerate managed settings/URL wiring for the embedded auth module."""
+        from quickscale_cli.utils.module_wiring_manager import (
+            regenerate_managed_wiring,
+        )
+
+        success, message = regenerate_managed_wiring(project_path)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+    def _assert_auth_url_responds(
+        self, server_process, port: int, timeout: int = 20
+    ) -> None:
+        """Hit the auth module's login URL and assert a 200 response.
+
+        Note: the auth module's wiring spec mounts allauth and the module's
+        own URLs at the ``accounts/`` prefix, so the login URL is
+        ``/accounts/login/`` (not ``/auth/login/``).
+        """
+        import urllib.error
+        import urllib.request
+
+        url = f"http://localhost:{port}/accounts/login/"
+        start = time.time()
+        last_error: Exception | None = None
+
+        while time.time() - start < timeout:
+            if server_process.poll() is not None:
+                output = ""
+                if server_process.stdout is not None:
+                    output = server_process.stdout.read()
+                raise RuntimeError(
+                    f"Server process exited with code "
+                    f"{server_process.returncode} before responding.\n"
+                    f"Output:\n{output}"
+                )
+            try:
+                response = urllib.request.urlopen(url, timeout=2)
+                if response.status == 200:
+                    return
+                last_error = AssertionError(
+                    f"Auth login URL returned status {response.status}: {url}"
+                )
+            except urllib.error.HTTPError as exc:
+                last_error = AssertionError(
+                    f"Auth login URL returned status {exc.code}: {url}"
+                )
+            except (urllib.error.URLError, OSError) as exc:
+                last_error = exc
+            time.sleep(0.5)
+
+        raise AssertionError(
+            f"Auth login URL {url} did not respond with 200 within {timeout}s. "
+            f"Last error: {last_error}"
+        )
+
+    def _run_module_embed_lifecycle(
+        self,
+        project_path: Path,
+        project_name: str,
+        theme: str,
+        postgres_url: str,
+        *,
+        build_frontend: bool,
+        subtree_branch: str,
+    ) -> None:
+        """Execute the embed -> wire -> boot -> serve -> assert lifecycle."""
+        from quickscale_cli.commands.module_config import get_default_auth_config
+
+        auth_options = get_default_auth_config()
+
+        # Declarative config + managed wiring + path-dependency registration.
+        self._write_quickscale_yml_with_auth(
+            project_path, project_name, theme, auth_options
+        )
+        self._sync_auth_module_dependency(project_path, auth_options)
+        self._regenerate_wiring(project_path)
+
+        # Install resolved dependencies (poetry lock + install).
+        self._install_project_dependencies(project_path)
+
+        if build_frontend:
+            self._build_react_frontend(project_path)
+
+        self._configure_test_database(project_path, project_name, postgres_url)
+        self._run_migrations(project_path)
+
+        server_port = self._find_free_port()
+        server_process = self._start_dev_server(project_path, port=server_port)
+
+        try:
+            self._wait_for_server(
+                f"http://localhost:{server_port}",
+                timeout=30,
+                server_process=server_process,
+            )
+            self._assert_auth_url_responds(server_process, server_port)
+        finally:
+            try:
+                server_process.terminate()
+                server_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+                server_process.wait(timeout=2)
+        # Silence the unused-argument warning while keeping the branch label
+        # visible in test logs.
+        _ = subtree_branch
+
+    def test_auth_module_embed_html_theme(self, tmp_path, e2e_postgres_url):
+        """Validate the full auth embed workflow for the showcase_html theme."""
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "embed_auth_html"
+        project_path = tmp_path / project_name
+
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+
+        subtree_branch = self._embed_auth_module_via_subtree(project_path)
+
+        self._run_module_embed_lifecycle(
+            project_path=project_path,
+            project_name=project_name,
+            theme="showcase_html",
+            postgres_url=e2e_postgres_url,
+            build_frontend=False,
+            subtree_branch=subtree_branch,
+        )
+
+    def test_auth_module_embed_react_theme(self, tmp_path, e2e_postgres_url):
+        """Validate the full auth embed workflow for the showcase_react theme."""
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "embed_auth_react"
+        project_path = tmp_path / project_name
+
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+        subtree_branch = self._embed_auth_module_via_subtree(project_path)
+
+        self._run_module_embed_lifecycle(
+            project_path=project_path,
+            project_name=project_name,
+            theme="showcase_react",
+            postgres_url=e2e_postgres_url,
+            build_frontend=True,
+            subtree_branch=subtree_branch,
+        )
 
 
 @pytest.mark.e2e

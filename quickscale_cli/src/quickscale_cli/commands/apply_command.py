@@ -96,7 +96,6 @@ from quickscale_core.utils.git_utils import is_working_directory_clean
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
-from quickscale_core.settings_manager import apply_mutable_config_changes
 
 
 @dataclass
@@ -124,11 +123,10 @@ class EmbedModulesResult:
 
 
 @dataclass(frozen=True)
-class _GitIndexSnapshot:
-    """Captured git index contents used to restore apply-owned staging."""
+class _GitIndexTreeSnapshot:
+    """Captured git index tree used to restore apply-owned staging."""
 
-    index_path: Path
-    contents: bytes | None
+    tree_id: str
 
 
 _UNSAFE_GITIGNORE_LEADING_CHARACTERS = frozenset({"!", "#"})
@@ -168,33 +166,16 @@ def _get_pre_embed_checkpoint_paths(paths: list[str]) -> list[str]:
     return [path for path in _PRE_EMBED_AUTHORITATIVE_GIT_PATHS if path in path_set]
 
 
-def _resolve_git_index_path(project_path: Path) -> Path:
-    """Resolve the git index path for regular repos and linked worktrees."""
-    git_path = project_path / ".git"
-    if git_path.is_dir():
-        return git_path / "index"
-
-    if git_path.is_file():
-        try:
-            git_reference = git_path.read_text().strip()
-        except OSError:
-            return git_path / "index"
-
-        prefix = "gitdir:"
-        if git_reference.startswith(prefix):
-            git_dir = Path(git_reference[len(prefix) :].strip())
-            if not git_dir.is_absolute():
-                git_dir = (project_path / git_dir).resolve()
-            return git_dir / "index"
-
-    return git_path / "index"
-
-
-def _capture_git_index_snapshot(project_path: Path) -> _GitIndexSnapshot | None:
-    """Capture the current git index so apply can restore it after checkpoint failure."""
-    index_path = _resolve_git_index_path(project_path)
+def _capture_git_index_snapshot(project_path: Path) -> _GitIndexTreeSnapshot | None:
+    """Capture the current git index tree for later index-only restoration."""
     try:
-        contents = index_path.read_bytes() if index_path.exists() else None
+        result = subprocess.run(
+            ["git", "write-tree"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError as error:
         click.secho(
             f"❌ Failed to snapshot git index before apply checkpoint: {error}",
@@ -202,21 +183,41 @@ def _capture_git_index_snapshot(project_path: Path) -> _GitIndexSnapshot | None:
             err=True,
         )
         return None
+    if result.returncode != 0:
+        click.secho(
+            "❌ Failed to snapshot git index before apply checkpoint.",
+            fg="red",
+            err=True,
+        )
+        if result.stderr:
+            click.echo(result.stderr.strip(), err=True)
+        return None
 
-    return _GitIndexSnapshot(index_path=index_path, contents=contents)
+    tree_id = result.stdout.strip()
+    if not tree_id:
+        click.secho(
+            "❌ Failed to snapshot git index before apply checkpoint: git write-tree returned no tree id.",
+            fg="red",
+            err=True,
+        )
+        return None
+
+    return _GitIndexTreeSnapshot(tree_id=tree_id)
 
 
-def _restore_git_index_snapshot(snapshot: _GitIndexSnapshot) -> bool:
+def _restore_git_index_snapshot(
+    project_path: Path,
+    snapshot: _GitIndexTreeSnapshot,
+) -> bool:
     """Restore the git index snapshot after an apply-owned checkpoint failure."""
     try:
-        if snapshot.contents is None:
-            if snapshot.index_path.exists():
-                snapshot.index_path.unlink()
-            return True
-
-        snapshot.index_path.parent.mkdir(parents=True, exist_ok=True)
-        snapshot.index_path.write_bytes(snapshot.contents)
-        return True
+        result = subprocess.run(
+            ["git", "read-tree", "--reset", snapshot.tree_id],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except OSError as error:
         click.secho(
             f"❌ Failed to restore git index after apply checkpoint failure: {error}",
@@ -224,11 +225,25 @@ def _restore_git_index_snapshot(snapshot: _GitIndexSnapshot) -> bool:
             err=True,
         )
         return False
+    if result.returncode == 0:
+        return True
+
+    click.secho(
+        "❌ Failed to restore git index after apply checkpoint failure.",
+        fg="red",
+        err=True,
+    )
+    if result.stderr:
+        click.echo(result.stderr.strip(), err=True)
+    return False
 
 
-def _restore_failed_apply_checkpoint(snapshot: _GitIndexSnapshot) -> None:
+def _restore_failed_apply_checkpoint(
+    project_path: Path,
+    snapshot: _GitIndexTreeSnapshot,
+) -> None:
     """Best-effort index restore for failed apply-owned checkpoint commands."""
-    if _restore_git_index_snapshot(snapshot):
+    if _restore_git_index_snapshot(project_path, snapshot):
         return
 
     click.secho(
@@ -253,14 +268,14 @@ def _stage_and_commit_with_index_restore(
 
     staged, _ = _run_command(stage_cmd, project_path, stage_description)
     if not staged:
-        _restore_failed_apply_checkpoint(snapshot)
+        _restore_failed_apply_checkpoint(project_path, snapshot)
         return False
 
     committed, _ = _run_command(commit_cmd, project_path, commit_description)
     if committed:
         return True
 
-    _restore_failed_apply_checkpoint(snapshot)
+    _restore_failed_apply_checkpoint(project_path, snapshot)
     return False
 
 
@@ -543,40 +558,6 @@ def _load_module_manifests(
     return manifests
 
 
-def _apply_mutable_config(
-    project_path: Path,
-    delta: ConfigDelta,
-    manifests: dict[str, ModuleManifest],
-) -> bool:
-    """Apply mutable configuration changes to settings.py
-
-    Returns True if all changes were applied successfully
-
-    """
-    if not delta.has_mutable_config_changes:
-        return True
-
-    click.echo("\n⏳ Applying mutable configuration changes...")
-
-    all_success = True
-    for module_name, change in delta.get_all_mutable_changes():
-        if change.django_setting:
-            results = apply_mutable_config_changes(
-                project_path, module_name, {change.django_setting: change.new_value}
-            )
-            for setting_name, success, message in results:
-                if success:
-                    click.secho(f"  ✅ {message}", fg="green")
-                else:
-                    click.secho(f"  ❌ {message}", fg="red")
-                    all_success = False
-
-    if all_success:
-        click.secho("✅ Mutable configuration changes applied", fg="green")
-
-    return all_success
-
-
 def _check_immutable_config_changes(delta: ConfigDelta) -> bool:
     """Check for immutable config changes and show errors
 
@@ -599,6 +580,16 @@ def _check_immutable_config_changes(delta: ConfigDelta) -> bool:
         click.echo(f"    Current: {change.old_value}")
         click.echo(f"    Desired: {change.new_value}")
 
+    click.secho(
+        "\n⚠️  DATA LOSS WARNING: the only safe path is remove + re-add,",
+        fg="yellow",
+        bold=True,
+    )
+    click.echo(
+        "   which drops the module's database tables/migrations and discards\n"
+        "   any user edits inside the module's managed files."
+    )
+
     click.echo("\n💡 To change immutable options:")
     modules_with_immutable = set(
         module_name for module_name, _ in delta.get_all_immutable_changes()
@@ -608,6 +599,13 @@ def _check_immutable_config_changes(delta: ConfigDelta) -> bool:
         click.echo("   2. Update quickscale.yml with new options")
         click.echo("   3. quickscale apply")
         click.echo()
+
+    click.echo(
+        "   `quickscale remove` snapshots every mutable file (module dir,\n"
+        "   managed settings/urls, quickscale.yml, .quickscale state) before\n"
+        "   mutating and rolls back automatically if removal fails, so it is\n"
+        "   the safe path for changing an immutable option."
+    )
 
     return False
 
@@ -626,10 +624,26 @@ def _abort_for_config_driven_module_removals(delta: ConfigDelta) -> None:
     for module_name in delta.modules_to_remove:
         click.echo(f"  ✗ {module_name}")
 
+    click.secho(
+        "\n⚠️  DATA LOSS WARNING: deleting a module from quickscale.yml and",
+        fg="yellow",
+        bold=True,
+    )
+    click.echo(
+        "   applying will not run the explicit remove path, so you would lose\n"
+        "   `quickscale remove`'s built-in snapshot/rollback safety for the\n"
+        "   module dir, managed settings/urls, quickscale.yml, and .quickscale\n"
+        "   state. The explicit remove workflow is the safe path."
+    )
+
     click.echo("\n💡 Use the explicit remove workflow instead:")
     for module_name in delta.modules_to_remove:
         click.echo(f"   1. quickscale remove {module_name}")
     click.echo("   2. Re-run quickscale apply")
+    click.echo(
+        "   `quickscale remove` snapshots every mutable file before mutating\n"
+        "   and rolls back automatically if removal fails."
+    )
     click.echo(
         "\nApply will not partially remove installed modules from managed wiring "
         "without also updating authoritative module state."
@@ -643,7 +657,12 @@ def _update_module_config_in_state(
     delta: ConfigDelta,
 ) -> None:
     """Update module options in state after mutable config changes"""
-    for module_name, module_delta in delta.config_deltas.items():
+    del config
+    config_deltas = getattr(delta, "config_deltas", {})
+    if not isinstance(config_deltas, Mapping):
+        return
+
+    for module_name, module_delta in config_deltas.items():
         if module_delta.has_mutable_changes and module_name in state.modules:
             # Update options with new values
             current_options = state.modules[module_name].options or {}
@@ -1773,10 +1792,12 @@ def _save_apply_recovery_state(
     existing_state: QuickScaleState | None,
     embedded_modules: list[str],
     delta: ConfigDelta,
+    *,
+    state_snapshot: QuickScaleState | None = None,
 ) -> bool:
     """Persist retry context for failures that happen after embedding succeeded."""
     try:
-        recovery_state = _build_project_state_snapshot(
+        recovery_state = state_snapshot or _build_project_state_snapshot(
             output_path,
             qs_config,
             existing_state,
@@ -1817,11 +1838,13 @@ def _save_project_state(
     existing_state: QuickScaleState | None,
     embedded_modules: list[str],
     delta: ConfigDelta,
+    *,
+    state_snapshot: QuickScaleState | None = None,
 ) -> bool:
     """Save project state to .quickscale/state.yml."""
     try:
         state_manager = StateManager(output_path)
-        new_state = _build_project_state_snapshot(
+        new_state = state_snapshot or _build_project_state_snapshot(
             output_path,
             qs_config,
             existing_state,
@@ -2172,7 +2195,7 @@ def _print_apply_failure_summary(failed_step: str, reason: str) -> None:
 
 def _abort_after_post_embed_failure(
     ctx: ApplyContext,
-    embedded_modules: list[str],
+    post_embed_state: QuickScaleState,
     *,
     failed_step: str,
     reason: str,
@@ -2182,8 +2205,9 @@ def _abort_after_post_embed_failure(
         ctx.output_path,
         ctx.qs_config,
         ctx.existing_state,
-        embedded_modules,
+        list(post_embed_state.modules.keys()),
         ctx.delta,
+        state_snapshot=post_embed_state,
     ):
         _print_apply_failure_summary(failed_step=failed_step, reason=reason)
         raise click.Abort()
@@ -2200,15 +2224,16 @@ def _abort_after_post_embed_failure(
 
 def _finalize_apply_state(
     ctx: ApplyContext,
-    embedded_modules: list[str],
+    post_embed_state: QuickScaleState,
 ) -> None:
     """Persist authoritative state and keep rerun recovery if it fails."""
     if _save_project_state(
         ctx.output_path,
         ctx.qs_config,
         ctx.existing_state,
-        embedded_modules,
+        list(post_embed_state.modules.keys()),
         ctx.delta,
+        state_snapshot=post_embed_state,
     ):
         _clear_apply_recovery_state(ctx.output_path)
         return
@@ -2217,8 +2242,9 @@ def _finalize_apply_state(
         ctx.output_path,
         ctx.qs_config,
         ctx.existing_state,
-        embedded_modules,
+        list(post_embed_state.modules.keys()),
         ctx.delta,
+        state_snapshot=post_embed_state,
     )
     if recovery_saved:
         _print_apply_failure_summary(
@@ -2328,11 +2354,29 @@ def _execute_apply_steps(
         )
         raise click.Abort()
 
+    try:
+        post_embed_state = _build_project_state_snapshot(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+    except Exception as error:
+        _print_apply_failure_summary(
+            failed_step="post-embed state snapshot",
+            reason=(
+                "QuickScale could not compute the post-embed state required for "
+                f"safe apply recovery: {error}"
+            ),
+        )
+        raise click.Abort() from error
+
     # Deterministic managed wiring generation for selected modules.
     if not _regenerate_managed_wiring_for_apply(ctx, embedded_modules):
         _abort_after_post_embed_failure(
             ctx,
-            embedded_modules,
+            post_embed_state,
             failed_step="managed module wiring generation",
             reason="unable to render managed settings, URL, and integration files",
         )
@@ -2340,7 +2384,7 @@ def _execute_apply_steps(
     if not _ensure_backups_gitignore_rules(ctx.output_path, ctx.qs_config):
         _abort_after_post_embed_failure(
             ctx,
-            embedded_modules,
+            post_embed_state,
             failed_step="backups gitignore hardening",
             reason="Unable to update .gitignore with the configured private backups directory.",
         )
@@ -2348,7 +2392,7 @@ def _execute_apply_steps(
     if not _sync_notifications_env_example(ctx.output_path, ctx.qs_config):
         _abort_after_post_embed_failure(
             ctx,
-            embedded_modules,
+            post_embed_state,
             failed_step="notifications env example sync",
             reason="Unable to update .env.example with the configured notifications env-var names.",
         )
@@ -2356,7 +2400,7 @@ def _execute_apply_steps(
     if not _sync_analytics_env_example(ctx.output_path, ctx.qs_config):
         _abort_after_post_embed_failure(
             ctx,
-            embedded_modules,
+            post_embed_state,
             failed_step="analytics env example sync",
             reason="Unable to update .env.example with the configured analytics env-var names.",
         )
@@ -2364,7 +2408,7 @@ def _execute_apply_steps(
     if not _sync_billing_env_example(ctx.output_path, ctx.qs_config):
         _abort_after_post_embed_failure(
             ctx,
-            embedded_modules,
+            post_embed_state,
             failed_step="billing env example sync",
             reason="Unable to update .env.example with the configured billing env-var names.",
         )
@@ -2375,7 +2419,7 @@ def _execute_apply_steps(
     ):
         _abort_after_post_embed_failure(
             ctx,
-            embedded_modules,
+            post_embed_state,
             failed_step="module dependency sync",
             reason="Unable to reconcile embedded-module Poetry dependency entries in pyproject.toml.",
         )
@@ -2393,7 +2437,7 @@ def _execute_apply_steps(
     ):
         _abort_after_post_embed_failure(
             ctx,
-            embedded_modules,
+            post_embed_state,
             failed_step="post-generation dependency and migration setup",
             reason="Poetry lock refresh, dependency installation, or local migrations failed after module dependency sync.",
         )
@@ -2414,7 +2458,7 @@ def _execute_apply_steps(
         if not docker_started:
             _abort_after_post_embed_failure(
                 ctx,
-                embedded_modules,
+                post_embed_state,
                 failed_step="docker startup",
                 reason="Docker auto-start failed. Run 'quickscale logs' to inspect the failing service.",
             )
@@ -2426,13 +2470,13 @@ def _execute_apply_steps(
             if not _run_migrations_in_docker(ctx.output_path):
                 _abort_after_post_embed_failure(
                     ctx,
-                    embedded_modules,
+                    post_embed_state,
                     failed_step="database migrations",
                     reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
                 )
 
     # Save state
-    _finalize_apply_state(ctx, embedded_modules)
+    _finalize_apply_state(ctx, post_embed_state)
 
     # Display next steps
     _display_next_steps(

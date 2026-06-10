@@ -247,12 +247,6 @@
         "symbol": "link_database_to_service",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/settings_manager.py::_resolve_package_name": {
-        "file": "quickscale_core/src/quickscale_core/settings_manager.py",
-        "max_complexity": 13,
-        "symbol": "_resolve_package_name",
-        "type": "function"
-      },
       "quickscale_modules/analytics/src/quickscale_modules_analytics/services.py::configure_analytics_client": {
         "file": "quickscale_modules/analytics/src/quickscale_modules_analytics/services.py",
         "max_complexity": 15,

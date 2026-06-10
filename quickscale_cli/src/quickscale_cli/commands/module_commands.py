@@ -2,12 +2,15 @@
 
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import click
 
 from quickscale_cli.module_catalog import get_module_names, get_module_readiness_reason
+from quickscale_cli.schema.config_schema import validate_config
 from quickscale_cli.schema.state_schema import StateError, StateManager
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
@@ -44,6 +47,16 @@ from .module_config import (
 
 # Available modules (including experimental for explicit CLI usage).
 AVAILABLE_MODULES = get_module_names(include_experimental=True)
+
+
+@dataclass(frozen=True)
+class _UpdatePathSnapshot:
+    """Filesystem snapshot used to roll back module update mutations."""
+
+    path: Path
+    backup_path: Path | None
+    existed: bool
+    is_dir: bool
 
 
 def _validate_git_environment() -> bool:
@@ -652,6 +665,267 @@ def _validate_update_environment() -> None:
         raise click.Abort()
 
 
+def _remove_update_path(path: Path) -> None:
+    """Remove a file or directory if it exists."""
+    if not path.exists():
+        return
+
+    if path.is_dir():
+        shutil.rmtree(path)
+        return
+
+    path.unlink()
+
+
+def _snapshot_update_path(
+    path: Path,
+    backup_root: Path,
+    label: str,
+) -> _UpdatePathSnapshot:
+    """Snapshot a file or directory before a module update mutates it."""
+    if not path.exists():
+        return _UpdatePathSnapshot(
+            path=path,
+            backup_path=None,
+            existed=False,
+            is_dir=False,
+        )
+
+    backup_path = backup_root / label
+    if path.is_dir():
+        shutil.copytree(path, backup_path)
+        return _UpdatePathSnapshot(
+            path=path,
+            backup_path=backup_path,
+            existed=True,
+            is_dir=True,
+        )
+
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, backup_path)
+    return _UpdatePathSnapshot(
+        path=path,
+        backup_path=backup_path,
+        existed=True,
+        is_dir=False,
+    )
+
+
+def _restore_update_snapshot(snapshot: _UpdatePathSnapshot) -> None:
+    """Restore a single module update snapshot."""
+    if not snapshot.existed:
+        _remove_update_path(snapshot.path)
+        return
+
+    if snapshot.backup_path is None:
+        raise RuntimeError(f"Missing rollback payload for {snapshot.path}")
+
+    _remove_update_path(snapshot.path)
+    if snapshot.is_dir:
+        shutil.copytree(snapshot.backup_path, snapshot.path)
+        return
+
+    snapshot.path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(snapshot.backup_path, snapshot.path)
+
+
+def _restore_update_snapshots(snapshots: list[_UpdatePathSnapshot]) -> None:
+    """Restore all module update snapshots in reverse mutation order."""
+    for snapshot in reversed(snapshots):
+        _restore_update_snapshot(snapshot)
+
+
+def _record_update_mutation_snapshots(
+    project_path: Path,
+    module_prefix: str,
+    backup_root: Path,
+) -> list[_UpdatePathSnapshot]:
+    """Snapshot every artifact a subtree update may mutate locally."""
+    snapshot_targets = [
+        ("module-tree", project_path / module_prefix),
+        ("legacy-config-yml", project_path / ".quickscale" / "config.yml"),
+        ("state-yml", project_path / ".quickscale" / "state.yml"),
+    ]
+    return [
+        _snapshot_update_path(path, backup_root, label)
+        for label, path in snapshot_targets
+    ]
+
+
+def _refresh_git_index_after_update_rollback(
+    project_path: Path,
+    snapshots: list[_UpdatePathSnapshot],
+) -> bool:
+    """Best-effort index refresh so restored files do not remain staged."""
+    tracked_paths = [
+        str(snapshot.path.relative_to(project_path))
+        for snapshot in snapshots
+        if snapshot.path.exists() or snapshot.existed
+    ]
+    if not tracked_paths:
+        return True
+
+    result = subprocess.run(
+        ["git", "add", "-A", *tracked_paths],
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        return True
+
+    click.secho(
+        "⚠️  Rollback restored files, but QuickScale could not refresh the git index.",
+        fg="yellow",
+        err=True,
+    )
+    if result.stderr:
+        click.echo(result.stderr.strip(), err=True)
+    return False
+
+
+def _load_update_recovery_state(project_path: Path) -> Any | None:
+    """Load the optional apply recovery snapshot used by update guardrails."""
+    recovery_path = project_path / ".quickscale" / "apply-recovery.yml"
+    if not recovery_path.exists():
+        return None
+
+    recovery_manager = StateManager(project_path)
+    recovery_manager.state_file = recovery_path
+    try:
+        return recovery_manager.load()
+    except StateError as error:
+        raise RuntimeError(
+            "Failed to load .quickscale/apply-recovery.yml: "
+            f"{error}. Fix or clear the recovery snapshot before updating modules."
+        ) from error
+
+
+def _report_local_pre_pull_guard_block(
+    module_name: str,
+    lines: list[str],
+) -> None:
+    """Report a bounded local pre-pull guard block for module update."""
+    click.secho(
+        f"⚠️  Pre-pull local guard blocked update for {module_name}",
+        fg="yellow",
+        err=True,
+        bold=True,
+    )
+    for line in lines:
+        click.echo(line, err=True)
+
+
+def _check_local_pre_pull_guard(
+    project_path: Path,
+    module_name: str,
+    applied_state: Any,
+) -> bool:
+    """Block known-local unsafe updates before any subtree pull starts."""
+    if applied_state is not None:
+        module_state = applied_state.modules.get(module_name)
+        if module_state is None:
+            _report_local_pre_pull_guard_block(
+                module_name,
+                [
+                    "",
+                    ".quickscale/state.yml does not list this module as installed.",
+                    "Reconcile local tracking with 'quickscale apply' before updating.",
+                    "This guard uses only verified local state and does not predict remote compatibility.",
+                ],
+            )
+            return False
+
+        recovery_state = _load_update_recovery_state(project_path)
+        if recovery_state is not None and module_name in recovery_state.modules:
+            _report_local_pre_pull_guard_block(
+                module_name,
+                [
+                    "",
+                    "Pending .quickscale/apply-recovery.yml still references this module.",
+                    "Finish or clear the local apply recovery flow before running 'quickscale update'.",
+                    "This guard uses only verified local state and does not predict remote compatibility.",
+                ],
+            )
+            return False
+    else:
+        module_state = None
+
+    quickscale_config_path = project_path / "quickscale.yml"
+    if not quickscale_config_path.exists() or module_state is None:
+        return True
+
+    try:
+        desired_config = validate_config(quickscale_config_path.read_text())
+    except Exception as error:
+        click.secho(
+            "❌ Cannot update: quickscale.yml pre-pull check failed because the local desired state could not be validated.",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        click.echo(f"Reason: {error}", err=True)
+        click.echo(
+            "💡 Fix quickscale.yml or run 'quickscale apply' to reconcile before updating.",
+            err=True,
+        )
+        return False
+
+    desired_module = desired_config.modules.get(module_name)
+    if desired_module is None:
+        _report_local_pre_pull_guard_block(
+            module_name,
+            [
+                "",
+                "quickscale.yml no longer includes this installed module.",
+                f"Run 'quickscale remove {module_name}' or reconcile desired state with 'quickscale apply' before updating.",
+                "This guard uses only verified local state and does not predict remote compatibility.",
+            ],
+        )
+        return False
+
+    desired_options = desired_module.options or {}
+    applied_options = module_state.options or {}
+    if desired_options == applied_options:
+        return True
+
+    drift_lines = [
+        "",
+        "Local desired state differs from applied module options.",
+        "Run 'quickscale apply' before updating so local module configuration is reconciled first.",
+        "Detected local-only option drift:",
+    ]
+    for option_name in sorted(set(desired_options) | set(applied_options)):
+        old_value = applied_options.get(option_name)
+        new_value = desired_options.get(option_name)
+        if old_value == new_value:
+            continue
+        drift_lines.append(
+            f"  • {module_name}.{option_name}: applied={old_value!r}, desired={new_value!r}"
+        )
+    drift_lines.append(
+        "This guard uses only verified local state and does not predict remote compatibility."
+    )
+    _report_local_pre_pull_guard_block(module_name, drift_lines)
+    return False
+
+
+def _rollback_failed_module_update(
+    project_path: Path,
+    snapshots: list[_UpdatePathSnapshot],
+) -> str | None:
+    """Restore recorded module update snapshots after a failed mutation."""
+    try:
+        _restore_update_snapshots(snapshots)
+    except Exception as rollback_error:
+        return f"Rollback also failed: {rollback_error}"
+
+    _refresh_git_index_after_update_rollback(project_path, snapshots)
+    click.secho("✅ Restored pre-pull update snapshot", fg="green")
+    return None
+
+
 def _update_single_module(
     name: str, info: Any, default_remote: str, no_preview: bool
 ) -> bool:
@@ -661,20 +935,47 @@ def _update_single_module(
 
     try:
         # Abort before any subtree/config mutation if applied state is invalid.
-        StateManager(project_path).load()
+        applied_state = StateManager(project_path).load()
+        if not _check_local_pre_pull_guard(project_path, name, applied_state):
+            return False
 
-        output = run_git_subtree_pull(
-            prefix=info.prefix,
-            remote=default_remote,
-            branch=info.branch,
-            squash=True,
-        )
+        with TemporaryDirectory(prefix="quickscale-module-update-") as temp_dir:
+            try:
+                snapshots = _record_update_mutation_snapshots(
+                    project_path,
+                    info.prefix,
+                    Path(temp_dir),
+                )
+            except (OSError, shutil.Error) as snapshot_error:
+                click.secho(
+                    f"❌ Failed to create pre-update snapshot for {name}: {snapshot_error}",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(
+                    "💡 Check disk space and permissions, then retry.",
+                    err=True,
+                )
+                return False
 
-        installed_version = _read_embedded_module_version(project_path, name)
-        update_module_version(name, installed_version, project_path)
-        _sync_state_module_version(project_path, name, installed_version)
+            try:
+                output = run_git_subtree_pull(
+                    prefix=info.prefix,
+                    remote=default_remote,
+                    branch=info.branch,
+                    squash=True,
+                )
 
-        _commit_module_update(name, info.prefix)
+                installed_version = _read_embedded_module_version(project_path, name)
+                update_module_version(name, installed_version, project_path)
+                _sync_state_module_version(project_path, name, installed_version)
+
+                _commit_module_update(name, info.prefix)
+            except Exception as error:
+                rollback_error = _rollback_failed_module_update(project_path, snapshots)
+                if rollback_error is not None:
+                    raise RuntimeError(rollback_error) from error
+                raise
 
         click.secho(f"✅ Updated {name} successfully", fg="green")
 
@@ -706,6 +1007,12 @@ def _update_single_module(
     except GitError as e:
         click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
         click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
+        return False
+    except RuntimeError as e:
+        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
+        return False
+    except Exception as e:
+        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
         return False
 
 
