@@ -1300,13 +1300,13 @@ def test_write_validated_toml_rejects_invalid_content(tmp_path: Path) -> None:
     assert not target.exists()
 
 
-def test_locate_toml_section_bounds_ignores_array_of_tables() -> None:
-    """The end boundary should skip [[...]] headers in the same section."""
+def test_locate_toml_section_bounds_ignores_child_array_of_tables() -> None:
+    """The end boundary should keep child [[parent.child]] headers in the body."""
     lines = _PYPROJECT_WITH_ARRAY_OF_TABLES.splitlines()
     start, end = _locate_toml_section_bounds(lines, "tool.poetry.dependencies")
     assert lines[start].strip() == "[tool.poetry.dependencies]"
     body = lines[start + 1 : end]
-    # The [[array-of-tables]] header that lives under the same section
+    # The [[array-of-tables]] header that is a strict child of the section
     # is still part of the section body and must not be the boundary.
     assert any(line.strip().startswith("[[") for line in body)
     assert lines[end].strip() == "[tool.poetry.group.dev.dependencies]"
@@ -1342,46 +1342,89 @@ def test_locate_toml_section_bounds_raises_when_section_missing() -> None:
         )
 
 
-def test_replace_toml_section_body_includes_array_of_tables(
+def test_locate_toml_section_bounds_terminates_at_sibling_array_of_tables() -> None:
+    """A sibling [[...]] header must terminate the active section bounds.
+
+    Unlike child array-of-tables (``[[parent.child]]``), a sibling
+    array-of-tables such as ``[[tool.poetry.source]]`` is not part of the
+    ``tool.poetry.dependencies`` section and must end the body scan.
+    """
+    document = (
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        "\n"
+        "[[tool.poetry.source]]\n"
+        'name = "private"\n'
+        'url = "https://example.com/simple"\n'
+        "\n"
+        "[tool.poetry.group.dev.dependencies]\n"
+        'pytest = "^9.0.0"\n'
+    )
+    lines = document.splitlines()
+    start, end = _locate_toml_section_bounds(lines, "tool.poetry.dependencies")
+    assert lines[start].strip() == "[tool.poetry.dependencies]"
+    # The sibling [[tool.poetry.source]] must NOT be inside the body.
+    body = lines[start + 1 : end]
+    assert not any("[[tool.poetry.source]]" in line for line in body)
+    assert lines[end].strip() == "[[tool.poetry.source]]"
+
+
+def test_locate_toml_section_bounds_keeps_child_array_of_tables_in_body() -> None:
+    """A child [[parent.child]] header must remain inside the section body."""
+    document = (
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        "\n"
+        "[[tool.poetry.dependencies.extra-source]]\n"
+        'name = "extra"\n'
+        'url = "https://example.com/simple"\n'
+        "\n"
+        "[tool.poetry.group.dev.dependencies]\n"
+        'pytest = "^9.0.0"\n'
+    )
+    lines = document.splitlines()
+    start, end = _locate_toml_section_bounds(lines, "tool.poetry.dependencies")
+    body = lines[start + 1 : end]
+    assert any("[[tool.poetry.dependencies.extra-source]]" in line for line in body)
+    assert lines[end].strip() == "[tool.poetry.group.dev.dependencies]"
+
+
+def test_replace_toml_section_refuses_child_array_of_tables(
     tmp_path: Path,
 ) -> None:
-    """The [[...]] header is part of the body, so a replacement eats it.
+    """Replacing a section with nested [[child]] blocks must fail explicitly.
 
-    The boundary detection no longer treats array-of-tables as a section
-    boundary, so the body physically spans the [[...]] declaration until the
-    next sibling section. Replacements therefore replace the [[...]] line
-    along with the key-value body.
+    The guard-fail strategy prevents silent data loss: the replacement body
+    cannot represent the child array-of-tables, so the call must refuse
+    rather than silently dropping the nested block.
     """
     target = tmp_path / "pyproject.toml"
     target.write_text(_PYPROJECT_WITH_ARRAY_OF_TABLES)
 
-    changed = _replace_toml_section(
-        target,
-        "tool.poetry.dependencies",
-        ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
-    )
-
-    assert changed is True
-    updated = target.read_text()
-    # The new body lines are present in the rewritten section.
-    assert 'python = "^3.14"' in updated
-    assert "Django" in updated
-    # The [[...]] array-of-tables that lived under the section is gone because
-    # it was physically part of the section body.
-    assert "[[tool.poetry.dependencies.quickscale-module-extra]]" not in updated
-    assert 'name = "extra-source"' not in updated
-    # The sibling section that follows the rewritten section is still there.
-    assert "[tool.poetry.group.dev.dependencies]" in updated
-    assert "[tool.pytest.ini_options]" in updated
+    with pytest.raises(ValueError, match="nested child block"):
+        _replace_toml_section(
+            target,
+            "tool.poetry.dependencies",
+            ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
+        )
+    # The file must not have been modified.
+    assert target.read_text() == _PYPROJECT_WITH_ARRAY_OF_TABLES
 
 
-def test_replace_toml_section_body_includes_nested_table(
+def test_replace_toml_section_refuses_nested_child_table(
     tmp_path: Path,
 ) -> None:
-    """A nested table under the rewritten section is part of the body.
+    """Replacing a section with nested [parent.child] blocks must fail explicitly.
 
-    The boundary detection treats ``[parent.child]`` (a strict child of the
-    current section) as part of the body, so it gets replaced too.
+    The guard-fail strategy prevents silent data loss: the replacement body
+    cannot represent the child table, so the call must refuse rather than
+    silently dropping the nested block.
     """
     document = (
         "[tool.poetry]\n"
@@ -1399,27 +1442,32 @@ def test_replace_toml_section_body_includes_nested_table(
     target = tmp_path / "pyproject.toml"
     target.write_text(document)
 
-    _replace_toml_section(
-        target,
-        "tool.poetry.dependencies",
-        ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
-    )
-
-    updated = target.read_text()
-    # The nested table was part of the body and was replaced.
-    assert "[tool.poetry.dependencies.sources]" not in updated
-    assert 'default = {url = "https://pypi.org/simple"}' not in updated
-    # The next sibling section is preserved.
-    assert "[tool.pytest.ini_options]" in updated
+    with pytest.raises(ValueError, match="nested child block"):
+        _replace_toml_section(
+            target,
+            "tool.poetry.dependencies",
+            ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
+        )
+    # The file must not have been modified.
+    assert target.read_text() == document
 
 
 def test_replace_toml_section_returns_false_when_unchanged(tmp_path: Path) -> None:
     """Replacing a section with the same body should not signal a change."""
+    document = (
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        "\n"
+        "[tool.poetry.group.dev.dependencies]\n"
+        'pytest = "^9.0.0"\n'
+    )
     target = tmp_path / "pyproject.toml"
-    target.write_text(_PYPROJECT_WITH_ARRAY_OF_TABLES)
+    target.write_text(document)
 
-    # First call: the [[...]] header is in the body, so the new content
-    # (which omits the [[...]] header) differs from the original body.
+    # First call: the body differs from the new content.
     changed = _replace_toml_section(
         target,
         "tool.poetry.dependencies",
@@ -1445,6 +1493,51 @@ def test_replace_toml_section_raises_when_section_missing(tmp_path: Path) -> Non
     target.write_text("[tool.poetry]\nname = 'demo'\n")
     with pytest.raises(ValueError, match="Unable to locate"):
         _replace_toml_section(target, "tool.poetry.dependencies", ['python = "^3.14"'])
+
+
+def test_replace_toml_section_preserves_sibling_array_of_tables(
+    tmp_path: Path,
+) -> None:
+    """A sibling [[tool.poetry.source]] must survive a section replacement.
+
+    This is a realistic regression case: pyproject.toml files with
+    ``[[tool.poetry.source]]`` entries should be replaceable for the
+    ``tool.poetry.dependencies`` section without losing the source block.
+    """
+    document = (
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        "\n"
+        "[[tool.poetry.source]]\n"
+        'name = "private"\n'
+        'url = "https://example.com/simple"\n'
+        "\n"
+        "[tool.poetry.group.dev.dependencies]\n"
+        'pytest = "^9.0.0"\n'
+    )
+    target = tmp_path / "pyproject.toml"
+    target.write_text(document)
+
+    changed = _replace_toml_section(
+        target,
+        "tool.poetry.dependencies",
+        ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
+    )
+
+    assert changed is True
+    updated = target.read_text()
+    # The new body is present.
+    assert 'python = "^3.14"' in updated
+    assert 'Django = ">=6.0.3,<7.0.0"' in updated
+    # The sibling [[tool.poetry.source]] block is preserved intact.
+    assert "[[tool.poetry.source]]" in updated
+    assert 'name = "private"' in updated
+    assert 'url = "https://example.com/simple"' in updated
+    # The subsequent section is preserved.
+    assert "[tool.poetry.group.dev.dependencies]" in updated
 
 
 def test_insert_missing_path_dependencies_inserts_after_array_of_tables(
@@ -1560,3 +1653,170 @@ def test_insert_missing_path_dependencies_raises_when_section_missing(
             target,
             {"quickscale-module-blog": {"path": "./modules/blog", "develop": True}},
         )
+
+
+# ---------------------------------------------------------------------------
+# Higher-fidelity integration test: TOML rewrite + managed apply handoff
+# ---------------------------------------------------------------------------
+
+
+_REALISTIC_RECIPIENT_PYPROJECT = (
+    "[tool.poetry]\n"
+    'name = "beta-site"\n'
+    'version = "0.1.0"\n'
+    'packages = [{include = "beta_site"}]\n'
+    "\n"
+    "[tool.poetry.dependencies]\n"
+    'python = "^3.14"\n'
+    'Django = ">=6.0.3,<7.0.0"\n'
+    'django-filter = "^24.0"\n'
+    'quickscale-module-auth = {path = "./modules/auth", develop = true}\n'
+    "\n"
+    "[[tool.poetry.source]]\n"
+    'name = "private"\n'
+    'url = "https://example.com/simple"\n'
+    'priority = "primary"\n'
+    "\n"
+    "[[tool.poetry.source]]\n"
+    'name = "backup"\n'
+    'url = "https://backup.example.com/simple"\n'
+    'priority = "supplemental"\n'
+    "\n"
+    "[tool.poetry.group.dev.dependencies]\n"
+    'pytest = "^9.0.0"\n'
+    'ruff = "^0.8.0"\n'
+    "\n"
+    "[tool.pytest.ini_options]\n"
+    'DJANGO_SETTINGS_MODULE = "beta_site.settings.local"\n'
+    'python_files = ["tests.py", "test_*.py"]\n'
+    "\n"
+    "[tool.ruff]\n"
+    "line-length = 100\n"
+)
+
+
+def test_run_in_place_with_continuation_preserves_sibling_sources_and_applies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In-place continuation with a realistic pyproject.toml should preserve sibling
+    ``[[tool.poetry.source]]`` blocks and later sections through the TOML rewrite,
+    and should still execute the managed apply handoff.
+
+    This test uses the existing monkeypatched subprocess harness rather than a
+    full end-to-end ``quickscale apply``, but it exercises the real
+    ``run_beta_migration`` in-place path end-to-end including the tightened
+    ``_locate_toml_section_bounds`` and ``_replace_toml_section`` helpers
+    together with the apply handoff seam.
+    """
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth", "forms", "social"),
+        path_dependencies=(
+            "quickscale-module-auth",
+            "quickscale-module-forms",
+            "quickscale-module-social",
+        ),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+
+    # Give the donor a different non-path dependency set so the merge step
+    # triggers a real _replace_toml_section rewrite on the recipient.
+    donor_pyproject = donor / "pyproject.toml"
+    donor_pyproject.write_text(
+        donor_pyproject.read_text().replace(
+            'Django = ">=6.0.3,<7.0.0"\n',
+            'Django = ">=6.1.0,<7.0.0"\ndjango-markdownx = "^4.0.7"\n',
+        )
+    )
+
+    # Replace the recipient pyproject.toml with a realistic layout that
+    # includes sibling [[tool.poetry.source]] blocks and later tool sections.
+    (recipient / "pyproject.toml").write_text(_REALISTIC_RECIPIENT_PYPROJECT)
+
+    _init_clean_git_repo(recipient)
+
+    calls = _install_in_place_success_stub(
+        monkeypatch,
+        recipient=recipient,
+        package="beta_site",
+    )
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="in-place",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=True,
+        )
+    )
+
+    # --- Report-level assertions ---
+    assert report.status == "ready"
+    assert report.phase == "in-place-executed"
+    _assert_verification_report(report, recipient, calls)
+
+    # --- Managed apply handoff ---
+    # The stub intercepts "quickscale apply" and creates .quickscale/state.yml,
+    # so its presence proves the apply handoff executed.
+    assert (recipient / ".quickscale" / "state.yml").exists()
+    assert any(step.step == "run-quickscale-apply" for step in report.completed_steps)
+
+    # --- TOML rewrite survival assertions ---
+    pyproject_text = (recipient / "pyproject.toml").read_text()
+
+    # The merged non-path dependencies from the donor are present.
+    assert 'Django = ">=6.1.0,<7.0.0"' in pyproject_text
+    assert 'django-markdownx = "^4.0.7"' in pyproject_text
+
+    # The recipient's path dependency survived the merge.
+    assert (
+        'quickscale-module-auth = {path = "./modules/auth", develop = true}'
+        in pyproject_text
+    )
+
+    # Both sibling [[tool.poetry.source]] blocks survived the rewrite intact.
+    assert "[[tool.poetry.source]]" in pyproject_text
+    assert 'name = "private"' in pyproject_text
+    assert 'url = "https://example.com/simple"' in pyproject_text
+    assert 'priority = "primary"' in pyproject_text
+    assert 'name = "backup"' in pyproject_text
+    assert 'url = "https://backup.example.com/simple"' in pyproject_text
+    assert 'priority = "supplemental"' in pyproject_text
+
+    # The later [tool.poetry.group.dev.dependencies] section survived.
+    assert "[tool.poetry.group.dev.dependencies]" in pyproject_text
+    assert 'pytest = "^9.0.0"' in pyproject_text
+    assert 'ruff = "^0.8.0"' in pyproject_text
+
+    # The [tool.pytest.ini_options] section survived with its content.
+    assert "[tool.pytest.ini_options]" in pyproject_text
+    assert 'DJANGO_SETTINGS_MODULE = "beta_site.settings.local"' in pyproject_text
+    assert 'python_files = ["tests.py", "test_*.py"]' in pyproject_text
+
+    # The [tool.ruff] section survived.
+    assert "[tool.ruff]" in pyproject_text
+    assert "line-length = 100" in pyproject_text
+
+    # The rewritten TOML must still parse as valid TOML.
+    import tomllib
+
+    parsed = tomllib.loads(pyproject_text)
+    sources = parsed["tool"]["poetry"]["source"]
+    assert len(sources) == 2
+    assert sources[0]["name"] == "private"
+    assert sources[1]["name"] == "backup"
+    assert parsed["tool"]["pytest"]["ini_options"]["DJANGO_SETTINGS_MODULE"] == (
+        "beta_site.settings.local"
+    )
+    assert parsed["tool"]["ruff"]["line-length"] == 100

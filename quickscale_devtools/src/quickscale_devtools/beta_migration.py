@@ -606,10 +606,13 @@ def _write_validated_toml(path: Path, content: str) -> None:
 def _locate_toml_section_bounds(lines: list[str], section_name: str) -> tuple[int, int]:
     """Return the (start, end) line indices of a TOML section in a line list.
 
-    The end boundary is the next non-array-of-tables header that is not a strict
-    child of ``section_name``. Array-of-tables headers (``[[foo.bar]]``) and
-    nested tables (``[foo.bar.child]``) are intentionally not treated as the end
-    of the current section so that rewrites do not split mid-table.
+    The end boundary is the next header that is not a strict child of
+    ``section_name``.  Child tables (``[foo.bar.child]``) and child
+    array-of-tables (``[[foo.bar.child]]``) are intentionally not treated as
+    the end of the current section so that rewrites do not split mid-table.
+    Sibling array-of-tables headers (``[[unrelated.name]]``) *do* terminate
+    the active section so that the bounds do not bleed into the next
+    unrelated block.
     """
     section_header = f"[{section_name}]"
     child_prefix = f"{section_name}."
@@ -624,9 +627,14 @@ def _locate_toml_section_bounds(lines: list[str], section_name: str) -> tuple[in
             continue
         if not (stripped.startswith("[") and stripped.endswith("]")):
             continue
-        # Ignore [[array-of-tables]] headers when scanning for the next boundary.
+        # Array-of-tables headers: child AOTs stay in the section body,
+        # sibling AOTs terminate the section.
         if stripped.startswith("[[") or stripped.endswith("]]"):
-            continue
+            aot_inner = stripped[2:-2].strip()
+            if aot_inner == section_name or aot_inner.startswith(child_prefix):
+                continue
+            section_end = index
+            break
         # Ignore strict child tables of the current section.
         inner = stripped[1:-1].strip()
         if inner == section_name or inner.startswith(child_prefix):
@@ -1704,10 +1712,30 @@ def _replace_toml_section(
     section_name: str,
     section_lines: Sequence[str],
 ) -> bool:
-    """Replace an entire TOML section body while preserving the rest of the file."""
+    """Replace an entire TOML section body while preserving the rest of the file.
+
+    Refuses to replace a section whose body contains nested child tables or
+    child array-of-tables blocks, because a flat replacement would silently
+    discard those nested blocks.  Callers must handle nested-child layouts
+    explicitly rather than relying on silent data loss.
+    """
     original = pyproject_path.read_text()
     lines = original.splitlines()
     section_start, section_end = _locate_toml_section_bounds(lines, section_name)
+
+    child_prefix = f"{section_name}."
+    child_table_prefix = f"[{child_prefix}"
+    child_aot_prefix = f"[[{child_prefix}"
+    for body_line in lines[section_start + 1 : section_end]:
+        stripped_body = body_line.strip()
+        if stripped_body.startswith(child_table_prefix) or stripped_body.startswith(
+            child_aot_prefix
+        ):
+            raise ValueError(
+                f"Refusing to replace [{section_name}] in {pyproject_path}: "
+                f"section contains nested child block {stripped_body!r} that would be "
+                f"silently lost during replacement."
+            )
 
     updated_lines = lines[: section_start + 1] + list(section_lines)
     if (

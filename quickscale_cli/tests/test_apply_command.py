@@ -1139,8 +1139,7 @@ class TestApplyDriftDetection:
 
         config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
 
-        result = _capture_managed_file_hashes_after_apply(project, config)
-        assert result is True
+        _capture_managed_file_hashes_after_apply(project, config)
 
         ledger = project / ".quickscale" / "file_hashes.yml"
         assert ledger.exists()

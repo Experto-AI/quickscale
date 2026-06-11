@@ -777,13 +777,18 @@ def _warn_version_drift_for_apply(
 def _capture_managed_file_hashes_after_apply(
     project_path: Path,
     qs_config: QuickScaleConfig,
-) -> bool:
+) -> None:
     """Capture SHA-256 hashes for the managed wiring files.
 
     Hash capture is best-effort: failures must not abort apply because
     drift detection is informational. The captured hashes are written to
     ``.quickscale/file_hashes.yml`` and consumed by ``quickscale status``
     on subsequent runs.
+
+    The function intentionally returns ``None``. The only caller treats
+    hash capture as a fire-and-forget step, so a boolean success signal
+    would be misleading. Failures are reported to the operator via
+    ``click.secho`` warnings and do not propagate.
     """
     try:
         manager = ProjectStateManager(project_path)
@@ -794,14 +799,13 @@ def _capture_managed_file_hashes_after_apply(
             f"⚠️  Failed to capture managed file hashes: {error}",
             fg="yellow",
         )
-        return False
+        return
 
     if records:
         click.echo(
             "  • Tracked managed file hashes for "
             f"{len(records)} managed file(s) in .quickscale/file_hashes.yml"
         )
-    return True
 
 
 def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
