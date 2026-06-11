@@ -19,6 +19,7 @@ from quickscale_cli.schema.config_schema import (
 )
 from quickscale_cli.schema.delta import compute_delta, format_delta
 from quickscale_cli.schema.state_schema import QuickScaleState, StateError, StateManager
+from quickscale_core.config import ConfigError
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.project_state import (
@@ -280,7 +281,7 @@ def _display_version_drift_warnings(
     try:
         state = project_state_manager.load_state()
         config = project_state_manager.load_config()
-    except (StateError, OSError) as error:
+    except (ConfigError, StateError, OSError) as error:
         click.echo(
             f"\n⚠️  Could not check version drift between .quickscale/state.yml "
             f"and .quickscale/config.yml: {error}"

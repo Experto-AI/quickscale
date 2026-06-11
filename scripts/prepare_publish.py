@@ -17,6 +17,34 @@ preparation that the legacy script attempted, but it:
 
 The helper only relies on the Python standard library. The publish script
 is expected to invoke it as ``python scripts/prepare_publish.py ...``.
+
+Maintainer-only publishing contract
+-----------------------------------
+This helper, together with ``scripts/publish.sh``, publishes ONLY the
+coordinated public release packages listed in :data:`DEFAULT_PACKAGES`
+(``quickscale_core`` → ``quickscale_cli`` → ``quickscale``).
+
+The maintainer-only package ``quickscale_devtools`` is **intentionally
+excluded** from this flow:
+
+* It is consumed from the monorepo via the root ``pyproject.toml`` path
+  dependency, not distributed to end users.
+* It is not present in :data:`DEFAULT_PACKAGES` or in
+  :data:`PATH_DEPENDENCY_REWRITES`, so the publish flow can never
+  silently include it.
+* If a maintainer ever needs to distribute it separately (one-off
+  share, isolated backport), do NOT add it here. Publish it directly
+  from ``quickscale_devtools/`` using ``poetry build`` and
+  ``poetry publish``; resolve the ``quickscale-core`` path dependency
+  to a version constraint manually if needed. See
+  ``quickscale_devtools/README.md`` and the inline comments in
+  ``quickscale_devtools/pyproject.toml`` for the full out-of-band
+  procedure.
+* If a one-off distribution becomes recurring, promote it to the
+  coordinated flow by adding the package to
+  :data:`DEFAULT_PACKAGES` and the matching entry to
+  :data:`PATH_DEPENDENCY_REWRITES`, and update the maintainer
+  publishing contract documentation in the same change.
 """
 
 from __future__ import annotations
@@ -37,6 +65,17 @@ from typing import Any, Final
 # path dependencies, the second depends on the first, and the third depends
 # on the first two. The order matches the existing ``scripts/publish.sh``
 # PACKAGES array so the rewritten graph is identical to the previous flow.
+#
+# NOTE: ``quickscale_devtools`` is intentionally NOT in this tuple. It is
+# a maintainer-only package consumed from the monorepo via the root
+# ``pyproject.toml`` path dependency; it is not part of the coordinated
+# public release. If you need to distribute it separately, do so out of
+# band (see the module docstring "Maintainer-only publishing contract"
+# section and ``quickscale_devtools/README.md``). Do not add it here
+# without also adding the matching entry to
+# :data:`PATH_DEPENDENCY_REWRITES` and updating the documentation in
+# ``quickscale_devtools/README.md`` and
+# ``quickscale_devtools/pyproject.toml`` in the same change.
 DEFAULT_PACKAGES: Final[tuple[str, ...]] = (
     "quickscale_core",
     "quickscale_cli",
@@ -50,6 +89,15 @@ DEFAULT_PACKAGES: Final[tuple[str, ...]] = (
 # that the original entry points to. Only entries present in this map are
 # rewritten — unknown path dependencies are left untouched so the helper
 # can never silently drop a user-managed dependency.
+#
+# The maintainer-only ``quickscale_devtools`` package is intentionally
+# absent from this map. Keeping it absent is part of the contract: it
+# means the helper has no rewrite rule for ``quickscale-core``'s path
+# dependency when viewed from the ``quickscale_devtools`` side, which
+# is one of the reasons ``quickscale_devtools`` is not a coordinated
+# publish target. See the module docstring "Maintainer-only publishing
+# contract" section for the full rationale and one-off distribution
+# guidance.
 PATH_DEPENDENCY_REWRITES: Final[dict[str, dict[str, str]]] = {
     "quickscale_core": {},
     "quickscale_cli": {

@@ -3,7 +3,11 @@
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+import yaml
+
 from quickscale_core.config import (
+    ConfigError,
     ModuleConfig,
     ModuleInfo,
     add_module,
@@ -126,6 +130,69 @@ modules:
         assert "auth" in config.modules
         assert config.modules["auth"].prefix == "modules/auth"
         assert config.modules["auth"].installed_version == "0.62.0"
+
+
+class TestLoadConfigMalformed:
+    """Phase 1: malformed ``.quickscale/config.yml`` must surface a ConfigError."""
+
+    def _write_malformed_config(self, tmp_path: Path, body: str) -> Path:
+        config_dir = tmp_path / ".quickscale"
+        config_dir.mkdir()
+        config_file = config_dir / "config.yml"
+        config_file.write_text(body)
+        return config_file
+
+    def test_load_config_raises_config_error_on_malformed_yaml(
+        self, tmp_path: Path
+    ) -> None:
+        """A malformed YAML body should raise ConfigError, not yaml.YAMLError."""
+        # Tabs are illegal inside YAML indentation contexts.
+        self._write_malformed_config(
+            tmp_path,
+            "default_remote: https://example.com/r.git\n"
+            "modules:\n"
+            "\tauth:\n"
+            "\t\tprefix: modules/auth\n",
+        )
+
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(tmp_path)
+
+        # The error message must mention the config path so users can act on it.
+        assert "config.yml" in str(excinfo.value)
+        # The underlying yaml.YAMLError must be chained for diagnostics.
+        assert isinstance(excinfo.value.__cause__, yaml.YAMLError)
+
+    def test_load_config_raises_config_error_on_unterminated_quote(
+        self, tmp_path: Path
+    ) -> None:
+        """Unterminated strings are a common YAML parse error class."""
+        self._write_malformed_config(
+            tmp_path,
+            'default_remote: "https://example.com/r.git\n',
+        )
+
+        with pytest.raises(ConfigError):
+            load_config(tmp_path)
+
+    def test_load_config_does_not_wrap_oserror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Permission / I/O errors must remain OSError so callers can distinguish."""
+        import builtins
+
+        config_dir = tmp_path / ".quickscale"
+        config_dir.mkdir()
+        config_file = config_dir / "config.yml"
+        config_file.write_text("default_remote: https://example.com/r.git\n")
+
+        def _raise_permission_error(*_args: object, **_kwargs: object) -> None:
+            raise PermissionError("simulated permission denied")
+
+        monkeypatch.setattr(builtins, "open", _raise_permission_error)
+
+        with pytest.raises(PermissionError):
+            load_config(tmp_path)
 
 
 class TestSaveConfig:

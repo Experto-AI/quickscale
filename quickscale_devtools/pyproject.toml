@@ -1,3 +1,34 @@
+# ---------------------------------------------------------------------------
+# Packaging pattern: PEP 621 [project] (metadata only) + [tool.poetry.*] (graph)
+# ---------------------------------------------------------------------------
+# This package uses a deliberate two-surface metadata layout:
+#
+#   * The PEP 621 [project] table below is the canonical, build-backend
+#     neutral metadata surface (name, version, description, readme, license,
+#     authors, classifiers, urls). It declares `dynamic = ["dependencies"]`
+#     so the resolved dependency list is *not* duplicated here.
+#   * [tool.poetry.dependencies] is the single source of truth for the
+#     runtime dependency graph that Poetry's build backend materialises
+#     into the built wheel's METADATA when `poetry build` runs.
+#
+# Maintenance rule (do not break this when editing either surface):
+#   - Add or update runtime dependencies ONLY in
+#     [tool.poetry.dependencies] below. Never re-introduce a static
+#     `dependencies = [...]` array in [project]; keep `dynamic` as-is so
+#     the two surfaces cannot drift.
+#   - Update static metadata (name, version, description, readme, license,
+#     authors, classifiers, urls) ONLY in the [project] table and
+#     [project.urls] table above.
+#   - This package is maintainer-only and is intentionally NOT in the
+#     PACKAGES list of `scripts/publish.sh` / `DEFAULT_PACKAGES` in
+#     `scripts/prepare_publish.py`. Do not add it there without also
+#     adding the matching entry to PATH_DEPENDENCY_REWRITES and updating
+#     the maintainer publishing contract documentation. See
+#     `quickscale_devtools/README.md` for the one-off distribution
+#     guidance if a maintainer ever needs to publish this package
+#     outside the coordinated release flow.
+# ---------------------------------------------------------------------------
+
 [project]
 name = "quickscale-devtools"
 version = "0.86.0"
@@ -15,6 +46,11 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Framework :: Django",
 ]
+# `dependencies` is declared dynamic so it is populated from
+# [tool.poetry.dependencies] below at build time. Do not add a static
+# `dependencies` array here — that would duplicate the graph and let the
+# two metadata surfaces drift. See the file-level comment for the
+# maintenance rule.
 dynamic = ["dependencies"]
 
 [project.urls]
@@ -27,6 +63,11 @@ package-mode = true
 packages = [{include = "quickscale_devtools", from = "src"}]
 include = ["src/quickscale_devtools/**/*"]
 
+# Runtime dependency graph — this is the ONLY place to edit runtime deps
+# for this package. Poetry exposes this list as the built wheel's
+# `dependencies` field because [project] above declares it dynamic.
+# Keep the path dep on quickscale-core in sync with the corresponding
+# entry in quickscale_core/pyproject.toml.
 [tool.poetry.dependencies]
 python = ">=3.13,<3.15"
 quickscale-core = {path = "../quickscale_core"}

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from quickscale_core.config import ModuleConfig, ModuleInfo
+from quickscale_core.config import ConfigError, ModuleConfig, ModuleInfo
 from quickscale_core.project_state import (
     DEFAULT_MANAGED_WIRING_PATHS,
     FILE_HASHES_FILENAME,
@@ -29,6 +29,7 @@ from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
     QuickScaleState,
+    StateError,
     StateManager,
 )
 
@@ -427,6 +428,60 @@ class TestProjectStateManager:
     ) -> None:
         manager = ProjectStateManager(tmp_path)
         assert manager.load_managed_file_hashes() == {}
+
+
+# ---------------------------------------------------------------------------
+# ConfigError -> StateError normalization at the project-state boundary
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyConsistencyNormalizesConfigError:
+    """Phase 1: ``verify_consistency`` must surface ConfigError as StateError.
+
+    The unified :class:`ProjectStateManager` is the boundary that CLI
+    surfaces talk to. A malformed ``.quickscale/config.yml`` raises
+    :class:`quickscale_core.config.ConfigError` from the low-level loader,
+    and that error type must be normalized to
+    :class:`quickscale_core.schema.state_schema.StateError` here so callers
+    only need to handle one error class for both ``state.yml`` and
+    ``config.yml``.
+    """
+
+    def _write_malformed_config(self, project_path: Path) -> Path:
+        config_dir = project_path / ".quickscale"
+        config_dir.mkdir()
+        config_file = config_dir / "config.yml"
+        # Tabs are not valid for YAML indentation.
+        config_file.write_text(
+            "default_remote: https://example.com/r.git\nmodules:\n\tauth:\n"
+        )
+        return config_file
+
+    def test_verify_consistency_raises_state_error_for_malformed_config(
+        self, tmp_path: Path
+    ) -> None:
+        manager = ProjectStateManager(tmp_path)
+        self._write_malformed_config(tmp_path)
+
+        with pytest.raises(StateError) as excinfo:
+            manager.verify_consistency()
+
+        # The boundary message must mention config.yml so operators can act.
+        assert "config.yml" in str(excinfo.value)
+
+    def test_verify_consistency_chains_underlying_config_error(
+        self, tmp_path: Path
+    ) -> None:
+        """The original ConfigError must remain reachable via __cause__."""
+        manager = ProjectStateManager(tmp_path)
+        self._write_malformed_config(tmp_path)
+
+        with pytest.raises(StateError) as excinfo:
+            manager.verify_consistency()
+
+        assert isinstance(excinfo.value.__cause__, ConfigError)
+        # The deeper yaml.YAMLError must still be reachable from the chain.
+        assert isinstance(excinfo.value.__cause__.__cause__, yaml.YAMLError)
 
 
 # ---------------------------------------------------------------------------

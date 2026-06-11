@@ -12,7 +12,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="$ROOT/VERSION"
 VERSION_TOOL="$ROOT/scripts/version_tool.sh"
 
-# Package directories in publish order
+# Package directories in publish order.
+#
+# NOTE: `quickscale_devtools` is intentionally NOT in this list. It is a
+# maintainer-only package consumed from the monorepo via the root
+# `pyproject.toml` path dependency; it is not part of the coordinated
+# public release. If a maintainer ever needs to distribute it separately
+# (one-off share, isolated backport), publish it directly from
+# `quickscale_devtools/` — see `quickscale_devtools/README.md` and the
+# "Publishing Contract" section for the out-of-band procedure. Do NOT
+# add it here without also adding the matching entry to
+# `scripts/prepare_publish.py` `DEFAULT_PACKAGES` and
+# `PATH_DEPENDENCY_REWRITES`, and updating the documentation in
+# `quickscale_devtools/pyproject.toml` / `quickscale_devtools/README.md`
+# in the same change.
 PACKAGES=(
     "quickscale_core"
     "quickscale_cli"
@@ -548,6 +561,17 @@ Workflow:
   3. Builds packages in order: quickscale-core → quickscale-cli → quickscale
   4. Automatically handles path dependencies (backs up, replaces, restores)
   5. Publishes to TestPyPI and/or PyPI
+
+Maintainer-only packages (e.g. quickscale_devtools):
+  - This script intentionally publishes ONLY the public user-facing
+    packages listed above.
+  - quickscale_devtools is a maintainer-side package consumed from the
+    monorepo and is excluded from the coordinated release by design.
+  - If you ever need to distribute it separately, follow the one-off
+    procedure documented in quickscale_devtools/README.md and
+    quickscale_devtools/pyproject.toml (do not add it to PACKAGES above
+    without also updating scripts/prepare_publish.py and the package
+    docs in the same change).
 
 Examples:
   # Safe workflow: test on TestPyPI first

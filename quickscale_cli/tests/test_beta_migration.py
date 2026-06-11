@@ -10,6 +10,10 @@ import quickscale_cli.schema as schema_module
 
 from quickscale_devtools.beta_migration import (
     BetaMigrationInput,
+    _insert_missing_path_dependencies,
+    _locate_toml_section_bounds,
+    _replace_toml_section,
+    _write_validated_toml,
     parse_cli_args,
     plan_beta_migration,
     run_beta_migration,
@@ -1252,3 +1256,307 @@ def test_run_beta_migration_cli_writes_report_and_stdout_json(tmp_path: Path) ->
     assert report_path.exists()
     parsed_file_json = json.loads(report_path.read_text())
     assert parsed_file_json["written_report_path"] == str(report_path.resolve())
+
+
+# ---------------------------------------------------------------------------
+# Helper-focused tests for the TOML rewrite helpers
+# ---------------------------------------------------------------------------
+
+
+_PYPROJECT_WITH_ARRAY_OF_TABLES = (
+    "[tool.poetry]\n"
+    'name = "demo"\n'
+    'version = "0.1.0"\n'
+    "packages = [{include = 'demo'}]\n"
+    "\n"
+    "[tool.poetry.dependencies]\n"
+    'python = "^3.14"\n'
+    "\n"
+    "[[tool.poetry.dependencies.quickscale-module-extra]]\n"
+    'name = "extra-source"\n'
+    'url = "https://example.com/simple"\n'
+    "\n"
+    "[tool.poetry.group.dev.dependencies]\n"
+    'pytest = "^9.0.0"\n'
+    "\n"
+    "[tool.pytest.ini_options]\n"
+    'DJANGO_SETTINGS_MODULE = "demo.settings.local"\n'
+)
+
+
+def test_write_validated_toml_accepts_valid_content(tmp_path: Path) -> None:
+    """The validator should accept TOML that round-trips through tomllib.loads."""
+    target = tmp_path / "pyproject.toml"
+    _write_validated_toml(target, _PYPROJECT_WITH_ARRAY_OF_TABLES)
+    assert target.read_text() == _PYPROJECT_WITH_ARRAY_OF_TABLES
+
+
+def test_write_validated_toml_rejects_invalid_content(tmp_path: Path) -> None:
+    """The validator should refuse to write TOML that does not parse."""
+    target = tmp_path / "pyproject.toml"
+    invalid = "[tool.poetry.dependencies]\npython = ^3.14\n"  # missing quotes
+    with pytest.raises(ValueError, match="invalid TOML"):
+        _write_validated_toml(target, invalid)
+    assert not target.exists()
+
+
+def test_locate_toml_section_bounds_ignores_array_of_tables() -> None:
+    """The end boundary should skip [[...]] headers in the same section."""
+    lines = _PYPROJECT_WITH_ARRAY_OF_TABLES.splitlines()
+    start, end = _locate_toml_section_bounds(lines, "tool.poetry.dependencies")
+    assert lines[start].strip() == "[tool.poetry.dependencies]"
+    body = lines[start + 1 : end]
+    # The [[array-of-tables]] header that lives under the same section
+    # is still part of the section body and must not be the boundary.
+    assert any(line.strip().startswith("[[") for line in body)
+    assert lines[end].strip() == "[tool.poetry.group.dev.dependencies]"
+
+
+def test_locate_toml_section_bounds_treats_nested_tables_as_same_section() -> None:
+    """A nested-table header (foo.bar.child) must not end the foo.bar section."""
+    document = (
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        "\n"
+        "[tool.poetry.dependencies.sources]\n"
+        'default = {url = "https://pypi.org/simple"}\n'
+        "\n"
+        "[tool.poetry.group.dev.dependencies]\n"
+        'pytest = "^9.0.0"\n'
+    )
+    lines = document.splitlines()
+    start, end = _locate_toml_section_bounds(lines, "tool.poetry.dependencies")
+    body = lines[start + 1 : end]
+    assert any(line.strip() == "[tool.poetry.dependencies.sources]" for line in body)
+    assert lines[end].strip() == "[tool.poetry.group.dev.dependencies]"
+
+
+def test_locate_toml_section_bounds_raises_when_section_missing() -> None:
+    """A missing section header should raise a clear ValueError."""
+    with pytest.raises(ValueError, match="Unable to locate"):
+        _locate_toml_section_bounds(
+            ["[tool.poetry]", 'name = "demo"'], "tool.poetry.dependencies"
+        )
+
+
+def test_replace_toml_section_body_includes_array_of_tables(
+    tmp_path: Path,
+) -> None:
+    """The [[...]] header is part of the body, so a replacement eats it.
+
+    The boundary detection no longer treats array-of-tables as a section
+    boundary, so the body physically spans the [[...]] declaration until the
+    next sibling section. Replacements therefore replace the [[...]] line
+    along with the key-value body.
+    """
+    target = tmp_path / "pyproject.toml"
+    target.write_text(_PYPROJECT_WITH_ARRAY_OF_TABLES)
+
+    changed = _replace_toml_section(
+        target,
+        "tool.poetry.dependencies",
+        ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
+    )
+
+    assert changed is True
+    updated = target.read_text()
+    # The new body lines are present in the rewritten section.
+    assert 'python = "^3.14"' in updated
+    assert "Django" in updated
+    # The [[...]] array-of-tables that lived under the section is gone because
+    # it was physically part of the section body.
+    assert "[[tool.poetry.dependencies.quickscale-module-extra]]" not in updated
+    assert 'name = "extra-source"' not in updated
+    # The sibling section that follows the rewritten section is still there.
+    assert "[tool.poetry.group.dev.dependencies]" in updated
+    assert "[tool.pytest.ini_options]" in updated
+
+
+def test_replace_toml_section_body_includes_nested_table(
+    tmp_path: Path,
+) -> None:
+    """A nested table under the rewritten section is part of the body.
+
+    The boundary detection treats ``[parent.child]`` (a strict child of the
+    current section) as part of the body, so it gets replaced too.
+    """
+    document = (
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        "\n"
+        "[tool.poetry.dependencies.sources]\n"
+        'default = {url = "https://pypi.org/simple"}\n'
+        "\n"
+        "[tool.pytest.ini_options]\n"
+        'DJANGO_SETTINGS_MODULE = "demo.settings.local"\n'
+    )
+    target = tmp_path / "pyproject.toml"
+    target.write_text(document)
+
+    _replace_toml_section(
+        target,
+        "tool.poetry.dependencies",
+        ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
+    )
+
+    updated = target.read_text()
+    # The nested table was part of the body and was replaced.
+    assert "[tool.poetry.dependencies.sources]" not in updated
+    assert 'default = {url = "https://pypi.org/simple"}' not in updated
+    # The next sibling section is preserved.
+    assert "[tool.pytest.ini_options]" in updated
+
+
+def test_replace_toml_section_returns_false_when_unchanged(tmp_path: Path) -> None:
+    """Replacing a section with the same body should not signal a change."""
+    target = tmp_path / "pyproject.toml"
+    target.write_text(_PYPROJECT_WITH_ARRAY_OF_TABLES)
+
+    # First call: the [[...]] header is in the body, so the new content
+    # (which omits the [[...]] header) differs from the original body.
+    changed = _replace_toml_section(
+        target,
+        "tool.poetry.dependencies",
+        ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
+    )
+    assert changed is True
+    rewritten = target.read_text()
+
+    # Second call with the same new content on the already-rewritten file:
+    # the body already matches, so no change is reported.
+    changed_again = _replace_toml_section(
+        target,
+        "tool.poetry.dependencies",
+        ['python = "^3.14"', 'Django = ">=6.0.3,<7.0.0"'],
+    )
+    assert changed_again is False
+    assert target.read_text() == rewritten
+
+
+def test_replace_toml_section_raises_when_section_missing(tmp_path: Path) -> None:
+    """A missing target section should raise a clear error."""
+    target = tmp_path / "pyproject.toml"
+    target.write_text("[tool.poetry]\nname = 'demo'\n")
+    with pytest.raises(ValueError, match="Unable to locate"):
+        _replace_toml_section(target, "tool.poetry.dependencies", ['python = "^3.14"'])
+
+
+def test_insert_missing_path_dependencies_inserts_after_array_of_tables(
+    tmp_path: Path,
+) -> None:
+    """The new dependency is appended to the body, after any [[...]] content.
+
+    The boundary detection treats [[...]] headers as part of the body, so
+    insertion lands at the end of the body, which is after the [[...]] block.
+    The [[...]] declaration itself is still present because insertion only
+    adds lines; it does not replace existing content.
+    """
+    target = tmp_path / "pyproject.toml"
+    target.write_text(_PYPROJECT_WITH_ARRAY_OF_TABLES)
+
+    changed = _insert_missing_path_dependencies(
+        target,
+        {
+            "quickscale-module-blog": {
+                "path": "./modules/blog",
+                "develop": True,
+            }
+        },
+    )
+
+    assert changed is True
+    updated = target.read_text()
+    # The new path dependency is present and formatted as an inline table.
+    assert "quickscale-module-blog" in updated
+    assert '{path = "./modules/blog", develop = true}' in updated
+    # The [[...]] array-of-tables that lived under the same section is still
+    # there because insertion only adds lines.
+    assert "[[tool.poetry.dependencies.quickscale-module-extra]]" in updated
+    # The new dependency is appended AFTER the [[...]] block contents.
+    extra_idx = updated.index("[[tool.poetry.dependencies.quickscale-module-extra]]")
+    new_dep_idx = updated.index("quickscale-module-blog")
+    assert new_dep_idx > extra_idx
+    # Sibling sections remain after the rewritten body.
+    assert "[tool.poetry.group.dev.dependencies]" in updated
+    assert "[tool.pytest.ini_options]" in updated
+
+
+def test_insert_missing_path_dependencies_inserts_after_nested_tables(
+    tmp_path: Path,
+) -> None:
+    """The new dependency is appended after any nested-table content.
+
+    The boundary detection treats ``[parent.child]`` (a strict child of the
+    current section) as part of the body, so insertion lands at the end of
+    the body, which is after the nested table's contents.
+    """
+    document = (
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        "\n"
+        "[tool.poetry.dependencies.sources]\n"
+        'default = {url = "https://pypi.org/simple"}\n'
+        "\n"
+        "[tool.pytest.ini_options]\n"
+        'DJANGO_SETTINGS_MODULE = "demo.settings.local"\n'
+    )
+    target = tmp_path / "pyproject.toml"
+    target.write_text(document)
+
+    changed = _insert_missing_path_dependencies(
+        target,
+        {
+            "quickscale-module-blog": {
+                "path": "./modules/blog",
+                "develop": True,
+            }
+        },
+    )
+
+    assert changed is True
+    updated = target.read_text()
+    # The nested table declaration is still present (insertion only adds).
+    assert "[tool.poetry.dependencies.sources]" in updated
+    assert 'default = {url = "https://pypi.org/simple"}' in updated
+    # The new entry is present and was inserted after the nested-table content.
+    new_dep_idx = updated.index("quickscale-module-blog")
+    nested_idx = updated.index('default = {url = "https://pypi.org/simple"}')
+    assert new_dep_idx > nested_idx
+    # The section that lives after the rewritten body is still intact.
+    assert "[tool.pytest.ini_options]" in updated
+
+
+def test_insert_missing_path_dependencies_returns_false_for_empty(
+    tmp_path: Path,
+) -> None:
+    """An empty dependency map is a no-op and should not touch the file."""
+    target = tmp_path / "pyproject.toml"
+    target.write_text(_PYPROJECT_WITH_ARRAY_OF_TABLES)
+    before = target.read_text()
+
+    changed = _insert_missing_path_dependencies(target, {})
+
+    assert changed is False
+    assert target.read_text() == before
+
+
+def test_insert_missing_path_dependencies_raises_when_section_missing(
+    tmp_path: Path,
+) -> None:
+    """Missing [tool.poetry.dependencies] should raise a clear error."""
+    target = tmp_path / "pyproject.toml"
+    target.write_text("[tool.poetry]\nname = 'demo'\n")
+    with pytest.raises(ValueError, match="Unable to locate"):
+        _insert_missing_path_dependencies(
+            target,
+            {"quickscale-module-blog": {"path": "./modules/blog", "develop": True}},
+        )

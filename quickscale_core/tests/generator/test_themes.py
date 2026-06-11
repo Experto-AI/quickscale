@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from quickscale_core.contracts.module_catalog import MODULE_CATALOG, get_module_names
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.generator.generator import (
     REACT_THEME_OPTIONAL_FILES,
@@ -395,6 +396,48 @@ class TestReactThemeBuildCompatibility:
 
         # Should NOT copy index.html to templates (we generate Django template)
         assert "index.html /app/templates/index.html" not in dockerfile
+
+
+class TestReactOptionalFilesModuleCatalogAlignment:
+    """Lightweight alignment between the React gating map and the module catalog.
+
+    ``REACT_THEME_OPTIONAL_FILES`` maps every optional React file to the
+    module that gates it. If a gating module key is not present in the
+    shared module catalog, ``selected_modules`` membership gating would
+    silently never trigger because the key can never appear in user
+    configs. This test guards that contract from drifting.
+    """
+
+    def test_all_react_optional_file_gating_modules_are_in_catalog(self) -> None:
+        """Every module referenced by ``REACT_THEME_OPTIONAL_FILES`` must exist in the catalog."""
+        catalog_names = set(get_module_names(include_experimental=True))
+        gating_modules = set(REACT_THEME_OPTIONAL_FILES.values())
+
+        missing = gating_modules - catalog_names
+        assert not missing, (
+            "REACT_THEME_OPTIONAL_FILES references gating modules that are "
+            f"missing from MODULE_CATALOG: {sorted(missing)}"
+        )
+
+    def test_all_react_optional_file_gating_modules_are_ready(self) -> None:
+        """Gating modules should be public-ready so apply accepts them by default."""
+        ready_names = {entry.name for entry in MODULE_CATALOG if entry.ready}
+        gating_modules = set(REACT_THEME_OPTIONAL_FILES.values())
+
+        not_ready = gating_modules - ready_names
+        assert not not_ready, (
+            "REACT_THEME_OPTIONAL_FILES references gating modules that are "
+            f"not public-ready: {sorted(not_ready)}"
+        )
+
+    def test_react_optional_files_values_match_module_catalog(self) -> None:
+        """Spot-check that known gating values line up with catalog entries."""
+        expected_subset = {"blog", "crm", "forms", "listings", "social"}
+        actual = set(REACT_THEME_OPTIONAL_FILES.values())
+        assert expected_subset.issubset(actual), (
+            f"Expected {sorted(expected_subset)} to gate React optional files; "
+            f"actual gating modules: {sorted(actual)}"
+        )
 
 
 class TestSelectedModulesReactTheme:

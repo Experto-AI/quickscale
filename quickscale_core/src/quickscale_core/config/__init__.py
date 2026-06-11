@@ -10,6 +10,7 @@ from importlib import import_module
 from typing import Any
 
 from quickscale_core.config.module_config import (
+    ConfigError,
     ModuleConfig,
     ModuleInfo,
     add_module,
@@ -62,6 +63,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "ConfigError",
     "ModuleConfig",
     "ModuleInfo",
     "load_config",

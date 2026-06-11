@@ -174,6 +174,7 @@ class TestGenerateProject:
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
+        mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is True
 
@@ -185,6 +186,7 @@ class TestGenerateProject:
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_htmx"
+        mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
 
@@ -196,6 +198,7 @@ class TestGenerateProject:
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
+        mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
 
@@ -207,6 +210,7 @@ class TestGenerateProject:
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
+        mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
 
@@ -218,8 +222,54 @@ class TestGenerateProject:
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
+        mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
+
+    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    def test_selected_modules_forwarded_from_quickscale_config(self, mock_gen_cls):
+        """Fresh apply must forward ``selected_modules`` from ``config.modules``.
+
+        ProjectGenerator treats ``selected_modules=None`` as the legacy default
+        (emit every per-module surface) and a list as the active selection. The
+        apply path must pass the actual selection so the React theme gating
+        matches ``quickscale.yml``. Existing-project apply does not call
+        ``_generate_project`` at all, so its legacy behavior is preserved.
+        """
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+        mock_config.project.package = "myapp"
+        mock_config.project.theme = "showcase_react"
+        mock_config.modules = {
+            "auth": Mock(),
+            "blog": Mock(),
+            "notifications": Mock(),
+        }
+
+        result = _generate_project(mock_config, Path("/tmp/myapp"))
+
+        assert result is True
+        mock_gen_cls.assert_called_once_with(
+            theme="showcase_react",
+            selected_modules=["auth", "blog", "notifications"],
+        )
+
+    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    def test_selected_modules_empty_list_when_no_modules(self, mock_gen_cls):
+        """An empty ``modules`` block should forward an empty selection list."""
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+        mock_config.project.package = "myapp"
+        mock_config.project.theme = "showcase_react"
+        mock_config.modules = {}
+
+        result = _generate_project(mock_config, Path("/tmp/myapp"))
+
+        assert result is True
+        mock_gen_cls.assert_called_once_with(
+            theme="showcase_react",
+            selected_modules=[],
+        )
 
 
 # ============================================================================

@@ -592,6 +592,52 @@ def _load_toml_file(pyproject_path: Path) -> dict[str, Any]:
         return tomllib.load(file_handle)
 
 
+def _write_validated_toml(path: Path, content: str) -> None:
+    """Write TOML content only after validating the rewritten document parses."""
+    try:
+        tomllib.loads(content)
+    except tomllib.TOMLDecodeError as error:
+        raise ValueError(
+            f"Refusing to write invalid TOML to {path}: {error}"
+        ) from error
+    path.write_text(content)
+
+
+def _locate_toml_section_bounds(lines: list[str], section_name: str) -> tuple[int, int]:
+    """Return the (start, end) line indices of a TOML section in a line list.
+
+    The end boundary is the next non-array-of-tables header that is not a strict
+    child of ``section_name``. Array-of-tables headers (``[[foo.bar]]``) and
+    nested tables (``[foo.bar.child]``) are intentionally not treated as the end
+    of the current section so that rewrites do not split mid-table.
+    """
+    section_header = f"[{section_name}]"
+    child_prefix = f"{section_name}."
+    section_start: int | None = None
+    section_end = len(lines)
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == section_header:
+            section_start = index
+            continue
+        if section_start is None:
+            continue
+        if not (stripped.startswith("[") and stripped.endswith("]")):
+            continue
+        # Ignore [[array-of-tables]] headers when scanning for the next boundary.
+        if stripped.startswith("[[") or stripped.endswith("]]"):
+            continue
+        # Ignore strict child tables of the current section.
+        inner = stripped[1:-1].strip()
+        if inner == section_name or inner.startswith(child_prefix):
+            continue
+        section_end = index
+        break
+    if section_start is None:
+        raise ValueError(f"Unable to locate {section_header} in TOML document")
+    return section_start, section_end
+
+
 def _extract_poetry_package(
     pyproject_data: dict[str, Any], pyproject_path: Path
 ) -> str:
@@ -1661,24 +1707,7 @@ def _replace_toml_section(
     """Replace an entire TOML section body while preserving the rest of the file."""
     original = pyproject_path.read_text()
     lines = original.splitlines()
-    section_header = f"[{section_name}]"
-    section_start: int | None = None
-    section_end = len(lines)
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped == section_header:
-            section_start = index
-            continue
-        if (
-            section_start is not None
-            and stripped.startswith("[")
-            and stripped.endswith("]")
-        ):
-            section_end = index
-            break
-
-    if section_start is None:
-        raise ValueError(f"Unable to locate {section_header} in {pyproject_path}")
+    section_start, section_end = _locate_toml_section_bounds(lines, section_name)
 
     updated_lines = lines[: section_start + 1] + list(section_lines)
     if (
@@ -1692,7 +1721,7 @@ def _replace_toml_section(
     updated = "\n".join(updated_lines) + "\n"
     if updated == original:
         return False
-    pyproject_path.write_text(updated)
+    _write_validated_toml(pyproject_path, updated)
     return True
 
 
@@ -2051,25 +2080,9 @@ def _insert_missing_path_dependencies(
 
     original = pyproject_path.read_text()
     lines = original.splitlines()
-    section_start: int | None = None
-    section_end = len(lines)
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped == "[tool.poetry.dependencies]":
-            section_start = index
-            continue
-        if (
-            section_start is not None
-            and stripped.startswith("[")
-            and stripped.endswith("]")
-        ):
-            section_end = index
-            break
-
-    if section_start is None:
-        raise ValueError(
-            f"Unable to locate [tool.poetry.dependencies] in {pyproject_path}"
-        )
+    section_start, section_end = _locate_toml_section_bounds(
+        lines, "tool.poetry.dependencies"
+    )
 
     insert_at = section_end
     while insert_at > section_start + 1 and lines[insert_at - 1].strip() == "":
@@ -2080,7 +2093,7 @@ def _insert_missing_path_dependencies(
         for dependency_name, dependency_value in missing_dependencies.items()
     ]
     updated_lines = lines[:insert_at] + dependency_lines + lines[insert_at:]
-    pyproject_path.write_text("\n".join(updated_lines) + "\n")
+    _write_validated_toml(pyproject_path, "\n".join(updated_lines) + "\n")
     return True
 
 

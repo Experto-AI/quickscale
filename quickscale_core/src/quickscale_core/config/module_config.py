@@ -7,6 +7,17 @@ from pathlib import Path
 import yaml
 
 
+class ConfigError(Exception):
+    """Raised when ``.quickscale/config.yml`` cannot be parsed or loaded.
+
+    Used as the local error type for the legacy module-tracking file so that
+    callers can distinguish configuration problems from generic I/O or YAML
+    errors. The unified :class:`quickscale_core.project_state.ProjectStateManager`
+    boundary normalizes :class:`ConfigError` into
+    :class:`quickscale_core.schema.state_schema.StateError` for CLI surfaces.
+    """
+
+
 def normalize_installed_version(version: str | None) -> str | None:
     """Normalize stored module versions to the embedded manifest form."""
     if version is None:
@@ -95,7 +106,17 @@ def get_config_path(project_path: Path | None = None) -> Path:
 
 
 def load_config(project_path: Path | None = None) -> ModuleConfig:
-    """Load module configuration from YAML file"""
+    """Load module configuration from YAML file.
+
+    Returns the default empty :class:`ModuleConfig` when the file does not
+    exist.
+
+    Raises:
+        ConfigError: If the file exists but cannot be parsed as YAML.
+            ``OSError`` (for example a permission error) is left to propagate
+            unchanged so that callers can distinguish it from a malformed
+            configuration.
+    """
     config_path = get_config_path(project_path)
 
     if not config_path.exists():
@@ -104,8 +125,11 @@ def load_config(project_path: Path | None = None) -> ModuleConfig:
             default_remote="https://github.com/Experto-AI/quickscale.git"
         )
 
-    with open(config_path) as f:
-        data = yaml.safe_load(f)
+    try:
+        with open(config_path) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as error:
+        raise ConfigError(f"Failed to parse {config_path}: {error}") from error
 
     return ModuleConfig.from_dict(data)
 

@@ -329,14 +329,24 @@ def _run_command(
 
 
 def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
-    """Generate project using ProjectGenerator"""
+    """Generate project using ProjectGenerator
+
+    Fresh-generation only. ``selected_modules`` is forwarded from
+    ``config.modules.keys()`` so the React theme gating sees the same module
+    selection the user declared in ``quickscale.yml``. Existing-project apply
+    paths do not call this function, so the legacy ``selected_modules=None``
+    behavior of :class:`ProjectGenerator` remains reachable for them.
+    """
     try:
         click.echo(
             f"⏳ Generating project: {config.project.slug} "
             f"(package: {config.project.package})..."
         )
 
-        generator = ProjectGenerator(theme=config.project.theme)
+        generator = ProjectGenerator(
+            theme=config.project.theme,
+            selected_modules=list(config.modules.keys()),
+        )
         # mypy can resolve an older installed quickscale-core signature here.
         generate_project = cast(Any, generator.generate)
         generate_project(

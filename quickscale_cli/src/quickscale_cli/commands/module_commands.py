@@ -19,6 +19,7 @@ from quickscale_cli.utils.module_dependency_sync import (
 )
 
 from quickscale_core.config import (
+    ConfigError,
     add_module,
     load_config,
     normalize_installed_version,
@@ -1132,7 +1133,20 @@ def update(no_preview: bool) -> None:
         _validate_update_environment()
 
         # Load configuration
-        config = load_config()
+        try:
+            config = load_config()
+        except ConfigError as error:
+            click.secho(
+                f"❌ Failed to load .quickscale/config.yml: {error}",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "💡 Fix or restore .quickscale/config.yml before running "
+                "'quickscale update'.",
+                err=True,
+            )
+            raise click.Abort() from error
 
         if not config.modules:
             click.secho("✅ No modules installed. Nothing to update.", fg="green")
@@ -1238,7 +1252,20 @@ def push(module: str, branch: str, remote: str) -> None:
             raise click.Abort()
 
         # Check if module is installed
-        config = load_config()
+        try:
+            config = load_config()
+        except ConfigError as error:
+            click.secho(
+                f"❌ Failed to load .quickscale/config.yml: {error}",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "💡 Fix or restore .quickscale/config.yml before running "
+                "'quickscale push'.",
+                err=True,
+            )
+            raise click.Abort() from error
         if module not in config.modules:
             click.secho(
                 f"❌ Error: Module '{module}' is not installed", fg="red", err=True

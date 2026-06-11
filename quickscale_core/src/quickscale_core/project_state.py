@@ -34,6 +34,7 @@ import yaml
 
 # Re-export the schema/state surface so callers can use a single import.
 from quickscale_core.config import (  # noqa: F401
+    ConfigError,
     ModuleConfig,
     ModuleInfo,
     add_module,
@@ -453,11 +454,19 @@ class ProjectStateManager:
             a list of :class:`VersionDriftWarning` entries. The wrapper
             dict leaves room for additional consistency categories without
             changing the call sites.
+
+        Raises:
+            StateError: If ``.quickscale/config.yml`` cannot be loaded
+                because the file is malformed. The boundary normalizes
+                :class:`quickscale_core.config.ConfigError` (and the
+                underlying :class:`yaml.YAMLError`) into :class:`StateError`
+                so that downstream CLI surfaces only need to handle one
+                error type for both ``state.yml`` and ``config.yml``.
         """
         state = self.load_state()
         try:
             config = self.load_config()
-        except (OSError, yaml.YAMLError) as error:
+        except (ConfigError, OSError, yaml.YAMLError) as error:
             raise StateError(
                 f"Failed to load .quickscale/config.yml: {error}"
             ) from error
@@ -468,6 +477,7 @@ class ProjectStateManager:
 
 __all__ = [
     # Re-exports from quickscale_core.config
+    "ConfigError",
     "ModuleConfig",
     "ModuleInfo",
     "add_module",
