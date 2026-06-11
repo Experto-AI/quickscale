@@ -335,6 +335,8 @@ VERIFICATION_COMMAND_SPECS = (
     VerificationCommandSpec("pytest", ("pytest",)),
     VerificationCommandSpec("pnpm test", ("pnpm", "test"), cwd_suffix="frontend"),
 )
+QUICKSCALE_APPLY_TIMEOUT_SECONDS = 600
+VERIFICATION_COMMAND_TIMEOUT_SECONDS = 600
 
 
 def _utc_now_iso() -> str:
@@ -1899,7 +1901,18 @@ def _execute_copy_managed_infrastructure_files(report: BetaMigrationReport) -> N
 
 
 def _execute_merge_pyproject_and_frontend_package(report: BetaMigrationReport) -> None:
-    """Merge pyproject dependencies and frontend package.json in place."""
+    """Merge pyproject dependencies and frontend package.json in place.
+
+    The merge contract is intentionally donor-authoritative for non-path
+    dependencies: the recipient ``[tool.poetry.dependencies]`` section is
+    replaced with the donor's non-path dependency set combined with the
+    recipient's path dependencies.  Recipient-only non-path dependencies
+    (present in the recipient but absent from the donor) are deliberately
+    dropped because the donor is the authoritative source of truth for the
+    merged dependency graph.  Dropped dependencies are surfaced in the
+    completed-step detail so the maintainer can review them in the report
+    before continuation.
+    """
     if report.donor is None or report.recipient is None:
         raise ValueError("Donor and recipient snapshots are required before execution.")
 
@@ -1919,6 +1932,12 @@ def _execute_merge_pyproject_and_frontend_package(report: BetaMigrationReport) -
         for dependency_name, dependency_value in recipient_dependencies.items()
         if isinstance(dependency_value, dict) and "path" in dependency_value
     }
+    recipient_only_non_path_dependencies = sorted(
+        dependency_name
+        for dependency_name, dependency_value in recipient_dependencies.items()
+        if not (isinstance(dependency_value, dict) and "path" in dependency_value)
+        and dependency_name not in donor_non_path_dependencies
+    )
     merged_dependencies = {
         **donor_non_path_dependencies,
         **recipient_path_dependencies,
@@ -1959,7 +1978,9 @@ def _execute_merge_pyproject_and_frontend_package(report: BetaMigrationReport) -
         detail=(
             "Merged donor non-path Poetry dependencies into recipient pyproject.toml while preserving recipient path dependencies "
             f"({', '.join(recipient_path_dependencies) or '(none)'}) and recipient pytest settings. "
-            f"frontend/package.json preserved recipient name {recipient_package_name!r}."
+            f"frontend/package.json preserved recipient name {recipient_package_name!r}. "
+            f"Recipient-only non-path dependencies dropped by donor-authoritative merge: "
+            f"{', '.join(recipient_only_non_path_dependencies) or '(none)'}"
         ),
     )
 
@@ -2025,7 +2046,15 @@ def _execute_quickscale_apply(report: BetaMigrationReport) -> None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=QUICKSCALE_APPLY_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(
+            f"quickscale apply exceeded the {QUICKSCALE_APPLY_TIMEOUT_SECONDS}s timeout "
+            f"in {report.recipient.path}. "
+            "Inspect the recipient working tree, re-run the migration, or increase "
+            "QUICKSCALE_APPLY_TIMEOUT_SECONDS if the apply is legitimately slow."
+        ) from exc
     except OSError as exc:
         raise ValueError(f"quickscale apply failed to start: {exc}") from exc
 
@@ -2188,7 +2217,29 @@ def _execute_verification_stack(report: BetaMigrationReport) -> None:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=VERIFICATION_COMMAND_TIMEOUT_SECONDS,
             )
+        except subprocess.TimeoutExpired as exc:
+            report.verification_results.append(
+                VerificationCommandResult(
+                    command=spec.display_command,
+                    cwd=str(working_dir),
+                    status="failed",
+                    return_code=None,
+                    stdout="",
+                    stderr=(
+                        f"Verification command timed out after "
+                        f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command}"
+                    ),
+                )
+            )
+            raise ValueError(
+                f"Verification command timed out after "
+                f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command} "
+                f"in {working_dir}. "
+                "Re-run the migration or increase VERIFICATION_COMMAND_TIMEOUT_SECONDS "
+                "if the command is legitimately slow."
+            ) from exc
         except OSError as exc:
             report.verification_results.append(
                 VerificationCommandResult(

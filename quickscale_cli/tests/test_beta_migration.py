@@ -1820,3 +1820,223 @@ def test_run_in_place_with_continuation_preserves_sibling_sources_and_applies(
         "beta_site.settings.local"
     )
     assert parsed["tool"]["ruff"]["line-length"] == 100
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: recipient-only non-path dependency visibility and
+# subprocess timeout hardening (Phase 3 roadmap items)
+# ---------------------------------------------------------------------------
+
+
+def test_in_place_merge_drops_and_surfaces_recipient_only_non_path_dependencies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recipient-only non-path dependencies must be dropped deliberately and surfaced in the report.
+
+    The donor-authoritative merge contract replaces the recipient non-path
+    dependency set with the donor's.  Recipient-only non-path dependencies
+    are intentionally dropped; the step detail must name them so the
+    maintainer can review the drop in the report rather than discovering it
+    silently after the fact.
+    """
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+
+    # Give the recipient a non-path dependency that the donor does not have.
+    recipient_pyproject = recipient / "pyproject.toml"
+    recipient_pyproject.write_text(
+        recipient_pyproject.read_text().replace(
+            'Django = ">=6.0.3,<7.0.0"\n',
+            'Django = ">=6.0.3,<7.0.0"\ndjango-recaptcha = "^4.0.0"\n',
+        )
+    )
+
+    _init_clean_git_repo(recipient)
+    _install_in_place_success_stub(
+        monkeypatch,
+        recipient=recipient,
+        package="beta_site",
+    )
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="in-place",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=True,
+        )
+    )
+
+    assert report.status == "ready"
+
+    # The dropped dependency must NOT appear in the final pyproject.toml.
+    pyproject_text = (recipient / "pyproject.toml").read_text()
+    assert "django-recaptcha" not in pyproject_text
+
+    # The step detail must explicitly name the dropped dependency.
+    merge_detail = _find_step_detail(report, "merge-pyproject-and-frontend-package")
+    assert "django-recaptcha" in merge_detail
+    assert "Recipient-only non-path dependencies dropped" in merge_detail
+
+
+def test_quickscale_apply_timeout_blocks_with_actionable_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hung quickscale apply must fail the migration with a bounded timeout diagnostic.
+
+    The subprocess timeout prevents indefinite blocking; the error message
+    must name the timeout, the working directory, and the remediation knob.
+    """
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    _init_clean_git_repo(recipient)
+
+    original_run = subprocess.run
+
+    def fake_run_with_apply_timeout(command, cwd=None, **kwargs):
+        command_tuple = tuple(command)
+        if (
+            len(command_tuple) >= 3
+            and command_tuple[0] == "git"
+            and command_tuple[1] == "-C"
+        ):
+            return original_run(command, cwd=cwd, **kwargs)
+        if command_tuple == ("quickscale", "apply"):
+            raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+        return original_run(command, cwd=cwd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_run_with_apply_timeout)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="in-place",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.phase == "in-place-partial"
+    assert any(
+        "timeout" in blocker.lower() and "quickscale apply" in blocker.lower()
+        for blocker in report.blockers
+    )
+    assert any(
+        "QUICKSCALE_APPLY_TIMEOUT_SECONDS" in blocker for blocker in report.blockers
+    )
+
+
+def test_verification_command_timeout_blocks_with_actionable_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hung verification command must fail the migration with a bounded timeout diagnostic.
+
+    The verification result must record the timeout as a failure with a
+    descriptive stderr, and the report must be blocked with a message that
+    names the timed-out command and the remediation knob.
+    """
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    _init_clean_git_repo(recipient)
+
+    original_run = subprocess.run
+
+    def fake_run_with_verification_timeout(command, cwd=None, **kwargs):
+        command_tuple = tuple(command)
+        if (
+            len(command_tuple) >= 3
+            and command_tuple[0] == "git"
+            and command_tuple[1] == "-C"
+        ):
+            return original_run(command, cwd=cwd, **kwargs)
+        if command_tuple == ("quickscale", "apply"):
+            return subprocess.CompletedProcess(
+                command_tuple,
+                0,
+                stdout="stdout:quickscale apply",
+                stderr="stderr:quickscale apply",
+            )
+        if command_tuple == ("poetry", "lock"):
+            raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+        return original_run(command, cwd=cwd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_run_with_verification_timeout)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="in-place",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.phase == "in-place-partial"
+
+    # The timed-out verification command must appear as a failed result.
+    timed_out_results = [
+        result
+        for result in report.verification_results
+        if result.command == "poetry lock"
+    ]
+    assert len(timed_out_results) == 1
+    assert timed_out_results[0].status == "failed"
+    assert "timed out" in timed_out_results[0].stderr.lower()
+
+    # The blocker must name the command and the remediation knob.
+    assert any(
+        "poetry lock" in blocker and "timed out" in blocker.lower()
+        for blocker in report.blockers
+    )
+    assert any(
+        "VERIFICATION_COMMAND_TIMEOUT_SECONDS" in blocker for blocker in report.blockers
+    )
