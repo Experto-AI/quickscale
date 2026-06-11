@@ -6,7 +6,7 @@ from pprint import pformat
 from textwrap import dedent
 from typing import Any, Mapping
 
-from quickscale_cli.analytics_contract import (
+from quickscale_cli.analytics_manifest import (
     resolve_analytics_module_options,
 )
 from quickscale_cli.backups_contract import (

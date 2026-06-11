@@ -436,7 +436,7 @@ def resolve_module_config(
     6. Project derived Django settings from the resolved values.
 
     The legacy contract-file path is **not** touched.  Callers that still
-    use ``analytics_contract.py`` or similar modules are unaffected.
+    use per-module manifest adapters or similar modules are unaffected.
 
     Args:
         manifest: The loaded module manifest.

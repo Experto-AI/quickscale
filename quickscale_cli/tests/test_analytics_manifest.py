@@ -1,4 +1,10 @@
-"""Tests for the v0.80.0 analytics planner/apply contract."""
+"""Tests for the manifest-driven analytics module adapter.
+
+Verifies that the analytics configuration path routes through the
+manifest-driven resolver (``quickscale_core.manifest.resolver``) and
+that defaults, normalization, validation, and production-targeting
+helpers produce the same results as the legacy contract file.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.analytics_contract import (
+from quickscale_cli.analytics_manifest import (
     ANALYTICS_EVENT_FORM_SUBMIT,
     ANALYTICS_EVENT_PAGEVIEW,
     ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
@@ -34,8 +40,8 @@ def _load_analytics_manifest() -> Any:
     return load_manifest_from_path(ANALYTICS_MANIFEST_PATH)
 
 
-def test_analytics_contract_constants_are_stable() -> None:
-    """The v0.80.0 analytics contract should stay explicitly PostHog-only."""
+def test_analytics_manifest_constants_are_stable() -> None:
+    """The analytics adapter should stay explicitly PostHog-only."""
     assert ANALYTICS_PROVIDER_POSTHOG == "posthog"
     assert ANALYTICS_PROVIDERS == ("posthog",)
     assert DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR == "POSTHOG_API_KEY"
@@ -51,7 +57,7 @@ def test_analytics_event_constants_are_stable() -> None:
     assert ANALYTICS_EVENT_SOCIAL_LINK_CLICK == "social_link_click"
 
 
-def test_default_analytics_module_options_match_manifest_contract() -> None:
+def test_default_analytics_module_options_match_manifest() -> None:
     """Default planner/apply config should align with the analytics manifest."""
     manifest = _load_analytics_manifest()
     defaults = default_analytics_module_options()
@@ -146,7 +152,7 @@ def test_validate_analytics_env_var_reference_rejects_invalid_names() -> None:
         ),
     ],
 )
-def test_validate_analytics_module_options_reports_contract_issues(
+def test_validate_analytics_module_options_reports_issues(
     options: dict[str, object],
     expected_issue: str,
 ) -> None:

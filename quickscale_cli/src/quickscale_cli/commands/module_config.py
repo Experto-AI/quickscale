@@ -14,7 +14,7 @@ from typing import Any, Literal, Mapping, Optional
 
 import click
 
-from quickscale_cli.analytics_contract import (
+from quickscale_cli.analytics_manifest import (
     ANALYTICS_POSTHOG_DEFAULT_HOST,
     DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
     DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
