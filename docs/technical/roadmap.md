@@ -485,7 +485,7 @@ One real-subtree-embed e2e per theme (even just `auth`, the simplest full app) w
 
 ### Phase 4 — Long-term restructuring (high effort, requires planning)
 - [x] Define the manifest derivation schema needed to make `module.yml` authoritative for defaults, normalization, setting projection, and other currently duplicated CLI-side module behavior (Finding 1)
-- [ ] Add a manifest-driven loader/API path that can compute module configuration and wiring inputs without deleting the legacy contract-file path yet (Finding 1)
+- [x] Add a manifest-driven loader/API path that can compute module configuration and wiring inputs without deleting the legacy contract-file path yet (Finding 1)
 - [ ] Migrate `analytics` to the manifest-driven path and delete its CLI contract file as the first pilot slice (Finding 1)
 - [ ] Add parity/regression coverage proving the manifest-driven `analytics` path matches the prior contract-file-driven behavior (Finding 1)
 - [ ] Migrate `forms` to the manifest-driven path and delete its CLI contract file as the second pilot slice (Finding 1)
