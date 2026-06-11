@@ -654,6 +654,38 @@ config:
 
 ---
 
+### Module Derivation Schema {#module-derivation-schema}
+
+**Architectural Decision (Phase 4, Finding 1):** A companion derivation schema describes how `module.yml` configuration options normalise, validate, and project into Django settings, making the manifest authoritative for behaviour currently duplicated across CLI contract files, `module_wiring_specs.py`, and imperative `normalize_*` / `validate_*` helpers.
+
+**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The existing manifest loader, runtime behaviour, and CLI contract-file path are unchanged.
+
+**YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so that future `module.yml` `derivation:` sections can round-trip through `yaml.safe_load` without custom codecs. YAML serialisation and loader wiring are intentionally deferred to a later roadmap item.
+
+**Dataclass summary:**
+
+| Type | Purpose |
+|------|---------|
+| `NormalizationRule` | Declarative normalisation transformation (choice-map, lowercase, strip, coerce) |
+| `ValidationRule` | Declarative validation constraint (choices, range, required, pattern, type) |
+| `LegacyKeyAlias` | Mapping from deprecated configuration keys to current replacements |
+| `DerivedSetting` | Django setting projected from one or more configuration options |
+| `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
+| `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
+
+**Roadmap context:** This foundation is the first step toward eventually replacing the imperative `normalize_*` / `validate_*` functions and CLI contract files that currently duplicate per-module knowledge (seven hand-written contract files, `module_wiring_specs.py`, and `module_config.py`). The analytics module is the planned first pilot slice. Later phases will add loader wiring, runtime derivation execution, and progressive contract-file deletion — one module at a time.
+
+**Constraints:**
+- ✅ Derivation types are frozen dataclasses (immutable after construction)
+- ✅ All field types are YAML-safe (scalars, lists, dicts)
+- ✅ `ModuleDerivationSchema` is a companion to `ModuleManifest`, not a replacement
+- ✅ No current loader, runtime, or CLI behaviour changes
+- ❌ No YAML loading from `module.yml` yet (deferred to next roadmap item)
+- ❌ No runtime derivation execution yet (deferred to analytics pilot)
+- ❌ No contract-file deletion yet (deferred to per-module migration phases)
+
+---
+
 ### Module Implementation Checklist {#module-implementation-checklist}
 
 **Architectural Decision (v0.67.0):** Every QuickScale module must be complete, embeddable, and usable immediately after `quickscale apply`. This checklist ensures no gaps between planning and implementation.
