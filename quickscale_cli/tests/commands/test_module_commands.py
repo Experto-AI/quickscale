@@ -1460,6 +1460,136 @@ class TestUpdateCommand:
         assert "cancelled" in result.output
 
 
+class TestUpdateVersionDriftWarning:
+    """Tests for the version drift warning invoked by 'quickscale update'."""
+
+    def test_warn_version_drift_for_update_returns_empty_when_agreeing(self, tmp_path):
+        """Drift warning is silent when state and config agree on versions."""
+        from quickscale_core.config import add_module
+        from quickscale_cli.commands.module_commands import (
+            _warn_version_drift_for_update,
+        )
+        from quickscale_core.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+            StateManager,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+
+        StateManager(project).save(
+            QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                ),
+                modules={
+                    "auth": ModuleState(name="auth", version="0.62.0"),
+                },
+            )
+        )
+
+        add_module(
+            module_name="auth",
+            prefix="modules/auth",
+            branch="splits/auth-module",
+            version="0.62.0",  # matches state
+            project_path=project,
+        )
+
+        from quickscale_core.config import load_config as load_legacy
+
+        config = load_legacy(project)
+        drift = _warn_version_drift_for_update(project, config)
+        assert drift == []
+
+    def test_warn_version_drift_for_update_reports_disagreement(self, tmp_path):
+        """Drift warning returns VersionDriftWarning when versions disagree."""
+        from quickscale_core.config import add_module
+        from quickscale_cli.commands.module_commands import (
+            _warn_version_drift_for_update,
+        )
+        from quickscale_core.project_state import VersionDriftWarning
+        from quickscale_core.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+            StateManager,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+
+        StateManager(project).save(
+            QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                ),
+                modules={
+                    "auth": ModuleState(name="auth", version="0.62.0"),
+                },
+            )
+        )
+
+        add_module(
+            module_name="auth",
+            prefix="modules/auth",
+            branch="splits/auth-module",
+            version="0.63.0",  # drift
+            project_path=project,
+        )
+
+        from quickscale_core.config import load_config as load_legacy
+
+        config = load_legacy(project)
+        drift = _warn_version_drift_for_update(project, config)
+        assert len(drift) == 1
+        assert isinstance(drift[0], VersionDriftWarning)
+        assert drift[0].module == "auth"
+
+    @patch("quickscale_cli.commands.module_commands._update_single_module")
+    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
+    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    def test_update_emits_drift_warning_via_warn_helper(
+        self, mock_confirm, mock_validate, mock_load, mock_update
+    ):
+        """Update should still run when drift is detected (drift is non-fatal)."""
+        mock_confirm.return_value = True
+        module_info = Mock(
+            installed_version="v0.70.0",
+            prefix="modules/auth",
+            branch="splits/auth-module",
+        )
+        config = Mock(
+            modules={"auth": module_info},
+            default_remote="https://example.com/repo.git",
+        )
+        mock_load.return_value = config
+        mock_update.return_value = True
+
+        from click.testing import CliRunner
+
+        # Patch the drift warning helper to a no-op so this test focuses on
+        # command routing; the helper's own behavior is exercised above.
+        with patch(
+            "quickscale_cli.commands.module_commands._warn_version_drift_for_update",
+            return_value=[],
+        ) as mock_warn:
+            runner = CliRunner()
+            result = runner.invoke(update, ["--no-preview"])
+
+        assert result.exit_code == 0
+        mock_warn.assert_called_once()
+
+
 class TestPushCommand:
     """Tests for push click command."""
 

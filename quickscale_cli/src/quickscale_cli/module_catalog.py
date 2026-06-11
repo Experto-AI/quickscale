@@ -1,133 +1,32 @@
-"""Module catalog metadata for QuickScale CLI."""
+"""Backward-compatible shim for ``quickscale_cli.module_catalog``.
 
-from collections.abc import Iterable
-from dataclasses import dataclass
+The canonical module catalog lives in
+``quickscale_core.contracts.module_catalog`` as part of the shared
+contract surface owned by ``quickscale_core``. This module re-exports
+those names so existing CLI consumers continue to work without
+modification.
 
+Phase 0 of the QuickScale Phase 3 architecture improvements moved the
+catalog out of the CLI package. The original symbols are preserved here
+as thin re-exports.
+"""
 
-@dataclass(frozen=True)
-class ModuleCatalogEntry:
-    """Metadata describing a module's availability and UX label."""
-
-    name: str
-    description: str
-    ready: bool
-    experimental: bool = False
-
-
-MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
-    ModuleCatalogEntry(
-        name="auth",
-        description="Authentication with django-allauth",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="blog",
-        description="Markdown-powered blog with categories and RSS",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="listings",
-        description="Generic listings for marketplace verticals",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="crm",
-        description="Customer Relationship Management (contacts, deals, pipeline)",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="forms",
-        description="Generic form builder with admin management and React renderer",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="storage",
-        description="Shared media storage infrastructure (local + S3-compatible)",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="backups",
-        description="Private operational database backups with guarded restore workflows",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="notifications",
-        description="Transactional email delivery with Resend and Anymail",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="analytics",
-        description="PostHog website analytics with flat settings and starter-theme support",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="social",
-        description="Curated social links and embeds with managed backend integration",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="billing",
-        description="Stripe integration with credits-first pricing and dashboard routes",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="orgs",
-        description="Organizations and multi-tenant foundations with memberships and invitations",
-        ready=True,
-    ),
-    ModuleCatalogEntry(
-        name="teams",
-        description="Multi-tenancy and team management",
-        ready=False,
-        experimental=True,
-    ),
+from quickscale_core.contracts.module_catalog import (
+    MODULE_CATALOG,
+    ModuleCatalogEntry,
+    find_not_ready_modules,
+    get_module_entries,
+    get_module_entry,
+    get_module_names,
+    get_module_readiness_reason,
 )
 
-
-def get_module_entry(module_name: str) -> ModuleCatalogEntry | None:
-    """Return module metadata for a module name."""
-    for entry in MODULE_CATALOG:
-        if entry.name == module_name:
-            return entry
-    return None
-
-
-def get_module_names(*, include_experimental: bool = True) -> list[str]:
-    """Return module names from the catalog."""
-    entries = get_module_entries(include_experimental=include_experimental)
-    return [entry.name for entry in entries]
-
-
-def get_module_entries(
-    *, include_experimental: bool = False
-) -> list[ModuleCatalogEntry]:
-    """Return catalog entries filtered by readiness/experimental visibility."""
-    if include_experimental:
-        return list(MODULE_CATALOG)
-    return [entry for entry in MODULE_CATALOG if entry.ready]
-
-
-def find_not_ready_modules(module_names: Iterable[str]) -> list[str]:
-    """Return known module names that are present but not publicly ready."""
-    not_ready: list[str] = []
-    for module_name in module_names:
-        entry = get_module_entry(module_name)
-        if entry is not None and not entry.ready and module_name not in not_ready:
-            not_ready.append(module_name)
-    return sorted(not_ready)
-
-
-def get_module_readiness_reason(module_name: str) -> str | None:
-    """Return an actionable readiness error for non-public-ready modules."""
-    entry = get_module_entry(module_name)
-    if entry is None or entry.ready:
-        return None
-
-    module_display_name = module_name.replace("_", " ").title()
-    return (
-        f"Module '{module_name}' remains placeholder inventory only and is not a "
-        "public-ready QuickScale module yet. "
-        f"{module_display_name} remains excluded from public quickscale plan, "
-        "quickscale.yml, quickscale apply, and quickscale status workflows until "
-        "it ships."
-    )
+__all__ = [
+    "MODULE_CATALOG",
+    "ModuleCatalogEntry",
+    "find_not_ready_modules",
+    "get_module_entries",
+    "get_module_entry",
+    "get_module_names",
+    "get_module_readiness_reason",
+]

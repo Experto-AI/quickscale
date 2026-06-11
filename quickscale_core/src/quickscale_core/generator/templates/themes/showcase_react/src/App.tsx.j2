@@ -1,13 +1,33 @@
-{% raw -%}
+{%- raw -%}
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
+{% endraw -%}
+{%- if selected_modules is none or 'blog' in selected_modules %}
+{% raw -%}
 import { BlogPage } from '@/pages/BlogPage'
-import { ListingsPage } from '@/pages/ListingsPage'
+{% endraw -%}
+{%- endif %}
+{%- if selected_modules is none or 'crm' in selected_modules %}
+{% raw -%}
 import { CrmPage } from '@/pages/CrmPage'
+{% endraw -%}
+{%- endif %}
+{%- if selected_modules is none or 'listings' in selected_modules %}
+{% raw -%}
+import { ListingsPage } from '@/pages/ListingsPage'
+{% endraw -%}
+{%- endif %}
+{%- raw -%}
 import { ProfilePage } from '@/pages/ProfilePage'
 import { SettingsPage } from '@/pages/SettingsPage'
+{% endraw -%}
+{%- if selected_modules is none or 'forms' in selected_modules %}
+{% raw -%}
 import { FormsPage } from '@/pages/FormsPage'
+{% endraw -%}
+{%- endif %}
+{%- raw -%}
 import { NotFound } from '@/pages/NotFound'
 import { buildOrgPath, useCurrentOrgSlug, useOwnerMode } from '@/hooks/useModules'
 import { OrgCreatePage } from '@/pages/orgs/OrgCreatePage'
@@ -44,20 +64,56 @@ function App() {
           <Route path="/orgs/new" element={<OrgCreatePage />} />
           <Route path="/orgs/:orgSlug" element={<OrgLayout />}>
             <Route index element={<OrgDashboardPage />} />
+{%- endraw %}
+{%- if selected_modules is none or 'blog' in selected_modules %}
+{%- raw %}
             <Route path="blog" element={<BlogPage />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'listings' in selected_modules %}
+{%- raw %}
             <Route path="listings" element={<ListingsPage />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'crm' in selected_modules %}
+{%- raw %}
             <Route path="crm" element={<CrmPage />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'forms' in selected_modules %}
+{%- raw %}
             <Route path="forms" element={<Navigate to="contact" replace />} />
             <Route path="forms/:slug" element={<FormsPage />} />
+{%- endraw %}
+{%- endif %}
+{%- raw %}
             <Route path="members" element={<OrgMembersPage />} />
             <Route path="settings" element={<OrgSettingsPage />} />
           </Route>
           <Route path="/profile" element={<ProfilePage />} />
+{%- endraw %}
+{%- if selected_modules is none or 'blog' in selected_modules %}
+{%- raw %}
           <Route path="/blog" element={<LegacySaasRedirect path="blog" />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'listings' in selected_modules %}
+{%- raw %}
           <Route path="/listings" element={<LegacySaasRedirect path="listings" />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'crm' in selected_modules %}
+{%- raw %}
           <Route path="/crm" element={<LegacySaasRedirect path="crm" />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'forms' in selected_modules %}
+{%- raw %}
           <Route path="/forms" element={<LegacySaasRedirect path="forms/contact" />} />
           <Route path="/forms/:slug" element={<LegacyFormsRedirect />} />
+{%- endraw %}
+{%- endif %}
+{%- raw %}
           <Route path="/settings" element={<LegacySaasRedirect path="settings" />} />
           <Route path="*" element={<NotFound />} />
         </Route>
@@ -69,13 +125,33 @@ function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
+{%- endraw %}
+{%- if selected_modules is none or 'blog' in selected_modules %}
+{%- raw %}
         <Route path="/blog" element={<BlogPage />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'listings' in selected_modules %}
+{%- raw %}
         <Route path="/listings" element={<ListingsPage />} />
+{%- endraw %}
+{%- endif %}
+{%- if selected_modules is none or 'crm' in selected_modules %}
+{%- raw %}
         <Route path="/crm" element={<CrmPage />} />
+{%- endraw %}
+{%- endif %}
+{%- raw %}
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+{%- endraw %}
+{%- if selected_modules is none or 'forms' in selected_modules %}
+{%- raw %}
         <Route path="/forms" element={<FormsPage />} />
         <Route path="/forms/:slug" element={<FormsPage />} />
+{%- endraw %}
+{%- endif %}
+{%- raw %}
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

@@ -1019,3 +1019,144 @@ class TestApplyManagedWiringStrictContext:
         error_output = capsys.readouterr().err
         assert "Managed wiring regeneration failed" in error_output
         assert "Failed to write managed wiring files: disk full" in error_output
+
+
+# ============================================================================
+# Phase 3: drift detection and managed file hash capture
+# ============================================================================
+
+
+class TestApplyDriftDetection:
+    """Tests for the Phase 3 drift detection helpers in apply_command."""
+
+    def test_warn_version_drift_for_apply_reports_disagreement(self, tmp_path, capsys):
+        """Apply should surface state/config version drift as a warning."""
+        from quickscale_core.config import add_module
+        from quickscale_cli.commands.apply_command import (
+            _warn_version_drift_for_apply,
+        )
+        from quickscale_core.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+            StateManager,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+
+        # Create state with auth v0.62.0
+        StateManager(project).save(
+            QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                ),
+                modules={
+                    "auth": ModuleState(name="auth", version="0.62.0"),
+                },
+            )
+        )
+
+        # Legacy config says 0.63.0 (drift).
+        add_module(
+            module_name="auth",
+            prefix="modules/auth",
+            branch="splits/auth-module",
+            version="0.63.0",
+            project_path=project,
+        )
+
+        # Build a minimal config object that satisfies the helper.
+        config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
+
+        drift = _warn_version_drift_for_apply(project, config)
+
+        assert len(drift) == 1
+        assert drift[0].module == "auth"
+        captured = capsys.readouterr().out
+        assert "Module version drift" in captured
+
+    def test_warn_version_drift_for_apply_silent_when_agreeing(self, tmp_path, capsys):
+        """Apply should stay quiet when state and config agree."""
+        from quickscale_core.config import add_module
+        from quickscale_cli.commands.apply_command import (
+            _warn_version_drift_for_apply,
+        )
+        from quickscale_core.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+            StateManager,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+
+        StateManager(project).save(
+            QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                ),
+                modules={
+                    "auth": ModuleState(name="auth", version="0.62.0"),
+                },
+            )
+        )
+
+        add_module(
+            module_name="auth",
+            prefix="modules/auth",
+            branch="splits/auth-module",
+            version="0.62.0",  # matches state
+            project_path=project,
+        )
+
+        config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
+
+        drift = _warn_version_drift_for_apply(project, config)
+
+        assert drift == []
+        captured = capsys.readouterr().out
+        assert "Module version drift" not in captured
+
+    def test_capture_managed_file_hashes_writes_ledger(self, tmp_path, capsys):
+        """Apply should capture hashes for the default managed wiring files."""
+        from quickscale_cli.commands.apply_command import (
+            _capture_managed_file_hashes_after_apply,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+        (project / "myapp" / "settings").mkdir(parents=True)
+        (project / "myapp" / "settings" / "modules.py").write_text("A = 1\n")
+        (project / "myapp" / "urls_modules.py").write_text("URLS = []\n")
+
+        config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
+
+        result = _capture_managed_file_hashes_after_apply(project, config)
+        assert result is True
+
+        ledger = project / ".quickscale" / "file_hashes.yml"
+        assert ledger.exists()
+
+        captured = capsys.readouterr().out
+        assert "Tracked managed file hashes" in captured
+
+    def test_resolve_managed_wiring_paths_uses_package(self, tmp_path):
+        """The default managed wiring paths are anchored at the package dir."""
+        from quickscale_cli.commands.apply_command import (
+            _resolve_managed_wiring_paths,
+        )
+
+        config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
+
+        paths = _resolve_managed_wiring_paths(config)
+        assert "myapp/settings/modules.py" in paths
+        assert "myapp/urls_modules.py" in paths
+        assert all("\\" not in p for p in paths)

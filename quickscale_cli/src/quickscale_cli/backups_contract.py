@@ -1,132 +1,27 @@
-"""Shared module configuration helpers.
+"""Backward-compatible shim for ``quickscale_cli.backups_contract``.
 
-This module centralizes the non-secret configuration contract used by the
-planner, apply flow, and state persistence for module compatibility helpers.
+The canonical module options normalization, validation, and dispatcher
+helpers live in ``quickscale_core.contracts.module_options`` as part of
+the shared contract surface owned by ``quickscale_core``. This module
+re-exports the backups-specific names so existing CLI consumers continue
+to work without modification.
+
+Phase 0 of the QuickScale Phase 3 architecture improvements moved the
+``sanitize_module_options`` dispatcher and the ``normalize_*_module_options``
+helpers out of the CLI package. The original symbols are preserved here
+as thin re-exports.
 """
 
-from __future__ import annotations
-
-from collections.abc import Mapping
-import re
-from typing import Any
-
-from quickscale_cli.billing_contract import normalize_billing_module_options
-from quickscale_cli.analytics_contract import normalize_analytics_module_options
-from quickscale_cli.auth_contract import normalize_auth_module_options
-from quickscale_cli.crm_contract import normalize_crm_module_options
-from quickscale_cli.notifications_contract import normalize_notifications_module_options
-from quickscale_cli.social_contract import normalize_social_module_options
-
-DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
-DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
-    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+from quickscale_core.contracts.module_options import (
+    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+    has_legacy_backups_secret_values,
+    normalize_backups_module_options,
+    sanitize_module_options,
+    validate_backups_env_var_reference,
 )
-
-BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION = "remote_access_key_id_env_var"
-BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION = "remote_secret_access_key_env_var"
-
-_LEGACY_BACKUPS_SECRET_OPTIONS = {
-    "remote_access_key_id": DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
-    "remote_secret_access_key": DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-}
-
-_BACKUPS_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
-_LIKELY_AWS_ACCESS_KEY_ID_PATTERN = re.compile(r"^(?:AKIA|ASIA)[A-Z0-9]{16}$")
-
-
-def normalize_backups_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Return backups options with legacy raw-secret keys removed.
-
-    Legacy raw credential values are converted into conventional environment-variable
-    references so downstream persistence layers never re-store the secret values.
-    """
-    normalized = dict(options or {})
-
-    legacy_access_key_id = str(normalized.pop("remote_access_key_id", "")).strip()
-    legacy_secret_access_key = str(
-        normalized.pop("remote_secret_access_key", "")
-    ).strip()
-
-    access_key_env_var = str(
-        normalized.get(BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION, "")
-    ).strip()
-    secret_access_key_env_var = str(
-        normalized.get(BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION, "")
-    ).strip()
-
-    if legacy_access_key_id and not access_key_env_var:
-        normalized[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION] = (
-            DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
-        )
-    if legacy_secret_access_key and not secret_access_key_env_var:
-        normalized[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
-            DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
-        )
-
-    return normalized
-
-
-def has_legacy_backups_secret_values(options: Mapping[str, Any] | None) -> bool:
-    """Return whether backups options still include legacy raw-secret keys."""
-    if not options:
-        return False
-
-    for option_name in _LEGACY_BACKUPS_SECRET_OPTIONS:
-        if str(options.get(option_name, "")).strip():
-            return True
-    return False
-
-
-def validate_backups_env_var_reference(option_name: str, value: Any) -> str | None:
-    """Validate a backups env-var reference field.
-
-    Returns an actionable error string when the value is not a safe environment
-    variable name or appears to be a literal credential value.
-    """
-    candidate = str(value).strip()
-    if not candidate:
-        return None
-
-    qualified_option = f"modules.backups.{option_name}"
-    if not _BACKUPS_ENV_VAR_NAME_PATTERN.fullmatch(candidate):
-        return (
-            f"{qualified_option} must be an environment variable name matching "
-            "^[A-Z][A-Z0-9_]*$"
-        )
-
-    if option_name == BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION:
-        if _LIKELY_AWS_ACCESS_KEY_ID_PATTERN.fullmatch(candidate):
-            return (
-                f"{qualified_option} must reference an environment variable name, "
-                "not a literal AWS access key id"
-            )
-
-    return None
-
-
-def sanitize_module_options(
-    module_name: str,
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Return module options safe for config/state persistence."""
-    if module_name == "analytics":
-        return normalize_analytics_module_options(options)
-    if module_name == "auth":
-        return normalize_auth_module_options(options)
-    if module_name == "backups":
-        return normalize_backups_module_options(options)
-    if module_name == "billing":
-        return normalize_billing_module_options(options)
-    if module_name == "crm":
-        return normalize_crm_module_options(options)
-    if module_name == "notifications":
-        return normalize_notifications_module_options(options)
-    if module_name == "social":
-        return normalize_social_module_options(dict(options or {}))
-    return dict(options or {})
-
 
 __all__ = [
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",

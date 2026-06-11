@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import yaml
 from click.testing import CliRunner
@@ -402,3 +403,160 @@ class TestStatusDriftDetection:
 
             assert result.exit_code == 0
             assert "missing" in result.output.lower() or "Missing" in result.output
+
+
+class TestStatusFileHashDrift:
+    """Tests for managed file drift warnings introduced in Phase 3."""
+
+    def test_status_detects_modified_managed_file(self):
+        """Status should warn when a managed file changed since last apply."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            import os
+            import quickscale_core  # noqa: F401  (import for sys.path)
+            from quickscale_core.project_state import ProjectStateManager
+
+            # Set up project state with one applied module.
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": "0.70.0",
+                                "commit_sha": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            # Create the managed wiring files.
+            os.makedirs("testapp/settings", exist_ok=True)
+            with open("testapp/settings/modules.py", "w") as f:
+                f.write("A = 1\n")
+            with open("testapp/urls_modules.py", "w") as f:
+                f.write("URLS = []\n")
+
+            # Capture the initial hashes, then mutate one file.
+            manager = ProjectStateManager(Path(os.getcwd()))
+            manager.capture_managed_file_hashes(
+                [
+                    "testapp/settings/modules.py",
+                    "testapp/urls_modules.py",
+                ]
+            )
+
+            with open("testapp/settings/modules.py", "w") as f:
+                f.write("A = 2\n")
+
+            result = runner.invoke(status, [])
+
+            assert result.exit_code == 0
+            assert "Managed file drift" in result.output
+            assert "testapp/settings/modules.py" in result.output
+
+
+class TestStatusVersionDrift:
+    """Tests for module version drift warnings between state and config."""
+
+    def test_status_warns_when_versions_drift(self):
+        """Status should warn when state and config disagree on module versions."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            import os
+            from quickscale_core.config import add_module
+
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": "0.62.0",
+                                "commit_sha": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            # Create the legacy config with a DIFFERENT version for the
+            # same module to trigger drift detection.
+            add_module(
+                module_name="auth",
+                prefix="modules/auth",
+                branch="splits/auth-module",
+                version="0.63.0",  # drift
+                project_path=Path(os.getcwd()),
+            )
+
+            result = runner.invoke(status, [])
+
+            assert result.exit_code == 0
+            assert "Module version drift" in result.output
+            assert "auth" in result.output
+
+    def test_status_silent_when_versions_agree(self):
+        """Status should stay quiet when state and config agree on versions."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            import os
+            from quickscale_core.config import add_module
+
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": "0.62.0",
+                                "commit_sha": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            add_module(
+                module_name="auth",
+                prefix="modules/auth",
+                branch="splits/auth-module",
+                version="0.62.0",  # matches state
+                project_path=Path(os.getcwd()),
+            )
+
+            result = runner.invoke(status, [])
+
+            assert result.exit_code == 0
+            assert "Module version drift" not in result.output

@@ -180,69 +180,29 @@ run_tests() {
     log_success "All tests passed"
 }
 
-backup_pyproject() {
-    local pkg_dir="$1"
-    local pyproject="$pkg_dir/pyproject.toml"
-    local backup="$pkg_dir/pyproject.toml.backup"
-
-    if [[ -f "$pyproject" ]]; then
-        cp "$pyproject" "$backup"
-        log_info "Backed up $pyproject"
-    else
-        log_error "pyproject.toml not found in $pkg_dir"
-        exit 1
+run_prepare_helper() {
+    # Run ``scripts/prepare_publish.py`` against the repository root using
+    # the active Poetry environment so the helper sees the same Python
+    # version and stdlib that the rest of the build/publish flow uses.
+    local subcommand="$1"
+    shift
+    if ! (cd "$ROOT" && poetry run python "$ROOT/scripts/prepare_publish.py" \
+            "$subcommand" --repo-root "$ROOT" "$@"); then
+        log_error "prepare_publish.py $subcommand failed"
+        return 1
     fi
 }
 
 restore_pyproject() {
+    # The Python helper is now the single source of truth for the
+    # ``.backup`` shadow file. This shim delegates the restore so any
+    # older caller (e.g. the build_package failure path) still cleans up
+    # the temporary README copy and removes the shadow backup.
     local pkg_dir="$1"
-    local pyproject="$pkg_dir/pyproject.toml"
-    local backup="$pkg_dir/pyproject.toml.backup"
-
-    if [[ -f "$backup" ]]; then
-        mv "$backup" "$pyproject"
-        log_info "Restored $pyproject"
-    fi
-}
-
-replace_path_deps() {
-    local pkg_name="$1"
-    local version="$2"
-    local pkg_dir="$ROOT/$pkg_name"
-    local pyproject="$pkg_dir/pyproject.toml"
-
-    log_info "Replacing path dependencies in $pkg_name with version constraints..."
-
-    case "$pkg_name" in
-        "quickscale_cli")
-            # Replace: quickscale-core = {path = "../quickscale_core", develop = true}
-            # Or:      quickscale-core = {path = "../quickscale_core"}
-            # With:    quickscale-core = "^VERSION"
-            sed -i "s|quickscale-core = {path = \"../quickscale_core\"[^}]*}|quickscale-core = \"^${version}\"|" "$pyproject"
-            log_success "Replaced quickscale-core path dependency"
-            ;;
-        "quickscale")
-            # Replace both dependencies (with or without develop = true)
-            sed -i "s|quickscale-core = {path = \"../quickscale_core\"[^}]*}|quickscale-core = \"^${version}\"|" "$pyproject"
-            sed -i "s|quickscale-cli = {path = \"../quickscale_cli\"[^}]*}|quickscale-cli = \"^${version}\"|" "$pyproject"
-            log_success "Replaced quickscale-core and quickscale-cli path dependencies"
-            ;;
-        "quickscale_core")
-            # No dependencies to replace
-            log_info "No path dependencies to replace in quickscale_core"
-            ;;
-    esac
-}
-
-fix_readme_path() {
-    local pkg_dir="$1"
-    local pyproject="$pkg_dir/pyproject.toml"
-
-    # Replace readme = "../README.md" with readme = "README.md" (since we copied it locally)
-    if grep -q 'readme = "\.\./README\.md"' "$pyproject"; then
-        sed -i 's|readme = "\.\./README\.md"|readme = "README.md"|' "$pyproject"
-        log_info "Fixed readme path in $pyproject"
-    fi
+    local pkg_name
+    pkg_name="$(basename "$pkg_dir")"
+    run_prepare_helper restore --package "$pkg_name" >/dev/null 2>&1 || true
+    remove_readme "$pkg_dir"
 }
 
 clean_dist() {
@@ -268,9 +228,12 @@ prepare_for_publish() {
     for pkg in "${PACKAGES[@]}"; do
         local pkg_dir="$ROOT/$pkg"
         copy_readme "$pkg_dir"
-        backup_pyproject "$pkg_dir"
-        fix_readme_path "$pkg_dir"
-        replace_path_deps "$pkg" "$version"
+        # The Python helper backs up, rewrites the readme path, and
+        # replaces the path-based inter-package dependencies in one
+        # validated pass. It only writes the file when the rewritten
+        # TOML re-parses cleanly, so a broken rewrite can never reach
+        # disk.
+        run_prepare_helper prepare --package "$pkg" --version "$version"
     done
 
     log_success "All pyproject.toml files prepared for publishing"
@@ -319,14 +282,10 @@ build_package() {
     # Copy README.md for Poetry build
     copy_readme "$pkg_dir"
 
-    # Backup original pyproject.toml
-    backup_pyproject "$pkg_dir"
-
-    # Fix readme path (../README.md -> README.md since we copied it)
-    fix_readme_path "$pkg_dir"
-
-    # Replace path dependencies with version dependencies
-    replace_path_deps "$pkg_name" "$version"
+    # Backup, fix readme path, and replace path dependencies via the
+    # Python helper. The helper is the single source of truth for the
+    # rewrite and validates the result before writing it to disk.
+    run_prepare_helper prepare --package "$pkg_name" --version "$version"
 
     # Clean dist directory
     clean_dist "$pkg_dir"

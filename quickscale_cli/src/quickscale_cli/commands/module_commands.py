@@ -25,6 +25,10 @@ from quickscale_core.config import (
     remove_module,
     update_module_version,
 )
+from quickscale_core.project_state import (
+    ProjectStateManager,
+    check_version_drift,
+)
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.utils.git_utils import (
     GitError,
@@ -219,6 +223,46 @@ def _sync_state_module_version(project_path: Path, module: str, version: str) ->
 
     state.modules[module].version = version
     state_manager.save(state)
+
+
+def _warn_version_drift_for_update(
+    project_path: Path,
+    config: Any,
+) -> list[Any]:
+    """Surface module version drift between state and legacy config.
+
+    The drift between ``.quickscale/state.yml`` and ``.quickscale/config.yml``
+    is non-fatal: the update flow rewrites both sources, so warnings here
+    are informational. They signal that an external process changed
+    ``config.yml`` after the last apply.
+    """
+    manager = ProjectStateManager(project_path)
+    try:
+        state = manager.load_state()
+    except StateError as error:
+        click.secho(
+            f"⚠️  Could not read .quickscale/state.yml for drift check: {error}",
+            fg="yellow",
+        )
+        return []
+
+    drift = check_version_drift(state, config)
+    if not drift:
+        return []
+
+    click.secho(
+        "\n⚠️  Module version drift between .quickscale/state.yml and "
+        ".quickscale/config.yml:",
+        fg="yellow",
+        bold=True,
+    )
+    for warning in drift:
+        click.echo(f"  • {warning.message}")
+    click.echo(
+        "\n💡 Update will reconcile .quickscale/config.yml to the freshly "
+        "installed state-managed version. The drift is informational and not fatal.",
+    )
+    return drift
 
 
 def _validate_module_readiness(
@@ -1096,6 +1140,10 @@ def update(no_preview: bool) -> None:
                 "\n💡 Tip: Install modules with 'quickscale embed --module <name>'"
             )
             return
+
+        # Surface module version drift between state and legacy config.
+        # Non-fatal: update reconciles both files at the end.
+        _warn_version_drift_for_update(Path.cwd(), config)
 
         for name in config.modules:
             if not _validate_module_readiness(name):

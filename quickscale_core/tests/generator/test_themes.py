@@ -6,6 +6,10 @@ from pathlib import Path
 import pytest
 
 from quickscale_core.generator import ProjectGenerator
+from quickscale_core.generator.generator import (
+    REACT_THEME_OPTIONAL_FILES,
+    REACT_THEME_SHARED_DJANGO_TEMPLATES,
+)
 
 
 class TestThemeInitialization:
@@ -391,3 +395,267 @@ class TestReactThemeBuildCompatibility:
 
         # Should NOT copy index.html to templates (we generate Django template)
         assert "index.html /app/templates/index.html" not in dockerfile
+
+
+class TestSelectedModulesReactTheme:
+    """Verify React theme honours ``selected_modules`` for per-module output."""
+
+    def test_default_selected_modules_emits_all_per_module_surfaces(
+        self, tmp_path: Path
+    ) -> None:
+        """When ``selected_modules`` is not provided every optional surface is rendered."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_default_modules"
+        generator.generate("react_default_modules", output_path)
+
+        for rel_path in REACT_THEME_OPTIONAL_FILES:
+            absolute = output_path / "frontend" / rel_path
+            assert absolute.exists(), (
+                f"Expected default React theme to render {rel_path} when "
+                "selected_modules is not provided."
+            )
+
+    def test_empty_selected_modules_drops_every_optional_react_file(
+        self, tmp_path: Path
+    ) -> None:
+        """An empty ``selected_modules`` list should drop every optional React file."""
+        generator = ProjectGenerator(theme="showcase_react", selected_modules=[])
+        output_path = tmp_path / "react_empty_modules"
+        generator.generate("react_empty_modules", output_path)
+
+        for rel_path in REACT_THEME_OPTIONAL_FILES:
+            absolute = output_path / "frontend" / rel_path
+            assert not absolute.exists(), (
+                f"Optional React file {rel_path} should not be generated when "
+                "selected_modules is empty."
+            )
+
+        # Core pages that are not module-gated must still be present so the
+        # generated app remains usable with no modules selected.
+        for rel_path in (
+            "frontend/src/pages/Dashboard.tsx",
+            "frontend/src/pages/SettingsPage.tsx",
+            "frontend/src/pages/ProfilePage.tsx",
+            "frontend/src/pages/NotFound.tsx",
+        ):
+            assert (output_path / rel_path).exists(), (
+                f"Core page {rel_path} must still be generated."
+            )
+
+    def test_partial_selected_modules_keeps_only_requested_surfaces(
+        self, tmp_path: Path
+    ) -> None:
+        """Only the requested modules should keep their per-module React surface."""
+        generator = ProjectGenerator(
+            theme="showcase_react", selected_modules=["blog", "crm"]
+        )
+        output_path = tmp_path / "react_blog_crm"
+        generator.generate("react_blog_crm", output_path)
+
+        # Selected modules keep their page files
+        assert (output_path / "frontend" / "src" / "pages" / "BlogPage.tsx").exists()
+        assert (output_path / "frontend" / "src" / "pages" / "CrmPage.tsx").exists()
+
+        # Unselected modules drop their gated files
+        for rel_path, gating_module in REACT_THEME_OPTIONAL_FILES.items():
+            if gating_module in {"blog", "crm"}:
+                continue
+            absolute = output_path / "frontend" / rel_path
+            assert not absolute.exists(), (
+                f"Optional file {rel_path} (gated by '{gating_module}') should "
+                "not be generated when the module is unselected."
+            )
+
+    def test_use_modules_interface_reflects_selected_modules(
+        self, tmp_path: Path
+    ) -> None:
+        """TypeScript interface entries in ``useModules`` should match the selection."""
+        generator = ProjectGenerator(
+            theme="showcase_react", selected_modules=["blog", "crm", "billing"]
+        )
+        output_path = tmp_path / "react_use_modules"
+        generator.generate("react_use_modules", output_path)
+
+        use_modules = (
+            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+
+        modules_block = use_modules.split("interface QuickScaleModules {", 1)[1].split(
+            "\n}", 1
+        )[0]
+        module_paths_block = use_modules.split("interface QuickScaleModulePaths {", 1)[
+            1
+        ].split("\n}", 1)[0]
+
+        for module_key in ("blog", "crm", "billing"):
+            assert f"{module_key}: boolean" in modules_block, (
+                f"Selected module '{module_key}' missing from QuickScaleModules."
+            )
+        for module_key in (
+            "auth",
+            "listings",
+            "forms",
+            "storage",
+            "backups",
+            "notifications",
+            "analytics",
+            "social",
+        ):
+            assert f"{module_key}: boolean" not in modules_block, (
+                f"Unselected module '{module_key}' should be absent from "
+                "QuickScaleModules."
+            )
+
+        assert "crm: string" in module_paths_block
+        assert "billing: string" in module_paths_block
+        assert "social: string" not in module_paths_block
+
+    def test_app_tsx_routes_only_emit_selected_module_paths(
+        self, tmp_path: Path
+    ) -> None:
+        """Routes, imports, and legacy redirects in App.tsx should be module-aware."""
+        generator = ProjectGenerator(
+            theme="showcase_react", selected_modules=["blog", "crm"]
+        )
+        output_path = tmp_path / "react_app_routes"
+        generator.generate("react_app_routes", output_path)
+
+        app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
+
+        for kept in ("BlogPage", "CrmPage", 'path="/blog"', 'path="/crm"'):
+            assert kept in app_tsx, (
+                f"Expected App.tsx to reference {kept} for selected modules."
+            )
+        for dropped in (
+            "ListingsPage",
+            "FormsPage",
+            'path="/listings"',
+            'path="/forms"',
+        ):
+            assert dropped not in app_tsx, (
+                f"App.tsx should not reference {dropped} when modules are not selected."
+            )
+
+    def test_sidebar_nav_reflects_selected_modules(self, tmp_path: Path) -> None:
+        """Sidebar nav items should follow the same module selection rules."""
+        generator = ProjectGenerator(theme="showcase_react", selected_modules=["blog"])
+        output_path = tmp_path / "react_sidebar"
+        generator.generate("react_sidebar", output_path)
+
+        sidebar = (
+            output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
+        ).read_text()
+
+        assert "name: 'Blog'" in sidebar
+        for dropped in (
+            "name: 'Listings'",
+            "name: 'CRM'",
+            "name: 'Forms'",
+            "name: 'Billing'",
+            "name: 'Social'",
+        ):
+            assert dropped not in sidebar, (
+                f"Sidebar should not include {dropped} when its module is unselected."
+            )
+
+    def test_window_module_config_matches_selected_modules(
+        self, tmp_path: Path
+    ) -> None:
+        """The Django-rendered React index.html should only include selected modules."""
+        generator = ProjectGenerator(
+            theme="showcase_react", selected_modules=["blog", "crm"]
+        )
+        output_path = tmp_path / "react_window_config"
+        generator.generate("react_window_config", output_path)
+
+        index_html = (output_path / "templates" / "index.html").read_text()
+        window_config = index_html.split("window.__QUICKSCALE__ = {", 1)[1].split(
+            "};", 1
+        )[0]
+
+        # Modules block only includes the selected keys
+        for kept in ("blog:", "crm:"):
+            assert kept in window_config, (
+                f"window.__QUICKSCALE__.modules should reference {kept}."
+            )
+        for dropped in (
+            "auth:",
+            "listings:",
+            "forms:",
+            "storage:",
+            "backups:",
+            "notifications:",
+            "analytics:",
+            "billing:",
+            "social:",
+        ):
+            assert dropped not in window_config, (
+                f"window.__QUICKSCALE__.modules should not reference {dropped}."
+            )
+
+        # modulePaths block keeps CRM only
+        assert "crm:" in window_config.split("modulePaths:", 1)[1]
+
+
+class TestSharedAdminTemplates:
+    """Both themes should reuse the consolidated admin override templates."""
+
+    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
+    def test_both_themes_render_shared_admin_overrides(
+        self, tmp_path: Path, theme: str
+    ) -> None:
+        """Admin index and app_index templates should appear for both themes."""
+        generator = ProjectGenerator(theme=theme)
+        output_path = tmp_path / f"{theme}_admin_shared"
+        generator.generate(f"{theme}_admin_shared", output_path)
+
+        for rel_template in REACT_THEME_SHARED_DJANGO_TEMPLATES:
+            output_rel = Path(rel_template).with_suffix("")  # Strip .j2
+            assert (output_path / output_rel).exists(), (
+                f"Expected shared Django template {rel_template} to render to "
+                f"{output_rel} for theme {theme}."
+            )
+
+    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
+    def test_shared_admin_templates_live_in_root_templates_dir(
+        self, tmp_path: Path, theme: str
+    ) -> None:
+        """The source admin templates should live once in the shared location."""
+        generator = ProjectGenerator(theme=theme)
+        template_dir = generator.template_dir
+
+        shared_admin_dir = template_dir / "templates" / "admin"
+        assert (shared_admin_dir / "index.html.j2").exists()
+        assert (shared_admin_dir / "app_index.html.j2").exists()
+
+        # Theme directories should not keep duplicate admin copies.
+        for theme_name in ("showcase_html", "showcase_react"):
+            theme_admin_dir = (
+                template_dir / "themes" / theme_name / "templates" / "admin"
+            )
+            assert not theme_admin_dir.exists(), (
+                f"Theme {theme_name} should not have its own admin template "
+                "directory after consolidation."
+            )
+
+    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
+    def test_admin_override_content_survives_consolidation(
+        self, tmp_path: Path, theme: str
+    ) -> None:
+        """Generated admin templates should preserve the backup-ops behavior."""
+        generator = ProjectGenerator(theme=theme)
+        output_path = tmp_path / f"{theme}_admin_content"
+        generator.generate(f"{theme}_admin_content", output_path)
+
+        admin_index = (output_path / "templates" / "admin" / "index.html").read_text()
+        app_index = (output_path / "templates" / "admin" / "app_index.html").read_text()
+
+        assert "Create backup now" not in admin_index
+        assert "Open backup ops" in admin_index
+        assert 'app.app_label == "quickscale_modules_backups"' in admin_index
+        assert (
+            'action="/admin/quickscale_modules_backups/backuppolicy/ops/create/"'
+            in app_index
+        )
+        assert "Open backup ops" in app_index
+        assert 'app_label == "quickscale_modules_backups"' in app_index

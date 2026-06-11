@@ -12,7 +12,8 @@ from typing import Any
 import click
 
 from quickscale_cli.commands.development_commands import _validate_project_and_docker
-from quickscale_cli.utils.project_identity import (
+from quickscale_core.contracts.module_options import get_env_var_portability
+from quickscale_core.utils.project_identity import (
     ProjectIdentity,
     resolve_project_identity,
 )
@@ -26,93 +27,6 @@ _TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"
 _ENV_MANIFEST_FILENAME = "env-var-manifest.json"
 _PROMOTION_VERIFICATION_FILENAME = "promotion-verification.json"
 _RELEASE_METADATA_FILENAME = "release-metadata.json"
-
-_IGNORED_ENV_EXACT = {
-    "HOME",
-    "HOSTNAME",
-    "LANG",
-    "OLDPWD",
-    "PATH",
-    "PWD",
-    "PYTHONUNBUFFERED",
-    "SHELL",
-    "SHLVL",
-    "TERM",
-    "TZ",
-    "USER",
-    "_",
-}
-_IGNORED_ENV_PREFIXES = (
-    "GPG_",
-    "LC_",
-    "NODE_",
-    "NPM_",
-    "PIP_",
-    "PNPM_",
-    "POETRY_",
-    "PYTHON",
-    "VIRTUAL_ENV",
-)
-_PORTABLE_ENV_EXACT = {"DEBUG"}
-_PORTABLE_ENV_PREFIXES = (
-    "ACCOUNT_",
-    "ANALYTICS_",
-    "BLOG_",
-    "DJANGO_",
-    "FORMS_",
-    "LISTINGS_",
-    "NOTIFICATIONS_",
-    "QUICKSCALE_",
-    "SOCIAL_",
-    "SOCIALACCOUNT_",
-)
-_NON_PORTABLE_ENV_EXACT = {
-    "ALLOWED_HOSTS",
-    "CSRF_TRUSTED_ORIGINS",
-    "DATABASE_URL",
-    "DJANGO_SETTINGS_MODULE",
-    "MEDIA_ROOT",
-    "MEDIA_URL",
-    "PORT",
-    "SECRET_KEY",
-    "STATIC_URL",
-}
-_NON_PORTABLE_ENV_PREFIXES = (
-    "AWS_",
-    "CELERY_BROKER_",
-    "CLOUDFLARE_",
-    "DATABASE_",
-    "DJANGO_SUPERUSER_",
-    "EMAIL_",
-    "PG",
-    "POSTGRES",
-    "R2_",
-    "RAILWAY_",
-    "REDIS_",
-    "RESEND_",
-    "SENTRY_",
-    "SMTP_",
-    "STRIPE_",
-)
-_NON_PORTABLE_ENV_CONTAINS = (
-    "BACKUPS_REMOTE",
-    "BUCKET",
-    "COOKIE",
-    "CSRF",
-    "DOMAIN",
-    "ENDPOINT",
-    "HOST",
-    "KEY",
-    "ORIGIN",
-    "PASSWORD",
-    "PRIVATE",
-    "PUBLIC_BASE_URL",
-    "REGION",
-    "SECRET",
-    "STORAGE_",
-    "TOKEN",
-    "URL",
-)
 
 
 @dataclass(frozen=True)
@@ -545,6 +459,12 @@ def _load_source_live_variables(context: DisasterRecoveryContext) -> dict[str, s
 
 
 def _is_manual_only_restore_gate(normalized_name: str) -> bool:
+    # Backward-compatible shim: the destructive-restore-gate rule now
+    # lives inside :func:`quickscale_core.contracts.module_options.
+    # get_env_var_portability`, but a few existing tests and any future
+    # internal callers may still want to ask the same question directly.
+    # We rebuild the rule inline so the shim has zero runtime cost and
+    # stays trivially in lockstep with the centralized classification.
     return normalized_name == "QUICKSCALE_BACKUPS_ALLOW_RESTORE" or (
         normalized_name.startswith("QUICKSCALE_")
         and "ALLOW" in normalized_name
@@ -553,26 +473,17 @@ def _is_manual_only_restore_gate(normalized_name: str) -> bool:
 
 
 def _classify_env_var(name: str) -> tuple[str, str]:
-    normalized = name.strip().upper()
-    if not normalized:
-        return "ignored", "blank name"
-    if normalized in _IGNORED_ENV_EXACT:
-        return "ignored", "shell/runtime noise"
-    if any(normalized.startswith(prefix) for prefix in _IGNORED_ENV_PREFIXES):
-        return "ignored", "shell/runtime noise"
-    if _is_manual_only_restore_gate(normalized):
-        return "manual", "destructive restore gate must be set manually"
-    if normalized in _NON_PORTABLE_ENV_EXACT:
-        return "manual", "provider-owned or target-owned variable"
-    if any(normalized.startswith(prefix) for prefix in _NON_PORTABLE_ENV_PREFIXES):
-        return "manual", "provider-owned or target-owned variable"
-    if any(token in normalized for token in _NON_PORTABLE_ENV_CONTAINS):
-        return "manual", "sensitive or environment-specific variable"
-    if normalized in _PORTABLE_ENV_EXACT:
-        return "portable", "portable variable"
-    if any(normalized.startswith(prefix) for prefix in _PORTABLE_ENV_PREFIXES):
-        return "portable", "portable variable"
-    return "manual", "outside the conservative portable allowlist"
+    """Backward-compatible wrapper around the centralized helper.
+
+    The classification rules live in
+    :func:`quickscale_core.contracts.module_options.get_env_var_portability`
+    so that the schema layer and any future caller can reuse them. This
+    thin shim preserves the original private name and signature so any
+    caller that still reaches into ``dr_commands._classify_env_var`` —
+    including the legacy test suite — continues to receive the same
+    ``(category, reason)`` tuple with the same reason strings.
+    """
+    return get_env_var_portability(name)
 
 
 def _build_env_sync_plan(

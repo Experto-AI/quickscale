@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from quickscale_cli.beta_migration import main
+from quickscale_devtools.beta_migration import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

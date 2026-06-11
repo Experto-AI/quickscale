@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import quickscale_cli.schema as schema_module
 
-from quickscale_cli.beta_migration import (
+from quickscale_devtools.beta_migration import (
     BetaMigrationInput,
     parse_cli_args,
     plan_beta_migration,

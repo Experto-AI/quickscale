@@ -1,3 +1,43 @@
+{%- set selected_module_keys = (
+  (selected_modules if selected_modules is not none else
+   ['auth', 'blog', 'listings', 'crm', 'forms', 'billing', 'social',
+    'storage', 'backups', 'notifications', 'analytics'])
+) -%}
+{%- set all_module_cards = [
+  ('auth', 'Authentication', 'UserCircle',
+   'User registration, login, profiles, and password management',
+   '/profile', None, None),
+  ('blog', 'Blog', 'BookOpen',
+   'Full-featured blog with Markdown support, categories, tags, and RSS feed',
+   '/blog', None, None),
+  ('listings', 'Listings', 'Store',
+   'Generic listings with filtering for marketplace verticals',
+   '/listings', None, None),
+  ('crm', 'CRM', 'Briefcase',
+   'Contact management, companies, deals, and pipeline tracking',
+   'crmPath', 'actionLabel', "'Open workspace'"),
+  ('forms', 'Forms', 'ClipboardList',
+   'Dynamic form builder with spam protection and submission management',
+   '/forms/contact', None, None),
+  ('billing', 'Billing', 'CreditCard',
+   'Module-owned pricing and billing dashboard pages powered by the billing module.',
+   'billingPath', 'reload_and_action', "true|'Open billing'"),
+  ('social', 'Social', 'Share2',
+   'Managed social link-tree and embed feeds exposed through fixed public routes.',
+   'socialPath', 'reloadDocument', 'true'),
+  ('storage', 'Storage', 'HardDrive',
+   'Shared media storage infrastructure for local and S3-compatible backends',
+   '/settings', None, None),
+  ('backups', 'Backups', 'Archive',
+   'Operational backup snapshots with retention, validation, and artifact downloads.',
+   '/admin/quickscale_modules_backups/backuppolicy/', 'reloadDocument', 'true'),
+  ('notifications', 'Notifications', 'Bell',
+   'Transactional email settings, message history, and delivery event visibility.',
+   '/admin/quickscale_modules_notifications/', 'reloadDocument', 'true'),
+  ('analytics', 'Analytics', 'BarChart2',
+   'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
+   '/settings', None, None),
+] -%}
 {% raw -%}
 import { motion } from 'motion/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -5,22 +45,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
 import {
-  Archive,
-  BarChart2,
-  Bell,
-  BookOpen,
-  Briefcase,
-  ClipboardList,
-  Code,
-  CreditCard,
-  Database,
+{% endraw -%}
+{%- for key, name, icon, desc, href, extra_key, extra_val in all_module_cards %}
+{%- if key in selected_module_keys %}
+  {{ icon }},
+{%- endif %}
+{%- endfor %}
+{%- raw %}
   ExternalLink,
-  HardDrive,
-  Rocket,
-  Share2,
-  Shield,
-  Store,
-  UserCircle,
 } from 'lucide-react'
 import { useModules, useProjectConfig } from '@/hooks/useModules'
 
@@ -39,92 +71,29 @@ const buildModuleInfo = (
   socialPath: string,
   billingPath: string,
 ): ModuleCard[] => [
+{% endraw -%}
+{%- for key, name, icon, desc, href, extra_key, extra_val in all_module_cards %}
+{%- if key in selected_module_keys %}
   {
-    key: 'auth',
-    name: 'Authentication',
-    icon: UserCircle,
-    description: 'User registration, login, profiles, and password management',
-    href: '/profile',
+    key: '{{ key }}',
+    name: '{{ name }}',
+    icon: {{ icon }},
+    description: '{{ desc }}',
+    href: {{ "'" ~ href ~ "'" if href in ('/profile', '/blog', '/listings', '/forms/contact', '/settings', '/admin/quickscale_modules_backups/backuppolicy/', '/admin/quickscale_modules_notifications/') else href }},
+{%- if extra_key == 'reloadDocument' %}
+    reloadDocument: {{ extra_val }},
+{%- endif %}
+{%- if extra_key == 'actionLabel' %}
+    actionLabel: {{ extra_val }},
+{%- endif %}
+{%- if extra_key == 'reload_and_action' %}
+    reloadDocument: {{ extra_val.split('|')[0] }},
+    actionLabel: {{ extra_val.split('|')[1] }},
+{%- endif %}
   },
-  {
-    key: 'blog',
-    name: 'Blog',
-    icon: BookOpen,
-    description: 'Full-featured blog with Markdown support, categories, tags, and RSS feed',
-    href: '/blog',
-  },
-  {
-    key: 'listings',
-    name: 'Listings',
-    icon: Store,
-    description: 'Generic listings with filtering for marketplace verticals',
-    href: '/listings',
-  },
-  {
-    key: 'crm',
-    name: 'CRM',
-    icon: Briefcase,
-    description: 'Contact management, companies, deals, and pipeline tracking',
-    href: crmPath,
-    actionLabel: 'Open workspace',
-  },
-  {
-    key: 'forms',
-    name: 'Forms',
-    icon: ClipboardList,
-    description: 'Dynamic form builder with spam protection and submission management',
-    href: '/forms/contact',
-  },
-  {
-    key: 'billing',
-    name: 'Billing',
-    icon: CreditCard,
-    description: 'Module-owned pricing and billing dashboard pages powered by the billing module.',
-    href: billingPath,
-    reloadDocument: true,
-    actionLabel: 'Open billing',
-  },
-  {
-    key: 'social',
-    name: 'Social',
-    icon: Share2,
-    description: 'Managed social link-tree and embed feeds exposed through fixed public routes.',
-    href: socialPath,
-    reloadDocument: true,
-    actionLabel: 'Open social',
-  },
-  {
-    key: 'storage',
-    name: 'Storage',
-    icon: HardDrive,
-    description: 'Shared media storage infrastructure for local and S3-compatible backends',
-    href: '/settings',
-  },
-  {
-    key: 'backups',
-    name: 'Backups',
-    icon: Archive,
-    description: 'Operational backup snapshots with retention, validation, and artifact downloads.',
-    href: '/admin/quickscale_modules_backups/backuppolicy/',
-    reloadDocument: true,
-    actionLabel: 'Open admin',
-  },
-  {
-    key: 'notifications',
-    name: 'Notifications',
-    icon: Bell,
-    description: 'Transactional email settings, message history, and delivery event visibility.',
-    href: '/admin/quickscale_modules_notifications/',
-    reloadDocument: true,
-    actionLabel: 'Open admin',
-  },
-  {
-    key: 'analytics',
-    name: 'Analytics',
-    icon: BarChart2,
-    description: 'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
-    href: '/settings',
-  },
+{%- endif %}
+{%- endfor %}
+{%- raw %}
 ]
 
 const gettingStarted = [

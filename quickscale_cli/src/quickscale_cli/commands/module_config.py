@@ -64,7 +64,7 @@ from quickscale_cli.social_contract import (
     validate_social_module_options,
 )
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
-from quickscale_cli.utils.project_identity import (
+from quickscale_core.utils.project_identity import (
     derive_package_from_slug,
     resolve_project_identity,
 )

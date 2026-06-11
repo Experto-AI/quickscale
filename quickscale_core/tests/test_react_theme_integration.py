@@ -1426,3 +1426,61 @@ class TestReactThemeModuleActivationMatrix:
         assert not (
             output_path / "frontend" / "src" / "pages" / "TeamsPage.tsx"
         ).exists()
+
+    def test_react_theme_drops_unselected_optional_page_files(self, tmp_path):
+        """Optional page files should be skipped when their module is unselected."""
+        generator = ProjectGenerator(theme="showcase_react", selected_modules=["blog"])
+        output_path = tmp_path / "react_optional_drop"
+        generator.generate("react_optional_drop", output_path)
+
+        pages_dir = output_path / "frontend" / "src" / "pages"
+
+        # Only BlogPage is kept; the rest are gated by other modules.
+        assert (pages_dir / "BlogPage.tsx").exists()
+        for dropped in (
+            "CrmPage.tsx",
+            "FormsPage.tsx",
+            "ListingsPage.tsx",
+            "SocialLinkTreePublicPage.tsx",
+            "SocialEmbedsPublicPage.tsx",
+        ):
+            assert not (pages_dir / dropped).exists(), (
+                f"{dropped} should not be generated when its module is unselected."
+            )
+
+        # Forms-related components and hooks should also be skipped.
+        forms_dir = output_path / "frontend" / "src" / "components" / "forms"
+        assert not forms_dir.exists() or not any(forms_dir.iterdir()), (
+            "Forms components directory should be empty when forms is unselected."
+        )
+        assert not (
+            output_path / "frontend" / "src" / "hooks" / "useFormSchema.ts"
+        ).exists()
+
+    def test_react_theme_empty_selected_modules_keeps_core_pages(self, tmp_path):
+        """No selected modules should still produce a usable core React app."""
+        generator = ProjectGenerator(theme="showcase_react", selected_modules=[])
+        output_path = tmp_path / "react_empty_modules"
+        generator.generate("react_empty_modules", output_path)
+
+        pages_dir = output_path / "frontend" / "src" / "pages"
+        for core_page in (
+            "Dashboard.tsx",
+            "SettingsPage.tsx",
+            "ProfilePage.tsx",
+            "NotFound.tsx",
+        ):
+            assert (pages_dir / core_page).exists(), (
+                f"Core page {core_page} should be present even without modules."
+            )
+
+        # Optional module pages should all be skipped.
+        for optional in (
+            "BlogPage.tsx",
+            "CrmPage.tsx",
+            "FormsPage.tsx",
+            "ListingsPage.tsx",
+            "SocialLinkTreePublicPage.tsx",
+            "SocialEmbedsPublicPage.tsx",
+        ):
+            assert not (pages_dir / optional).exists()

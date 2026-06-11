@@ -13,12 +13,12 @@ from pathlib import Path
 from shlex import quote
 from typing import Any, Literal, TextIO
 
-from quickscale_cli.schema.config_schema import (
+from quickscale_core.schema.config_schema import (
     QuickScaleConfig,
     generate_yaml,
     validate_config,
 )
-from quickscale_cli.utils.project_identity import (
+from quickscale_core.utils.project_identity import (
     ProjectIdentity,
     resolve_project_identity,
 )

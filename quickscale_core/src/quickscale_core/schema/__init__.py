@@ -1,12 +1,16 @@
-"""Backward-compatible shim for the relocated QuickScale schema package.
+"""QuickScale Schema Package
 
-The schema layer now lives at :mod:`quickscale_core.schema`. This module
-re-exports the same public surface from its original location so that
-existing CLI imports (``from quickscale_cli.schema import ...``) keep
-working without modification.
+Dataclasses, validation, state management, and delta computation for
+quickscale.yml and .quickscale/state.yml.
 
-The lazy-export pattern (``_LAZY_EXPORTS`` + ``__getattr__``) is preserved
-so import-time cost stays equivalent to the pre-relocation package.
+This package is the canonical home for the schema layer. The CLI package
+preserves a backward-compatible shim at ``quickscale_cli.schema`` that
+re-exports the same names through the same lazy-export pattern.
+
+The unified project state owner lives at :mod:`quickscale_core.project_state`
+and re-exports the same names plus :class:`ProjectStateManager` for callers
+that want a single entry point over both ``.quickscale/state.yml`` and
+``.quickscale/config.yml``.
 """
 
 from importlib import import_module

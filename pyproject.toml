@@ -14,6 +14,7 @@ python = ">=3.13,<3.15"
 quickscale = {path = "./quickscale", develop = true}
 quickscale-core = {path = "./quickscale_core", develop = true}
 quickscale-cli = {path = "./quickscale_cli", develop = true}
+quickscale-devtools = {path = "./quickscale_devtools", develop = true}
 # All modules installed in editable mode for centralized testing
 quickscale-module-auth = {path = "./quickscale_modules/auth", develop = true}
 quickscale-module-billing = {path = "./quickscale_modules/billing", develop = true}
@@ -54,7 +55,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-pythonpath = ["quickscale/src", "quickscale_core/src", "quickscale_cli/src"]
+pythonpath = ["quickscale/src", "quickscale_core/src", "quickscale_cli/src", "quickscale_devtools/src"]
 
 [tool.pylint.main]
 # Use multiple processes for faster analysis

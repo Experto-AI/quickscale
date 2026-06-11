@@ -21,6 +21,10 @@ from quickscale_cli.schema.delta import compute_delta, format_delta
 from quickscale_cli.schema.state_schema import QuickScaleState, StateError, StateManager
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
+from quickscale_core.project_state import (
+    ProjectStateManager,
+    check_version_drift,
+)
 
 
 def _get_docker_status() -> dict[str, str] | None:
@@ -249,6 +253,55 @@ def _display_drift_warnings(state_manager: StateManager) -> None:
         click.echo("   These modules may have been manually removed.")
 
 
+def _display_managed_file_drift_warnings(
+    project_state_manager: ProjectStateManager,
+) -> None:
+    """Display warnings about managed wiring files that drifted since apply."""
+    drifted = project_state_manager.detect_managed_file_drift()
+    if not drifted:
+        return
+
+    click.echo("\n⚠️  Managed file drift detected (file changed since last apply):")
+    for record in drifted:
+        click.secho(
+            f"   • {record.path} (expected hash {record.hash[:12]}…)",
+            fg="yellow",
+        )
+    click.echo(
+        "   These managed files were modified after the last 'quickscale apply'. "
+        "Re-run apply to restore them, or commit your edits if they are intentional."
+    )
+
+
+def _display_version_drift_warnings(
+    project_state_manager: ProjectStateManager,
+) -> None:
+    """Display warnings about module version drift between state and config."""
+    try:
+        state = project_state_manager.load_state()
+        config = project_state_manager.load_config()
+    except (StateError, OSError) as error:
+        click.echo(
+            f"\n⚠️  Could not check version drift between .quickscale/state.yml "
+            f"and .quickscale/config.yml: {error}"
+        )
+        return
+
+    drift = check_version_drift(state, config)
+    if not drift:
+        return
+
+    click.echo(
+        "\n⚠️  Module version drift between .quickscale/state.yml and "
+        ".quickscale/config.yml:"
+    )
+    for warning in drift:
+        click.secho(f"   • {warning.message}", fg="yellow")
+    click.echo(
+        "   Apply will reconcile .quickscale/config.yml to the canonical state version."
+    )
+
+
 def _build_json_output(
     project_path: Path,
     config_path: Path | None,
@@ -322,6 +375,7 @@ def _display_text_status(
     config_path: Path | None,
     state_path: Path | None,
     state_manager: StateManager,
+    project_state_manager: ProjectStateManager,
     manifests: dict[str, ModuleManifest] | None = None,
 ) -> None:
     """Display status in text format."""
@@ -344,6 +398,8 @@ def _display_text_status(
         _display_project_info(state)
         _display_modules(state)
         _display_drift_warnings(state_manager)
+        _display_managed_file_drift_warnings(project_state_manager)
+        _display_version_drift_warnings(project_state_manager)
     else:
         click.secho("\n⚠️  No state file found (.quickscale/state.yml)", fg="yellow")
         click.echo("   Run 'quickscale apply' to initialize the project state.")
@@ -408,6 +464,7 @@ def status(json_output: bool) -> None:
 
     # Load state and config
     state_manager = StateManager(project_path)
+    project_state_manager = ProjectStateManager(project_path)
     try:
         state = state_manager.load()
     except StateError as error:
@@ -466,5 +523,6 @@ def status(json_output: bool) -> None:
         config_path,
         state_path,
         state_manager,
+        project_state_manager,
         manifests,
     )

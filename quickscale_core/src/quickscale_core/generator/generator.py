@@ -15,10 +15,40 @@ from quickscale_core.utils.file_utils import (
 )
 
 
+# Map of optional React theme source files to the module key that gates them.
+# When ``selected_modules`` is provided and the gating module is not selected,
+# the generator skips rendering the file entirely. When ``selected_modules`` is
+# ``None``, the file is always rendered to preserve the default behavior.
+REACT_THEME_OPTIONAL_FILES: dict[str, str] = {
+    "src/pages/BlogPage.tsx": "blog",
+    "src/pages/CrmPage.tsx": "crm",
+    "src/pages/FormsPage.tsx": "forms",
+    "src/pages/ListingsPage.tsx": "listings",
+    "src/components/forms/FormRenderer.tsx": "forms",
+    "src/components/forms/FormFieldRenderer.tsx": "forms",
+    "src/components/forms/FormSuccess.tsx": "forms",
+    "src/hooks/useFormSchema.ts": "forms",
+    "src/pages/SocialLinkTreePublicPage.tsx": "social",
+    "src/pages/SocialEmbedsPublicPage.tsx": "social",
+}
+
+# React theme Django-side templates that should be rendered from the shared
+# ``templates/`` location when the theme-specific copy is absent.
+REACT_THEME_SHARED_DJANGO_TEMPLATES: tuple[str, ...] = (
+    "templates/admin/index.html.j2",
+    "templates/admin/app_index.html.j2",
+)
+
+
 class ProjectGenerator:
     """Generate Django projects from templates"""
 
-    def __init__(self, template_dir: Path | None = None, theme: str = "showcase_react"):
+    def __init__(
+        self,
+        template_dir: Path | None = None,
+        theme: str = "showcase_react",
+        selected_modules: list[str] | None = None,
+    ):
         """
         Initialize generator with template directory and theme
 
@@ -26,6 +56,12 @@ class ProjectGenerator:
         ----
             template_dir: Path to template directory (auto-detected if None)
             theme: Theme name to use (default: showcase_react)
+            selected_modules: Optional list of module names that the user
+                selected. When provided, the React theme generator uses it to
+                gate optional per-module React components and TypeScript
+                interface entries. When ``None`` (default), the generator
+                preserves the legacy behavior of emitting every per-module
+                surface.
 
         Raises:
         ------
@@ -34,6 +70,9 @@ class ProjectGenerator:
 
         """
         self.theme = theme
+        self.selected_modules = (
+            list(selected_modules) if selected_modules is not None else None
+        )
 
         # Validate theme
         available_themes = ["showcase_html", "showcase_react"]
@@ -211,6 +250,9 @@ class ProjectGenerator:
             "theme": self.theme,
             "host_uid": os.getuid() if hasattr(os, "getuid") else 1000,
             "host_gid": os.getgid() if hasattr(os, "getgid") else 1000,
+            "selected_modules": list(self.selected_modules)
+            if self.selected_modules is not None
+            else None,
         }
 
         # Map of template files to output files
@@ -397,9 +439,16 @@ class ProjectGenerator:
                         # Convert relative path to just the filename within templates/
                         output_file_path = output_path / rel_template_path
 
+                        # Prefer the theme-specific Django template when it
+                        # exists; otherwise fall back to the shared
+                        # ``templates/`` location so that admin overrides and
+                        # other identical templates can live in one place.
                         template_rel_path = (
                             f"themes/showcase_react/{rel_root / filename}"
                         )
+                        if not (self.template_dir / template_rel_path).exists():
+                            template_rel_path = str(rel_root / filename)
+
                         template = self.env.get_template(template_rel_path)
                         content = template.render(**context)
 
@@ -417,6 +466,12 @@ class ProjectGenerator:
                     template = self.env.get_template(template_rel_path)
                     content = template.render(**context)
 
+                    # Skip optional React components when their gating module
+                    # is not selected. This keeps generated apps free of dead
+                    # imports and unrendered routes for unselected modules.
+                    if self._should_skip_optional_react_file(rel_output_path):
+                        continue
+
                     output_file_path = frontend_output / rel_output_path
                     write_file(output_file_path, content)
                 else:
@@ -426,6 +481,40 @@ class ProjectGenerator:
 
                     ensure_directory(output_file_path.parent)
                     shutil.copy2(src_path, output_file_path)
+
+        # Render shared Django templates that are not theme-specific. The
+        # React walker above only visits files inside the theme directory, so
+        # we explicitly add shared Django templates (such as admin overrides)
+        # here to keep both themes in sync without duplicating files.
+        for shared_rel in REACT_THEME_SHARED_DJANGO_TEMPLATES:
+            shared_source = self.template_dir / shared_rel
+            if not shared_source.exists():
+                continue
+
+            output_rel = Path(shared_rel).with_suffix("")  # Strip .j2
+            output_file_path = output_path / output_rel
+            template = self.env.get_template(shared_rel)
+            content = template.render(**context)
+            write_file(output_file_path, content)
+
+    def _should_skip_optional_react_file(self, rel_output_path: Path) -> bool:
+        """Return True when an optional React file should be skipped.
+
+        Optional files are mapped to the module that gates them in
+        :data:`REACT_THEME_OPTIONAL_FILES`. When ``selected_modules`` is
+        ``None`` (legacy default) no file is skipped. When
+        ``selected_modules`` is an explicit list, the file is skipped only
+        when the gating module is missing from the list.
+        """
+        if self.selected_modules is None:
+            return False
+
+        posix_path = rel_output_path.as_posix()
+        gating_module = REACT_THEME_OPTIONAL_FILES.get(posix_path)
+        if gating_module is None:
+            return False
+
+        return gating_module not in self.selected_modules
 
     def _generate_poetry_lock(self, project_path: Path) -> None:
         """

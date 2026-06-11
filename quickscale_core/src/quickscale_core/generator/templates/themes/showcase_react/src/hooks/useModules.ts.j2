@@ -1,6 +1,26 @@
+{%- set optional_module_entries = [
+  ('auth', "  auth: boolean\n"),
+  ('blog', "  blog: boolean\n"),
+  ('listings', "  listings: boolean\n"),
+  ('crm', "  crm: boolean\n"),
+  ('forms', "  forms: boolean\n"),
+  ('storage', "  storage: boolean\n"),
+  ('backups', "  backups: boolean\n"),
+  ('notifications', "  notifications: boolean\n"),
+  ('analytics', "  analytics: boolean\n"),
+  ('billing', "  billing: boolean\n"),
+  ('social', "  social: boolean\n"),
+] -%}
+{%- set optional_module_path_entries = [
+  ('crm', "  crm: string\n"),
+  ('billing', "  billing: string\n"),
+  ('social', "  social: string\n"),
+] -%}
 {% raw -%}
 interface QuickScaleModules {
-  auth: boolean
+{% endraw -%}
+{%- if selected_modules is none %}
+{% raw %}  auth: boolean
   blog: boolean
   listings: boolean
   crm: boolean
@@ -11,12 +31,22 @@ interface QuickScaleModules {
   analytics: boolean
   billing: boolean
   social: boolean
+{% endraw %}{%- else %}
+{%- for key, line in optional_module_entries %}{% if key in selected_modules %}{{ line }}{% endif %}{% endfor %}
+{%- endif %}
+{%- raw %}
 }
 
 interface QuickScaleModulePaths {
-  crm: string
+{% endraw -%}
+{%- if selected_modules is none %}
+{% raw %}  crm: string
   billing: string
   social: string
+{% endraw %}{%- else %}
+{%- for key, line in optional_module_path_entries %}{% if key in selected_modules %}{{ line }}{% endif %}{% endfor %}
+{%- endif %}
+{%- raw %}
 }
 
 export type QuickScaleOwnerMode = 'solo' | 'saas'
@@ -58,7 +88,9 @@ declare global {
 const defaultConfig: QuickScaleConfig = {
   projectName: '{% endraw %}{{ project_name }}{% raw %}',
   modules: {
-    auth: false,
+{% endraw -%}
+{%- if selected_modules is none %}
+{% raw %}    auth: false,
     blog: false,
     listings: false,
     crm: false,
@@ -69,11 +101,27 @@ const defaultConfig: QuickScaleConfig = {
     analytics: false,
     billing: false,
     social: false,
+{% endraw %}{%- else %}
+{%- for key, line in optional_module_entries %}{% if key in selected_modules %}    {{ key }}: false,
+{% endif %}{% endfor %}
+{%- endif %}
+{%- raw %}
   },
   modulePaths: {
-    crm: '/crm',
+{% endraw -%}
+{%- if selected_modules is none %}
+{% raw %}    crm: '/crm',
     billing: '/billing/pricing/',
     social: '/social',
+{% endraw %}{%- else %}
+{%- if 'crm' in selected_modules %}    crm: '/crm',
+{% endif -%}
+{%- if 'billing' in selected_modules %}    billing: '/billing/pricing/',
+{% endif -%}
+{%- if 'social' in selected_modules %}    social: '/social',
+{% endif -%}
+{%- endif %}
+{%- raw %}
   },
   owner: {
     mode: 'solo',

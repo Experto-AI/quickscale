@@ -24,6 +24,7 @@ from quickscale_cli.commands.status_command import (
     _load_config,
     status,
 )
+from quickscale_core.project_state import ProjectStateManager
 
 
 # ============================================================================
@@ -412,8 +413,9 @@ class TestDisplayTextStatus:
         import click as click_mod
 
         sm = Mock()
+        psm = Mock(spec=ProjectStateManager)
         with pytest.raises(click_mod.Abort):
-            _display_text_status(tmp_path, None, None, None, None, sm)
+            _display_text_status(tmp_path, None, None, None, None, sm, psm)
 
     def test_with_state_only(self, tmp_path):
         """Display with state but no config"""
@@ -429,12 +431,16 @@ class TestDisplayTextStatus:
             "orphaned_modules": [],
             "missing_modules": [],
         }
+        psm = Mock(spec=ProjectStateManager)
+        psm.detect_managed_file_drift.return_value = []
+        psm.load_state.return_value = None
+        psm.load_config.return_value = None
 
         with patch(
             "quickscale_cli.commands.status_command._get_docker_status",
             return_value=None,
         ):
-            _display_text_status(tmp_path, state, None, None, None, sm)
+            _display_text_status(tmp_path, state, None, None, None, sm, psm)
 
     def test_with_config_no_state(self, tmp_path):
         """Display with config but no state"""
@@ -447,6 +453,7 @@ class TestDisplayTextStatus:
         config.docker.build = False
 
         sm = Mock()
+        psm = Mock(spec=ProjectStateManager)
         with patch(
             "quickscale_cli.commands.status_command._get_docker_status",
             return_value=None,
@@ -457,7 +464,7 @@ class TestDisplayTextStatus:
                 delta = Mock()
                 delta.has_changes = False
                 mock_delta.return_value = delta
-                _display_text_status(tmp_path, None, config, None, None, sm)
+                _display_text_status(tmp_path, None, config, None, None, sm, psm)
 
 
 # ============================================================================

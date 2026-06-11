@@ -64,6 +64,21 @@ MANIFEST_DEPENDENCY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+")
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 VERSION_EXPORT_PATTERN = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 
+# Jinja2 control tags in a .j2 template can contain literal `}` characters (e.g.
+# `{% endraw %}`, `{% endif %}`).  The Phase 3 React theme templates wrap
+# TypeScript interface bodies in `{% raw %}` / `{% endraw %}` blocks so they
+# can host conditional inclusion logic, which means a naive
+# `text.split("interface QuickScaleModules {")[1].split("}")[0]` truncates
+# the body at the first inner tag's `}` instead of the interface's actual
+# closing brace.  Stripping all Jinja2 control tags before the split restores
+# the intended behavior: every `}` left in the text is a real language brace.
+_JINJA2_CONTROL_TAG_PATTERN = re.compile(r"\{%.*?%\}", re.DOTALL)
+
+
+def _strip_jinja2_control_tags(template_text: str) -> str:
+    """Remove Jinja2 control tags (`{% ... %}`) from a template string."""
+    return _JINJA2_CONTROL_TAG_PATTERN.sub("", template_text)
+
 
 def _manifest_path(module_name: str) -> Path:
     return MODULES_ROOT / module_name / "module.yml"
@@ -382,9 +397,9 @@ def test_all_catalog_modules_in_react_typescript_interface() -> None:
     When adding a new module: add a '{name}: boolean' line to the
     QuickScaleModules interface, or add the name to _REACT_UI_EXCLUDED_MODULES.
     """
-    use_modules = (
-        REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2"
-    ).read_text()
+    use_modules = _strip_jinja2_control_tags(
+        (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2").read_text()
+    )
     # Extract only the QuickScaleModules interface body
     interface_block = use_modules.split("interface QuickScaleModules {")[1].split("}")[
         0
@@ -410,9 +425,9 @@ def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -
     set at runtime.
     """
     index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
-    use_modules = (
-        REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2"
-    ).read_text()
+    use_modules = _strip_jinja2_control_tags(
+        (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2").read_text()
+    )
 
     modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
     html_modules = set(re.findall(r"\b(\w+):\s+\{%", modules_block))

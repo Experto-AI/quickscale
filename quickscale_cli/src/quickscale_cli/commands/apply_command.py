@@ -92,6 +92,12 @@ from quickscale_core.config import (
     normalize_installed_version,
     save_config as save_module_tracking_config,
 )
+from quickscale_core.project_state import (
+    DEFAULT_MANAGED_WIRING_PATHS,
+    ProjectStateManager,
+    VersionDriftWarning,
+    check_version_drift,
+)
 from quickscale_core.utils.git_utils import is_working_directory_clean
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
@@ -697,6 +703,95 @@ def _sync_legacy_module_config_versions(
     if changed:
         save_module_tracking_config(legacy_config, project_path)
         click.secho("✅ Updated .quickscale/config.yml module versions", fg="green")
+
+
+def _resolve_managed_wiring_paths(
+    qs_config: QuickScaleConfig,
+) -> list[str]:
+    """Return the managed wiring file paths that apply should track.
+
+    Paths are repo-relative (forward slashes) so they match the keys
+    written by :func:`compute_file_hashes`. The returned list always
+    includes the default managed wiring files; module-specific managed
+    files inside ``<package>/quickscale_managed/`` are not enumerated
+    here because they are owned by individual modules and may be
+    introduced or removed without breaking the drift signal.
+    """
+    package = qs_config.project.package
+    return [f"{package}/{relative}" for relative in DEFAULT_MANAGED_WIRING_PATHS]
+
+
+def _warn_version_drift_for_apply(
+    project_path: Path,
+    qs_config: QuickScaleConfig,
+) -> list[VersionDriftWarning]:
+    """Surface module version drift between state and legacy config.
+
+    Called near the start of apply so users can see drift before any
+    mutation. Drift between state and config is non-fatal: apply
+    reconciles the two at finalize time via
+    :func:`_sync_legacy_module_config_versions`. The warnings exist so
+    that operations and status can surface the gap.
+    """
+    state_manager = ProjectStateManager(project_path)
+    try:
+        state = state_manager.load_state()
+        config = state_manager.load_config()
+    except StateError as error:
+        click.secho(
+            f"⚠️  Could not read managed state files for drift check: {error}",
+            fg="yellow",
+        )
+        return []
+
+    drift = check_version_drift(state, config)
+    if not drift:
+        return []
+
+    del qs_config
+    click.secho(
+        "\n⚠️  Module version drift between .quickscale/state.yml and "
+        ".quickscale/config.yml:",
+        fg="yellow",
+        bold=True,
+    )
+    for warning in drift:
+        click.echo(f"  • {warning.message}")
+    click.echo(
+        "\n💡 Apply will reconcile .quickscale/config.yml to the canonical "
+        "state-managed version. The drift is informational and not fatal.",
+    )
+    return drift
+
+
+def _capture_managed_file_hashes_after_apply(
+    project_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Capture SHA-256 hashes for the managed wiring files.
+
+    Hash capture is best-effort: failures must not abort apply because
+    drift detection is informational. The captured hashes are written to
+    ``.quickscale/file_hashes.yml`` and consumed by ``quickscale status``
+    on subsequent runs.
+    """
+    try:
+        manager = ProjectStateManager(project_path)
+        managed_paths = _resolve_managed_wiring_paths(qs_config)
+        records = manager.capture_managed_file_hashes(managed_paths)
+    except OSError as error:
+        click.secho(
+            f"⚠️  Failed to capture managed file hashes: {error}",
+            fg="yellow",
+        )
+        return False
+
+    if records:
+        click.echo(
+            "  • Tracked managed file hashes for "
+            f"{len(records)} managed file(s) in .quickscale/file_hashes.yml"
+        )
+    return True
 
 
 def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
@@ -2299,6 +2394,10 @@ def _execute_apply_steps(
         ctx.existing_state is not None and not has_pending_post_embed_recovery
     )
 
+    # Surface module version drift between state and legacy config early.
+    # Drift is non-fatal: apply reconciles the two at finalize time.
+    _warn_version_drift_for_apply(ctx.output_path, ctx.qs_config)
+
     # Generate project (only for new projects)
     project_generated = False
     if ctx.existing_state is None:
@@ -2380,6 +2479,10 @@ def _execute_apply_steps(
             failed_step="managed module wiring generation",
             reason="unable to render managed settings, URL, and integration files",
         )
+
+    # Capture SHA-256 hashes of the freshly written managed wiring files so
+    # `quickscale status` can detect drift on subsequent runs. Best-effort.
+    _capture_managed_file_hashes_after_apply(ctx.output_path, ctx.qs_config)
 
     if not _ensure_backups_gitignore_rules(ctx.output_path, ctx.qs_config):
         _abort_after_post_embed_failure(

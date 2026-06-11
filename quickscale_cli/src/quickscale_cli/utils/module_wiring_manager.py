@@ -8,11 +8,11 @@ from typing import Any, Mapping
 from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
 from quickscale_cli.schema.config_schema import validate_config
 from quickscale_cli.schema.state_schema import StateManager
-from quickscale_cli.utils.project_identity import (
+from quickscale_core.module_wiring import write_managed_wiring
+from quickscale_core.utils.project_identity import (
     ProjectIdentityResolutionError,
     resolve_project_identity,
 )
-from quickscale_core.module_wiring import write_managed_wiring
 
 
 class ManagedWiringContextError(ValueError):
