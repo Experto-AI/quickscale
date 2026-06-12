@@ -27,16 +27,16 @@ from quickscale_cli.forms_manifest import (
     resolve_forms_module_options,
     validate_forms_module_options,
 )
-from quickscale_cli.billing_contract import (
+from quickscale_cli.billing_manifest import (
     default_billing_module_options,
     resolve_billing_module_options,
     validate_billing_module_options,
 )
-from quickscale_cli.auth_contract import (
+from quickscale_cli.auth_manifest import (
     default_auth_module_options,
     resolve_auth_module_options,
 )
-from quickscale_cli.backups_contract import (
+from quickscale_cli.backups_manifest import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,

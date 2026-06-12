@@ -1,6 +1,6 @@
 """Focused billing wiring regression tests."""
 
-from quickscale_cli.billing_contract import (
+from quickscale_cli.billing_manifest import (
     DEFAULT_BILLING_CURRENCY,
     DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
     DEFAULT_BILLING_SECRET_KEY_ENV_VAR,

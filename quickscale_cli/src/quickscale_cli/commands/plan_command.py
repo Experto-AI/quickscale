@@ -11,8 +11,8 @@ from typing import Any
 
 import click
 
-from quickscale_cli.auth_contract import format_auth_desired_config_contract
-from quickscale_cli.backups_contract import sanitize_module_options
+from quickscale_cli.auth_manifest import format_auth_desired_config_contract
+from quickscale_core.contracts.module_options import sanitize_module_options
 from quickscale_cli.commands.implied_module_defaults import (
     get_implied_module_default_configs,
 )

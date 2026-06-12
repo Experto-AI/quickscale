@@ -10,7 +10,7 @@ from unittest.mock import patch
 import click
 import pytest
 
-from quickscale_cli.backups_contract import (
+from quickscale_cli.backups_manifest import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
 )

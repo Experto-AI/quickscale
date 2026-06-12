@@ -1,10 +1,36 @@
-"""Shared billing-module configuration helpers."""
+"""Billing module manifest-driven configuration adapter.
+
+Replaces the legacy ``billing_contract.py`` by sourcing defaults from the
+billing ``module.yml`` manifest and routing normalization and resolution
+through the manifest-driven resolver
+(:mod:`quickscale_core.manifest.resolver`).
+
+The public API is a drop-in replacement for the old contract file so that
+callers in ``module_wiring_specs.py``, ``apply_command.py``, and
+``module_config.py`` can migrate without rewriting their logic.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 import re
 from typing import Any
+
+from quickscale_core.manifest.derivation import (
+    ModuleDerivationSchema,
+)
+from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.resolver import resolve_module_config
+
+# ---------------------------------------------------------------------------
+# Constants
+#
+# BILLING_SUPPORTED_CURRENCIES is NOT enumerated in module.yml and must remain
+# as a module-level Python constant.  The DEFAULT_BILLING_* values match the
+# module.yml defaults but are re-declared here so that callers that import
+# them by name continue to work without changes.
+# ---------------------------------------------------------------------------
 
 DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR = "STRIPE_PUBLISHABLE_KEY"
 DEFAULT_BILLING_SECRET_KEY_ENV_VAR = "STRIPE_SECRET_KEY"
@@ -23,6 +49,8 @@ BILLING_MODULE_OPTION_KEYS = frozenset(
         "billing_currency",
     }
 )
+
+# The ~25-currency tuple is not in module.yml; keep it as a Python constant.
 BILLING_SUPPORTED_CURRENCIES = (
     "aud",
     "brl",
@@ -53,16 +81,48 @@ BILLING_SUPPORTED_CURRENCIES = (
 
 _BILLING_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
+# ---------------------------------------------------------------------------
+# Manifest
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_BILLING_MANIFEST_PATH = _REPO_ROOT / "quickscale_modules" / "billing" / "module.yml"
+
+
+def _load_billing_manifest() -> Any:
+    """Load the billing module manifest from ``module.yml``."""
+    return load_manifest_from_path(_BILLING_MANIFEST_PATH)
+
+
+def _build_billing_derivation_schema() -> ModuleDerivationSchema:
+    """Build a minimal derivation schema for the billing module.
+
+    Billing has no special normalization or derived settings that the generic
+    resolver needs to express — all billing-specific logic (env-var strip,
+    currency strip+lowercase) is applied as adapter-level post-steps in the
+    functions below.
+    """
+    return ModuleDerivationSchema(
+        module_name="billing",
+        version="1",
+        option_derivations={},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public API — drop-in replacement for billing_contract.py
+# ---------------------------------------------------------------------------
+
 
 def default_billing_module_options() -> dict[str, Any]:
-    """Return the default planner/apply contract for billing."""
-    return {
-        "enabled": True,
-        "publishable_key_env_var": DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-        "secret_key_env_var": DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-        "webhook_secret_env_var": DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-        "billing_currency": DEFAULT_BILLING_CURRENCY,
-    }
+    """Return the default planner/apply contract for billing.
+
+    Defaults are sourced from the billing ``module.yml`` manifest via
+    :meth:`ModuleManifest.get_defaults`.
+    """
+    manifest = _load_billing_manifest()
+    result: dict[str, Any] = manifest.get_defaults()
+    return result
 
 
 def normalize_billing_module_options(
@@ -86,12 +146,24 @@ def normalize_billing_module_options(
 def resolve_billing_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Merge billing options with defaults and normalized overrides."""
-    resolved = default_billing_module_options()
-    resolved.update(normalize_billing_module_options(options))
+    """Merge billing options with defaults and normalized overrides.
+
+    Routes through the manifest-driven resolver for defaults extraction,
+    then applies the billing-specific env-var and currency normalization
+    that the generic resolver does not cover.
+    """
+    manifest = _load_billing_manifest()
+    schema = _build_billing_derivation_schema()
+
+    result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
+    resolved = dict(result.resolved)
+
+    # Apply billing-specific post-resolution normalization (identical to
+    # legacy contract behaviour).
     for option_name in BILLING_ENV_VAR_OPTION_NAMES:
         resolved[option_name] = str(resolved[option_name]).strip()
     resolved["billing_currency"] = str(resolved["billing_currency"]).strip().lower()
+
     return resolved
 
 

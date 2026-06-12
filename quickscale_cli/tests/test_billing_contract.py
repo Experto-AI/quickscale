@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from quickscale_cli.billing_contract import (
+from quickscale_cli.billing_manifest import (
     billing_production_targeted,
     default_billing_module_options,
     resolve_billing_module_options,

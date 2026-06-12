@@ -21,7 +21,7 @@ from quickscale_cli.analytics_manifest import (
     resolve_analytics_module_options,
     validate_analytics_module_options,
 )
-from quickscale_cli.billing_contract import (
+from quickscale_cli.billing_manifest import (
     DEFAULT_BILLING_CURRENCY,
     DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
     DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
@@ -29,14 +29,14 @@ from quickscale_cli.billing_contract import (
     resolve_billing_module_options,
     validate_billing_module_options,
 )
-from quickscale_cli.backups_contract import (
+from quickscale_cli.backups_manifest import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     normalize_backups_module_options,
-    sanitize_module_options,
 )
+from quickscale_core.contracts.module_options import sanitize_module_options
 from quickscale_cli.notifications_manifest import (
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,

@@ -491,7 +491,7 @@ One real-subtree-embed e2e per theme (even just `auth`, the simplest full app) w
 - [x] Migrate `forms` to the manifest-driven path and delete its CLI contract file as the second pilot slice (Finding 1)
 - [x] Migrate `crm` to the manifest-driven path and delete its CLI contract file as the third slice (Finding 1)
 - [x] Migrate the remaining lower-coupling modules (`notifications`, `social`) one module at a time to the manifest-driven path, deleting one CLI contract file per slice instead of batching them (Finding 1)
-- [ ] Migrate the higher-coupling modules (`auth`, `billing`, `backups`) individually to the manifest-driven path with module-specific verification at each step (Finding 1)
+- [x] Migrate the higher-coupling modules (`auth`, `billing`, `backups`) individually to the manifest-driven path with module-specific verification at each step (Finding 1)
 - [ ] Delete `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` once all required derivation behavior has moved to the manifest-driven path or module-owned hooks (Finding 1)
 - [ ] Replace the per-module interactive handlers in `quickscale_cli/src/quickscale_cli/commands/module_config.py` with a manifest-driven configurator flow once the manifest path is authoritative (Finding 1)
 - [ ] Remove the remaining legacy contract-file compatibility shims, constants, and dead imports after the manifest-driven path fully replaces the old module registry duplication (Finding 1)
