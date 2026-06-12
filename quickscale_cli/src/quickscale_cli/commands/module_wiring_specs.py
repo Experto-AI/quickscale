@@ -9,6 +9,9 @@ from typing import Any, Mapping
 from quickscale_cli.analytics_manifest import (
     resolve_analytics_module_options,
 )
+from quickscale_cli.crm_manifest import (
+    resolve_crm_module_options,
+)
 from quickscale_cli.forms_manifest import (
     resolve_forms_module_options,
 )
@@ -187,11 +190,12 @@ def _listings_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
 
 
 def _crm_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
-    enable_api = bool(options.get("enable_api", True))
+    resolved = resolve_crm_module_options(options)
+    enable_api = bool(resolved.get("enable_api", True))
 
     settings: dict[str, Any] = {
-        "CRM_DEALS_PER_PAGE": int(options.get("deals_per_page", 25)),
-        "CRM_CONTACTS_PER_PAGE": int(options.get("contacts_per_page", 50)),
+        "CRM_DEALS_PER_PAGE": int(resolved.get("deals_per_page", 25)),
+        "CRM_CONTACTS_PER_PAGE": int(resolved.get("contacts_per_page", 50)),
         "CRM_ENABLE_API": enable_api,
     }
 

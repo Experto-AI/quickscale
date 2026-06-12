@@ -44,7 +44,7 @@ from quickscale_cli.backups_contract import (
     normalize_backups_module_options,
     validate_backups_env_var_reference,
 )
-from quickscale_cli.crm_contract import (
+from quickscale_cli.crm_manifest import (
     default_crm_module_options,
     resolve_crm_module_options,
 )
@@ -794,39 +794,6 @@ def _write_validated_pyproject_content(pyproject_path: Path, content: str) -> No
 
     with open(pyproject_path, "w") as f:
         f.write(content)
-
-
-def _get_crm_settings_addition(config: dict[str, Any]) -> str:
-    """Generate settings addition for CRM module."""
-    return f"""
-# CRM Module Settings
-CRM_DEALS_PER_PAGE = {config["deals_per_page"]}
-CRM_CONTACTS_PER_PAGE = {config["contacts_per_page"]}
-CRM_ENABLE_API = {config["enable_api"]}
-"""
-
-
-def _update_crm_urls(urls_path: Path) -> None:
-    """Add CRM URLs to project's urls.py."""
-    if not urls_path.exists():
-        return
-
-    with open(urls_path) as f:
-        urls_content = f.read()
-
-    if "quickscale_modules_crm" in urls_content:
-        return
-
-    if "urlpatterns = [" in urls_content:
-        urls_addition = '    path("crm/", include("quickscale_modules_crm.urls")),\n'
-        urls_content = urls_content.replace(
-            "urlpatterns = [", "urlpatterns = [\n" + urls_addition
-        )
-
-        with open(urls_path, "w") as f:
-            f.write(urls_content)
-
-        click.secho("  ✅ Updated urls.py with CRM URLs", fg="green")
 
 
 def apply_crm_configuration(
