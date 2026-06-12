@@ -22,6 +22,11 @@ from quickscale_cli.analytics_manifest import (
     resolve_analytics_module_options,
     validate_analytics_module_options,
 )
+from quickscale_cli.forms_manifest import (
+    default_forms_module_options,
+    resolve_forms_module_options,
+    validate_forms_module_options,
+)
 from quickscale_cli.billing_contract import (
     default_billing_module_options,
     resolve_billing_module_options,
@@ -854,13 +859,19 @@ def apply_crm_configuration(
 
 def get_default_forms_config() -> dict[str, Any]:
     """Return default configuration for the forms module."""
-    return {
-        "forms_per_page": 25,
-        "spam_protection_enabled": True,
-        "rate_limit": "5/hour",
-        "data_retention_days": 365,
-        "submissions_api_enabled": True,
-    }
+    return default_forms_module_options()
+
+
+def _raise_for_invalid_forms_config(config: Mapping[str, Any]) -> None:
+    """Abort with actionable messaging when forms config is invalid."""
+    issues = validate_forms_module_options(config)
+    if not issues:
+        return
+
+    click.secho("\n❌ Invalid forms module configuration:", fg="red", err=True)
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    raise click.Abort()
 
 
 def configure_forms_module(
@@ -868,16 +879,23 @@ def configure_forms_module(
     existing_config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Configure the forms module interactively or using defaults."""
-    defaults = _merge_existing_config(get_default_forms_config(), existing_config)
+    defaults = resolve_forms_module_options(existing_config)
 
     if non_interactive:
         click.echo("\n⚙️  Using default forms module configuration...")
         config = defaults
         click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
-        click.echo("  \u2022 Spam protection: Enabled")
+        click.echo(
+            f"  \u2022 Spam protection: "
+            f"{'Enabled' if config['spam_protection_enabled'] else 'Disabled'}"
+        )
         click.echo(f"  \u2022 Rate limit: {config['rate_limit']}")
         click.echo(f"  \u2022 Data retention: {config['data_retention_days']} days")
-        click.echo("  \u2022 Submissions API: Enabled")
+        click.echo(
+            f"  \u2022 Submissions API: "
+            f"{'Enabled' if config['submissions_api_enabled'] else 'Disabled'}"
+        )
+        _raise_for_invalid_forms_config(config)
         return config
 
     click.echo("\n⚙️  Configuring forms module...")
@@ -905,6 +923,7 @@ def configure_forms_module(
             default=bool(defaults["submissions_api_enabled"]),
         ),
     }
+    _raise_for_invalid_forms_config(config)
     return config
 
 
@@ -915,21 +934,23 @@ def apply_forms_configuration(
     execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> None:
     """Apply forms module configuration to the project."""
+    resolved = resolve_forms_module_options(config)
+    _raise_for_invalid_forms_config(resolved)
     _regenerate_wiring_for_execution_mode(
         project_path,
         "forms",
-        config,
+        resolved,
         execution_mode=execution_mode,
     )
     click.echo("\n\U0001f4cb Configuration applied:")
-    click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
+    click.echo(f"  \u2022 Forms per page: {resolved['forms_per_page']}")
     click.echo(
-        f"  \u2022 Spam protection: {'Enabled' if config['spam_protection_enabled'] else 'Disabled'}"
+        f"  \u2022 Spam protection: {'Enabled' if resolved['spam_protection_enabled'] else 'Disabled'}"
     )
-    click.echo(f"  \u2022 Rate limit: {config['rate_limit']}")
-    click.echo(f"  \u2022 Data retention: {config['data_retention_days']} days")
+    click.echo(f"  \u2022 Rate limit: {resolved['rate_limit']}")
+    click.echo(f"  \u2022 Data retention: {resolved['data_retention_days']} days")
     click.echo(
-        f"  \u2022 Submissions API: {'Enabled' if config['submissions_api_enabled'] else 'Disabled'}"
+        f"  \u2022 Submissions API: {'Enabled' if resolved['submissions_api_enabled'] else 'Disabled'}"
     )
 
 

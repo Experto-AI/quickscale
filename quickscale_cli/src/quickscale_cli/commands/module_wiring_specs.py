@@ -9,6 +9,9 @@ from typing import Any, Mapping
 from quickscale_cli.analytics_manifest import (
     resolve_analytics_module_options,
 )
+from quickscale_cli.forms_manifest import (
+    resolve_forms_module_options,
+)
 from quickscale_cli.backups_contract import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -200,11 +203,12 @@ def _crm_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
 
 
 def _forms_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
-    submissions_api_enabled = bool(options.get("submissions_api_enabled", True))
-    forms_per_page = int(options.get("forms_per_page", 25))
-    spam_protection_enabled = bool(options.get("spam_protection_enabled", True))
-    rate_limit = str(options.get("rate_limit", "5/hour"))
-    data_retention_days = int(options.get("data_retention_days", 365))
+    resolved = resolve_forms_module_options(options)
+    submissions_api_enabled = bool(resolved.get("submissions_api_enabled", True))
+    forms_per_page = int(resolved.get("forms_per_page", 25))
+    spam_protection_enabled = bool(resolved.get("spam_protection_enabled", True))
+    rate_limit = str(resolved.get("rate_limit", "5/hour"))
+    data_retention_days = int(resolved.get("data_retention_days", 365))
 
     settings: dict[str, Any] = {
         "FORMS_PER_PAGE": forms_per_page,
