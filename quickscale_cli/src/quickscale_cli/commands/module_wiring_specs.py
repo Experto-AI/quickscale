@@ -29,12 +29,12 @@ from quickscale_cli.billing_contract import (
     DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
     normalize_billing_module_options,
 )
-from quickscale_cli.notifications_contract import (
+from quickscale_cli.notifications_manifest import (
     NOTIFICATIONS_LIVE_EMAIL_BACKEND,
     notifications_runtime_email_backend,
     resolve_notifications_module_options,
 )
-from quickscale_cli.social_contract import (
+from quickscale_cli.social_manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,

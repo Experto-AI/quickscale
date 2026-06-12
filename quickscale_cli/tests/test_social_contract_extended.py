@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from quickscale_cli.social_contract import (
+from quickscale_cli.social_manifest import (
     get_social_provider_metadata,
     normalize_social_module_options,
     normalize_social_provider,

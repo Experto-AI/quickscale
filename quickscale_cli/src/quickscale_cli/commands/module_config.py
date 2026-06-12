@@ -48,7 +48,7 @@ from quickscale_cli.crm_manifest import (
     default_crm_module_options,
     resolve_crm_module_options,
 )
-from quickscale_cli.notifications_contract import (
+from quickscale_cli.notifications_manifest import (
     DEFAULT_NOTIFICATIONS_ALLOWED_TAGS,
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
@@ -58,7 +58,7 @@ from quickscale_cli.notifications_contract import (
     resolve_notifications_module_options,
     validate_notifications_module_options,
 )
-from quickscale_cli.social_contract import (
+from quickscale_cli.social_manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,

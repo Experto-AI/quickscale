@@ -1,18 +1,33 @@
-"""Dependency-light social module contract helpers.
+"""Social module manifest-driven configuration adapter.
 
-This module defines the canonical Phase A social contract used by planner-side
-validation and future generated-project wiring. Runtime/admin consumers must not
-import quickscale_cli directly; later phases should copy these fixed values into
-module-owned or generated-project-owned code paths instead.
+Replaces the legacy ``social_contract.py`` by sourcing defaults from the social
+``module.yml`` manifest and routing core normalization, validation, and
+resolution through the manifest-driven resolver
+(:mod:`quickscale_core.manifest.resolver`).
+
+The public API is a drop-in replacement for the old contract file so callers in
+``apply_command.py``, ``module_wiring_specs.py``, and ``module_config.py`` can
+migrate without rewriting their logic.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from quickscale_core.manifest.derivation import (
+    DerivedSetting,
+    ModuleDerivationSchema,
+    NormalizationRule,
+    OptionDerivation,
+    ValidationRule,
+)
+from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.resolver import resolve_module_config
 
 SOCIAL_LINK_TREE_PATH = "/social"
 SOCIAL_EMBEDS_PATH = "/social/embeds"
@@ -147,18 +162,181 @@ DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST = tuple(
     provider.name for provider in SOCIAL_PROVIDER_CATALOG if provider.supports_embeds
 )
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_SOCIAL_MANIFEST_PATH = _REPO_ROOT / "quickscale_modules" / "social" / "module.yml"
+
+
+def _load_social_manifest() -> Any:
+    """Load the social module manifest from ``module.yml``."""
+    return load_manifest_from_path(_SOCIAL_MANIFEST_PATH)
+
+
+def _build_social_derivation_schema() -> ModuleDerivationSchema:
+    """Build the derivation schema for the social module.
+
+    Captures the normalization and validation rules that the generic resolver
+    can execute. Social-specific rules that the resolver does not support
+    natively (provider alias normalization and embed-support checks) are applied
+    as post-resolution steps in the adapter functions below.
+    """
+
+    return ModuleDerivationSchema(
+        module_name="social",
+        version="1",
+        option_derivations={
+            "link_tree_enabled": OptionDerivation(
+                option_key="link_tree_enabled",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_SOCIAL_LINK_TREE_ENABLED",
+                        source_options=["link_tree_enabled"],
+                        derivation_type="direct",
+                        expression={"option": "link_tree_enabled"},
+                    )
+                ],
+            ),
+            "layout_variant": OptionDerivation(
+                option_key="layout_variant",
+                normalization_rules=[
+                    NormalizationRule(
+                        source_key="layout_variant",
+                        target_key="layout_variant",
+                        rule_type="strip",
+                    ),
+                    NormalizationRule(
+                        source_key="layout_variant",
+                        target_key="layout_variant",
+                        rule_type="lowercase",
+                    ),
+                ],
+                validation_rules=[
+                    ValidationRule(
+                        option_key="layout_variant",
+                        rule_type="choices",
+                        allowed_values=list(SOCIAL_LAYOUT_VARIANTS),
+                        description=(
+                            "modules.social.layout_variant must be one of: list, cards, grid"
+                        ),
+                    )
+                ],
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_SOCIAL_LAYOUT_VARIANT",
+                        source_options=["layout_variant"],
+                        derivation_type="direct",
+                        expression={"option": "layout_variant"},
+                    )
+                ],
+            ),
+            "embeds_enabled": OptionDerivation(
+                option_key="embeds_enabled",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_SOCIAL_EMBEDS_ENABLED",
+                        source_options=["embeds_enabled"],
+                        derivation_type="direct",
+                        expression={"option": "embeds_enabled"},
+                    )
+                ],
+            ),
+            "provider_allowlist": OptionDerivation(
+                option_key="provider_allowlist",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST",
+                        source_options=["provider_allowlist"],
+                        derivation_type="direct",
+                        expression={"option": "provider_allowlist"},
+                    )
+                ],
+            ),
+            "cache_ttl_seconds": OptionDerivation(
+                option_key="cache_ttl_seconds",
+                normalization_rules=[
+                    NormalizationRule(
+                        source_key="cache_ttl_seconds",
+                        target_key="cache_ttl_seconds",
+                        rule_type="strip",
+                    )
+                ],
+                validation_rules=[
+                    ValidationRule(
+                        option_key="cache_ttl_seconds",
+                        rule_type="pattern",
+                        pattern=r"^\d+$",
+                        description="modules.social.cache_ttl_seconds must be an integer",
+                    )
+                ],
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS",
+                        source_options=["cache_ttl_seconds"],
+                        derivation_type="direct",
+                        expression={"option": "cache_ttl_seconds"},
+                    )
+                ],
+            ),
+            "links_per_page": OptionDerivation(
+                option_key="links_per_page",
+                normalization_rules=[
+                    NormalizationRule(
+                        source_key="links_per_page",
+                        target_key="links_per_page",
+                        rule_type="strip",
+                    )
+                ],
+                validation_rules=[
+                    ValidationRule(
+                        option_key="links_per_page",
+                        rule_type="pattern",
+                        pattern=r"^\d+$",
+                        description="modules.social.links_per_page must be an integer",
+                    )
+                ],
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_SOCIAL_LINKS_PER_PAGE",
+                        source_options=["links_per_page"],
+                        derivation_type="direct",
+                        expression={"option": "links_per_page"},
+                    )
+                ],
+            ),
+            "embeds_per_page": OptionDerivation(
+                option_key="embeds_per_page",
+                normalization_rules=[
+                    NormalizationRule(
+                        source_key="embeds_per_page",
+                        target_key="embeds_per_page",
+                        rule_type="strip",
+                    )
+                ],
+                validation_rules=[
+                    ValidationRule(
+                        option_key="embeds_per_page",
+                        rule_type="pattern",
+                        pattern=r"^\d+$",
+                        description="modules.social.embeds_per_page must be an integer",
+                    )
+                ],
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE",
+                        source_options=["embeds_per_page"],
+                        derivation_type="direct",
+                        expression={"option": "embeds_per_page"},
+                    )
+                ],
+            ),
+        },
+    )
+
 
 def default_social_module_options() -> dict[str, Any]:
-    """Return the Phase A social module contract defaults."""
-    return {
-        "link_tree_enabled": True,
-        "layout_variant": "list",
-        "embeds_enabled": True,
-        "provider_allowlist": list(DEFAULT_SOCIAL_PROVIDER_ALLOWLIST),
-        "cache_ttl_seconds": 300,
-        "links_per_page": 24,
-        "embeds_per_page": 12,
-    }
+    """Return the social module contract defaults."""
+    manifest = _load_social_manifest()
+    result: dict[str, Any] = manifest.get_defaults()
+    return result
 
 
 def _normalize_provider_token(value: Any) -> str:
@@ -226,7 +404,7 @@ def normalize_social_provider_allowlist(values: Sequence[Any] | Any) -> list[str
 
 
 def normalize_social_module_options(
-    options: dict[str, Any] | None,
+    options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Return a normalized social module options mapping."""
     normalized = dict(options or {})
@@ -242,18 +420,30 @@ def normalize_social_module_options(
     return normalized
 
 
-def resolve_social_module_options(options: dict[str, Any] | None) -> dict[str, Any]:
-    """Merge default social options with normalized overrides."""
-    resolved = default_social_module_options()
-    resolved.update(normalize_social_module_options(options))
+def resolve_social_module_options(
+    options: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge default social options with normalized overrides.
+
+    Routes through the manifest-driven resolver for defaults extraction and core
+    normalization, then applies social-specific post-resolution normalization for
+    provider aliases and layout casing.
+    """
+    manifest = _load_social_manifest()
+    schema = _build_social_derivation_schema()
+
+    cleaned = normalize_social_module_options(options)
+    result = resolve_module_config(manifest, schema, overrides=cleaned)
+    resolved = dict(result.resolved)
+
     resolved["provider_allowlist"] = normalize_social_provider_allowlist(
-        resolved["provider_allowlist"]
+        resolved.get("provider_allowlist", [])
     )
-    resolved["layout_variant"] = str(resolved["layout_variant"]).strip().lower()
+    resolved["layout_variant"] = str(resolved.get("layout_variant", "")).strip().lower()
     return resolved
 
 
-def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
+def validate_social_module_options(options: Mapping[str, Any] | None) -> list[str]:
     """Return validation issues for the social module contract."""
     resolved = resolve_social_module_options(options)
     issues: list[str] = []

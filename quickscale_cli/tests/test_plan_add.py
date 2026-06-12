@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
 from quickscale_cli.module_catalog import get_module_names
-from quickscale_cli.notifications_contract import default_notifications_module_options
+from quickscale_cli.notifications_manifest import default_notifications_module_options
 
 
 class TestPlanAddBasic:

@@ -12,8 +12,8 @@ from quickscale_cli.backups_contract import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
 )
-from quickscale_cli.notifications_contract import default_notifications_module_options
-from quickscale_cli.social_contract import (
+from quickscale_cli.notifications_manifest import default_notifications_module_options
+from quickscale_cli.social_manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,

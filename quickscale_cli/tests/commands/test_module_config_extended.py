@@ -54,7 +54,7 @@ from quickscale_cli.commands.module_config import (
     validate_backups_module_options,
 )
 from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
-from quickscale_cli.social_contract import (
+from quickscale_cli.social_manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,

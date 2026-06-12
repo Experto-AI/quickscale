@@ -22,7 +22,7 @@ from quickscale_cli.module_catalog import (
     get_module_entries,
     get_module_readiness_reason,
 )
-from quickscale_cli.notifications_contract import (
+from quickscale_cli.notifications_manifest import (
     notifications_production_targeted,
     validate_notifications_module_options,
 )

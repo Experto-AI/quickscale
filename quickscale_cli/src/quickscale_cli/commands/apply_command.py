@@ -37,7 +37,7 @@ from quickscale_cli.backups_contract import (
     normalize_backups_module_options,
     sanitize_module_options,
 )
-from quickscale_cli.notifications_contract import (
+from quickscale_cli.notifications_manifest import (
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
@@ -54,7 +54,7 @@ from quickscale_cli.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
 )
-from quickscale_cli.social_contract import (
+from quickscale_cli.social_manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,

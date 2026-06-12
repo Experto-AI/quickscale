@@ -7,7 +7,7 @@ import yaml
 from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import _get_project_info_for_reconfig, plan
-from quickscale_cli.notifications_contract import default_notifications_module_options
+from quickscale_cli.notifications_manifest import default_notifications_module_options
 
 
 class TestPlanReconfigureBasic:

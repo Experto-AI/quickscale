@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.social_contract import (
+from quickscale_cli.social_manifest import (
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
     SOCIAL_EMBEDS_PATH,

@@ -17,7 +17,7 @@ from quickscale_cli.commands.apply_command import (
     _validate_module_prerequisites,
     apply,
 )
-from quickscale_cli.notifications_contract import default_notifications_module_options
+from quickscale_cli.notifications_manifest import default_notifications_module_options
 
 
 def _make_apply_context(project_path, *, package_name="myapp"):

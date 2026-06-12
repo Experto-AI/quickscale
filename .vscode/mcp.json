@@ -1,11 +1,3 @@
 {
-  "servers": {
-    "adaptive-context": {
-      "type": "stdio",
-      "command": "/home/victor/.local/bin/adaptive",
-      "args": [
-        "mcp"
-      ]
-    }
-  }
+	"servers": {}
 }
