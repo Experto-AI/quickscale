@@ -66,8 +66,10 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Explanation (autopsy #3):** The suite (~2,255 tests / 123 files) is large but tests the wrong seams. It has **no cross-tenant isolation coverage** outside `orgs` RBAC (`orgs/tests/test_permissions.py:22-441` covers decorators only; module fixtures like `crm/tests/conftest.py:74-80` create data with no org context, so isolation is not even expressible). It **does not runtime-verify** generated projects (`test_integration.py` checks structure/imports only; `test_e2e_full_workflow.py` is smoke-only and never asserts a generated project serves HTTP). And it **locks legacy output strings** via exact-string parity tests (e.g. `test_auth_parity.py:278`), so every config-string change must be mirrored into N parity files — taxing the F1 migration. This finding comes first because it makes F11 verifiable and F1 cheaper.
 
 **Phase 14.1 — Cross-tenant isolation test harness** _(why → [Finding 14](#finding-14--add-tenant-isolation-and-generator-runtime-test-coverage))_
-- [ ] Add shared org-scoped test fixtures (organizations A and B with their own users/data).
-- [ ] Add a reusable "Org A request cannot read Org B rows" isolation assertion and apply it to `crm`; confirm it **fails today** (this is the point).
+- [x] Add shared org-scoped test fixtures (organizations A and B with their own users/data).
+- [x] Add a CRM-specific org-scoped failing request probe that confirms cross-tenant data is reachable today (this is the point).
+- [ ] Extract a reusable "Org A request cannot read Org B rows" isolation assertion from the CRM inline probe and apply it to at least one additional module.
+- [ ] Narrow the strict `xfail` on the CRM isolation test so only the known cross-tenant leak assertion is treated as expected failure; request-path, auth, status, and response-shape regressions must fail normally instead of being blanket-covered by the `xfail`.
 
 **Phase 14.2 — Extend isolation coverage to every tenant module** _(why → [Finding 14](#finding-14--add-tenant-isolation-and-generator-runtime-test-coverage))_
 - [ ] Parametrize the isolation test across `crm`, `blog`, `forms`, `listings`, `social` (interlocks with F11 rollout — each module passes once it gains structural isolation).
