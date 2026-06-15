@@ -72,8 +72,8 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [ ] Narrow the strict `xfail` on the CRM isolation test so only the known cross-tenant leak assertion is treated as expected failure; request-path, auth, status, and response-shape regressions must fail normally instead of being blanket-covered by the `xfail`.
 
 **Phase 14.2 — Extend isolation coverage to every tenant module** _(why → [Finding 14](#finding-14--add-tenant-isolation-and-generator-runtime-test-coverage))_
-- [ ] Parametrize the isolation test across `crm`, `blog`, `forms`, `listings`, `social` (interlocks with F11 rollout — each module passes once it gains structural isolation).
-- [ ] Wire the isolation test into default CI so regressions surface in daily PR feedback.
+- [x] Parametrize the isolation test across `crm`, `blog`, `forms`, `listings`, `social` (interlocks with F11 rollout — each module passes once it gains structural isolation). _Each module now carries a `@pytest.mark.isolation` test: `crm` runs the live request-path probe (`xfail(strict=True)`), while `blog`/`forms`/`listings`/`social` carry skip-placeholders that activate once F11 gives each module an org-scoped path (Phase 11.2)._
+- [x] Wire the isolation test into default CI so regressions surface in daily PR feedback. _Isolation tests live in each module's `tests/` dir and run under default `make test-unit` (`scripts/test_unit.sh` → `.github/workflows/ci.yml`), grouped by the registered `isolation` marker._
 
 **Phase 14.3 — Generated-project runtime smoke test** _(why → [Finding 14](#finding-14--add-tenant-isolation-and-generator-runtime-test-coverage))_
 - [ ] Add a generated-project boot + migrate + single-route smoke test that asserts an embedded-module project actually serves HTTP.

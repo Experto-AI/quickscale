@@ -14,6 +14,7 @@ marker removal becomes an explicit part of the F11 rollout.
 import pytest
 
 
+@pytest.mark.isolation
 @pytest.mark.django_db
 class TestCRMCrossTenantIsolation:
     """Cross-tenant isolation assertions for CRM tenant data.

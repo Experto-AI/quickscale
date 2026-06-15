@@ -49,6 +49,9 @@ pythonpath = ["."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
 addopts = "-v --cov=src/quickscale_modules_blog --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+markers = [
+    "isolation: cross-tenant isolation tests (roadmap Finding 14 / F11 rollout)",
+]
 
 [tool.coverage.report]
 fail_under = 90
