@@ -15,6 +15,11 @@ from quickscale_modules_crm.models import (
     Stage,
     Tag,
 )
+from quickscale_modules_orgs.models import (
+    OrgRole,
+    Organization,
+    OrganizationMembership,
+)
 
 
 @pytest.fixture
@@ -142,3 +147,56 @@ def deal_note(db, deal, user):
         created_by=user,
         text="Follow up next week",
     )
+
+
+# ---------------------------------------------------------------------------
+# Organization-scoped fixtures for cross-tenant isolation coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def org_a(db):
+    """Organization A — first tenant in isolation tests."""
+    return Organization.objects.create(name="Org A", slug="org-a")
+
+
+@pytest.fixture
+def org_b(db):
+    """Organization B — second tenant in isolation tests."""
+    return Organization.objects.create(name="Org B", slug="org-b")
+
+
+@pytest.fixture
+def org_a_admin(db, org_a):
+    """Staff user who is an admin of Organization A."""
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-a-admin",
+        email="org-a-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_a,
+        role=OrgRole.ADMIN,
+    )
+    return user
+
+
+@pytest.fixture
+def org_b_admin(db, org_b):
+    """Staff user who is an admin of Organization B."""
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-b-admin",
+        email="org-b-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_b,
+        role=OrgRole.ADMIN,
+    )
+    return user
