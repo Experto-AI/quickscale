@@ -52,6 +52,7 @@ testpaths = ["tests"]
 addopts = "-v --cov=quickscale_modules_forms --cov-report=html --cov-report=term-missing --cov-fail-under=90"
 markers = [
     "e2e: End-to-end integration tests that exercise the full user workflow",
+    "isolation: cross-tenant isolation tests (roadmap Finding 14 / F11 rollout)",
 ]
 
 [tool.coverage.report]
