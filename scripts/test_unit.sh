@@ -183,6 +183,10 @@ build_module_pythonpath() {
   local sibling_path=""
   local -a path_entries=("$module_path")
 
+  # Add the repo root so cross-module shared test helpers
+  # (e.g. tests_shared.isolation) are importable from every module's tests.
+  path_entries+=(".")
+
   if [ -d "$module_path/src" ]; then
     path_entries+=("$module_path/src")
   fi

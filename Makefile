@@ -254,7 +254,7 @@ test:
 				mod_found=1; \
 				mod_name=$$(basename "$$mod"); \
 				echo "📦 Testing module: $$mod_name..."; \
-				module_pythonpath="$$mod"; \
+				module_pythonpath="$$mod:."; \
 				if [ -d "$$mod/src" ]; then \
 					module_pythonpath="$$module_pythonpath:$$mod/src"; \
 				fi; \
@@ -299,7 +299,7 @@ test-unit:
 				mod_found=1; \
 				mod_name=$$(basename "$$mod"); \
 				echo "📦 Unit testing module: $$mod_name..."; \
-				module_pythonpath="$$mod"; \
+				module_pythonpath="$$mod:."; \
 				if [ -d "$$mod/src" ]; then \
 					module_pythonpath="$$module_pythonpath:$$mod/src"; \
 				fi; \
