@@ -110,6 +110,14 @@ def _analytics_manifest_adapter(
                 expression={"value": ["quickscale_modules_analytics"]},
                 description="Analytics Django app label",
             ),
+            WiringProjection(
+                wiring_field="url_includes",
+                derivation_type="static",
+                expression={
+                    "value": [["analytics/", "quickscale_modules_analytics.urls"]]
+                },
+                description="Analytics URL include (added in v87 M0 analytics routing)",
+            ),
         ],
         option_derivations={
             "enabled": OptionDerivation(
