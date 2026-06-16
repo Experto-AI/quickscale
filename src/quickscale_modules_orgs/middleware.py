@@ -17,6 +17,7 @@ from django.shortcuts import redirect
 from django.urls import Resolver404, resolve
 
 from .constants import ORG_INVITATION_ACCEPT_URL_NAME
+from .current_org import clear_current_org, set_current_org
 from .models import Organization, OrganizationMembership
 
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
@@ -41,7 +42,7 @@ class TenantMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         org_request = cast(OrganizationRequest, request)
-        org_request.org = None
+        clear_current_org(org_request)
 
         if self._is_exempt_path(org_request.path_info):
             return self.get_response(org_request)
@@ -117,7 +118,7 @@ class TenantMiddleware:
         request: OrganizationRequest,
         organization: Organization,
     ) -> HttpResponse:
-        request.org = organization
+        set_current_org(request, organization)
         with transaction.atomic():
             self._set_current_org_id(organization.id)
             return self.get_response(request)
