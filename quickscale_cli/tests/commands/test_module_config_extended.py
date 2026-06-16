@@ -947,6 +947,14 @@ class TestModuleWiringSpecs:
         assert "quickscale_modules_analytics" not in apps
         assert "QUICKSCALE_ANALYTICS_ENABLED" not in settings
 
+    def test_analytics_wiring_includes_module_owned_urls(self):
+        """Analytics wiring should include the module-owned URL mount."""
+        specs = build_module_wiring_specs({"analytics": {}})
+
+        assert specs["analytics"].url_includes == (
+            ("analytics/", "quickscale_modules_analytics.urls"),
+        )
+
     def test_blog_and_listings_markdownx_media_path_uses_blog_value(self):
         """`MARKDOWNX_MEDIA_PATH` should remain stable with blog and listings."""
         specs = build_module_wiring_specs(

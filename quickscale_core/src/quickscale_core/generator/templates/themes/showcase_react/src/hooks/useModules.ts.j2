@@ -15,6 +15,7 @@
   ('crm', "  crm: string\n"),
   ('billing', "  billing: string\n"),
   ('social', "  social: string\n"),
+  ('analytics', "  analytics: string\n"),
 ] -%}
 {% raw -%}
 interface QuickScaleModules {
@@ -43,6 +44,7 @@ interface QuickScaleModulePaths {
 {% raw %}  crm: string
   billing: string
   social: string
+  analytics: string
 {% endraw %}{%- else %}
 {%- for key, line in optional_module_path_entries %}{% if key in selected_modules %}{{ line }}{% endif %}{% endfor %}
 {%- endif %}
@@ -113,12 +115,15 @@ const defaultConfig: QuickScaleConfig = {
 {% raw %}    crm: '/crm',
     billing: '/billing/pricing/',
     social: '/social',
+    analytics: '/analytics/',
 {% endraw %}{%- else %}
 {%- if 'crm' in selected_modules %}    crm: '/crm',
 {% endif -%}
 {%- if 'billing' in selected_modules %}    billing: '/billing/pricing/',
 {% endif -%}
 {%- if 'social' in selected_modules %}    social: '/social',
+{% endif -%}
+{%- if 'analytics' in selected_modules %}    analytics: '/analytics/',
 {% endif -%}
 {%- endif %}
 {%- raw %}

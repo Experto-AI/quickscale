@@ -1,3 +1,7 @@
 """URL configuration for analytics module tests."""
 
-urlpatterns: list[object] = []
+from django.urls import include, path
+
+urlpatterns = [
+    path("analytics/", include("quickscale_modules_analytics.urls")),
+]

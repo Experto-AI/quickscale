@@ -53,7 +53,7 @@ git merge --no-ff wt-track{N}-<branch>
 
 | # | Track | Phase | Condition |
 |---|-------|-------|-----------|
-| M0 | Track 1 | v0.87.0 | Blocked — analytics has no starter-owned or module-owned page/URL; path wiring and dashboard card deferred until destination exists |
+| M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
 | M1 | Track 1 | F11.1d–11.1g | CRM org FK nullable; queries scoped; isolation test still xfail |
 | M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
@@ -73,24 +73,27 @@ git merge --no-ff wt-track{N}-<branch>
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M0
 **Dependencies:** None — start immediately.
 
-**Status:** 🔴 Blocked
+**Status:** ✅ Complete
 
 **Explanation:** The remaining release work is now limited to `showcase_react` analytics parity. The completed `showcase_html` hardening work has been archived in the changelog.
 
-**Blocker:** Analytics has no valid starter-owned or module-owned page/URL today. The `modulePaths.analytics` entry and the Dashboard analytics card both claim a destination that does not exist. Path wiring and the dashboard card must be deferred until a real analytics destination page/URL is in place. The boolean module flag (`modules.analytics`) remains wired and functional.
+**Resolution:** Analytics now has a module-owned Django page at `/analytics/` (served by `quickscale_modules_analytics.urls` / `AnalyticsDashboardView`). The `_analytics_wiring()` builder includes the URL mount, `modulePaths.analytics` is declared in the `useModules` hook and `index.html.j2`, and the Dashboard analytics card routes to the real destination.
 
-**What was done (boolean flag only):**
+**What was done (boolean flag):**
 - Analytics boolean flag is wired into `window.__QUICKSCALE__.modules` via `templates/index.html.j2`
 - Analytics boolean flag is registered in the TypeScript module registry (`useModules` hook)
 
-**What is blocked (path + dashboard card):**
-- `modulePaths.analytics` cannot be declared until a real analytics page/URL exists
-- The Dashboard analytics card cannot route to a valid destination until one exists
+**What was done (path + dashboard card):**
+- Module-owned analytics page at `/analytics/` with `AnalyticsDashboardView` and minimal template
+- `_analytics_wiring()` now includes `url_includes` for `quickscale_modules_analytics.urls`
+- `modulePaths.analytics` is declared in `useModules.ts.j2` (interface + default config)
+- `modulePaths.analytics` is emitted in `index.html.j2`
+- Dashboard analytics card routes to `modulePaths.analytics` via `reloadDocument`
 
 - [x] Wire analytics into `window.__QUICKSCALE__.modules` in `templates/index.html.j2` so fresh `showcase_react` generations expose analytics through the shared shell module payload.
 - [x] Add analytics to the TypeScript module registry (`useModules` hook) so generated React code can type-check and consume the analytics module consistently.
-- [ ] Declare `modulePaths.analytics` so generated React code can route to an analytics destination. _Blocked — no starter-owned or module-owned analytics page/URL exists yet._
-- [ ] Add an Analytics dashboard card to `Dashboard.tsx.j2` so fresh `showcase_react` starters surface analytics in the default dashboard. _Blocked — no valid analytics destination URL to route to._
+- [x] Declare `modulePaths.analytics` so generated React code can route to an analytics destination.
+- [x] Add an Analytics dashboard card to `Dashboard.tsx.j2` so fresh `showcase_react` starters surface analytics in the default dashboard.
 
 ## Long-Term Backlog
 
