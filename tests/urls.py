@@ -1,10 +1,11 @@
-"""URL configuration for testing CRM module"""
+"""URL configuration for testing CRM module.
+
+CRM owns both solo and org-scoped SaaS paths internally, so a single root
+include exposes the full route contract for tests.
+"""
 
 from django.urls import include, path
 
 urlpatterns = [
-    # Non-scoped path for existing view tests (reverse() finds this first)
     path("", include("quickscale_modules_crm.urls")),
-    # Org-scoped CRM API for cross-tenant isolation testing
-    path("orgs/<slug:org_slug>/crm/", include("quickscale_modules_crm.urls")),
 ]
