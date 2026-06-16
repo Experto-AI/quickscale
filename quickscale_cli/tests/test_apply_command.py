@@ -283,6 +283,65 @@ docker:
             assert "orgs" in modules
             assert modules["notifications"] == default_notifications_module_options()
 
+    def test_load_and_validate_config_auto_adds_orgs_and_notifications_for_crm(
+        self,
+    ):
+        """Apply should materialize the crm org dependency chain into quickscale.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+  theme: showcase_html
+modules:
+  auth:
+  crm:
+docker:
+  start: false
+"""
+                )
+
+            qs_config = _load_and_validate_config(Path("quickscale.yml"))
+
+            assert set(qs_config.modules.keys()) == {
+                "auth",
+                "crm",
+                "orgs",
+                "notifications",
+            }
+
+            with open("quickscale.yml") as f:
+                persisted = yaml.safe_load(f)
+
+            modules = (persisted or {}).get("modules") or {}
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
+
+    def test_apply_crm_requires_auth_module_via_implied_orgs(self, capsys):
+        """CRM without auth should fail fast because CRM implies orgs which requires auth."""
+        qs_config = SimpleNamespace(
+            modules={
+                "crm": SimpleNamespace(options={}),
+                "orgs": SimpleNamespace(options={}),
+                "notifications": SimpleNamespace(
+                    options=default_notifications_module_options()
+                ),
+            }
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert (
+            "Organizations requires the auth module before apply can continue"
+            in error_output
+        )
+
     def test_abort_for_not_ready_modules_reports_teams_reason(self, capsys):
         """Teams should remain blocked by the non-public-ready apply helper."""
         with pytest.raises(click.Abort):

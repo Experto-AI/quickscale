@@ -92,8 +92,8 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Explanation:** The original single-slice `crm` pilot turned out to be Tier 3 during plan review because it bundled planner/apply dependency materialization, current-org runtime substrate, route-contract decisions, schema changes, legacy-data rollout, runtime enforcement, and closeout into one change. Split it into the ordered Tier 1–2 slices below and execute top-down.
 
 **Phase 11.1a — Materialize CRM's org dependency in planner/apply** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-- [ ] Make CRM selection materialize `orgs` + `notifications` in planner/apply flows, while keeping `auth` explicit and fail-fast.
-- [ ] Add planner/apply coverage for new-project and existing-project add/reconfigure flows so implied configs persist through load, delta, and embed.
+- [x] Make CRM selection materialize `orgs` + `notifications` in planner/apply flows, while keeping `auth` explicit and fail-fast. _CRM now implies ``orgs`` (and transitively ``notifications``) via shared implied defaults in ``implied_module_defaults.py``; ``auth`` remains explicit and fail-fast through the existing orgs prerequisite check._
+- [x] Add planner/apply coverage for new-project and existing-project add/reconfigure flows so implied configs persist through load, delta, and embed. _Planner/apply coverage now spans new-project, add, reconfigure, and apply-load persistence paths (``test_plan_add.py``, ``test_plan_reconfigure.py``, ``test_apply_command.py``, ``test_apply_command_extended.py``); 287 targeted tests pass._
 
 **Phase 11.1b — Current-org runtime substrate** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [ ] Add an explicit current-org access/reset contract for request-scoped tenant resolution.

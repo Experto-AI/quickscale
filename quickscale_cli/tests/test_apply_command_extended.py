@@ -726,6 +726,64 @@ class TestLoadAndValidateConfig:
         assert "sender_email: noreply@example.com" in rewritten
         assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
 
+    def test_crm_module_materializes_orgs_and_notifications_on_load(self, tmp_path):
+        """Apply load should persist orgs+notifications when crm is configured with auth."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "  crm:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
+
+        assert set(result.modules.keys()) == {
+            "auth",
+            "crm",
+            "notifications",
+            "orgs",
+        }
+        assert result.modules["orgs"].options == {}
+        assert result.modules["notifications"].options == (
+            default_notifications_module_options()
+        )
+        assert "orgs:" in rewritten
+        assert "notifications:" in rewritten
+        assert "sender_email: noreply@example.com" in rewritten
+        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
+
+    def test_crm_module_requires_auth_on_load_via_implied_orgs(self, tmp_path, capsys):
+        """Apply load should reject crm until auth is present because crm implies orgs."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  crm:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+        error_output = capsys.readouterr().err
+        assert (
+            "Organizations requires the auth module before apply can continue"
+            in error_output
+        )
+
     def test_legacy_backups_secrets_are_sanitized_on_load(self, tmp_path):
         """Legacy raw backup secrets should be rewritten to env-var references."""
         config = tmp_path / "quickscale.yml"

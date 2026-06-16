@@ -387,6 +387,61 @@ docker:
             assert "orgs" in modules
             assert modules["notifications"] == default_notifications_module_options()
 
+    def test_plan_reconfigure_auto_adds_orgs_and_notifications_when_crm_selected(
+        self,
+    ) -> None:
+        """Adding crm during reconfigure should materialize orgs and notifications."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--reconfigure"], input="y\ncrm\nn\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "crm" in modules
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
+
     def test_plan_reconfigure_preserves_explicit_notifications_when_adding_orgs(
         self,
     ) -> None:

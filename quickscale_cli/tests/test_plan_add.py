@@ -420,6 +420,38 @@ docker:
             assert "orgs" in modules
             assert modules["notifications"] == default_notifications_module_options()
 
+    def test_plan_add_auto_adds_orgs_and_notifications_when_crm_selected(
+        self,
+    ) -> None:
+        """Selecting crm should materialize the org-backed dependency chain."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--add"], input="crm\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "crm" in modules
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
+
     def test_plan_add_prunes_legacy_storage_custom_domain(self) -> None:
         """Adding modules should drop legacy storage-only custom_domain keys."""
         runner = CliRunner()
@@ -524,6 +556,25 @@ class TestPlanNewProjectConfigureModules:
                 config = yaml.safe_load(f)
 
             modules = (config or {}).get("modules") or {}
+            assert "orgs" in modules
+            assert modules["notifications"] == default_notifications_module_options()
+
+    def test_plan_new_project_auto_adds_orgs_and_notifications_for_crm(self) -> None:
+        """New-project planning should materialize orgs+notifications when crm selected."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp"],
+                input=("\n\nauth,crm\nn\ny\n"),
+            )
+
+            assert result.exit_code == 0
+            with open("myapp/quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "crm" in modules
             assert "orgs" in modules
             assert modules["notifications"] == default_notifications_module_options()
 
