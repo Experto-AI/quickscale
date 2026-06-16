@@ -392,6 +392,7 @@ def _analytics_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     return ModuleWiringSpec(
         apps=("quickscale_modules_analytics",),
         settings=settings,
+        url_includes=(("analytics/", "quickscale_modules_analytics.urls"),),
     )
 
 

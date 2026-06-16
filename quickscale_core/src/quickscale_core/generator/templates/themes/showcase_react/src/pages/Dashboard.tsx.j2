@@ -32,11 +32,11 @@
    'Operational backup snapshots with retention, validation, and artifact downloads.',
    '/admin/quickscale_modules_backups/backuppolicy/', 'reloadDocument', 'true'),
   ('notifications', 'Notifications', 'Bell',
-   'Transactional email settings, message history, and delivery event visibility.',
-   '/admin/quickscale_modules_notifications/', 'reloadDocument', 'true'),
+    'Transactional email settings, message history, and delivery event visibility.',
+    '/admin/quickscale_modules_notifications/', 'reloadDocument', 'true'),
   ('analytics', 'Analytics', 'BarChart2',
    'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
-   '/settings', None, None),
+   'analyticsPath', 'reloadDocument', 'true'),
 ] -%}
 {% raw -%}
 import { motion } from 'motion/react'
@@ -53,6 +53,10 @@ import {
 {%- endfor %}
 {%- raw %}
   ExternalLink,
+  Code,
+  Rocket,
+  Database,
+  Shield,
 } from 'lucide-react'
 import { useModules, useProjectConfig } from '@/hooks/useModules'
 
@@ -70,6 +74,7 @@ const buildModuleInfo = (
   crmPath: string,
   socialPath: string,
   billingPath: string,
+  analyticsPath: string,
 ): ModuleCard[] => [
 {% endraw -%}
 {%- for key, name, icon, desc, href, extra_key, extra_val in all_module_cards %}
@@ -107,9 +112,10 @@ export function Dashboard() {
   const modules = useModules()
   const { modulePaths } = useProjectConfig()
   const installedModules = buildModuleInfo(
-    modulePaths.crm,
-    modulePaths.social,
-    modulePaths.billing,
+    (modulePaths as { crm?: string }).crm ?? '',
+    (modulePaths as { social?: string }).social ?? '',
+    (modulePaths as { billing?: string }).billing ?? '',
+    (modulePaths as { analytics?: string }).analytics ?? '',
   ).filter((m) => modules[m.key])
   const hasModules = installedModules.length > 0
 

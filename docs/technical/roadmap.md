@@ -53,7 +53,7 @@ git merge --no-ff wt-track{N}-<branch>
 
 | # | Track | Phase | Condition |
 |---|-------|-------|-----------|
-| M0 | Track 1 | v0.87.0 | Analytics `modulePaths` wired; dashboard routes to analytics URL |
+| M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
 | M1 | Track 1 | F11.1d–11.1g | CRM org FK nullable; queries scoped; isolation test still xfail |
 | M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
@@ -73,22 +73,27 @@ git merge --no-ff wt-track{N}-<branch>
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M0
 **Dependencies:** None — start immediately.
 
-**Status:** 🟡 In progress
+**Status:** ✅ Complete
 
 **Explanation:** The remaining release work is now limited to `showcase_react` analytics parity. The completed `showcase_html` hardening work has been archived in the changelog.
 
-**What's actually missing** (explore confirmed the boolean flag is already wired — only the path entries are absent):
-- `modulePaths.analytics` is not declared in `useModules.ts.j2` (only `crm`/`billing`/`social` have path entries)
-- The Dashboard analytics card routes to `/settings` instead of an analytics path
+**Resolution:** Analytics now has a module-owned Django page at `/analytics/` (served by `quickscale_modules_analytics.urls` / `AnalyticsDashboardView`). The `_analytics_wiring()` builder includes the URL mount, `modulePaths.analytics` is declared in the `useModules` hook and `index.html.j2`, and the Dashboard analytics card routes to the real destination.
 
-Files to change:
-- `quickscale_core/.../themes/showcase_react/src/hooks/useModules.ts.j2` — add `analytics: string` to `QuickScaleModulesPaths` interface and `analytics: '/analytics'` to default config
-- `quickscale_core/.../themes/showcase_react/templates/index.html.j2` — add conditional `analytics` entry in `modulePaths` block, mirroring the `crm` pattern
-- `quickscale_core/.../themes/showcase_react/src/pages/Dashboard.tsx.j2` — change analytics card path from `'/settings'` to `modules.modulePaths.analytics`
+**What was done (boolean flag):**
+- Analytics boolean flag is wired into `window.__QUICKSCALE__.modules` via `templates/index.html.j2`
+- Analytics boolean flag is registered in the TypeScript module registry (`useModules` hook)
 
-- [ ] Wire analytics into `window.__QUICKSCALE__.modules` in `main.tsx.j2` so fresh `showcase_react` generations expose analytics through the shared shell module payload.
-- [ ] Add analytics to the TypeScript module registry (`useModules` hook) so generated React code can type-check and consume the analytics module consistently.
-- [ ] Add an Analytics dashboard card to `Dashboard.tsx.j2` so fresh `showcase_react` starters surface analytics in the default dashboard.
+**What was done (path + dashboard card):**
+- Module-owned analytics page at `/analytics/` with `AnalyticsDashboardView` and minimal template
+- `_analytics_wiring()` now includes `url_includes` for `quickscale_modules_analytics.urls`
+- `modulePaths.analytics` is declared in `useModules.ts.j2` (interface + default config)
+- `modulePaths.analytics` is emitted in `index.html.j2`
+- Dashboard analytics card routes to `modulePaths.analytics` via `reloadDocument`
+
+- [x] Wire analytics into `window.__QUICKSCALE__.modules` in `templates/index.html.j2` so fresh `showcase_react` generations expose analytics through the shared shell module payload.
+- [x] Add analytics to the TypeScript module registry (`useModules` hook) so generated React code can type-check and consume the analytics module consistently.
+- [x] Declare `modulePaths.analytics` so generated React code can route to an analytics destination.
+- [x] Add an Analytics dashboard card to `Dashboard.tsx.j2` so fresh `showcase_react` starters surface analytics in the default dashboard.
 
 ## Long-Term Backlog
 

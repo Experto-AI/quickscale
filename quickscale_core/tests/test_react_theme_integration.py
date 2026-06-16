@@ -1047,7 +1047,7 @@ class TestReactThemeModuleActivationMatrix:
         assert "reloadDocument: true" in billing_card
         assert "actionLabel: 'Open billing'" in billing_card
         assert re.search(
-            r"buildModuleInfo\(\s*modulePaths\.crm,\s*modulePaths\.social,\s*modulePaths\.billing,\s*\)",
+            r"buildModuleInfo\(\s*\(modulePaths as \{ crm\?: string \}\)\.crm \?\? '',\s*\(modulePaths as \{ social\?: string \}\)\.social \?\? '',\s*\(modulePaths as \{ billing\?: string \}\)\.billing \?\? '',\s*\(modulePaths as \{ analytics\?: string \}\)\.analytics \?\? '',\s*\)",
             dashboard,
         )
         self._assert_no_hardcoded_billing_paths(dashboard)
