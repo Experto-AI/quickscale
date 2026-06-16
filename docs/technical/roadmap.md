@@ -15,13 +15,76 @@
 - Phases are sized as short iterations (Adaptive Tier 1–2). If a checklist item turns out to be Tier 3, split it before implementing.
 - Each phase links back (`why →`) to the finding explanation that justifies it, so work can be analyzed and iterated before implementation.
 
+## Parallel Execution Tracks
+
+Work is split across 3 git worktrees that develop in parallel and merge back to `v87` after each phase. `v87` is the clean integration branch — never commit directly to it.
+
+### Worktree setup (already done)
+
+```bash
+git worktree add /home/victor/code/quickscale-wt-track1 -b wt-track1-f11-f13 v87
+git worktree add /home/victor/code/quickscale-wt-track2 -b wt-track2-f1-f5 v87
+git worktree add /home/victor/code/quickscale-wt-track3 -b wt-track3-f2-f12-f7 v87
+```
+
+### Track assignment
+
+| Track | Worktree path | Branch | Owns |
+|-------|--------------|--------|------|
+| **Track 1** | `quickscale-wt-track1` | `wt-track1-f11-f13` | v0.87.0 → F11 (CRM isolation) → F13 (billing SSOT) |
+| **Track 2** | `quickscale-wt-track2` | `wt-track2-f1-f5` | F1 (manifest wiring) → F5 (DR engine split) |
+| **Track 3** | `quickscale-wt-track3` | `wt-track3-f2-f12-f7` | F2 (project state) → F12 (recoverable apply) → F7 (runtime pins) |
+
+### Cross-track dependency (the only one)
+
+Track 2 / F5 must wait until Track 3 / F12 has merged to `v87` — both touch `apply_command.py`. Everything else across tracks is fully parallel.
+
+### Merge procedure (any worktree → v87)
+
+```bash
+cd /home/victor/code/quickscale-wt-track{N}
+git merge v87          # sync latest first; resolve any conflicts here
+# run phase verification tests
+cd /home/victor/code/quickscale
+git merge --no-ff wt-track{N}-<branch>
+```
+
+### Merge checkpoints
+
+| # | Track | Phase | Condition |
+|---|-------|-------|-----------|
+| M0 | Track 1 | v0.87.0 | Analytics `modulePaths` wired; dashboard routes to analytics URL |
+| M1 | Track 1 | F11.1d–11.1g | CRM org FK nullable; queries scoped; isolation test still xfail |
+| M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
+| M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
+| M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 12 wiring slices migrated |
+| M5 | Track 3 | F2.3–2.4 | Provenance fields in state.yml; release tooling updated |
+| M6 | Track 2 | F1.3 | `module_wiring_specs.py` deleted; manifest builder wired |
+| M7 | Track 1 | F11.2–11.4 | All module isolation tests unskipped and green |
+| M8 | Track 3 | F12.1–12.3 | `ApplyStep` model done; recovery ledger has `failed_step` |
+| M9 | Track 1 | F13.1–13.3 | Billing org-authoritative; dual-FK rows reconciled |
+| M10 | Track 2 | F5.1–5.4 | DR engine in CLI; backups module slimmed |
+| M11 | Track 3 | F7.1–7.3 | Generator vs project pin ownership split |
+
 ## Active Milestone
 
 ### v0.87.0 — Hardening Release
 
+**Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M0
+**Dependencies:** None — start immediately.
+
 **Status:** 🟡 In progress
 
 **Explanation:** The remaining release work is now limited to `showcase_react` analytics parity. The completed `showcase_html` hardening work has been archived in the changelog.
+
+**What's actually missing** (explore confirmed the boolean flag is already wired — only the path entries are absent):
+- `modulePaths.analytics` is not declared in `useModules.ts.j2` (only `crm`/`billing`/`social` have path entries)
+- The Dashboard analytics card routes to `/settings` instead of an analytics path
+
+Files to change:
+- `quickscale_core/.../themes/showcase_react/src/hooks/useModules.ts.j2` — add `analytics: string` to `QuickScaleModulesPaths` interface and `analytics: '/analytics'` to default config
+- `quickscale_core/.../themes/showcase_react/templates/index.html.j2` — add conditional `analytics` entry in `modulePaths` block, mirroring the `crm` pattern
+- `quickscale_core/.../themes/showcase_react/src/pages/Dashboard.tsx.j2` — change analytics card path from `'/settings'` to `modules.modulePaths.analytics`
 
 - [ ] Wire analytics into `window.__QUICKSCALE__.modules` in `main.tsx.j2` so fresh `showcase_react` generations expose analytics through the shared shell module payload.
 - [ ] Add analytics to the TypeScript module registry (`useModules` hook) so generated React code can type-check and consume the analytics module consistently.
@@ -100,56 +163,73 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [x] Define the deliberate unscoped/operator path for admin, shell, and migration flows, and prove no-context access fails closed.
 
 **Phase 11.1c — Canonical CRM solo/SaaS route contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-- [ ] Choose the canonical solo and SaaS CRM HTML/API paths.
-- [ ] Make generated wiring, module URLs, and route-parity tests agree on that contract.
+- [x] Choose the canonical solo and SaaS CRM HTML/API paths. _Solo: `/crm/` and `/crm/api/`; SaaS: `/orgs/<slug>/crm/` and `/orgs/<slug>/crm/api/` — CRM owns both path sets internally (billing-style) and is included at root from wiring._
+- [x] Make generated wiring, module URLs, and route-parity tests agree on that contract. _`_crm_wiring` now includes CRM at `""`; `crm/urls.py` defines both solo and org-scoped paths; `crm/tests/urls.py` simplified to single root include; route-parity tests in `test_views.py` prove both path sets resolve; `organizations.md` corrected to reflect canonical `/orgs/<slug>/crm/api/` pattern._
 
-**Phase 11.1d — Nullable CRM ownership groundwork** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase 11.1d–11.1g — CRM org FK + query scoping** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M1
+**Dependencies:** None externally (pull v87 after M0, then continue in same worktree).
+
 - [ ] Make `TenantModel` the base for `crm` tenant models and add nullable `organization_id` FKs first.
 - [ ] Replace global uniqueness with per-org uniqueness where required (`Tag`, `Stage`, and any other tenant-sensitive constraints discovered in rollout).
 
 **Phase 11.1e — Existing-data rollout contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+_(implement between M1 and M3, same worktree as 11.1d)_
+
 - [ ] Ship an idempotent CRM backfill command that assigns legacy CRM rows to one operator-selected authoritative org or aborts without partial writes.
 - [ ] Document and test the rollout sequence: backup → deploy nullable slice → run backfill → verify counts / unassigned rows → continue or restore.
 
 **Phase 11.1f — Tenant-local CRM bootstrap** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+_(implement between M1 and M3, same worktree as 11.1d)_
+
 - [ ] Add tenant-local default CRM stage bootstrap for migrated orgs and newly created orgs.
 - [ ] Add tests proving a fresh org can use CRM without manual stage seeding.
 
 **Phase 11.1g — CRM read-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+_(part of the M1 batch — implement alongside 11.1d)_
+
 - [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org.
 - [ ] Confirm no-context reads fail closed rather than widening scope.
 
-**Phase 11.1h — CRM write-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase 11.1h–11.1j — CRM write-path isolation + NOT NULL enforcement** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M3
+**Dependencies:** M1 complete (previous phase within this track).
+
 - [ ] Make serializer related-field validation org-aware (`company_id`, `tag_ids`, `contact_id`, `stage_id`).
 - [ ] Scope bulk deal actions by current-org deal visibility so raw `deal_ids` cannot mutate cross-org rows.
-
-**Phase 11.1i — Explicit admin/operator CRM behavior** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [ ] Route CRM admin through the deliberate unscoped/operator path and expose org context explicitly.
 - [ ] Add admin coverage proving access is explicit rather than an accidental tenant bypass.
-
-**Phase 11.1j — Enforce ownership and close out the pilot** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [ ] After backfill/bootstrap evidence is green, enforce `NOT NULL` org ownership and the manager-first CRM isolation policy for this pilot (RLS deferred to Phase 11.3 defense-in-depth).
 - [ ] Remove the CRM isolation `xfail` and confirm the Finding 14 isolation test now passes for `crm` (failing before, passing after).
 - [ ] Check off the corresponding roadmap TODOs only after CRM, touched `orgs`, and touched CLI wiring tests are green.
 
-**Phase 11.2 — Roll structural isolation across remaining tenant modules** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ — one module per slice
+**Phase 11.2–11.4 — Roll isolation to remaining modules + close out** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M7
+**Dependencies:** M3 merged to v87 (previous phase within this track); pull v87 into worktree before starting.
+
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `blog`.
 - [ ] Apply the same to `forms`.
 - [ ] Apply the same to `listings`.
 - [ ] Apply the same to `social` (and any other tenant tables discovered during rollout).
-
-**Phase 11.3 — Defense-in-depth alignment** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [ ] Keep the `require_org_role`/`require_org_feature` decorator layer as a second line of defense.
 - [ ] Verify isolation fails closed at the data layer for non-view paths (admin, shell, management commands, async jobs).
-
-**Phase 11.4 — Migration path for existing projects** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [ ] Document the migration path for already-generated projects adopting structural isolation.
 
 ### Finding 1 — Finish manifest-driven wiring and configuration
 
 **Explanation (autopsy #2 — module SSOT / dual-pattern):** "What a module is" is not declared in one place owned by the module; it is reconstructed from ~7 hand-synced registries (`module_catalog.py`, `module_config.py` `MODULE_CONFIGURATORS`, `module_wiring_specs.py` 708-line `if/elif` chain, per-module `*_manifest.py`, `module_options.py` 910-line normalizers, implied-defaults, generator gates) and resolved through **two contradictory paths**: manifest-driven (`social`/`analytics`/`notifications` via `manifest/resolver.py`) vs legacy bespoke `resolve_<module>_module_options()`. The product thesis is "more modules," so the core value-add sits on the steepest cost curve, and each new cross-cutting concern (F11 tenancy columns, F7 observability) must be retrofitted across all modules. Manifest-driven option resolution is complete; Django wiring and interactive configuration are still partly hand-coded in the CLI. The remaining work teaches manifests to express wiring, migrates each module one slice at a time, then removes the legacy builders — collapsing the two paths into one. Pair with F14 behavioral parity to avoid the parity-string refactor tax.
 
-**Phase 1.1 — Wiring-expression capability** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_ — extend `module.yml` to express each wiring dimension, one slice at a time
+**Phase 1.1–1.2 — Wiring-expression capability + per-module slices** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
+
+**Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M4
+**Dependencies:** None — start immediately (fully parallel with Tracks 1 and 3).
+
 - [ ] Let `module.yml` declare dependency-ordered `django_apps`.
 - [ ] Let `module.yml` declare `middleware` (with ordering).
 - [ ] Let `module.yml` declare computed and conditional Django settings.
@@ -157,8 +237,6 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [ ] Let `module.yml` declare managed-file code generation.
 - [ ] Add a manifest-driven wiring builder API in `quickscale_core` that can produce `ModuleWiringSpec` alongside the legacy `module_wiring_specs.py` builders during migration.
 - [ ] Add `*_manifest.py` adapters for `blog`, `listings`, `orgs`, and `storage` so every module has a manifest adapter before its wiring slice.
-
-**Phase 1.2 — Per-module wiring slices** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_ — one module per slice, each with parity coverage
 - [ ] Migrate `analytics` wiring to the manifest-driven builder.
 - [ ] Migrate `backups` wiring to the manifest-driven builder.
 - [ ] Migrate `billing` wiring to the manifest-driven builder.
@@ -172,7 +250,11 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [ ] Migrate `storage` wiring to the manifest-driven builder.
 - [ ] Migrate `social` wiring to the manifest-driven builder.
 
-**Phase 1.3 — Legacy removal** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_ — only after all slices land
+**Phase 1.3 — Legacy removal** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
+
+**Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M6
+**Dependencies:** M4 merged to v87 (previous phase within this track); pull v87 before starting.
+
 - [ ] Delete `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` and switch `module_wiring_manager.py` to the manifest-driven wiring builder.
 - [ ] Replace the per-module interactive handlers in `module_config.py` with a manifest-driven configurator flow.
 - [ ] Remove the remaining legacy contract-file compatibility shims, constants, and dead imports.
@@ -181,6 +263,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 ### Finding 13 — Establish a single billing customer source of truth
 
 **Explanation (autopsy #5):** `Subscription` carries both an `organization` FK (`billing/models.py:170`) and a `user` FK (`:177`) as concurrent owners, and "one active subscription per customer" is enforced only by a status-conditional partial unique constraint (`:216-228`). The canonical billing subject and the active-subscription invariant are both ambiguous at the schema level; `_sync_subscription_authority()` (`services.py:~2288`) overwrites `user` but not `organization`, allowing a row that points at both. Entitlement gates revenue, so every billing query, webhook handler, and entitlement check re-encodes the same implicit "which FK wins / which statuses count" policy. (Webhook/credit **concurrency** is handled correctly — unique `stripe_event_id`, `transaction.atomic()` + `select_for_update()`, idempotency keys — so this is an ownership-semantics issue, not a concurrency one.) Resolve before building team/seat-scoped billing on this seam.
+
+**Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M9
+**Dependencies:** M7 merged to v87 (previous phase within this track); pull v87 before starting.
 
 **Phase 13.1 — Declare the authoritative subject** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
 - [ ] Declare the organization as the authoritative billing subject; make `user` non-authoritative (derived/nullable convenience) or remove it.
@@ -198,18 +283,22 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 **Explanation (autopsy #6 + provenance):** Mutable project state lives in several stores that can silently disagree — `quickscale.yml` (desired), `.quickscale/state.yml` (applied), `.quickscale/config.yml` (legacy version mirror), the files on disk, and `.quickscale/file_hashes.yml` (drift ledger) — with authority asserted by convention rather than structure, and **no lock against concurrent `apply`** (`state.yml` read/modify/write is last-write-wins; drift is detected only during the next `apply`, `project_state.py:136-184`). Versioning is shallow (`config_schema.py:92` requires `version` but only validates equality, no migration path). Provenance work adds *more* state (commit SHA, release id) on top of this unconsolidated base, so consolidate the stores and add an advisory lock first, then make provenance authoritative.
 
-**Phase 2.1 — Consolidate state stores** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase 2.1–2.2 — Consolidate state stores + concurrency safety** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M2
+**Dependencies:** None — start immediately (fully parallel with Tracks 1 and 2).
+
 - [ ] Collapse to one authoritative applied-state store: retire `config.yml` into `state.yml` and fold `file_hashes.yml` into a sub-section.
 - [ ] Make reconciliation explicit and queryable (`quickscale status`/`doctor` reports drift on demand, not only during `apply`).
-
-**Phase 2.2 — Concurrency safety** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 - [ ] Add an advisory lock around `state.yml` read/modify/write so concurrent `apply` (CI + local, two terminals) fails closed instead of racing.
 
-**Phase 2.3 — Authoritative provenance fields** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase 2.3–2.4 — Authoritative provenance fields + release tooling** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M5
+**Dependencies:** M2 merged to v87 (previous phase within this track); pull v87 before starting.
+
 - [ ] Define the authoritative provenance fields to persist in the consolidated state: version, commit SHA, and any required release identifier.
 - [ ] Persist module commit SHA and version during embed, update, and apply flows.
-
-**Phase 2.4 — Provenance validation and release tooling** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 - [ ] Update subtree release tooling so split branches are cut only from tagged or versioned source states.
 - [ ] Validate embedded module provenance during `apply` and `update`.
 - [ ] Add operator-facing diagnostics for untagged split provenance or version/SHA mismatches.
@@ -217,6 +306,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 ### Finding 12 — Make `apply` recoverable via a saga model
 
 **Explanation (autopsy #4):** `apply` performs an ordered sequence of irreversible cross-system side effects — filesystem generation, `git subtree add`, `pyproject.toml`/lock edits, `poetry install`, Django migrations, Docker, Railway — in one ~2700-line command (`apply_command.py:2415-2596`) with an explicit no-rollback contract (~line 2446) and inconsistent fail policy: embedding/wiring/poetry/migrations fail **closed**, but the `config.yml` mirror (`:1969-1972`), managed-file hash capture, and git-index snapshot fail **open**. Each new capability bolted into `apply` widens the set of partial-failure states; with no rollback abstraction, every new step hand-rolls its own recovery. Partial failure leaves projects half-applied, recoverable only by manual cleanup or idempotent re-run.
+
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M8
+**Dependencies:** M5 merged to v87 (previous phase within this track); pull v87 before starting.
 
 **Phase 12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 - [ ] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action.
@@ -232,6 +324,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 ### Finding 5 — Split the DR engine out of the embeddable backups module
 
 **Explanation (autopsy #2 — one instance of the CLI↔module god-layer coupling):** The backups module still carries platform-level backup and restore orchestration that is difficult to update safely inside generated projects, communicating with the CLI through a hidden management-command/env-var protocol. The remaining work moves the engine into centrally owned code while leaving only thin Django-facing surfaces in the embeddable module. Eased once F1 makes module boundaries manifest-driven.
+
+**Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
+**Dependencies:** M6 (previous phase within this track) AND M8 (Track 3 / F12) — both must be on v87 before starting. M8 is required because F5 adds an `ApplyStep` to the list that F12 creates; starting before M8 means conflicting changes to `apply_command.py`. Pull v87 after both M6 and M8 are merged.
 
 **Phase 5.1 — Define the boundary** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 - [ ] Define the DR boundary contract between embeddable Django surfaces and the centrally owned backup/restore engine.
@@ -250,6 +345,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 ### Finding 7 — Decouple generator runtime pins from generated-project pins
 
 **Explanation:** The generator and generated projects still share one compatibility window. The remaining work splits ownership so generated projects can carry their own runtime policy without inheriting maintainer-tool runtime constraints by accident.
+
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M11
+**Dependencies:** M8 merged to v87 (previous phase within this track); pull v87 before starting.
 
 **Phase 7.1 — Inventory** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 - [ ] Inventory which Python, Django, and PostgreSQL constraints belong to the generator runtime versus generated-project templates.
