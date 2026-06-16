@@ -6,7 +6,7 @@
 <h1>CRM Dashboard</h1>
 <p>
     Staff-only operational overview for CRM activity. Session-authenticated API access
-    remains available separately under <a href="/crm/api/">/crm/api/</a>.
+    remains available separately under <a href="{{ crm_api_root_url }}">{{ crm_api_root_url }}</a>.
 </p>
 
 <section class="stats-grid">
@@ -110,12 +110,12 @@
     <h2>API Endpoints</h2>
     <p>The CRM module provides a REST API for managing your CRM data:</p>
     <ul style="margin: 1rem 0; padding-left: 2rem;">
-        <li><code>GET/POST /crm/api/contacts/</code> - List/Create contacts</li>
-        <li><code>GET/POST /crm/api/companies/</code> - List/Create companies</li>
-        <li><code>GET/POST /crm/api/deals/</code> - List/Create deals</li>
-        <li><code>GET/POST /crm/api/stages/</code> - List/Create pipeline stages</li>
-        <li><code>GET/POST /crm/api/tags/</code> - List/Create tags</li>
+        <li><code>GET/POST {{ crm_api_prefix }}contacts/</code> - List/Create contacts</li>
+        <li><code>GET/POST {{ crm_api_prefix }}companies/</code> - List/Create companies</li>
+        <li><code>GET/POST {{ crm_api_prefix }}deals/</code> - List/Create deals</li>
+        <li><code>GET/POST {{ crm_api_prefix }}stages/</code> - List/Create pipeline stages</li>
+        <li><code>GET/POST {{ crm_api_prefix }}tags/</code> - List/Create tags</li>
     </ul>
-    <p>Visit the <a href="/crm/api/">API browser</a> to explore all endpoints.</p>
+    <p>Visit the <a href="{{ crm_api_root_url }}">API browser</a> to explore all endpoints.</p>
 </section>
 {% endblock %}

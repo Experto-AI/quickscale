@@ -1198,7 +1198,7 @@ class TestModuleWiringSpecs:
         assert settings["FORMS_PER_PAGE"] == 15
         assert settings["FORMS_SUBMISSIONS_API"] is True
         assert "REST_FRAMEWORK" not in settings
-        assert ("crm/", "quickscale_modules_crm.urls") in urls
+        assert ("", "quickscale_modules_crm.urls") in urls
         assert ("", "quickscale_modules_forms.urls") in urls
 
     def test_build_module_wiring_specs_skips_unknown_modules(self):

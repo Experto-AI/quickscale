@@ -470,7 +470,7 @@ Path routing (not subdomain). The org slug appears in every URL so the active or
 /orgs/<slug>/listings/                     # Listings for this org
 
 # API equivalents:
-/api/orgs/<slug>/crm/                      # CRM API for this org
+/orgs/<slug>/crm/api/                    # CRM API for this org
 /orgs/<slug>/api/billing/...               # Canonical org-scoped billing API surface
 
 Flat authenticated billing routes (`/billing/dashboard/`, `/api/billing/...`) remain compatibility shims for Solo mode and for older non-org callers while SaaS callers move to the canonical org-scoped paths above.

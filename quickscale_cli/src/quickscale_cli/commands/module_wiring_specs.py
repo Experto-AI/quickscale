@@ -202,7 +202,7 @@ def _crm_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     return ModuleWiringSpec(
         apps=("rest_framework", "django_filters", "quickscale_modules_crm"),
         settings=settings,
-        url_includes=(("crm/", "quickscale_modules_crm.urls"),),
+        url_includes=(("", "quickscale_modules_crm.urls"),),
     )
 
 

@@ -893,3 +893,112 @@ class TestCRMPageSizeSettings:
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
+
+
+@pytest.mark.django_db
+class TestCRMRouteContractParity:
+    """Route-contract parity tests for Phase 11.1c.
+
+    These tests verify that both solo and SaaS CRM paths are routable and
+    serve the same views, proving the canonical route contract:
+    - Solo: /crm/ and /crm/api/
+    - SaaS: /orgs/<slug>/crm/ and /orgs/<slug>/crm/api/
+    """
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_solo_dashboard_path_resolves(self, client, user):
+        """The solo CRM dashboard should be reachable at /crm/."""
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        client.force_login(user)
+
+        response = client.get("/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_saas_dashboard_path_resolves(self, client, user):
+        """The SaaS CRM dashboard should be reachable at /orgs/<slug>/crm/."""
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        client.force_login(user)
+
+        response = client.get("/orgs/acme-corp/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_solo_api_root_path_resolves(self, authenticated_client):
+        """The solo CRM API root should be reachable at /crm/api/."""
+        response = authenticated_client.get("/crm/api/")
+
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_saas_api_root_path_resolves(self, authenticated_client):
+        """The SaaS CRM API root should be reachable at /orgs/<slug>/crm/api/."""
+        response = authenticated_client.get("/orgs/acme-corp/crm/api/")
+
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_solo_api_tags_path_resolves(self, authenticated_client, tag):
+        """The solo CRM tags API should be reachable at /crm/api/tags/."""
+        response = authenticated_client.get("/crm/api/tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_saas_api_tags_path_resolves(self, authenticated_client, tag):
+        """The SaaS CRM tags API should be reachable at /orgs/<slug>/crm/api/tags/."""
+        response = authenticated_client.get("/orgs/acme-corp/crm/api/tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_solo_dashboard_renders_solo_urls(self, client, user):
+        """The solo CRM dashboard should render solo URLs in links and examples."""
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        client.force_login(user)
+
+        response = client.get("/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # Verify solo URLs are present
+        assert 'href="/crm/"' in content
+        assert 'href="/crm/api/"' in content
+        assert "/crm/api/contacts/" in content
+        assert "/crm/api/companies/" in content
+        # Verify SaaS URLs are NOT present
+        assert "/orgs/" not in content
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_saas_dashboard_renders_org_scoped_urls(self, client, user):
+        """The SaaS CRM dashboard should render org-scoped URLs in links and examples."""
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        client.force_login(user)
+
+        response = client.get("/orgs/acme-corp/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # Verify org-scoped URLs are present
+        assert 'href="/orgs/acme-corp/crm/"' in content
+        assert 'href="/orgs/acme-corp/crm/api/"' in content
+        assert "/orgs/acme-corp/crm/api/contacts/" in content
+        assert "/orgs/acme-corp/crm/api/companies/" in content
+        # Verify solo URLs are NOT present (except in navigation text)
+        # The solo /crm/ URL should not appear as a link
+        assert 'href="/crm/"' not in content
+        assert 'href="/crm/api/"' not in content

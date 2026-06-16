@@ -9,6 +9,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Sum
 from django.http import Http404, HttpRequest
 from django.http.response import HttpResponseBase
+from django.urls import reverse
 from django.views.generic import TemplateView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
@@ -80,6 +81,21 @@ class CRMDashboardView(TemplateView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
+
+        # Compute org-aware URLs for caller parity
+        org_slug = self.kwargs.get("org_slug")
+        if org_slug:
+            # SaaS mode: org-scoped URLs
+            context["crm_dashboard_url"] = reverse(
+                "quickscale_crm:org-dashboard", kwargs={"org_slug": org_slug}
+            )
+            context["crm_api_root_url"] = f"/orgs/{org_slug}/crm/api/"
+            context["crm_api_prefix"] = f"/orgs/{org_slug}/crm/api/"
+        else:
+            # Solo mode: standalone URLs
+            context["crm_dashboard_url"] = reverse("quickscale_crm:dashboard")
+            context["crm_api_root_url"] = "/crm/api/"
+            context["crm_api_prefix"] = "/crm/api/"
 
         # Summary statistics
         context["total_contacts"] = Contact.objects.count()
