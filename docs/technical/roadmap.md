@@ -88,9 +88,49 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Explanation (autopsy #1 — highest severity):** Tenant isolation is presented as a data-layer mechanism but is enforced nowhere. The `orgs` middleware sets the `app.current_org_id` Postgres GUC (`orgs/.../middleware.py:129`), but **no RLS policy consumes it** (no `ENABLE ROW LEVEL SECURITY`/`CREATE POLICY` in any module migration), `TenantModel` (`orgs/models.py:300`) has **zero subclasses**, and tenant models in `crm`/`blog`/`forms`/`listings`/`social` have **no `organization` FK**. The only `get_queryset` overrides filter by `status`, never by tenant. Isolation depends entirely on per-view decorators (`require_org_role`/`require_org_feature`) that gate the *request* but never scope the *query* — so any admin, shell, management command, or async path returns cross-tenant data silently (rows, not an error). This is minted into every generated SaaS project, and the stated v0.87+ teams direction is built directly on this inert mechanism. Isolation must fail **closed** at the layer closest to the data.
 
 **Phase 11.1 — Pilot structural isolation on one module (`crm`)** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-- [ ] Make `TenantModel` the base for `crm` tenant models; add `organization_id` (NOT NULL FK) columns with migrations.
-- [ ] Ship the `crm` isolation policy: either RLS migration (`ENABLE ROW LEVEL SECURITY` + `CREATE POLICY USING (organization_id = current_setting('app.current_org_id')::int)`) so the GUC the middleware already sets becomes load-bearing, **OR** a tenant-aware default manager that auto-scopes querysets and cannot be bypassed accidentally.
-- [ ] Confirm the Finding 14 isolation test now passes for `crm` (failing before, passing after).
+
+**Explanation:** The original single-slice `crm` pilot turned out to be Tier 3 during plan review because it bundled planner/apply dependency materialization, current-org runtime substrate, route-contract decisions, schema changes, legacy-data rollout, runtime enforcement, and closeout into one change. Split it into the ordered Tier 1–2 slices below and execute top-down.
+
+**Phase 11.1a — Materialize CRM's org dependency in planner/apply** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Make CRM selection materialize `orgs` + `notifications` in planner/apply flows, while keeping `auth` explicit and fail-fast.
+- [ ] Add planner/apply coverage for new-project and existing-project add/reconfigure flows so implied configs persist through load, delta, and embed.
+
+**Phase 11.1b — Current-org runtime substrate** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Add an explicit current-org access/reset contract for request-scoped tenant resolution.
+- [ ] Define the deliberate unscoped/operator path for admin, shell, and migration flows, and prove no-context access fails closed.
+
+**Phase 11.1c — Canonical CRM solo/SaaS route contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Choose the canonical solo and SaaS CRM HTML/API paths.
+- [ ] Make generated wiring, module URLs, and route-parity tests agree on that contract.
+
+**Phase 11.1d — Nullable CRM ownership groundwork** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Make `TenantModel` the base for `crm` tenant models and add nullable `organization_id` FKs first.
+- [ ] Replace global uniqueness with per-org uniqueness where required (`Tag`, `Stage`, and any other tenant-sensitive constraints discovered in rollout).
+
+**Phase 11.1e — Existing-data rollout contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Ship an idempotent CRM backfill command that assigns legacy CRM rows to one operator-selected authoritative org or aborts without partial writes.
+- [ ] Document and test the rollout sequence: backup → deploy nullable slice → run backfill → verify counts / unassigned rows → continue or restore.
+
+**Phase 11.1f — Tenant-local CRM bootstrap** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Add tenant-local default CRM stage bootstrap for migrated orgs and newly created orgs.
+- [ ] Add tests proving a fresh org can use CRM without manual stage seeding.
+
+**Phase 11.1g — CRM read-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org.
+- [ ] Confirm no-context reads fail closed rather than widening scope.
+
+**Phase 11.1h — CRM write-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Make serializer related-field validation org-aware (`company_id`, `tag_ids`, `contact_id`, `stage_id`).
+- [ ] Scope bulk deal actions by current-org deal visibility so raw `deal_ids` cannot mutate cross-org rows.
+
+**Phase 11.1i — Explicit admin/operator CRM behavior** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Route CRM admin through the deliberate unscoped/operator path and expose org context explicitly.
+- [ ] Add admin coverage proving access is explicit rather than an accidental tenant bypass.
+
+**Phase 11.1j — Enforce ownership and close out the pilot** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] After backfill/bootstrap evidence is green, enforce `NOT NULL` org ownership and the manager-first CRM isolation policy for this pilot (RLS deferred to Phase 11.3 defense-in-depth).
+- [ ] Remove the CRM isolation `xfail` and confirm the Finding 14 isolation test now passes for `crm` (failing before, passing after).
+- [ ] Check off the corresponding roadmap TODOs only after CRM, touched `orgs`, and touched CLI wiring tests are green.
 
 **Phase 11.2 — Roll structural isolation across remaining tenant modules** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ — one module per slice
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `blog`.
