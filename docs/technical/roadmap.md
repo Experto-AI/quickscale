@@ -233,27 +233,32 @@ _(part of the M1 batch — implement alongside 11.1d)_
 **Phase 1.1–1.2 — Wiring-expression capability + per-module slices** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
 
 **Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M4
+
+**Status:** 🟡 M4 partially landed. The wiring-expression engine, the 4 missing adapters, and the 7 flat-mapper migrations are done and merged. The 5 conditional/codegen migrations remain.
+
+**Explanation:** The flat-mapper increment shipped first to de-risk the engine. The remaining migrations (`notifications`, `auth`, `orgs`, `storage`, `social`) each carry conditional/branching wiring or managed-file codegen and were split into a follow-up M4 batch so the engine could land green first. Their option-resolution adapters already exist (orgs/storage added here; auth/notifications/social pre-existing) — only the legacy **wiring builders** for those 5 modules still need to route through the manifest path. Managed-file codegen declaration (`social` only) is deferred to Phase 1.3/M6.
+
 **Dependencies:** None — start immediately (fully parallel with Tracks 1 and 3).
 
-- [ ] Let `module.yml` declare dependency-ordered `django_apps`.
-- [ ] Let `module.yml` declare `middleware` (with ordering).
-- [ ] Let `module.yml` declare computed and conditional Django settings.
-- [ ] Let `module.yml` declare URL include placement.
-- [ ] Let `module.yml` declare managed-file code generation.
-- [ ] Add a manifest-driven wiring builder API in `quickscale_core` that can produce `ModuleWiringSpec` alongside the legacy `module_wiring_specs.py` builders during migration.
-- [ ] Add `*_manifest.py` adapters for `blog`, `listings`, `orgs`, and `storage` so every module has a manifest adapter before its wiring slice.
-- [ ] Migrate `analytics` wiring to the manifest-driven builder.
-- [ ] Migrate `backups` wiring to the manifest-driven builder.
-- [ ] Migrate `billing` wiring to the manifest-driven builder.
-- [ ] Migrate `crm` wiring to the manifest-driven builder.
-- [ ] Migrate `blog` wiring to the manifest-driven builder.
-- [ ] Migrate `listings` wiring to the manifest-driven builder.
-- [ ] Migrate `forms` wiring to the manifest-driven builder.
-- [ ] Migrate `notifications` wiring to the manifest-driven builder.
-- [ ] Migrate `auth` wiring to the manifest-driven builder.
-- [ ] Migrate `orgs` wiring to the manifest-driven builder.
-- [ ] Migrate `storage` wiring to the manifest-driven builder.
-- [ ] Migrate `social` wiring to the manifest-driven builder.
+- [x] Let `module.yml` declare dependency-ordered `django_apps`. _`WiringProjection(wiring_field="apps")` + `ResolverResult.apps`; exercised by all 7 migrated flat modules._
+- [x] Let `module.yml` declare `middleware` (with ordering). _`WiringProjection(wiring_field="middleware")` + `ResolverResult.middleware` capability built and unit-tested (`test_manifest_wiring_projection.py`); end-to-end-exercised when the middleware-using modules (`auth`/`orgs`) migrate in the follow-up batch._
+- [x] Let `module.yml` declare computed and conditional Django settings. _Reuses the existing `DerivedSetting` `direct`/`static`/`conditional`/`computed` machinery plus the per-adapter post-resolution hook (analytics precedent); exercised by the `backups` `private_remote` conditional env-var defaulting (no new expression DSL)._
+- [x] Let `module.yml` declare URL include placement. _`url_includes` + `pre_home_url_includes` projections + `ResolverResult` fields; exercised by `analytics`/`crm`/`blog`/`listings`/`forms`; `pre_home_url_includes` (solo/saas orgs) lands with the orgs wiring migration._
+- [ ] Let `module.yml` declare managed-file code generation. _Deferred to Phase 1.3/M6 — only `social` needs it (~100 lines of generated Python); declaring that in `module.yml` is high-effort for a single consumer._
+- [x] Add a manifest-driven wiring builder API in `quickscale_core` that can produce `ModuleWiringSpec` alongside the legacy `module_wiring_specs.py` builders during migration. _`build_manifest_wiring_spec()` + `assemble_wiring_spec()` + `MANIFEST_ADAPTER_REGISTRY`; legacy builders untouched (byte-identical), production dispatch unchanged until M6._
+- [x] Add `*_manifest.py` adapters for `blog`, `listings`, `orgs`, and `storage` so every module has a manifest adapter before its wiring slice. _Each ships with an option-resolution parity test._
+- [x] Migrate `analytics` wiring to the manifest-driven builder. _Full `ModuleWiringSpec` dataclass parity; reproduces the `enabled=false` empty-spec short-circuit and the v87-M0 analytics url_include._
+- [x] Migrate `backups` wiring to the manifest-driven builder. _Parity-gated; `private_remote` conditional defaulting via post-resolution hook._
+- [x] Migrate `billing` wiring to the manifest-driven builder. _Parity-gated; introduced the reusable `wiring_parity` harness._
+- [x] Migrate `crm` wiring to the manifest-driven builder. _Parity-gated._
+- [x] Migrate `blog` wiring to the manifest-driven builder. _Parity-gated._
+- [x] Migrate `listings` wiring to the manifest-driven builder. _Parity-gated._
+- [x] Migrate `forms` wiring to the manifest-driven builder. _Parity-gated._
+- [ ] Migrate `notifications` wiring to the manifest-driven builder. _Follow-up M4 batch — conditional runtime email backend._
+- [ ] Migrate `auth` wiring to the manifest-driven builder. _Follow-up M4 batch — login-method branching + middleware + dual url includes._
+- [ ] Migrate `orgs` wiring to the manifest-driven builder. _Follow-up M4 batch — solo/saas mode toggles `pre_home_url_includes` vs `url_includes` + middleware (adapter already added)._
+- [ ] Migrate `storage` wiring to the manifest-driven builder. _Follow-up M4 batch — s3/r2 conditional nested `STORAGES`/`AWS_*` via post-resolution hook (adapter already added)._
+- [ ] Migrate `social` wiring to the manifest-driven builder. _Deferred to Phase 1.3/M6 — depends on managed-file codegen._
 
 **Phase 1.3 — Legacy removal** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
 

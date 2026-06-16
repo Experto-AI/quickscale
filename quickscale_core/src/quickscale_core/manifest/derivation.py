@@ -19,7 +19,11 @@ duplicate per-module knowledge (see roadmap Phase 4, Finding 1).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
+from dataclasses import (
+    field as _field,
+)  # alias to avoid name collision in WiringProjection
 from typing import Any
 
 
@@ -145,12 +149,55 @@ class DerivedSetting:
 
 
 @dataclass(frozen=True)
+class WiringProjection:
+    """A wiring contribution projected from one or more configuration options.
+
+    Wiring projections describe how module configuration options translate
+    into ``ModuleWiringSpec`` fields — Django app labels, middleware dotted
+    paths, and URL include tuples — that the assembler merges into the final
+    spec.
+
+    Projections use the same ``derivation_type`` vocabulary as
+    :class:`DerivedSetting` (``"static"``, ``"direct"``, ``"conditional"``,
+    ``"computed"``) so the same projection engine can evaluate both.
+
+    Attributes:
+        wiring_field: The :class:`~quickscale_core.module_wiring.ModuleWiringSpec`
+            field this projection contributes to.  Recognised values are
+            ``"apps"``, ``"middleware"``, ``"url_includes"``, and
+            ``"pre_home_url_includes"``.
+        source_options: Configuration option keys that determine whether and
+            what to contribute.
+        derivation_type: How the contribution is computed.  Uses the same
+            vocabulary as :class:`DerivedSetting`.
+        expression: Derivation configuration.  For ``"static"`` the value
+            is a constant list/tuple contribution.  For ``"conditional"`` it
+            maps source values to contribution lists.  Contributions that are
+            lists of two-element lists are treated as
+            ``(route_prefix, include_path)`` tuples for URL fields.
+        default: Fallback contribution when sources are absent or the branch
+            is unmatched.  Must be a list (of strings or two-element lists).
+        description: Human-readable explanation of what this projection adds.
+    """
+
+    wiring_field: (
+        str  # "apps" | "middleware" | "url_includes" | "pre_home_url_includes"
+    )
+    source_options: list[str] = _field(default_factory=list)
+    derivation_type: str = "static"
+    expression: dict[str, Any] = _field(default_factory=dict)
+    default: list[Any] = _field(default_factory=list)
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class OptionDerivation:
     """Per-option derivation metadata bundling all rules for one config option.
 
-    Groups the normalization rules, validation rules, legacy aliases, and
-    derived settings that together describe how a single configuration
-    option flows from raw user input to runtime Django settings.
+    Groups the normalization rules, validation rules, legacy aliases,
+    derived settings, and wiring projections that together describe how a
+    single configuration option flows from raw user input to runtime Django
+    settings and module wiring.
 
     Attributes:
         option_key: The configuration option key this derivation describes.
@@ -158,6 +205,7 @@ class OptionDerivation:
         validation_rules: Validation constraints for this option.
         legacy_aliases: Legacy key aliases that map into this option.
         derived_settings: Django settings projected from this option.
+        wiring_projections: Wiring contributions projected from this option.
     """
 
     option_key: str
@@ -165,6 +213,7 @@ class OptionDerivation:
     validation_rules: list[ValidationRule] = field(default_factory=list)
     legacy_aliases: list[LegacyKeyAlias] = field(default_factory=list)
     derived_settings: list[DerivedSetting] = field(default_factory=list)
+    wiring_projections: list[WiringProjection] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -174,7 +223,7 @@ class ModuleDerivationSchema:
     Companion to :class:`ModuleManifest` that captures the declarative
     derivation metadata a module needs to make its ``module.yml``
     authoritative for defaults, normalization, validation, setting
-    projection, and legacy-key migration.
+    projection, legacy-key migration, and wiring projection.
 
     This type does **not** replace ``ModuleManifest``.  It is a parallel
     descriptor that later phases will load from a ``derivation`` section
@@ -190,6 +239,10 @@ class ModuleDerivationSchema:
             apply across multiple options (e.g. global key renaming).
         shared_validation_rules: Module-wide validation rules that apply
             across multiple options.
+        module_wiring_projections: Module-level wiring projections that are
+            not tied to a specific option (e.g. static app labels or
+            middleware that are always contributed regardless of options).
+            These are applied in addition to per-option projections.
         description: Human-readable summary of the derivation schema.
     """
 
@@ -198,6 +251,7 @@ class ModuleDerivationSchema:
     option_derivations: dict[str, OptionDerivation] = field(default_factory=dict)
     shared_normalization_rules: list[NormalizationRule] = field(default_factory=list)
     shared_validation_rules: list[ValidationRule] = field(default_factory=list)
+    module_wiring_projections: list[WiringProjection] = field(default_factory=list)
     description: str = ""
 
     def get_option_derivation(self, option_key: str) -> OptionDerivation | None:
@@ -234,3 +288,20 @@ class ModuleDerivationSchema:
         for derivation in self.option_derivations.values():
             aliases.extend(derivation.legacy_aliases)
         return aliases
+
+    def get_all_wiring_projections(self) -> list[WiringProjection]:
+        """Collect every wiring projection across all option derivations and
+        module-level projections.
+
+        Module-level projections come first (they provide the static
+        structural base), then per-option projections in option-derivation
+        order.
+
+        Returns:
+            Flat list of all :class:`WiringProjection` instances declared
+            in this schema.
+        """
+        projections: list[WiringProjection] = list(self.module_wiring_projections)
+        for derivation in self.option_derivations.values():
+            projections.extend(derivation.wiring_projections)
+        return projections
