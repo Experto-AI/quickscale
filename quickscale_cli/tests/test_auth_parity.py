@@ -16,7 +16,7 @@ Scope
 * Default option values (all 4 keys including immutable authentication_method)
 * Legacy-key normalisation (allow_registration -> registration_enabled, social_providers dropped)
 * Resolution (defaults + normalised overrides)
-* Exact ``format_auth_desired_config_contract()`` string
+* Behavioral equivalence of ``format_auth_desired_config_contract()`` (canonical keys, value shapes, legacy guidance)
 """
 
 from __future__ import annotations
@@ -259,24 +259,80 @@ class TestResolutionParity:
 
 
 class TestFormatAuthDesiredConfigContractParity:
-    """format_auth_desired_config_contract must return the exact legacy string."""
+    """format_auth_desired_config_contract must provide behavioral-equivalent contract info."""
 
-    _EXPECTED = "\n".join(
-        [
-            "Canonical auth keys/value shapes:",
-            "modules.auth.registration_enabled: true|false",
-            "modules.auth.email_verification: none|optional|mandatory",
-            "modules.auth.authentication_method: email|username|both",
-            "modules.auth.session_cookie_age: <positive integer seconds>  # optional",
-            (
-                "Remove legacy keys like modules.auth.allow_registration and "
-                "modules.auth.social_providers."
-            ),
-        ]
-    )
+    def test_format_string_provides_behavioral_equivalence(self) -> None:
+        """Verify the contract output contains all required behavioral elements.
 
-    def test_format_string_matches_legacy_exactly(self) -> None:
-        assert format_auth_desired_config_contract() == self._EXPECTED
+        Assert *semantics* instead of literal presentation fragments so that
+        cosmetic changes (separator style, whitespace, rephrasing) cannot
+        break the test while the underlying meaning is preserved.
+        """
+        contract = format_auth_desired_config_contract()
+
+        # Verify it's a non-empty multi-line string
+        assert isinstance(contract, str)
+        assert len(contract) > 0
+        lines = contract.split("\n")
+        assert len(lines) >= 5, (
+            "Contract should have header + 4 canonical keys + legacy guidance"
+        )
+
+        # Verify header introduces canonical auth keys (structural, not cosmetic)
+        assert lines[0].lower().startswith("canonical auth keys")
+
+        # Build a mapping from canonical key -> the line that declares it.
+        # Each canonical key must appear exactly once as a modules.auth.<key>: entry.
+        key_lines: dict[str, str] = {}
+        for key in CANONICAL_AUTH_MODULE_OPTION_KEYS:
+            matches = [line for line in lines if f"modules.auth.{key}:" in line]
+            assert len(matches) == 1, (
+                f"Expected exactly one line for {key}, found {len(matches)}"
+            )
+            key_lines[key] = matches[0]
+
+        # registration_enabled: line must convey boolean (true/false) semantics
+        reg_line = key_lines["registration_enabled"].lower()
+        assert "true" in reg_line and "false" in reg_line, (
+            "registration_enabled line must convey boolean semantics"
+        )
+
+        # email_verification: line must include every enum member,
+        # independent of separator or whitespace
+        ev_line = key_lines["email_verification"].lower()
+        for member in AUTH_EMAIL_VERIFICATION_VALUES:
+            assert member in ev_line, (
+                f"email_verification line must include enum member '{member}'"
+            )
+
+        # authentication_method: line must include every enum member,
+        # independent of separator or whitespace
+        am_line = key_lines["authentication_method"].lower()
+        for member in AUTH_AUTHENTICATION_METHOD_VALUES:
+            assert member in am_line, (
+                f"authentication_method line must include enum member '{member}'"
+            )
+
+        # session_cookie_age: line must convey positive-integer-in-seconds meaning
+        # without pinning one exact phrase
+        sc_line = key_lines["session_cookie_age"].lower()
+        assert "integer" in sc_line and "second" in sc_line, (
+            "session_cookie_age line must convey positive-integer-in-seconds meaning"
+        )
+
+        # Legacy key remediation guidance: both legacy keys must be mentioned
+        # somewhere in the contract, with removal or migration intent
+        contract_lower = contract.lower()
+        assert "allow_registration" in contract_lower, (
+            "Contract must mention allow_registration legacy key"
+        )
+        assert "social_providers" in contract_lower, (
+            "Contract must mention social_providers legacy key"
+        )
+        assert any(
+            term in contract_lower
+            for term in ("remove", "deprecated", "migrate", "migration")
+        ), "Legacy key guidance should mention removal or migration"
 
     def test_format_string_contains_all_canonical_keys(self) -> None:
         contract = format_auth_desired_config_contract()

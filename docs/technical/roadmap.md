@@ -80,8 +80,8 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [x] Move it into default CI (not release-gated `ci-e2e`) so generator fidelity is verified daily. _The test is not marked `@pytest.mark.e2e` and lives under `quickscale_core/tests/`, so it is collected by the default CI path (`pytest quickscale_core/tests/ -m "not e2e"` via `scripts/test_unit.sh` → `.github/workflows/ci.yml`)._
 
 **Phase 14.4 — Replace string parity with behavioral parity** _(why → [Finding 14](#finding-14--add-tenant-isolation-and-generator-runtime-test-coverage))_
-- [ ] Replace exact-string parity assertions with behavioral-equivalence checks (does the generated wiring produce the same effective settings?), so cosmetic output changes don't penalize the F1 migration.
-- [ ] Audit `pragma: no cover` E2E gating so environment-conditional paths don't create hidden coverage debt.
+- [x] Replace exact-string parity assertions with behavioral-equivalence checks (does the generated wiring produce the same effective settings?), so cosmetic output changes don't penalize the F1 migration. _`test_auth_parity.py` now verifies the contract output contains all canonical keys with their value shapes and legacy-key remediation guidance, instead of comparing to a hardcoded multiline string. Cosmetic format changes no longer break the test as long as the effective information is preserved._
+- [x] Audit `pragma: no cover` E2E gating so environment-conditional paths don't create hidden coverage debt. _Removed the sole environment-conditional `# pragma: no cover` from the `playwright_browser_available` fixture in `test_e2e_full_workflow.py`. The Playwright skip path is now visible to coverage reporting; the line is covered when Playwright is unavailable and uncovered when it is available — both are expected environment-conditional outcomes._
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 

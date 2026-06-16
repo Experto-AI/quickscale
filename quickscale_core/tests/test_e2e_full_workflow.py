@@ -248,7 +248,7 @@ def playwright_browser_available() -> None:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             browser.close()
-    except Exception as exc:  # pragma: no cover - environment-dependent
+    except Exception as exc:
         pytest.skip(f"Playwright browser is unavailable: {exc}")
 
 
