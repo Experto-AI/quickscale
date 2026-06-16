@@ -73,7 +73,7 @@ git merge --no-ff wt-track{N}-<branch>
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M0
 **Dependencies:** None — start immediately.
 
-**Status:** 🟡 In progress
+**Status:** ✅ Complete
 
 **Explanation:** The remaining release work is now limited to `showcase_react` analytics parity. The completed `showcase_html` hardening work has been archived in the changelog.
 
