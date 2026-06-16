@@ -9,6 +9,12 @@ from django.apps import apps
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.urls import Resolver404, resolve
 
+from .current_org import (
+    CurrentOrgError,
+    get_current_org,
+    require_current_org,
+    set_current_org,
+)
 from .models import OrgRole, Organization, OrganizationMembership
 
 ROLE_HIERARCHY = {
@@ -50,10 +56,11 @@ def require_org_role(min_role: OrgRole) -> Callable:
             if not bool(user is not None and getattr(user, "is_authenticated", False)):
                 return HttpResponseForbidden()
 
-            organization = _resolve_request_org(request, kwargs)
-            if organization is None:
+            _resolve_request_org(request, kwargs)
+            try:
+                organization = require_current_org(request)
+            except CurrentOrgError:
                 return HttpResponseForbidden()
-            setattr(request, "org", organization)
 
             if not user_has_org_role(request.user, organization, min_role):
                 return HttpResponseForbidden()
@@ -74,10 +81,11 @@ class OrgRoleMixin:
         if not bool(user is not None and getattr(user, "is_authenticated", False)):
             return HttpResponseForbidden()
 
-        organization = _resolve_request_org(request, kwargs)
-        if organization is None:
+        _resolve_request_org(request, kwargs)
+        try:
+            organization = require_current_org(request)
+        except CurrentOrgError:
             return HttpResponseForbidden()
-        setattr(request, "org", organization)
 
         if not user_has_org_role(request.user, organization, self.min_org_role):
             return HttpResponseForbidden()
@@ -98,10 +106,11 @@ def require_org_feature(feature_key: str) -> Callable:
             if not bool(user is not None and getattr(user, "is_authenticated", False)):
                 return HttpResponse(status=402)
 
-            organization = _resolve_request_org(request, kwargs)
-            if organization is None:
+            _resolve_request_org(request, kwargs)
+            try:
+                organization = require_current_org(request)
+            except CurrentOrgError:
                 return HttpResponse(status=402)
-            setattr(request, "org", organization)
 
             subscription = _get_active_org_subscription(organization)
             plan = getattr(subscription, "plan", None)
@@ -146,7 +155,7 @@ def _resolve_request_org(
     request: HttpRequest,
     route_kwargs: dict[str, Any],
 ) -> Organization | None:
-    organization = getattr(request, "org", None)
+    organization = get_current_org(request)
     if organization is not None:
         return organization
 
@@ -159,4 +168,7 @@ def _resolve_request_org(
         org_slug = match.kwargs.get("org_slug")
     if not org_slug:
         return None
-    return Organization.objects.filter(slug=org_slug).first()
+    organization = Organization.objects.filter(slug=org_slug).first()
+    if organization is not None:
+        set_current_org(request, organization)
+    return organization

@@ -8,6 +8,13 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 
 from quickscale_modules_billing.models import Plan, Subscription
+from quickscale_modules_orgs.current_org import (
+    CurrentOrgError,
+    clear_current_org,
+    get_current_org,
+    require_current_org,
+    set_current_org,
+)
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 from quickscale_modules_orgs.permissions import (
     ROLE_HIERARCHY,
@@ -439,3 +446,87 @@ def test_resolve_request_org_returns_none_when_slug_not_in_url() -> None:
     request.org = None
     result = _resolve_request_org(request, {})
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Strict fail-closed current-org accessor tests
+# ---------------------------------------------------------------------------
+
+
+def test_require_current_org_raises_when_no_org_context() -> None:
+    """require_current_org must raise CurrentOrgError when request.org is None."""
+    request = RequestFactory().get("/")
+    clear_current_org(request)
+
+    with pytest.raises(CurrentOrgError):
+        require_current_org(request)
+
+
+def test_require_current_org_returns_org_when_context_is_set() -> None:
+    """require_current_org returns the org when request.org is set."""
+    request = RequestFactory().get("/")
+    organization = Organization(name="Strict", slug="strict")
+    set_current_org(request, organization)
+
+    result = require_current_org(request)
+    assert result is organization
+
+
+@pytest.mark.django_db
+def test_require_org_role_returns_403_when_no_org_context(client, settings) -> None:
+    """require_org_role must fail closed (403) when no org context is available."""
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="no-context-user",
+        email="no-context@example.com",
+        password="secret123",
+    )
+    request = RequestFactory().get("/orgs/anything/admin-only/")
+    request.user = user
+    clear_current_org(request)
+
+    from quickscale_modules_orgs.permissions import require_org_role
+
+    @require_org_role(OrgRole.ADMIN)
+    def guarded_view(request, org_slug: str):
+        return HttpResponse("ok")  # pragma: no cover
+
+    response = guarded_view(request, org_slug="anything")
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_require_org_feature_returns_402_when_no_org_context(client, settings) -> None:
+    """require_org_feature must fail closed (402) when no org context is available."""
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="no-context-feature",
+        email="no-context-feature@example.com",
+        password="secret123",
+    )
+    request = RequestFactory().get("/orgs/anything/feature/")
+    request.user = user
+    clear_current_org(request)
+
+    @require_org_feature("crm")
+    def feature_view(request, org_slug: str):
+        return HttpResponse("ok")  # pragma: no cover
+
+    response = feature_view(request, org_slug="anything")
+    assert response.status_code == 402
+
+
+@pytest.mark.django_db
+def test_resolve_request_org_sets_org_via_helper() -> None:
+    """_resolve_request_org must use set_current_org when resolving via slug."""
+    organization = Organization.objects.create(
+        name="HelperResolve", slug="helper-resolve"
+    )
+    request = RequestFactory().get(f"/orgs/{organization.slug}/admin-only/")
+    clear_current_org(request)
+
+    result = _resolve_request_org(request, {})
+    assert result is not None
+    assert result.pk == organization.pk
+    assert get_current_org(request) is not None
+    assert get_current_org(request).pk == organization.pk

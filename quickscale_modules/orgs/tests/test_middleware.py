@@ -16,6 +16,11 @@ from django.utils import timezone
 from quickscale_modules_orgs.constants import (
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
 )
+from quickscale_modules_orgs.current_org import (
+    clear_current_org,
+    get_current_org,
+    set_current_org,
+)
 from quickscale_modules_orgs.middleware import TenantMiddleware
 from quickscale_modules_orgs.models import (
     OrgRole,
@@ -231,6 +236,26 @@ def test_request_org_is_none_for_exempt_routes(client, settings, path) -> None:
 
     assert response.status_code == 200
     assert response.content.decode() == "none|none"
+
+
+def test_admin_path_is_exempt_and_does_not_attach_org_context(settings) -> None:
+    """/admin/ must remain an unscoped operator path after the middleware refactor."""
+    settings.QUICKSCALE_MODE = "saas"
+    request = RequestFactory().get("/admin/")
+    request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
+
+    captured_orgs = []
+
+    def capture_view(req):
+        captured_orgs.append(get_current_org(req))
+        from django.http import HttpResponse
+
+        return HttpResponse("ok")
+
+    TenantMiddleware(capture_view)(request)
+
+    assert captured_orgs == [None]
+    assert get_current_org(request) is None
 
 
 @pytest.mark.django_db
@@ -517,3 +542,81 @@ def test_postgres_request_sets_current_org_id_for_org_scoped_requests(
     assert org_response.status_code == 200
     assert org_response.content.decode() == str(organization.id)
     assert healthcheck_response.content.decode() == "none|none"
+
+
+# ---------------------------------------------------------------------------
+# current_org helper integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_middleware_clears_org_via_helper_at_start_of_request(settings) -> None:
+    """Middleware must use clear_current_org to reset request.org at entry."""
+    settings.QUICKSCALE_MODE = "saas"
+    request = RequestFactory().get("/healthcheck/")
+    request.user = SimpleNamespace(is_authenticated=False)
+    # Pre-set a stale org to confirm it gets cleared
+    request.org = Organization(name="Stale", slug="stale")
+
+    captured_orgs = []
+
+    def capture_view(req):
+        captured_orgs.append(get_current_org(req))
+        from django.http import HttpResponse
+
+        return HttpResponse("ok")
+
+    TenantMiddleware(capture_view)(request)
+
+    assert captured_orgs == [None]
+    assert get_current_org(request) is None
+
+
+@pytest.mark.django_db
+def test_middleware_sets_org_via_helper_for_authenticated_saas_request(
+    client, settings
+) -> None:
+    """Middleware must use set_current_org when attaching the resolved org."""
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="helper-set-user",
+        email="helper-set@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="HelperSet", slug="helper-set")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    captured_orgs = []
+    original_home = home_view
+
+    def capturing_home(req):
+        captured_orgs.append(get_current_org(req))
+        return original_home(req)
+
+    # Use a direct middleware call with an org-scoped path to trigger set_current_org
+    request = RequestFactory().get(f"/orgs/{organization.slug}/")
+    request.user = user
+    response = TenantMiddleware(capturing_home)(request)
+
+    assert response.status_code == 200
+    assert len(captured_orgs) == 1
+    assert captured_orgs[0] is not None
+    assert captured_orgs[0].slug == organization.slug
+
+
+def test_current_org_helper_round_trip() -> None:
+    """set_current_org / get_current_org / clear_current_org round-trip."""
+    request = RequestFactory().get("/")
+
+    assert get_current_org(request) is None
+
+    sentinel = Organization(name="RoundTrip", slug="round-trip")
+    set_current_org(request, sentinel)
+    assert get_current_org(request) is sentinel
+
+    clear_current_org(request)
+    assert get_current_org(request) is None

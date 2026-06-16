@@ -96,8 +96,8 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [x] Add planner/apply coverage for new-project and existing-project add/reconfigure flows so implied configs persist through load, delta, and embed. _Planner/apply coverage now spans new-project, add, reconfigure, and apply-load persistence paths (``test_plan_add.py``, ``test_plan_reconfigure.py``, ``test_apply_command.py``, ``test_apply_command_extended.py``); 287 targeted tests pass._
 
 **Phase 11.1b — Current-org runtime substrate** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-- [ ] Add an explicit current-org access/reset contract for request-scoped tenant resolution.
-- [ ] Define the deliberate unscoped/operator path for admin, shell, and migration flows, and prove no-context access fails closed.
+- [x] Add an explicit current-org access/reset contract for request-scoped tenant resolution.
+- [x] Define the deliberate unscoped/operator path for admin, shell, and migration flows, and prove no-context access fails closed.
 
 **Phase 11.1c — Canonical CRM solo/SaaS route contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [ ] Choose the canonical solo and SaaS CRM HTML/API paths.
