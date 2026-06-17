@@ -124,6 +124,68 @@ def _write_initial_state_with_modules(
     (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
 
 
+def _write_non_consolidated_state_with_modules(
+    project_path: Path,
+    module_names: list[str],
+) -> None:
+    """Write .quickscale/state.yml WITHOUT consolidated tracking fields.
+
+    This simulates a pre-M2 project where state.yml has module entries but
+    lacks prefix/branch/installed_at — the tracking metadata lives only in
+    the legacy config.yml.  ProjectStateManager.load_state() must read-through
+    import from config.yml to materialise the tracking fields.
+    """
+    state_data = {
+        "version": "1",
+        "project": {
+            "slug": "myproject",
+            "package": "myproject",
+            "theme": "showcase_html",
+            "created_at": "2025-01-01T00:00:00",
+            "last_applied": "2025-01-01T00:00:00",
+        },
+        "modules": {
+            module_name: {
+                "name": module_name,
+                "version": "0.71.0",
+                "commit_sha": "abc123",
+                "embedded_at": "2025-01-01T00:00:00",
+                "options": {},
+            }
+            for module_name in module_names
+        },
+    }
+    state_dir = project_path / ".quickscale"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
+
+
+def _write_project_with_modules_non_consolidated(
+    project_path: Path, module_names: list[str]
+) -> None:
+    """Write the minimal project layout with non-consolidated state.
+
+    Like ``_write_project_with_modules`` but state.yml lacks the Phase 2
+    consolidated tracking fields, so the legacy config.yml is the only
+    source of prefix/branch/installed_at metadata.
+    """
+    project_path.mkdir()
+    (project_path / "manage.py").write_text("# manage")
+
+    for module_name in module_names:
+        module_dir = project_path / "modules" / module_name
+        module_dir.mkdir(parents=True)
+        (module_dir / "__init__.py").write_text("")
+        (module_dir / "module.yml").write_text(
+            f'name: {module_name}\nversion: "0.71.0"\n'
+        )
+
+    _write_quickscale_config_with_modules(project_path, module_names)
+    _write_non_consolidated_state_with_modules(project_path, module_names)
+    _write_initial_module_tracking_with_modules(project_path, module_names)
+    _write_managed_package_layout(project_path)
+
+
 def _write_initial_module_tracking(project_path: Path) -> None:
     """Write legacy .quickscale/config.yml tracking for installed modules."""
     config_data = {
@@ -823,6 +885,114 @@ def test_push_after_successful_remove_treats_removed_module_as_absent(
     assert removed_result.exit_code != 0
     assert "not installed" in removed_result.output.lower()
     mock_push.assert_not_called()
+
+
+def test_partial_remove_on_non_consolidated_project_preserves_surviving_tracking(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CR-005: partial remove on a legacy-tracked non-consolidated project.
+
+    When state.yml lacks consolidated tracking fields (prefix/branch/
+    installed_at) and the tracking metadata lives only in the legacy
+    config.yml, a partial remove must materialise the surviving module's
+    tracking fields into state.yml before saving.  Without this, the
+    post-remove flush of empty consolidated markers suppresses the legacy
+    read-through import on later loads, and the surviving module loses
+    its tracking metadata — breaking subsequent update/push flows.
+    """
+    from quickscale_core.project_state import ProjectStateManager
+
+    project_path = tmp_path / "myproject"
+    _write_project_with_modules_non_consolidated(project_path, ["auth", "blog"])
+
+    runner = CliRunner()
+    monkeypatch.chdir(project_path)
+
+    remove_result = runner.invoke(
+        remove,
+        ["auth", "--force"],
+        catch_exceptions=False,
+    )
+
+    assert remove_result.exit_code == 0
+    assert not (project_path / "modules" / "auth").exists()
+    assert (project_path / "modules" / "blog").exists()
+
+    # The surviving module's tracking fields must be materialised in state.yml.
+    state_after_remove = yaml.safe_load(
+        (project_path / ".quickscale" / "state.yml").read_text()
+    )
+    blog_state = state_after_remove["modules"]["blog"]
+    assert blog_state.get("prefix") == "modules/blog"
+    assert blog_state.get("branch") == "splits/blog-module"
+    assert blog_state.get("installed_at") == "2025-01-01"
+
+    # A subsequent ProjectStateManager.load_state() must return blog with
+    # full consolidated tracking — proving the read-through import is not
+    # suppressed by the post-remove consolidated markers.
+    psm = ProjectStateManager(project_path)
+    reloaded_state = psm.load_state()
+    assert reloaded_state is not None
+    assert "blog" in reloaded_state.modules
+    assert "auth" not in reloaded_state.modules
+    blog_reloaded = reloaded_state.modules["blog"]
+    assert blog_reloaded.prefix == "modules/blog"
+    assert blog_reloaded.branch == "splits/blog-module"
+    assert blog_reloaded.installed_at == "2025-01-01"
+
+
+def test_update_after_partial_remove_on_non_consolidated_project_targets_surviving(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CR-005: update after partial remove on non-consolidated project.
+
+    After removing one module from a legacy-tracked non-consolidated
+    project, the surviving module's tracking metadata must be available
+    for ``quickscale update`` — the update flow reads state via
+    ProjectStateManager and needs prefix/branch/installed_at to resolve
+    the git-subtree push target.
+    """
+    project_path = tmp_path / "myproject"
+    _write_project_with_modules_non_consolidated(project_path, ["auth", "blog"])
+
+    runner = CliRunner()
+    monkeypatch.chdir(project_path)
+
+    remove_result = runner.invoke(
+        remove,
+        ["auth", "--force"],
+        catch_exceptions=False,
+    )
+    assert remove_result.exit_code == 0
+
+    with (
+        patch(
+            "quickscale_cli.commands.module_commands._validate_update_environment",
+            return_value=None,
+        ),
+        patch(
+            "quickscale_cli.commands.module_commands.click.confirm",
+            return_value=True,
+        ),
+        patch(
+            "quickscale_cli.commands.module_commands._update_single_module",
+            return_value=True,
+        ) as mock_update_single_module,
+    ):
+        result = runner.invoke(update, ["--no-preview"], catch_exceptions=False)
+
+    assert result.exit_code == 0
+    mock_update_single_module.assert_called_once()
+    module_name, module_info, remote, no_preview = (
+        mock_update_single_module.call_args.args
+    )
+    assert module_name == "blog"
+    assert module_info.prefix == "modules/blog"
+    assert module_info.branch == "splits/blog-module"
+    assert remote == "https://github.com/Experto-AI/quickscale.git"
+    assert no_preview is True
 
 
 @pytest.mark.e2e
