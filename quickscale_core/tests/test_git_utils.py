@@ -1,5 +1,6 @@
 """Unit tests for git utilities."""
 
+import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -17,6 +18,11 @@ from quickscale_core.utils.git_utils import (
     run_git_subtree_pull,
     run_git_subtree_push,
 )
+
+
+def _git_available() -> bool:
+    """Return True if git is available on PATH."""
+    return shutil.which("git") is not None
 
 
 class TestIsGitRepo:
@@ -234,3 +240,295 @@ class TestResolveRemoteRef:
         )
         with pytest.raises(GitError, match="Unexpected ref format"):
             resolve_remote_ref("https://github.com/repo.git", "main")
+
+
+# ---------------------------------------------------------------------------
+# CR-M5-P3-007: SHA-pinned subtree pull contract verification
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestSubtreePullWithCommitSha:
+    """Hermetic integration test proving ``git subtree pull`` accepts a 40-char SHA.
+
+    This test creates a bare remote repo, pushes two commits, then uses
+    ``run_git_subtree_add`` with the first commit's SHA and
+    ``run_git_subtree_pull`` with the second commit's SHA.  It verifies that
+    the subtree content is correctly updated to the second commit.
+
+    This documents and verifies the contract that ``run_git_subtree_pull``
+    accepts a fully-spelled hex commit SHA in the *branch* parameter, which
+    is how ``_update_single_module`` binds the pull to the exact resolved
+    commit (CR-M5-P3-005 / CR-M5-P3-007).
+    """
+
+    def test_subtree_pull_with_40_char_sha_updates_content(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """git subtree pull with a 40-char SHA fetches the correct commit."""
+        remote_dir = tmp_path / "remote.git"
+        work_dir = tmp_path / "work"
+        local_dir = tmp_path / "local"
+
+        # --- Create a bare remote repo ---
+        subprocess.run(
+            ["git", "init", "--bare", str(remote_dir)],
+            check=True,
+            capture_output=True,
+        )
+
+        # --- Create a working repo to push initial content ---
+        subprocess.run(
+            ["git", "init", str(work_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+
+        # First commit
+        (work_dir / "module.txt").write_text("initial content\n")
+        subprocess.run(
+            ["git", "-C", str(work_dir), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "commit", "-m", "initial commit"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "remote", "add", "origin", str(remote_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(work_dir),
+                "push",
+                "origin",
+                "master:main",
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        # Capture the first commit SHA
+        initial_sha_result = subprocess.run(
+            ["git", "-C", str(work_dir), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        initial_sha = initial_sha_result.stdout.strip()
+        assert len(initial_sha) == 40
+
+        # Second commit
+        (work_dir / "module.txt").write_text("updated content\n")
+        subprocess.run(
+            ["git", "-C", str(work_dir), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "commit", "-m", "second commit"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(work_dir),
+                "push",
+                "origin",
+                "master:main",
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        # Capture the second commit SHA
+        second_sha_result = subprocess.run(
+            ["git", "-C", str(work_dir), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        second_sha = second_sha_result.stdout.strip()
+        assert len(second_sha) == 40
+        assert second_sha != initial_sha
+
+        # --- Create the local repo that uses subtree ---
+        subprocess.run(
+            ["git", "init", str(local_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Initial commit in local repo (required before subtree add)
+        (local_dir / "README.md").write_text("local readme\n")
+        subprocess.run(
+            ["git", "-C", str(local_dir), "add", "README.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "commit", "-m", "local init"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Subtree add using the first commit SHA
+        run_git_subtree_add(
+            prefix="modules/test",
+            remote=str(remote_dir),
+            branch=initial_sha,
+            squash=True,
+            path=local_dir,
+        )
+
+        # Verify initial content was added
+        module_file = local_dir / "modules" / "test" / "module.txt"
+        assert module_file.exists()
+        assert module_file.read_text() == "initial content\n"
+
+        # Subtree pull using the second commit SHA (the contract under test)
+        output = run_git_subtree_pull(
+            prefix="modules/test",
+            remote=str(remote_dir),
+            branch=second_sha,
+            squash=True,
+            path=local_dir,
+        )
+
+        # Verify the content was updated to the second commit
+        assert module_file.read_text() == "updated content\n"
+        # The pull should have produced some output
+        assert output  # non-empty stdout
+
+    def test_subtree_add_with_40_char_sha_works(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """git subtree add also accepts a 40-char SHA (companion proof)."""
+        remote_dir = tmp_path / "remote.git"
+        work_dir = tmp_path / "work"
+        local_dir = tmp_path / "local"
+
+        # Create bare remote
+        subprocess.run(
+            ["git", "init", "--bare", str(remote_dir)],
+            check=True,
+            capture_output=True,
+        )
+
+        # Create working repo with one commit
+        subprocess.run(
+            ["git", "init", str(work_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (work_dir / "module.txt").write_text("sha-pinned content\n")
+        subprocess.run(
+            ["git", "-C", str(work_dir), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "commit", "-m", "initial commit"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "remote", "add", "origin", str(remote_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "push", "origin", "master:main"],
+            check=True,
+            capture_output=True,
+        )
+
+        sha_result = subprocess.run(
+            ["git", "-C", str(work_dir), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        commit_sha = sha_result.stdout.strip()
+        assert len(commit_sha) == 40
+
+        # Create local repo
+        subprocess.run(
+            ["git", "init", str(local_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (local_dir / "README.md").write_text("local\n")
+        subprocess.run(
+            ["git", "-C", str(local_dir), "add", "README.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Subtree add using the commit SHA
+        run_git_subtree_add(
+            prefix="modules/test",
+            remote=str(remote_dir),
+            branch=commit_sha,
+            squash=True,
+            path=local_dir,
+        )
+
+        module_file = local_dir / "modules" / "test" / "module.txt"
+        assert module_file.exists()
+        assert module_file.read_text() == "sha-pinned content\n"
