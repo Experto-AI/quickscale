@@ -623,6 +623,163 @@ class ProjectStateManager:
         return self.load_managed_file_hashes()
 
     # ------------------------------------------------------------------
+    # Authoritative project metadata resolution
+    # ------------------------------------------------------------------
+
+    def resolve_authoritative_project_metadata(
+        self,
+    ) -> tuple[str, str, str] | None:
+        """Resolve real project slug, package, and theme from authoritative sources.
+
+        Resolution order:
+
+        1. ``state.yml`` — when it has consolidated sections (or a valid
+           ``project`` block), its slug/package/theme are authoritative.
+        2. ``quickscale.yml`` — validated desired-state file as fallback.
+
+        Returns:
+            ``(slug, package, theme)`` if derivable, ``None`` if neither
+            source provides valid project metadata.  Callers that need to
+            abort rather than synthesize should check for ``None``.
+        """
+        # 1. Try authoritative state.yml.
+        if self.state_file.exists():
+            try:
+                state = self._state_manager.load()
+            except StateError:
+                state = None
+
+            if state is not None:
+                return (
+                    state.project.slug,
+                    state.project.package,
+                    state.project.theme,
+                )
+
+        # 2. Fall back to validated quickscale.yml.
+        quickscale_yml = self.project_path / "quickscale.yml"
+        if quickscale_yml.exists():
+            try:
+                from quickscale_core.schema.config_schema import validate_config
+
+                desired = validate_config(quickscale_yml.read_text())
+                return (
+                    desired.project.slug,
+                    desired.project.package,
+                    desired.project.theme,
+                )
+            except Exception:
+                return None
+
+        return None
+
+    def materialize_authoritative_state(
+        self,
+    ) -> QuickScaleState | None:
+        """Materialize ``state.yml`` for config-only / non-consolidated projects.
+
+        When ``state.yml`` already has consolidated sections this is a no-op
+        that returns the loaded state.  When consolidated sections are absent
+        (config-only project), this method:
+
+        1. Resolves real project metadata from ``quickscale.yml`` (or from
+           the existing ``state.yml`` project block when parseable).
+        2. Imports legacy module tracking from ``config.yml``.
+        3. Preserves any existing module entries in ``state.yml`` that lack
+           consolidated tracking fields (merges rather than replaces).
+        4. Writes a fully consolidated ``state.yml``.
+
+        Returns:
+            The materialized :class:`QuickScaleState`, or ``None`` when
+            materialization is impossible (e.g. no ``quickscale.yml`` and
+            no valid ``state.yml``).
+
+        Raises:
+            StateError: When ``state.yml`` exists but is malformed.
+        """
+        # Already consolidated — nothing to materialize.
+        if self._state_file_has_consolidated_sections():
+            return self._state_manager.load()
+
+        # Load existing state if parseable (may have modules without
+        # consolidated tracking fields).
+        existing_state: QuickScaleState | None = None
+        if self.state_file.exists():
+            existing_state = self._state_manager.load()
+
+        # Resolve project metadata: prefer existing state, fall back to
+        # quickscale.yml.
+        metadata = self.resolve_authoritative_project_metadata()
+        if metadata is None:
+            return None
+
+        slug, package, theme = metadata
+
+        # Start from existing modules (if any) to preserve entries that
+        # lack consolidated tracking fields.
+        modules: dict[str, ModuleState] = {}
+        if existing_state is not None:
+            modules.update(existing_state.modules)
+
+        # Merge legacy module tracking from config.yml.
+        try:
+            legacy_config = self.load_config()
+        except (ConfigError, OSError, yaml.YAMLError):
+            legacy_config = None
+
+        if legacy_config is not None:
+            for module_name, module_info in legacy_config.modules.items():
+                if module_name in modules:
+                    # Fill in missing consolidated tracking fields.
+                    module_state = modules[module_name]
+                    if module_state.prefix is None:
+                        module_state.prefix = module_info.prefix
+                    if module_state.branch is None:
+                        module_state.branch = module_info.branch
+                    if module_state.installed_at is None:
+                        module_state.installed_at = module_info.installed_at
+                else:
+                    modules[module_name] = ModuleState(
+                        name=module_name,
+                        version=normalize_installed_version(
+                            module_info.installed_version
+                        ),
+                        prefix=module_info.prefix,
+                        branch=module_info.branch,
+                        installed_at=module_info.installed_at,
+                    )
+
+        # Import legacy file hashes.
+        managed_files: dict[str, ManagedFileRecord] = {}
+        if existing_state is not None:
+            managed_files.update(existing_state.managed_files)
+        try:
+            legacy_hashes = self.load_managed_file_hashes()
+        except StateError:
+            legacy_hashes = {}
+        for path, record in legacy_hashes.items():
+            if path not in managed_files:
+                managed_files[path] = ManagedFileRecord(
+                    path=record.path,
+                    hash=record.hash,
+                    applied_at=record.applied_at,
+                )
+
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug=slug,
+                package=package,
+                theme=theme,
+            ),
+            modules=modules,
+            managed_files=managed_files,
+        )
+
+        self.save_state(state)
+        return state
+
+    # ------------------------------------------------------------------
     # Cross-file consistency
     # ------------------------------------------------------------------
 

@@ -58,7 +58,7 @@ git merge --no-ff wt-track{N}-<branch>
 | M2 | Track 3 | F2.1–2.2 | ✅ | `state.yml` authoritative; advisory lock; CR-005 resolved |
 | M3 | Track 1 | F11.1h–11.1j | ⬜ | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | ✅ | All 11 catalog modules on manifest wiring path |
-| M5 | Track 3 | F2.3b–2.4b | 🟡 | CR-M5-P3-001..004 resolved; split-publish wrapper adopted; tagged-source gate done |
+| M5 | Track 3 | F2.3b–2.4b | 🟡 | 2.3b ✅ (CR-M5-P3-001/002 resolved); 2.3c (CR-M5-P3-003/004), 2.4a, 2.4b still open |
 | M6 | Track 2 | F1.3 | 🟡 | CR-M6-004 resolved + regression coverage |
 | M7 | Track 1 | F11.2–11.4 | ⬜ | All module isolation tests unskipped and green |
 | M8 | Track 3 | F12.1–12.3 | ⬜ | `ApplyStep` model done; recovery ledger has `failed_step` |
@@ -76,9 +76,9 @@ git merge --no-ff wt-track{N}-<branch>
 
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3`
-**Status:** 🟡 Blocked — worktree dirty; CR-M5-P3-001..004 open; split-publish wrapper and tagged-source gate not yet done
-**Done this milestone:** 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix paths)
-**Open:** 2.3b (update paths), 2.3c (apply/embed paths), 2.4a (wrapper adoption), 2.4b (tagged-source gate)
+**Status:** 🟡 — 2.3b complete; 2.3c (CR-M5-P3-003/004), 2.4a (split-publish wrapper), 2.4b (tagged-source gate) still open
+**Done this milestone:** 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix paths); 2.3b (update-path provenance persistence, config-only/non-consolidated state materialization safeguards, project metadata preservation, abort-on-missing-authority, py.typed metadata fix)
+**Open:** 2.3c (apply/embed paths), 2.4a (wrapper adoption), 2.4b (tagged-source gate)
 
 ### M6 — F1.3 Legacy wiring follow-ups
 **Track:** Track 2 | **Worktree:** `quickscale-wt-track2`
@@ -280,24 +280,14 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 **Explanation (autopsy #6 + provenance):** Mutable project state lives in several stores that can silently disagree — `quickscale.yml` (desired), `.quickscale/state.yml` (applied), `.quickscale/config.yml` (legacy version mirror), the files on disk, and `.quickscale/file_hashes.yml` (drift ledger) — with authority asserted by convention rather than structure. Provenance work adds *more* state (commit SHA, release id) on top of this unconsolidated base. State consolidation and advisory locking are done (M2). Provenance persistence and release tooling remain.
 
-**Completed (v0.87.0, see CHANGELOG):** Phase 2.1–2.2 (M2 — `state.yml` authoritative, legacy read-through, drift diagnostics, advisory lock, CR-005); Phase 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix/module-resolution paths)
+**Completed (v0.87.0, see CHANGELOG):** Phase 2.1–2.2 (M2 — `state.yml` authoritative, legacy read-through, drift diagnostics, advisory lock, CR-005); Phase 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix/module-resolution paths); Phase 2.3b (update-path provenance persistence, config-only/non-consolidated state materialization safeguards, project metadata preservation, abort-on-missing-authority, py.typed metadata fix)
 
 ---
-
-**Phase 2.3b — Provenance persistence on update paths (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
-
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as part of:** M5
-**Dependencies:** M2 on v87 (done).
-**Status:** 🚫 CR-M5-P3-001 (update path records project HEAD, not module source commit) and CR-M5-P3-002 (config-only legacy update does not materialize provenance into `state.yml`) open.
-
-- [ ] Fix CR-M5-P3-001: update path must record module source commit, not project HEAD.
-- [ ] Fix CR-M5-P3-002: config-only legacy update must materialize authoritative provenance into `state.yml`.
-- [ ] Add provenance-persistence tests for both update paths.
 
 **Phase 2.3c — Provenance persistence on apply/embed paths (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as part of:** M5
-**Dependencies:** 2.3b complete (share the provenance-persistence test harness).
+**Dependencies:** 2.3b complete ✅ (share the provenance-persistence test harness).
 **Status:** 🚫 CR-M5-P3-003 (apply/embed/no-op do not persist full provenance triple consistently) and CR-M5-P3-004 (caller parity across update/apply/embed/no-op incomplete) open.
 
 - [ ] Fix CR-M5-P3-003: apply/embed/no-op apply must persist/backfill full provenance triple consistently.
@@ -307,7 +297,7 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Phase 2.4a — Split-publish wrapper adoption (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as part of:** M5
-**Dependencies:** 2.3b complete (helper surface established).
+**Dependencies:** 2.3b complete ✅ (helper surface established).
 
 - [ ] Adopt the split-publish wrapper across actual split/publish execution paths so split branches use the provenance-aware helper surface instead of hardcoded module path/branch resolution.
 
