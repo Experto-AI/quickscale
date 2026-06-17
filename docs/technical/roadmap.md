@@ -54,7 +54,7 @@ git merge --no-ff wt-track{N}-<branch>
 | # | Track | Phase | Status | Condition |
 |---|-------|-------|--------|-----------|
 | M0 | Track 1 | v0.87.0 | ✅ | Analytics module-owned page; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
-| M1 | Track 1 | F11.1g + 11.1g.1 | 🟡 | 11.1d ✅; 11.1d.1 Tag-first ✅; Stage semantic deferred; 11.1g.a/b and 11.1g.1 still open |
+| M1 | Track 1 | F11.1g.a (next) + 11.1g.b (blocked) + 11.1g.1 (blocked) | 🟡 | 11.1d ✅; 11.1d.1 Tag-first ✅; Stage semantic deferred; 11.1g.a next actionable (deps satisfied, deferred for handoff); **CR-P11GA-001 blocking** — insufficient-membership org-scoped POST denial proof required; 11.1g.b blocked behind 11.1g.a; 11.1g.1 blocked behind 11.1g.b |
 | M2 | Track 3 | F2.1–2.2 | ✅ | `state.yml` authoritative; advisory lock; CR-005 resolved |
 | M3 | Track 1 | F11.1h–11.1j | ⬜ | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | ✅ | All 11 catalog modules on manifest wiring path |
@@ -70,9 +70,9 @@ git merge --no-ff wt-track{N}-<branch>
 
 ### M1 — F11 CRM org-scoped create + read bridge
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1`
-**Status:** 🟡 — 11.1g blocked (Contact/Deal related-ID safety); 11.1g.1 read-path pending
+**Status:** 🟡 — 11.1g.a next actionable (deps satisfied, deferred for handoff); **CR-P11GA-001 blocking** (insufficient-membership org-scoped POST denial proof required); 11.1g.b blocked behind 11.1g.a; 11.1g.1 blocked behind 11.1g.b
 **Done this milestone:** 11.1d (nullable org FK on 5 models), 11.1d.1 Tag-first (partial UniqueConstraints + serializer parity)
-**Open:** Stage terminal_semantic deferred; 11.1g.a/b (create stamping); 11.1g.1 (read-path scope)
+**Open:** Stage terminal_semantic deferred; CR-P11GA-001; 11.1g.a (self-contained create stamping); 11.1g.b (Contact/Deal guard + stamping); 11.1g.1 (read-path scope)
 
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3`
@@ -142,7 +142,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 **Track:** Track 1 | **Merges as part of:** M1
 **Dependencies:** None externally; runs after 11.1d.1.
+**Status:** ⏳ Next actionable — dependencies satisfied, implementation deferred for handoff. Blocked by CR-P11GA-001.
 
+- [ ] Resolve CR-P11GA-001: add an insufficient-membership org-scoped POST denial proof — a wrong-org or non-member staff user must receive 403 with no row creation on org-scoped create.
 - [ ] Stamp current-org ownership on org-scoped create paths for Tag, Company, and Stage (self-contained resources — no foreign-org related-ID risk).
 - [ ] Add middleware-backed org-member create → list roundtrip coverage for Tag, Company, and Stage.
 
