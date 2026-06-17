@@ -55,7 +55,7 @@ git merge --no-ff wt-track{N}-<branch>
 |---|-------|-------|-----------|
 | M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
 | M1 | Track 1 | F11.1d ✅ + 11.1d.1 + 11.1g + 11.1g.1 | **11.1d done:** nullable org FK on Tag/Company/Contact/Stage/Deal; ContactNote/DealNote parent-derived; CRM admin non-exposure explicit for all five admins; targeted migration/admin/serializer/model tests added; CRM baseline 158 passed / 1 xfailed. **Remaining:** legacy NULL-row uniqueness preserved (11.1d.1); org-scoped creates stamp current org (11.1g); queries scoped (11.1g.1); isolation test still xfail |
-| M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
+| M2 | Track 3 | F2.1–2.2 | Substantial implementation complete; merge blocked — CR-005 partial-remove legacy read-through regression |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 11 wiring slices migrated (`social` deferred to M6) |
 | M5 | Track 3 | F2.3–2.4 | Provenance fields in state.yml; release tooling updated |
@@ -317,9 +317,11 @@ _(part of the M1 batch — implement after 11.1g in the same worktree)_
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M2
 **Dependencies:** None — start immediately (fully parallel with Tracks 1 and 2).
 
-- [ ] Collapse to one authoritative applied-state store: retire `config.yml` into `state.yml` and fold `file_hashes.yml` into a sub-section.
-- [ ] Make reconciliation explicit and queryable (`quickscale status`/`doctor` reports drift on demand, not only during `apply`).
-- [ ] Add an advisory lock around `state.yml` read/modify/write so concurrent `apply` (CI + local, two terminals) fails closed instead of racing.
+- [x] Collapse to one authoritative applied-state store: retire `config.yml` into `state.yml` and fold `file_hashes.yml` into a sub-section. _`.quickscale/state.yml` is now the sole authoritative applied-state store with optional `managed_files` and per-module consolidated tracking sub-sections. Legacy `config.yml` and `file_hashes.yml` are read-through imported as compatibility inputs when consolidated sections are absent, and ignored when consolidated sections are present._
+- [x] Make reconciliation explicit and queryable (`quickscale status` reports drift on demand, not only during `apply`). _`quickscale status` text and `--json` output now surface M2 drift and compatibility diagnostics: state consolidation status, legacy files on disk, legacy-compat active mode, per-module tracking completeness, managed-files consolidation, filesystem drift, managed-file drift, and version drift. No `doctor` command was added; diagnostics live in `quickscale status` only._
+- [x] Add an advisory lock around `state.yml` read/modify/write so concurrent `apply` (CI + local, two terminals) fails closed instead of racing. _`AdvisoryLock` provides an exclusive-create (`O_CREAT | O_EXCL`) file-based advisory lock at `.quickscale/<name>.lock` with PID, hostname, timestamp, and operation metadata. Fail-fast contention with no retry loops; stale-lock inspection and manual-clear guidance only._
+
+**Merge status:** Substantial implementation complete on the branch (state.yml consolidation, legacy read-through compatibility, drift diagnostics in `quickscale status` text and `--json`, advisory lock with fail-fast contention, roadmap and technical docs updated, package README / publish helper compatibility fixed). **Blocked** — CR-005: after a partial remove on a legacy-tracked project, the new empty consolidated marker can suppress legacy `config.yml` tracking import for surviving modules, which can break later `quickscale update`/`push`. Fix required before M2 can merge to `v87`.
 
 **Phase 2.3–2.4 — Authoritative provenance fields + release tooling** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 

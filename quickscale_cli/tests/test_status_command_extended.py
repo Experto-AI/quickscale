@@ -12,8 +12,10 @@ import pytest
 from quickscale_cli.schema.config_schema import ConfigValidationError
 from quickscale_cli.commands.status_command import (
     _build_json_output,
+    _compute_drift_diagnostics,
     _detect_project_context,
     _display_docker_status,
+    _display_drift_diagnostics,
     _display_drift_warnings,
     _display_modules,
     _display_pending_changes,
@@ -22,6 +24,7 @@ from quickscale_cli.commands.status_command import (
     _format_datetime,
     _get_docker_status,
     _load_config,
+    _state_file_has_consolidated_sections,
     status,
 )
 from quickscale_core.project_state import ProjectStateManager
@@ -602,3 +605,211 @@ class TestStatusCommandExtended:
             assert result.exit_code != 0
             assert "manifest" in result.output.lower()
             assert "auth" in result.output
+
+
+# ============================================================================
+# Phase 4: _state_file_has_consolidated_sections
+# ============================================================================
+
+
+class TestStateFileHasConsolidatedSections:
+    """Tests for _state_file_has_consolidated_sections helper."""
+
+    def test_no_state_file(self, tmp_path):
+        """Return False when state.yml does not exist."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        assert _state_file_has_consolidated_sections(state_dir) is False
+
+    def test_consolidated_via_managed_files(self, tmp_path):
+        """Return True when managed_files section is present."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "modules: {}\n"
+            "managed_files: []\n"
+        )
+        assert _state_file_has_consolidated_sections(state_dir) is True
+
+    def test_consolidated_via_module_tracking(self, tmp_path):
+        """Return True when a module has prefix/branch/installed_at."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "    version: '1.0'\n"
+            "    prefix: modules/auth\n"
+            "    branch: main\n"
+            "    installed_at: '2025-01-01'\n"
+        )
+        assert _state_file_has_consolidated_sections(state_dir) is True
+
+    def test_not_consolidated(self, tmp_path):
+        """Return False when no consolidated sections present."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        assert _state_file_has_consolidated_sections(state_dir) is False
+
+    def test_malformed_yaml(self, tmp_path):
+        """Return False for malformed YAML."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text("invalid: [yaml: broken")
+        assert _state_file_has_consolidated_sections(state_dir) is False
+
+
+# ============================================================================
+# Phase 4: _compute_drift_diagnostics
+# ============================================================================
+
+
+class TestComputeDriftDiagnostics:
+    """Tests for _compute_drift_diagnostics helper."""
+
+    def test_basic_diagnostics_structure(self, tmp_path):
+        """Diagnostics should return a well-structured dict."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+
+        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.project_state import ProjectStateManager
+
+        sm = StateManager(tmp_path)
+        psm = ProjectStateManager(tmp_path)
+        state = sm.load()
+
+        result = _compute_drift_diagnostics(tmp_path, state, psm, sm)
+
+        assert "state_consolidated" in result
+        assert "legacy_files_present" in result
+        assert "legacy_compat_active" in result
+        assert "module_tracking" in result
+        assert "managed_files_consolidated" in result
+        assert "filesystem_drift" in result
+        assert "managed_file_drift" in result
+        assert "version_drift" in result
+
+    def test_legacy_compat_active_when_no_consolidated(self, tmp_path):
+        """legacy_compat_active should be True when consolidated sections absent."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        # Create a legacy config.yml.
+        from quickscale_core.config import add_module
+
+        add_module(
+            module_name="auth",
+            prefix="modules/auth",
+            branch="main",
+            version="1.0.0",
+            project_path=tmp_path,
+        )
+
+        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.project_state import ProjectStateManager
+
+        sm = StateManager(tmp_path)
+        psm = ProjectStateManager(tmp_path)
+        state = sm.load()
+
+        result = _compute_drift_diagnostics(tmp_path, state, psm, sm)
+
+        assert result["state_consolidated"] is False
+        assert result["legacy_compat_active"] is True
+        assert "config.yml" in result["legacy_files_present"]
+
+    def test_none_state(self, tmp_path):
+        """Diagnostics should handle None state gracefully."""
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+
+        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.project_state import ProjectStateManager
+
+        sm = StateManager(tmp_path)
+        psm = ProjectStateManager(tmp_path)
+
+        result = _compute_drift_diagnostics(tmp_path, None, psm, sm)
+
+        assert result["state_consolidated"] is False
+        assert result["module_tracking"]["total"] == 0
+
+
+# ============================================================================
+# Phase 4: _display_drift_diagnostics
+# ============================================================================
+
+
+class TestDisplayDriftDiagnostics:
+    """Tests for _display_drift_diagnostics text output."""
+
+    def test_display_runs_without_error(self):
+        """Display function should run without raising."""
+        diagnostics = {
+            "state_consolidated": True,
+            "legacy_files_present": [],
+            "legacy_compat_active": False,
+            "module_tracking": {
+                "total": 0,
+                "consolidated": 0,
+                "needs_consolidation": [],
+            },
+            "managed_files_consolidated": False,
+            "filesystem_drift": {
+                "orphaned_modules": [],
+                "missing_modules": [],
+            },
+            "managed_file_drift": [],
+            "version_drift": [],
+        }
+        # Should not raise.
+        _display_drift_diagnostics(diagnostics)
+
+    def test_display_with_issues(self):
+        """Display function should handle drift issues."""
+        diagnostics = {
+            "state_consolidated": False,
+            "legacy_files_present": ["config.yml", "file_hashes.yml"],
+            "legacy_compat_active": True,
+            "module_tracking": {
+                "total": 2,
+                "consolidated": 1,
+                "needs_consolidation": ["blog"],
+            },
+            "managed_files_consolidated": False,
+            "filesystem_drift": {
+                "orphaned_modules": ["orphan"],
+                "missing_modules": ["gone"],
+            },
+            "managed_file_drift": [
+                {"path": "settings/modules.py", "expected_hash": "abc123"},
+            ],
+            "version_drift": [
+                {
+                    "module": "auth",
+                    "state_version": "1.0",
+                    "config_version": "2.0",
+                },
+            ],
+        }
+        # Should not raise.
+        _display_drift_diagnostics(diagnostics)

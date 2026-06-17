@@ -79,7 +79,8 @@ quickscale
 myapp/
 ├── quickscale.yml              # Desired state (user edits)
 ├── .quickscale/
-│   └── state.yml               # Applied state (auto-managed)
+│   ├── state.yml               # Sole authoritative applied-state store (auto-managed)
+│   └── <name>.lock             # Advisory lock for concurrent-apply serialization
 ├── modules/
 │   ├── auth/                   # Embedded modules
 │   └── blog/
@@ -126,7 +127,7 @@ keys are accepted: `registration_enabled`, `email_verification`,
 legacy auth keys so older projects can re-apply without rewriting historical
 state first.
 
-### `.quickscale/state.yml` (Applied State)
+### `.quickscale/state.yml` (Applied State — Sole Authoritative Store)
 
 ```yaml
 version: 0.86.0
@@ -148,7 +149,18 @@ modules:
       email_verification: optional
       session_cookie_age: 1209600
       authentication_method: email
+    # Consolidated tracking fields (Phase 2 / M2):
+    prefix: splits
+    branch: splits/auth-module
+    installed_at: "2025-11-28T10:05:00"
+
+managed_files:
+  - path: myapp/settings/base.py
+    hash: sha256hex...
+    applied_at: "2025-11-28T10:30:00"
 ```
+
+Legacy `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only: read-through imported when the consolidated sections above are absent, ignored when present.
 
 ### Module Manifest (`module.yml`)
 
@@ -185,16 +197,21 @@ config:
 
 ## State Management
 
-**Hybrid Approach (Terraform-style)**:
-1. **State file** (`.quickscale/state.yml`): Tracks applied configuration
-2. **Filesystem verification**: Double-checks modules exist in `modules/`
+**Consolidated State (Phase 2 / M2)**:
+1. **State file** (`.quickscale/state.yml`): Sole authoritative applied-state store, with consolidated sub-sections for module-tracking metadata (`prefix`, `branch`, `installed_at`) and managed-file drift/hash records (`managed_files`).
+2. **Advisory lock** (`.quickscale/<name>.lock`): Exclusive-create file-based lock that serializes concurrent `apply` operations. Fail-fast contention; stale-lock inspection and manual-clear guidance only.
+3. **Legacy compatibility**: `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only — read-through imported when `state.yml` lacks consolidated sections, ignored when consolidated sections are present. Leftover legacy files may remain on disk as ignored compatibility debris after a successful authoritative save.
+4. **Drift diagnostics**: `quickscale status` text and `--json` output report state consolidation status, legacy files on disk, legacy-compat active mode, per-module tracking completeness, managed-files consolidation, filesystem drift, managed-file drift, and version drift.
 
 **Apply logic**:
-1. Read desired state from `quickscale.yml`
-2. Read applied state from `.quickscale/state.yml`
-3. Verify filesystem matches state file
-4. Calculate delta (what's new, changed, or removed)
-5. Apply only the delta
+1. Acquire advisory lock on `state.yml` (fail-fast if held)
+2. Read desired state from `quickscale.yml`
+3. Read applied state from `.quickscale/state.yml` (read-through import from legacy files when consolidated sections are absent)
+4. Verify filesystem matches state file
+5. Calculate delta (what's new, changed, or removed)
+6. Apply only the delta
+7. Write new state to `.quickscale/state.yml` with consolidated sub-sections
+8. Release advisory lock
 
 ---
 

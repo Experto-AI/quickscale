@@ -9,3 +9,19 @@ that the CLI and module packages build on.
 
 Install it directly only when you need the library without the CLI; most
 users should install the top-level `quickscale` package instead.
+
+## Installation
+
+```bash
+pip install quickscale-core
+```
+
+Or install the full bundle:
+
+```bash
+pip install quickscale
+```
+
+## Documentation
+
+See the [main repository README](../README.md) and [docs/](../docs/) for full documentation.

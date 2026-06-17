@@ -33,14 +33,16 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - Modules are reusable Django apps that users embed into generated projects and update over project lifetime.
 - Themes are one-time scaffolding copied into user-owned project files during generation; they are not live runtime packages.
 - Generated projects stay standalone by default. Automatic settings inheritance from `quickscale_core` is not part of the default generated-project contract.
-- `quickscale.yml` remains the desired-state input, while `.quickscale/state.yml` and `.quickscale/config.yml` are system-managed state artifacts.
+- `quickscale.yml` remains the desired-state input, while `.quickscale/state.yml` is the sole authoritative applied-state store. Legacy `.quickscale/config.yml` is a compatibility input only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present).
 
 <a id="planapply-architecture"></a>
 ## Plan/Apply Contract Summary
 
 - `quickscale plan <project>` creates or updates `quickscale.yml` as the user-owned desired-state file.
 - Users then enter the generated project directory and run `quickscale apply` to materialize the configuration.
-- `.quickscale/state.yml` records applied state after execution, and `.quickscale/config.yml` stores module metadata for update and push workflows.
+- `.quickscale/state.yml` records applied state after execution and is the sole authoritative applied-state store, with consolidated sub-sections for module-tracking metadata and managed-file drift records. Legacy `.quickscale/config.yml` is a compatibility input only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present).
+- `quickscale status` reports drift and compatibility diagnostics on demand, including state consolidation status, legacy files on disk, per-module tracking completeness, managed-file drift, and version drift.
+- Apply acquires an advisory lock around `state.yml` read/modify/write so concurrent `apply` operations fail closed instead of racing.
 - Apply is expected to be declarative, incremental, and idempotent for the current shipped contract.
 
 <a id="module-configuration-strategy"></a>
@@ -114,7 +116,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | Themes (React default + HTML secondary option) | IN (v0.61.0+) | `showcase_react` and `showcase_html` ship as generator templates with one-time copy during apply. |
 | `quickscale_themes/` packaged themes | NOT CURRENT | Theme package distribution is out of contract unless a later release documents it explicitly. |
 | YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | Shipped as part of the plan/apply system. |
-| State tracking (`.quickscale/state.yml`) | IN (v0.69.0+) | Applied-state tracking for incremental applies. |
+| State tracking (`.quickscale/state.yml`) | IN (v0.69.0+; consolidated Phase 2 / M2) | Sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records. Advisory lock serializes concurrent `apply`. `quickscale status` reports drift and compatibility diagnostics. |
 | PyPI / private-registry distribution for commercial modules | NOT CURRENT | Commercial distribution is not part of the current shipped contract. |
 
 **Notes:**

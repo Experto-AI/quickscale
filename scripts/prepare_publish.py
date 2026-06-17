@@ -114,6 +114,12 @@ PATH_DEPENDENCY_REWRITES: Final[dict[str, dict[str, str]]] = {
 # operators and any cleanup tooling continue to recognise the file.
 BACKUP_SUFFIX: Final[str] = ".backup"
 
+# Marker filename written next to a package ``README.md`` when the helper
+# itself created the copy.  ``remove_readme`` consults this marker so it
+# can distinguish helper-created copies from pre-existing package READMEs
+# and leave the latter untouched during restore.
+README_COPY_MARKER: Final[str] = ".prepare_publish_readme_copy"
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -357,6 +363,10 @@ def copy_readme(repo_root: Path, package: str) -> bool:
     rewritten ``pyproject.toml`` so poetry could find it. The copy is
     skipped when the file already exists to avoid clobbering any
     package-owned content. Returns ``True`` when a copy was performed.
+
+    A marker file (:data:`README_COPY_MARKER`) is written alongside the
+    copy so :func:`remove_readme` can later tell helper-created copies
+    apart from pre-existing package READMEs.
     """
     source = repo_root / "README.md"
     target = repo_root / package / "README.md"
@@ -365,6 +375,9 @@ def copy_readme(repo_root: Path, package: str) -> bool:
     if target.is_file():
         return False
     shutil.copyfile(source, target)
+    # Mark the copy as helper-created so restore can preserve pre-existing
+    # package READMEs that were not written by this helper.
+    (repo_root / package / README_COPY_MARKER).write_text("", encoding="utf-8")
     return True
 
 
@@ -372,28 +385,47 @@ def remove_readme(package_dir: Path, *, root_readme: Path | None = None) -> bool
     """
     Remove a temporary package-level ``README.md`` copy if present.
 
-    When *root_readme* is provided and exists on disk, the package README
-    is deleted **only** when its content is byte-identical to the root
-    README — i.e. it was created by :func:`copy_readme` and is not a real
-    package-owned README.  Real package READMEs (different content) are
-    preserved.
+    The function uses two complementary safety checks to decide whether a
+    package ``README.md`` was created by :func:`copy_readme` and is safe to
+    delete:
 
-    When *root_readme* is ``None`` the function falls back to the legacy
-    behaviour (delete any existing ``README.md``).  Callers that care about
-    preserving real package READMEs should always pass *root_readme*.
+    1. **Marker check** — if the :data:`README_COPY_MARKER` sidecar file
+       exists alongside the README, the copy is definitively helper-created
+       and is removed.
+    2. **Content check** — when *root_readme* is provided and exists on
+       disk, the package README is deleted **only** when its content is
+       byte-identical to the root README.  Real package READMEs (different
+       content) are preserved.
+
+    When neither check confirms the README is a temporary copy, the file
+    is left untouched.  Callers that care about preserving real package
+    READMEs should always pass *root_readme*.
 
     Returns ``True`` when a file was removed.
     """
     readme = package_dir / "README.md"
     if not readme.is_file():
         return False
+    marker = package_dir / README_COPY_MARKER
+    if marker.is_file():
+        # Primary signal: the marker sidecar proves this README was
+        # created by copy_readme.  Remove both.
+        readme.unlink()
+        marker.unlink()
+        return True
     if root_readme is not None and root_readme.is_file():
         if readme.read_bytes() != root_readme.read_bytes():
             # Content differs from the root README — this is a real
             # package-owned README, not a temporary copy.  Preserve it.
             return False
-    readme.unlink()
-    return True
+        # Content matches the root README — safe to remove even without
+        # the marker (e.g. marker was lost or the copy was made by an
+        # older helper version).
+        readme.unlink()
+        return True
+    # No marker and no root_readme to compare against — preserve the
+    # README rather than risk deleting a real package file.
+    return False
 
 
 def prepare_all(

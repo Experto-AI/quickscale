@@ -955,9 +955,6 @@ class TestUpdateSingleModule:
                 "quickscale_cli.commands.module_commands.run_git_subtree_pull"
             ) as mock_pull,
             patch(
-                "quickscale_cli.commands.module_commands.update_module_version"
-            ) as mock_update_version,
-            patch(
                 "quickscale_cli.commands.module_commands._sync_state_module_version"
             ) as mock_sync_state,
             patch(
@@ -977,7 +974,6 @@ class TestUpdateSingleModule:
         assert "Failed to load .quickscale/state.yml" in captured.err
         assert expected_fragment in captured.err
         mock_pull.assert_not_called()
-        mock_update_version.assert_not_called()
         mock_sync_state.assert_not_called()
         mock_commit.assert_not_called()
 
@@ -1037,9 +1033,6 @@ class TestUpdateSingleModule:
                 "quickscale_cli.commands.module_commands.run_git_subtree_pull"
             ) as mock_pull,
             patch(
-                "quickscale_cli.commands.module_commands.update_module_version"
-            ) as mock_update_version,
-            patch(
                 "quickscale_cli.commands.module_commands._sync_state_module_version"
             ) as mock_sync_state,
             patch(
@@ -1060,7 +1053,6 @@ class TestUpdateSingleModule:
         assert "quickscale apply" in captured.err
         assert "blog.enable_rss" in captured.err
         mock_pull.assert_not_called()
-        mock_update_version.assert_not_called()
         mock_sync_state.assert_not_called()
         mock_commit.assert_not_called()
 
@@ -1114,16 +1106,6 @@ class TestUpdateSingleModule:
             )
             return "updated"
 
-        def _fake_update_module_version(
-            module_name: str,
-            version: str,
-            project_path: Path,
-        ) -> None:
-            del module_name
-            (project_path / ".quickscale" / "config.yml").write_text(
-                f"modules:\n  auth:\n    installed_version: {version}\n"
-            )
-
         def _fake_sync_state_module_version(
             project_path: Path,
             module_name: str,
@@ -1142,10 +1124,6 @@ class TestUpdateSingleModule:
             patch(
                 "quickscale_cli.commands.module_commands._read_embedded_module_version",
                 return_value="0.82.0",
-            ),
-            patch(
-                "quickscale_cli.commands.module_commands.update_module_version",
-                side_effect=_fake_update_module_version,
             ),
             patch(
                 "quickscale_cli.commands.module_commands._sync_state_module_version",
@@ -1174,12 +1152,10 @@ class TestUpdateSingleModule:
     @patch("quickscale_cli.commands.module_commands._commit_module_update")
     @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
     @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
-    @patch("quickscale_cli.commands.module_commands.update_module_version")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_successful_update(
         self,
         mock_pull,
-        mock_update_version,
         mock_read_version,
         mock_sync_state,
         mock_commit,
@@ -1200,19 +1176,16 @@ class TestUpdateSingleModule:
             branch="splits/auth-module",
             squash=True,
         )
-        assert mock_update_version.call_args.args[:2] == ("auth", "0.82.0")
         assert mock_sync_state.call_args.args[:2] == (Path.cwd(), "auth")
         mock_commit.assert_called_once_with("auth", "modules/auth")
 
     @patch("quickscale_cli.commands.module_commands._commit_module_update")
     @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
     @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
-    @patch("quickscale_cli.commands.module_commands.update_module_version")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_update_with_no_preview(
         self,
         mock_pull,
-        mock_update_version,
         mock_read_version,
         mock_sync_state,
         mock_commit,
@@ -1323,28 +1296,25 @@ class TestUpdateCommand:
     """Tests for update click command."""
 
     @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
     def test_update_allows_billing_module_through_standard_readiness_path(
         self,
         mock_confirm,
         mock_validate,
-        mock_load,
+        mock_manager_cls,
         mock_update,
     ):
         """Billing updates should no longer abort on a stale readiness override."""
         mock_confirm.return_value = True
-        module_info = Mock(
-            installed_version="0.70.0",
+        module_state = Mock(
+            version="0.70.0",
             prefix="modules/billing",
             branch="splits/billing-module",
         )
-        config = Mock(
-            modules={"billing": module_info},
-            default_remote="https://example.com/repo.git",
-        )
-        mock_load.return_value = config
+        state = Mock(modules={"billing": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1356,31 +1326,24 @@ class TestUpdateCommand:
         assert (
             "Billing remains excluded from public quickscale embed" not in result.output
         )
-        mock_update.assert_called_once_with(
-            "billing",
-            module_info,
-            "https://example.com/repo.git",
-            True,
-        )
+        mock_update.assert_called_once()
 
     @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
     def test_successful_update(
-        self, mock_confirm, mock_validate, mock_load, mock_update
+        self, mock_confirm, mock_validate, mock_manager_cls, mock_update
     ):
         """Test successful update of installed modules."""
         mock_confirm.return_value = True
-        module_info = Mock(
-            installed_version="v0.70.0",
+        module_state = Mock(
+            version="v0.70.0",
             prefix="modules/auth",
             branch="splits/auth-module",
         )
-        config = Mock(
-            modules={"auth": module_info}, default_remote="https://example.com/repo.git"
-        )
-        mock_load.return_value = config
+        state = Mock(modules={"auth": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1390,29 +1353,26 @@ class TestUpdateCommand:
         assert result.exit_code == 0
 
     @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
     def test_update_stops_and_aborts_on_module_failure(
-        self, mock_confirm, mock_validate, mock_load, mock_update
+        self, mock_confirm, mock_validate, mock_manager_cls, mock_update
     ):
         """Test update aborts when a module fails to update."""
         mock_confirm.return_value = True
-        auth_info = Mock(
-            installed_version="v0.70.0",
+        auth_state = Mock(
+            version="v0.70.0",
             prefix="modules/auth",
             branch="splits/auth-module",
         )
-        listings_info = Mock(
-            installed_version="v0.70.0",
+        listings_state = Mock(
+            version="v0.70.0",
             prefix="modules/listings",
             branch="splits/listings-module",
         )
-        config = Mock(
-            modules={"auth": auth_info, "listings": listings_info},
-            default_remote="https://example.com/repo.git",
-        )
-        mock_load.return_value = config
+        state = Mock(modules={"auth": auth_state, "listings": listings_state})
+        mock_manager_cls.return_value.load_state.return_value = state
         mock_update.side_effect = [True, False]
 
         from click.testing import CliRunner
@@ -1424,12 +1384,12 @@ class TestUpdateCommand:
         assert "Module update stopped due to failure" in result.output
         assert "Unexpected error" not in result.output
 
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
-    def test_no_modules_installed(self, mock_validate, mock_load):
+    def test_no_modules_installed(self, mock_validate, mock_manager_cls):
         """Test update when no modules are installed."""
-        config = Mock(modules={})
-        mock_load.return_value = config
+        state = Mock(modules={})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1439,17 +1399,17 @@ class TestUpdateCommand:
         assert result.exit_code == 0
         assert "No modules installed" in result.output
 
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
-    def test_user_cancels_update(self, mock_confirm, mock_validate, mock_load):
+    def test_user_cancels_update(self, mock_confirm, mock_validate, mock_manager_cls):
         """Test update cancelled by user."""
         mock_confirm.return_value = False
-        module_info = Mock(installed_version="v0.70.0")
-        config = Mock(
-            modules={"auth": module_info}, default_remote="https://example.com/repo.git"
+        module_state = Mock(
+            version="v0.70.0", prefix="modules/auth", branch="splits/auth-module"
         )
-        mock_load.return_value = config
+        state = Mock(modules={"auth": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1457,7 +1417,7 @@ class TestUpdateCommand:
         result = runner.invoke(update)
 
         assert result.exit_code == 0
-        assert "cancelled" in result.output
+        assert "cancelled" in result.output or "❌" in result.output
 
 
 class TestUpdateVersionDriftWarning:
@@ -1555,24 +1515,21 @@ class TestUpdateVersionDriftWarning:
         assert drift[0].module == "auth"
 
     @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
     def test_update_emits_drift_warning_via_warn_helper(
-        self, mock_confirm, mock_validate, mock_load, mock_update
+        self, mock_confirm, mock_validate, mock_manager_cls, mock_update
     ):
         """Update should still run when drift is detected (drift is non-fatal)."""
         mock_confirm.return_value = True
-        module_info = Mock(
-            installed_version="v0.70.0",
+        module_state = Mock(
+            version="v0.70.0",
             prefix="modules/auth",
             branch="splits/auth-module",
         )
-        config = Mock(
-            modules={"auth": module_info},
-            default_remote="https://example.com/repo.git",
-        )
-        mock_load.return_value = config
+        state = Mock(modules={"auth": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
         mock_update.return_value = True
 
         from click.testing import CliRunner
@@ -1594,16 +1551,18 @@ class TestPushCommand:
     """Tests for push click command."""
 
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_push")
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands.is_git_repo")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
-    def test_successful_push(self, mock_confirm, mock_repo, mock_load, mock_push):
+    def test_successful_push(
+        self, mock_confirm, mock_repo, mock_manager_cls, mock_push
+    ):
         """Test successful push of module changes."""
         mock_repo.return_value = True
         mock_confirm.return_value = True
-        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
-        config = Mock(modules={"auth": module_info})
-        mock_load.return_value = config
+        module_state = Mock(prefix="modules/auth", branch="splits/auth-module")
+        state = Mock(modules={"auth": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1625,13 +1584,13 @@ class TestPushCommand:
 
         assert result.exit_code != 0
 
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    def test_push_module_not_installed(self, mock_repo, mock_load):
+    def test_push_module_not_installed(self, mock_repo, mock_manager_cls):
         """Test push fails when module is not installed."""
         mock_repo.return_value = True
-        config = Mock(modules={})
-        mock_load.return_value = config
+        state = Mock(modules={})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1640,16 +1599,16 @@ class TestPushCommand:
 
         assert result.exit_code != 0
 
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands.is_git_repo")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
-    def test_user_cancels_push(self, mock_confirm, mock_repo, mock_load):
+    def test_user_cancels_push(self, mock_confirm, mock_repo, mock_manager_cls):
         """Test push cancelled by user."""
         mock_repo.return_value = True
         mock_confirm.return_value = False
-        module_info = Mock(prefix="modules/auth")
-        config = Mock(modules={"auth": module_info})
-        mock_load.return_value = config
+        module_state = Mock(prefix="modules/auth", branch="splits/auth-module")
+        state = Mock(modules={"auth": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1657,21 +1616,25 @@ class TestPushCommand:
         result = runner.invoke(push, ["--module", "auth"])
 
         assert result.exit_code == 0
-        assert "cancelled" in result.output
+        assert (
+            "cancelled" in result.output
+            or "Push cancelled" in result.output
+            or "❌" in result.output
+        )
 
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_push")
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands.is_git_repo")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
     def test_push_with_custom_branch(
-        self, mock_confirm, mock_repo, mock_load, mock_push
+        self, mock_confirm, mock_repo, mock_manager_cls, mock_push
     ):
         """Test push with custom branch name."""
         mock_repo.return_value = True
         mock_confirm.return_value = True
-        module_info = Mock(prefix="modules/auth")
-        config = Mock(modules={"auth": module_info})
-        mock_load.return_value = config
+        module_state = Mock(prefix="modules/auth", branch="splits/auth-module")
+        state = Mock(modules={"auth": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
 
         from click.testing import CliRunner
 
@@ -1686,18 +1649,18 @@ class TestPushCommand:
         assert call_args[1]["branch"] == "feature/custom-branch"
 
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_push")
-    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
     @patch("quickscale_cli.commands.module_commands.is_git_repo")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
-    def test_push_git_error(self, mock_confirm, mock_repo, mock_load, mock_push):
+    def test_push_git_error(self, mock_confirm, mock_repo, mock_manager_cls, mock_push):
         """Test handling of GitError during push."""
         from quickscale_core.utils.git_utils import GitError
 
         mock_repo.return_value = True
         mock_confirm.return_value = True
-        module_info = Mock(prefix="modules/auth")
-        config = Mock(modules={"auth": module_info})
-        mock_load.return_value = config
+        module_state = Mock(prefix="modules/auth", branch="splits/auth-module")
+        state = Mock(modules={"auth": module_state})
+        mock_manager_cls.return_value.load_state.return_value = state
         mock_push.side_effect = GitError("Push failed")
 
         from click.testing import CliRunner

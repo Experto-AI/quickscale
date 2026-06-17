@@ -1,17 +1,19 @@
 """Unified owner for QuickScale project state and module configuration.
 
-Phase 3 unifies ``.quickscale/state.yml`` (authoritative applied state) and
-``.quickscale/config.yml`` (legacy module tracking) under a single Python
-owner without merging the two files on disk. The two YAML files keep their
-existing serialization format and location so that the on-disk contract is
-unchanged.
+Phase 2 (M2) makes ``.quickscale/state.yml`` the sole authority for
+module-tracking metadata and managed-file drift records.  Legacy
+``config.yml`` and ``file_hashes.yml`` are compatibility inputs only:
+they are read-through imported when the consolidated sections are absent
+from ``state.yml``, and ignored when the consolidated sections are
+present.
 
 The unified surface provides:
 
-* :class:`ProjectStateManager` — load/save both files and verify they agree
-  on module versions.
+* :class:`ProjectStateManager` — load/save state with read-through
+  import from legacy files when consolidated sections are absent.
 * :class:`ManagedFileHash` — typed record of a managed file's last-known
-  hash and the timestamp it was captured at.
+  hash and the timestamp it was captured at (legacy ledger form).
+* :class:`ManagedFileRecord` — consolidated form stored in ``state.yml``.
 * :func:`compute_file_hashes` — hash managed wiring files for drift detection.
 * :func:`check_version_drift` — compare module versions in state vs config.
 
@@ -25,6 +27,7 @@ modules and continue to work without modification.
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +48,7 @@ from quickscale_core.config import (  # noqa: F401
     update_module_version,
 )
 from quickscale_core.schema.state_schema import (  # noqa: F401
+    ManagedFileRecord,
     ModuleState,
     ProjectState,
     QuickScaleState,
@@ -54,6 +58,8 @@ from quickscale_core.schema.state_schema import (  # noqa: F401
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+logger = logging.getLogger(__name__)
 
 
 # File name for the separate managed-file hash ledger.
@@ -327,9 +333,149 @@ class ProjectStateManager:
     # State (.quickscale/state.yml)
     # ------------------------------------------------------------------
 
+    def _state_file_has_consolidated_sections(self) -> bool:
+        """Check whether ``state.yml`` has consolidated sections on disk.
+
+        Returns True when the state file exists and contains either the
+        ``managed_files`` section, an explicit ``modules`` key (even when
+        empty — signalling that M2 has authoritatively recorded "no
+        modules"), or modules with consolidated tracking fields
+        (``prefix``/``branch``).  This determines whether legacy
+        ``config.yml`` and ``file_hashes.yml`` should be read-through
+        imported or ignored.
+        """
+        if not self.state_file.exists():
+            return False
+        try:
+            with open(self.state_file) as handle:
+                data = yaml.safe_load(handle) or {}
+        except (yaml.YAMLError, OSError):
+            return False
+
+        if not isinstance(data, dict):
+            return False
+
+        # Check for managed_files section.
+        if "managed_files" in data:
+            return True
+
+        # An explicit empty ``modules: {}`` key means M2 has authoritatively
+        # recorded "no modules tracked."  Legacy config.yml must NOT be
+        # read-through imported in that case, because stale legacy entries
+        # could resurrect modules that were explicitly removed.
+        # Non-empty modules without consolidated fields still need legacy
+        # read-through import (pre-M2 → M2 migration path).
+        modules_data = data.get("modules")
+        if (
+            modules_data is not None
+            and isinstance(modules_data, dict)
+            and not modules_data
+        ):
+            return True
+
+        # Check for consolidated module tracking fields.
+        if isinstance(modules_data, dict):
+            for _name, info in modules_data.items():
+                if isinstance(info, dict) and (
+                    "prefix" in info or "branch" in info or "installed_at" in info
+                ):
+                    return True
+
+        return False
+
     def load_state(self) -> QuickScaleState | None:
-        """Load ``.quickscale/state.yml`` via the existing ``StateManager``."""
-        return self._state_manager.load()
+        """Load ``.quickscale/state.yml`` with read-through import.
+
+        Phase 2 (M2) makes ``state.yml`` the sole authority.  When the
+        consolidated sections (``managed_files`` or module tracking
+        fields) are absent from ``state.yml``, this method read-through
+        imports from legacy ``config.yml`` and ``file_hashes.yml``.
+
+        When consolidated sections are present, legacy files are ignored
+        even if they still exist on disk.
+
+        Returns:
+            :class:`QuickScaleState` if state can be loaded, ``None`` if
+            no state file exists.
+
+        Raises:
+            StateError: If the state file is malformed.
+        """
+        state = self._state_manager.load()
+        if state is None:
+            return None
+
+        # If consolidated sections are present, return as-is.
+        if self._state_file_has_consolidated_sections():
+            return state
+
+        # Read-through import from legacy files.
+        return self._read_through_import_legacy(state)
+
+    def _read_through_import_legacy(self, state: QuickScaleState) -> QuickScaleState:
+        """Import legacy ``config.yml`` and ``file_hashes.yml`` into state.
+
+        This is called only when ``state.yml`` lacks consolidated sections.
+        Legacy module-tracking metadata from ``config.yml`` is merged into
+        the module states, and legacy file hashes from ``file_hashes.yml``
+        are merged into ``managed_files``.
+
+        The returned state is not persisted; callers should save it if they
+        want to materialize the consolidation.
+        """
+        # Import legacy module tracking from config.yml.
+        try:
+            legacy_config = self.load_config()
+        except (ConfigError, OSError, yaml.YAMLError) as error:
+            logger.warning(
+                "Failed to load legacy config.yml for read-through import: %s",
+                error,
+            )
+            legacy_config = None
+
+        if legacy_config is not None:
+            for module_name, module_info in legacy_config.modules.items():
+                if module_name in state.modules:
+                    # Merge tracking fields into existing module state.
+                    module_state = state.modules[module_name]
+                    if module_state.prefix is None:
+                        module_state.prefix = module_info.prefix
+                    if module_state.branch is None:
+                        module_state.branch = module_info.branch
+                    if module_state.installed_at is None:
+                        module_state.installed_at = module_info.installed_at
+                else:
+                    # Module exists in config but not in state — create a
+                    # minimal ModuleState with tracking fields.
+                    state.modules[module_name] = ModuleState(
+                        name=module_name,
+                        version=normalize_installed_version(
+                            module_info.installed_version
+                        ),
+                        prefix=module_info.prefix,
+                        branch=module_info.branch,
+                        installed_at=module_info.installed_at,
+                    )
+
+        # Import legacy file hashes from file_hashes.yml.
+        try:
+            legacy_hashes = self.load_managed_file_hashes()
+        except StateError as error:
+            logger.warning(
+                "Failed to load legacy file_hashes.yml for read-through import: %s",
+                error,
+            )
+            legacy_hashes = {}
+
+        for path, record in legacy_hashes.items():
+            if path not in state.managed_files:
+                state.managed_files[path] = ManagedFileRecord(
+                    path=record.path,
+                    hash=record.hash,
+                    applied_at=record.applied_at,
+                )
+
+        return state
 
     def save_state(self, state: QuickScaleState) -> None:
         """Persist ``.quickscale/state.yml`` via the existing ``StateManager``."""
@@ -417,8 +563,12 @@ class ProjectStateManager:
         The list contains the *recorded* :class:`ManagedFileHash` so the
         caller can report both the path and the expected hash. The current
         hash, if any, is recomputed here and not stored on the record.
+
+        Phase 2 (M2): reads authoritative ``state.yml.managed_files`` first.
+        Falls back to the legacy ``file_hashes.yml`` ledger only when the
+        consolidated section is absent from state.
         """
-        stored = self.load_managed_file_hashes()
+        stored = self._load_managed_file_records_for_drift()
         if not stored:
             return []
 
@@ -441,6 +591,36 @@ class ProjectStateManager:
             if current_hash != record.hash:
                 drifted.append(record)
         return drifted
+
+    def _load_managed_file_records_for_drift(self) -> dict[str, ManagedFileHash]:
+        """Load managed-file hash records from the authoritative source.
+
+        Phase 2 (M2) priority:
+
+        1. ``state.yml.managed_files`` — consolidated authoritative records.
+        2. ``file_hashes.yml`` — legacy fallback, only when the consolidated
+           section is absent from state.
+        """
+        # Try consolidated state.yml first.
+        if self._state_file_has_consolidated_sections():
+            state = self._state_manager.load()
+            if state is not None and state.managed_files:
+                return {
+                    path: ManagedFileHash(
+                        path=record.path,
+                        hash=record.hash,
+                        applied_at=record.applied_at,
+                    )
+                    for path, record in state.managed_files.items()
+                }
+            # Consolidated sections present but managed_files empty — no
+            # records to check.  Do not fall back to legacy.
+            if state is not None:
+                return {}
+
+        # Legacy fallback: read file_hashes.yml when consolidated data
+        # is absent from state.yml.
+        return self.load_managed_file_hashes()
 
     # ------------------------------------------------------------------
     # Cross-file consistency
@@ -487,6 +667,7 @@ __all__ = [
     "save_config",
     "update_module_version",
     # Re-exports from quickscale_core.schema.state_schema
+    "ManagedFileRecord",
     "ModuleState",
     "ProjectState",
     "QuickScaleState",

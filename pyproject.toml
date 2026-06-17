@@ -17,6 +17,7 @@ quickscale-cli = {path = "./quickscale_cli", develop = true}
 quickscale-devtools = {path = "./quickscale_devtools", develop = true}
 # All modules installed in editable mode for centralized testing
 quickscale-module-auth = {path = "./quickscale_modules/auth", develop = true}
+quickscale-module-orgs = {path = "./quickscale_modules/orgs", develop = true}
 quickscale-module-billing = {path = "./quickscale_modules/billing", develop = true}
 quickscale-module-blog = {path = "./quickscale_modules/blog", develop = true}
 quickscale-module-listings = {path = "./quickscale_modules/listings", develop = true}
@@ -27,7 +28,6 @@ quickscale-module-backups = {path = "./quickscale_modules/backups", develop = tr
 quickscale-module-notifications = {path = "./quickscale_modules/notifications", develop = true}
 quickscale-module-analytics = {path = "./quickscale_modules/analytics", develop = true}
 quickscale-module-social = {path = "./quickscale_modules/social", develop = true}
-quickscale-module-orgs = {path = "./quickscale_modules/orgs", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks
