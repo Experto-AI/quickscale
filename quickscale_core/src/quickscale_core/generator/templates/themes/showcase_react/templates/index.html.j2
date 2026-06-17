@@ -90,8 +90,12 @@
 {%- endif %}
 {%- if selected_modules is none or 'social' in selected_modules %}
 {%- raw %}
-          social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}"
-{%- endraw %}
+          social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}"{% endraw %}{% if selected_modules is none or 'analytics' in selected_modules %},{% endif %}
+{%- endif %}
+{%- if selected_modules is none or 'analytics' in selected_modules %}
+{%- raw %}
+          analytics: "/analytics/"
+{% endraw %}
 {%- endif %}
 {%- raw %}
         }

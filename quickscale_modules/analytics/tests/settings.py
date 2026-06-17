@@ -1,5 +1,9 @@
 """Django settings for QuickScale analytics module tests."""
 
+from pathlib import Path
+
+TESTS_DIR = Path(__file__).resolve().parent
+
 SECRET_KEY = "test-secret-key-for-analytics-module"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
@@ -24,7 +28,7 @@ ROOT_URLCONF = "tests.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [str(TESTS_DIR / "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

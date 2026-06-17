@@ -53,11 +53,11 @@ git merge --no-ff wt-track{N}-<branch>
 
 | # | Track | Phase | Condition |
 |---|-------|-------|-----------|
-| M0 | Track 1 | v0.87.0 | Blocked — analytics has no starter-owned or module-owned page/URL; path wiring and dashboard card deferred until destination exists |
-| M1 | Track 1 | F11.1d–11.1g | CRM org FK nullable; queries scoped; isolation test still xfail |
+| M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
+| M1 | Track 1 | F11.1d ✅ + 11.1d.1 + 11.1g + 11.1g.1 | **11.1d done:** nullable org FK on Tag/Company/Contact/Stage/Deal; ContactNote/DealNote parent-derived; CRM admin non-exposure explicit for all five admins; targeted migration/admin/serializer/model tests added; CRM baseline 158 passed / 1 xfailed. **Remaining:** legacy NULL-row uniqueness preserved (11.1d.1); org-scoped creates stamp current org (11.1g); queries scoped (11.1g.1); isolation test still xfail |
 | M2 | Track 3 | F2.1–2.2 | Substantial implementation complete; merge blocked — CR-005 partial-remove legacy read-through regression |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
-| M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 12 wiring slices migrated |
+| M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 11 wiring slices migrated (`social` deferred to M6) |
 | M5 | Track 3 | F2.3–2.4 | Provenance fields in state.yml; release tooling updated |
 | M6 | Track 2 | F1.3 | `module_wiring_specs.py` deleted; manifest builder wired |
 | M7 | Track 1 | F11.2–11.4 | All module isolation tests unskipped and green |
@@ -73,24 +73,27 @@ git merge --no-ff wt-track{N}-<branch>
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M0
 **Dependencies:** None — start immediately.
 
-**Status:** 🔴 Blocked
+**Status:** ✅ Complete
 
 **Explanation:** The remaining release work is now limited to `showcase_react` analytics parity. The completed `showcase_html` hardening work has been archived in the changelog.
 
-**Blocker:** Analytics has no valid starter-owned or module-owned page/URL today. The `modulePaths.analytics` entry and the Dashboard analytics card both claim a destination that does not exist. Path wiring and the dashboard card must be deferred until a real analytics destination page/URL is in place. The boolean module flag (`modules.analytics`) remains wired and functional.
+**Resolution:** Analytics now has a module-owned Django page at `/analytics/` (served by `quickscale_modules_analytics.urls` / `AnalyticsDashboardView`). The `_analytics_wiring()` builder includes the URL mount, `modulePaths.analytics` is declared in the `useModules` hook and `index.html.j2`, and the Dashboard analytics card routes to the real destination.
 
-**What was done (boolean flag only):**
+**What was done (boolean flag):**
 - Analytics boolean flag is wired into `window.__QUICKSCALE__.modules` via `templates/index.html.j2`
 - Analytics boolean flag is registered in the TypeScript module registry (`useModules` hook)
 
-**What is blocked (path + dashboard card):**
-- `modulePaths.analytics` cannot be declared until a real analytics page/URL exists
-- The Dashboard analytics card cannot route to a valid destination until one exists
+**What was done (path + dashboard card):**
+- Module-owned analytics page at `/analytics/` with `AnalyticsDashboardView` and minimal template
+- `_analytics_wiring()` now includes `url_includes` for `quickscale_modules_analytics.urls`
+- `modulePaths.analytics` is declared in `useModules.ts.j2` (interface + default config)
+- `modulePaths.analytics` is emitted in `index.html.j2`
+- Dashboard analytics card routes to `modulePaths.analytics` via `reloadDocument`
 
 - [x] Wire analytics into `window.__QUICKSCALE__.modules` in `templates/index.html.j2` so fresh `showcase_react` generations expose analytics through the shared shell module payload.
 - [x] Add analytics to the TypeScript module registry (`useModules` hook) so generated React code can type-check and consume the analytics module consistently.
-- [ ] Declare `modulePaths.analytics` so generated React code can route to an analytics destination. _Blocked — no starter-owned or module-owned analytics page/URL exists yet._
-- [ ] Add an Analytics dashboard card to `Dashboard.tsx.j2` so fresh `showcase_react` starters surface analytics in the default dashboard. _Blocked — no valid analytics destination URL to route to._
+- [x] Declare `modulePaths.analytics` so generated React code can route to an analytics destination.
+- [x] Add an Analytics dashboard card to `Dashboard.tsx.j2` so fresh `showcase_react` starters surface analytics in the default dashboard.
 
 ## Long-Term Backlog
 
@@ -168,13 +171,24 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [x] Choose the canonical solo and SaaS CRM HTML/API paths. _Solo: `/crm/` and `/crm/api/`; SaaS: `/orgs/<slug>/crm/` and `/orgs/<slug>/crm/api/` — CRM owns both path sets internally (billing-style) and is included at root from wiring._
 - [x] Make generated wiring, module URLs, and route-parity tests agree on that contract. _`_crm_wiring` now includes CRM at `""`; `crm/urls.py` defines both solo and org-scoped paths; `crm/tests/urls.py` simplified to single root include; route-parity tests in `test_views.py` prove both path sets resolve; `organizations.md` corrected to reflect canonical `/orgs/<slug>/crm/api/` pattern._
 
-**Phase 11.1d–11.1g — CRM org FK + query scoping** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase 11.1d + 11.1d.1 + 11.1g + 11.1g.1 — CRM org ownership + M1 read-scope bridge** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M1
 **Dependencies:** None externally (pull v87 after M0, then continue in same worktree).
 
-- [ ] Make `TenantModel` the base for `crm` tenant models and add nullable `organization_id` FKs first.
-- [ ] Replace global uniqueness with per-org uniqueness where required (`Tag`, `Stage`, and any other tenant-sensitive constraints discovered in rollout).
+**Status:** 🟡 11.1d complete; 11.1d.1 + 11.1g + 11.1g.1 pending. M1 is not yet met.
+
+**Explanation:** Plan review found the original M1 batch was still effectively Tier 3 because it mixed CRM ownership strategy, nullable schema rollout, uniqueness changes, org-scoped create behavior, and read-path scoping. Keep M1 inside CRM only: do **not** widen shared `TenantModel` nullability in `orgs`, preserve legacy `NULL`-owned uniqueness for `Tag` / `Stage` while ownership remains nullable, and land an explicit create-path bridge before org-scoped reads hide `NULL`-owned rows. The handoff slices below are the current non-Tier-3 breakdown; if any slice grows beyond a clean Tier 1–2 pass, split it again before implementation.
+
+**Phase 11.1d — CRM-local nullable ownership groundwork** ✅ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [x] Add CRM-local nullable `organization_id` ownership to `Tag`, `Company`, `Contact`, `Stage`, and `Deal` without changing shared `TenantModel` nullability in `orgs`. _Migration `0004_add_organization_ownership.py` adds nullable `organization_id` FKs to all five models; model tests and migration tests cover the new fields. CRM admin classes remain non-exposed for all five admins (Tag, Company, Contact, Stage, Deal)._
+- [x] Keep `ContactNote` and `DealNote` parent-derived in M1 rather than adding direct org FKs in this batch. _Confirmed parent-derived — no direct org FK added; serializer tests cover the parent-derived contract._
+
+**Completion evidence (11.1d):** Targeted migration, admin, serializer, and model tests added. CRM baseline: 158 passed / 1 xfailed (the xfail is the known cross-tenant isolation assertion from Finding 14, unchanged by this slice). Query scoping, backfill, bootstrap, per-org uniqueness replacement, and NOT NULL enforcement remain in later slices.
+
+**Phase 11.1d.1 — Legacy-NULL-preserving uniqueness** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Replace global uniqueness on `Tag` / `Stage` only when the same migration preserves one legacy `NULL`-owned row globally and enforces per-org uniqueness for owned rows.
+- [ ] Add migration / model coverage proving `NULL`-owned duplicates remain blocked while owned-row duplicates are allowed only where intended.
 
 **Phase 11.1e — Existing-data rollout contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
@@ -190,12 +204,20 @@ _(implement between M1 and M3, same worktree as 11.1d)_
 - [ ] Add tenant-local default CRM stage bootstrap for migrated orgs and newly created orgs.
 - [ ] Add tests proving a fresh org can use CRM without manual stage seeding.
 
-**Phase 11.1g — CRM read-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase 11.1g — Org-scoped create bridge** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 _(part of the M1 batch — implement alongside 11.1d)_
 
-- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org.
+- [ ] Stamp current-org ownership on org-scoped create paths for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` before M1 hides `NULL`-owned rows from org-scoped reads.
+- [ ] Add middleware-backed org-member create → list roundtrip coverage so SaaS-created CRM rows remain visible inside the creating org.
+
+**Phase 11.1g.1 — CRM read-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+_(part of the M1 batch — implement after 11.1g in the same worktree)_
+
+- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote` / `DealNote` parent-derived via their parent record in M1.
 - [ ] Confirm no-context reads fail closed rather than widening scope.
+- [ ] Keep the CRM isolation `xfail` open only for the named remaining M1 seam, and update its rationale if the failure mode changes.
 
 **Phase 11.1h–11.1j — CRM write-path isolation + NOT NULL enforcement** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
@@ -230,33 +252,38 @@ _(part of the M1 batch — implement alongside 11.1d)_
 **Phase 1.1–1.2 — Wiring-expression capability + per-module slices** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
 
 **Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M4
+
+**Status:** ✅ M4 complete. All 11 manifest-supported modules now route their wiring through the manifest-driven builder. Only `social` remains on the legacy path — it depends on managed-file codegen and moves to Phase 1.3/M6.
+
+**Explanation:** The flat-mapper increment shipped first to de-risk the engine. The follow-up M4 batch then migrated the four conditional/branching modules (`notifications`, `auth`, `orgs`, `storage`) — each carrying conditional runtime settings, middleware, dual URL includes, or post-resolution hooks. All four are now merged and their targeted checkpoints are green. `social` is the sole remaining holdout; it depends on managed-file code generation (~100 lines of generated Python) which is deferred to Phase 1.3/M6 alongside the legacy removal work.
+
 **Dependencies:** None — start immediately (fully parallel with Tracks 1 and 3).
 
-- [ ] Let `module.yml` declare dependency-ordered `django_apps`.
-- [ ] Let `module.yml` declare `middleware` (with ordering).
-- [ ] Let `module.yml` declare computed and conditional Django settings.
-- [ ] Let `module.yml` declare URL include placement.
-- [ ] Let `module.yml` declare managed-file code generation.
-- [ ] Add a manifest-driven wiring builder API in `quickscale_core` that can produce `ModuleWiringSpec` alongside the legacy `module_wiring_specs.py` builders during migration.
-- [ ] Add `*_manifest.py` adapters for `blog`, `listings`, `orgs`, and `storage` so every module has a manifest adapter before its wiring slice.
-- [ ] Migrate `analytics` wiring to the manifest-driven builder.
-- [ ] Migrate `backups` wiring to the manifest-driven builder.
-- [ ] Migrate `billing` wiring to the manifest-driven builder.
-- [ ] Migrate `crm` wiring to the manifest-driven builder.
-- [ ] Migrate `blog` wiring to the manifest-driven builder.
-- [ ] Migrate `listings` wiring to the manifest-driven builder.
-- [ ] Migrate `forms` wiring to the manifest-driven builder.
-- [ ] Migrate `notifications` wiring to the manifest-driven builder.
-- [ ] Migrate `auth` wiring to the manifest-driven builder.
-- [ ] Migrate `orgs` wiring to the manifest-driven builder.
-- [ ] Migrate `storage` wiring to the manifest-driven builder.
-- [ ] Migrate `social` wiring to the manifest-driven builder.
+- [x] Let `module.yml` declare dependency-ordered `django_apps`. _`WiringProjection(wiring_field="apps")` + `ResolverResult.apps`; exercised by all 7 migrated flat modules._
+- [x] Let `module.yml` declare `middleware` (with ordering). _`WiringProjection(wiring_field="middleware")` + `ResolverResult.middleware` capability built and unit-tested (`test_manifest_wiring_projection.py`); end-to-end-exercised when the middleware-using modules (`auth`/`orgs`) migrate in the follow-up batch._
+- [x] Let `module.yml` declare computed and conditional Django settings. _Reuses the existing `DerivedSetting` `direct`/`static`/`conditional`/`computed` machinery plus the per-adapter post-resolution hook (analytics precedent); exercised by the `backups` `private_remote` conditional env-var defaulting (no new expression DSL)._
+- [x] Let `module.yml` declare URL include placement. _`url_includes` + `pre_home_url_includes` projections + `ResolverResult` fields; exercised by `analytics`/`crm`/`blog`/`listings`/`forms`; `pre_home_url_includes` (solo/saas orgs) lands with the orgs wiring migration._
+- [x] Add a manifest-driven wiring builder API in `quickscale_core` that can produce `ModuleWiringSpec` alongside the legacy `module_wiring_specs.py` builders during migration. _`build_manifest_wiring_spec()` + `assemble_wiring_spec()` + `MANIFEST_ADAPTER_REGISTRY`; legacy builders untouched (byte-identical), production dispatch unchanged until M6._
+- [x] Add `*_manifest.py` adapters for `blog`, `listings`, `orgs`, and `storage` so every module has a manifest adapter before its wiring slice. _Each ships with an option-resolution parity test._
+- [x] Migrate `analytics` wiring to the manifest-driven builder. _Full `ModuleWiringSpec` dataclass parity; reproduces the `enabled=false` empty-spec short-circuit and the v87-M0 analytics url_include._
+- [x] Migrate `backups` wiring to the manifest-driven builder. _Parity-gated; `private_remote` conditional defaulting via post-resolution hook._
+- [x] Migrate `billing` wiring to the manifest-driven builder. _Parity-gated; introduced the reusable `wiring_parity` harness._
+- [x] Migrate `crm` wiring to the manifest-driven builder. _Parity-gated._
+- [x] Migrate `blog` wiring to the manifest-driven builder. _Parity-gated._
+- [x] Migrate `listings` wiring to the manifest-driven builder. _Parity-gated._
+- [x] Migrate `forms` wiring to the manifest-driven builder. _Parity-gated._
+- [x] Migrate `notifications` wiring to the manifest-driven builder. _Conditional runtime email backend via post-resolution hook; parity-gated._
+- [x] Migrate `auth` wiring to the manifest-driven builder. _Login-method branching + middleware + dual url includes; parity-gated._
+- [x] Migrate `orgs` wiring to the manifest-driven builder. _Solo/saas mode toggles `pre_home_url_includes` vs `url_includes` + middleware; parity-gated._
+- [x] Migrate `storage` wiring to the manifest-driven builder. _s3/r2 conditional nested `STORAGES`/`AWS_*` via post-resolution hook; parity-gated._
 
-**Phase 1.3 — Legacy removal** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
+**Phase 1.3 — Legacy removal + social wiring** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
 
 **Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M6
 **Dependencies:** M4 merged to v87 (previous phase within this track); pull v87 before starting.
 
+- [ ] Let `module.yml` declare managed-file code generation. _Only `social` needs it (~100 lines of generated Python); deferred from Phase 1.1–1.2 because declaring that capability in `module.yml` is high-effort for a single consumer._
+- [ ] Migrate `social` wiring to the manifest-driven builder. _Depends on managed-file codegen above; last module to leave the legacy wiring path._
 - [ ] Delete `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` and switch `module_wiring_manager.py` to the manifest-driven wiring builder.
 - [ ] Replace the per-module interactive handlers in `module_config.py` with a manifest-driven configurator flow.
 - [ ] Remove the remaining legacy contract-file compatibility shims, constants, and dead imports.

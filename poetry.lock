@@ -1857,6 +1857,7 @@ develop = true
 Django = ">=6.0.5,<6.1.0"
 django-filter = "^25.2"
 djangorestframework = "^3.16.1"
+quickscale-module-orgs = ">=0.86.0,<0.87.0"
 
 [package.source]
 type = "directory"

@@ -25,6 +25,7 @@ from quickscale_core.manifest.derivation import (
     ModuleDerivationSchema,
     NormalizationRule,
     ValidationRule,
+    WiringProjection,
 )
 from quickscale_core.manifest.schema import ModuleManifest
 
@@ -46,6 +47,16 @@ class ResolverResult:
             ``DerivedSetting`` declarations.
         legacy_migrations: Key-value pairs that were migrated from legacy
             alias keys to their current canonical keys during resolution.
+        apps: Django app labels contributed by the module's wiring
+            projections.  Empty when no ``WiringProjection`` declares an
+            ``"apps"`` field.
+        middleware: Middleware dotted paths contributed by the module's
+            wiring projections.  Empty when no ``WiringProjection`` declares
+            a ``"middleware"`` field.
+        url_includes: ``(route_prefix, include_path)`` tuples for
+            post-home URL includes contributed by wiring projections.
+        pre_home_url_includes: ``(route_prefix, include_path)`` tuples for
+            pre-home URL includes contributed by wiring projections.
     """
 
     module_name: str
@@ -54,6 +65,10 @@ class ResolverResult:
     validation_issues: list[str] = field(default_factory=list)
     derived_settings: dict[str, Any] = field(default_factory=dict)
     legacy_migrations: dict[str, Any] = field(default_factory=dict)
+    apps: tuple[str, ...] = ()
+    middleware: tuple[str, ...] = ()
+    url_includes: tuple[tuple[str, str], ...] = ()
+    pre_home_url_includes: tuple[tuple[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +429,144 @@ def _project_all_derived_settings(
 
 
 # ---------------------------------------------------------------------------
+# Wiring projection engine
+# ---------------------------------------------------------------------------
+
+_WIRING_URL_FIELDS = frozenset({"url_includes", "pre_home_url_includes"})
+_WIRING_LIST_FIELDS = frozenset({"apps", "middleware"})
+_WIRING_ALL_FIELDS = _WIRING_URL_FIELDS | _WIRING_LIST_FIELDS
+
+
+def _coerce_contribution(raw: Any, wiring_field: str) -> list[Any]:
+    """Coerce a raw projection contribution to a list of appropriate items.
+
+    For URL fields the items must be two-element sequences; each is coerced
+    to a ``(str, str)`` tuple.  For list fields (apps/middleware) the items
+    are strings.
+
+    Args:
+        raw: The raw contribution from the projection expression.
+        wiring_field: The target wiring field name (for URL vs list).
+
+    Returns:
+        A list of coerced contribution items, or an empty list if *raw* is
+        ``None`` or empty.
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+
+    result: list[Any] = []
+    if wiring_field in _WIRING_URL_FIELDS:
+        for item in raw:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                result.append((str(item[0]), str(item[1])))
+    else:
+        for item in raw:
+            if item is not None:
+                result.append(str(item))
+    return result
+
+
+def _project_wiring_contribution(
+    projection: WiringProjection,
+    resolved: dict[str, Any],
+) -> list[Any]:
+    """Compute the contribution for a single wiring projection.
+
+    Uses the same derivation-type vocabulary as :func:`_project_derived_setting`
+    (static / direct / conditional / computed).  The return value is always a
+    list; callers accumulate lists per wiring field.
+
+    Args:
+        projection: The wiring projection declaration.
+        resolved: The fully resolved option values.
+
+    Returns:
+        A list of string items (for ``apps``/``middleware``) or
+        ``(str, str)`` tuples (for URL fields).
+    """
+    derivation_type = projection.derivation_type
+    wiring_field = projection.wiring_field
+
+    if derivation_type == "static":
+        raw = projection.expression.get("value", projection.default)
+        return _coerce_contribution(raw, wiring_field)
+
+    if derivation_type == "direct":
+        option_key = projection.expression.get("option")
+        if option_key and option_key in resolved:
+            value = resolved[option_key]
+            if value is not None:
+                raw = value if isinstance(value, (list, tuple)) else [value]
+                coerced = _coerce_contribution(raw, wiring_field)
+                if coerced:
+                    return coerced
+        return _coerce_contribution(projection.default, wiring_field)
+
+    if derivation_type == "conditional":
+        branches = projection.expression.get("branches", {})
+        for source_key in projection.source_options:
+            if source_key in resolved:
+                selector = resolved[source_key]
+                if selector in branches:
+                    return _coerce_contribution(branches[selector], wiring_field)
+        return _coerce_contribution(projection.default, wiring_field)
+
+    if derivation_type == "computed":
+        # Computed wiring projections use the same template approach as
+        # DerivedSetting but produce a list of items via a "values" template
+        # list rather than a single string.
+        templates = projection.expression.get("values", [])
+        context = {k: str(v) if v is not None else "" for k, v in resolved.items()}
+        result: list[Any] = []
+        for template in templates:
+            try:
+                rendered = str(template).format(**context)
+                result.append(rendered)
+            except (KeyError, IndexError, ValueError):
+                pass
+        if result:
+            return _coerce_contribution(result, wiring_field)
+        return _coerce_contribution(projection.default, wiring_field)
+
+    # Unknown derivation type: return default
+    return _coerce_contribution(projection.default, wiring_field)
+
+
+def _project_all_wiring(
+    derivation_schema: ModuleDerivationSchema,
+    resolved: dict[str, Any],
+) -> dict[str, list[Any]]:
+    """Compute all wiring contributions from the derivation schema.
+
+    Args:
+        derivation_schema: The module's derivation schema.
+        resolved: The fully resolved option values.
+
+    Returns:
+        A mapping from wiring field name to accumulated contribution list.
+        Keys present only when at least one projection declares them.
+    """
+    accumulated: dict[str, list[Any]] = {
+        "apps": [],
+        "middleware": [],
+        "url_includes": [],
+        "pre_home_url_includes": [],
+    }
+
+    for projection in derivation_schema.get_all_wiring_projections():
+        wf = projection.wiring_field
+        if wf not in _WIRING_ALL_FIELDS:
+            continue
+        contribution = _project_wiring_contribution(projection, resolved)
+        accumulated[wf].extend(contribution)
+
+    return accumulated
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -486,6 +639,16 @@ def resolve_module_config(
     # Step 6: Project derived Django settings
     derived_settings = _project_all_derived_settings(derivation_schema, resolved)
 
+    # Step 7: Project wiring contributions (apps, middleware, url_includes,
+    # pre_home_url_includes) from the derivation schema's wiring projections.
+    wiring = _project_all_wiring(derivation_schema, resolved)
+
+    def _to_str_tuple(items: list[Any]) -> tuple[str, ...]:
+        return tuple(str(x) for x in items)
+
+    def _to_url_tuple(items: list[Any]) -> tuple[tuple[str, str], ...]:
+        return tuple((str(a), str(b)) for a, b in items)
+
     return ResolverResult(
         module_name=manifest.name,
         defaults=defaults,
@@ -493,10 +656,16 @@ def resolve_module_config(
         validation_issues=validation_issues,
         derived_settings=derived_settings,
         legacy_migrations=legacy_migrations,
+        apps=_to_str_tuple(wiring["apps"]),
+        middleware=_to_str_tuple(wiring["middleware"]),
+        url_includes=_to_url_tuple(wiring["url_includes"]),
+        pre_home_url_includes=_to_url_tuple(wiring["pre_home_url_includes"]),
     )
 
 
 __all__ = [
     "ResolverResult",
     "resolve_module_config",
+    "_project_wiring_contribution",
+    "_project_all_wiring",
 ]

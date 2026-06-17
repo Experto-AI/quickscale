@@ -185,3 +185,81 @@ class TestDealNoteSerializer:
         note = serializer.save()
         assert note.text == "New deal note"
         assert note.created_by == user
+
+
+@pytest.mark.django_db
+class TestOrganizationFieldNotExposedInSerializers:
+    """Phase 11.1d: organization must not appear in serializer output or input.
+
+    The nullable organization groundwork must not leak through the API
+    serializer surface.  Every serializer that backs a CRM-owned model
+    must exclude organization from its output fields, and attempts to
+    supply organization via input must be silently ignored.
+    """
+
+    def test_tag_serializer_excludes_organization(self, tag):
+        """TagSerializer output must not contain organization."""
+        serializer = TagSerializer(tag)
+        assert "organization" not in serializer.data
+
+    def test_company_serializer_excludes_organization(self, company):
+        """CompanySerializer output must not contain organization."""
+        serializer = CompanySerializer(company)
+        assert "organization" not in serializer.data
+
+    def test_contact_list_serializer_excludes_organization(self, contact):
+        """ContactListSerializer output must not contain organization."""
+        serializer = ContactListSerializer(contact)
+        assert "organization" not in serializer.data
+
+    def test_contact_detail_serializer_excludes_organization(self, contact):
+        """ContactDetailSerializer output must not contain organization."""
+        serializer = ContactDetailSerializer(contact)
+        assert "organization" not in serializer.data
+
+    def test_stage_serializer_excludes_organization(self, stage):
+        """StageSerializer output must not contain organization."""
+        serializer = StageSerializer(stage)
+        assert "organization" not in serializer.data
+
+    def test_deal_list_serializer_excludes_organization(self, deal):
+        """DealListSerializer output must not contain organization."""
+        serializer = DealListSerializer(deal)
+        assert "organization" not in serializer.data
+
+    def test_deal_detail_serializer_excludes_organization(self, deal):
+        """DealDetailSerializer output must not contain organization."""
+        serializer = DealDetailSerializer(deal)
+        assert "organization" not in serializer.data
+
+    def test_tag_serializer_ignores_organization_input(self):
+        """TagSerializer must not accept organization via input."""
+        serializer = TagSerializer(data={"name": "OrgInput", "organization": 999})
+        assert serializer.is_valid(), serializer.errors
+        tag = serializer.save()
+        assert tag.organization_id is None
+
+    def test_company_serializer_ignores_organization_input(self):
+        """CompanySerializer must not accept organization via input."""
+        serializer = CompanySerializer(
+            data={"name": "OrgInput Corp", "organization": 999}
+        )
+        assert serializer.is_valid(), serializer.errors
+        company = serializer.save()
+        assert company.organization_id is None
+
+    def test_contact_serializer_meta_fields_exclude_organization(self):
+        """ContactListSerializer Meta.fields must not list organization."""
+        assert "organization" not in ContactListSerializer.Meta.fields
+
+    def test_contact_detail_serializer_meta_fields_exclude_organization(self):
+        """ContactDetailSerializer Meta.fields must not list organization."""
+        assert "organization" not in ContactDetailSerializer.Meta.fields
+
+    def test_deal_list_serializer_meta_fields_exclude_organization(self):
+        """DealListSerializer Meta.fields must not list organization."""
+        assert "organization" not in DealListSerializer.Meta.fields
+
+    def test_deal_detail_serializer_meta_fields_exclude_organization(self):
+        """DealDetailSerializer Meta.fields must not list organization."""
+        assert "organization" not in DealDetailSerializer.Meta.fields
