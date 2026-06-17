@@ -110,6 +110,51 @@ def run_git_subtree_push(
         raise GitError(f"Failed to push git subtree: {e.stderr}")
 
 
+def resolve_remote_ref(remote: str, branch: str, path: Path | None = None) -> str:
+    """Resolve a remote branch to its current commit SHA.
+
+    Uses ``git ls-remote`` to look up the tip of *branch* on *remote* and
+    returns the full 40-character hex SHA.  This lets callers bind the
+    exact source ref once and reuse it for both the subtree operation and
+    state persistence.
+
+    Args:
+        remote: Git remote URL.
+        branch: Branch name on the remote (e.g. ``splits/auth-module``).
+        path: Optional working directory for the git command.
+
+    Returns:
+        The 40-character hex commit SHA string.
+
+    Raises:
+        GitError: If the remote cannot be contacted or the branch does not
+            exist on the remote.
+    """
+    cwd = path or Path.cwd()
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--heads", remote, branch],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to resolve remote ref: {e.stderr}") from e
+
+    output = result.stdout.strip()
+    if not output:
+        raise GitError(
+            f"Remote branch '{branch}' not found on {remote}; cannot resolve source ref"
+        )
+
+    # ls-remote output format: "<sha>\trefs/heads/<branch>"
+    sha = output.split()[0]
+    if len(sha) != 40:
+        raise GitError(f"Unexpected ref format from ls-remote for {branch}: {sha!r}")
+    return sha
+
+
 def get_remote_url(remote_name: str = "origin", path: Path | None = None) -> str:
     """Get the URL of a git remote"""
     cwd = path or Path.cwd()

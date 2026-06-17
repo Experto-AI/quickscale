@@ -39,6 +39,7 @@ from quickscale_core.utils.git_utils import (
     check_remote_branch_exists,
     is_git_repo,
     is_working_directory_clean,
+    resolve_remote_ref,
     run_git_subtree_add,
     run_git_subtree_pull,
     run_git_subtree_push,
@@ -218,14 +219,28 @@ def _read_embedded_module_version(project_path: Path, module: str) -> str:
     return normalized or manifest.version
 
 
-def _sync_state_module_version(project_path: Path, module: str, version: str) -> None:
-    """Mirror embedded module versions into applied state when present."""
+def _sync_state_module_version(
+    project_path: Path,
+    module: str,
+    version: str,
+    *,
+    commit_sha: str | None = None,
+) -> None:
+    """Mirror embedded module versions and provenance into applied state.
+
+    Updates ``state.modules[module].version`` and, when *commit_sha* is
+    provided, ``state.modules[module].commit_sha``.  The state file must
+    already contain the module entry; modules absent from state are
+    silently skipped (callers should ensure state is materialized first).
+    """
     state_manager = StateManager(project_path)
     state = state_manager.load()
     if state is None or module not in state.modules:
         return
 
     state.modules[module].version = version
+    if commit_sha is not None:
+        state.modules[module].commit_sha = commit_sha
     state_manager.save(state)
 
 
@@ -835,6 +850,46 @@ def _refresh_git_index_after_update_rollback(
     return False
 
 
+def _ensure_authoritative_state_for_update(
+    project_path: Path,
+) -> Any | None:
+    """Ensure authoritative ``state.yml`` is available before update mutations.
+
+    For config-only / non-consolidated projects, this materializes
+    ``state.yml`` from ``quickscale.yml`` and legacy ``config.yml`` before
+    any git mutation begins.  Returns the loaded (or freshly materialized)
+    :class:`QuickScaleState`, or ``None`` when authoritative metadata
+    cannot be derived.
+
+    The update path must abort before git mutation when this returns
+    ``None`` — synthetic project metadata must never be written.
+
+    Raises:
+        StateError: When ``state.yml`` exists but is malformed.  The
+            caller's existing ``StateError`` handler surfaces this.
+    """
+    manager = ProjectStateManager(project_path)
+
+    # If state.yml already has consolidated sections, just load and return.
+    if manager._state_file_has_consolidated_sections():
+        return manager.load_state()
+
+    # If state.yml exists but lacks consolidated sections, check whether
+    # it is at least parseable.  A malformed state.yml must surface as
+    # StateError (not silently fall through to quickscale.yml).
+    if manager.state_file.exists():
+        try:
+            existing = manager._state_manager.load()
+        except StateError:
+            raise  # Let caller surface the malformed-state error.
+        if existing is not None:
+            # Parseable but non-consolidated — materialize.
+            return manager.materialize_authoritative_state()
+
+    # No state.yml at all — try quickscale.yml for project metadata.
+    return manager.materialize_authoritative_state()
+
+
 def _load_update_recovery_state(project_path: Path) -> Any | None:
     """Load the optional apply recovery snapshot used by update guardrails."""
     recovery_path = project_path / ".quickscale" / "apply-recovery.yml"
@@ -984,9 +1039,45 @@ def _update_single_module(
     project_path = Path.cwd()
 
     try:
-        # Abort before any subtree/config mutation if applied state is invalid.
-        applied_state = StateManager(project_path).load()
+        # Phase 2.3b: ensure authoritative state exists before any mutation.
+        # For config-only / non-consolidated projects, materialize state.yml
+        # from quickscale.yml + legacy config.yml.  Abort if authoritative
+        # project metadata (slug/package/theme) cannot be derived.
+        applied_state = _ensure_authoritative_state_for_update(project_path)
+        if applied_state is None:
+            click.secho(
+                "❌ Cannot update: authoritative project metadata "
+                "(slug/package/theme) could not be derived from "
+                ".quickscale/state.yml or quickscale.yml.",
+                fg="red",
+                err=True,
+                bold=True,
+            )
+            click.echo(
+                "💡 Fix quickscale.yml or regenerate state with "
+                "'quickscale apply' before updating modules.",
+                err=True,
+            )
+            return False
+
         if not _check_local_pre_pull_guard(project_path, name, applied_state):
+            return False
+
+        # Phase 2.3b: resolve the source ref once and reuse it for both
+        # the subtree pull and state persistence (CR-PLAN-004).
+        try:
+            source_ref = resolve_remote_ref(default_remote, info.branch)
+        except GitError as ref_error:
+            click.secho(
+                f"❌ Failed to resolve source ref for {name}: {ref_error}",
+                fg="red",
+                err=True,
+                bold=True,
+            )
+            click.echo(
+                "💡 Check network connectivity and remote branch availability.",
+                err=True,
+            )
             return False
 
         with TemporaryDirectory(prefix="quickscale-module-update-") as temp_dir:
@@ -1017,7 +1108,12 @@ def _update_single_module(
                 )
 
                 installed_version = _read_embedded_module_version(project_path, name)
-                _sync_state_module_version(project_path, name, installed_version)
+                _sync_state_module_version(
+                    project_path,
+                    name,
+                    installed_version,
+                    commit_sha=source_ref,
+                )
 
                 _commit_module_update(name, info.prefix)
             except Exception as error:

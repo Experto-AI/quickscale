@@ -1329,3 +1329,161 @@ class TestQuickScaleStateConsolidatedProperties:
             },
         )
         assert state.has_consolidated_modules is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 2.3b: resolve_authoritative_project_metadata
+# ---------------------------------------------------------------------------
+
+
+class TestResolveAuthoritativeProjectMetadata:
+    """Tests for ProjectStateManager.resolve_authoritative_project_metadata."""
+
+    def test_returns_metadata_from_consolidated_state(self, tmp_path: Path) -> None:
+        """When state.yml has consolidated sections, its project is authoritative."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        StateManager(tmp_path).save(
+            QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp", package="myapp", theme="showcase_react"
+                ),
+                modules={},
+            )
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager.resolve_authoritative_project_metadata()
+        assert result == ("myapp", "myapp", "showcase_react")
+
+    def test_falls_back_to_quickscale_yml(self, tmp_path: Path) -> None:
+        """When state.yml is absent, quickscale.yml provides project metadata."""
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager.resolve_authoritative_project_metadata()
+        assert result == ("myproject", "myproject", "showcase_html")
+
+    def test_returns_none_when_no_source_available(self, tmp_path: Path) -> None:
+        """Returns None when neither state.yml nor quickscale.yml exists."""
+        manager = ProjectStateManager(tmp_path)
+        result = manager.resolve_authoritative_project_metadata()
+        assert result is None
+
+    def test_returns_none_when_quickscale_yml_is_invalid(self, tmp_path: Path) -> None:
+        """Returns None when quickscale.yml exists but is malformed."""
+        (tmp_path / "quickscale.yml").write_text("- invalid\n- list\n")
+        manager = ProjectStateManager(tmp_path)
+        result = manager.resolve_authoritative_project_metadata()
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 2.3b: materialize_authoritative_state
+# ---------------------------------------------------------------------------
+
+
+class TestMaterializeAuthoritativeState:
+    """Tests for ProjectStateManager.materialize_authoritative_state."""
+
+    def test_noop_when_already_consolidated(self, tmp_path: Path) -> None:
+        """Materialization is a no-op when state.yml is already consolidated."""
+        StateManager(tmp_path).save(
+            QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp", package="myapp", theme="showcase_react"
+                ),
+                modules={
+                    "auth": ModuleState(
+                        name="auth",
+                        version="0.62.0",
+                        prefix="modules/auth",
+                        branch="splits/auth-module",
+                        installed_at="2025-01-01",
+                    ),
+                },
+            )
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+        assert result is not None
+        assert result.project.slug == "myapp"
+        assert "auth" in result.modules
+
+    def test_materializes_from_quickscale_yml_and_legacy_config(
+        self, tmp_path: Path
+    ) -> None:
+        """Config-only project gets a fully consolidated state.yml."""
+        # quickscale.yml provides project metadata.
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        # Legacy config.yml provides module tracking.
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "config.yml").write_text(
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules:\n"
+            "  auth:\n"
+            "    prefix: modules/auth\n"
+            "    branch: splits/auth-module\n"
+            "    installed_version: '0.62.0'\n"
+            "    installed_at: '2025-01-01'\n"
+        )
+        # state.yml does not exist yet.
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        assert result is not None
+        assert result.project.slug == "myproject"
+        assert result.project.package == "myproject"
+        assert result.project.theme == "showcase_html"
+        assert "auth" in result.modules
+        assert result.modules["auth"].version == "0.62.0"
+        assert result.modules["auth"].prefix == "modules/auth"
+        assert result.modules["auth"].branch == "splits/auth-module"
+
+        # Verify it was persisted to disk.
+        assert (quickscale_dir / "state.yml").exists()
+        reloaded = StateManager(tmp_path).load()
+        assert reloaded is not None
+        assert reloaded.project.slug == "myproject"
+        assert "auth" in reloaded.modules
+
+    def test_returns_none_when_no_quickscale_yml(self, tmp_path: Path) -> None:
+        """Materialization fails gracefully when no quickscale.yml exists."""
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+        assert result is None
+
+    def test_preserves_real_project_metadata_not_synthetic(
+        self, tmp_path: Path
+    ) -> None:
+        """Materialization uses real quickscale.yml metadata, not synthetic."""
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: real-project\n"
+            "  package: real_project\n"
+            "  theme: showcase_react\n"
+            "modules: {}\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        assert result is not None
+        assert result.project.slug == "real-project"
+        assert result.project.package == "real_project"
+        assert result.project.theme == "showcase_react"
