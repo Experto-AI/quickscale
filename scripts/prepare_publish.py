@@ -114,6 +114,12 @@ PATH_DEPENDENCY_REWRITES: Final[dict[str, dict[str, str]]] = {
 # operators and any cleanup tooling continue to recognise the file.
 BACKUP_SUFFIX: Final[str] = ".backup"
 
+# Marker filename written next to a package ``README.md`` when the helper
+# itself created the copy.  ``remove_readme`` consults this marker so it
+# can distinguish helper-created copies from pre-existing package READMEs
+# and leave the latter untouched during restore.
+README_COPY_MARKER: Final[str] = ".prepare_publish_readme_copy"
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -357,6 +363,10 @@ def copy_readme(repo_root: Path, package: str) -> bool:
     rewritten ``pyproject.toml`` so poetry could find it. The copy is
     skipped when the file already exists to avoid clobbering any
     package-owned content. Returns ``True`` when a copy was performed.
+
+    A marker file (:data:`README_COPY_MARKER`) is written alongside the
+    copy so :func:`remove_readme` can later tell helper-created copies
+    apart from pre-existing package READMEs.
     """
     source = repo_root / "README.md"
     target = repo_root / package / "README.md"
@@ -365,6 +375,9 @@ def copy_readme(repo_root: Path, package: str) -> bool:
     if target.is_file():
         return False
     shutil.copyfile(source, target)
+    # Mark the copy as helper-created so restore can preserve pre-existing
+    # package READMEs that were not written by this helper.
+    (repo_root / package / README_COPY_MARKER).write_text("", encoding="utf-8")
     return True
 
 
@@ -372,15 +385,21 @@ def remove_readme(package_dir: Path) -> bool:
     """
     Remove a temporary package-level ``README.md`` copy if present.
 
-    Returns ``True`` when a file was removed. Files that were not created
-    by the helper (for example, a real package README) are not removed
-    here — the caller's expected invariant is that ``copy_readme`` was
-    the only writer.
+    Returns ``True`` when a file was removed. Only READMEs that were
+    created by :func:`copy_readme` (identified by the presence of the
+    :data:`README_COPY_MARKER` sidecar) are removed. Pre-existing
+    package READMEs are left untouched so the prepare/restore cycle
+    remains reversible even when packages ship their own README files.
     """
     readme = package_dir / "README.md"
     if not readme.is_file():
         return False
+    marker = package_dir / README_COPY_MARKER
+    if not marker.is_file():
+        # No marker — this README was not created by the helper; leave it.
+        return False
     readme.unlink()
+    marker.unlink()
     return True
 
 

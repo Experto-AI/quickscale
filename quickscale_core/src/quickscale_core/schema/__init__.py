@@ -35,6 +35,10 @@ _LAZY_EXPORTS = {
     "QuickScaleState": ("quickscale_core.schema.state_schema", "QuickScaleState"),
     "StateError": ("quickscale_core.schema.state_schema", "StateError"),
     "StateManager": ("quickscale_core.schema.state_schema", "StateManager"),
+    "ManagedFileRecord": (
+        "quickscale_core.schema.state_schema",
+        "ManagedFileRecord",
+    ),
     "ProjectStateManager": (
         "quickscale_core.project_state",
         "ProjectStateManager",
@@ -88,6 +92,7 @@ __all__ = [
     "ModuleState",
     "StateManager",
     "StateError",
+    "ManagedFileRecord",
     "ConfigDelta",
     "compute_delta",
     "format_delta",

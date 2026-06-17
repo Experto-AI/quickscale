@@ -560,3 +560,269 @@ class TestStatusVersionDrift:
 
             assert result.exit_code == 0
             assert "Module version drift" not in result.output
+
+
+class TestStatusM2DriftDiagnostics:
+    """Phase 4: tests for explicit M2 drift/compatibility diagnostics."""
+
+    def test_text_output_includes_diagnostics_section(self):
+        """Text status must include the M2 Drift & Compatibility section."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {},
+                    },
+                    f,
+                )
+
+            result = runner.invoke(status, [])
+
+            assert result.exit_code == 0
+            assert "M2 Drift & Compatibility" in result.output
+            assert "State consolidation" in result.output
+            assert "Module tracking" in result.output
+            assert "Filesystem drift" in result.output
+
+    def test_json_output_includes_drift_key(self):
+        """JSON status must include a machine-queryable drift payload."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {},
+                    },
+                    f,
+                )
+
+            result = runner.invoke(status, ["--json"])
+
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            assert "drift" in data
+            drift = data["drift"]
+            assert "state_consolidated" in drift
+            assert "legacy_files_present" in drift
+            assert "legacy_compat_active" in drift
+            assert "module_tracking" in drift
+            assert "managed_files_consolidated" in drift
+            assert "filesystem_drift" in drift
+            assert "managed_file_drift" in drift
+            assert "version_drift" in drift
+
+    def test_consolidated_state_detected(self):
+        """Diagnostics should report consolidated when state.yml has managed_files."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {},
+                        "managed_files": [],
+                    },
+                    f,
+                )
+
+            result = runner.invoke(status, ["--json"])
+            data = json.loads(result.output)
+            assert data["drift"]["state_consolidated"] is True
+            assert data["drift"]["legacy_compat_active"] is False
+
+    def test_legacy_mode_detected(self):
+        """Diagnostics should report legacy mode when consolidated sections absent."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {},
+                    },
+                    f,
+                )
+            # Create a legacy config.yml to trigger legacy_compat_active.
+            from quickscale_core.config import add_module
+
+            add_module(
+                module_name="auth",
+                prefix="modules/auth",
+                branch="main",
+                version="1.0.0",
+                project_path=Path(os.getcwd()),
+            )
+
+            result = runner.invoke(status, ["--json"])
+            data = json.loads(result.output)
+            assert data["drift"]["state_consolidated"] is False
+            assert data["drift"]["legacy_compat_active"] is True
+            assert "config.yml" in data["drift"]["legacy_files_present"]
+
+    def test_module_tracking_completeness(self):
+        """Diagnostics should report which modules need consolidation."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": "1.0.0",
+                                "prefix": "modules/auth",
+                                "branch": "main",
+                                "installed_at": "2025-01-01T00:00:00",
+                            },
+                            "blog": {
+                                "version": "1.0.0",
+                                # Missing prefix/branch/installed_at.
+                            },
+                        },
+                    },
+                    f,
+                )
+
+            result = runner.invoke(status, ["--json"])
+            data = json.loads(result.output)
+            mt = data["drift"]["module_tracking"]
+            assert mt["total"] == 2
+            assert mt["consolidated"] == 1
+            assert "blog" in mt["needs_consolidation"]
+
+    def test_text_shows_consolidated_status(self):
+        """Text output should show ✅ consolidated for fully consolidated state."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": "1.0.0",
+                                "prefix": "modules/auth",
+                                "branch": "main",
+                                "installed_at": "2025-01-01T00:00:00",
+                            },
+                        },
+                        "managed_files": [
+                            {
+                                "path": "settings/modules.py",
+                                "hash": "abc123",
+                                "applied_at": "2025-01-01T00:00:00",
+                            }
+                        ],
+                    },
+                    f,
+                )
+
+            result = runner.invoke(status, [])
+            assert result.exit_code == 0
+            assert "consolidated" in result.output
+
+    def test_text_shows_legacy_mode_warning(self):
+        """Text output should show ⚠️ legacy mode for non-consolidated state."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {},
+                    },
+                    f,
+                )
+            # Create legacy config.yml so legacy_compat_active is True.
+            from quickscale_core.config import add_module
+
+            add_module(
+                module_name="auth",
+                prefix="modules/auth",
+                branch="main",
+                version="1.0.0",
+                project_path=Path(os.getcwd()),
+            )
+
+            result = runner.invoke(status, [])
+            assert result.exit_code == 0
+            assert "legacy mode" in result.output
+
+    def test_json_drift_filesystem_drift_populated(self):
+        """JSON drift should include orphaned/missing modules."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            os.makedirs("modules/orphan_mod", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {
+                            "missing_mod": {
+                                "version": "1.0.0",
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            result = runner.invoke(status, ["--json"])
+            data = json.loads(result.output)
+            fs = data["drift"]["filesystem_drift"]
+            assert "orphan_mod" in fs["orphaned_modules"]
+            assert "missing_mod" in fs["missing_modules"]

@@ -143,7 +143,7 @@ QuickScale Repo Branches:
 ```
 myproject/
 ├── .quickscale/
-│   └── config.yml             # Tracks installed modules
+│   └── state.yml              # Sole authoritative applied-state store
 ├── modules/                   # Embedded modules (git subtrees)
 │   ├── auth/                  # From splits/auth-module
 │   └── blog/                  # From splits/blog-module
@@ -341,8 +341,8 @@ Projects are managed through two configuration files with clear separation of co
 | File | Purpose | Role |
 |------|---------|------|
 | `quickscale.yml` | Declared desired configuration | Input (what user wants) |
-| `.quickscale/state.yml` | Applied state after execution | Output (what was actually done) |
-| `.quickscale/config.yml` | Module metadata for updates | System state (v0.62.0 legacy) |
+| `.quickscale/state.yml` | Applied state after execution | Sole authoritative applied-state store (output — what was actually done) |
+| `.quickscale/config.yml` | Legacy module metadata | Compatibility input only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present) |
 
 #### **Desired State Schema** (`quickscale.yml`)
 
@@ -374,9 +374,9 @@ docker:
 - ✅ `project.package` is the Python import/package identity and MUST NOT be inferred from the project directory name
 - ✅ Location: Project root
 
-#### **Applied State Schema** (`.quickscale/state.yml`, v0.69.0+)
+#### **Applied State Schema** (`.quickscale/state.yml`, v0.69.0+; consolidated sub-sections in Phase 2 / M2)
 
-System-managed state file tracking what has been applied:
+System-managed state file tracking what has been applied. `.quickscale/state.yml` is the sole authoritative applied-state store:
 
 ```yaml
 version: 0.86.0
@@ -395,12 +395,25 @@ modules:
       registration_enabled: true
       email_verification: none
       authentication_method: email
+    # Consolidated tracking fields (Phase 2 / M2):
+    prefix: splits
+    branch: splits/auth-module
+    installed_at: 2025-12-03T14:30:00
   listings:
     version: 0.86.0
     commit_sha: xyz789uvw012
     embedded_at: 2025-12-03T14:31:00
     options: null
+    prefix: splits
+    branch: splits/listings-module
+    installed_at: 2025-12-03T14:31:00
+managed_files:
+  - path: myapp/settings/base.py
+    hash: sha256hex...
+    applied_at: 2025-12-03T14:32:00
 ```
+
+Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: they are read-through imported when the consolidated sections above are absent from `state.yml`, and ignored when consolidated sections are present. Leftover legacy files may remain on disk as ignored compatibility debris after a successful authoritative save.
 
 **Constraints**:
 - ✅ Auto-generated and auto-updated by `quickscale apply`
@@ -414,7 +427,8 @@ modules:
 
 - ✅ The installed version recorded for an embedded module MUST come from that module's embedded `modules/<name>/module.yml` `version` field
 - ✅ `.quickscale/state.yml` stores that canonical manifest version for each installed module
-- ✅ `.quickscale/config.yml` mirrors the same normalized version value for legacy update/push compatibility
+- ✅ `.quickscale/state.yml` is the sole authoritative applied-state store; per-module tracking fields (`prefix`, `branch`, `installed_at`) and the `managed_files` sub-section consolidate what legacy `config.yml` and `file_hashes.yml` used to hold
+- ✅ Legacy `.quickscale/config.yml` is a compatibility input only: read-through imported when `state.yml` lacks consolidated sections, ignored when consolidated sections are present; leftover legacy files may remain on disk as ignored compatibility debris after a successful authoritative save
 - ✅ Package `pyproject.toml` version fields and any exported module `__version__` string MUST match `module.yml` when they exist
 - ✅ Legacy `v`-prefixed stored versions normalize to the manifest form without the prefix
 
@@ -429,12 +443,14 @@ modules:
 #### **Implementation Rules**
 
 **State Computation** (`quickscale apply`):
-1. Read `quickscale.yml` (desired state)
-2. Read `.quickscale/state.yml` (applied state)
-3. Compute delta (what changed)
-4. Show delta to user for confirmation
-5. Execute changes
-6. Write new state to `.quickscale/state.yml`
+1. Acquire advisory lock on `.quickscale/state.yml` (fail-fast if held)
+2. Read `quickscale.yml` (desired state)
+3. Read `.quickscale/state.yml` (applied state; read-through import from legacy `config.yml`/`file_hashes.yml` when consolidated sections are absent)
+4. Compute delta (what changed)
+5. Show delta to user for confirmation
+6. Execute changes
+7. Write new state to `.quickscale/state.yml` with consolidated sub-sections
+8. Release advisory lock
 
 **Idempotency Requirements**:
 - ❌ NEVER re-execute already-applied modules
@@ -446,10 +462,13 @@ modules:
 - ✅ Write state file atomically (no partial writes)
 - ✅ Include timestamps plus canonical installed module version/commit metadata for auditing
 - ✅ Never corrupt state from manual edits (reject if format invalid)
+- ✅ Advisory lock around `state.yml` read/modify/write so concurrent `apply` fails closed instead of racing
 
 #### **Related Files**
 
-- **Module tracking**: `.quickscale/config.yml` (v0.62.0+) — Records module branches and versions for `quickscale update` and `quickscale push --module <name>` operations. If the tracking model changes later, the current docs and release notes must describe that change explicitly.
+- **Module tracking**: `.quickscale/state.yml` (Phase 2 / M2) — The sole authoritative applied-state store. Per-module consolidated tracking fields (`prefix`, `branch`, `installed_at`) and the `managed_files` sub-section replace the legacy `config.yml` and `file_hashes.yml`. Legacy files are read-through imported as compatibility inputs when `state.yml` lacks consolidated sections and ignored when consolidated sections are present.
+- **Advisory lock**: `.quickscale/<name>.lock` — Exclusive-create file-based advisory lock used to serialize concurrent operations that mutate `state.yml`. Fail-fast contention; stale-lock inspection and manual-clear guidance only.
+- **Recovery state**: `.quickscale/apply-recovery.yml` — Separate recovery-only state for the saga-model apply recovery ledger (future Phase 12 work).
 - **User manual**: See [user_manual.md §4.3](./user_manual.md#43-planapply-commands-shipped-in-v0680) for workflow examples and CLI usage.
 - **Project structure**: See [scaffolding.md §5](./scaffolding.md#generated-project-output) for complete project layout including state files.
 

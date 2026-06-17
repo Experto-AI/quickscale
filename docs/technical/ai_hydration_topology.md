@@ -80,21 +80,26 @@ Before trimming, swapping, or widening any role input in [adaptive.rules.md](../
 | `change-review` | `adaptive` baseline plus evidence expectations, authority order, scope protection, and regression-review discipline. |
 
 <a id="post-refactor-validation-snapshot"></a>
-## Post-Refactor Validation Snapshot (2026-05-01)
+## Post-Refactor Validation Snapshot (2026-05-01; refreshed 2026-06-16 for Phase 2 / M2)
 
 Hydration status was `configured` and `ready` before the metrics capture below. Metrics were captured by re-running MCP hydration against the current graph for every major role. The table measures expanded hydrated content only; docs-local "Important context (always read)" pointers such as [docs/index.md](../index.md) are metadata surfaced alongside the payload, not expanded content counted in these totals.
 
 | Role | Phase 0 lines | Phase 0 size | Current lines | Current size | Delta from Phase 0 | Budget check | Validation note |
 |---|---:|---:|---:|---:|---|---|---|
-| `adaptive` | 2,507 | 117.0 KB | 91 | 4.7 KB | -2,416 lines, -112.3 KB | Pass | Shared authority/workflow baseline remains intact via [docs/technical/ai_context.md](./ai_context.md). |
-| `plan` | 2,585 | 120.6 KB | 444 | 18.8 KB | -2,141 lines, -101.8 KB | Pass | Shared baseline plus generated-project, repository-layout, and planning guidance are present. |
-| `codebase-discovery` | n/a | n/a | 399 | 16.8 KB | n/a | Informational | Shared baseline plus the two structure authorities only. |
-| `external-research` | n/a | n/a | 91 | 4.7 KB | n/a | Informational | Intentionally limited to the shared baseline only. |
-| `implement` | 2,661 | 122.2 KB | 442 | 18.8 KB | -2,219 lines, -103.4 KB | Pass | Shared baseline plus structure context and implementation guidance are present. |
-| `quality-gate` | 2,875 | 128.6 KB | 406 | 16.4 KB | -2,469 lines, -112.2 KB | Pass | Shared baseline plus validation policy, testing, and debugging guidance are present. |
-| `change-review` | 2,572 | 119.7 KB | 127 | 6.3 KB | -2,445 lines, -113.4 KB | Pass | Shared baseline plus review guidance are present. |
+| `adaptive` | 2,507 | 117.0 KB | 93 | 4.9 KB | -2,414 lines, -112.1 KB | Pass | Shared authority/workflow baseline remains intact via [docs/technical/ai_context.md](./ai_context.md). |
+| `plan` | 2,585 | 120.6 KB | 449 | 19.0 KB | -2,136 lines, -101.6 KB | Pass | Shared baseline plus generated-project, repository-layout, and planning guidance are present. |
+| `codebase-discovery` | n/a | n/a | 404 | 17.0 KB | n/a | Informational | Shared baseline plus the two structure authorities only. |
+| `external-research` | n/a | n/a | 93 | 4.9 KB | n/a | Informational | Intentionally limited to the shared baseline only. |
+| `implement` | 2,661 | 122.2 KB | 447 | 19.0 KB | -2,214 lines, -103.2 KB | Pass | Shared baseline plus structure context and implementation guidance are present. |
+| `quality-gate` | 2,875 | 128.6 KB | 408 | 16.6 KB | -2,467 lines, -112.0 KB | Pass | Shared baseline plus validation policy, testing, and debugging guidance are present. |
+| `change-review` | 2,572 | 119.7 KB | 129 | 6.5 KB | -2,443 lines, -113.2 KB | Pass | Shared baseline plus review guidance are present. |
 
 All role payloads with provisional budgets in [docs/planning/context-refactor.md](../planning/context-refactor.md) are now below both their line and size targets.
+
+<a id="m2-hydration-edit-rationale"></a>
+### Phase 2 / M2 Hydration-Edit Rationale (2026-06-16)
+
+[docs/technical/ai_context.md](./ai_context.md) was updated to reflect the M2 consolidated-state contract: `.quickscale/state.yml` is now described as the sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records; legacy `config.yml` and `file_hashes.yml` are described as compatibility inputs only; advisory locking and `quickscale status` drift diagnostics are noted. [docs/technical/generated_project_structure.md](./generated_project_structure.md) was updated in the same change to align the State and Module Metadata section and the Crosswalk table with the M2 contract. No role include graph edges changed — only the content of two already-included files grew by a few lines each. The include topology, role-to-input inventory, must-have facts checklist, and rollback notes are unchanged.
 
 <a id="validation-findings"></a>
 ## Validation Findings

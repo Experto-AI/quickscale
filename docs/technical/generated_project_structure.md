@@ -59,7 +59,8 @@ myapp/
 
 Notes:
 - `quickscale.yml` is created during planning and remains the user-owned desired-state file.
-- `.quickscale/state.yml` and `.quickscale/config.yml` appear after apply writes state and module metadata.
+- `.quickscale/state.yml` is the sole authoritative applied-state store after apply writes state. It carries consolidated sub-sections for module-tracking metadata and managed-file drift records. Legacy `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present). Leftover legacy files may remain on disk as ignored compatibility debris after a successful authoritative save.
+- `.quickscale/<name>.lock` advisory lock files serialize concurrent `apply` operations.
 - `Makefile` is always generated at the project root and is the preferred local entrypoint for setup, lint, format, test, check, and ci workflows.
 - `scripts/lint.sh` is generated alongside the root `Makefile` and backs the shared `make lint` and `make check` workflows.
 - Frontend-specific Makefile targets run only when `frontend/package.json` exists; on `showcase_html` they report a skip instead of failing.
@@ -203,13 +204,14 @@ When modules are embedded or applies are recorded, QuickScale writes:
 
 ```
 .quickscale/
-├── state.yml   # applied state
-└── config.yml  # module metadata for update and push workflows
+├── state.yml   # Sole authoritative applied-state store
+└── <name>.lock # Advisory lock for concurrent-apply serialization
 ```
 
 Rules:
 - `quickscale.yml` is user-edited desired state.
-- `.quickscale/state.yml` and `.quickscale/config.yml` are system-managed.
+- `.quickscale/state.yml` is the sole authoritative applied-state store (system-managed). It carries consolidated sub-sections for module-tracking metadata (`prefix`, `branch`, `installed_at`) and managed-file drift records (`managed_files`).
+- Legacy `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only: read-through imported when `state.yml` lacks consolidated sections, ignored when consolidated sections are present. Leftover legacy files may remain on disk as ignored compatibility debris.
 - Generated projects remain standalone even when modules are embedded.
 
 ### Optional Manual Inheritance / Extraction Notes
@@ -228,8 +230,9 @@ If you intentionally adopt a manual inheritance or extraction pattern:
 | Desired state | `quickscale.yml` |
 | Local developer workflow entrypoints | `Makefile` |
 | Lint/check helper surface | `scripts/lint.sh` |
-| Applied state | `.quickscale/state.yml` |
-| Module metadata | `.quickscale/config.yml` |
+| Applied state | `.quickscale/state.yml` (sole authoritative store; consolidated sub-sections for module tracking and managed-file drift) |
+| Advisory lock | `.quickscale/<name>.lock` (concurrent-apply serialization) |
+| Legacy compatibility inputs | `.quickscale/config.yml`, `.quickscale/file_hashes.yml` (read-through imported when `state.yml` lacks consolidated sections; ignored when present) |
 | Project generation | `quickscale_core/generator/` templates and generator logic |
 | Embedded modules | `modules/<name>/` inside the generated project |
 | Starter theme assets | project `frontend/`, `templates/`, and `static/` directories |

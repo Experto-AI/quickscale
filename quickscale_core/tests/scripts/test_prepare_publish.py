@@ -371,9 +371,20 @@ def test_remove_readme_deletes_only_existing_files(tmp_path: Path) -> None:
     pkg_dir = tmp_path / "quickscale_cli"
     pkg_dir.mkdir()
     readme = pkg_dir / "README.md"
+    # A README without the helper marker is treated as pre-existing and
+    # must NOT be removed by the restore path.
     readme.write_text("placeholder", encoding="utf-8")
+    assert prepare_publish.remove_readme(pkg_dir) is False
+    assert readme.exists()
+
+    # Once the marker sidecar is present the README is recognised as a
+    # helper-created copy and remove_readme cleans both up.
+    marker = pkg_dir / prepare_publish.README_COPY_MARKER
+    marker.write_text("", encoding="utf-8")
     assert prepare_publish.remove_readme(pkg_dir) is True
     assert not readme.exists()
+    assert not marker.exists()
+    # Second call is a clean no-op.
     assert prepare_publish.remove_readme(pkg_dir) is False
 
 
@@ -555,11 +566,11 @@ def test_helper_is_a_noop_on_clean_real_pyprojects() -> None:
             prepare_publish.restore_all(repo_root)
         except Exception:  # pragma: no cover - best-effort cleanup
             pass
-        # Remove any stray temp READMEs or backups.
+        # Remove any stray helper-created READMEs or backups.  Using the
+        # marker-aware ``remove_readme`` helper ensures pre-existing
+        # package READMEs are never deleted here.
         for package in prepare_publish.DEFAULT_PACKAGES:
-            readme = repo_root / package / "README.md"
-            if readme.exists():
-                readme.unlink()
+            prepare_publish.remove_readme(repo_root / package)
             backup = (
                 repo_root / package / f"pyproject.toml{prepare_publish.BACKUP_SUFFIX}"
             )

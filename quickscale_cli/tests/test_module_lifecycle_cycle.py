@@ -110,6 +110,11 @@ def _write_initial_state_with_modules(
                 "commit_sha": "abc123",
                 "embedded_at": "2025-01-01T00:00:00",
                 "options": {},
+                # Phase 2 consolidated tracking fields so read-through import
+                # from legacy config.yml is skipped.
+                "prefix": f"modules/{module_name}",
+                "branch": f"splits/{module_name}-module",
+                "installed_at": "2025-01-01",
             }
             for module_name in module_names
         },
@@ -355,7 +360,9 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
     legacy_tracking_after_remove = yaml.safe_load(
         (project_path / ".quickscale" / "config.yml").read_text()
     )
-    assert "auth" not in legacy_tracking_after_remove.get("modules", {})
+    # Phase 3: remove no longer writes to legacy config.yml.
+    # The legacy config.yml is a read-through compatibility input only.
+    assert "auth" in legacy_tracking_after_remove.get("modules", {})
 
     _write_quickscale_config(project_path, include_auth=True)
 
@@ -728,10 +735,13 @@ def test_update_after_removal_only_targets_remaining_modules(
     )
 
     assert remove_result.exit_code == 0
+    # Phase 3: remove no longer writes to legacy config.yml.
+    # The legacy config.yml is a read-through compatibility input only.
     legacy_tracking = yaml.safe_load(
         (project_path / ".quickscale" / "config.yml").read_text()
     )
-    assert set(legacy_tracking.get("modules", {})) == {"blog"}
+    # Both auth and blog remain in legacy config since remove no longer mutates it.
+    assert set(legacy_tracking.get("modules", {})) == {"auth", "blog"}
 
     with (
         patch(
