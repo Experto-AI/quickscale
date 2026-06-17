@@ -1420,7 +1420,13 @@ class TestMaterializeAuthoritativeState:
     def test_materializes_from_quickscale_yml_and_legacy_config(
         self, tmp_path: Path
     ) -> None:
-        """Config-only project gets a fully consolidated state.yml."""
+        """Config-only project with existing state.yml gets consolidated state.
+
+        CR-M5-P3-006: materialization requires an existing state.yml with
+        authoritative timestamps.  When state.yml exists with timestamps but
+        lacks consolidated module-tracking sections, materialization merges
+        legacy config.yml tracking and preserves the original timestamps.
+        """
         # quickscale.yml provides project metadata.
         (tmp_path / "quickscale.yml").write_text(
             "version: '1'\n"
@@ -1430,9 +1436,22 @@ class TestMaterializeAuthoritativeState:
             "  theme: showcase_html\n"
             "modules: {}\n"
         )
-        # Legacy config.yml provides module tracking.
+        # Existing state.yml with authoritative timestamps but no consolidated
+        # module tracking — the pre-M2 migration scenario.  The modules section
+        # has entries without prefix/branch/installed_at, so consolidated
+        # sections are NOT considered present.
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        # Legacy config.yml provides module tracking.
         (quickscale_dir / "config.yml").write_text(
             "default_remote: https://github.com/Experto-AI/quickscale.git\n"
             "modules:\n"
@@ -1442,7 +1461,6 @@ class TestMaterializeAuthoritativeState:
             "    installed_version: '0.62.0'\n"
             "    installed_at: '2025-01-01'\n"
         )
-        # state.yml does not exist yet.
         manager = ProjectStateManager(tmp_path)
         result = manager.materialize_authoritative_state()
 
@@ -1450,6 +1468,9 @@ class TestMaterializeAuthoritativeState:
         assert result.project.slug == "myproject"
         assert result.project.package == "myproject"
         assert result.project.theme == "showcase_html"
+        # Timestamps preserved from raw state.yml — not fabricated.
+        assert result.project.created_at == "2024-06-15T10:30:00"
+        assert result.project.last_applied == "2024-12-01T14:45:00"
         assert "auth" in result.modules
         assert result.modules["auth"].version == "0.62.0"
         assert result.modules["auth"].prefix == "modules/auth"
@@ -1460,6 +1481,8 @@ class TestMaterializeAuthoritativeState:
         reloaded = StateManager(tmp_path).load()
         assert reloaded is not None
         assert reloaded.project.slug == "myproject"
+        assert reloaded.project.created_at == "2024-06-15T10:30:00"
+        assert reloaded.project.last_applied == "2024-12-01T14:45:00"
         assert "auth" in reloaded.modules
 
     def test_returns_none_when_no_quickscale_yml(self, tmp_path: Path) -> None:
@@ -1471,13 +1494,23 @@ class TestMaterializeAuthoritativeState:
     def test_preserves_real_project_metadata_not_synthetic(
         self, tmp_path: Path
     ) -> None:
-        """Materialization uses real quickscale.yml metadata, not synthetic."""
-        (tmp_path / "quickscale.yml").write_text(
+        """Materialization uses real project metadata from authoritative sources.
+
+        CR-M5-P3-006: when state.yml has timestamps, its project block is
+        authoritative.  This test verifies that materialized state carries
+        the real metadata from state.yml, not fabricated values.
+        """
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        # state.yml with timestamps and project metadata.
+        (quickscale_dir / "state.yml").write_text(
             "version: '1'\n"
             "project:\n"
             "  slug: real-project\n"
             "  package: real_project\n"
             "  theme: showcase_react\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
             "modules: {}\n"
         )
         manager = ProjectStateManager(tmp_path)
@@ -1487,3 +1520,235 @@ class TestMaterializeAuthoritativeState:
         assert result.project.slug == "real-project"
         assert result.project.package == "real_project"
         assert result.project.theme == "showcase_react"
+
+    def test_preserves_authoritative_timestamp_from_existing_state(
+        self, tmp_path: Path
+    ) -> None:
+        """CR-M5-P3-006 regression: preserve created_at/last_applied from existing state.
+
+        When state.yml exists with real timestamps but lacks consolidated
+        module-tracking sections, materialization must preserve the original
+        project timestamps rather than overwriting them with datetime.now().
+        """
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        # state.yml with real timestamps but missing consolidated module tracking.
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+            "modules: {}\n"
+        )
+        # quickscale.yml provides desired state (required for materialization).
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        assert result is not None
+        # Timestamps must be preserved from the existing state.yml.
+        assert result.project.created_at == "2024-06-15T10:30:00"
+        assert result.project.last_applied == "2024-12-01T14:45:00"
+
+        # Verify persistence.
+        reloaded = StateManager(tmp_path).load()
+        assert reloaded is not None
+        assert reloaded.project.created_at == "2024-06-15T10:30:00"
+        assert reloaded.project.last_applied == "2024-12-01T14:45:00"
+
+    def test_aborts_when_no_state_yml_exists(self, tmp_path: Path) -> None:
+        """CR-M5-P3-006: no state.yml means no authoritative timestamps → abort.
+
+        Materialization must never fabricate created_at/last_applied with
+        datetime.now().  When state.yml does not exist, there is no
+        authoritative timestamp source, so materialization returns None.
+        """
+        # quickscale.yml provides project metadata.
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        # No state.yml exists.
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        # Must abort — no fabricated timestamps.
+        assert result is None
+        # state.yml must not have been created.
+        assert not (tmp_path / ".quickscale" / "state.yml").exists()
+
+    def test_aborts_when_state_yml_lacks_timestamps(self, tmp_path: Path) -> None:
+        """CR-M5-P3-006: state.yml without created_at/last_applied → abort.
+
+        Even when state.yml exists and is parseable, if it lacks explicit
+        timestamp fields, materialization must not fabricate them.
+        """
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        # state.yml exists but has no created_at or last_applied.
+        # No modules section either, so consolidated sections are absent
+        # and materialization proceeds to the timestamp check.
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+        )
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        # Must abort — no authoritative timestamps in raw YAML.
+        assert result is None
+
+    def test_aborts_when_state_yml_has_partial_timestamps(self, tmp_path: Path) -> None:
+        """CR-M5-P3-006: state.yml with only one timestamp → abort.
+
+        Both created_at and last_applied must be present in the raw YAML.
+        A partial timestamp set is not authoritative.
+        """
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        # state.yml has created_at but no last_applied.
+        # No modules section, so consolidated sections are absent.
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+        )
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        # Must abort — incomplete timestamps.
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 2.3b: _read_raw_project_timestamps
+# ---------------------------------------------------------------------------
+
+
+class TestReadRawProjectTimestamps:
+    """Tests for ProjectStateManager._read_raw_project_timestamps.
+
+    CR-M5-P3-006: this helper reads timestamps directly from the raw YAML
+    to bypass StateManager.load() defaults that fabricate datetime.now().
+    """
+
+    def test_returns_none_when_no_state_file(self, tmp_path: Path) -> None:
+        manager = ProjectStateManager(tmp_path)
+        assert manager._read_raw_project_timestamps() is None
+
+    def test_returns_none_when_state_file_is_empty(self, tmp_path: Path) -> None:
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text("")
+        manager = ProjectStateManager(tmp_path)
+        assert manager._read_raw_project_timestamps() is None
+
+    def test_returns_none_when_project_section_missing(self, tmp_path: Path) -> None:
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text("version: '1'\nmodules: {}\n")
+        manager = ProjectStateManager(tmp_path)
+        assert manager._read_raw_project_timestamps() is None
+
+    def test_returns_none_when_created_at_missing(self, tmp_path: Path) -> None:
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        assert manager._read_raw_project_timestamps() is None
+
+    def test_returns_none_when_last_applied_missing(self, tmp_path: Path) -> None:
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        assert manager._read_raw_project_timestamps() is None
+
+    def test_returns_timestamps_when_both_present(self, tmp_path: Path) -> None:
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        result = manager._read_raw_project_timestamps()
+        assert result == ("2024-06-15T10:30:00", "2024-12-01T14:45:00")
+
+    def test_returns_none_for_malformed_yaml(self, tmp_path: Path) -> None:
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(":\n  invalid: [yaml\n")
+        manager = ProjectStateManager(tmp_path)
+        assert manager._read_raw_project_timestamps() is None
+
+    def test_returns_none_when_timestamps_are_not_strings(self, tmp_path: Path) -> None:
+        """Non-string timestamp values (e.g. integers) are not authoritative."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "  created_at: 12345\n"
+            "  last_applied: 67890\n"
+        )
+        manager = ProjectStateManager(tmp_path)
+        assert manager._read_raw_project_timestamps() is None

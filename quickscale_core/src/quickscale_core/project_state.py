@@ -673,6 +673,42 @@ class ProjectStateManager:
 
         return None
 
+    def _read_raw_project_timestamps(self) -> tuple[str, str] | None:
+        """Read project timestamps from raw ``state.yml`` without fabrication.
+
+        CR-M5-P3-006: ``StateManager.load()`` fills in ``datetime.now()``
+        when ``created_at`` or ``last_applied`` are absent from the YAML.
+        This helper bypasses that default and returns the raw values only
+        when both are explicitly present in the on-disk file.
+
+        Returns:
+            ``(created_at, last_applied)`` when both fields are present as
+            strings in the raw YAML, or ``None`` when ``state.yml`` does
+            not exist, is unparseable, or lacks either timestamp field.
+        """
+        if not self.state_file.exists():
+            return None
+        try:
+            with open(self.state_file) as handle:
+                data = yaml.safe_load(handle) or {}
+        except (yaml.YAMLError, OSError):
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        project_data = data.get("project")
+        if not isinstance(project_data, dict):
+            return None
+
+        created_at = project_data.get("created_at")
+        last_applied = project_data.get("last_applied")
+
+        if not isinstance(created_at, str) or not isinstance(last_applied, str):
+            return None
+
+        return (created_at, last_applied)
+
     def materialize_authoritative_state(
         self,
     ) -> QuickScaleState | None:
@@ -765,12 +801,22 @@ class ProjectStateManager:
                     applied_at=record.applied_at,
                 )
 
+        # CR-M5-P3-006: preserve authoritative project timestamps from
+        # raw state.yml when available.  When no authoritative timestamp
+        # source exists, abort rather than fabricate timestamps.
+        timestamps = self._read_raw_project_timestamps()
+        if timestamps is None:
+            return None
+        created_at, last_applied = timestamps
+
         state = QuickScaleState(
             version="1",
             project=ProjectState(
                 slug=slug,
                 package=package,
                 theme=theme,
+                created_at=created_at,
+                last_applied=last_applied,
             ),
             modules=modules,
             managed_files=managed_files,
