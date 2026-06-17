@@ -15,6 +15,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -28,12 +29,26 @@ class Tag(models.Model):
         blank=True,
         related_name="crm_tags",
     )
-    name = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=50)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"
         ordering = ["name"]
+        constraints = [
+            # Block duplicate names within the NULL-owned bucket.
+            models.UniqueConstraint(
+                fields=["name"],
+                name="crm_tag_name_unique_null_org",
+                condition=Q(organization__isnull=True),
+            ),
+            # Block duplicate names within the same non-null org bucket.
+            models.UniqueConstraint(
+                fields=["name", "organization"],
+                name="crm_tag_name_organization_unique",
+                condition=Q(organization__isnull=False),
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
