@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
+from quickscale_core.manifest.entry_point import (
+    ManifestAdapterNotFound,
+    build_manifest_wiring_spec,
+)
+from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_cli.schema.config_schema import validate_config
 from quickscale_cli.schema.state_schema import StateManager
 from quickscale_core.module_wiring import write_managed_wiring
@@ -119,13 +123,22 @@ def regenerate_managed_wiring(
         for module_name in selected_modules
     }
 
-    try:
-        specs = build_module_wiring_specs(
-            selected_options,
-            project_package=package_name,
-        )
-    except ValueError as e:
-        return False, f"Unable to build managed wiring specs: {e}"
+    specs: dict[str, ModuleWiringSpec] = {}
+    for module_name, options in selected_options.items():
+        try:
+            specs[module_name] = build_manifest_wiring_spec(
+                module_name,
+                dict(options),
+                project_package=package_name,
+            )
+        except ManifestAdapterNotFound:
+            # Skip discovered/forwarded modules that have no manifest adapter
+            # registered yet.  This preserves the legacy skip-unknown behaviour
+            # for non-registered module names (e.g. a modules/ directory that
+            # contains a module without a manifest adapter).
+            continue
+        except ValueError as error:
+            return False, f"Unable to build managed wiring specs: {error}"
 
     package_dir = project_path / package_name
     if not package_dir.exists():

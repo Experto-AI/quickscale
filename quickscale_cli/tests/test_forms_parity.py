@@ -277,7 +277,7 @@ class TestWiringDerivedSettingsParity:
     """The resolved options must project to the correct Django settings.
 
     These tests verify that the resolved option dict contains all the fields
-    that ``_forms_wiring`` in ``module_wiring_specs.py`` reads, and that
+    that the forms manifest adapter reads, and that
     the values are in the correct shape for direct projection to Django
     settings.
     """

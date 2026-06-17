@@ -6,8 +6,8 @@ through the manifest-driven resolver
 (:mod:`quickscale_core.manifest.resolver`).
 
 The public API is a drop-in replacement for the old contract file so that
-callers in ``module_wiring_specs.py``, ``apply_command.py``, and
-``module_config.py`` can migrate without rewriting their logic.
+callers in ``apply_command.py`` and ``module_config.py`` can use it without
+rewriting their logic.
 """
 
 from __future__ import annotations

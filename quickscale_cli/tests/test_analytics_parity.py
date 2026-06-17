@@ -447,7 +447,7 @@ class TestWiringDerivedSettingsParity:
     """The resolved options must project to the correct Django settings.
 
     These tests verify that the resolved option dict contains all the fields
-    that ``_analytics_wiring`` in ``module_wiring_specs.py`` reads, and that
+    that the analytics manifest adapter reads, and that
     the values are in the correct shape for direct projection to Django
     settings.
     """

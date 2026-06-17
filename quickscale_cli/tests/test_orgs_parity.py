@@ -10,8 +10,7 @@ does NOT test wiring integration — that is covered by the existing contract
 tests.
 
 The gold values below were recovered from the orgs ``module.yml`` manifest
-and the ``_orgs_wiring`` function in ``module_wiring_specs.py`` (lines
-122–138).
+and the ``orgs_manifest.py`` adapter.
 
 Scope
 -----

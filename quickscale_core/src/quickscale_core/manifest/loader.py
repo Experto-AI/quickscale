@@ -4,11 +4,17 @@ Loads and validates module.yml manifest files.
 """
 
 from pathlib import Path
+import posixpath
 from typing import Any
 
 import yaml
 
-from quickscale_core.manifest.schema import ConfigOption, ModuleManifest
+from quickscale_core.manifest.schema import (
+    MANAGED_FILE_ROOT_PREFIX,
+    ConfigOption,
+    ManagedFileDeclaration,
+    ModuleManifest,
+)
 
 
 class ManifestError(Exception):
@@ -113,6 +119,92 @@ def _validate_mutable_options(
             )
 
 
+def _parse_managed_files(
+    data: dict[str, Any], module_name: str | None
+) -> dict[str, ManagedFileDeclaration]:
+    """Parse and validate the top-level ``managed_files`` section.
+
+    Each entry must be a mapping with at least ``renderer`` (non-empty
+    string) and ``output_path`` (non-empty string starting with
+    ``quickscale_managed/``).  Entries that violate the write boundary
+    raise :class:`ManifestError`.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        module_name: Optional module name for error messages.
+
+    Returns:
+        A dict mapping managed-file keys to their
+        :class:`ManagedFileDeclaration` instances.  Returns an empty
+        dict when the section is absent.
+
+    Raises:
+        ManifestError: If the section is malformed or a path escapes
+            the managed root.
+    """
+    raw_section = data.get("managed_files")
+    if raw_section is None:
+        return {}
+
+    if not isinstance(raw_section, dict):
+        raise ManifestError("'managed_files' must be a mapping", module_name)
+
+    declarations: dict[str, ManagedFileDeclaration] = {}
+
+    for key, entry in raw_section.items():
+        if entry is None:
+            entry = {}
+        if not isinstance(entry, dict):
+            raise ManifestError(
+                f"managed_files.{key} must be a mapping or empty",
+                module_name,
+            )
+
+        renderer = entry.get("renderer")
+        if not isinstance(renderer, str) or not renderer:
+            raise ManifestError(
+                f"managed_files.{key}.renderer must be a non-empty string",
+                module_name,
+            )
+
+        output_path = entry.get("output_path")
+        if not isinstance(output_path, str) or not output_path:
+            raise ManifestError(
+                f"managed_files.{key}.output_path must be a non-empty string",
+                module_name,
+            )
+
+        if not output_path.startswith(MANAGED_FILE_ROOT_PREFIX):
+            raise ManifestError(
+                f"managed_files.{key}.output_path must start with "
+                f"'{MANAGED_FILE_ROOT_PREFIX}' "
+                f"(got '{output_path}')",
+                module_name,
+            )
+
+        # Defense-in-depth: normalize the path to reject traversal attempts
+        # like "quickscale_managed/../etc/passwd".
+        normalized = posixpath.normpath(output_path)
+        if not (
+            normalized.startswith(MANAGED_FILE_ROOT_PREFIX)
+            or normalized == MANAGED_FILE_ROOT_PREFIX.rstrip("/")
+        ):
+            raise ManifestError(
+                f"managed_files.{key}.output_path resolves outside "
+                f"'{MANAGED_FILE_ROOT_PREFIX}' after normalization "
+                f"(got '{output_path}')",
+                module_name,
+            )
+
+        declarations[key] = ManagedFileDeclaration(
+            key=key,
+            renderer=renderer,
+            output_path=output_path,
+        )
+
+    return declarations
+
+
 def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleManifest:
     """Load and validate a module manifest from YAML content
 
@@ -147,6 +239,9 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     dependencies = _validate_list_field(data, "dependencies", module_name)
     django_apps = _validate_list_field(data, "django_apps", module_name)
 
+    # Parse managed-files declarations (additive; empty when absent)
+    managed_files = _parse_managed_files(data, module_name)
+
     return ModuleManifest(
         name=name,
         version=version,
@@ -156,6 +251,7 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         required_modules=required_modules,
         dependencies=dependencies,
         django_apps=django_apps,
+        managed_files=managed_files,
     )
 
 

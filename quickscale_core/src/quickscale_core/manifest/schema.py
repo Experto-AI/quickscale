@@ -7,6 +7,40 @@ Defines mutable vs immutable config options for modules.
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+#: Root prefix that all manifest-declared managed-file output paths must
+#: resolve under.  This is the single source of truth for the write
+#: boundary enforced by the loader and assembler.
+MANAGED_FILE_ROOT_PREFIX = "quickscale_managed/"
+
+
+@dataclass(frozen=True)
+class ManagedFileDeclaration:
+    """Declarative description of a single module-owned managed file.
+
+    Managed files are generated artifacts that a module contributes to the
+    generated project.  The declaration is intentionally minimal: a renderer
+    identifier and a rooted output path.  Content generation is deferred to
+    a later phase; this dataclass captures only the structural contract.
+
+    Attributes:
+        key: The YAML key identifying this managed file within the
+            module's ``managed_files`` section.
+        renderer: Renderer identifier (e.g. a template path or renderer
+            name) that describes how the file content is produced.
+        output_path: Destination path for the generated file, relative
+            to the project root.  Must start with
+            ``quickscale_managed/`` to enforce the write boundary.
+    """
+
+    key: str
+    renderer: str
+    output_path: str
+
+    @property
+    def is_within_managed_root(self) -> bool:
+        """Return True when the output_path is under the managed root prefix."""
+        return self.output_path.startswith(MANAGED_FILE_ROOT_PREFIX)
+
 
 @dataclass
 class ConfigOption:
@@ -38,6 +72,7 @@ class ModuleManifest:
     required_modules: list[str] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
     django_apps: list[str] = field(default_factory=list)
+    managed_files: dict[str, ManagedFileDeclaration] = field(default_factory=dict)
 
     def get_option(self, option_name: str) -> ConfigOption | None:
         """Get a config option by name from either mutable or immutable"""

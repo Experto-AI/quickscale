@@ -17,9 +17,8 @@ B-phase scope (this file):
 C11 scope (deferred, NOT tested here):
 * Nested STORAGES / AWS_* wiring for s3 / r2 backends
 
-The gold values below were recovered from the storage ``module.yml`` manifest,
-``_normalize_media_url`` (lines 55–61 of module_wiring_specs.py), and
-``_storage_wiring`` (lines 232–301).
+The gold values below were recovered from the storage ``module.yml`` manifest
+and the ``storage_manifest.py`` adapter.
 """
 
 from __future__ import annotations

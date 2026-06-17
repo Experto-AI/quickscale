@@ -6,7 +6,10 @@ from unittest.mock import Mock, patch
 import click
 import pytest
 
-from quickscale_cli.commands.module_config import APPLY_MODULE_EXECUTION_MODE
+from quickscale_cli.commands.module_config import (
+    APPLY_MODULE_EXECUTION_MODE,
+    ModuleConfigurator,
+)
 from quickscale_core.manifest.loader import ManifestError
 
 from quickscale_cli.commands.module_commands import (
@@ -246,7 +249,7 @@ class TestPerformModuleEmbed:
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_successful_embed_without_configurator(
         self,
         mock_subtree,
@@ -307,8 +310,12 @@ class TestPerformModuleEmbed:
         applier = Mock()
 
         with patch(
-            "quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS",
-            {"blog": (configurator, applier)},
+            "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+            {
+                "blog": ModuleConfigurator(
+                    name="blog", configure=configurator, apply=applier
+                )
+            },
         ):
             result = _perform_module_embed(
                 tmp_path,
@@ -330,7 +337,7 @@ class TestPerformModuleEmbed:
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_embed_dependency_installation_fails(
         self,
         mock_subtree,
@@ -360,7 +367,7 @@ class TestPerformModuleEmbed:
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_embed_fails_when_embedded_manifest_is_invalid(
         self, mock_subtree, mock_add_module, mock_install, tmp_path
     ):
@@ -409,8 +416,12 @@ class TestPerformModuleEmbed:
                 side_effect=_fake_subtree_add,
             ),
             patch.dict(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS",
-                {"blog": (Mock(), _failing_applier)},
+                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                {
+                    "blog": ModuleConfigurator(
+                        name="blog", configure=Mock(), apply=_failing_applier
+                    )
+                },
                 clear=True,
             ),
         ):
@@ -689,7 +700,7 @@ class TestEmbedModule:
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_successful_embed(
         self,
         mock_git_env,
@@ -768,7 +779,7 @@ class TestEmbedModule:
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_auth_migration_allow_unverifiable_forwarded(
         self,
         mock_git_env,
@@ -800,7 +811,7 @@ class TestEmbedModule:
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_auth_migration_check_can_be_skipped(
         self,
         mock_git_env,
@@ -830,7 +841,7 @@ class TestEmbedModule:
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_git_error_handling(
         self, mock_git_env, mock_not_exists, mock_remote, mock_perform, tmp_path
     ):
@@ -850,7 +861,7 @@ class TestEmbedModule:
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_unexpected_error_handling(
         self, mock_git_env, mock_not_exists, mock_remote, mock_perform, tmp_path
     ):
@@ -881,8 +892,12 @@ class TestEmbedModule:
         applier = Mock()
 
         with patch(
-            "quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS",
-            {"blog": (configurator, applier)},
+            "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+            {
+                "blog": ModuleConfigurator(
+                    name="blog", configure=configurator, apply=applier
+                )
+            },
         ):
             result = embed_module("blog", tmp_path, non_interactive=True)
 

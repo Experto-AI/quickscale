@@ -109,7 +109,7 @@ def check_git_installed() -> DependencyStatus:
         return _skipped_dependency(
             name="Git",
             required=False,
-            purpose="Version control and module management (quickscale embed/update)",
+            purpose="Version control and module management (quickscale plan --add / update / push)",
             version_env="QUICKSCALE_MOCK_GIT_VERSION",
         )
     git_path = shutil.which("git")
@@ -132,7 +132,7 @@ def check_git_installed() -> DependencyStatus:
                 installed=True,
                 version=version,
                 required=False,
-                purpose="Version control and module management (quickscale embed/update)",
+                purpose="Version control and module management (quickscale plan --add / update / push)",
             )
         except (
             subprocess.SubprocessError,

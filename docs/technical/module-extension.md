@@ -188,4 +188,3 @@ Every module README should include a required section using this taxonomy:
 - [docs/technical/user_manual.md](user_manual.md)
 - [examples/client_extensions/README.md](../../examples/client_extensions/README.md)
 - [quickscale_core/src/quickscale_core/module_wiring.py](../../quickscale_core/src/quickscale_core/module_wiring.py)
-- [quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py](../../quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py)

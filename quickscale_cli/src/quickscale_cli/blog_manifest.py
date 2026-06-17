@@ -4,16 +4,11 @@ Sources defaults from the blog ``module.yml`` manifest and routes
 normalization and resolution through the manifest-driven resolver
 (:mod:`quickscale_core.manifest.resolver`).
 
-Option set mirrors the legacy ``_blog_wiring`` function in
-``module_wiring_specs.py``:
+Option set:
 
 * ``posts_per_page`` — integer, default ``10``
 * ``enable_rss``     — boolean, default ``True``
 * ``api_rate_limit`` — string, default ``"5/hour"``
-
-ADAPTER/OPTION-RESOLUTION ONLY — wiring migration is deferred to a later
-phase.  Do NOT register this adapter in ``MANIFEST_ADAPTER_REGISTRY`` until
-the wiring migration is complete.
 """
 
 from __future__ import annotations
@@ -35,8 +30,7 @@ from quickscale_core.manifest.resolver import resolve_module_config
 #
 # DEFAULT_BLOG_API_RATE_LIMIT is re-declared here so callers that reference
 # it by name can import it directly from this adapter.  The value must
-# match the module.yml default and the legacy DEFAULT_BLOG_API_RATE_LIMIT
-# constant in module_wiring_specs.py.
+# match the module.yml default.
 # ---------------------------------------------------------------------------
 
 DEFAULT_BLOG_POSTS_PER_PAGE = 10

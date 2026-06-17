@@ -6,8 +6,7 @@ expectations and verify that the manifest-driven replacement
 entry point.
 
 The gold values below were recovered from the blog ``module.yml`` manifest
-and the ``_blog_wiring`` function in ``module_wiring_specs.py`` (lines
-141–170).
+and the ``blog_manifest.py`` adapter.
 
 Scope
 -----

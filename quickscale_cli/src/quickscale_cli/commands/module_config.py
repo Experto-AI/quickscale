@@ -10,7 +10,7 @@ import subprocess
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Callable, Literal, Mapping, Optional
 
 import click
 
@@ -428,7 +428,7 @@ def _generate_auth_settings_addition(config: dict[str, Any]) -> str:
     session_cookie_age = int(resolved_config["session_cookie_age"])
 
     settings_addition = """
-# QuickScale Auth Module - Added by quickscale embed
+# QuickScale Auth Module - Added by quickscale plan/apply
 INSTALLED_APPS += [
     "django.contrib.sites",  # Required by allauth
     "quickscale_modules_auth",  # Must be before allauth.account for template overrides
@@ -1992,19 +1992,119 @@ def get_default_orgs_config() -> dict[str, Any]:
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
-MODULE_CONFIGURATORS = {
-    "auth": (configure_auth_module, apply_auth_configuration),
-    "blog": (configure_blog_module, apply_blog_configuration),
-    "listings": (configure_listings_module, apply_listings_configuration),
-    "crm": (configure_crm_module, apply_crm_configuration),
-    "forms": (configure_forms_module, apply_forms_configuration),
-    "storage": (configure_storage_module, apply_storage_configuration),
-    "backups": (configure_backups_module, apply_backups_configuration),
-    "billing": (configure_billing_module, apply_billing_configuration),
-    "notifications": (
-        configure_notifications_module,
-        apply_notifications_configuration,
-    ),
-    "analytics": (configure_analytics_module, apply_analytics_configuration),
-    "social": (configure_social_module, apply_social_configuration),
-}
+
+@dataclass(frozen=True)
+class ModuleConfigurator:
+    """Manifest-backed configurator entry for a single module.
+
+    Replaces the raw ``(configure, apply)`` tuple dispatch with a structured
+    surface that callers can query by attribute name.  Each entry wraps the
+    module's interactive configurator, its apply-time applier, and an optional
+    non-interactive default factory.
+
+    Attributes:
+        name: Canonical module identifier (e.g. ``"auth"``).
+        configure: Interactive or non-interactive configurator callable.
+            Signature: ``(non_interactive=False, existing_config=None) -> dict``.
+        apply: Apply-time applier callable.
+            Signature: ``(project_path, config, *, execution_mode) -> None``.
+        get_defaults: Optional factory returning the module's non-interactive
+            default option dictionary.
+    """
+
+    name: str
+    configure: Callable[..., dict[str, Any]]
+    apply: Callable[..., None]
+    get_defaults: Callable[[], dict[str, Any]] | None = None
+
+
+def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
+    """Build the canonical module configurator registry.
+
+    Centralising registration here keeps the manifest-backed surface in one
+    place.
+    """
+    entries: list[ModuleConfigurator] = [
+        ModuleConfigurator(
+            name="auth",
+            configure=configure_auth_module,
+            apply=apply_auth_configuration,
+            get_defaults=get_default_auth_config,
+        ),
+        ModuleConfigurator(
+            name="blog",
+            configure=configure_blog_module,
+            apply=apply_blog_configuration,
+            get_defaults=get_default_blog_config,
+        ),
+        ModuleConfigurator(
+            name="listings",
+            configure=configure_listings_module,
+            apply=apply_listings_configuration,
+            get_defaults=get_default_listings_config,
+        ),
+        ModuleConfigurator(
+            name="crm",
+            configure=configure_crm_module,
+            apply=apply_crm_configuration,
+            get_defaults=get_default_crm_config,
+        ),
+        ModuleConfigurator(
+            name="forms",
+            configure=configure_forms_module,
+            apply=apply_forms_configuration,
+            get_defaults=get_default_forms_config,
+        ),
+        ModuleConfigurator(
+            name="storage",
+            configure=configure_storage_module,
+            apply=apply_storage_configuration,
+            get_defaults=get_default_storage_config,
+        ),
+        ModuleConfigurator(
+            name="backups",
+            configure=configure_backups_module,
+            apply=apply_backups_configuration,
+            get_defaults=get_default_backups_config,
+        ),
+        ModuleConfigurator(
+            name="billing",
+            configure=configure_billing_module,
+            apply=apply_billing_configuration,
+            get_defaults=get_default_billing_config,
+        ),
+        ModuleConfigurator(
+            name="notifications",
+            configure=configure_notifications_module,
+            apply=apply_notifications_configuration,
+            get_defaults=get_default_notifications_config,
+        ),
+        ModuleConfigurator(
+            name="analytics",
+            configure=configure_analytics_module,
+            apply=apply_analytics_configuration,
+            get_defaults=get_default_analytics_config,
+        ),
+        ModuleConfigurator(
+            name="social",
+            configure=configure_social_module,
+            apply=apply_social_configuration,
+            get_defaults=get_default_social_config,
+        ),
+    ]
+    return {entry.name: entry for entry in entries}
+
+
+MODULE_CONFIGURATOR_REGISTRY: dict[str, ModuleConfigurator] = (
+    _build_configurator_registry()
+)
+
+
+def get_module_configurator(module_name: str) -> ModuleConfigurator | None:
+    """Return the configurator entry for *module_name*, or ``None``."""
+    return MODULE_CONFIGURATOR_REGISTRY.get(module_name)
+
+
+def get_configurator_module_names() -> list[str]:
+    """Return the sorted list of modules that have a registered configurator."""
+    return sorted(MODULE_CONFIGURATOR_REGISTRY)

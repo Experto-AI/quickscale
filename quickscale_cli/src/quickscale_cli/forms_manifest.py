@@ -1,14 +1,13 @@
 """Forms module manifest-driven configuration adapter.
 
-Replaces the legacy hardcoded defaults and derivation logic that lived inline
-in ``module_config.py`` and ``module_wiring_specs.py`` by sourcing defaults
-from the forms ``module.yml`` manifest and routing normalization, validation,
-and resolution through the manifest-driven resolver
+Replaces the legacy hardcoded defaults and derivation logic by sourcing
+defaults from the forms ``module.yml`` manifest and routing normalization,
+validation, and resolution through the manifest-driven resolver
 (:mod:`quickscale_core.manifest.resolver`).
 
-The public API mirrors the analytics pilot pattern so that callers in
-``module_wiring_specs.py``, ``apply_command.py``, and ``module_config.py``
-can migrate without rewriting their logic.
+The public API follows the manifest adapter pattern so that callers in
+``apply_command.py`` and ``module_config.py`` can use it without rewriting
+their logic.
 """
 
 from __future__ import annotations

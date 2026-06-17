@@ -15,7 +15,7 @@ from quickscale_cli.backups_manifest import (
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
 )
 from quickscale_cli.commands.module_config import (
-    MODULE_CONFIGURATORS,
+    MODULE_CONFIGURATOR_REGISTRY,
     _add_django_allauth_dependency,
     _add_storage_dependencies,
     _filter_new_apps,
@@ -53,7 +53,7 @@ from quickscale_cli.commands.module_config import (
     format_auth_migration_remediation,
     validate_backups_module_options,
 )
-from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
+from quickscale_core.manifest.entry_point import build_manifest_wiring_spec
 from quickscale_cli.social_manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
@@ -75,6 +75,20 @@ from quickscale_cli.utils.module_dependency_sync import (
     resolve_embedded_module_install_path,
 )
 from quickscale_core.module_wiring import collect_wiring
+
+
+def _build_specs(
+    modules_options: dict[str, dict[str, object]],
+    *,
+    project_package: str | None = None,
+) -> dict[str, object]:
+    """Build a dict of ModuleWiringSpec via the manifest-driven entry point."""
+    return {
+        name: build_manifest_wiring_spec(
+            name, dict(options), project_package=project_package
+        )
+        for name, options in modules_options.items()
+    }
 
 
 # ============================================================================
@@ -908,7 +922,7 @@ class TestModuleWiringSpecs:
 
     def test_analytics_wiring_emits_flat_settings(self):
         """Analytics wiring should emit flat settings plus the analytics app."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "analytics": {
                     "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
@@ -940,7 +954,7 @@ class TestModuleWiringSpecs:
 
     def test_analytics_wiring_disabled_omits_managed_settings(self):
         """Disabled analytics should not contribute apps or managed settings."""
-        specs = build_module_wiring_specs({"analytics": {"enabled": False}})
+        specs = _build_specs({"analytics": {"enabled": False}})
 
         apps, _, settings, _ = collect_wiring(specs)
 
@@ -949,7 +963,7 @@ class TestModuleWiringSpecs:
 
     def test_analytics_wiring_includes_module_owned_urls(self):
         """Analytics wiring should include the module-owned URL mount."""
-        specs = build_module_wiring_specs({"analytics": {}})
+        specs = _build_specs({"analytics": {}})
 
         assert specs["analytics"].url_includes == (
             ("analytics/", "quickscale_modules_analytics.urls"),
@@ -957,7 +971,7 @@ class TestModuleWiringSpecs:
 
     def test_blog_and_listings_markdownx_media_path_uses_blog_value(self):
         """`MARKDOWNX_MEDIA_PATH` should remain stable with blog and listings."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "blog": {
                     "posts_per_page": 10,
@@ -973,7 +987,7 @@ class TestModuleWiringSpecs:
 
     def test_listings_wiring_includes_markdownx_urls(self):
         """Listings wiring should include markdownx URLs for admin uploads"""
-        specs = build_module_wiring_specs({"listings": {"listings_per_page": 12}})
+        specs = _build_specs({"listings": {"listings_per_page": 12}})
 
         assert specs["listings"].url_includes == (
             ("listings/", "quickscale_modules_listings.urls"),
@@ -982,7 +996,7 @@ class TestModuleWiringSpecs:
 
     def test_blog_wiring_without_rss_still_includes_markdownx_urls(self):
         """Blog wiring should keep markdownx URLs even when RSS is disabled."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "blog": {
                     "posts_per_page": 10,
@@ -1001,7 +1015,7 @@ class TestModuleWiringSpecs:
 
     def test_storage_wiring_local_keeps_filesystem_defaults(self):
         """Storage wiring should not force STORAGES override for local backend."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "storage": {
                     "backend": "local",
@@ -1020,7 +1034,7 @@ class TestModuleWiringSpecs:
 
     def test_storage_wiring_s3_sets_s3_backend(self):
         """Storage wiring should configure S3-compatible backend in cloud mode."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "storage": {
                     "backend": "s3",
@@ -1055,7 +1069,7 @@ class TestModuleWiringSpecs:
 
     def test_storage_wiring_invalid_backend_and_media_url_are_normalized(self):
         """Storage wiring should normalize invalid backends and relative URLs."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "storage": {
                     "backend": "invalid",
@@ -1074,7 +1088,7 @@ class TestModuleWiringSpecs:
 
     def test_storage_wiring_r2_sets_optional_provider_settings(self):
         """Storage wiring should emit optional provider fields for R2 mode."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "storage": {
                     "backend": "r2",
@@ -1111,7 +1125,7 @@ class TestModuleWiringSpecs:
 
     def test_auth_wiring_supports_legacy_allow_registration_and_username_mode(self):
         """Auth wiring should keep legacy config compatibility paths covered."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "auth": {
                     "allow_registration": False,
@@ -1134,7 +1148,7 @@ class TestModuleWiringSpecs:
 
     def test_auth_wiring_supports_both_authentication_mode(self):
         """Auth wiring should generate combined login/signup fields for both mode."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "auth": {
                     "registration_enabled": True,
@@ -1156,7 +1170,7 @@ class TestModuleWiringSpecs:
 
     def test_forms_wiring_without_submissions_api_omits_rest_framework(self):
         """Forms wiring should avoid REST_FRAMEWORK when submissions API is disabled."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "forms": {
                     "forms_per_page": 15,
@@ -1179,7 +1193,7 @@ class TestModuleWiringSpecs:
 
     def test_crm_and_forms_wiring_do_not_collide_on_rest_framework(self):
         """CRM and forms wiring should keep distinct module-owned settings."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "crm": {
                     "enable_api": True,
@@ -1209,18 +1223,20 @@ class TestModuleWiringSpecs:
         assert ("", "quickscale_modules_crm.urls") in urls
         assert ("", "quickscale_modules_forms.urls") in urls
 
-    def test_build_module_wiring_specs_skips_unknown_modules(self):
-        """Unknown modules should be ignored by the wiring builder registry."""
-        specs = build_module_wiring_specs(
-            {"unknown": {}, "storage": {"backend": "local"}}
-        )
+    def test_manifest_entry_point_raises_for_unknown_modules(self):
+        """Unknown modules should raise ManifestAdapterNotFound at the entry point."""
+        from quickscale_core.manifest.entry_point import ManifestAdapterNotFound
 
-        assert "unknown" not in specs
-        assert "storage" in specs
+        with pytest.raises(ManifestAdapterNotFound):
+            build_manifest_wiring_spec("unknown", {})
+
+        # Known modules still resolve successfully.
+        storage_spec = build_manifest_wiring_spec("storage", {"backend": "local"})
+        assert storage_spec is not None
 
     def test_social_wiring_creates_managed_backend_transport(self):
         """Social wiring should emit fixed-route settings and managed transport files."""
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "social": {
                     "layout_variant": "GRID",
@@ -1266,7 +1282,7 @@ class TestModuleWiringSpecs:
     def test_social_wiring_requires_project_package(self):
         """Social managed transport wiring should require the generated package name."""
         with pytest.raises(ValueError, match="project_package is required"):
-            build_module_wiring_specs({"social": {}})
+            _build_specs({"social": {}})
 
 
 class TestFormsModuleConfig:
@@ -1348,7 +1364,7 @@ class TestStorageModuleConfig:
         assert config["querystring_auth"] is False
 
     def test_storage_in_module_configurators(self):
-        assert "storage" in MODULE_CONFIGURATORS
+        assert "storage" in MODULE_CONFIGURATOR_REGISTRY
         config = configure_storage_module(non_interactive=True)
         assert config["backend"] == "local"
 
@@ -1635,7 +1651,7 @@ class TestAnalyticsModuleConfig:
         assert config["anonymous_by_default"] is True
 
     def test_analytics_in_module_configurators(self):
-        assert "analytics" in MODULE_CONFIGURATORS
+        assert "analytics" in MODULE_CONFIGURATOR_REGISTRY
 
         config = configure_analytics_module(non_interactive=True)
 
@@ -1707,7 +1723,7 @@ class TestBillingModuleConfig:
         assert config["billing_currency"] == "usd"
 
     def test_billing_in_module_configurators(self):
-        assert "billing" in MODULE_CONFIGURATORS
+        assert "billing" in MODULE_CONFIGURATOR_REGISTRY
 
         config = configure_billing_module(non_interactive=True)
 
@@ -1795,7 +1811,7 @@ class TestBackupsModuleConfig:
         assert config["automation_enabled"] is False
 
     def test_backups_in_module_configurators(self):
-        assert "backups" in MODULE_CONFIGURATORS
+        assert "backups" in MODULE_CONFIGURATOR_REGISTRY
         config = configure_backups_module(non_interactive=True)
         assert config["target_mode"] == "local"
 
@@ -1943,7 +1959,7 @@ class TestBackupsModuleConfig:
         )
 
     def test_backups_wiring_sets_private_settings_without_public_urls(self):
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "backups": {
                     "retention_days": 14,
@@ -1991,7 +2007,7 @@ class TestNotificationsModuleConfig:
         assert config["resend_api_key_env_var"] == "RESEND_API_KEY"
 
     def test_notifications_in_module_configurators(self):
-        assert "notifications" in MODULE_CONFIGURATORS
+        assert "notifications" in MODULE_CONFIGURATOR_REGISTRY
 
         config = configure_notifications_module(non_interactive=True)
 
@@ -2058,7 +2074,7 @@ class TestNotificationsModuleConfig:
         )
 
     def test_notifications_wiring_stays_console_safe_by_default(self):
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "notifications": {
                     "enabled": True,
@@ -2086,7 +2102,7 @@ class TestNotificationsModuleConfig:
         assert ("", "quickscale_modules_notifications.urls") in urls
 
     def test_notifications_wiring_live_delivery_owns_email_backend(self):
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "notifications": {
                     "enabled": True,
@@ -2114,7 +2130,7 @@ class TestNotificationsModuleConfig:
         )
 
     def test_notifications_wiring_disabled_leaves_email_backend_unmanaged(self):
-        specs = build_module_wiring_specs(
+        specs = _build_specs(
             {
                 "notifications": {
                     "enabled": False,
@@ -2149,7 +2165,7 @@ class TestSocialModuleConfig:
         ]
 
     def test_social_in_module_configurators(self):
-        assert "social" in MODULE_CONFIGURATORS
+        assert "social" in MODULE_CONFIGURATOR_REGISTRY
 
         config = configure_social_module(non_interactive=True)
 
@@ -2274,10 +2290,10 @@ class TestCRMModuleConfig:
         assert config["contacts_per_page"] == 100
 
     def test_crm_in_module_configurators(self):
-        """Test CRM is registered in MODULE_CONFIGURATORS"""
-        assert "crm" in MODULE_CONFIGURATORS
-        configurator, applier = MODULE_CONFIGURATORS["crm"]
-        config = configurator(non_interactive=True)
+        """Test CRM is registered in MODULE_CONFIGURATOR_REGISTRY"""
+        assert "crm" in MODULE_CONFIGURATOR_REGISTRY
+        entry = MODULE_CONFIGURATOR_REGISTRY["crm"]
+        config = entry.configure(non_interactive=True)
         assert "enable_api" in config
 
 

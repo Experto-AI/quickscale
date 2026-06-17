@@ -4,14 +4,9 @@ Sources defaults from the listings ``module.yml`` manifest and routes
 normalization and resolution through the manifest-driven resolver
 (:mod:`quickscale_core.manifest.resolver`).
 
-Option set mirrors the legacy ``_listings_wiring`` function in
-``module_wiring_specs.py``:
+Option set:
 
 * ``listings_per_page`` — integer, default ``12``
-
-ADAPTER/OPTION-RESOLUTION ONLY — wiring migration is deferred to a later
-phase.  Do NOT register this adapter in ``MANIFEST_ADAPTER_REGISTRY`` until
-the wiring migration is complete.
 """
 
 from __future__ import annotations

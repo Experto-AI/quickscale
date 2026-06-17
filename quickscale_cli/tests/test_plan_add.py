@@ -578,6 +578,65 @@ class TestPlanNewProjectConfigureModules:
             assert "orgs" in modules
             assert modules["notifications"] == default_notifications_module_options()
 
+    def test_plan_new_project_configure_modules_configures_implied_notifications(
+        self,
+    ) -> None:
+        """--configure-modules with billing should invoke notifications configurator.
+
+        When billing is selected with --configure-modules, orgs and notifications
+        are implied. All three modules with registry-backed configurators (auth,
+        billing, notifications) must receive input in the same planning pass.
+        """
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            # Input sequence:
+            # - \n: default package name (myapp)
+            # - \n: default theme (showcase_react)
+            # - auth,billing: select auth + billing (implies orgs → notifications)
+            # - n: don't start Docker
+            # Auth configurator (3 prompts):
+            # - y: enable registration
+            # - \n: email verification default (none)
+            # - \n: auth method default (email)
+            # Billing configurator (5 prompts, all defaults):
+            # - \n: enable billing (default yes)
+            # - \n: publishable key env var
+            # - \n: secret key env var
+            # - \n: webhook secret env var
+            # - \n: billing currency
+            # Notifications configurator (implied, 9 prompts):
+            # - y: enable notifications runtime
+            # - \n: sender name default
+            # - \n: sender email default
+            # - \n: reply-to default
+            # - n: skip live Resend delivery
+            # - n: skip webhook signing
+            # - \n: allowed tags default
+            # - \n: default tags default
+            # - \n: webhook ttl default
+            # - y: confirm save
+            result = runner.invoke(
+                plan,
+                ["myapp", "--configure-modules"],
+                input=(
+                    "\n\nauth,billing\nn\ny\n\n\n\n\n\n\n\ny\n\n\n\nn\nn\n\n\n\ny\n"
+                ),
+            )
+
+            assert result.exit_code == 0
+            with open("myapp/quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "billing" in modules
+            assert "orgs" in modules
+            # Notifications should be present (implied by orgs)
+            assert "notifications" in modules
+            # The configurator should have been invoked, so notifications
+            # should have been configured (not just default empty dict)
+            notifications_config = modules["notifications"]
+            assert isinstance(notifications_config, dict)
+
 
 class TestPlanAddNoModulesSelected:
     """Tests for when no modules are selected"""
