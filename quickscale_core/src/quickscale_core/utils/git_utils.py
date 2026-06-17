@@ -82,7 +82,19 @@ def run_git_subtree_add(
 def run_git_subtree_pull(
     prefix: str, remote: str, branch: str, squash: bool = True, path: Path | None = None
 ) -> str:
-    """Execute git subtree pull with error handling and return diff summary"""
+    """Execute git subtree pull with error handling and return diff summary.
+
+    The *branch* parameter accepts either a branch name or a fully-spelled
+    40-character hex commit SHA.  Passing a SHA binds the pull to the exact
+    commit so the fetched content cannot drift if the remote branch advances
+    between ref resolution and the subtree operation.
+
+    This SHA-pinned contract is verified by the integration test
+    ``TestSubtreePullWithCommitSha`` in ``quickscale_core/tests/test_git_utils.py``
+    and relies on ``git fetch <url> <hex>`` officially supporting fully-spelled
+    hex object names (git-fetch documentation) and ``git-subtree`` forwarding
+    the ref to ``git fetch``.  Verified on Git 2.43.0+.
+    """
     cwd = path or Path.cwd()
     cmd = ["git", "subtree", "pull", f"--prefix={prefix}", remote, branch]
     if squash:

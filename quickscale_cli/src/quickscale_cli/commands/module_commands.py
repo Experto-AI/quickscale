@@ -1105,6 +1105,14 @@ def _update_single_module(
                 # the commit_sha persisted to state.yml.  Passing the branch
                 # name here would allow the pull to drift if the remote
                 # branch advances between resolve_remote_ref and subtree.
+                #
+                # CR-M5-P3-007: ``git subtree pull <remote> <40-char SHA>
+                # --squash`` is verified to work on Git 2.43.0+ because
+                # ``git fetch <url> <hex>`` officially supports fully-spelled
+                # hex object names and git-subtree forwards the ref to
+                # ``git fetch``.  See the hermetic integration proof in
+                # ``quickscale_core/tests/test_git_utils.py``
+                # (TestSubtreePullWithCommitSha).
                 output = run_git_subtree_pull(
                     prefix=info.prefix,
                     remote=default_remote,
