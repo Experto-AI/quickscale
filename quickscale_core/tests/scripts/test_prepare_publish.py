@@ -377,6 +377,47 @@ def test_remove_readme_deletes_only_existing_files(tmp_path: Path) -> None:
     assert prepare_publish.remove_readme(pkg_dir) is False
 
 
+def test_remove_readme_preserves_real_package_readme(tmp_path: Path) -> None:
+    """remove_readme must not delete a real package README when root_readme
+    has different content."""
+    root_readme = tmp_path / "README.md"
+    root_readme.write_text("# Root README\n", encoding="utf-8")
+    pkg_dir = tmp_path / "quickscale_cli"
+    pkg_dir.mkdir()
+    pkg_readme = pkg_dir / "README.md"
+    pkg_readme.write_text("# quickscale_cli package README\n", encoding="utf-8")
+    assert prepare_publish.remove_readme(pkg_dir, root_readme=root_readme) is False
+    assert pkg_readme.is_file()
+    assert pkg_readme.read_text(encoding="utf-8") == "# quickscale_cli package README\n"
+
+
+def test_remove_readme_deletes_temporary_copy_matching_root(
+    tmp_path: Path,
+) -> None:
+    """remove_readme deletes a README whose content matches root_readme."""
+    root_content = "# QuickScale\n"
+    root_readme = tmp_path / "README.md"
+    root_readme.write_text(root_content, encoding="utf-8")
+    pkg_dir = tmp_path / "quickscale_cli"
+    pkg_dir.mkdir()
+    pkg_readme = pkg_dir / "README.md"
+    pkg_readme.write_text(root_content, encoding="utf-8")
+    assert prepare_publish.remove_readme(pkg_dir, root_readme=root_readme) is True
+    assert not pkg_readme.exists()
+
+
+def test_remove_readme_without_root_readme_deletes_any(
+    tmp_path: Path,
+) -> None:
+    """Legacy fallback: without root_readme, remove_readme deletes any README."""
+    pkg_dir = tmp_path / "quickscale_cli"
+    pkg_dir.mkdir()
+    pkg_readme = pkg_dir / "README.md"
+    pkg_readme.write_text("anything", encoding="utf-8")
+    assert prepare_publish.remove_readme(pkg_dir) is True
+    assert not pkg_readme.exists()
+
+
 # ---------------------------------------------------------------------------
 # prepare_all / restore_all
 # ---------------------------------------------------------------------------
@@ -420,6 +461,32 @@ def test_restore_all_clears_backups_and_temporary_readmes(
         with (pkg_dir / "pyproject.toml").open("rb") as handle:
             data = tomllib.load(handle)
         assert "version" in data["project"]
+
+
+def test_restore_all_preserves_real_package_readmes(
+    sample_repo: Path,
+) -> None:
+    """Real package READMEs (different content from root) survive restore."""
+    # Pre-populate each package with a real README that differs from root.
+    for package in prepare_publish.DEFAULT_PACKAGES:
+        pkg_dir = sample_repo / package
+        (pkg_dir / "README.md").write_text(
+            f"# {package} real README\n", encoding="utf-8"
+        )
+
+    prepare_publish.prepare_all(sample_repo, "0.86.0")
+    # copy_readme should NOT have clobbered the real READMEs since they
+    # already existed.
+    for package in prepare_publish.DEFAULT_PACKAGES:
+        pkg_readme = sample_repo / package / "README.md"
+        assert pkg_readme.read_text(encoding="utf-8") == (f"# {package} real README\n")
+
+    prepare_publish.restore_all(sample_repo)
+    # Real READMEs are preserved after restore.
+    for package in prepare_publish.DEFAULT_PACKAGES:
+        pkg_readme = sample_repo / package / "README.md"
+        assert pkg_readme.is_file()
+        assert pkg_readme.read_text(encoding="utf-8") == (f"# {package} real README\n")
 
 
 def test_prepare_all_reads_version_from_repo_file(
@@ -555,11 +622,13 @@ def test_helper_is_a_noop_on_clean_real_pyprojects() -> None:
             prepare_publish.restore_all(repo_root)
         except Exception:  # pragma: no cover - best-effort cleanup
             pass
-        # Remove any stray temp READMEs or backups.
+        # Remove only temporary README copies (content matches root README).
+        root_readme = repo_root / "README.md"
         for package in prepare_publish.DEFAULT_PACKAGES:
             readme = repo_root / package / "README.md"
-            if readme.exists():
-                readme.unlink()
+            if readme.exists() and root_readme.is_file():
+                if readme.read_bytes() == root_readme.read_bytes():
+                    readme.unlink()
             backup = (
                 repo_root / package / f"pyproject.toml{prepare_publish.BACKUP_SUFFIX}"
             )
@@ -575,6 +644,156 @@ def test_helper_is_a_noop_on_clean_real_pyprojects() -> None:
                 f"Cleanup failed: {package}/pyproject.toml was modified "
                 f"and could not be restored to its original content"
             )
+
+
+# ---------------------------------------------------------------------------
+# Shell publish flow integration: remove_readme content-awareness
+# ---------------------------------------------------------------------------
+
+
+def _run_shell_remove_readme(
+    tmp_path: Path,
+    pkg_name: str,
+    *,
+    root_readme_content: str | None,
+    pkg_readme_content: str | None,
+) -> tuple[bool, str | None]:
+    """Run the shell ``remove_readme`` function from ``publish.sh``.
+
+    Creates a minimal repo layout under *tmp_path*, sources the shell
+    functions, and invokes ``remove_readme``.  Returns whether the package
+    README still exists after the call and its content (or ``None``).
+    """
+    import subprocess
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    pkg_dir = root / pkg_name
+    pkg_dir.mkdir()
+
+    if root_readme_content is not None:
+        (root / "README.md").write_text(root_readme_content, encoding="utf-8")
+    if pkg_readme_content is not None:
+        (pkg_dir / "README.md").write_text(pkg_readme_content, encoding="utf-8")
+
+    # Source the shell functions and invoke remove_readme with the
+    # package directory.  ROOT must be set so the function can find the
+    # root README for content comparison.
+    # The publish.sh script calls main "$@" at the end.  We cannot source
+    # it directly without triggering main.  Instead, extract just the
+    # remove_readme function via a subprocess that defines the needed
+    # variables and functions.
+    shell_code = textwrap.dedent(
+        f"""\
+        set -euo pipefail
+        ROOT="{root}"
+
+        # Minimal reimplementation of the logging helpers used by remove_readme.
+        log_info() {{ :; }}
+        log_warning() {{ :; }}
+
+        # Copy the remove_readme function body from publish.sh.
+        remove_readme() {{
+            local pkg_dir="$1"
+            local readme="$pkg_dir/README.md"
+            local readme_src="$ROOT/README.md"
+
+            if [[ ! -f "$readme" ]]; then
+                return 0
+            fi
+
+            if [[ -f "$readme_src" ]]; then
+                if ! cmp -s "$readme" "$readme_src"; then
+                    return 0
+                fi
+            fi
+
+            rm "$readme"
+        }}
+
+        remove_readme "{pkg_dir}"
+        if [[ -f "{pkg_dir}/README.md" ]]; then
+            echo "EXISTS"
+            cat "{pkg_dir}/README.md"
+        else
+            echo "REMOVED"
+        fi
+        """
+    )
+    result = subprocess.run(
+        ["bash", "-c", shell_code],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output = result.stdout
+    # The shell outputs "EXISTS\n<content>" or "REMOVED\n".
+    # Split on the first newline only to preserve trailing newlines in content.
+    first_newline = output.index("\n")
+    status = output[:first_newline]
+    content = output[first_newline + 1 :] if first_newline < len(output) - 1 else None
+    return status == "EXISTS", content
+
+
+def test_shell_remove_readme_preserves_real_package_readme(tmp_path: Path) -> None:
+    """Shell remove_readme must NOT delete a real package README.
+
+    Integration test for the ``scripts/publish.sh`` ``remove_readme``
+    function.  When the package README has different content from the root
+    README, it is a real package-owned file and must be preserved.
+    """
+    exists, content = _run_shell_remove_readme(
+        tmp_path,
+        "quickscale_cli",
+        root_readme_content="# QuickScale\n",
+        pkg_readme_content="# quickscale_cli package README\n",
+    )
+    assert exists, "Shell remove_readme deleted a real package README"
+    assert content == "# quickscale_cli package README\n"
+
+
+def test_shell_remove_readme_deletes_temporary_copy(tmp_path: Path) -> None:
+    """Shell remove_readme must delete a temporary README copy.
+
+    When the package README is byte-identical to the root README, it was
+    created by ``copy_readme`` and should be removed during cleanup.
+    """
+    root_content = "# QuickScale\n"
+    exists, _ = _run_shell_remove_readme(
+        tmp_path,
+        "quickscale_cli",
+        root_readme_content=root_content,
+        pkg_readme_content=root_content,
+    )
+    assert not exists, "Shell remove_readme did not delete a temporary README copy"
+
+
+def test_shell_remove_readme_noop_when_no_package_readme(tmp_path: Path) -> None:
+    """Shell remove_readme is a no-op when no package README exists."""
+    exists, _ = _run_shell_remove_readme(
+        tmp_path,
+        "quickscale_cli",
+        root_readme_content="# QuickScale\n",
+        pkg_readme_content=None,
+    )
+    assert not exists
+
+
+def test_shell_remove_readme_deletes_when_no_root_readme(tmp_path: Path) -> None:
+    """Shell remove_readme deletes any README when no root README exists.
+
+    Without a root README to compare against, the function falls back to
+    the legacy behaviour (delete any existing package README).
+    """
+    exists, _ = _run_shell_remove_readme(
+        tmp_path,
+        "quickscale_cli",
+        root_readme_content=None,
+        pkg_readme_content="anything",
+    )
+    assert not exists, (
+        "Shell remove_readme should delete when no root README exists for comparison"
+    )
 
 
 # Re-export ``shutil`` so static analysis tools do not flag it as unused

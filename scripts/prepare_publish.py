@@ -368,18 +368,30 @@ def copy_readme(repo_root: Path, package: str) -> bool:
     return True
 
 
-def remove_readme(package_dir: Path) -> bool:
+def remove_readme(package_dir: Path, *, root_readme: Path | None = None) -> bool:
     """
     Remove a temporary package-level ``README.md`` copy if present.
 
-    Returns ``True`` when a file was removed. Files that were not created
-    by the helper (for example, a real package README) are not removed
-    here — the caller's expected invariant is that ``copy_readme`` was
-    the only writer.
+    When *root_readme* is provided and exists on disk, the package README
+    is deleted **only** when its content is byte-identical to the root
+    README — i.e. it was created by :func:`copy_readme` and is not a real
+    package-owned README.  Real package READMEs (different content) are
+    preserved.
+
+    When *root_readme* is ``None`` the function falls back to the legacy
+    behaviour (delete any existing ``README.md``).  Callers that care about
+    preserving real package READMEs should always pass *root_readme*.
+
+    Returns ``True`` when a file was removed.
     """
     readme = package_dir / "README.md"
     if not readme.is_file():
         return False
+    if root_readme is not None and root_readme.is_file():
+        if readme.read_bytes() != root_readme.read_bytes():
+            # Content differs from the root README — this is a real
+            # package-owned README, not a temporary copy.  Preserve it.
+            return False
     readme.unlink()
     return True
 
@@ -412,14 +424,17 @@ def restore_all(
     Restore every publish package in dependency order.
 
     Returns a mapping of package name to whether a backup was restored.
-    Any package-level temporary ``README.md`` is removed as part of the
-    restore so the repository returns to its pre-publish layout.
+    Any package-level temporary ``README.md`` that was created by
+    :func:`copy_readme` (i.e. content matches the root README) is removed
+    as part of the restore so the repository returns to its pre-publish
+    layout.  Real package-owned READMEs are preserved.
     """
+    root_readme = repo_root / "README.md"
     results: dict[str, bool] = {}
     for package in packages:
         pyproject = repo_root / package / "pyproject.toml"
         restored = restore_pyproject(pyproject)
-        remove_readme(repo_root / package)
+        remove_readme(repo_root / package, root_readme=root_readme)
         results[package] = restored
     return results
 

@@ -86,7 +86,8 @@ def _load_storage_manifest() -> Any:
 def _build_storage_derivation_schema() -> ModuleDerivationSchema:
     """Build a derivation schema for the storage module.
 
-    ``backend``        — strip + lowercase + choices validation.
+    ``backend``        — lowercase + choices validation (no strip — matches
+    legacy ``_storage_wiring`` which only calls ``.lower()``).
     ``public_base_url`` — strip (legacy: ``str(...).strip()``).
     Other string fields (bucket_name, endpoint_url, etc.) — strip only.
 
@@ -123,11 +124,6 @@ def _build_storage_derivation_schema() -> ModuleDerivationSchema:
             "backend": OptionDerivation(
                 option_key="backend",
                 normalization_rules=[
-                    NormalizationRule(
-                        source_key="backend",
-                        target_key="backend",
-                        rule_type="strip",
-                    ),
                     NormalizationRule(
                         source_key="backend",
                         target_key="backend",
@@ -199,7 +195,8 @@ def normalize_storage_module_options(
 
     Mirrors the normalization applied in the legacy ``_storage_wiring``:
 
-    * ``backend``         — strip + lowercase; invalid values are NOT yet
+    * ``backend``         — lowercase (no strip — matches legacy
+      ``_storage_wiring``); invalid values are NOT yet
       replaced here (that happens in :func:`resolve_storage_module_options`).
     * ``media_url``       — full ``_normalize_media_url`` normalization.
     * ``public_base_url`` — strip whitespace.
@@ -208,7 +205,7 @@ def normalize_storage_module_options(
     normalized = dict(options or {})
 
     if "backend" in normalized:
-        normalized["backend"] = str(normalized["backend"]).strip().lower()
+        normalized["backend"] = str(normalized["backend"]).lower()
 
     if "media_url" in normalized:
         normalized["media_url"] = _normalize_media_url(str(normalized["media_url"]))
@@ -253,7 +250,7 @@ def resolve_storage_module_options(
     resolved = dict(result.resolved)
 
     # Backend: normalize + fallback (mirrors legacy _storage_wiring).
-    backend = str(resolved.get("backend", "")).strip().lower()
+    backend = str(resolved.get("backend", "")).lower()
     if backend not in STORAGE_BACKENDS:
         backend = STORAGE_BACKEND_LOCAL
     resolved["backend"] = backend
@@ -300,7 +297,7 @@ def validate_storage_module_options(options: Mapping[str, Any] | None) -> list[s
 
     issues: list[str] = []
 
-    backend = str(merged.get("backend", "")).strip().lower()
+    backend = str(merged.get("backend", "")).lower()
     if backend not in STORAGE_BACKENDS:
         issues.append(
             "modules.storage.backend must be one of: " + ", ".join(STORAGE_BACKENDS)
