@@ -18,7 +18,8 @@ Manifest adapters register themselves by populating
 :class:`~quickscale_core.module_wiring.ModuleWiringSpec`.
 
 Analytics is registered at import time as the first migrated module.
-Billing, blog, listings, CRM, forms, and backups are registered as C1-C7
+Billing, blog, listings, CRM, forms, backups, notifications, auth, orgs, and
+storage are registered as C1-C7, M4 follow-up, and Track 2 Phase 1.1-1.2
 migration adapters.
 """
 
@@ -81,7 +82,7 @@ def _analytics_manifest_adapter(
     """
     # Deferred import avoids circular dependency: quickscale_core must not
     # import from quickscale_cli at module level.
-    from quickscale_cli.analytics_manifest import (  # noqa: PLC0415
+    from quickscale_cli.analytics_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
         resolve_analytics_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -299,7 +300,7 @@ def _billing_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         billing that is equal to the legacy ``_billing_wiring`` output.
     """
-    from quickscale_cli.billing_manifest import (  # noqa: PLC0415
+    from quickscale_cli.billing_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
         DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
         DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
         DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
@@ -462,7 +463,7 @@ def _blog_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         blog that is equal to the legacy ``_blog_wiring`` output.
     """
-    from quickscale_cli.blog_manifest import (  # noqa: PLC0415
+    from quickscale_cli.blog_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
         resolve_blog_module_options,
         DEFAULT_BLOG_API_RATE_LIMIT,
     )
@@ -610,7 +611,7 @@ def _listings_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         listings that is equal to the legacy ``_listings_wiring`` output.
     """
-    from quickscale_cli.listings_manifest import (  # noqa: PLC0415
+    from quickscale_cli.listings_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
         resolve_listings_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -733,7 +734,7 @@ def _crm_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         CRM that is equal to the legacy ``_crm_wiring`` output.
     """
-    from quickscale_cli.crm_manifest import (  # noqa: PLC0415
+    from quickscale_cli.crm_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
         resolve_crm_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -872,7 +873,7 @@ def _forms_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         forms that is equal to the legacy ``_forms_wiring`` output.
     """
-    from quickscale_cli.forms_manifest import (  # noqa: PLC0415
+    from quickscale_cli.forms_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
         resolve_forms_module_options,
         DEFAULT_FORMS_RATE_LIMIT,
     )
@@ -1043,7 +1044,7 @@ def _backups_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         backups that is equal to the legacy ``_backups_wiring`` output.
     """
-    from quickscale_cli.backups_manifest import (  # noqa: PLC0415
+    from quickscale_cli.backups_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
         normalize_backups_module_options,
         BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
         BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -1149,6 +1150,677 @@ def _backups_manifest_adapter(
 
 
 MANIFEST_ADAPTER_REGISTRY["backups"] = _backups_manifest_adapter
+
+
+# ---------------------------------------------------------------------------
+# Notifications adapter (M4 follow-up — Phase 1)
+# ---------------------------------------------------------------------------
+
+
+def _notifications_manifest_adapter(
+    options: dict[str, Any],
+    *,
+    project_package: str | None = None,
+) -> ModuleWiringSpec:
+    """Build a ModuleWiringSpec for the notifications module via the manifest path.
+
+    Mirrors ``_notifications_wiring`` in ``module_wiring_specs.py`` exactly.
+    Apps: ``("quickscale_modules_notifications",)`` with ``"anymail"`` prepended
+    when the runtime email backend is the live Resend backend.
+    URL includes: ``[("", "quickscale_modules_notifications.urls")]``.
+    Settings: QUICKSCALE_NOTIFICATIONS_* keys plus conditional EMAIL_BACKEND,
+    DEFAULT_FROM_EMAIL, and SERVER_EMAIL keys.
+
+    The conditional anymail app and email-backend settings are applied via the
+    assembler post-resolution hook because the generic resolver cannot express
+    cross-option conditional wiring.
+
+    Args:
+        options: Module options (e.g. from ``quickscale.yml``).
+        project_package: Unused for notifications; present for signature parity.
+
+    Returns:
+        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+        notifications that is equal to the legacy ``_notifications_wiring``
+        output.
+    """
+    from quickscale_cli.notifications_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+        NOTIFICATIONS_LIVE_EMAIL_BACKEND,
+        notifications_runtime_email_backend,
+        resolve_notifications_module_options,
+    )
+    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
+    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
+        DerivedSetting,
+        ModuleDerivationSchema,
+        OptionDerivation,
+        WiringProjection,
+    )
+    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
+        ResolverResult,
+        _project_all_derived_settings,
+        _project_all_wiring,
+    )
+
+    resolved = resolve_notifications_module_options(options)
+    runtime_email_backend = notifications_runtime_email_backend(resolved)
+
+    schema = ModuleDerivationSchema(
+        module_name="notifications",
+        version="1",
+        module_wiring_projections=[
+            WiringProjection(
+                wiring_field="apps",
+                derivation_type="static",
+                expression={"value": ["quickscale_modules_notifications"]},
+                description="Notifications Django app label",
+            ),
+            WiringProjection(
+                wiring_field="url_includes",
+                derivation_type="static",
+                expression={"value": [["", "quickscale_modules_notifications.urls"]]},
+                description="Notifications URL includes",
+            ),
+        ],
+        option_derivations={
+            "enabled": OptionDerivation(
+                option_key="enabled",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_ENABLED",
+                        source_options=["enabled"],
+                        derivation_type="direct",
+                        expression={"option": "enabled"},
+                    ),
+                ],
+            ),
+            "sender_name": OptionDerivation(
+                option_key="sender_name",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_SENDER_NAME",
+                        source_options=["sender_name"],
+                        derivation_type="direct",
+                        expression={"option": "sender_name"},
+                    ),
+                ],
+            ),
+            "sender_email": OptionDerivation(
+                option_key="sender_email",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL",
+                        source_options=["sender_email"],
+                        derivation_type="direct",
+                        expression={"option": "sender_email"},
+                    ),
+                ],
+            ),
+            "reply_to_email": OptionDerivation(
+                option_key="reply_to_email",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL",
+                        source_options=["reply_to_email"],
+                        derivation_type="direct",
+                        expression={"option": "reply_to_email"},
+                    ),
+                ],
+            ),
+            "resend_domain": OptionDerivation(
+                option_key="resend_domain",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN",
+                        source_options=["resend_domain"],
+                        derivation_type="direct",
+                        expression={"option": "resend_domain"},
+                    ),
+                ],
+            ),
+            "resend_api_key_env_var": OptionDerivation(
+                option_key="resend_api_key_env_var",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR",
+                        source_options=["resend_api_key_env_var"],
+                        derivation_type="direct",
+                        expression={"option": "resend_api_key_env_var"},
+                    ),
+                ],
+            ),
+            "webhook_secret_env_var": OptionDerivation(
+                option_key="webhook_secret_env_var",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
+                        source_options=["webhook_secret_env_var"],
+                        derivation_type="direct",
+                        expression={"option": "webhook_secret_env_var"},
+                    ),
+                ],
+            ),
+            "default_tags": OptionDerivation(
+                option_key="default_tags",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS",
+                        source_options=["default_tags"],
+                        derivation_type="direct",
+                        expression={"option": "default_tags"},
+                    ),
+                ],
+            ),
+            "allowed_tags": OptionDerivation(
+                option_key="allowed_tags",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS",
+                        source_options=["allowed_tags"],
+                        derivation_type="direct",
+                        expression={"option": "allowed_tags"},
+                    ),
+                ],
+            ),
+            "webhook_ttl_seconds": OptionDerivation(
+                option_key="webhook_ttl_seconds",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS",
+                        source_options=["webhook_ttl_seconds"],
+                        derivation_type="direct",
+                        expression={"option": "webhook_ttl_seconds"},
+                    ),
+                ],
+            ),
+        },
+    )
+
+    wiring = _project_all_wiring(schema, resolved)
+    derived_settings = _project_all_derived_settings(schema, resolved)
+
+    # Reproduce legacy coercions exactly.
+    derived_settings["QUICKSCALE_NOTIFICATIONS_ENABLED"] = bool(
+        derived_settings.get("QUICKSCALE_NOTIFICATIONS_ENABLED", True)
+    )
+    for str_key in (
+        "QUICKSCALE_NOTIFICATIONS_SENDER_NAME",
+        "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL",
+        "QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL",
+        "QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN",
+        "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR",
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
+    ):
+        if str_key in derived_settings:
+            derived_settings[str_key] = str(derived_settings[str_key]).strip()
+
+    derived_settings["QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS"] = list(
+        derived_settings.get("QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS", [])
+    )
+    derived_settings["QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS"] = list(
+        derived_settings.get("QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS", [])
+    )
+    derived_settings["QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS"] = int(
+        derived_settings.get("QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS", 300)
+    )
+
+    # Static setting that is not derived from any option.
+    derived_settings["QUICKSCALE_NOTIFICATIONS_PROVIDER"] = "resend"
+
+    result = ResolverResult(
+        module_name="notifications",
+        defaults={},
+        resolved=resolved,
+        derived_settings=derived_settings,
+        apps=tuple(wiring["apps"]),
+        middleware=tuple(wiring["middleware"]),
+        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
+        pre_home_url_includes=tuple(
+            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
+        ),
+    )
+
+    # Post-resolution hook: conditional anymail app and email settings.
+    def _notifications_post_hook(
+        spec: ModuleWiringSpec, resolved_opts: dict[str, Any]
+    ) -> ModuleWiringSpec:
+        from quickscale_core.module_wiring import ModuleWiringSpec as _MWS  # noqa: PLC0415
+
+        apps = list(spec.apps)
+        if runtime_email_backend == NOTIFICATIONS_LIVE_EMAIL_BACKEND:
+            if "anymail" not in apps:
+                apps.insert(0, "anymail")
+
+        settings = dict(spec.settings)
+        if runtime_email_backend is not None:
+            settings["EMAIL_BACKEND"] = runtime_email_backend
+            sender_email = settings.get("QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL", "")
+            settings["DEFAULT_FROM_EMAIL"] = sender_email
+            settings["SERVER_EMAIL"] = sender_email
+
+        return _MWS(
+            apps=tuple(apps),
+            middleware=spec.middleware,
+            settings=settings,
+            pre_home_url_includes=spec.pre_home_url_includes,
+            url_includes=spec.url_includes,
+            managed_files=spec.managed_files,
+        )
+
+    return assemble_wiring_spec(result, post_hook=_notifications_post_hook)
+
+
+MANIFEST_ADAPTER_REGISTRY["notifications"] = _notifications_manifest_adapter
+
+
+# ---------------------------------------------------------------------------
+# Auth adapter (Track 2 Phase 1.1-1.2 / M4 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def _auth_manifest_adapter(
+    options: dict[str, Any],
+    *,
+    project_package: str | None = None,
+) -> ModuleWiringSpec:
+    """Build a ModuleWiringSpec for the auth module via the manifest path.
+
+    Mirrors ``_auth_wiring`` in ``module_wiring_specs.py`` exactly.
+    Apps: ``("django.contrib.sites", "quickscale_modules_auth", "allauth",
+    "allauth.account")``.
+    Middleware: ``("allauth.account.middleware.AccountMiddleware",)``.
+    URL includes: ``(("accounts/", "allauth.urls"),
+    ("accounts/", "quickscale_modules_auth.urls"))``.
+    Settings: allauth/auth-specific keys derived from resolved options,
+    including login-method branching (``ACCOUNT_LOGIN_METHODS`` and
+    ``ACCOUNT_SIGNUP_FIELDS``) and legacy ``allow_registration``
+    normalisation fallback.
+
+    The login-method branching (``authentication_method`` -> set of login
+    methods + signup fields) is applied directly in the adapter because the
+    generic derivation schema cannot express one-option-to-two-compound-
+    setting projections.
+
+    Args:
+        options: Module options (e.g. from ``quickscale.yml``).
+        project_package: Unused for auth; present for signature parity.
+
+    Returns:
+        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+        auth that is equal to the legacy ``_auth_wiring`` output.
+    """
+    from quickscale_cli.auth_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+        resolve_auth_module_options,
+    )
+    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
+    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
+        ModuleDerivationSchema,
+        WiringProjection,
+    )
+    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
+        ResolverResult,
+        _project_all_wiring,
+    )
+
+    resolved = resolve_auth_module_options(options)
+
+    # Login-method branching (same logic as legacy _auth_wiring).
+    authentication_method = resolved.get("authentication_method", "email")
+    if authentication_method == "username":
+        login_methods: set[str] = {"username"}
+        signup_fields: list[str] = ["username*", "password1*", "password2*"]
+    elif authentication_method == "both":
+        login_methods = {"email", "username"}
+        signup_fields = ["email*", "username*", "password1*", "password2*"]
+    else:
+        login_methods = {"email"}
+        signup_fields = ["email*", "password1*", "password2*"]
+
+    # Build settings dict directly (compound values cannot use the generic
+    # OptionDerivation -> DerivedSetting pipeline).
+    derived_settings: dict[str, Any] = {
+        "AUTHENTICATION_BACKENDS": [
+            "django.contrib.auth.backends.ModelBackend",
+            "allauth.account.auth_backends.AuthenticationBackend",
+        ],
+        "AUTH_USER_MODEL": "quickscale_modules_auth.User",
+        "SITE_ID": 1,
+        "ACCOUNT_LOGIN_METHODS": login_methods,
+        "ACCOUNT_SIGNUP_FIELDS": signup_fields,
+        "ACCOUNT_EMAIL_VERIFICATION": resolved.get("email_verification", "none"),
+        "ACCOUNT_ALLOW_REGISTRATION": bool(resolved.get("registration_enabled", True)),
+        "ACCOUNT_ADAPTER": (
+            "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"
+        ),
+        "ACCOUNT_SIGNUP_FORM_CLASS": ("quickscale_modules_auth.forms.SignupForm"),
+        "LOGIN_REDIRECT_URL": "/accounts/profile/",
+        "LOGOUT_REDIRECT_URL": "/",
+        "SESSION_COOKIE_AGE": int(resolved.get("session_cookie_age", 1209600)),
+    }
+
+    schema = ModuleDerivationSchema(
+        module_name="auth",
+        version="1",
+        module_wiring_projections=[
+            WiringProjection(
+                wiring_field="apps",
+                derivation_type="static",
+                expression={
+                    "value": [
+                        "django.contrib.sites",
+                        "quickscale_modules_auth",
+                        "allauth",
+                        "allauth.account",
+                    ]
+                },
+                description="Auth Django app labels",
+            ),
+            WiringProjection(
+                wiring_field="middleware",
+                derivation_type="static",
+                expression={"value": ["allauth.account.middleware.AccountMiddleware"]},
+                description="Auth middleware",
+            ),
+            WiringProjection(
+                wiring_field="url_includes",
+                derivation_type="static",
+                expression={
+                    "value": [
+                        ["accounts/", "allauth.urls"],
+                        ["accounts/", "quickscale_modules_auth.urls"],
+                    ]
+                },
+                description="Auth URL includes",
+            ),
+        ],
+    )
+
+    wiring = _project_all_wiring(schema, resolved)
+
+    result = ResolverResult(
+        module_name="auth",
+        defaults={},
+        resolved=resolved,
+        derived_settings=derived_settings,
+        apps=tuple(wiring["apps"]),
+        middleware=tuple(wiring["middleware"]),
+        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
+        pre_home_url_includes=tuple(
+            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
+        ),
+    )
+
+    return assemble_wiring_spec(result)
+
+
+MANIFEST_ADAPTER_REGISTRY["auth"] = _auth_manifest_adapter
+
+
+# ---------------------------------------------------------------------------
+# Orgs adapter (Track 2 Phase 1.1-1.2 / M4 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def _orgs_manifest_adapter(
+    options: dict[str, Any],
+    *,
+    project_package: str | None = None,
+) -> ModuleWiringSpec:
+    """Build a ModuleWiringSpec for the orgs module via the manifest path.
+
+    Mirrors ``_orgs_wiring`` in ``module_wiring_specs.py`` exactly.
+    Apps: ``("quickscale_modules_orgs",)``.
+    Middleware: ``("quickscale_modules_orgs.middleware.TenantMiddleware",)``.
+    Settings: ``ACCOUNT_ADAPTER`` and ``QUICKSCALE_MODE`` derived from
+    resolved options.
+
+    The conditional URL wiring (``pre_home_url_includes`` for solo mode vs
+    ``url_includes`` for saas mode) is applied via the assembler
+    post-resolution hook because the generic resolver cannot express
+    cross-option conditional wiring placement.
+
+    Args:
+        options: Module options (e.g. from ``quickscale.yml``).
+        project_package: Unused for orgs; present for signature parity.
+
+    Returns:
+        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+        orgs that is equal to the legacy ``_orgs_wiring`` output.
+    """
+    from quickscale_cli.orgs_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+        resolve_orgs_module_options,
+    )
+    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
+    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
+        DerivedSetting,
+        ModuleDerivationSchema,
+        OptionDerivation,
+        WiringProjection,
+    )
+    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
+        ResolverResult,
+        _project_all_derived_settings,
+        _project_all_wiring,
+    )
+
+    resolved = resolve_orgs_module_options(options)
+    mode = str(resolved.get("mode", "solo")).strip().lower()
+
+    schema = ModuleDerivationSchema(
+        module_name="orgs",
+        version="1",
+        module_wiring_projections=[
+            WiringProjection(
+                wiring_field="apps",
+                derivation_type="static",
+                expression={"value": ["quickscale_modules_orgs"]},
+                description="Orgs Django app label",
+            ),
+            WiringProjection(
+                wiring_field="middleware",
+                derivation_type="static",
+                expression={
+                    "value": ["quickscale_modules_orgs.middleware.TenantMiddleware"]
+                },
+                description="Orgs middleware",
+            ),
+        ],
+        option_derivations={
+            "mode": OptionDerivation(
+                option_key="mode",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="QUICKSCALE_MODE",
+                        source_options=["mode"],
+                        derivation_type="direct",
+                        expression={"option": "mode"},
+                    ),
+                ],
+            ),
+        },
+    )
+
+    wiring = _project_all_wiring(schema, resolved)
+    derived_settings = _project_all_derived_settings(schema, resolved)
+
+    # Static setting that is not derived from any option.
+    derived_settings["ACCOUNT_ADAPTER"] = (
+        "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+    )
+
+    # Reproduce legacy str() coercion on QUICKSCALE_MODE.
+    if "QUICKSCALE_MODE" in derived_settings:
+        derived_settings["QUICKSCALE_MODE"] = str(
+            derived_settings["QUICKSCALE_MODE"]
+        ).strip()
+
+    # Conditional URL wiring: solo → pre_home_url_includes, saas → url_includes.
+    root_include = (("", "quickscale_modules_orgs.urls"),)
+    if mode == "solo":
+        pre_home: tuple[tuple[str, str], ...] = root_include
+        post_home: tuple[tuple[str, str], ...] = ()
+    else:
+        pre_home = ()
+        post_home = root_include
+
+    result = ResolverResult(
+        module_name="orgs",
+        defaults={},
+        resolved=resolved,
+        derived_settings=derived_settings,
+        apps=tuple(wiring["apps"]),
+        middleware=tuple(wiring["middleware"]),
+        url_includes=post_home,
+        pre_home_url_includes=pre_home,
+    )
+
+    return assemble_wiring_spec(result)
+
+
+MANIFEST_ADAPTER_REGISTRY["orgs"] = _orgs_manifest_adapter
+
+
+# ---------------------------------------------------------------------------
+# Storage adapter (Track 2 Phase 1.1-1.2 / M4 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def _storage_manifest_adapter(
+    options: dict[str, Any],
+    *,
+    project_package: str | None = None,
+) -> ModuleWiringSpec:
+    """Build a ModuleWiringSpec for the storage module via the manifest path.
+
+    Mirrors ``_storage_wiring`` in ``module_wiring_specs.py`` exactly.
+    Apps: ``("quickscale_modules_storage",)``.
+    Settings: ``QUICKSCALE_STORAGE_BACKEND``, ``QUICKSCALE_STORAGE_PUBLIC_BASE_URL``,
+    ``MEDIA_URL``, ``QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED``, plus conditional
+    ``STORAGES`` and ``AWS_*`` keys when backend is ``"s3"`` or ``"r2"``.
+
+    The conditional cloud-provider settings (STORAGES dict and AWS_* keys)
+    are applied directly in the adapter because the generic derivation schema
+    cannot express cross-option conditional settings.
+
+    Args:
+        options: Module options (e.g. from ``quickscale.yml``).
+        project_package: Unused for storage; present for signature parity.
+
+    Returns:
+        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+        storage that is equal to the legacy ``_storage_wiring`` output.
+    """
+    from quickscale_cli.storage_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+        resolve_storage_module_options,
+    )
+    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
+    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
+        ModuleDerivationSchema,
+        WiringProjection,
+    )
+    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
+        ResolverResult,
+        _project_all_wiring,
+    )
+
+    resolved = resolve_storage_module_options(options)
+    backend = str(resolved.get("backend", "local")).lower()
+
+    schema = ModuleDerivationSchema(
+        module_name="storage",
+        version="1",
+        module_wiring_projections=[
+            WiringProjection(
+                wiring_field="apps",
+                derivation_type="static",
+                expression={"value": ["quickscale_modules_storage"]},
+                description="Storage Django app label",
+            ),
+        ],
+    )
+
+    wiring = _project_all_wiring(schema, resolved)
+
+    # Build derived settings directly (conditional cloud settings cannot use
+    # the generic OptionDerivation -> DerivedSetting pipeline).
+    media_url = str(resolved.get("media_url", "/media/"))
+    public_base_url = str(resolved.get("public_base_url", "")).strip()
+
+    derived_settings: dict[str, Any] = {
+        "QUICKSCALE_STORAGE_BACKEND": backend,
+        "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": public_base_url,
+        "MEDIA_URL": media_url,
+        "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": bool(
+            resolved.get("private_media_enabled", False)
+        ),
+    }
+
+    if backend in {"s3", "r2"}:
+        bucket_name = str(resolved.get("bucket_name", "")).strip()
+        endpoint_url = str(resolved.get("endpoint_url", "")).strip()
+        region_name = str(resolved.get("region_name", "")).strip()
+        access_key_id = str(resolved.get("access_key_id", "")).strip()
+        secret_access_key = str(resolved.get("secret_access_key", "")).strip()
+        default_acl = str(resolved.get("default_acl", "")).strip()
+        querystring_auth = bool(resolved.get("querystring_auth", False))
+
+        storage_options: dict[str, Any] = {
+            "querystring_auth": querystring_auth,
+        }
+        if access_key_id:
+            storage_options["access_key"] = access_key_id
+        if secret_access_key:
+            storage_options["secret_key"] = secret_access_key
+        if bucket_name:
+            storage_options["bucket_name"] = bucket_name
+        if endpoint_url:
+            storage_options["endpoint_url"] = endpoint_url
+        if region_name:
+            storage_options["region_name"] = region_name
+        if default_acl:
+            storage_options["default_acl"] = default_acl
+
+        derived_settings["STORAGES"] = {
+            "default": {
+                "BACKEND": "storages.backends.s3.S3Storage",
+                "OPTIONS": storage_options,
+            },
+            "staticfiles": {
+                "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+            },
+        }
+
+        derived_settings["AWS_QUERYSTRING_AUTH"] = querystring_auth
+        if bucket_name:
+            derived_settings["AWS_STORAGE_BUCKET_NAME"] = bucket_name
+        if endpoint_url:
+            derived_settings["AWS_S3_ENDPOINT_URL"] = endpoint_url
+        if region_name:
+            derived_settings["AWS_S3_REGION_NAME"] = region_name
+        if access_key_id:
+            derived_settings["AWS_ACCESS_KEY_ID"] = access_key_id
+        if secret_access_key:
+            derived_settings["AWS_SECRET_ACCESS_KEY"] = secret_access_key
+        if default_acl:
+            derived_settings["AWS_DEFAULT_ACL"] = default_acl
+
+    result = ResolverResult(
+        module_name="storage",
+        defaults={},
+        resolved=resolved,
+        derived_settings=derived_settings,
+        apps=tuple(wiring["apps"]),
+        middleware=tuple(wiring["middleware"]),
+        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
+        pre_home_url_includes=tuple(
+            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
+        ),
+    )
+
+    return assemble_wiring_spec(result)
+
+
+MANIFEST_ADAPTER_REGISTRY["storage"] = _storage_manifest_adapter
 
 
 # ---------------------------------------------------------------------------

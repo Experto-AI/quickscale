@@ -7,7 +7,7 @@ point that belongs to the B-phase adapter scope.
 
 B-phase scope (this file):
 * Default option values
-* backend normalisation (strip + lowercase + fallback to "local")
+* backend normalisation (lowercase only, no strip + fallback to "local")
 * media_url normalisation (``_normalize_media_url`` mirror)
 * public_base_url normalisation (strip)
 * private_media_enabled (immutable bool, default False)
@@ -171,9 +171,10 @@ class TestConstantsParity:
 class TestBackendNormalizationParity:
     """Backend normalisation must mirror legacy _storage_wiring coercion."""
 
-    def test_backend_strip(self) -> None:
-        normalized = normalize_storage_module_options({"backend": "  s3  "})
-        assert normalized["backend"] == "s3"
+    def test_backend_no_strip(self) -> None:
+        """Legacy _storage_wiring only calls .lower(); whitespace is preserved."""
+        normalized = normalize_storage_module_options({"backend": "  S3  "})
+        assert normalized["backend"] == "  s3  "
 
     def test_backend_lowercase(self) -> None:
         normalized = normalize_storage_module_options({"backend": "S3"})

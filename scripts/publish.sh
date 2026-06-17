@@ -278,11 +278,24 @@ copy_readme() {
 remove_readme() {
     local pkg_dir="$1"
     local readme="$pkg_dir/README.md"
+    local readme_src="$ROOT/README.md"
 
-    if [[ -f "$readme" ]]; then
-        rm "$readme"
-        log_info "Removed temporary README.md from $pkg_dir"
+    if [[ ! -f "$readme" ]]; then
+        return 0
     fi
+
+    # Only delete the package README when it is a temporary copy of the
+    # root README (byte-identical content).  Real package-owned READMEs
+    # have different content and must be preserved.
+    if [[ -f "$readme_src" ]]; then
+        if ! cmp -s "$readme" "$readme_src"; then
+            log_info "Preserving real package README.md in $pkg_dir"
+            return 0
+        fi
+    fi
+
+    rm "$readme"
+    log_info "Removed temporary README.md from $pkg_dir"
 }
 
 build_package() {
