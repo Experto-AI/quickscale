@@ -3,260 +3,215 @@
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work Only)
 > **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Changelog](../../CHANGELOG.md) | [Release Summary Template](release_summary_template.md) | [Start Here](../../START_HERE.md)
 
-## General Introduction
+## Purpose
 
-**Purpose:** This document tracks only pending roadmap work.
+Tracks only pending roadmap work. Completed history is in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as Adaptive Tier 1–2; split before implementing if a checklist item is Tier 3.
 
-**Roadmap rules:**
+**Rules:**
 - Keep only open todo items here.
-- Keep each pending section paired with a short explanation of why the work still remains.
-- Move completed implementation history into [CHANGELOG.md](../../CHANGELOG.md) in concise form.
-- Use `docs/releases/` release notes for tagged or published release closeout.
-- Phases are sized as short iterations (Adaptive Tier 1–2). If a checklist item turns out to be Tier 3, split it before implementing.
-- Each phase links back (`why →`) to the finding explanation that justifies it, so work can be analyzed and iterated before implementation.
+- Move completed implementation history to CHANGELOG.md in concise form.
+- Each phase links back (`why →`) to the finding that justifies it.
 
 ## Parallel Execution Tracks
 
 Work is split across 3 git worktrees that develop in parallel and merge back to `v87` after each phase. `v87` is the clean integration branch — never commit directly to it.
 
-### Worktree setup (already done)
+### Worktree setup
 
 ```bash
-git worktree add /home/victor/code/quickscale-wt-track1 -b wt-track1-f11-f13 v87
-git worktree add /home/victor/code/quickscale-wt-track2 -b wt-track2-f1-f5 v87
-git worktree add /home/victor/code/quickscale-wt-track3 -b wt-track3-f2-f12-f7 v87
+git worktree add /home/victor/code/quickscale-wt-track1 -b wt-track1 v87
+git worktree add /home/victor/code/quickscale-wt-track2 -b wt-track2 v87
+git worktree add /home/victor/code/quickscale-wt-track3 -b wt-track3 v87
 ```
 
-> **Track 3 lane update:** The original `quickscale-wt-track3` worktree is historical and contains dirty mixed-scope changes — do not reuse it directly. Active M5 continuation uses the clean handoff lane `quickscale-wt-track3-f2-3b` (branched from v87 after the 2.3b merge). Future M8 and M11 work must branch cleanly from v87 at the time they start.
+> **Track 3 note (M5):** M5 is currently active in `quickscale-wt-track3-f2-3b` (branch `wt-track3-f2-3b`). The old `quickscale-wt-track3` worktree (branch `wt-track3-f2-f12-f7`) is dirty and should be removed. Once M5 merges to v87, Track 3 resumes as `quickscale-wt-track3` per the setup above.
 
 ### Track assignment
 
-| Track | Worktree path | Branch | Owns |
-|-------|--------------|--------|------|
-| **Track 1** | `quickscale-wt-track1` | `wt-track1-f11-f13` | F11 CRM isolation (M1→M3→M7) → F13 billing SSOT (M9) |
-| **Track 2** | `quickscale-wt-track2` | `wt-track2-f1-f5` | F1.3 follow-ups (M6) → F5 DR engine split (M10) |
-| **Track 3** | `quickscale-wt-track3-f2-3b` (M5); fresh from v87 for M8/M11 | `wt-track3-f2-3b` (M5); new branch per phase | F2 provenance (M5) → F12 recoverable apply (M8) → F7 runtime pins (M11) |
+| Track | Worktree | Branch | Owns |
+|-------|---------|--------|------|
+| 1 | `quickscale-wt-track1` | `wt-track1` | F11 tenant isolation (M1 → M3 → M7) → F13 billing SSOT (M9) |
+| 2 | `quickscale-wt-track2` | `wt-track2` | F5 DR engine split (M10) |
+| 3 | `quickscale-wt-track3` | `wt-track3` | F2 provenance (M5) → F12 recoverable apply (M8) → F7 runtime pins (M11) |
 
-### Cross-track dependency (the only one)
+### Cross-track dependency
 
-Track 2 / F5 must wait until Track 3 / F12 has merged to `v87` — both touch `apply_command.py`. Everything else across tracks is fully parallel.
+Track 2 / F5 (M10) must wait for Track 3 / F12 (M8) — both touch `apply_command.py`. Everything else is fully parallel.
 
-### Merge procedure (any worktree → v87)
+### Merge procedure
 
 ```bash
 cd /home/victor/code/quickscale-wt-track{N}
-git merge v87          # sync latest first; resolve any conflicts here
+git merge v87          # sync latest first; resolve conflicts here
 # run phase verification tests
 cd /home/victor/code/quickscale
-git merge --no-ff wt-track{N}-<branch>
+git merge --no-ff wt-track{N}
 ```
 
 ### Merge checkpoints
 
-| # | Track | Phase | Status | Condition |
-|---|-------|-------|--------|-----------|
-| M0 | Track 1 | v0.87.0 | ✅ | Analytics module-owned page; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
-| M1 | Track 1 | F11.1g.a.1 (next) → 11.1g.a.2 → 11.1g.b → 11.1g.1 | 🟡 | **Done:** 11.1d, 11.1d.1 Tag-first. **Pending next:** 11.1g.a.1 (org-scoped POST denial proof). **Blocked after next:** 11.1g.a.2 → 11.1g.b → 11.1g.1. **Blocking finding:** CR-P11GA-001 (resolved by 11.1g.a.1). **Deferred:** Stage `terminal_semantic` uniqueness (unlocked by 11.1g.1). |
-| M2 | Track 3 | F2.1–2.2 | ✅ | `state.yml` authoritative; advisory lock; CR-005 resolved |
-| M3 | Track 1 | F11.1h–11.1j | ⬜ | NOT NULL enforced; xfail removed; isolation test green |
-| M4 | Track 2 | F1.1–1.2 | ✅ | All 11 catalog modules on manifest wiring path |
-| M5 | Track 3 | F2.3b–2.4b | 🟡 | 2.3b ✅ merged to v87 (CR-M5-P3-001/002 resolved); **CR-M5-P3-007 open** (branch-default-agnostic subtree-SHA proof); 2.3c split → 2.3c.0 + 2.3c.1 + 2.3c.2; 2.4a, 2.4b still open |
-| M6 | Track 2 | F1.3 | ✅ | CR-M6-004 resolved + regression coverage; CR-M6-005 stale refs cleaned |
-| M7 | Track 1 | F11.2–11.4 | ⬜ | All module isolation tests unskipped and green |
-| M8 | Track 3 | F12.1–12.3 | ⬜ | `ApplyStep` model done; recovery ledger has `failed_step` |
-| M9 | Track 1 | F13.1–13.3 | ⬜ | Billing org-authoritative; dual-FK rows reconciled |
-| M10 | Track 2 | F5.1–5.4 | ⬜ | DR engine in CLI; backups module slimmed |
-| M11 | Track 3 | F7.1–7.3 | ⬜ | Generator vs project pin ownership split |
+| # | Track | Phases | Status | Condition |
+|---|-------|--------|--------|-----------|
+| M1 | 1 | F11.2–F11.5 | 🟡 | **Next:** F11.2 (org-scoped POST denial). Pending F11.2 → F11.3 → F11.4 → F11.5. Blocker CR-P11GA-001 resolved by F11.2. |
+| M3 | 1 | F11.6–F11.10 | ⬜ | M1 merged; backfill (F11.6) + bootstrap (F11.7) green; NOT NULL enforced; xfail removed |
+| M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.5 + F2.6 (parallel). CR-M5-P3-007 resolved by F2.5; blocks F2.9. |
+| M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
+| M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
+| M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
+| M10 | 2 | F5.1–F5.4 | ⬜ | M6 + M8 both merged; DR engine in CLI; backups module slimmed |
+| M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
 
 ## In-Flight Milestones
 
-### M1 — F11 CRM org-scoped create + read bridge
-**Track:** Track 1 | **Worktree:** `quickscale-wt-track1`
+### M1 — F11 CRM create + read isolation
+**Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Done:** 11.1d (nullable org FK on 5 models), 11.1d.1 Tag-first (partial UniqueConstraints + serializer parity).
+**Pending phases (serial):** F11.2 → F11.3 → F11.4 → F11.5
 
-**Pending next:** 11.1g.a.1 — org-scoped POST denial proof for self-contained CRM resources.
-
-**Blocked after next:** 11.1g.a.2 (self-contained create stamping + member roundtrip for Tag/Company/Stage, blocked on 11.1g.a.1), 11.1g.b (Contact/Deal related-ID guard + create stamping, blocked on 11.1g.a.2), 11.1g.1 (CRM read-path isolation, blocked on 11.1g.b; unlocks deferred Stage `terminal_semantic` uniqueness).
-
-**Blocking finding:** CR-P11GA-001 — insufficient-membership org-scoped POST denial proof required. Resolved by 11.1g.a.1.
-
-**Deferred:** Stage `terminal_semantic` uniqueness (Phase 11.1d.1) — waits for 11.1g.1 read-path seam.
+F11.2 is next actionable (resolves CR-P11GA-001); F11.3–F11.5 blocked in sequence.
 
 **Next handoff decisions:**
-- CR-P11GA-001 denial matrix: next implementation must either prove both wrong-org and non-member staff variants, or explicitly name one insufficient-membership case and apply it consistently across Tag/Company/Stage.
-- 11.1g.a.2 bundling assumption: Tag/Company/Stage stay together unless one resource path proves structurally different during implementation.
-- 11.1g.b follow-on split policy: re-evaluate after 11.1g.a.2 whether Contact and Deal remain one slice or split further.
-- 11.1g.1 scope boundary: M1 read-path work covers dashboard, list/detail, nested-note, and helper reads only; bulk actions and admin/operator exceptions remain M3 work.
+- CR-P11GA-001 denial matrix: must prove both wrong-org and non-member staff variants, or name one case and apply it consistently across Tag/Company/Stage.
+- F11.3 bundling: Tag/Company/Stage stay together unless one resource path proves structurally different.
+- F11.4 follow-on split: re-evaluate after F11.3 whether Contact and Deal stay in one slice.
+- F11.5 scope boundary: dashboard, list/detail, nested-note, and helper reads only; bulk actions and admin/operator paths are F11.9 (M3).
+
+**Deferred (unlocked by F11.5):** Stage `terminal_semantic` per-org uniqueness — see F11-deferred below.
+
+---
 
 ### M5 — F2 Provenance persistence + release tooling
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` (clean handoff; do NOT reuse the original dirty `quickscale-wt-track3`)
-**Status:** 🟡 — 2.3b merged to v87; CR-M5-P3-007 open; 2.3c split into 2.3c.0 + 2.3c.1 + 2.3c.2; 2.4a, 2.4b still open
-**Done this milestone:** 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix paths); 2.3b (update-path provenance persistence, config-only/non-consolidated state materialization safeguards, project metadata preservation, abort-on-missing-authority, py.typed metadata fix) — **merged to v87**
-**Merge-back status:** 2.3b code is on v87 (HEAD 30d09a6). Clean handoff worktree `quickscale-wt-track3-f2-3b` (HEAD cb67755) is ready for next slice. Original `quickscale-wt-track3` is dirty mixed-scope across apply/embed/split-publish surfaces and docs — do not reuse directly.
+**Track:** 3 | **Worktree:** `quickscale-wt-track3-f2-3b` (M5 only; future phases use `quickscale-wt-track3`)
 
-**Open blocking finding:** CR-M5-P3-007 — branch-default-agnostic subtree-SHA proof hardening. Must be resolved before 2.4b tagged-source gate can be considered complete.
+**Pending phases:** F2.5 + F2.6 (both next actionable, parallel) → F2.7 → F2.8 → F2.9
 
-**Open work (split into handoff-sized slices):**
-- 2.3c.0 — Fix CR-M5-P3-007: branch-default-agnostic subtree-SHA proof hardening
-- 2.3c.1 — Fix CR-M5-P3-003: apply/embed/no-op provenance triple persistence consistency
-- 2.3c.2 — Fix CR-M5-P3-004 + caller parity tests across update/apply/embed/no-op
-- 2.4a — Split-publish wrapper adoption
-- 2.4b — Tagged/versioned-source gate + operator diagnostics (blocked on CR-M5-P3-007)
+**Open blocking finding:** CR-M5-P3-007 — branch-default-agnostic subtree-SHA proof. Resolved by F2.5. Blocks F2.9.
 
 **Next handoff decisions:**
-- CR-M5-P3-007 first or alongside 2.3c: next implementer should resolve the subtree-SHA proof hardening before or in parallel with 2.3c, since 2.4b depends on it.
-- 2.3c.1 before 2.3c.2: fix the persistence inconsistency (CR-003) before adding caller-parity tests (CR-004), since tests depend on consistent behavior.
-- 2.4a is independent of 2.3c: can be parallelized if a second Track 3 handoff branch is created, but default serial order keeps it after 2.3c.2.
-- 2.4b is the M5 closeout slice: blocked on both CR-M5-P3-007 and 2.4a.
-- Worktree handoff: use `quickscale-wt-track3-f2-3b` (clean, branched from v87 after 2.3b merge). Do not resume work in the original `quickscale-wt-track3` — it has dirty mixed-scope changes across unrelated surfaces.
+- F2.5 and F2.6 can proceed in parallel; default serial order is F2.5 then F2.6.
+- Fix provenance triple consistency (F2.6) before adding caller-parity tests (F2.7) — tests depend on consistent behavior.
+- F2.8 is independent of F2.5–F2.7; can parallelize on a separate handoff branch or run serially after F2.7.
+- F2.9 is the M5 closeout: blocked on both F2.5 (SHA proof) and F2.8 (wrapper adoption).
 
-## Long-Term Backlog
+---
 
-> **Architecture autopsy (2026-06):** The findings below were derived from a structural autopsy of QuickScale v0.86.0 — a manifest-driven code generator whose `quickscale_modules/*` are templates minted into every generated SaaS project, so every module-level wrong decision is the same defect replicated across all downstream projects. The autopsy surfaced load-bearing structural risks (fix-cost grows with every feature built on top). The full autopsy has now been integrated here and its source file removed; this roadmap is the single source of truth.
+## Backlog
 
-### Autopsy ranking (blast radius × trigger likelihood)
+### Sequencing
 
-| Autopsy # | Risk | Blast radius | Trigger likelihood | Roadmap finding |
-|-----------|------|--------------|--------------------|-----------------|
-| 1 | Tenant isolation wired but inert (no structural enforcement) | Catastrophic — cross-tenant leak in every generated SaaS | Certain (2nd paying tenant) | **F11** |
-| 2 | Module has no single source of truth (~7-registry fan-out, 2 resolution patterns) | High — every module, forever | Certain (every module) | **F1** (+ F5) |
-| 5 | Billing has no canonical "who is the customer" | High — revenue correctness | Likely (team-scoped billing) | **F13** |
-| 6 | Project state spans 3+ stores; convention-based authority, no concurrency lock | Med-high — silent drift, races | Frequent (multi-apply) | **F2** |
-| 4 | `apply` mutates 5+ systems with no transaction + explicit no-rollback contract | High — corrupt half-generated projects | Frequent (any interruption) | **F12** |
-| 7 | Emitted modules ship with no operability or contract substrate | Med-high — every generated app born blind & unversioned | Likely (1st prod incident / API change) | **Deferred / Monitor** |
+Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
-### Sequencing (dependency + impact order)
-
-Execute top-down. Earlier items are either prerequisites for, or de-risk, later items.
-
-1. **F11 — Structural multi-tenant isolation.** Highest severity/impact. F14 test harness already in place (done).
-2. **F1 — Finish manifest-driven wiring.** M4, M6, and Phase 1.3 follow-ups complete — manifest wiring path is the sole path for all catalog modules, CR-M6-004 resolved, stale two-path references cleaned (M6).
-3. **F13 — Single billing customer SSOT.** Must precede team/seat-scoped billing; assumes organization-as-tenant from F11.
-4. **F2 — Consolidate project state + module provenance.** Consolidation done (M2); provenance persistence and release tooling (M5) remain.
-5. **F12 — Recoverable `apply` (saga).** Needed before the next external integration is bolted into `apply`.
-6. **F5 — Split the DR engine out of backups.** Eased once F1 lands.
-7. **F7 — Decouple generator vs generated-project runtime pins.**
-8. **Deferred / Monitor.**
+| Priority | Finding | Milestone(s) | Status |
+|----------|---------|-------------|--------|
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 in-flight |
+| 2 | F2 — Project state + module provenance | M5 | 🟡 M5 in-flight |
+| 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
+| 4 | F12 — Recoverable `apply` (saga) | M8 | ⬜ Waits for M5 |
+| 5 | F5 — DR engine split | M10 | ⬜ Waits for M6 + M8 |
+| 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
 
 ---
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Explanation (autopsy #1 — highest severity):** Tenant isolation is presented as a data-layer mechanism but is enforced nowhere. The `orgs` middleware sets the `app.current_org_id` Postgres GUC (`orgs/.../middleware.py:129`), but **no RLS policy consumes it** (no `ENABLE ROW LEVEL SECURITY`/`CREATE POLICY` in any module migration), `TenantModel` (`orgs/models.py:300`) has **zero subclasses**, and tenant models in `blog`/`forms`/`listings`/`social` have **no `organization` FK**. The only `get_queryset` overrides filter by `status`, never by tenant. Isolation depends entirely on per-view decorators (`require_org_role`/`require_org_feature`) that gate the *request* but never scope the *query* — so any admin, shell, management command, or async path returns cross-tenant data silently (rows, not an error). This is minted into every generated SaaS project. Isolation must fail **closed** at the layer closest to the data.
-
-**Completed (v0.87.0, see CHANGELOG):** 11.1a (CRM implies `orgs`+`notifications` in planner/apply), 11.1b (current-org access/reset contract), 11.1c (canonical solo/SaaS CRM route contract), 11.1d (nullable `organization_id` FK on Tag/Company/Contact/Stage/Deal), 11.1d.1 Tag-first (partial UniqueConstraints + serializer duplicate-rejection parity)
+**Why still open:** Tenant isolation is asserted by per-view decorators that gate the request but never scope the query. Any admin, shell, management command, or async path returns cross-tenant data silently. Must fail closed at the data layer. CRM groundwork (F11.1: 11.1a–11.1d.1) is done and in CHANGELOG. Org-scoped create + read isolation (M1), backfill/NOT NULL closeout (M3), and module rollout (M7) remain.
 
 ---
 
-**Phase 11.1d.1 — Stage `terminal_semantic` uniqueness** _(deferred; same worktree as M1)_
+**Phase F11.2 — Org-scoped create denial** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Why deferred:** Allowing per-org duplicate `Stage.terminal_semantic` values before org-aware helper/read-path work lands breaks `_resolve_terminal_stage()` and bulk mark-won / mark-lost caller parity.
+**Dependencies:** F11.1 complete ✅ | **Status:** ⏳ Next actionable — resolves CR-P11GA-001.
 
-- [ ] Split `Stage.terminal_semantic` uniqueness to per-bucket partial `UniqueConstraint`s once org-aware helper/read-path seam (11.1g.1) is in place; add migration + serializer + API regression coverage.
+- [ ] Prove that a wrong-org or non-member staff user receives 403 with no row created on org-scoped POST for Tag, Company, and Stage.
+
+**Phase F11.3 — Self-contained resource create stamping** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.2 | **Status:** 🚫 Blocked on F11.2.
+
+- [ ] Stamp current-org ownership on org-scoped create paths for Tag, Company, and Stage.
+- [ ] Add org-member create → list roundtrip tests for Tag, Company, and Stage.
+
+**Phase F11.4 — Contact/Deal related-ID guard + create stamping** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.3 | **Status:** 🚫 Blocked on F11.3. Contact/Deal serializers accept foreign-org or legacy-NULL related IDs via unscoped `company_id`, `tag_ids`, `contact_id`, `stage_id` — guard required before stamping.
+
+- [ ] Reject foreign-org related IDs (`company_id`, `tag_ids`, `contact_id`, `stage_id`) on Contact and Deal create serializers.
+- [ ] Stamp current-org ownership on Contact and Deal org-scoped create paths.
+- [ ] Add org-member create → list roundtrip tests for Contact and Deal.
+
+**Phase F11.5 — CRM read-path isolation** _(M1 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.4 | **Status:** 🚫 Blocked on F11.4.
+**Scope:** Dashboard, list/detail, nested-note, and helper reads. Bulk actions and admin/operator paths are F11.9.
+**Unlocks:** F11-deferred (Stage `terminal_semantic` per-org uniqueness).
+
+- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote`/`DealNote` parent-derived.
+- [ ] Confirm no-context reads fail closed.
+- [ ] Narrow the CRM isolation `xfail` to remaining open seams; remove if none remain.
 
 ---
 
-**Phase 11.1e — Existing-data rollout contract** _(Track 1; between M1 and M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.6 — Existing-data backfill** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** M1 merged. Must complete before F11.10 (NOT NULL).
 
 - [ ] Ship an idempotent CRM backfill command that assigns legacy CRM rows to one operator-selected org or aborts without partial writes.
-- [ ] Document and test the rollout sequence: backup → deploy nullable slice → run backfill → verify counts / unassigned rows → continue or restore.
+- [ ] Document and test rollout sequence: backup → deploy nullable slice → run backfill → verify counts → continue or restore.
 
-**Phase 11.1f — Tenant-local CRM bootstrap** _(Track 1; between M1 and M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.7 — Tenant-local CRM bootstrap** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** M1 merged. Must complete before F11.10.
 
 - [ ] Add tenant-local default CRM stage bootstrap for migrated and newly created orgs.
-- [ ] Add tests proving a fresh org can use CRM without manual stage seeding.
+- [ ] Prove a fresh org can use CRM without manual stage seeding.
 
----
+**Phase F11.8 — Serializer related-field validation** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Phase 11.1g.a.1 — Org-scoped POST denial proof for self-contained CRM resources (M1)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Track:** Track 1 | **Merges as part of:** M1
-**Dependencies:** 11.1d.1 Tag-first complete (partial UniqueConstraints + serializer parity). Stage `terminal_semantic` uniqueness deferred to post-11.1g.1.
-**Status:** ⏳ Next actionable — dependencies satisfied, implementation deferred for handoff. This slice resolves CR-P11GA-001.
-
-- [ ] Resolve CR-P11GA-001: add an insufficient-membership org-scoped POST denial proof — a wrong-org or non-member staff user must receive 403 with no row creation on org-scoped create for self-contained CRM resources (Tag, Company, Stage).
-
-**Phase 11.1g.a.2 — Self-contained resource create stamping + member roundtrip (M1)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Track:** Track 1 | **Merges as part of:** M1
-**Dependencies:** 11.1g.a.1 complete.
-**Status:** 🚫 Blocked — waits for CR-P11GA-001 denial proof in 11.1g.a.1.
-
-- [ ] Stamp current-org ownership on org-scoped create paths for Tag, Company, and Stage (self-contained resources — no foreign-org related-ID risk; bundled on the same create-stamping seam).
-- [ ] Add middleware-backed org-member create → list roundtrip coverage for Tag, Company, and Stage.
-
-**Phase 11.1g.b — Contact/Deal related-ID guard + create stamping (M1)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Track:** Track 1 | **Merges as part of:** M1
-**Dependencies:** 11.1g.a.2 complete.
-**Status:** 🚫 Blocked — waits for 11.1g.a.2 self-contained create stamping. Contact/Deal create serializers accept foreign-org or legacy-NULL related IDs via unscoped `company_id`, `tag_ids`, `contact_id`, `stage_id`. Must add guard before stamping.
-
-- [ ] Add org-aware rejection guard for `company_id`, `tag_ids`, `contact_id`, and `stage_id` on Contact and Deal create serializers.
-- [ ] Stamp current-org ownership on Contact and Deal org-scoped create paths.
-- [ ] Add middleware-backed org-member create → list roundtrip coverage for Contact and Deal.
-
-**Phase 11.1g.1 — CRM read-path isolation (M1)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Track:** Track 1 | **Merges as part of:** M1
-**Dependencies:** 11.1g.b complete.
-**Scope boundary:** M1 read-path work covers dashboard, list/detail, nested-note, and helper reads only; bulk actions and admin/operator exceptions remain M3 work.
-**Unlocks:** Phase 11.1d.1 — Stage `terminal_semantic` per-org uniqueness (deferred until this read-path seam is in place).
-
-- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote`/`DealNote` parent-derived via their parent record.
-- [ ] Confirm no-context reads fail closed rather than widening scope.
-- [ ] Narrow the CRM isolation `xfail` to only the remaining open seam after read-scope lands; remove it if none remain.
-
----
-
-**Phase 11.1h — Serializer related-field validation (M3)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Track:** Track 1 | **Merges as part of:** M3
-**Dependencies:** M1 merged to v87.
+**Dependencies:** M1 merged.
 
 - [ ] Make serializer related-field validation org-aware: `company_id`, `tag_ids`, `contact_id`, and `stage_id` must reject foreign-org IDs on all write paths.
 - [ ] Add coverage proving cross-org related-ID writes are rejected with controlled 4xx responses.
 
-**Phase 11.1i — Bulk deal scope + CRM admin operator path (M3)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.9 — Bulk deal scope + CRM admin path** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Track:** Track 1 | **Merges as part of:** M3
-**Dependencies:** 11.1h complete.
+**Dependencies:** F11.8.
 
 - [ ] Scope bulk deal actions (mark-won, mark-lost) by current-org deal visibility so raw `deal_ids` cannot mutate cross-org rows.
 - [ ] Route CRM admin through the deliberate unscoped/operator path; add coverage proving access is explicit, not an accidental bypass.
 
-**Phase 11.1j — NOT NULL enforcement + isolation closeout (M3)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.10 — NOT NULL enforcement + isolation closeout** _(M3 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Track:** Track 1 | **Merges as:** M3
-**Dependencies:** 11.1h + 11.1i complete; 11.1e backfill and 11.1f bootstrap evidence green.
+**Dependencies:** F11.8 + F11.9 + F11.6 + F11.7 all green.
 
-- [ ] Enforce NOT NULL org ownership and the manager-first CRM isolation policy (RLS deferred to Phase 11.3 defense-in-depth).
+- [ ] Enforce NOT NULL org ownership and the manager-first CRM isolation policy.
 - [ ] Remove the CRM isolation `xfail`; confirm the Finding 14 isolation test now passes for `crm`.
-- [ ] Check off roadmap TODOs only after CRM, touched `orgs`, and touched CLI wiring tests are green.
 
 ---
 
-**Phase 11.2 — blog isolation (M7)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**F11-deferred — Stage `terminal_semantic` per-org uniqueness** _(unlocked by F11.5)_
 
-**Track:** Track 1 | **Merges as part of:** M7
-**Dependencies:** M3 merged to v87.
+- [ ] Split `Stage.terminal_semantic` uniqueness to per-bucket partial `UniqueConstraint`s; add migration + serializer + API regression coverage.
+
+---
+
+**Phase F11.11 — Blog isolation** _(M7)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** M3 merged.
 
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `blog`.
 - [ ] Unskip and confirm `blog` isolation test green.
 
-**Phase 11.3 — forms + listings isolation (M7)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.12 — Forms + listings isolation** _(M7)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Track:** Track 1 | **Merges as part of:** M7
-**Dependencies:** M3 merged to v87.
+**Dependencies:** M3 merged.
 
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `forms`.
 - [ ] Apply the same to `listings`.
 - [ ] Unskip and confirm `forms` and `listings` isolation tests green.
 
-**Phase 11.4 — social isolation + module rollout closeout (M7)** _(Track 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.13 — Social isolation + rollout closeout** _(M7 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Track:** Track 1 | **Merges as:** M7
-**Dependencies:** 11.2 and 11.3 complete.
+**Dependencies:** F11.11 + F11.12.
 
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `social` (and any other tenant tables discovered during rollout).
 - [ ] Keep `require_org_role`/`require_org_feature` as second-line defense; verify isolation fails closed for non-view paths (admin, shell, management commands, async jobs).
@@ -265,109 +220,90 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 ---
 
-### Finding 1 — Finish manifest-driven wiring and configuration
-
-**Explanation (autopsy #2 — module SSOT / dual-pattern):** "What a module is" is not declared in one place owned by the module; it is reconstructed from ~7 hand-synced registries and resolved through two contradictory paths: manifest-driven vs legacy bespoke `resolve_<module>_module_options()`. The product thesis is "more modules," so the core value-add sits on the steepest cost curve. Manifest-driven option resolution is complete; the manifest wiring path is now the sole path for all catalog modules. Phase 1.3 follow-up CRs are resolved (M6).
-
-**Completed (v0.87.0, see CHANGELOG):** Phase 1.1–1.2 (M4 — all 11 modules on manifest-driven wiring path); Phase 1.3 main work (M6 — `social` migrated, `module_wiring_specs.py` deleted, configurator rerouted, two-path resolution defect closed)
-
----
-
-### Finding 13 — Establish a single billing customer source of truth
-
-**Explanation (autopsy #5):** `Subscription` carries both an `organization` FK (`billing/models.py:170`) and a `user` FK (`:177`) as concurrent owners, and "one active subscription per customer" is enforced only by a status-conditional partial unique constraint (`:216-228`). The canonical billing subject and the active-subscription invariant are both ambiguous at the schema level; `_sync_subscription_authority()` (`services.py:~2288`) overwrites `user` but not `organization`, allowing a row that points at both. Entitlement gates revenue, so every billing query, webhook handler, and entitlement check re-encodes the same implicit "which FK wins / which statuses count" policy. Resolve before building team/seat-scoped billing on this seam.
-
-**Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M9
-**Dependencies:** M7 merged to v87.
-
-**Phase 13.1 — Declare the authoritative billing subject** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
-
-- [ ] Declare organization as the authoritative billing subject; make `user` non-authoritative (derived/nullable convenience) or remove it.
-- [ ] Fix `_sync_subscription_authority()` so it can never leave a row owned by both FKs.
-
-**Phase 13.2 — Single "current subscription" invariant** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
-
-- [ ] Define the "current subscription" status set once; share it between ORM queries and the unique constraint.
-- [ ] Enforce "one current subscription per organization" structurally.
-
-**Phase 13.3 — Reconcile and gate** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
-
-- [ ] Reconcile existing dual-FK rows to the canonical owner via migration.
-- [ ] Confirm ownership-authority semantics are resolved before any team/seat-scoped billing work begins.
-
----
-
 ### Finding 2 — Consolidate project state and make module provenance actionable
 
-**Explanation (autopsy #6 + provenance):** Mutable project state lives in several stores that can silently disagree — `quickscale.yml` (desired), `.quickscale/state.yml` (applied), `.quickscale/config.yml` (legacy version mirror), the files on disk, and `.quickscale/file_hashes.yml` (drift ledger) — with authority asserted by convention rather than structure. Provenance work adds *more* state (commit SHA, release id) on top of this unconsolidated base. State consolidation and advisory locking are done (M2). Provenance persistence and release tooling remain.
-
-**Completed (v0.87.0, see CHANGELOG):** Phase 2.1–2.2 (M2 — `state.yml` authoritative, legacy read-through, drift diagnostics, advisory lock, CR-005); Phase 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix/module-resolution paths); Phase 2.3b (update-path provenance persistence, config-only/non-consolidated state materialization safeguards, project metadata preservation, abort-on-missing-authority, py.typed metadata fix)
+**Why still open:** State consolidation and advisory locking are done (F2.1–F2.4 in CHANGELOG). Provenance persistence across apply/embed/no-op paths and release tooling (tagged-source gate, split-publish wrapper) remain.
 
 ---
 
-**Phase 2.3c.0 — Branch-default-agnostic subtree-SHA proof (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase F2.5 — Branch-default-agnostic subtree-SHA proof** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
-**Dependencies:** 2.3b merged to v87 ✅.
-**Status:** ⏳ Next actionable — resolves blocking finding CR-M5-P3-007. Can proceed in parallel with 2.3c.1.
+**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ⏳ Next actionable — resolves CR-M5-P3-007. Can run in parallel with F2.6.
 
-- [ ] Fix CR-M5-P3-007: harden subtree-SHA proof to be branch-default-agnostic so provenance verification does not depend on a specific default branch name.
-- [ ] Add tests proving subtree-SHA proof works regardless of branch-default configuration.
+- [ ] Harden subtree-SHA proof so provenance verification does not depend on a specific default branch name.
+- [ ] Add tests proving SHA proof works regardless of branch-default configuration.
 
-**Phase 2.3c.1 — Apply/embed provenance triple persistence (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase F2.6 — Apply/embed/no-op provenance triple persistence** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
-**Dependencies:** 2.3b merged to v87 ✅ (share the provenance-persistence test harness).
-**Status:** ⏳ Next actionable — dependencies satisfied. Resolves CR-M5-P3-003.
+**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ⏳ Next actionable — resolves CR-M5-P3-003. Can run in parallel with F2.5.
 
-- [ ] Fix CR-M5-P3-003: apply/embed/no-op apply must persist/backfill full provenance triple consistently.
-- [ ] Add provenance-persistence tests for apply/embed/no-op paths.
+- [ ] Make apply/embed/no-op paths persist/backfill the full provenance triple consistently.
+- [ ] Add provenance-persistence tests for all three paths.
 
-**Phase 2.3c.2 — Caller parity across provenance paths (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase F2.7 — Caller parity across provenance paths** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
-**Dependencies:** 2.3c.1 complete.
-**Status:** 🚫 Blocked — waits for 2.3c.1 provenance triple consistency. Resolves CR-M5-P3-004.
+**Dependencies:** F2.6 | **Status:** 🚫 Blocked on F2.6 — resolves CR-M5-P3-004.
 
-- [ ] Fix CR-M5-P3-004: establish caller parity across update/apply/embed/no-op provenance paths.
-- [ ] Add caller-parity tests proving consistent provenance behavior across all entry points.
+- [ ] Establish caller parity across update/apply/embed/no-op provenance paths.
+- [ ] Add caller-parity tests proving consistent behavior across all entry points.
 
-**Phase 2.4a — Split-publish wrapper adoption (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase F2.8 — Split-publish wrapper adoption** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
-**Dependencies:** 2.3b merged to v87 ✅ (helper surface established). Independent of 2.3c.
-**Status:** ⏳ Actionable — can proceed after 2.3c.2 or in parallel on a separate handoff branch.
+**Dependencies:** F2.1–F2.4 merged ✅ Independent of F2.5–F2.7; can parallelize on a separate handoff branch.
+**Status:** ⏳ Actionable after F2.7 (default serial) or in parallel.
 
-- [ ] Adopt the split-publish wrapper across actual split/publish execution paths so split branches use the provenance-aware helper surface instead of hardcoded module path/branch resolution.
+- [ ] Adopt the split-publish wrapper across actual split/publish execution paths; replace hardcoded module-path/branch resolution with the provenance-aware helper surface.
 
-**Phase 2.4b — Tagged/versioned-source gate + operator diagnostics (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase F2.9 — Tagged/versioned-source gate + operator diagnostics** _(M5 closeout)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as:** M5
-**Dependencies:** 2.4a complete; CR-M5-P3-007 resolved (2.3c.0).
-**Status:** 🚫 Blocked — waits for 2.4a and CR-M5-P3-007 (branch-default-agnostic subtree-SHA proof).
+**Dependencies:** F2.5 + F2.8 | **Status:** 🚫 Blocked on F2.5 + F2.8.
 
 - [ ] Update subtree release tooling so split branches are cut only from tagged or versioned source states.
 - [ ] Add operator-facing diagnostics for untagged split provenance or version/SHA mismatches.
 
 ---
 
+### Finding 13 — Establish a single billing customer source of truth
+
+**Why still open:** `Subscription` carries concurrent `organization` and `user` FKs; `_sync_subscription_authority()` (`billing/services.py:~2288`) can leave a row owned by both. The active-subscription invariant is ambiguous at the schema level. Must resolve before team/seat-scoped billing.
+
+**Track:** 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M9
+**Dependencies:** M7 merged.
+
+**Phase F13.1 — Declare the authoritative billing subject** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+
+- [ ] Declare organization as the authoritative billing subject; make `user` non-authoritative (derived/nullable) or remove it.
+- [ ] Fix `_sync_subscription_authority()` so it cannot leave a row owned by both FKs.
+
+**Phase F13.2 — Single "current subscription" invariant** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+
+- [ ] Define the "current subscription" status set once; share it between ORM queries and the unique constraint.
+- [ ] Enforce "one current subscription per organization" structurally.
+
+**Phase F13.3 — Reconcile and gate** _(M9 closeout)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+
+- [ ] Reconcile existing dual-FK rows to the canonical owner via migration.
+- [ ] Confirm ownership-authority semantics are resolved before any team/seat-scoped billing work begins.
+
+---
+
 ### Finding 12 — Make `apply` recoverable via a saga model
 
-**Explanation (autopsy #4):** `apply` performs an ordered sequence of irreversible cross-system side effects — filesystem generation, `git subtree add`, `pyproject.toml`/lock edits, `poetry install`, Django migrations, Docker, Railway — in one ~2700-line command (`apply_command.py:2415-2596`) with an explicit no-rollback contract (~line 2446) and inconsistent fail policy: embedding/wiring/poetry/migrations fail **closed**, but the `config.yml` mirror (`:1969-1972`), managed-file hash capture, and git-index snapshot fail **open**. Each new capability bolted into `apply` widens the set of partial-failure states; with no rollback abstraction, every new step hand-rolls its own recovery.
+**Why still open:** `apply` performs an ordered sequence of irreversible cross-system side effects — filesystem generation, `git subtree add`, `pyproject.toml`/lock edits, `poetry install`, Django migrations, Docker, Railway — with an explicit no-rollback contract and inconsistent fail policy. Each new step bolted in widens partial-failure states with no rollback abstraction.
 
-**Track:** Track 3 | **Worktree:** fresh from v87 at start (do not reuse dirty `quickscale-wt-track3`) | **Merges as:** M8
-**Dependencies:** M5 merged to v87.
+**Track:** 3 | **Worktree:** `quickscale-wt-track3` (fresh from v87) | **Merges as:** M8
+**Dependencies:** M5 merged.
 
-**Phase 12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
+**Phase F12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
 - [ ] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action.
 - [ ] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling.
 
-**Phase 12.2 — Consistent fail policy** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
+**Phase F12.2 — Consistent fail policy** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
 - [ ] Adopt one consistent fail policy (default fail-closed); document and audit any fail-open exceptions, including the `config.yml` mirror at `apply_command.py:1969-1972`.
 
-**Phase 12.3 — Close recovery gaps** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
+**Phase F12.3 — Close recovery gaps** _(M8 closeout)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
 - [ ] Add pre-embed recovery coverage (generation / `git init` failure).
 - [ ] Define rollback/resume semantics for the external Railway deploy step.
@@ -376,26 +312,35 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 ### Finding 5 — Split the DR engine out of the embeddable backups module
 
-**Explanation (autopsy #2 — one instance of the CLI↔module god-layer coupling):** The backups module still carries platform-level backup and restore orchestration that is difficult to update safely inside generated projects, communicating with the CLI through a hidden management-command/env-var protocol. The remaining work moves the engine into centrally owned code while leaving only thin Django-facing surfaces in the embeddable module. Eased once F1 makes module boundaries manifest-driven.
+**Why still open:** The backups module carries platform-level backup/restore orchestration that communicates with the CLI through a hidden management-command/env-var protocol. Move the engine into centrally owned code; leave only thin Django-facing surfaces in the embeddable module.
 
-**Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
-**Dependencies:** M6 AND M8 both merged to v87 — both touch `apply_command.py`.
+**Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
+**Dependencies:** M6 + M8 both merged — both touch `apply_command.py`.
 
-**Phase 5.1 — Define the boundary** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.1 — Define the boundary** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
 - [ ] Define the DR boundary contract between embeddable Django surfaces and the centrally owned backup/restore engine.
 
-**Phase 5.2 — Extract the engine** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.2a — Extract snapshot and archive primitives** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+
+**Dependencies:** F5.1.
 
 - [ ] Extract snapshot and archive primitives into a CLI/core-owned engine library while preserving current behavior.
+
+**Phase F5.2b — Extract restore and orchestration** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+
+**Dependencies:** F5.2a.
+
 - [ ] Extract restore/orchestration flow, verification, and rollback-pin handling into the centrally owned engine layer.
 
-**Phase 5.3 — Slim the module and protocol** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.3 — Slim the module and protocol** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+
+**Dependencies:** F5.2b.
 
 - [ ] Replace the hidden CLI↔module management-command/env-var protocol with a smaller explicit internal boundary or adapter.
 - [ ] Shrink the embeddable backups module to thin Django-facing surfaces only.
 
-**Phase 5.4 — Migration docs** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.4 — Migration docs** _(M10 closeout)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
 - [ ] Document the migration and compatibility contract for existing generated projects adopting the split DR architecture.
 
@@ -403,21 +348,21 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 ### Finding 7 — Decouple generator runtime pins from generated-project pins
 
-**Explanation:** The generator and generated projects still share one compatibility window. The remaining work splits ownership so generated projects can carry their own runtime policy without inheriting maintainer-tool runtime constraints by accident.
+**Why still open:** Generator and generated projects share one compatibility window. Split ownership so generated projects carry their own runtime policy without inheriting generator constraints accidentally.
 
-**Track:** Track 3 | **Worktree:** fresh from v87 at start (do not reuse dirty `quickscale-wt-track3`) | **Merges as:** M11
-**Dependencies:** M8 merged to v87.
+**Track:** 3 | **Worktree:** `quickscale-wt-track3` (fresh from v87) | **Merges as:** M11
+**Dependencies:** M8 merged.
 
-**Phase 7.1 — Inventory** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.1 — Inventory** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
 - [ ] Inventory which Python, Django, and PostgreSQL constraints belong to the generator runtime versus generated-project templates.
 
-**Phase 7.2 — Split ownership** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.2 — Split ownership** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
-- [ ] Split configuration ownership so generator runtime pins and generated-project runtime pins are managed independently.
-- [ ] Update generation so emitted project templates use generated-project-owned runtime pins instead of inheriting generator package constraints accidentally.
+- [ ] Split configuration ownership so generator and generated-project runtime pins are managed independently.
+- [ ] Update generation so emitted project templates use generated-project-owned runtime pins instead of inheriting generator constraints accidentally.
 
-**Phase 7.3 — Validate and document** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.3 — Validate and document** _(M11 closeout)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
 - [ ] Add validation coverage for intentionally diverged generator-vs-generated-project runtime pin sets.
 - [ ] Align documentation and operator messaging with the decoupled runtime-pin model.
@@ -426,18 +371,18 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 ## Deferred / Monitor
 
-- [ ] Documentation consolidation (Finding 10) — defer until doc drift causes real onboarding failures; auto-generated version and module facts will likely become easier once manifest work (F1) is complete. (`organizations.md`/`module-extension.md` describe a `TenantModel`/RLS/extension-app architecture not yet fully shipped; treat as "target architecture" until F11 makes the mechanism load-bearing.)
-- [ ] Broader compatibility-window widening (Finding 7 follow-on) — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
-- [ ] Emitted-project operability & API-contract substrate (autopsy #7) — generated modules ship with no structured logging / correlation IDs (no `import logging`/`structlog` in `billing/services.py`; bare handlers swallow detail) and no versioned public API (`/api/vN` absent across module `urls.py`); the Stripe SDK is not `api_version`-pinned; webhook payloads are parsed by field name without boundary validation. Provide both as generated substrate (shared logging/correlation middleware; `/api/v1/...` convention + contract-evolution policy; pinned SDK + inbound payload schema validation). Promote to active backlog when a second external provider lands or the first public-API consumer appears.
+- [ ] **Documentation consolidation** — defer until doc drift causes real onboarding failures; manifest work (F1) simplifies auto-generated module facts.
+- [ ] **Broader compatibility-window widening** (F7 follow-on) — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
+- [ ] **Emitted-project operability & API-contract substrate** — generated modules ship with no structured logging/correlation IDs and no versioned public API (`/api/vN` absent across module `urls.py`); Stripe SDK is not `api_version`-pinned; webhook payloads lack boundary validation. Promote to active backlog when a second external provider lands or the first public-API consumer appears.
 
-### Explicitly out of scope (non-architectural, ticket-shaped)
+### Explicitly out of scope
 
-The autopsy deliberately excluded these as single-PR/ticket items that do not change the design (they fail the "compounding cost × touches the design" filter); track them as ordinary tickets, not roadmap findings:
+Single-PR/ticket items that do not change the design:
 
 - Orphaned `apply-recovery.yml` cleanup after a crashed final state-write.
-- Pinning the Stripe SDK `api_version` *as a one-liner* (the architectural substrate gap is the autopsy #7 Deferred/Monitor item above).
+- Pinning the Stripe SDK `api_version` as a one-liner.
 - Missing `list_filter`/`select_related` in individual admin classes.
-- Individual `pragma: no cover` lines (the architectural issue — release-gated E2E and no isolation tests — is Finding 14, now complete).
+- Individual `pragma: no cover` lines.
 
 ## References
 
