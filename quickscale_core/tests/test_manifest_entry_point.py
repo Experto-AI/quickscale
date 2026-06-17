@@ -50,6 +50,38 @@ class TestManifestAdapterRegistry:
         """The analytics registry entry is callable."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["analytics"])
 
+    def test_notifications_registered_at_import(self) -> None:
+        """Notifications adapter is registered when entry_point module loads."""
+        assert "notifications" in MANIFEST_ADAPTER_REGISTRY
+
+    def test_notifications_value_is_callable(self) -> None:
+        """The notifications registry entry is callable."""
+        assert callable(MANIFEST_ADAPTER_REGISTRY["notifications"])
+
+    def test_auth_registered_at_import(self) -> None:
+        """Auth adapter is registered when entry_point module loads."""
+        assert "auth" in MANIFEST_ADAPTER_REGISTRY
+
+    def test_auth_value_is_callable(self) -> None:
+        """The auth registry entry is callable."""
+        assert callable(MANIFEST_ADAPTER_REGISTRY["auth"])
+
+    def test_orgs_registered_at_import(self) -> None:
+        """Orgs adapter is registered when entry_point module loads."""
+        assert "orgs" in MANIFEST_ADAPTER_REGISTRY
+
+    def test_orgs_value_is_callable(self) -> None:
+        """The orgs registry entry is callable."""
+        assert callable(MANIFEST_ADAPTER_REGISTRY["orgs"])
+
+    def test_storage_registered_at_import(self) -> None:
+        """Storage adapter is registered when entry_point module loads."""
+        assert "storage" in MANIFEST_ADAPTER_REGISTRY
+
+    def test_storage_value_is_callable(self) -> None:
+        """The storage registry entry is callable."""
+        assert callable(MANIFEST_ADAPTER_REGISTRY["storage"])
+
     def test_importable_from_manifest_package(self) -> None:
         """MANIFEST_ADAPTER_REGISTRY is importable from quickscale_core.manifest."""
         assert MANIFEST_ADAPTER_REGISTRY is REGISTRY_DIRECT
@@ -176,3 +208,146 @@ class TestCustomAdapterRegistration:
     def test_unregistered_after_cleanup(self) -> None:
         """After registry cleanup the custom adapter is not present."""
         assert "_test_lifecycle" not in MANIFEST_ADAPTER_REGISTRY
+
+
+# ---------------------------------------------------------------------------
+# Adapter-path coverage: exercise each registered adapter through
+# build_manifest_wiring_spec and verify the returned ModuleWiringSpec.
+# ---------------------------------------------------------------------------
+
+# All adapters registered at import time.
+_REGISTERED_ADAPTERS = [
+    "analytics",
+    "auth",
+    "backups",
+    "billing",
+    "blog",
+    "crm",
+    "forms",
+    "listings",
+    "notifications",
+    "orgs",
+    "storage",
+]
+
+
+class TestRegisteredAdapterPaths:
+    """Each registered adapter produces a valid ModuleWiringSpec via the
+    public build_manifest_wiring_spec entry point."""
+
+    def test_all_expected_adapters_registered(self) -> None:
+        """Every adapter in the expected set is present in the registry."""
+        for name in _REGISTERED_ADAPTERS:
+            assert name in MANIFEST_ADAPTER_REGISTRY, f"{name} adapter not registered"
+
+    def test_analytics_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("analytics", {"enabled": True})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_analytics" in spec.apps
+
+    def test_analytics_disabled_returns_empty_spec(self) -> None:
+        spec = build_manifest_wiring_spec("analytics", {"enabled": False})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert spec.apps == ()
+
+    def test_billing_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("billing", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_billing" in spec.apps
+        assert "rest_framework" in spec.apps
+
+    def test_blog_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("blog", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_blog" in spec.apps
+        assert "markdownx" in spec.apps
+
+    def test_listings_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("listings", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_listings" in spec.apps
+        assert "django_filters" in spec.apps
+
+    def test_crm_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("crm", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_crm" in spec.apps
+        assert "rest_framework" in spec.apps
+
+    def test_forms_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("forms", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_forms" in spec.apps
+        assert "rest_framework" in spec.apps
+
+    def test_backups_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("backups", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_backups" in spec.apps
+
+    def test_notifications_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("notifications", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_notifications" in spec.apps
+
+    def test_auth_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("auth", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_auth" in spec.apps
+        assert "allauth" in spec.apps
+
+    def test_auth_adapter_username_mode(self) -> None:
+        spec = build_manifest_wiring_spec("auth", {"authentication_method": "username"})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_auth" in spec.apps
+
+    def test_orgs_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("orgs", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_orgs" in spec.apps
+
+    def test_orgs_adapter_saas_mode(self) -> None:
+        spec = build_manifest_wiring_spec("orgs", {"mode": "saas"})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_orgs" in spec.apps
+
+    def test_storage_adapter_local_backend(self) -> None:
+        spec = build_manifest_wiring_spec("storage", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_storage" in spec.apps
+
+    def test_storage_adapter_s3_backend(self) -> None:
+        spec = build_manifest_wiring_spec(
+            "storage",
+            {
+                "backend": "s3",
+                "bucket_name": "test-bucket",
+                "region_name": "us-east-1",
+            },
+        )
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_storage" in spec.apps
+
+    def test_each_adapter_accepts_none_options(self) -> None:
+        """Every registered adapter tolerates options=None."""
+        for name in _REGISTERED_ADAPTERS:
+            spec = build_manifest_wiring_spec(name, None)
+            assert isinstance(spec, ModuleWiringSpec), (
+                f"{name} adapter did not return ModuleWiringSpec with None options"
+            )
+
+    def test_each_adapter_accepts_empty_options(self) -> None:
+        """Every registered adapter tolerates options={}."""
+        for name in _REGISTERED_ADAPTERS:
+            spec = build_manifest_wiring_spec(name, {})
+            assert isinstance(spec, ModuleWiringSpec), (
+                f"{name} adapter did not return ModuleWiringSpec with empty options"
+            )
+
+    def test_each_adapter_forwards_project_package(self) -> None:
+        """project_package kwarg is forwarded without error."""
+        for name in _REGISTERED_ADAPTERS:
+            spec = build_manifest_wiring_spec(name, {}, project_package="myproject")
+            assert isinstance(spec, ModuleWiringSpec), (
+                f"{name} adapter failed with project_package kwarg"
+            )

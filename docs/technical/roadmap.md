@@ -57,7 +57,7 @@ git merge --no-ff wt-track{N}-<branch>
 | M1 | Track 1 | F11.1d + 11.1d.1 + 11.1g + 11.1g.1 | CRM-local nullable org ownership; legacy NULL-row uniqueness preserved; org-scoped creates stamp current org; queries scoped; isolation test still xfail |
 | M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
-| M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 12 wiring slices migrated |
+| M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 11 wiring slices migrated (`social` deferred to M6) |
 | M5 | Track 3 | F2.3–2.4 | Provenance fields in state.yml; release tooling updated |
 | M6 | Track 2 | F1.3 | `module_wiring_specs.py` deleted; manifest builder wired |
 | M7 | Track 1 | F11.2–11.4 | All module isolation tests unskipped and green |
@@ -251,9 +251,9 @@ _(part of the M1 batch — implement after 11.1g in the same worktree)_
 
 **Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M4
 
-**Status:** 🟡 M4 partially landed. The wiring-expression engine, the 4 missing adapters, and the 7 flat-mapper migrations are done and merged. The 5 conditional/codegen migrations remain.
+**Status:** ✅ M4 complete. All 11 manifest-supported modules now route their wiring through the manifest-driven builder. Only `social` remains on the legacy path — it depends on managed-file codegen and moves to Phase 1.3/M6.
 
-**Explanation:** The flat-mapper increment shipped first to de-risk the engine. The remaining migrations (`notifications`, `auth`, `orgs`, `storage`, `social`) each carry conditional/branching wiring or managed-file codegen and were split into a follow-up M4 batch so the engine could land green first. Their option-resolution adapters already exist (orgs/storage added here; auth/notifications/social pre-existing) — only the legacy **wiring builders** for those 5 modules still need to route through the manifest path. Managed-file codegen declaration (`social` only) is deferred to Phase 1.3/M6.
+**Explanation:** The flat-mapper increment shipped first to de-risk the engine. The follow-up M4 batch then migrated the four conditional/branching modules (`notifications`, `auth`, `orgs`, `storage`) — each carrying conditional runtime settings, middleware, dual URL includes, or post-resolution hooks. All four are now merged and their targeted checkpoints are green. `social` is the sole remaining holdout; it depends on managed-file code generation (~100 lines of generated Python) which is deferred to Phase 1.3/M6 alongside the legacy removal work.
 
 **Dependencies:** None — start immediately (fully parallel with Tracks 1 and 3).
 
@@ -261,7 +261,6 @@ _(part of the M1 batch — implement after 11.1g in the same worktree)_
 - [x] Let `module.yml` declare `middleware` (with ordering). _`WiringProjection(wiring_field="middleware")` + `ResolverResult.middleware` capability built and unit-tested (`test_manifest_wiring_projection.py`); end-to-end-exercised when the middleware-using modules (`auth`/`orgs`) migrate in the follow-up batch._
 - [x] Let `module.yml` declare computed and conditional Django settings. _Reuses the existing `DerivedSetting` `direct`/`static`/`conditional`/`computed` machinery plus the per-adapter post-resolution hook (analytics precedent); exercised by the `backups` `private_remote` conditional env-var defaulting (no new expression DSL)._
 - [x] Let `module.yml` declare URL include placement. _`url_includes` + `pre_home_url_includes` projections + `ResolverResult` fields; exercised by `analytics`/`crm`/`blog`/`listings`/`forms`; `pre_home_url_includes` (solo/saas orgs) lands with the orgs wiring migration._
-- [ ] Let `module.yml` declare managed-file code generation. _Deferred to Phase 1.3/M6 — only `social` needs it (~100 lines of generated Python); declaring that in `module.yml` is high-effort for a single consumer._
 - [x] Add a manifest-driven wiring builder API in `quickscale_core` that can produce `ModuleWiringSpec` alongside the legacy `module_wiring_specs.py` builders during migration. _`build_manifest_wiring_spec()` + `assemble_wiring_spec()` + `MANIFEST_ADAPTER_REGISTRY`; legacy builders untouched (byte-identical), production dispatch unchanged until M6._
 - [x] Add `*_manifest.py` adapters for `blog`, `listings`, `orgs`, and `storage` so every module has a manifest adapter before its wiring slice. _Each ships with an option-resolution parity test._
 - [x] Migrate `analytics` wiring to the manifest-driven builder. _Full `ModuleWiringSpec` dataclass parity; reproduces the `enabled=false` empty-spec short-circuit and the v87-M0 analytics url_include._
@@ -271,17 +270,18 @@ _(part of the M1 batch — implement after 11.1g in the same worktree)_
 - [x] Migrate `blog` wiring to the manifest-driven builder. _Parity-gated._
 - [x] Migrate `listings` wiring to the manifest-driven builder. _Parity-gated._
 - [x] Migrate `forms` wiring to the manifest-driven builder. _Parity-gated._
-- [ ] Migrate `notifications` wiring to the manifest-driven builder. _Follow-up M4 batch — conditional runtime email backend._
-- [ ] Migrate `auth` wiring to the manifest-driven builder. _Follow-up M4 batch — login-method branching + middleware + dual url includes._
-- [ ] Migrate `orgs` wiring to the manifest-driven builder. _Follow-up M4 batch — solo/saas mode toggles `pre_home_url_includes` vs `url_includes` + middleware (adapter already added)._
-- [ ] Migrate `storage` wiring to the manifest-driven builder. _Follow-up M4 batch — s3/r2 conditional nested `STORAGES`/`AWS_*` via post-resolution hook (adapter already added)._
-- [ ] Migrate `social` wiring to the manifest-driven builder. _Deferred to Phase 1.3/M6 — depends on managed-file codegen._
+- [x] Migrate `notifications` wiring to the manifest-driven builder. _Conditional runtime email backend via post-resolution hook; parity-gated._
+- [x] Migrate `auth` wiring to the manifest-driven builder. _Login-method branching + middleware + dual url includes; parity-gated._
+- [x] Migrate `orgs` wiring to the manifest-driven builder. _Solo/saas mode toggles `pre_home_url_includes` vs `url_includes` + middleware; parity-gated._
+- [x] Migrate `storage` wiring to the manifest-driven builder. _s3/r2 conditional nested `STORAGES`/`AWS_*` via post-resolution hook; parity-gated._
 
-**Phase 1.3 — Legacy removal** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
+**Phase 1.3 — Legacy removal + social wiring** _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
 
 **Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M6
 **Dependencies:** M4 merged to v87 (previous phase within this track); pull v87 before starting.
 
+- [ ] Let `module.yml` declare managed-file code generation. _Only `social` needs it (~100 lines of generated Python); deferred from Phase 1.1–1.2 because declaring that capability in `module.yml` is high-effort for a single consumer._
+- [ ] Migrate `social` wiring to the manifest-driven builder. _Depends on managed-file codegen above; last module to leave the legacy wiring path._
 - [ ] Delete `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` and switch `module_wiring_manager.py` to the manifest-driven wiring builder.
 - [ ] Replace the per-module interactive handlers in `module_config.py` with a manifest-driven configurator flow.
 - [ ] Remove the remaining legacy contract-file compatibility shims, constants, and dead imports.
