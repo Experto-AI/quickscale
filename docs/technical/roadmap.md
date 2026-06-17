@@ -54,7 +54,7 @@ git merge --no-ff wt-track{N}-<branch>
 | # | Track | Phase | Condition |
 |---|-------|-------|-----------|
 | M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
-| M1 | Track 1 | F11.1d–11.1g | CRM org FK nullable; queries scoped; isolation test still xfail |
+| M1 | Track 1 | F11.1d + 11.1d.1 + 11.1g + 11.1g.1 | CRM-local nullable org ownership; legacy NULL-row uniqueness preserved; org-scoped creates stamp current org; queries scoped; isolation test still xfail |
 | M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 12 wiring slices migrated |
@@ -171,13 +171,22 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 - [x] Choose the canonical solo and SaaS CRM HTML/API paths. _Solo: `/crm/` and `/crm/api/`; SaaS: `/orgs/<slug>/crm/` and `/orgs/<slug>/crm/api/` — CRM owns both path sets internally (billing-style) and is included at root from wiring._
 - [x] Make generated wiring, module URLs, and route-parity tests agree on that contract. _`_crm_wiring` now includes CRM at `""`; `crm/urls.py` defines both solo and org-scoped paths; `crm/tests/urls.py` simplified to single root include; route-parity tests in `test_views.py` prove both path sets resolve; `organizations.md` corrected to reflect canonical `/orgs/<slug>/crm/api/` pattern._
 
-**Phase 11.1d–11.1g — CRM org FK + query scoping** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase 11.1d + 11.1d.1 + 11.1g + 11.1g.1 — CRM org ownership + M1 read-scope bridge** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M1
 **Dependencies:** None externally (pull v87 after M0, then continue in same worktree).
 
-- [ ] Make `TenantModel` the base for `crm` tenant models and add nullable `organization_id` FKs first.
-- [ ] Replace global uniqueness with per-org uniqueness where required (`Tag`, `Stage`, and any other tenant-sensitive constraints discovered in rollout).
+**Status:** 🔴 Blocked as one batch. Do not implement this as a single change.
+
+**Explanation:** Plan review found the original M1 batch was still effectively Tier 3 because it mixed CRM ownership strategy, nullable schema rollout, uniqueness changes, org-scoped create behavior, and read-path scoping. Keep M1 inside CRM only: do **not** widen shared `TenantModel` nullability in `orgs`, preserve legacy `NULL`-owned uniqueness for `Tag` / `Stage` while ownership remains nullable, and land an explicit create-path bridge before org-scoped reads hide `NULL`-owned rows. The handoff slices below are the current non-Tier-3 breakdown; if any slice grows beyond a clean Tier 1–2 pass, split it again before implementation.
+
+**Phase 11.1d — CRM-local nullable ownership groundwork** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Add CRM-local nullable `organization_id` ownership to `Tag`, `Company`, `Contact`, `Stage`, and `Deal` without changing shared `TenantModel` nullability in `orgs`.
+- [ ] Keep `ContactNote` and `DealNote` parent-derived in M1 rather than adding direct org FKs in this batch.
+
+**Phase 11.1d.1 — Legacy-NULL-preserving uniqueness** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [ ] Replace global uniqueness on `Tag` / `Stage` only when the same migration preserves one legacy `NULL`-owned row globally and enforces per-org uniqueness for owned rows.
+- [ ] Add migration / model coverage proving `NULL`-owned duplicates remain blocked while owned-row duplicates are allowed only where intended.
 
 **Phase 11.1e — Existing-data rollout contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
@@ -193,12 +202,20 @@ _(implement between M1 and M3, same worktree as 11.1d)_
 - [ ] Add tenant-local default CRM stage bootstrap for migrated orgs and newly created orgs.
 - [ ] Add tests proving a fresh org can use CRM without manual stage seeding.
 
-**Phase 11.1g — CRM read-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase 11.1g — Org-scoped create bridge** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 _(part of the M1 batch — implement alongside 11.1d)_
 
-- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org.
+- [ ] Stamp current-org ownership on org-scoped create paths for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` before M1 hides `NULL`-owned rows from org-scoped reads.
+- [ ] Add middleware-backed org-member create → list roundtrip coverage so SaaS-created CRM rows remain visible inside the creating org.
+
+**Phase 11.1g.1 — CRM read-path isolation** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+_(part of the M1 batch — implement after 11.1g in the same worktree)_
+
+- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote` / `DealNote` parent-derived via their parent record in M1.
 - [ ] Confirm no-context reads fail closed rather than widening scope.
+- [ ] Keep the CRM isolation `xfail` open only for the named remaining M1 seam, and update its rationale if the failure mode changes.
 
 **Phase 11.1h–11.1j — CRM write-path isolation + NOT NULL enforcement** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
