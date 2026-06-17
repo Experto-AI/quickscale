@@ -58,7 +58,7 @@ git merge --no-ff wt-track{N}-<branch>
 | M2 | Track 3 | F2.1–2.2 | Merged to `v87`; CR-005 resolved — partial-remove legacy read-through regression fixed and covered |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 11 wiring slices migrated (`social` deferred to M6) |
-| M5 | Track 3 | F2.3–2.4 | Provenance fields in state.yml; release tooling updated |
+| M5 | Track 3 | F2.3–2.4 | 🟡 OPEN — provenance groundwork landed in worktree; wrapper adoption, tagged/versioned-source gating, and CR-M5-P3-001..004 remain; merge blocked |
 | M6 | Track 2 | F1.3 🟡 | `module_wiring_specs.py` deleted; manifest builder wired; all catalog modules on manifest path. **Open:** CR-M6-004 (blocking — `--reconfigure --configure-modules` empty `new_modules` path) + CR-M6-005 (advisory — docs/strings cleanup) |
 | M7 | Track 1 | F11.2–11.4 | All module isolation tests unskipped and green |
 | M8 | Track 3 | F12.1–12.3 | `ApplyStep` model done; recovery ledger has `failed_step` |
@@ -358,11 +358,57 @@ _(part of the M1 batch — implement after 11.1g in the same worktree)_
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M5
 **Dependencies:** M2 merged to v87 (previous phase within this track); pull v87 before starting.
 
-- [ ] Define the authoritative provenance fields to persist in the consolidated state: version, commit SHA, and any required release identifier.
-- [ ] Persist module commit SHA and version during embed, update, and apply flows.
+**Status:** 🟡 M5 is open and unmerged. Provenance groundwork (contract shape, docs, helper surface) has landed in the worktree, but wrapper adoption, tagged/versioned-source gating, and four code-review findings remain open. Merge is blocked until the findings are resolved and the worktree is clean.
+
+**Explanation:** Phase 2.3a provenance contract and documentation groundwork is done. The split-publish helper surface exists and is partially adopted for ready-module/path/branch resolution only — full wrapper adoption across split/publish execution paths, tagged/versioned-source gating, and operator diagnostics remain open. The remaining work splits into two open provenance-persistence slices (2.3b, 2.3c) and two open release-tooling slices (2.4a, 2.4b). The worktree is dirty and unmerged; M5 cannot close until the blocked findings below are resolved.
+
+**Phase 2.3a — Provenance contract and documentation groundwork** ✅ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+- [x] Define the authoritative provenance fields to persist in the consolidated state: version, commit SHA, and any required release identifier.
+- [x] Document the provenance contract and helper surface for downstream adoption.
+
+**Phase 2.3b — Provenance persistence on update paths** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+
+**Blocked findings:**
+- `CR-M5-P3-001` — Update path records project HEAD instead of module source commit.
+- `CR-M5-P3-002` — Config-only legacy update does not materialize authoritative provenance into state.yml.
+
+- [ ] Fix CR-M5-P3-001: update path must record module source commit, not project HEAD.
+- [ ] Fix CR-M5-P3-002: config-only legacy update must materialize authoritative provenance into state.yml.
+
+**Phase 2.3c — Provenance persistence on apply/embed paths** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+
+**Blocked findings:**
+- `CR-M5-P3-003` — Apply/embed/no-op apply do not persist/backfill full provenance triple consistently.
+- `CR-M5-P3-004` — Caller parity across update/apply/embed/no-op incomplete.
+
+- [ ] Fix CR-M5-P3-003: apply/embed/no-op apply must persist/backfill full provenance triple consistently.
+- [ ] Fix CR-M5-P3-004: establish caller parity across update/apply/embed/no-op provenance paths.
+
+**Phase 2.4 — Release tooling: split-publish wrapper + tagged/versioned-source gating** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+
+**Status:** 🟡 Helper surface exists and is partially adopted; full wrapper adoption, gating, and diagnostics remain open.
+
+**Done (narrow groundwork):**
+- [x] Split-publish helper surface exists in the worktree for ready-module, path, and branch resolution.
+- [x] Partial adoption: module-list/matrix/module-resolution paths use the helper surface.
+
+**Pending (open):**
+- [ ] Adopt the split-publish wrapper across actual split/publish execution paths so split branches use the provenance-aware helper surface instead of hardcoded module path/branch resolution. _(2.4a)_
+- [ ] Update subtree release tooling so split branches are cut only from tagged or versioned source states. _(2.4b)_
+- [ ] Add operator-facing diagnostics for untagged split provenance or version/SHA mismatches. _(2.4b)_
+
+**Phase 2.4a — Split-publish wrapper adoption** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+- [ ] Adopt the split-publish wrapper across actual split/publish execution paths so split branches use the provenance-aware helper surface instead of hardcoded module path/branch resolution.
+
+**Phase 2.4b — Tagged/versioned-source gate + operator diagnostics** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 - [ ] Update subtree release tooling so split branches are cut only from tagged or versioned source states.
-- [ ] Validate embedded module provenance during `apply` and `update`.
 - [ ] Add operator-facing diagnostics for untagged split provenance or version/SHA mismatches.
+
+**Next-session decisions (M5 closeout path):**
+- **Settled policy (reference):** `commit_sha` is the full module source commit SHA (decisions.md); `state.yml` is the sole authoritative applied-state store with legacy read-through only when consolidated sections are absent (implementation_contract.md); missing SHA is classified as `backfill_needed` in current code.
+- Execution sequencing: decide whether to address CR-M5-P3-001/002 (update paths) before CR-M5-P3-003/004 (apply/embed paths), or tackle them in parallel given their different code paths.
+- Test coverage strategy: decide whether to add provenance-persistence tests incrementally with each finding fix, or batch them after all four findings are resolved.
+- Roadmap visibility path: decide whether the M5 roadmap update should proceed as a docs-only change on v87 (since the worktree is dirty/unmerged and the code findings remain open).
 
 ### Finding 12 — Make `apply` recoverable via a saga model
 
