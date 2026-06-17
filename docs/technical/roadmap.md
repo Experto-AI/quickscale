@@ -54,12 +54,12 @@ git merge --no-ff wt-track{N}-<branch>
 | # | Track | Phase | Status | Condition |
 |---|-------|-------|--------|-----------|
 | M0 | Track 1 | v0.87.0 | ✅ | Analytics module-owned page; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
-| M1 | Track 1 | F11.1g + 11.1g.1 | 🟡 | 11.1d ✅; 11.1d.1 Tag-first ✅; Stage semantic deferred; 11.1g.a/b and 11.1g.1 still open |
+| M1 | Track 1 | F11.1g.a (next) + 11.1g.b (blocked) + 11.1g.1 (blocked) | 🟡 | 11.1d ✅; 11.1d.1 Tag-first ✅; Stage semantic deferred; 11.1g.a next actionable (deps satisfied, deferred for handoff); **CR-P11GA-001 blocking** — insufficient-membership org-scoped POST denial proof required; 11.1g.b blocked behind 11.1g.a; 11.1g.1 blocked behind 11.1g.b |
 | M2 | Track 3 | F2.1–2.2 | ✅ | `state.yml` authoritative; advisory lock; CR-005 resolved |
 | M3 | Track 1 | F11.1h–11.1j | ⬜ | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | ✅ | All 11 catalog modules on manifest wiring path |
 | M5 | Track 3 | F2.3b–2.4b | 🟡 | 2.3b ✅ (CR-M5-P3-001/002 resolved); 2.3c (CR-M5-P3-003/004), 2.4a, 2.4b still open |
-| M6 | Track 2 | F1.3 | 🟡 | CR-M6-004 resolved + regression coverage |
+| M6 | Track 2 | F1.3 | ✅ | CR-M6-004 resolved + regression coverage; CR-M6-005 stale refs cleaned |
 | M7 | Track 1 | F11.2–11.4 | ⬜ | All module isolation tests unskipped and green |
 | M8 | Track 3 | F12.1–12.3 | ⬜ | `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | Track 1 | F13.1–13.3 | ⬜ | Billing org-authoritative; dual-FK rows reconciled |
@@ -70,20 +70,15 @@ git merge --no-ff wt-track{N}-<branch>
 
 ### M1 — F11 CRM org-scoped create + read bridge
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1`
-**Status:** 🟡 — 11.1g blocked (Contact/Deal related-ID safety); 11.1g.1 read-path pending
+**Status:** 🟡 — 11.1g.a next actionable (deps satisfied, deferred for handoff); **CR-P11GA-001 blocking** (insufficient-membership org-scoped POST denial proof required); 11.1g.b blocked behind 11.1g.a; 11.1g.1 blocked behind 11.1g.b
 **Done this milestone:** 11.1d (nullable org FK on 5 models), 11.1d.1 Tag-first (partial UniqueConstraints + serializer parity)
-**Open:** Stage terminal_semantic deferred; 11.1g.a/b (create stamping); 11.1g.1 (read-path scope)
+**Open:** Stage terminal_semantic deferred; CR-P11GA-001; 11.1g.a (self-contained create stamping); 11.1g.b (Contact/Deal guard + stamping); 11.1g.1 (read-path scope)
 
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3`
 **Status:** 🟡 — 2.3b complete; 2.3c (CR-M5-P3-003/004), 2.4a (split-publish wrapper), 2.4b (tagged-source gate) still open
 **Done this milestone:** 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix paths); 2.3b (update-path provenance persistence, config-only/non-consolidated state materialization safeguards, project metadata preservation, abort-on-missing-authority, py.typed metadata fix)
 **Open:** 2.3c (apply/embed paths), 2.4a (wrapper adoption), 2.4b (tagged-source gate)
-
-### M6 — F1.3 Legacy wiring follow-ups
-**Track:** Track 2 | **Worktree:** `quickscale-wt-track2`
-**Status:** 🟡 — CR-M6-004 blocking (empty `new_modules` path under `--reconfigure --configure-modules`); CR-M6-005 advisory
-**Done this milestone:** `module_wiring_specs.py` deleted; `social` on manifest path; configurator rerouted; all catalog modules single-path
 
 ## Long-Term Backlog
 
@@ -105,7 +100,7 @@ git merge --no-ff wt-track{N}-<branch>
 Execute top-down. Earlier items are either prerequisites for, or de-risk, later items.
 
 1. **F11 — Structural multi-tenant isolation.** Highest severity/impact. F14 test harness already in place (done).
-2. **F1 — Finish manifest-driven wiring.** M4 and M6 main work done; Phase 1.3 follow-ups (CR-M6-004, CR-M6-005) remain.
+2. **F1 — Finish manifest-driven wiring.** M4, M6, and Phase 1.3 follow-ups complete — manifest wiring path is the sole path for all catalog modules, CR-M6-004 resolved, stale two-path references cleaned (M6).
 3. **F13 — Single billing customer SSOT.** Must precede team/seat-scoped billing; assumes organization-as-tenant from F11.
 4. **F2 — Consolidate project state + module provenance.** Consolidation done (M2); provenance persistence and release tooling (M5) remain.
 5. **F12 — Recoverable `apply` (saga).** Needed before the next external integration is bolted into `apply`.
@@ -147,7 +142,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 **Track:** Track 1 | **Merges as part of:** M1
 **Dependencies:** None externally; runs after 11.1d.1.
+**Status:** ⏳ Next actionable — dependencies satisfied, implementation deferred for handoff. Blocked by CR-P11GA-001.
 
+- [ ] Resolve CR-P11GA-001: add an insufficient-membership org-scoped POST denial proof — a wrong-org or non-member staff user must receive 403 with no row creation on org-scoped create.
 - [ ] Stamp current-org ownership on org-scoped create paths for Tag, Company, and Stage (self-contained resources — no foreign-org related-ID risk).
 - [ ] Add middleware-backed org-member create → list roundtrip coverage for Tag, Company, and Stage.
 
@@ -230,25 +227,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 ### Finding 1 — Finish manifest-driven wiring and configuration
 
-**Explanation (autopsy #2 — module SSOT / dual-pattern):** "What a module is" is not declared in one place owned by the module; it is reconstructed from ~7 hand-synced registries and resolved through two contradictory paths: manifest-driven vs legacy bespoke `resolve_<module>_module_options()`. The product thesis is "more modules," so the core value-add sits on the steepest cost curve. Manifest-driven option resolution is complete; the manifest wiring path is now the sole path for all catalog modules. Phase 1.3 follow-up CRs remain.
+**Explanation (autopsy #2 — module SSOT / dual-pattern):** "What a module is" is not declared in one place owned by the module; it is reconstructed from ~7 hand-synced registries and resolved through two contradictory paths: manifest-driven vs legacy bespoke `resolve_<module>_module_options()`. The product thesis is "more modules," so the core value-add sits on the steepest cost curve. Manifest-driven option resolution is complete; the manifest wiring path is now the sole path for all catalog modules. Phase 1.3 follow-up CRs are resolved (M6).
 
 **Completed (v0.87.0, see CHANGELOG):** Phase 1.1–1.2 (M4 — all 11 modules on manifest-driven wiring path); Phase 1.3 main work (M6 — `social` migrated, `module_wiring_specs.py` deleted, configurator rerouted, two-path resolution defect closed)
-
----
-
-**Phase 1.3a — Empty `new_modules` fix (M6, blocking)** _(Track 2)_ _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
-
-**Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M6 closeout
-**Status:** 🚫 CR-M6-004 — `quickscale plan --reconfigure --configure-modules` with an explicit empty `new_modules` selection produces incorrect behavior.
-
-- [ ] Fix the explicit-empty `new_modules` path under `--reconfigure --configure-modules` and add regression coverage.
-
-**Phase 1.3b — Post-M6 docs/strings cleanup (M6, advisory)** _(Track 2)_ _(why → [Finding 1](#finding-1--finish-manifest-driven-wiring-and-configuration))_
-
-**Track:** Track 2 | **Merges as:** M6 closeout
-**Status:** CR-M6-005 advisory.
-
-- [ ] Audit and update docs, comments, and user-facing strings that still carry stale references from the legacy two-path era.
 
 ---
 

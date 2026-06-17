@@ -675,7 +675,7 @@ config:
 
 ### Module Derivation Schema {#module-derivation-schema}
 
-**Architectural Decision (Phase 4, Finding 1):** A companion derivation schema describes how `module.yml` configuration options normalise, validate, and project into Django settings, making the manifest authoritative for behaviour currently duplicated across CLI contract files, `module_wiring_specs.py`, and imperative `normalize_*` / `validate_*` helpers.
+**Architectural Decision (Phase 4, Finding 1):** A companion derivation schema describes how `module.yml` configuration options normalise, validate, and project into Django settings, making the manifest authoritative for behaviour that was historically duplicated across CLI contract files, the now-deleted `module_wiring_specs.py`, and imperative `normalize_*` / `validate_*` helpers.
 
 **Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The existing manifest loader, runtime behaviour, and CLI contract-file path are unchanged.
 
@@ -692,7 +692,7 @@ config:
 | `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
 | `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
 
-**Roadmap context:** This foundation is the first step toward eventually replacing the imperative `normalize_*` / `validate_*` functions and CLI contract files that currently duplicate per-module knowledge (seven hand-written contract files, `module_wiring_specs.py`, and `module_config.py`). The analytics module is the planned first pilot slice. Later phases will add loader wiring, runtime derivation execution, and progressive contract-file deletion — one module at a time.
+**Roadmap context:** This foundation is the first step toward eventually replacing the imperative `normalize_*` / `validate_*` functions and CLI contract files that historically duplicated per-module knowledge (seven hand-written contract files, the now-deleted `module_wiring_specs.py`, and `module_config.py`). The analytics module is the planned first pilot slice. Later phases will add loader wiring, runtime derivation execution, and progressive contract-file deletion — one module at a time.
 
 **Constraints:**
 - ✅ Derivation types are frozen dataclasses (immutable after construction)
