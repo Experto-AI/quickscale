@@ -27,13 +27,15 @@ git worktree add /home/victor/code/quickscale-wt-track2 -b wt-track2-f1-f5 v87
 git worktree add /home/victor/code/quickscale-wt-track3 -b wt-track3-f2-f12-f7 v87
 ```
 
+> **Track 3 lane update:** The original `quickscale-wt-track3` worktree is historical and contains dirty mixed-scope changes — do not reuse it directly. Active M5 continuation uses the clean handoff lane `quickscale-wt-track3-f2-3b` (branched from v87 after the 2.3b merge). Future M8 and M11 work must branch cleanly from v87 at the time they start.
+
 ### Track assignment
 
 | Track | Worktree path | Branch | Owns |
 |-------|--------------|--------|------|
 | **Track 1** | `quickscale-wt-track1` | `wt-track1-f11-f13` | F11 CRM isolation (M1→M3→M7) → F13 billing SSOT (M9) |
 | **Track 2** | `quickscale-wt-track2` | `wt-track2-f1-f5` | F1.3 follow-ups (M6) → F5 DR engine split (M10) |
-| **Track 3** | `quickscale-wt-track3` | `wt-track3-f2-f12-f7` | F2 provenance (M5) → F12 recoverable apply (M8) → F7 runtime pins (M11) |
+| **Track 3** | `quickscale-wt-track3-f2-3b` (M5); fresh from v87 for M8/M11 | `wt-track3-f2-3b` (M5); new branch per phase | F2 provenance (M5) → F12 recoverable apply (M8) → F7 runtime pins (M11) |
 
 ### Cross-track dependency (the only one)
 
@@ -58,7 +60,7 @@ git merge --no-ff wt-track{N}-<branch>
 | M2 | Track 3 | F2.1–2.2 | ✅ | `state.yml` authoritative; advisory lock; CR-005 resolved |
 | M3 | Track 1 | F11.1h–11.1j | ⬜ | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | ✅ | All 11 catalog modules on manifest wiring path |
-| M5 | Track 3 | F2.3b–2.4b | 🟡 | 2.3b ✅ (CR-M5-P3-001/002 resolved); 2.3c (CR-M5-P3-003/004), 2.4a, 2.4b still open |
+| M5 | Track 3 | F2.3b–2.4b | 🟡 | 2.3b ✅ merged to v87 (CR-M5-P3-001/002 resolved); **CR-M5-P3-007 open** (branch-default-agnostic subtree-SHA proof); 2.3c split → 2.3c.0 + 2.3c.1 + 2.3c.2; 2.4a, 2.4b still open |
 | M6 | Track 2 | F1.3 | ✅ | CR-M6-004 resolved + regression coverage; CR-M6-005 stale refs cleaned |
 | M7 | Track 1 | F11.2–11.4 | ⬜ | All module isolation tests unskipped and green |
 | M8 | Track 3 | F12.1–12.3 | ⬜ | `ApplyStep` model done; recovery ledger has `failed_step` |
@@ -88,10 +90,26 @@ git merge --no-ff wt-track{N}-<branch>
 - 11.1g.1 scope boundary: M1 read-path work covers dashboard, list/detail, nested-note, and helper reads only; bulk actions and admin/operator exceptions remain M3 work.
 
 ### M5 — F2 Provenance persistence + release tooling
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3`
-**Status:** 🟡 — 2.3b complete; 2.3c (CR-M5-P3-003/004), 2.4a (split-publish wrapper), 2.4b (tagged-source gate) still open
-**Done this milestone:** 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix paths); 2.3b (update-path provenance persistence, config-only/non-consolidated state materialization safeguards, project metadata preservation, abort-on-missing-authority, py.typed metadata fix)
-**Open:** 2.3c (apply/embed paths), 2.4a (wrapper adoption), 2.4b (tagged-source gate)
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` (clean handoff; do NOT reuse the original dirty `quickscale-wt-track3`)
+**Status:** 🟡 — 2.3b merged to v87; CR-M5-P3-007 open; 2.3c split into 2.3c.0 + 2.3c.1 + 2.3c.2; 2.4a, 2.4b still open
+**Done this milestone:** 2.3a (provenance contract + helper surface groundwork, split-publish module-list/matrix paths); 2.3b (update-path provenance persistence, config-only/non-consolidated state materialization safeguards, project metadata preservation, abort-on-missing-authority, py.typed metadata fix) — **merged to v87**
+**Merge-back status:** 2.3b code is on v87 (HEAD 30d09a6). Clean handoff worktree `quickscale-wt-track3-f2-3b` (HEAD cb67755) is ready for next slice. Original `quickscale-wt-track3` is dirty mixed-scope across apply/embed/split-publish surfaces and docs — do not reuse directly.
+
+**Open blocking finding:** CR-M5-P3-007 — branch-default-agnostic subtree-SHA proof hardening. Must be resolved before 2.4b tagged-source gate can be considered complete.
+
+**Open work (split into handoff-sized slices):**
+- 2.3c.0 — Fix CR-M5-P3-007: branch-default-agnostic subtree-SHA proof hardening
+- 2.3c.1 — Fix CR-M5-P3-003: apply/embed/no-op provenance triple persistence consistency
+- 2.3c.2 — Fix CR-M5-P3-004 + caller parity tests across update/apply/embed/no-op
+- 2.4a — Split-publish wrapper adoption
+- 2.4b — Tagged/versioned-source gate + operator diagnostics (blocked on CR-M5-P3-007)
+
+**Next handoff decisions:**
+- CR-M5-P3-007 first or alongside 2.3c: next implementer should resolve the subtree-SHA proof hardening before or in parallel with 2.3c, since 2.4b depends on it.
+- 2.3c.1 before 2.3c.2: fix the persistence inconsistency (CR-003) before adding caller-parity tests (CR-004), since tests depend on consistent behavior.
+- 2.4a is independent of 2.3c: can be parallelized if a second Track 3 handoff branch is created, but default serial order keeps it after 2.3c.2.
+- 2.4b is the M5 closeout slice: blocked on both CR-M5-P3-007 and 2.4a.
+- Worktree handoff: use `quickscale-wt-track3-f2-3b` (clean, branched from v87 after 2.3b merge). Do not resume work in the original `quickscale-wt-track3` — it has dirty mixed-scope changes across unrelated surfaces.
 
 ## Long-Term Backlog
 
@@ -287,27 +305,46 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 ---
 
-**Phase 2.3c — Provenance persistence on apply/embed paths (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+**Phase 2.3c.0 — Branch-default-agnostic subtree-SHA proof (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as part of:** M5
-**Dependencies:** 2.3b complete ✅ (share the provenance-persistence test harness).
-**Status:** 🚫 CR-M5-P3-003 (apply/embed/no-op do not persist full provenance triple consistently) and CR-M5-P3-004 (caller parity across update/apply/embed/no-op incomplete) open.
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
+**Dependencies:** 2.3b merged to v87 ✅.
+**Status:** ⏳ Next actionable — resolves blocking finding CR-M5-P3-007. Can proceed in parallel with 2.3c.1.
+
+- [ ] Fix CR-M5-P3-007: harden subtree-SHA proof to be branch-default-agnostic so provenance verification does not depend on a specific default branch name.
+- [ ] Add tests proving subtree-SHA proof works regardless of branch-default configuration.
+
+**Phase 2.3c.1 — Apply/embed provenance triple persistence (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
+**Dependencies:** 2.3b merged to v87 ✅ (share the provenance-persistence test harness).
+**Status:** ⏳ Next actionable — dependencies satisfied. Resolves CR-M5-P3-003.
 
 - [ ] Fix CR-M5-P3-003: apply/embed/no-op apply must persist/backfill full provenance triple consistently.
-- [ ] Fix CR-M5-P3-004: establish caller parity across update/apply/embed/no-op provenance paths.
 - [ ] Add provenance-persistence tests for apply/embed/no-op paths.
+
+**Phase 2.3c.2 — Caller parity across provenance paths (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
+
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
+**Dependencies:** 2.3c.1 complete.
+**Status:** 🚫 Blocked — waits for 2.3c.1 provenance triple consistency. Resolves CR-M5-P3-004.
+
+- [ ] Fix CR-M5-P3-004: establish caller parity across update/apply/embed/no-op provenance paths.
+- [ ] Add caller-parity tests proving consistent provenance behavior across all entry points.
 
 **Phase 2.4a — Split-publish wrapper adoption (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as part of:** M5
-**Dependencies:** 2.3b complete ✅ (helper surface established).
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as part of:** M5
+**Dependencies:** 2.3b merged to v87 ✅ (helper surface established). Independent of 2.3c.
+**Status:** ⏳ Actionable — can proceed after 2.3c.2 or in parallel on a separate handoff branch.
 
 - [ ] Adopt the split-publish wrapper across actual split/publish execution paths so split branches use the provenance-aware helper surface instead of hardcoded module path/branch resolution.
 
 **Phase 2.4b — Tagged/versioned-source gate + operator diagnostics (M5)** _(Track 3)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M5
-**Dependencies:** 2.4a complete.
+**Track:** Track 3 | **Worktree:** `quickscale-wt-track3-f2-3b` | **Merges as:** M5
+**Dependencies:** 2.4a complete; CR-M5-P3-007 resolved (2.3c.0).
+**Status:** 🚫 Blocked — waits for 2.4a and CR-M5-P3-007 (branch-default-agnostic subtree-SHA proof).
 
 - [ ] Update subtree release tooling so split branches are cut only from tagged or versioned source states.
 - [ ] Add operator-facing diagnostics for untagged split provenance or version/SHA mismatches.
@@ -318,7 +355,7 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 **Explanation (autopsy #4):** `apply` performs an ordered sequence of irreversible cross-system side effects — filesystem generation, `git subtree add`, `pyproject.toml`/lock edits, `poetry install`, Django migrations, Docker, Railway — in one ~2700-line command (`apply_command.py:2415-2596`) with an explicit no-rollback contract (~line 2446) and inconsistent fail policy: embedding/wiring/poetry/migrations fail **closed**, but the `config.yml` mirror (`:1969-1972`), managed-file hash capture, and git-index snapshot fail **open**. Each new capability bolted into `apply` widens the set of partial-failure states; with no rollback abstraction, every new step hand-rolls its own recovery.
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M8
+**Track:** Track 3 | **Worktree:** fresh from v87 at start (do not reuse dirty `quickscale-wt-track3`) | **Merges as:** M8
 **Dependencies:** M5 merged to v87.
 
 **Phase 12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
@@ -368,7 +405,7 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 
 **Explanation:** The generator and generated projects still share one compatibility window. The remaining work splits ownership so generated projects can carry their own runtime policy without inheriting maintainer-tool runtime constraints by accident.
 
-**Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M11
+**Track:** Track 3 | **Worktree:** fresh from v87 at start (do not reuse dirty `quickscale-wt-track3`) | **Merges as:** M11
 **Dependencies:** M8 merged to v87.
 
 **Phase 7.1 — Inventory** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
