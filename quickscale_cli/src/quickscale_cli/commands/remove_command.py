@@ -25,6 +25,7 @@ from quickscale_core.advisory_lock import (
     AdvisoryLock,
     AdvisoryLockContentionError,
 )
+from quickscale_core.project_state import ProjectStateManager
 
 
 _APPLY_RECOVERY_FILENAME = "apply-recovery.yml"
@@ -74,10 +75,20 @@ def _load_quickscale_config(project_path: Path) -> QuickScaleConfig | None:
 def _load_state(
     project_path: Path, state_manager: StateManager
 ) -> QuickScaleState | None:
-    """Strictly load .quickscale/state.yml when present."""
-    del project_path
+    """Load ``.quickscale/state.yml`` with legacy read-through import.
+
+    Uses :meth:`ProjectStateManager.load_state` so that non-consolidated
+    projects (pre-M2 state without ``prefix``/``branch``/``installed_at``
+    tracking fields) have their surviving module metadata materialised
+    from legacy ``config.yml`` before the removal save.  Without this,
+    the post-remove ``flush_empty_consolidated_sections`` can write
+    explicit empty consolidated markers that suppress the legacy
+    read-through import on later loads, losing tracking for surviving
+    modules and breaking subsequent ``update``/``push`` flows.
+    """
+    del state_manager
     try:
-        return state_manager.load()
+        return ProjectStateManager(project_path).load_state()
     except Exception as error:
         raise click.ClickException(
             f"Failed to load .quickscale/state.yml: {error}"
