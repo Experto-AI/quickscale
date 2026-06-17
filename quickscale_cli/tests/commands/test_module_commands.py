@@ -1125,13 +1125,19 @@ class TestUpdateSingleModule:
             project_path: Path,
             module_name: str,
             version: str,
+            *,
+            commit_sha: str | None = None,
         ) -> None:
-            del module_name
+            del module_name, commit_sha
             (project_path / ".quickscale" / "state.yml").write_text(
                 original_state.replace('version: "0.71.0"', f'version: "{version}"', 1)
             )
 
         with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="a" * 40,
+            ),
             patch(
                 "quickscale_cli.commands.module_commands.run_git_subtree_pull",
                 side_effect=_fake_subtree_pull,
@@ -1164,20 +1170,30 @@ class TestUpdateSingleModule:
         )
         assert state_path.read_text() == original_state
 
+    @patch(
+        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+    )
     @patch("quickscale_cli.commands.module_commands._commit_module_update")
     @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
     @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch(
+        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        return_value="a" * 40,
+    )
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_successful_update(
         self,
         mock_pull,
+        mock_resolve,
         mock_read_version,
         mock_sync_state,
         mock_commit,
+        mock_ensure_state,
     ):
         """Test successful module update."""
         mock_pull.return_value = "Changes applied successfully"
         mock_read_version.return_value = "0.82.0"
+        mock_ensure_state.return_value = Mock(modules={"auth": Mock(version="0.71.0")})
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
         result = _update_single_module(
@@ -1194,20 +1210,30 @@ class TestUpdateSingleModule:
         assert mock_sync_state.call_args.args[:2] == (Path.cwd(), "auth")
         mock_commit.assert_called_once_with("auth", "modules/auth")
 
+    @patch(
+        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+    )
     @patch("quickscale_cli.commands.module_commands._commit_module_update")
     @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
     @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch(
+        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        return_value="a" * 40,
+    )
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_update_with_no_preview(
         self,
         mock_pull,
+        mock_resolve,
         mock_read_version,
         mock_sync_state,
         mock_commit,
+        mock_ensure_state,
     ):
         """Test update with preview disabled."""
         mock_pull.return_value = "Changes"
         mock_read_version.return_value = "0.82.0"
+        mock_ensure_state.return_value = Mock(modules={"blog": Mock(version="0.71.0")})
         module_info = Mock(prefix="modules/blog", branch="splits/blog-module")
 
         result = _update_single_module(
@@ -1218,15 +1244,25 @@ class TestUpdateSingleModule:
         mock_pull.assert_called_once()
         mock_commit.assert_called_once_with("blog", "modules/blog")
 
+    @patch(
+        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+    )
     @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch(
+        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        return_value="a" * 40,
+    )
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
-    def test_update_manifest_error(self, mock_pull, mock_read_version):
+    def test_update_manifest_error(
+        self, mock_pull, mock_resolve, mock_read_version, mock_ensure_state
+    ):
         """Manifest validation failures should stop the update before commit."""
         mock_pull.return_value = "Changes"
         mock_read_version.side_effect = ManifestError(
             "Manifest file not found: modules/auth/module.yml",
             "auth",
         )
+        mock_ensure_state.return_value = Mock(modules={"auth": Mock(version="0.71.0")})
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
         result = _update_single_module(
@@ -1235,12 +1271,20 @@ class TestUpdateSingleModule:
 
         assert result is False
 
+    @patch(
+        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+    )
+    @patch(
+        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        return_value="a" * 40,
+    )
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
-    def test_update_git_error(self, mock_pull):
+    def test_update_git_error(self, mock_pull, mock_resolve, mock_ensure_state):
         """Test handling of GitError during update."""
         from quickscale_core.utils.git_utils import GitError
 
         mock_pull.side_effect = GitError("Pull failed")
+        mock_ensure_state.return_value = Mock(modules={"auth": Mock(version="0.71.0")})
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
         # Should not raise - error is handled internally
@@ -1684,3 +1728,335 @@ class TestPushCommand:
         result = runner.invoke(push, ["--module", "auth"])
 
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 2.3b: update-path provenance persistence and safeguards
+# ---------------------------------------------------------------------------
+
+
+class TestUpdatePathProvenancePersistence:
+    """Tests for Phase 2.3b update-path commit_sha persistence."""
+
+    def test_update_persists_commit_sha_from_resolved_source_ref(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """Update must persist the resolved source ref as commit_sha in state.yml."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        state_path = quickscale_dir / "state.yml"
+        state_path.write_text(
+            "\n".join(
+                [
+                    'version: "1"',
+                    "project:",
+                    "  slug: myproject",
+                    "  package: myproject",
+                    "  theme: showcase_html",
+                    '  created_at: "2025-01-01T00:00:00"',
+                    '  last_applied: "2025-01-01T00:00:00"',
+                    "modules:",
+                    "  auth:",
+                    "    name: auth",
+                    '    version: "0.71.0"',
+                    '    commit_sha: "old_sha"',
+                    '    embedded_at: "2025-01-01T00:00:00"',
+                    "    prefix: modules/auth",
+                    "    branch: splits/auth-module",
+                    '    installed_at: "2025-01-01"',
+                ]
+            )
+            + "\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        expected_sha = "a" * 40
+
+        def _fake_subtree_pull(*, prefix, remote, branch, squash):
+            del remote, branch, squash
+            (tmp_path / prefix / "module.yml").write_text(
+                'name: auth\nversion: "0.82.0"\n'
+            )
+            return "updated"
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value=expected_sha,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                side_effect=_fake_subtree_pull,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.82.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+            ),
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is True
+
+        # Verify commit_sha was persisted to state.yml.
+        import yaml
+
+        persisted = yaml.safe_load(state_path.read_text())
+        assert persisted["modules"]["auth"]["commit_sha"] == expected_sha
+        assert persisted["modules"]["auth"]["version"] == "0.82.0"
+
+    def test_update_aborts_when_authoritative_metadata_unavailable(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        """Update must abort before git mutation when project metadata cannot be derived."""
+        # No state.yml, no quickscale.yml — metadata cannot be derived.
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref"
+            ) as mock_resolve,
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+            ) as mock_pull,
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        captured = capsys.readouterr()
+        assert result is False
+        assert "authoritative project metadata" in captured.err
+        mock_resolve.assert_not_called()
+        mock_pull.assert_not_called()
+
+    def test_update_materializes_config_only_state_before_provenance(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """Config-only projects must materialize state.yml before provenance persistence."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        # quickscale.yml provides project metadata and includes the module.
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth: {}\n"
+        )
+
+        # Legacy config.yml provides module tracking (no state.yml).
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "config.yml").write_text(
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules:\n"
+            "  auth:\n"
+            "    prefix: modules/auth\n"
+            "    branch: splits/auth-module\n"
+            "    installed_version: '0.71.0'\n"
+            "    installed_at: '2025-01-01'\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        expected_sha = "b" * 40
+
+        def _fake_subtree_pull(*, prefix, remote, branch, squash):
+            del remote, branch, squash
+            (tmp_path / prefix / "module.yml").write_text(
+                'name: auth\nversion: "0.82.0"\n'
+            )
+            return "updated"
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value=expected_sha,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                side_effect=_fake_subtree_pull,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.82.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+            ),
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is True
+
+        # Verify state.yml was materialized and contains provenance.
+        import yaml
+
+        state_path = quickscale_dir / "state.yml"
+        assert state_path.exists()
+        persisted = yaml.safe_load(state_path.read_text())
+        assert persisted["project"]["slug"] == "myproject"
+        assert persisted["project"]["package"] == "myproject"
+        assert persisted["project"]["theme"] == "showcase_html"
+        assert "auth" in persisted["modules"]
+        assert persisted["modules"]["auth"]["commit_sha"] == expected_sha
+        assert persisted["modules"]["auth"]["version"] == "0.82.0"
+
+    def test_update_resolves_source_ref_once_and_reuses_it(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """The resolved source ref must be used for both pull and persistence."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "\n".join(
+                [
+                    'version: "1"',
+                    "project:",
+                    "  slug: myproject",
+                    "  package: myproject",
+                    "  theme: showcase_html",
+                    "modules:",
+                    "  auth:",
+                    "    name: auth",
+                    '    version: "0.71.0"',
+                    '    embedded_at: "2025-01-01T00:00:00"',
+                    "    prefix: modules/auth",
+                    "    branch: splits/auth-module",
+                    '    installed_at: "2025-01-01"',
+                ]
+            )
+            + "\n"
+        )
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        expected_sha = "c" * 40
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value=expected_sha,
+            ) as mock_resolve,
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                return_value="updated",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.82.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version",
+            ) as mock_sync,
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is True
+        mock_resolve.assert_called_once_with(
+            "https://example.com/repo.git", "splits/auth-module"
+        )
+        # Verify the same SHA was passed to _sync_state_module_version.
+        mock_sync.assert_called_once()
+        assert mock_sync.call_args.kwargs["commit_sha"] == expected_sha
+
+    def test_update_aborts_when_source_ref_cannot_be_resolved(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        """Update must abort before subtree pull when source ref resolution fails."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "\n".join(
+                [
+                    'version: "1"',
+                    "project:",
+                    "  slug: myproject",
+                    "  package: myproject",
+                    "  theme: showcase_html",
+                    "modules:",
+                    "  auth:",
+                    "    name: auth",
+                    '    version: "0.71.0"',
+                    '    embedded_at: "2025-01-01T00:00:00"',
+                    "    prefix: modules/auth",
+                    "    branch: splits/auth-module",
+                    '    installed_at: "2025-01-01"',
+                ]
+            )
+            + "\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        from quickscale_core.utils.git_utils import GitError
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                side_effect=GitError("Remote branch not found"),
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+            ) as mock_pull,
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        captured = capsys.readouterr()
+        assert result is False
+        assert "resolve source ref" in captured.err
+        mock_pull.assert_not_called()

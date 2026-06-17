@@ -12,6 +12,7 @@ from quickscale_core.utils.git_utils import (
     get_remote_url,
     is_git_repo,
     is_working_directory_clean,
+    resolve_remote_ref,
     run_git_subtree_add,
     run_git_subtree_pull,
     run_git_subtree_push,
@@ -191,3 +192,45 @@ class TestGetRemoteUrl:
         mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="error")
         with pytest.raises(GitError, match="Failed to get remote URL"):
             get_remote_url()
+
+
+class TestResolveRemoteRef:
+    """Tests for resolve_remote_ref function."""
+
+    @patch("subprocess.run")
+    def test_resolves_branch_to_commit_sha(self, mock_run: MagicMock) -> None:
+        """resolve_remote_ref returns the 40-char SHA from ls-remote."""
+        mock_run.return_value = MagicMock(
+            stdout="a" * 40 + "\trefs/heads/splits/auth-module\n",
+            returncode=0,
+        )
+        sha = resolve_remote_ref("https://github.com/repo.git", "splits/auth-module")
+        assert sha == "a" * 40
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args[:3] == ["git", "ls-remote", "--heads"]
+
+    @patch("subprocess.run")
+    def test_raises_when_branch_not_found(self, mock_run: MagicMock) -> None:
+        """resolve_remote_ref raises GitError when the branch is missing."""
+        mock_run.return_value = MagicMock(stdout="", returncode=0)
+        with pytest.raises(GitError, match="not found"):
+            resolve_remote_ref("https://github.com/repo.git", "splits/missing")
+
+    @patch("subprocess.run")
+    def test_raises_on_ls_remote_failure(self, mock_run: MagicMock) -> None:
+        """resolve_remote_ref raises GitError on ls-remote command failure."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "git", stderr="fatal: not found"
+        )
+        with pytest.raises(GitError, match="Failed to resolve remote ref"):
+            resolve_remote_ref("https://github.com/repo.git", "splits/auth-module")
+
+    @patch("subprocess.run")
+    def test_raises_on_unexpected_sha_length(self, mock_run: MagicMock) -> None:
+        """resolve_remote_ref raises GitError when SHA is not 40 chars."""
+        mock_run.return_value = MagicMock(
+            stdout="short\trefs/heads/main\n", returncode=0
+        )
+        with pytest.raises(GitError, match="Unexpected ref format"):
+            resolve_remote_ref("https://github.com/repo.git", "main")
