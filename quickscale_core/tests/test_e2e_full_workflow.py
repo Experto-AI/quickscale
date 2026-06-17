@@ -1291,7 +1291,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
     Django boots -> module URL responds, for the auth module in both the
     HTML and React starter themes.
 
-    The auth module's wiring spec (see module_wiring_specs._auth_wiring)
+    The auth module's wiring spec (see manifest adapter for auth)
     mounts allauth and the module's own URLs at the ``accounts/`` prefix,
     so the login URL served by the module is ``/accounts/login/``.
     """

@@ -82,6 +82,14 @@ class TestManifestAdapterRegistry:
         """The storage registry entry is callable."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["storage"])
 
+    def test_social_registered_at_import(self) -> None:
+        """Social adapter is registered when entry_point module loads."""
+        assert "social" in MANIFEST_ADAPTER_REGISTRY
+
+    def test_social_value_is_callable(self) -> None:
+        """The social registry entry is callable."""
+        assert callable(MANIFEST_ADAPTER_REGISTRY["social"])
+
     def test_importable_from_manifest_package(self) -> None:
         """MANIFEST_ADAPTER_REGISTRY is importable from quickscale_core.manifest."""
         assert MANIFEST_ADAPTER_REGISTRY is REGISTRY_DIRECT
@@ -227,8 +235,12 @@ _REGISTERED_ADAPTERS = [
     "listings",
     "notifications",
     "orgs",
+    "social",
     "storage",
 ]
+
+# Adapters that require project_package to build a spec.
+_ADAPTERS_REQUIRING_PROJECT_PACKAGE = frozenset({"social"})
 
 
 class TestRegisteredAdapterPaths:
@@ -328,9 +340,23 @@ class TestRegisteredAdapterPaths:
         assert isinstance(spec, ModuleWiringSpec)
         assert "quickscale_modules_storage" in spec.apps
 
+    def test_social_adapter_returns_spec(self) -> None:
+        spec = build_manifest_wiring_spec("social", {}, project_package="myproject")
+        assert isinstance(spec, ModuleWiringSpec)
+        assert spec.apps == ()
+        assert "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED" in spec.settings
+        assert len(spec.managed_files) == 3
+
+    def test_social_adapter_requires_project_package(self) -> None:
+        """Social adapter raises ValueError without project_package."""
+        with pytest.raises(ValueError, match="project_package"):
+            build_manifest_wiring_spec("social", {})
+
     def test_each_adapter_accepts_none_options(self) -> None:
         """Every registered adapter tolerates options=None."""
         for name in _REGISTERED_ADAPTERS:
+            if name in _ADAPTERS_REQUIRING_PROJECT_PACKAGE:
+                continue
             spec = build_manifest_wiring_spec(name, None)
             assert isinstance(spec, ModuleWiringSpec), (
                 f"{name} adapter did not return ModuleWiringSpec with None options"
@@ -339,6 +365,8 @@ class TestRegisteredAdapterPaths:
     def test_each_adapter_accepts_empty_options(self) -> None:
         """Every registered adapter tolerates options={}."""
         for name in _REGISTERED_ADAPTERS:
+            if name in _ADAPTERS_REQUIRING_PROJECT_PACKAGE:
+                continue
             spec = build_manifest_wiring_spec(name, {})
             assert isinstance(spec, ModuleWiringSpec), (
                 f"{name} adapter did not return ModuleWiringSpec with empty options"

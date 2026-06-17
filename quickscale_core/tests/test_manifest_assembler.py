@@ -5,7 +5,7 @@ These tests cover:
 - assemble_wiring_spec: post_hook seam (receives correct args, can augment).
 - PostResolutionHook: type alias importable from the package.
 - Frozen ModuleWiringSpec is returned.
-- managed_files defaults to empty (A4 deferred).
+- managed_files populated from resolver result declarations (Phase 1.3).
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from quickscale_core.manifest.assembler import (
     PostResolutionHook as PostResolutionHookDirect,
     assemble_wiring_spec as assemble_wiring_spec_direct,
 )
+from quickscale_core.manifest.schema import ManagedFileDeclaration
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 
@@ -39,6 +40,7 @@ def _make_result(
     middleware: tuple[str, ...] = (),
     url_includes: tuple[tuple[str, str], ...] = (),
     pre_home_url_includes: tuple[tuple[str, str], ...] = (),
+    managed_files: tuple[ManagedFileDeclaration, ...] = (),
 ) -> ResolverResult:
     return ResolverResult(
         module_name=module_name,
@@ -49,6 +51,7 @@ def _make_result(
         middleware=middleware,
         url_includes=url_includes,
         pre_home_url_includes=pre_home_url_includes,
+        managed_files=managed_files,
     )
 
 
@@ -252,6 +255,100 @@ class TestPostResolutionHook:
         result_cors = _make_result(resolved={"cors_enabled": True})
         spec_cors = assemble_wiring_spec(result_cors, post_hook=middleware_hook)
         assert "django.middleware.common.CorsMiddleware" in spec_cors.middleware
+
+
+# ---------------------------------------------------------------------------
+# Managed files emission (Phase 1.3)
+# ---------------------------------------------------------------------------
+
+
+class TestAssembleManagedFiles:
+    """Tests for managed_files population from ResolverResult declarations."""
+
+    def test_empty_declarations_produce_empty_managed_files(self) -> None:
+        """No managed_files declarations -> empty managed_files dict."""
+        result = _make_result()
+        spec = assemble_wiring_spec(result)
+        assert spec.managed_files == {}
+
+    def test_single_declaration_emitted(self) -> None:
+        """A single managed_files declaration is emitted as output_path -> renderer."""
+        decl = ManagedFileDeclaration(
+            key="social_link_tree",
+            renderer="social/link_tree.html",
+            output_path="quickscale_managed/social/link_tree.html",
+        )
+        result = _make_result(managed_files=(decl,))
+        spec = assemble_wiring_spec(result)
+        assert spec.managed_files == {
+            "quickscale_managed/social/link_tree.html": "social/link_tree.html",
+        }
+
+    def test_multiple_declarations_emitted(self) -> None:
+        """Multiple declarations are all emitted."""
+        decl1 = ManagedFileDeclaration(
+            key="file_a",
+            renderer="renderer_a",
+            output_path="quickscale_managed/a.html",
+        )
+        decl2 = ManagedFileDeclaration(
+            key="file_b",
+            renderer="renderer_b",
+            output_path="quickscale_managed/b.html",
+        )
+        result = _make_result(managed_files=(decl1, decl2))
+        spec = assemble_wiring_spec(result)
+        assert spec.managed_files == {
+            "quickscale_managed/a.html": "renderer_a",
+            "quickscale_managed/b.html": "renderer_b",
+        }
+
+    def test_invalid_path_silently_skipped(self) -> None:
+        """Declarations with paths outside quickscale_managed/ are skipped.
+
+        This is defense-in-depth; the loader already rejects such paths.
+        """
+        valid = ManagedFileDeclaration(
+            key="valid",
+            renderer="r",
+            output_path="quickscale_managed/valid.html",
+        )
+        invalid = ManagedFileDeclaration(
+            key="invalid",
+            renderer="r",
+            output_path="templates/escaped.html",
+        )
+        result = _make_result(managed_files=(valid, invalid))
+        spec = assemble_wiring_spec(result)
+        assert spec.managed_files == {
+            "quickscale_managed/valid.html": "r",
+        }
+        assert "templates/escaped.html" not in spec.managed_files
+
+    def test_managed_files_do_not_disturb_other_fields(self) -> None:
+        """Emit managed_files without disturbing apps/middleware/settings/url."""
+        decl = ManagedFileDeclaration(
+            key="f",
+            renderer="r",
+            output_path="quickscale_managed/f.html",
+        )
+        result = _make_result(
+            apps=("myapp",),
+            middleware=("myapp.mw.M",),
+            derived_settings={"SETTING_A": "value_a"},
+            url_includes=(("blog/", "myapp.blog.urls"),),
+            pre_home_url_includes=(("robots.txt", "myapp.robots"),),
+            managed_files=(decl,),
+        )
+        spec = assemble_wiring_spec(result)
+        # All other fields are populated normally
+        assert spec.apps == ("myapp",)
+        assert spec.middleware == ("myapp.mw.M",)
+        assert spec.settings == {"SETTING_A": "value_a"}
+        assert spec.url_includes == (("blog/", "myapp.blog.urls"),)
+        assert spec.pre_home_url_includes == (("robots.txt", "myapp.robots"),)
+        # And managed_files is also populated
+        assert spec.managed_files == {"quickscale_managed/f.html": "r"}
 
 
 # ---------------------------------------------------------------------------

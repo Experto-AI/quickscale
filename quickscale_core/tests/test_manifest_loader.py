@@ -350,3 +350,138 @@ version: "0.71.0"
 
         result = get_manifest_for_module(project_path, "broken")
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Managed files parsing
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestManagedFiles:
+    """Tests for the managed_files section in load_manifest."""
+
+    def test_no_managed_files_section(self) -> None:
+        """Manifests without managed_files produce an empty dict."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.managed_files == {}
+
+    def test_empty_managed_files_section(self) -> None:
+        """An empty managed_files section is accepted."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nmanaged_files: {}\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.managed_files == {}
+
+    def test_valid_managed_files(self) -> None:
+        """Valid managed_files entries are parsed correctly."""
+        yaml_content = """
+name: social
+version: "0.79.0"
+managed_files:
+  social_link_tree:
+    renderer: social/link_tree.html
+    output_path: quickscale_managed/social/link_tree.html
+  social_embeds:
+    renderer: social/embeds.html
+    output_path: quickscale_managed/social/embeds.html
+"""
+        manifest = load_manifest(yaml_content, "social")
+        assert len(manifest.managed_files) == 2
+        assert "social_link_tree" in manifest.managed_files
+        decl = manifest.managed_files["social_link_tree"]
+        assert decl.key == "social_link_tree"
+        assert decl.renderer == "social/link_tree.html"
+        assert decl.output_path == "quickscale_managed/social/link_tree.html"
+
+    def test_managed_files_not_mapping_raises(self) -> None:
+        """managed_files that is not a mapping raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nmanaged_files: not_a_mapping\n"
+        with pytest.raises(ManifestError, match="managed_files"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_managed_files_entry_not_mapping_raises(self) -> None:
+        """A managed_files entry that is not a mapping raises ManifestError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\nmanaged_files:\n  my_file: not_a_mapping\n"
+        )
+        with pytest.raises(ManifestError, match="managed_files.my_file"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_managed_files_missing_renderer_raises(self) -> None:
+        """A managed_files entry without renderer raises ManifestError."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+managed_files:
+  my_file:
+    output_path: quickscale_managed/f.html
+"""
+        with pytest.raises(ManifestError, match="renderer"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_managed_files_empty_renderer_raises(self) -> None:
+        """A managed_files entry with empty renderer raises ManifestError."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+managed_files:
+  my_file:
+    renderer: ""
+    output_path: quickscale_managed/f.html
+"""
+        with pytest.raises(ManifestError, match="renderer"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_managed_files_missing_output_path_raises(self) -> None:
+        """A managed_files entry without output_path raises ManifestError."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+managed_files:
+  my_file:
+    renderer: some_renderer
+"""
+        with pytest.raises(ManifestError, match="output_path"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_managed_files_path_outside_managed_root_raises(self) -> None:
+        """A managed_files entry with path outside quickscale_managed/ raises."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+managed_files:
+  my_file:
+    renderer: some_renderer
+    output_path: templates/escaped.html
+"""
+        with pytest.raises(ManifestError, match="quickscale_managed/"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_managed_files_path_traversal_raises(self) -> None:
+        """Path traversal attempts outside quickscale_managed/ are rejected."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+managed_files:
+  my_file:
+    renderer: some_renderer
+    output_path: quickscale_managed/../etc/passwd
+"""
+        with pytest.raises(ManifestError, match="quickscale_managed/"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_managed_files_entry_with_none_value_accepted(self) -> None:
+        """A managed_files entry with null value is treated as empty mapping.
+
+        This matches the config option behavior where null values are
+        accepted as empty mappings.
+        """
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+managed_files:
+  my_file:
+"""
+        # Should raise because renderer is required
+        with pytest.raises(ManifestError, match="renderer"):
+            load_manifest(yaml_content, "mymod")

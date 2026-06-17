@@ -51,7 +51,9 @@ from quickscale_core.manifest.resolver import (
     resolve_module_config,
 )
 from quickscale_core.manifest.schema import (
+    MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
+    ManagedFileDeclaration,
     ModuleManifest,
 )
 
@@ -60,6 +62,8 @@ __all__ = [
     "DerivedSetting",
     "LegacyKeyAlias",
     "MANIFEST_ADAPTER_REGISTRY",
+    "MANAGED_FILE_ROOT_PREFIX",
+    "ManagedFileDeclaration",
     "ManifestAdapterNotFound",
     "ManifestError",
     "ModuleDerivationSchema",

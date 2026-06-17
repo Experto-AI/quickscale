@@ -1,6 +1,11 @@
 """Tests for module manifest schema"""
 
-from quickscale_core.manifest import ConfigOption, ModuleManifest
+from quickscale_core.manifest import (
+    ConfigOption,
+    ManagedFileDeclaration,
+    ModuleManifest,
+)
+from quickscale_core.manifest.schema import MANAGED_FILE_ROOT_PREFIX
 
 
 class TestConfigOption:
@@ -323,3 +328,113 @@ class TestModuleManifest:
             immutable_options={"max_retries": option},
         )
         assert manifest.get_defaults()["max_retries"] == 3
+
+
+# ---------------------------------------------------------------------------
+# ManagedFileDeclaration
+# ---------------------------------------------------------------------------
+
+
+class TestManagedFileDeclaration:
+    """Tests for the ManagedFileDeclaration dataclass."""
+
+    def test_creation(self) -> None:
+        """ManagedFileDeclaration stores key, renderer, and output_path."""
+        decl = ManagedFileDeclaration(
+            key="social_link_tree",
+            renderer="social/link_tree.html",
+            output_path="quickscale_managed/social/link_tree.html",
+        )
+        assert decl.key == "social_link_tree"
+        assert decl.renderer == "social/link_tree.html"
+        assert decl.output_path == "quickscale_managed/social/link_tree.html"
+
+    def test_frozen(self) -> None:
+        """ManagedFileDeclaration instances are immutable."""
+        import pytest
+
+        decl = ManagedFileDeclaration(
+            key="k", renderer="r", output_path="quickscale_managed/f.html"
+        )
+        with pytest.raises(AttributeError):
+            decl.key = "other"  # type: ignore[misc]
+
+    def test_is_within_managed_root_true(self) -> None:
+        """is_within_managed_root returns True for valid paths."""
+        decl = ManagedFileDeclaration(
+            key="k",
+            renderer="r",
+            output_path="quickscale_managed/social/embeds.html",
+        )
+        assert decl.is_within_managed_root is True
+
+    def test_is_within_managed_root_false(self) -> None:
+        """is_within_managed_root returns False for paths outside the prefix."""
+        decl = ManagedFileDeclaration(
+            key="k",
+            renderer="r",
+            output_path="templates/escaped.html",
+        )
+        assert decl.is_within_managed_root is False
+
+    def test_managed_file_root_prefix_constant(self) -> None:
+        """The root prefix constant is the expected value."""
+        assert MANAGED_FILE_ROOT_PREFIX == "quickscale_managed/"
+
+
+class TestModuleManifestManagedFiles:
+    """Tests for ModuleManifest.managed_files field."""
+
+    def test_default_empty(self) -> None:
+        """ModuleManifest defaults managed_files to empty dict."""
+        manifest = ModuleManifest(name="m", version="1.0.0")
+        assert manifest.managed_files == {}
+
+    def test_managed_files_populated(self) -> None:
+        """ModuleManifest accepts managed_files declarations."""
+        decl = ManagedFileDeclaration(
+            key="social_link_tree",
+            renderer="social/link_tree.html",
+            output_path="quickscale_managed/social/link_tree.html",
+        )
+        manifest = ModuleManifest(
+            name="social",
+            version="0.79.0",
+            managed_files={"social_link_tree": decl},
+        )
+        assert "social_link_tree" in manifest.managed_files
+        assert manifest.managed_files["social_link_tree"] is decl
+
+    def test_managed_files_not_in_defaults(self) -> None:
+        """Managed-file declarations do not appear in config option defaults.
+
+        This proves that managed_files live outside the mutable/immutable
+        config option system and cannot leak into config defaults.
+        """
+        decl = ManagedFileDeclaration(
+            key="social_link_tree",
+            renderer="social/link_tree.html",
+            output_path="quickscale_managed/social/link_tree.html",
+        )
+        manifest = ModuleManifest(
+            name="social",
+            version="0.79.0",
+            managed_files={"social_link_tree": decl},
+        )
+        defaults = manifest.get_defaults()
+        assert "social_link_tree" not in defaults
+        assert defaults == {}
+
+    def test_managed_files_not_in_all_options(self) -> None:
+        """Managed-file declarations are not returned by get_all_options."""
+        decl = ManagedFileDeclaration(
+            key="link_tree",
+            renderer="r",
+            output_path="quickscale_managed/f.html",
+        )
+        manifest = ModuleManifest(
+            name="m",
+            version="1.0.0",
+            managed_files={"link_tree": decl},
+        )
+        assert "link_tree" not in manifest.get_all_options()

@@ -117,8 +117,8 @@ class DerivedSetting:
 
     Derived settings describe how module configuration options translate
     into the Django ``settings.py`` keys that the module's runtime code
-    reads.  This replaces the imperative derivation logic currently
-    scattered across CLI contract files and ``module_wiring_specs.py``.
+    reads.  This replaces the imperative derivation logic previously
+    scattered across CLI contract files.
 
     Attributes:
         setting_key: The Django setting name (e.g.

@@ -20,7 +20,8 @@ from quickscale_cli.commands.module_config import (
     get_default_blog_config,
     get_default_listings_config,
     has_migrations_been_run,
-    MODULE_CONFIGURATORS,
+    MODULE_CONFIGURATOR_REGISTRY,
+    ModuleConfigurator,
 )
 
 
@@ -341,39 +342,46 @@ class TestListingsModuleConfig:
 
 
 class TestModuleConfigurators:
-    """Tests for MODULE_CONFIGURATORS dictionary."""
+    """Tests for MODULE_CONFIGURATOR_REGISTRY."""
 
-    def test_module_configurators_structure(self):
-        """Test that MODULE_CONFIGURATORS is properly structured."""
-        assert "auth" in MODULE_CONFIGURATORS
-        assert "blog" in MODULE_CONFIGURATORS
-        assert "listings" in MODULE_CONFIGURATORS
+    def test_module_configurator_registry_structure(self):
+        """Test that MODULE_CONFIGURATOR_REGISTRY is properly structured."""
+        assert "auth" in MODULE_CONFIGURATOR_REGISTRY
+        assert "blog" in MODULE_CONFIGURATOR_REGISTRY
+        assert "listings" in MODULE_CONFIGURATOR_REGISTRY
 
-        # Each module should have (configurator, applier) tuple
-        for module, (configurator, applier) in MODULE_CONFIGURATORS.items():
-            assert callable(configurator)
-            assert callable(applier)
+        for name, entry in MODULE_CONFIGURATOR_REGISTRY.items():
+            assert isinstance(entry, ModuleConfigurator)
+            assert entry.name == name
+            assert callable(entry.configure)
+            assert callable(entry.apply)
 
-    def test_auth_configurator_in_dict(self):
-        """Test auth configurator is accessible from MODULE_CONFIGURATORS."""
-        configurator, applier = MODULE_CONFIGURATORS["auth"]
+    def test_module_configurator_registry_has_defaults(self):
+        """Every registered configurator should expose a get_defaults factory."""
+        for name, entry in MODULE_CONFIGURATOR_REGISTRY.items():
+            assert entry.get_defaults is not None, (
+                f"{name} configurator is missing get_defaults"
+            )
+            defaults = entry.get_defaults()
+            assert isinstance(defaults, dict)
 
-        # Test configurator works
-        config = configurator(non_interactive=True)
+    def test_auth_configurator_in_registry(self):
+        """Test auth configurator is accessible from MODULE_CONFIGURATOR_REGISTRY."""
+        entry = MODULE_CONFIGURATOR_REGISTRY["auth"]
+
+        config = entry.configure(non_interactive=True)
         assert "registration_enabled" in config
 
-    def test_blog_configurator_in_dict(self):
-        """Test blog configurator is accessible from MODULE_CONFIGURATORS."""
-        configurator, applier = MODULE_CONFIGURATORS["blog"]
+    def test_blog_configurator_in_registry(self):
+        """Test blog configurator is accessible from MODULE_CONFIGURATOR_REGISTRY."""
+        entry = MODULE_CONFIGURATOR_REGISTRY["blog"]
 
-        # Test configurator works
-        config = configurator(non_interactive=True)
+        config = entry.configure(non_interactive=True)
         assert "enable_rss" in config
 
-    def test_listings_configurator_in_dict(self):
-        """Test listings configurator is accessible from MODULE_CONFIGURATORS."""
-        configurator, applier = MODULE_CONFIGURATORS["listings"]
+    def test_listings_configurator_in_registry(self):
+        """Test listings configurator is accessible from MODULE_CONFIGURATOR_REGISTRY."""
+        entry = MODULE_CONFIGURATOR_REGISTRY["listings"]
 
-        # Test configurator works
-        config = configurator(non_interactive=True)
+        config = entry.configure(non_interactive=True)
         assert "listings_per_page" in config

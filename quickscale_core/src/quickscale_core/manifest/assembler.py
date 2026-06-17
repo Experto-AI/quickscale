@@ -2,13 +2,8 @@
 
 Turns a :class:`~quickscale_core.manifest.resolver.ResolverResult` (the
 output of the manifest-driven resolver) into a
-:class:`~quickscale_core.module_wiring.ModuleWiringSpec` that the legacy
-wiring renderer can write to disk.
-
-This module is **additive** — it does not alter the existing
-``build_module_wiring_specs`` / ``write_managed_wiring`` pipeline.  It
-introduces a companion assembly path that future module adapters will use
-instead of the imperative contract-file pattern.
+:class:`~quickscale_core.module_wiring.ModuleWiringSpec` that the wiring
+renderer can write to disk.
 
 Post-resolution hook seam
 --------------------------
@@ -36,6 +31,7 @@ from collections.abc import Callable
 from typing import Any
 
 from quickscale_core.manifest.resolver import ResolverResult
+from quickscale_core.manifest.schema import MANAGED_FILE_ROOT_PREFIX
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 
@@ -66,6 +62,33 @@ Returns:
 # ---------------------------------------------------------------------------
 
 
+def _build_managed_files_mapping(
+    result: ResolverResult,
+) -> dict[str, str]:
+    """Convert managed-file declarations into a ``ModuleWiringSpec`` mapping.
+
+    Each declaration's ``output_path`` becomes the key and its ``renderer``
+    identifier becomes the value.  This is a structural placeholder —
+    content generation is deferred to a later phase.
+
+    Declarations whose ``output_path`` does not start with
+    ``quickscale_managed/`` are silently skipped as a defense-in-depth
+    measure (the loader already rejects such paths at parse time).
+
+    Args:
+        result: The resolver result carrying managed-file declarations.
+
+    Returns:
+        A dict mapping output paths to renderer identifiers.
+    """
+    managed: dict[str, str] = {}
+    for declaration in result.managed_files:
+        if not declaration.output_path.startswith(MANAGED_FILE_ROOT_PREFIX):
+            continue
+        managed[declaration.output_path] = declaration.renderer
+    return managed
+
+
 def assemble_wiring_spec(
     result: ResolverResult,
     *,
@@ -76,8 +99,10 @@ def assemble_wiring_spec(
 
     Copies the resolver-projected wiring fields (apps, middleware,
     url_includes, pre_home_url_includes) and derived settings directly into
-    a frozen ``ModuleWiringSpec``.  The ``managed_files`` field is left empty
-    (managed-file codegen is deferred to phase A4).
+    a frozen ``ModuleWiringSpec``.  The ``managed_files`` field is populated
+    from the resolver result's manifest-declared managed-file declarations:
+    each declaration's ``output_path`` maps to its ``renderer`` identifier.
+    Content generation for managed files is deferred to a later phase.
 
     If a *post_hook* is provided it is called with the assembled spec and a
     copy of the resolved options dict, allowing adapter code to override or
@@ -100,7 +125,7 @@ def assemble_wiring_spec(
         settings=dict(result.derived_settings),
         pre_home_url_includes=result.pre_home_url_includes,
         url_includes=result.url_includes,
-        managed_files={},
+        managed_files=_build_managed_files_mapping(result),
     )
 
     if post_hook is not None:

@@ -6,8 +6,7 @@ expectations and verify that the manifest-driven replacement
 entry point.
 
 The gold values below were recovered from the listings ``module.yml``
-manifest and the ``_listings_wiring`` function in
-``module_wiring_specs.py`` (lines 173–189).
+manifest and the ``listings_manifest.py`` adapter.
 
 Scope
 -----

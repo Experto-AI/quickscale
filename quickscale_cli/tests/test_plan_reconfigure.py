@@ -6,7 +6,11 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.plan_command import _get_project_info_for_reconfig, plan
+from quickscale_cli.commands.plan_command import (
+    _configure_selected_modules,
+    _get_project_info_for_reconfig,
+    plan,
+)
 from quickscale_cli.notifications_manifest import default_notifications_module_options
 
 
@@ -804,3 +808,142 @@ docker:
             assert "backend: s3" in content
             assert "public_base_url: https://cdn.example.com/media" in content
             assert "bucket_name: assets" in content
+
+
+class TestConfigureSelectedModulesEmptyNewModules:
+    """Regression tests for CR-M6-004: empty new_modules must not fall back to all."""
+
+    def test_empty_new_modules_prompts_reconfigure_instead_of_running_immediately(
+        self,
+    ) -> None:
+        """An explicit empty new_modules set must prompt for reconfiguration.
+
+        When ``--reconfigure --configure-modules`` is used and the user adds no
+        new modules, ``new_modules`` is an empty set.  The function must NOT
+        treat that as "all modules are new" and run configurators immediately.
+        Instead, it should prompt whether to reconfigure each existing module.
+        """
+        from click.testing import CliRunner
+
+        import click
+
+        existing_options = {"storage": {"backend": "local", "public_base_url": ""}}
+
+        @click.command()
+        def _probe() -> None:
+            configured = _configure_selected_modules(
+                ["storage"],
+                existing_options,
+                new_modules=set(),
+                allow_reconfigure_existing=True,
+            )
+            # If the user declined reconfiguration, the original options
+            # should be preserved (not replaced by configurator output).
+            click.echo(f"RESULT:{configured['storage']['backend']}")
+
+        runner = CliRunner()
+        # User declines reconfiguration for the existing storage module.
+        invoke_result = runner.invoke(_probe, input="n\n")
+        assert "Reconfigure storage module options?" in invoke_result.output
+        assert "RESULT:local" in invoke_result.output
+
+    def test_none_new_modules_treats_all_as_new(self) -> None:
+        """When new_modules is None, all modules should be treated as new."""
+        from click.testing import CliRunner
+
+        import click
+
+        existing_options = {"storage": {"backend": "local", "public_base_url": ""}}
+
+        @click.command()
+        def _probe() -> None:
+            configured = _configure_selected_modules(
+                ["storage"],
+                existing_options,
+                new_modules=None,
+                allow_reconfigure_existing=False,
+            )
+            # With new_modules=None, storage is treated as new and its
+            # configurator runs immediately (default backend is "local").
+            click.echo(f"RESULT:{configured['storage']['backend']}")
+
+        runner = CliRunner()
+        # The storage configurator will prompt for backend choice.
+        # Accept the default ("local") by sending empty input + extra prompts.
+        invoke_result = runner.invoke(
+            _probe,
+            input="\n\n\n\n\n\n\n\n\n\n\n\n",
+        )
+        # The configurator should have run (no "Reconfigure" prompt).
+        assert "Reconfigure storage module options?" not in invoke_result.output
+        assert "RESULT:local" in invoke_result.output
+
+    def test_reconfigure_configure_modules_no_new_modules_preserves_options(
+        self,
+    ) -> None:
+        """Full integration: --reconfigure --configure-modules with no new modules.
+
+        When the user declines adding modules and declines reconfiguring
+        existing modules, the original options should be preserved.
+        """
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "storage": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {
+                                    "backend": "s3",
+                                    "public_base_url": "https://cdn.example.com/media",
+                                },
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  storage:
+    backend: s3
+    public_base_url: https://cdn.example.com/media
+docker:
+  start: false
+"""
+                )
+
+            # Don't add modules (n), decline reconfigure storage (n),
+            # docker start (n), save (y).
+            result = runner.invoke(
+                plan,
+                ["--reconfigure", "--configure-modules"],
+                input="n\nn\nn\ny\n",
+            )
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                content = f.read()
+            # Original options should be preserved.
+            assert "backend: s3" in content
+            assert "public_base_url: https://cdn.example.com/media" in content
+            # The reconfigure prompt should have appeared.
+            assert "Reconfigure storage module options?" in result.output
