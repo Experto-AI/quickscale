@@ -54,7 +54,7 @@ git merge --no-ff wt-track{N}-<branch>
 | # | Track | Phase | Condition |
 |---|-------|-------|-----------|
 | M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
-| M1 | Track 1 | F11.1d + 11.1d.1 + 11.1g + 11.1g.1 | CRM-local nullable org ownership; legacy NULL-row uniqueness preserved; org-scoped creates stamp current org; queries scoped; isolation test still xfail |
+| M1 | Track 1 | F11.1d ✅ + 11.1d.1 + 11.1g + 11.1g.1 | **11.1d done:** nullable org FK on Tag/Company/Contact/Stage/Deal; ContactNote/DealNote parent-derived; CRM admin non-exposure explicit for all five admins; targeted migration/admin/serializer/model tests added; CRM baseline 158 passed / 1 xfailed. **Remaining:** legacy NULL-row uniqueness preserved (11.1d.1); org-scoped creates stamp current org (11.1g); queries scoped (11.1g.1); isolation test still xfail |
 | M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 12 wiring slices migrated |
@@ -176,13 +176,15 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M1
 **Dependencies:** None externally (pull v87 after M0, then continue in same worktree).
 
-**Status:** 🔴 Blocked as one batch. Do not implement this as a single change.
+**Status:** 🟡 11.1d complete; 11.1d.1 + 11.1g + 11.1g.1 pending. M1 is not yet met.
 
 **Explanation:** Plan review found the original M1 batch was still effectively Tier 3 because it mixed CRM ownership strategy, nullable schema rollout, uniqueness changes, org-scoped create behavior, and read-path scoping. Keep M1 inside CRM only: do **not** widen shared `TenantModel` nullability in `orgs`, preserve legacy `NULL`-owned uniqueness for `Tag` / `Stage` while ownership remains nullable, and land an explicit create-path bridge before org-scoped reads hide `NULL`-owned rows. The handoff slices below are the current non-Tier-3 breakdown; if any slice grows beyond a clean Tier 1–2 pass, split it again before implementation.
 
-**Phase 11.1d — CRM-local nullable ownership groundwork** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-- [ ] Add CRM-local nullable `organization_id` ownership to `Tag`, `Company`, `Contact`, `Stage`, and `Deal` without changing shared `TenantModel` nullability in `orgs`.
-- [ ] Keep `ContactNote` and `DealNote` parent-derived in M1 rather than adding direct org FKs in this batch.
+**Phase 11.1d — CRM-local nullable ownership groundwork** ✅ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+- [x] Add CRM-local nullable `organization_id` ownership to `Tag`, `Company`, `Contact`, `Stage`, and `Deal` without changing shared `TenantModel` nullability in `orgs`. _Migration `0004_add_organization_ownership.py` adds nullable `organization_id` FKs to all five models; model tests and migration tests cover the new fields. CRM admin classes remain non-exposed for all five admins (Tag, Company, Contact, Stage, Deal)._
+- [x] Keep `ContactNote` and `DealNote` parent-derived in M1 rather than adding direct org FKs in this batch. _Confirmed parent-derived — no direct org FK added; serializer tests cover the parent-derived contract._
+
+**Completion evidence (11.1d):** Targeted migration, admin, serializer, and model tests added. CRM baseline: 158 passed / 1 xfailed (the xfail is the known cross-tenant isolation assertion from Finding 14, unchanged by this slice). Query scoping, backfill, bootstrap, per-org uniqueness replacement, and NOT NULL enforcement remain in later slices.
 
 **Phase 11.1d.1 — Legacy-NULL-preserving uniqueness** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [ ] Replace global uniqueness on `Tag` / `Stage` only when the same migration preserves one legacy `NULL`-owned row globally and enforces per-org uniqueness for owned rows.

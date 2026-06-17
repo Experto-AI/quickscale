@@ -21,6 +21,13 @@ from django.utils import timezone
 class Tag(models.Model):
     """Generic tags for organizing contacts and deals"""
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_tags",
+    )
     name = models.CharField(max_length=50, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -35,6 +42,13 @@ class Tag(models.Model):
 class Company(models.Model):
     """Company/Organization entity"""
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_companies",
+    )
     name = models.CharField(max_length=200)
     industry = models.CharField(max_length=100, blank=True)
     website = models.URLField(blank=True)
@@ -61,6 +75,13 @@ class Contact(models.Model):
         ("inactive", "Inactive"),
     ]
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_contacts",
+    )
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     email = models.EmailField()
@@ -108,6 +129,13 @@ class Stage(models.Model):
         (TERMINAL_SEMANTIC_LOST, "Lost"),
     ]
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_stages",
+    )
     name = models.CharField(max_length=100)
     order = models.PositiveIntegerField(default=0)
     terminal_semantic = models.CharField(
@@ -130,6 +158,13 @@ class Stage(models.Model):
 class Deal(models.Model):
     """Sales opportunity/deal"""
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_deals",
+    )
     title = models.CharField(max_length=200)
     contact = models.ForeignKey(
         Contact,

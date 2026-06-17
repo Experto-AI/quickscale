@@ -116,3 +116,76 @@ class TestDealNoteAdmin:
         note_admin = DealNoteAdmin(DealNote, admin.site)
         result = note_admin.short_text(deal_note)
         assert len(result) <= 53  # 50 chars + "..."
+
+
+@pytest.mark.django_db
+class TestOrganizationFieldExcludedFromAdmin:
+    """Phase 11.1d: organization must be excluded from all five affected admin forms.
+
+    The nullable organization groundwork must not leak into the Django admin
+    surface.  Each of the five admin classes that own an organization FK
+    (Tag, Company, Contact, Stage, Deal) must explicitly exclude it from
+    both the ``exclude`` tuple and the generated form fields.
+    """
+
+    def test_tag_admin_excludes_organization(self):
+        """TagAdmin must exclude organization from its form."""
+        from quickscale_modules_crm.admin import TagAdmin
+
+        tag_admin = TagAdmin(Tag, admin.site)
+        assert "organization" in tag_admin.exclude
+        request = RequestFactory().get("/admin/")
+        form_class = tag_admin.get_form(request)
+        assert "organization" not in form_class.base_fields
+
+    def test_company_admin_excludes_organization(self):
+        """CompanyAdmin must exclude organization from its form."""
+        company_admin = CompanyAdmin(Company, admin.site)
+        assert "organization" in company_admin.exclude
+        request = RequestFactory().get("/admin/")
+        form_class = company_admin.get_form(request)
+        assert "organization" not in form_class.base_fields
+
+    def test_contact_admin_excludes_organization(self, staff_user):
+        """ContactAdmin must exclude organization from its form and fieldsets."""
+        from quickscale_modules_crm.admin import ContactAdmin
+
+        contact_admin = ContactAdmin(Contact, admin.site)
+        assert "organization" in contact_admin.exclude
+        request = RequestFactory().get("/admin/")
+        request.user = staff_user
+        form_class = contact_admin.get_form(request)
+        assert "organization" not in form_class.base_fields
+        # Also verify fieldsets do not reference organization.
+        fieldset_fields = [
+            field
+            for _, options in contact_admin.fieldsets
+            for field in options.get("fields", ())
+        ]
+        assert "organization" not in fieldset_fields
+
+    def test_stage_admin_excludes_organization(self):
+        """StageAdmin must exclude organization from its form."""
+        stage_admin = StageAdmin(Stage, admin.site)
+        assert "organization" in stage_admin.exclude
+        request = RequestFactory().get("/admin/")
+        form_class = stage_admin.get_form(request)
+        assert "organization" not in form_class.base_fields
+
+    def test_deal_admin_excludes_organization(self, staff_user):
+        """DealAdmin must exclude organization from its form and fieldsets."""
+        from quickscale_modules_crm.admin import DealAdmin
+
+        deal_admin = DealAdmin(Deal, admin.site)
+        assert "organization" in deal_admin.exclude
+        request = RequestFactory().get("/admin/")
+        request.user = staff_user
+        form_class = deal_admin.get_form(request)
+        assert "organization" not in form_class.base_fields
+        # Also verify fieldsets do not reference organization.
+        fieldset_fields = [
+            field
+            for _, options in deal_admin.fieldsets
+            for field in options.get("fields", ())
+        ]
+        assert "organization" not in fieldset_fields
