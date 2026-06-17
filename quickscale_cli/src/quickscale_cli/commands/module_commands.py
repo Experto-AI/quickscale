@@ -1100,10 +1100,15 @@ def _update_single_module(
                 return False
 
             try:
+                # Phase 2.3b (CR-M5-P3-005): bind the subtree pull to the
+                # exact resolved commit SHA so the pulled content matches
+                # the commit_sha persisted to state.yml.  Passing the branch
+                # name here would allow the pull to drift if the remote
+                # branch advances between resolve_remote_ref and subtree.
                 output = run_git_subtree_pull(
                     prefix=info.prefix,
                     remote=default_remote,
-                    branch=info.branch,
+                    branch=source_ref,
                     squash=True,
                 )
 

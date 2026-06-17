@@ -1201,10 +1201,13 @@ class TestUpdateSingleModule:
         )
 
         assert result is True
+        # CR-M5-P3-005: subtree pull must use the resolved SHA, not the
+        # branch name, so the pulled content is bound to the exact commit
+        # that was persisted to state.yml.
         mock_pull.assert_called_once_with(
             prefix="modules/auth",
             remote="https://example.com/repo.git",
-            branch="splits/auth-module",
+            branch="a" * 40,
             squash=True,
         )
         assert mock_sync_state.call_args.args[:2] == (Path.cwd(), "auth")
@@ -1292,6 +1295,51 @@ class TestUpdateSingleModule:
             "auth", module_info, "https://example.com/repo.git", no_preview=False
         )
         assert result is False
+
+    @patch(
+        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+    )
+    @patch("quickscale_cli.commands.module_commands._commit_module_update")
+    @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
+    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch(
+        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        return_value="b" * 40,
+    )
+    @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
+    def test_subtree_pull_uses_resolved_ref_not_branch_name(
+        self,
+        mock_pull,
+        mock_resolve,
+        mock_read_version,
+        mock_sync_state,
+        mock_commit,
+        mock_ensure_state,
+    ):
+        """CR-M5-P3-005 regression: subtree pull must bind to the resolved SHA.
+
+        Simulates a scenario where the remote branch could advance between
+        ``resolve_remote_ref`` and the subtree pull.  The pull must use the
+        exact SHA returned by ``resolve_remote_ref`` (not the branch name)
+        so the pulled content matches the ``commit_sha`` persisted to state.
+        """
+        mock_pull.return_value = "Changes applied"
+        mock_read_version.return_value = "0.83.0"
+        mock_ensure_state.return_value = Mock(modules={"auth": Mock(version="0.82.0")})
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        result = _update_single_module(
+            "auth", module_info, "https://example.com/repo.git", no_preview=True
+        )
+
+        assert result is True
+        # The subtree pull must receive the resolved SHA, not the branch name.
+        pull_kwargs = mock_pull.call_args
+        assert pull_kwargs.kwargs["branch"] == "b" * 40
+        assert pull_kwargs.kwargs["branch"] != "splits/auth-module"
+        # The commit_sha persisted to state must also be the resolved SHA.
+        sync_call_kwargs = mock_sync_state.call_args.kwargs
+        assert sync_call_kwargs["commit_sha"] == "b" * 40
 
 
 class TestCommitModuleUpdate:
@@ -1856,7 +1904,13 @@ class TestUpdatePathProvenancePersistence:
         tmp_path,
         monkeypatch,
     ):
-        """Config-only projects must materialize state.yml before provenance persistence."""
+        """Config-only projects must materialize state.yml before provenance persistence.
+
+        CR-M5-P3-006: materialization requires an existing state.yml with
+        authoritative timestamps.  This test provides a pre-M2 state.yml
+        (with timestamps but no consolidated module tracking) so that
+        materialization can proceed.
+        """
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
@@ -1872,9 +1926,20 @@ class TestUpdatePathProvenancePersistence:
             "  auth: {}\n"
         )
 
-        # Legacy config.yml provides module tracking (no state.yml).
+        # Pre-M2 state.yml with authoritative timestamps but no consolidated
+        # module tracking — the scenario that triggers materialization.
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        # Legacy config.yml provides module tracking.
         (quickscale_dir / "config.yml").write_text(
             "default_remote: https://github.com/Experto-AI/quickscale.git\n"
             "modules:\n"
@@ -1931,6 +1996,9 @@ class TestUpdatePathProvenancePersistence:
         assert persisted["project"]["slug"] == "myproject"
         assert persisted["project"]["package"] == "myproject"
         assert persisted["project"]["theme"] == "showcase_html"
+        # Timestamps preserved from the original state.yml.
+        assert persisted["project"]["created_at"] == "2024-06-15T10:30:00"
+        assert persisted["project"]["last_applied"] == "2024-12-01T14:45:00"
         assert "auth" in persisted["modules"]
         assert persisted["modules"]["auth"]["commit_sha"] == expected_sha
         assert persisted["modules"]["auth"]["version"] == "0.82.0"
