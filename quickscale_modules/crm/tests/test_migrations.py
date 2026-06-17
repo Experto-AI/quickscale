@@ -218,3 +218,76 @@ def test_0003_preserves_existing_unique_terminal_semantics() -> None:
     assert won_stage.order == 9
     assert won_stage.terminal_semantic == "won"
     assert preserved_deal.stage_id == won_stage.pk
+
+
+def test_0004_adds_nullable_organization_without_backfill() -> None:
+    """Migration 0004 must add nullable org FKs without mutating existing rows.
+
+    Phase 11.1d forward-migration proof: legacy Tag/Company/Contact/Stage/Deal
+    rows created before the organization field existed must survive migration
+    0004 with organization_id=None and no backfill or default assignment.
+    """
+    migrate_from = ("quickscale_modules_crm", "0003_stage_terminal_semantic_unique")
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_from])
+    old_apps = executor.loader.project_state([migrate_from]).apps
+
+    # Create legacy rows at 0003 state (no organization field exists yet).
+    LegacyTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+    LegacyCompany = old_apps.get_model("quickscale_modules_crm", "Company")
+    LegacyContact = old_apps.get_model("quickscale_modules_crm", "Contact")
+    LegacyStage = old_apps.get_model("quickscale_modules_crm", "Stage")
+    LegacyDeal = old_apps.get_model("quickscale_modules_crm", "Deal")
+
+    legacy_tag = LegacyTag.objects.create(name="Legacy VIP")
+    legacy_company = LegacyCompany.objects.create(name="Legacy Corp")
+    legacy_contact = LegacyContact.objects.create(
+        first_name="Legacy",
+        last_name="Contact",
+        email="legacy@example.com",
+        company=legacy_company,
+    )
+    legacy_stage = LegacyStage.objects.create(name="Legacy Stage", order=1)
+    legacy_deal = LegacyDeal.objects.create(
+        title="Legacy Deal",
+        contact=legacy_contact,
+        stage=legacy_stage,
+    )
+
+    # Migrate forward to 0004.
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    new_apps = executor.loader.project_state([migrate_to]).apps
+
+    MigratedTag = new_apps.get_model("quickscale_modules_crm", "Tag")
+    MigratedCompany = new_apps.get_model("quickscale_modules_crm", "Company")
+    MigratedContact = new_apps.get_model("quickscale_modules_crm", "Contact")
+    MigratedStage = new_apps.get_model("quickscale_modules_crm", "Stage")
+    MigratedDeal = new_apps.get_model("quickscale_modules_crm", "Deal")
+
+    # Verify all legacy rows survive with null organization and no data mutation.
+    tag = MigratedTag.objects.get(pk=legacy_tag.pk)
+    assert tag.organization_id is None
+    assert tag.name == "Legacy VIP"
+
+    company = MigratedCompany.objects.get(pk=legacy_company.pk)
+    assert company.organization_id is None
+    assert company.name == "Legacy Corp"
+
+    contact = MigratedContact.objects.get(pk=legacy_contact.pk)
+    assert contact.organization_id is None
+    assert contact.first_name == "Legacy"
+    assert contact.email == "legacy@example.com"
+
+    stage = MigratedStage.objects.get(pk=legacy_stage.pk)
+    assert stage.organization_id is None
+    assert stage.name == "Legacy Stage"
+    assert stage.order == 1
+
+    deal = MigratedDeal.objects.get(pk=legacy_deal.pk)
+    assert deal.organization_id is None
+    assert deal.title == "Legacy Deal"
+    assert deal.contact_id == legacy_contact.pk
+    assert deal.stage_id == legacy_stage.pk
