@@ -43,7 +43,7 @@ from quickscale_core.utils.git_utils import (
 
 from .module_config import (
     APPLY_MODULE_EXECUTION_MODE,
-    MODULE_CONFIGURATORS,
+    MODULE_CONFIGURATOR_REGISTRY,
     STANDALONE_MODULE_EXECUTION_MODE,
     ModuleExecutionMode,
     assess_auth_migration_state,
@@ -359,12 +359,14 @@ def _perform_module_embed(
 
     try:
         # Apply module-specific configuration
-        if module in MODULE_CONFIGURATORS and config:
-            _, applier = MODULE_CONFIGURATORS[module]
+        configurator_entry = MODULE_CONFIGURATOR_REGISTRY.get(module)
+        if configurator_entry is not None and config:
             if execution_mode == STANDALONE_MODULE_EXECUTION_MODE:
-                applier(project_path, config)
+                configurator_entry.apply(project_path, config)
             else:
-                applier(project_path, config, execution_mode=execution_mode)
+                configurator_entry.apply(
+                    project_path, config, execution_mode=execution_mode
+                )
     except Exception as error:
         if execution_mode == APPLY_MODULE_EXECUTION_MODE:
             _cleanup_failed_apply_embed(project_path, module)
@@ -499,9 +501,9 @@ def embed_module(
 
         # Interactive module configuration
         config: dict[str, Any] = {}
-        if module in MODULE_CONFIGURATORS:
-            configurator, applier = MODULE_CONFIGURATORS[module]
-            config = configurator(non_interactive=non_interactive)
+        configurator_entry = MODULE_CONFIGURATOR_REGISTRY.get(module)
+        if configurator_entry is not None:
+            config = configurator_entry.configure(non_interactive=non_interactive)
 
         # Perform embedding
         return _perform_module_embed(
@@ -1150,9 +1152,7 @@ def update(no_preview: bool) -> None:
 
         if not config.modules:
             click.secho("✅ No modules installed. Nothing to update.", fg="green")
-            click.echo(
-                "\n💡 Tip: Install modules with 'quickscale embed --module <name>'"
-            )
+            click.echo("\n💡 Tip: Add modules with 'quickscale plan --add'")
             return
 
         # Surface module version drift between state and legacy config.
@@ -1271,7 +1271,7 @@ def push(module: str, branch: str, remote: str) -> None:
                 f"❌ Error: Module '{module}' is not installed", fg="red", err=True
             )
             click.echo(
-                f"\n💡 Tip: Install the module first with 'quickscale embed --module {module}'",
+                "\n💡 Tip: Add the module first with 'quickscale plan --add'",
                 err=True,
             )
             raise click.Abort()

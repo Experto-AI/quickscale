@@ -1648,6 +1648,87 @@ class TestAnalyticsShapedResolution:
 
 
 # ---------------------------------------------------------------------------
+# Managed files threading
+# ---------------------------------------------------------------------------
+
+
+class TestResolverManagedFiles:
+    """Tests for managed_files threading through ResolverResult."""
+
+    def test_default_empty_managed_files(self) -> None:
+        """ResolverResult defaults managed_files to empty tuple."""
+        result = ResolverResult(
+            module_name="test",
+            defaults={},
+            resolved={},
+        )
+        assert result.managed_files == ()
+
+    def test_resolve_threads_managed_files_from_manifest(self) -> None:
+        """resolve_module_config threads managed_files from manifest."""
+        from quickscale_core.manifest.schema import ManagedFileDeclaration
+
+        decl = ManagedFileDeclaration(
+            key="social_link_tree",
+            renderer="social/link_tree.html",
+            output_path="quickscale_managed/social/link_tree.html",
+        )
+        manifest = ModuleManifest(
+            name="social",
+            version="0.79.0",
+            managed_files={"social_link_tree": decl},
+        )
+        schema = ModuleDerivationSchema(module_name="social", version="1")
+
+        result = resolve_module_config(manifest, schema)
+
+        assert len(result.managed_files) == 1
+        assert result.managed_files[0] is decl
+        assert result.managed_files[0].key == "social_link_tree"
+        assert result.managed_files[0].renderer == "social/link_tree.html"
+        assert (
+            result.managed_files[0].output_path
+            == "quickscale_managed/social/link_tree.html"
+        )
+
+    def test_resolve_empty_manifest_produces_empty_managed_files(self) -> None:
+        """A manifest with no managed_files produces empty tuple in result."""
+        manifest = ModuleManifest(name="m", version="1.0.0")
+        schema = ModuleDerivationSchema(module_name="m", version="1")
+
+        result = resolve_module_config(manifest, schema)
+
+        assert result.managed_files == ()
+
+    def test_resolve_multiple_managed_files(self) -> None:
+        """Multiple managed_files declarations are all threaded through."""
+        from quickscale_core.manifest.schema import ManagedFileDeclaration
+
+        decl1 = ManagedFileDeclaration(
+            key="file_a",
+            renderer="renderer_a",
+            output_path="quickscale_managed/a.html",
+        )
+        decl2 = ManagedFileDeclaration(
+            key="file_b",
+            renderer="renderer_b",
+            output_path="quickscale_managed/b.html",
+        )
+        manifest = ModuleManifest(
+            name="m",
+            version="1.0.0",
+            managed_files={"file_a": decl1, "file_b": decl2},
+        )
+        schema = ModuleDerivationSchema(module_name="m", version="1")
+
+        result = resolve_module_config(manifest, schema)
+
+        assert len(result.managed_files) == 2
+        keys = {d.key for d in result.managed_files}
+        assert keys == {"file_a", "file_b"}
+
+
+# ---------------------------------------------------------------------------
 # Public exports
 # ---------------------------------------------------------------------------
 

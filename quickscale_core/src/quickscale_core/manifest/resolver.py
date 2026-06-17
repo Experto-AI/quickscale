@@ -27,7 +27,7 @@ from quickscale_core.manifest.derivation import (
     ValidationRule,
     WiringProjection,
 )
-from quickscale_core.manifest.schema import ModuleManifest
+from quickscale_core.manifest.schema import ManagedFileDeclaration, ModuleManifest
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,10 @@ class ResolverResult:
             post-home URL includes contributed by wiring projections.
         pre_home_url_includes: ``(route_prefix, include_path)`` tuples for
             pre-home URL includes contributed by wiring projections.
+        managed_files: Manifest-declared managed-file declarations threaded
+            through from the :class:`ModuleManifest`.  Empty when the
+            manifest declares no managed files.  The assembler converts
+            these into ``ModuleWiringSpec.managed_files`` entries.
     """
 
     module_name: str
@@ -69,6 +73,7 @@ class ResolverResult:
     middleware: tuple[str, ...] = ()
     url_includes: tuple[tuple[str, str], ...] = ()
     pre_home_url_includes: tuple[tuple[str, str], ...] = ()
+    managed_files: tuple[ManagedFileDeclaration, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -660,6 +665,7 @@ def resolve_module_config(
         middleware=_to_str_tuple(wiring["middleware"]),
         url_includes=_to_url_tuple(wiring["url_includes"]),
         pre_home_url_includes=_to_url_tuple(wiring["pre_home_url_includes"]),
+        managed_files=tuple(manifest.managed_files.values()),
     )
 
 

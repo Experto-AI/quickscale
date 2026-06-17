@@ -1,26 +1,18 @@
 """Manifest-driven wiring spec entry point.
 
-Provides :func:`build_manifest_wiring_spec` — an ADDITIVE entry point that
+Provides :func:`build_manifest_wiring_spec` — the canonical entry point that
 routes a module through its manifest adapter and the manifest assembler to
 produce a complete :class:`~quickscale_core.module_wiring.ModuleWiringSpec`.
-
-This entry point does **not** modify or replace
-``build_module_wiring_specs`` (the legacy dispatch in
-``quickscale_cli.commands.module_wiring_specs``).  The legacy builder
-continues to own its dispatch table and its sole direct caller
-(``quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring``).
 
 Module adapter registration
 ----------------------------
 Manifest adapters register themselves by populating
 :data:`MANIFEST_ADAPTER_REGISTRY`.  Each entry is a callable that accepts
-``(options, *, project_package)`` and returns a
+ ``(options, *, project_package)`` and returns a
 :class:`~quickscale_core.module_wiring.ModuleWiringSpec`.
 
-Analytics is registered at import time as the first migrated module.
-Billing, blog, listings, CRM, forms, backups, notifications, auth, orgs, and
-storage are registered as C1-C7, M4 follow-up, and Track 2 Phase 1.1-1.2
-migration adapters.
+All catalog modules are registered: analytics, billing, blog, listings, CRM,
+forms, backups, notifications, auth, orgs, storage, and social.
 """
 
 from __future__ import annotations
@@ -82,7 +74,7 @@ def _analytics_manifest_adapter(
     """
     # Deferred import avoids circular dependency: quickscale_core must not
     # import from quickscale_cli at module level.
-    from quickscale_cli.analytics_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.analytics_manifest import (  # noqa: PLC0415
         resolve_analytics_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -287,7 +279,6 @@ def _billing_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the billing module via the manifest path.
 
-    Mirrors ``_billing_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("rest_framework", "quickscale_modules_billing")``.
     URL includes: ``[("", "quickscale_modules_billing.urls")]``.
     Settings: QUICKSCALE_BILLING_* keys derived from resolved options.
@@ -300,7 +291,7 @@ def _billing_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         billing that is equal to the legacy ``_billing_wiring`` output.
     """
-    from quickscale_cli.billing_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.billing_manifest import (  # noqa: PLC0415
         DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
         DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
         DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
@@ -450,7 +441,6 @@ def _blog_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the blog module via the manifest path.
 
-    Mirrors ``_blog_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("markdownx", "quickscale_modules_blog")``.
     URL includes: ``[("blog/", ...), ("markdownx/", ...)]``.
     Settings: BLOG_* + MARKDOWNX_* keys.
@@ -463,7 +453,7 @@ def _blog_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         blog that is equal to the legacy ``_blog_wiring`` output.
     """
-    from quickscale_cli.blog_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.blog_manifest import (  # noqa: PLC0415
         resolve_blog_module_options,
         DEFAULT_BLOG_API_RATE_LIMIT,
     )
@@ -598,7 +588,6 @@ def _listings_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the listings module via the manifest path.
 
-    Mirrors ``_listings_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("django_filters", "markdownx", "quickscale_modules_listings")``.
     URL includes: ``[("listings/", ...), ("markdownx/", ...)]``.
     Settings: LISTINGS_PER_PAGE + MARKDOWNX_MARKDOWN_EXTENSIONS.
@@ -611,7 +600,7 @@ def _listings_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         listings that is equal to the legacy ``_listings_wiring`` output.
     """
-    from quickscale_cli.listings_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.listings_manifest import (  # noqa: PLC0415
         resolve_listings_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -721,7 +710,6 @@ def _crm_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the CRM module via the manifest path.
 
-    Mirrors ``_crm_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("rest_framework", "django_filters", "quickscale_modules_crm")``.
     URL includes: ``[("", "quickscale_modules_crm.urls")]``.
     Settings: CRM_DEALS_PER_PAGE, CRM_CONTACTS_PER_PAGE, CRM_ENABLE_API.
@@ -734,7 +722,7 @@ def _crm_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         CRM that is equal to the legacy ``_crm_wiring`` output.
     """
-    from quickscale_cli.crm_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.crm_manifest import (  # noqa: PLC0415
         resolve_crm_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -860,7 +848,6 @@ def _forms_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the forms module via the manifest path.
 
-    Mirrors ``_forms_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("rest_framework", "django_filters", "quickscale_modules_forms")``.
     URL includes: ``[("", "quickscale_modules_forms.urls")]``.
     Settings: FORMS_* keys.
@@ -873,7 +860,7 @@ def _forms_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         forms that is equal to the legacy ``_forms_wiring`` output.
     """
-    from quickscale_cli.forms_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.forms_manifest import (  # noqa: PLC0415
         resolve_forms_module_options,
         DEFAULT_FORMS_RATE_LIMIT,
     )
@@ -1028,7 +1015,6 @@ def _backups_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the backups module via the manifest path.
 
-    Mirrors ``_backups_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("quickscale_modules_backups",)``.
     Settings: QUICKSCALE_BACKUPS_* keys.
 
@@ -1044,7 +1030,7 @@ def _backups_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         backups that is equal to the legacy ``_backups_wiring`` output.
     """
-    from quickscale_cli.backups_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.backups_manifest import (  # noqa: PLC0415
         normalize_backups_module_options,
         BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
         BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -1164,7 +1150,6 @@ def _notifications_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the notifications module via the manifest path.
 
-    Mirrors ``_notifications_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("quickscale_modules_notifications",)`` with ``"anymail"`` prepended
     when the runtime email backend is the live Resend backend.
     URL includes: ``[("", "quickscale_modules_notifications.urls")]``.
@@ -1184,7 +1169,7 @@ def _notifications_manifest_adapter(
         notifications that is equal to the legacy ``_notifications_wiring``
         output.
     """
-    from quickscale_cli.notifications_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.notifications_manifest import (  # noqa: PLC0415
         NOTIFICATIONS_LIVE_EMAIL_BACKEND,
         notifications_runtime_email_backend,
         resolve_notifications_module_options,
@@ -1425,7 +1410,6 @@ def _auth_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the auth module via the manifest path.
 
-    Mirrors ``_auth_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("django.contrib.sites", "quickscale_modules_auth", "allauth",
     "allauth.account")``.
     Middleware: ``("allauth.account.middleware.AccountMiddleware",)``.
@@ -1449,7 +1433,7 @@ def _auth_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         auth that is equal to the legacy ``_auth_wiring`` output.
     """
-    from quickscale_cli.auth_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.auth_manifest import (  # noqa: PLC0415
         resolve_auth_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -1568,7 +1552,6 @@ def _orgs_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the orgs module via the manifest path.
 
-    Mirrors ``_orgs_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("quickscale_modules_orgs",)``.
     Middleware: ``("quickscale_modules_orgs.middleware.TenantMiddleware",)``.
     Settings: ``ACCOUNT_ADAPTER`` and ``QUICKSCALE_MODE`` derived from
@@ -1587,7 +1570,7 @@ def _orgs_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         orgs that is equal to the legacy ``_orgs_wiring`` output.
     """
-    from quickscale_cli.orgs_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.orgs_manifest import (  # noqa: PLC0415
         resolve_orgs_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -1692,7 +1675,6 @@ def _storage_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the storage module via the manifest path.
 
-    Mirrors ``_storage_wiring`` in ``module_wiring_specs.py`` exactly.
     Apps: ``("quickscale_modules_storage",)``.
     Settings: ``QUICKSCALE_STORAGE_BACKEND``, ``QUICKSCALE_STORAGE_PUBLIC_BASE_URL``,
     ``MEDIA_URL``, ``QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED``, plus conditional
@@ -1710,7 +1692,7 @@ def _storage_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         storage that is equal to the legacy ``_storage_wiring`` output.
     """
-    from quickscale_cli.storage_manifest import (  # type: ignore[import-untyped]  # noqa: PLC0415
+    from quickscale_cli.storage_manifest import (  # noqa: PLC0415
         resolve_storage_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -1824,6 +1806,162 @@ MANIFEST_ADAPTER_REGISTRY["storage"] = _storage_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
+# Social adapter (Track 2 Phase 1.3 — Phase 2)
+# ---------------------------------------------------------------------------
+
+
+def _social_manifest_adapter(
+    options: dict[str, Any],
+    *,
+    project_package: str | None = None,
+) -> ModuleWiringSpec:
+    """Build a ModuleWiringSpec for the social module via the manifest path.
+
+    Settings: ``QUICKSCALE_SOCIAL_*`` keys derived from resolved options plus
+    fixed path constants.
+    URL includes: a single ``project_package``-qualified include pointing at
+    ``{project_package}.quickscale_managed.social_urls``.
+    Managed files: sourced from the manifest-declared ``managed_files``
+    contract in ``quickscale_modules/social/module.yml``.  The assembler
+    converts each declaration's ``output_path`` and ``renderer`` into a
+    placeholder mapping; the post-resolution hook then replaces each
+    renderer-ID placeholder with the actual rendered file content.  This
+    keeps the managed-file inventory in the manifest as the single source
+    of truth rather than hardcoding paths in the adapter.
+
+    The managed-file content is injected via a post-resolution hook that
+    replaces the structural renderer-ID placeholders emitted by the generic
+    assembler with the actual rendered file content.  This keeps the
+    extension local to the social adapter and does not alter the generic
+    assembler behaviour.
+
+    Args:
+        options: Module options (e.g. from ``quickscale.yml``).
+        project_package: The generated project's Python package name.
+            Required for the URL include qualification.
+
+    Returns:
+        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+        social.
+
+    Raises:
+        ValueError: When *project_package* is ``None``.
+    """
+    if project_package is None:
+        raise ValueError("project_package is required for managed social wiring")
+
+    from quickscale_cli.social_manifest import (  # noqa: PLC0415
+        SOCIAL_EMBEDS_PATH,
+        SOCIAL_INTEGRATION_BASE_PATH,
+        SOCIAL_INTEGRATION_EMBEDS_PATH,
+        SOCIAL_LINK_TREE_PATH,
+        load_social_manifest,
+        render_social_managed_init_module,
+        render_social_managed_urls_module,
+        render_social_managed_views_module,
+        resolve_social_module_options,
+        social_provider_supports_embeds,
+    )
+    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
+    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
+        ResolverResult,
+    )
+
+    resolved = resolve_social_module_options(dict(options))
+    provider_allowlist = list(resolved["provider_allowlist"])
+    embed_provider_allowlist = [
+        provider
+        for provider in provider_allowlist
+        if social_provider_supports_embeds(provider)
+    ]
+
+    derived_settings: dict[str, Any] = {
+        "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED": bool(
+            resolved.get("link_tree_enabled", True)
+        ),
+        "QUICKSCALE_SOCIAL_LAYOUT_VARIANT": str(resolved.get("layout_variant", "list")),
+        "QUICKSCALE_SOCIAL_EMBEDS_ENABLED": bool(resolved.get("embeds_enabled", True)),
+        "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": provider_allowlist,
+        "QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST": embed_provider_allowlist,
+        "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS": int(
+            resolved.get("cache_ttl_seconds", 300)
+        ),
+        "QUICKSCALE_SOCIAL_LINKS_PER_PAGE": int(resolved.get("links_per_page", 24)),
+        "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE": int(resolved.get("embeds_per_page", 12)),
+        "QUICKSCALE_SOCIAL_LINK_TREE_PATH": SOCIAL_LINK_TREE_PATH,
+        "QUICKSCALE_SOCIAL_EMBEDS_PATH": SOCIAL_EMBEDS_PATH,
+        "QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH": SOCIAL_INTEGRATION_BASE_PATH,
+        "QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH": SOCIAL_INTEGRATION_EMBEDS_PATH,
+    }
+
+    # Load the manifest-declared managed_files contract so the assembler
+    # populates spec.managed_files with output_path -> renderer_id mappings
+    # sourced from module.yml rather than hardcoded in this adapter.
+    social_manifest = load_social_manifest()
+    managed_file_declarations = tuple(social_manifest.managed_files.values())
+
+    result = ResolverResult(
+        module_name="social",
+        defaults={},
+        resolved=resolved,
+        derived_settings=derived_settings,
+        apps=(),
+        middleware=(),
+        url_includes=(
+            (
+                SOCIAL_INTEGRATION_BASE_PATH.lstrip("/"),
+                f"{project_package}.quickscale_managed.social_urls",
+            ),
+        ),
+        pre_home_url_includes=(),
+        managed_files=managed_file_declarations,
+    )
+
+    # Post-resolution hook: replace renderer-ID placeholders (sourced from the
+    # manifest-declared managed_files contract) with rendered content.
+    def _social_managed_files_hook(
+        spec: ModuleWiringSpec, resolved_opts: dict[str, Any]
+    ) -> ModuleWiringSpec:
+        from quickscale_core.module_wiring import ModuleWiringSpec as _MWS  # noqa: PLC0415
+
+        # Dispatch table: renderer_id (from module.yml) -> rendered content.
+        # The output_path keys come from spec.managed_files which the assembler
+        # populated from the manifest declarations, not from hardcoded paths.
+        renderer_dispatch: dict[str, str] = {
+            "social.managed_init": render_social_managed_init_module(),
+            "social.managed_urls": render_social_managed_urls_module(),
+            "social.managed_views": render_social_managed_views_module(
+                provider_allowlist,
+                embed_provider_allowlist,
+                layout_variant=str(resolved_opts.get("layout_variant", "list")),
+                cache_ttl_seconds=int(resolved_opts.get("cache_ttl_seconds", 300)),
+                links_per_page=int(resolved_opts.get("links_per_page", 24)),
+                embeds_per_page=int(resolved_opts.get("embeds_per_page", 12)),
+            ),
+        }
+
+        managed_content: dict[str, str] = {}
+        for output_path, renderer_id in spec.managed_files.items():
+            rendered = renderer_dispatch.get(renderer_id)
+            if rendered is not None:
+                managed_content[output_path] = rendered
+
+        return _MWS(
+            apps=spec.apps,
+            middleware=spec.middleware,
+            settings=spec.settings,
+            pre_home_url_includes=spec.pre_home_url_includes,
+            url_includes=spec.url_includes,
+            managed_files=managed_content,
+        )
+
+    return assemble_wiring_spec(result, post_hook=_social_managed_files_hook)
+
+
+MANIFEST_ADAPTER_REGISTRY["social"] = _social_manifest_adapter
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -1843,10 +1981,6 @@ def build_manifest_wiring_spec(
 
     Routes the module through its registered manifest adapter (which calls
     the manifest resolver and the assembler) and returns the assembled spec.
-
-    This entry point is **additive**: it does not touch the legacy
-    ``build_module_wiring_specs`` dispatch and does not modify any existing
-    callers.
 
     Args:
         module_name: The module to build a spec for (e.g. ``"analytics"``).

@@ -4,11 +4,8 @@ Sources defaults from the storage ``module.yml`` manifest and routes
 normalization and resolution through the manifest-driven resolver
 (:mod:`quickscale_core.manifest.resolver`).
 
-Option set mirrors the option-resolution portion of ``_storage_wiring`` in
-``module_wiring_specs.py`` and the ``_normalize_media_url`` helper
-(lines 55–61 and 232–301 of that file).  The full option set (including
-the cloud-provider fields used in the deferred nested STORAGES/AWS_* wiring)
-is declared here for completeness, but the B-phase adapter scope focuses on:
+Option set (including the cloud-provider fields used in the nested
+STORAGES/AWS_* wiring):
 
 * ``backend``               — string, choices ``{"local", "s3", "r2"}``, default ``"local"``
 * ``media_url``             — string, default ``"/media/"`` (normalized)
@@ -20,9 +17,10 @@ The remaining cloud-provider fields (``bucket_name``, ``endpoint_url``,
 ``querystring_auth``) are included in defaults/resolution but their wiring
 into ``STORAGES`` / ``AWS_*`` settings is deferred to phase C11.
 
-ADAPTER/OPTION-RESOLUTION ONLY — do NOT migrate the nested STORAGES/AWS_*
-wiring here.  Do NOT register this adapter in ``MANIFEST_ADAPTER_REGISTRY``
-until the wiring migration is complete.
+ADAPTER/OPTION-RESOLUTION ONLY — the nested STORAGES/AWS_* settings wiring
+is handled by the manifest-driven wiring builder, not by this adapter.
+This adapter is registered in ``MANIFEST_ADAPTER_REGISTRY`` via
+``quickscale_core.manifest.entry_point``.
 """
 
 from __future__ import annotations
@@ -148,15 +146,12 @@ def _build_storage_derivation_schema() -> ModuleDerivationSchema:
 
 
 # ---------------------------------------------------------------------------
-# Media URL normalization (mirrors _normalize_media_url in module_wiring_specs.py)
+# Media URL normalization
 # ---------------------------------------------------------------------------
 
 
 def _normalize_media_url(media_url: str) -> str:
     """Normalize a media URL to have a leading and trailing slash.
-
-    Mirrors the legacy ``_normalize_media_url`` helper in
-    ``module_wiring_specs.py`` (lines 55–61):
 
     * Strip whitespace.
     * Fall back to ``"/media/"`` if blank.

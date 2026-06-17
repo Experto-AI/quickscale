@@ -59,7 +59,7 @@ git merge --no-ff wt-track{N}-<branch>
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 11 wiring slices migrated (`social` deferred to M6) |
 | M5 | Track 3 | F2.3–2.4 | Provenance fields in state.yml; release tooling updated |
-| M6 | Track 2 | F1.3 | `module_wiring_specs.py` deleted; manifest builder wired |
+| M6 | Track 2 | F1.3 🟡 | `module_wiring_specs.py` deleted; manifest builder wired; all catalog modules on manifest path. **Open:** CR-M6-004 (blocking — `--reconfigure --configure-modules` empty `new_modules` path) + CR-M6-005 (advisory — docs/strings cleanup) |
 | M7 | Track 1 | F11.2–11.4 | All module isolation tests unskipped and green |
 | M8 | Track 3 | F12.1–12.3 | `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | Track 1 | F13.1–13.3 | Billing org-authoritative; dual-FK rows reconciled |
@@ -282,12 +282,22 @@ _(part of the M1 batch — implement after 11.1g in the same worktree)_
 **Track:** Track 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M6
 **Dependencies:** M4 merged to v87 (previous phase within this track); pull v87 before starting.
 
-- [ ] Let `module.yml` declare managed-file code generation. _Only `social` needs it (~100 lines of generated Python); deferred from Phase 1.1–1.2 because declaring that capability in `module.yml` is high-effort for a single consumer._
-- [ ] Migrate `social` wiring to the manifest-driven builder. _Depends on managed-file codegen above; last module to leave the legacy wiring path._
-- [ ] Delete `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` and switch `module_wiring_manager.py` to the manifest-driven wiring builder.
-- [ ] Replace the per-module interactive handlers in `module_config.py` with a manifest-driven configurator flow.
-- [ ] Remove the remaining legacy contract-file compatibility shims, constants, and dead imports.
-- [ ] Add a contract test asserting every catalog module resolves through the generic resolver, so the codebase cannot regress to two patterns.
+**Status:** 🟡 M6 merged with follow-ups. `module_wiring_specs.py` deleted; `social` migrated to the manifest path; configurator flow rerouted through the manifest registry; all catalog modules now resolve through the generic manifest builder. No runtime or test references to the legacy wiring module remain. Two accepted findings remain open (see below).
+
+**Explanation:** The M6 batch closed the last two-module resolution split. Phase 1 added core manifest plumbing (builder API, manager dispatch, projection fields); Phase 2 added the `social` manifest adapter with parity coverage; Phase 3 swapped the manager to the manifest-driven builder and verified generated-project runtime; Phase 4 rerouted the configurator through the manifest registry; Phase 5 confirmed the manifest-only end state — grep verified zero remaining references to `module_wiring_specs.py` or `MODULE_WIRING_BUILDERS` in runtime or test code. The two-path resolution defect from autopsy #2 is now collapsed into a single manifest-driven path for every catalog module. Review accepted two follow-up findings (CR-M6-004 blocking, CR-M6-005 advisory) that keep M6 from full closeout.
+
+- [x] Let `module.yml` declare managed-file code generation. _`social` managed-file projection added; ~100 lines of generated Python now flow through the manifest-driven builder._
+- [x] Migrate `social` wiring to the manifest-driven builder. _Last module to leave the legacy wiring path; parity-gated._
+- [x] Delete `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py` and switch `module_wiring_manager.py` to the manifest-driven wiring builder. _File deleted; manager dispatches exclusively through the manifest builder._
+- [x] Replace the per-module interactive handlers in `module_config.py` with a manifest-driven configurator flow. _Configurator registry now routes through the manifest-backed configurator; per-module legacy handlers removed. **Note:** the explicit-empty `new_modules` path under `--reconfigure --configure-modules` is tracked as CR-M6-004._
+- [x] Remove the remaining legacy contract-file compatibility shims, constants, and dead imports. _Legacy shims, `MODULE_WIRING_BUILDERS` constant, and dead imports purged; grep-verified clean._
+- [x] Add a contract test asserting every catalog module resolves through the generic resolver, so the codebase cannot regress to two patterns. _Contract test in place; every catalog module resolves through the generic manifest resolver._
+
+**Completion evidence (M6):** Targeted checkpoint tests pass across all five sub-phases (core plumbing, social adapter, manager swap + runtime, configurator reroute, manifest-only contract). Ruff and MyPy green. Grep confirms zero runtime/test references to `module_wiring_specs.py` or `MODULE_WIRING_BUILDERS`.
+
+**Remaining findings (M6 follow-ups):**
+- **CR-M6-004 (blocking):** `quickscale plan --reconfigure --configure-modules` with an explicit empty `new_modules` selection still needs correction and regression coverage. The configurator reroute is functionally complete for the normal path, but the explicit-empty edge case was not exercised.
+- **CR-M6-005 (advisory):** Post-M6 docs, comments, and user-facing strings still carry stale references from the legacy two-path era. A consistency cleanup pass remains incomplete.
 
 ### Finding 13 — Establish a single billing customer source of truth
 

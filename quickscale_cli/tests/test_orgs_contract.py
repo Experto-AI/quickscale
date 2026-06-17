@@ -1,6 +1,6 @@
 """Contract tests for the ready-state orgs module integration."""
 
-from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
+from quickscale_core.manifest.entry_point import build_manifest_wiring_spec
 from quickscale_cli.module_catalog import get_module_entry, get_module_names
 from quickscale_cli.schema.config_schema import validate_config
 from quickscale_core.module_wiring import collect_wiring
@@ -55,12 +55,9 @@ modules:
 
 def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
     """Solo orgs wiring should reserve the root include before home."""
-    specs = build_module_wiring_specs(
-        {"orgs": {"mode": "solo"}},
-        project_package="myapp",
+    orgs_spec = build_manifest_wiring_spec(
+        "orgs", {"mode": "solo"}, project_package="myapp"
     )
-
-    orgs_spec = specs["orgs"]
 
     assert orgs_spec.apps == ("quickscale_modules_orgs",)
     assert orgs_spec.middleware == (
@@ -76,12 +73,9 @@ def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
 
 def test_orgs_wiring_spec_registers_saas_runtime_surface() -> None:
     """SaaS orgs wiring should keep the root include in the post-home bucket."""
-    specs = build_module_wiring_specs(
-        {"orgs": {"mode": "saas"}},
-        project_package="myapp",
+    orgs_spec = build_manifest_wiring_spec(
+        "orgs", {"mode": "saas"}, project_package="myapp"
     )
-
-    orgs_spec = specs["orgs"]
 
     assert orgs_spec.settings["QUICKSCALE_MODE"] == "saas"
     assert orgs_spec.pre_home_url_includes == ()
@@ -90,10 +84,12 @@ def test_orgs_wiring_spec_registers_saas_runtime_surface() -> None:
 
 def test_orgs_wiring_preserves_auth_contracts_when_both_are_selected() -> None:
     """Orgs should layer on top of auth without disturbing auth-owned apps and URLs."""
-    specs = build_module_wiring_specs(
-        {"auth": {}, "orgs": {"mode": "solo"}},
-        project_package="myapp",
-    )
+    specs = {
+        "auth": build_manifest_wiring_spec("auth", {}, project_package="myapp"),
+        "orgs": build_manifest_wiring_spec(
+            "orgs", {"mode": "solo"}, project_package="myapp"
+        ),
+    }
 
     apps, middleware, settings, urls = collect_wiring(specs)
 

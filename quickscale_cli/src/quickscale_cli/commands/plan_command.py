@@ -16,7 +16,7 @@ from quickscale_core.contracts.module_options import sanitize_module_options
 from quickscale_cli.commands.implied_module_defaults import (
     get_implied_module_default_configs,
 )
-from quickscale_cli.commands.module_config import MODULE_CONFIGURATORS
+from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
 from quickscale_cli.module_catalog import (
     ModuleCatalogEntry,
     get_module_entries,
@@ -316,7 +316,9 @@ def _configure_selected_modules(
 ) -> dict[str, dict[str, Any]]:
     """Interactively configure selected modules that expose configurators."""
     configured: dict[str, dict[str, Any]] = {}
-    target_new_modules = new_modules or set(module_names)
+    target_new_modules: set[str] = (
+        set(module_names) if new_modules is None else new_modules
+    )
 
     if not module_names:
         return configured
@@ -330,7 +332,7 @@ def _configure_selected_modules(
         )
         configured[module_name] = current_options
 
-        configurator_entry = MODULE_CONFIGURATORS.get(module_name)
+        configurator_entry = MODULE_CONFIGURATOR_REGISTRY.get(module_name)
         if configurator_entry is None:
             continue
 
@@ -344,8 +346,9 @@ def _configure_selected_modules(
         if not should_configure:
             continue
 
-        configurator, _ = configurator_entry
-        configured[module_name] = configurator(existing_config=current_options)
+        configured[module_name] = configurator_entry.configure(
+            existing_config=current_options
+        )
 
     return configured
 
@@ -692,6 +695,17 @@ def _handle_add_modules(
     )
     if implied_modules:
         new_modules = _merge_module_names(new_modules, implied_modules)
+        # Run implied modules through registry-backed configurators so that
+        # billing/CRM planner flows invoke configurators for implied
+        # notifications/orgs in the same planning pass.
+        if configure_modules:
+            existing_options.update(
+                _configure_selected_modules(
+                    implied_modules,
+                    existing_options,
+                    new_modules=set(implied_modules),
+                )
+            )
 
     if existing_config is not None:
         docker_config = existing_config.docker
@@ -854,10 +868,21 @@ def _handle_reconfigure(
             )
         )
 
-    all_modules, module_options, _ = _materialize_implied_module_configs(
+    all_modules, module_options, implied_modules = _materialize_implied_module_configs(
         all_modules,
         module_options,
     )
+    # Run implied modules through registry-backed configurators so that
+    # reconfigure flows invoke configurators for implied notifications/orgs
+    # in the same planning pass.
+    if configure_modules and implied_modules:
+        module_options.update(
+            _configure_selected_modules(
+                implied_modules,
+                module_options,
+                new_modules=set(implied_modules),
+            )
+        )
 
     # Configure Docker
     docker_start, docker_build, docker_create_superuser = _configure_docker()
@@ -1177,10 +1202,23 @@ def plan(
             )
         )
 
-    selected_modules, module_options, _ = _materialize_implied_module_configs(
-        selected_modules,
-        module_options,
+    selected_modules, module_options, implied_modules = (
+        _materialize_implied_module_configs(
+            selected_modules,
+            module_options,
+        )
     )
+    # Run implied modules through registry-backed configurators so that
+    # new-project flows invoke configurators for implied notifications/orgs
+    # in the same planning pass.
+    if configure_modules and implied_modules:
+        module_options.update(
+            _configure_selected_modules(
+                implied_modules,
+                module_options,
+                new_modules=set(implied_modules),
+            )
+        )
 
     # Build configuration
     modules = _build_module_configs(selected_modules, module_options)
