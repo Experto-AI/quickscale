@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import click
+import yaml
 
 from quickscale_cli.module_catalog import (
     find_not_ready_modules,
@@ -23,6 +24,7 @@ from quickscale_core.config import ConfigError
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.project_state import (
+    FILE_HASHES_FILENAME,
     ProjectStateManager,
     check_version_drift,
 )
@@ -303,12 +305,236 @@ def _display_version_drift_warnings(
     )
 
 
+def _state_file_has_consolidated_sections(state_dir: Path) -> bool:
+    """Check whether ``state.yml`` on disk has consolidated sections.
+
+    Returns True when the state file exists and contains either the
+    ``managed_files`` section or modules with consolidated tracking
+    fields (``prefix``/``branch``/``installed_at``).
+    """
+    state_file = state_dir / "state.yml"
+    if not state_file.exists():
+        return False
+    try:
+        with open(state_file) as handle:
+            data = yaml.safe_load(handle) or {}
+    except (yaml.YAMLError, OSError):
+        return False
+
+    if not isinstance(data, dict):
+        return False
+
+    if "managed_files" in data:
+        return True
+
+    modules_data = data.get("modules", {})
+    if isinstance(modules_data, dict):
+        for _name, info in modules_data.items():
+            if isinstance(info, dict) and (
+                "prefix" in info or "branch" in info or "installed_at" in info
+            ):
+                return True
+
+    return False
+
+
+def _compute_drift_diagnostics(
+    project_path: Path,
+    state: QuickScaleState | None,
+    project_state_manager: ProjectStateManager,
+    state_manager: StateManager,
+) -> dict:
+    """Compute M2 drift and compatibility diagnostics.
+
+    Returns a dictionary suitable for both text display and JSON serialization.
+    The diagnostics cover:
+
+    * ``state_consolidated`` — whether ``state.yml`` on disk carries the
+      consolidated sections (``managed_files`` or module tracking fields).
+    * ``legacy_files_present`` — which legacy files exist on disk.
+    * ``legacy_compat_active`` — whether read-through import from legacy
+      files is active (consolidated sections absent and legacy files present).
+    * ``module_tracking`` — per-module consolidated tracking status.
+    * ``managed_files_consolidated`` — whether the ``managed_files`` section
+      is populated in state.
+    * ``filesystem_drift`` — orphaned and missing modules.
+    * ``managed_file_drift`` — managed files that drifted since last apply.
+    * ``version_drift`` — version disagreements between state and config.
+    """
+    state_dir = project_path / ".quickscale"
+    consolidated_on_disk = _state_file_has_consolidated_sections(state_dir)
+
+    # Check which legacy files exist on disk.
+    legacy_files_present: list[str] = []
+    config_yml = state_dir / "config.yml"
+    file_hashes_yml = state_dir / FILE_HASHES_FILENAME
+    if config_yml.exists():
+        legacy_files_present.append("config.yml")
+    if file_hashes_yml.exists():
+        legacy_files_present.append(FILE_HASHES_FILENAME)
+
+    legacy_compat_active = (not consolidated_on_disk) and bool(legacy_files_present)
+
+    # Module tracking completeness.
+    modules = state.modules if state else {}
+    module_tracking_total = len(modules)
+    modules_needing_consolidation: list[str] = []
+    for name, mod in modules.items():
+        if not mod.has_consolidated_tracking:
+            modules_needing_consolidation.append(name)
+    module_tracking_consolidated = module_tracking_total - len(
+        modules_needing_consolidation
+    )
+
+    # Managed files consolidation.
+    managed_files_consolidated = bool(state and state.managed_files)
+
+    # Filesystem drift (orphaned/missing modules).
+    fs_drift = state_manager.verify_filesystem()
+
+    # Managed file drift.
+    managed_drift_records = project_state_manager.detect_managed_file_drift()
+    managed_file_drift = [
+        {"path": r.path, "expected_hash": r.hash} for r in managed_drift_records
+    ]
+
+    # Version drift between state and config.
+    try:
+        loaded_state = project_state_manager.load_state()
+        loaded_config = project_state_manager.load_config()
+    except (ConfigError, StateError, OSError):
+        loaded_state = None
+        loaded_config = None
+
+    version_warnings = check_version_drift(loaded_state, loaded_config)
+    version_drift = [
+        {
+            "module": w.module,
+            "state_version": w.state_version,
+            "config_version": w.config_version,
+        }
+        for w in version_warnings
+    ]
+
+    return {
+        "state_consolidated": consolidated_on_disk,
+        "legacy_files_present": legacy_files_present,
+        "legacy_compat_active": legacy_compat_active,
+        "module_tracking": {
+            "total": module_tracking_total,
+            "consolidated": module_tracking_consolidated,
+            "needs_consolidation": sorted(modules_needing_consolidation),
+        },
+        "managed_files_consolidated": managed_files_consolidated,
+        "filesystem_drift": {
+            "orphaned_modules": sorted(fs_drift.get("orphaned_modules", [])),
+            "missing_modules": sorted(fs_drift.get("missing_modules", [])),
+        },
+        "managed_file_drift": managed_file_drift,
+        "version_drift": version_drift,
+    }
+
+
+def _display_drift_diagnostics(diagnostics: dict) -> None:
+    """Display M2 drift and compatibility diagnostics in text format."""
+    click.echo("\n🔍 M2 Drift & Compatibility:")
+
+    # State consolidation status.
+    if diagnostics["state_consolidated"]:
+        click.secho("   State consolidation: ✅ consolidated", fg="green")
+    else:
+        click.secho(
+            "   State consolidation: ⚠️  legacy mode (read-through import active)",
+            fg="yellow",
+        )
+
+    # Legacy files on disk.
+    legacy = diagnostics["legacy_files_present"]
+    if legacy:
+        if diagnostics["legacy_compat_active"]:
+            click.secho(
+                f"   Legacy files on disk: {', '.join(legacy)} (active compatibility inputs)",
+                fg="yellow",
+            )
+        else:
+            click.echo(
+                f"   Legacy files on disk: {', '.join(legacy)} (ignored — consolidated)"
+            )
+    else:
+        click.echo("   Legacy files on disk: none")
+
+    # Module tracking completeness.
+    mt = diagnostics["module_tracking"]
+    if mt["total"] == 0:
+        click.echo("   Module tracking: (no modules)")
+    elif mt["needs_consolidation"]:
+        click.secho(
+            f"   Module tracking: {mt['consolidated']}/{mt['total']} consolidated"
+            f" — needs consolidation: {', '.join(mt['needs_consolidation'])}",
+            fg="yellow",
+        )
+    else:
+        click.secho(
+            f"   Module tracking: {mt['consolidated']}/{mt['total']} fully consolidated",
+            fg="green",
+        )
+
+    # Managed files consolidation.
+    if diagnostics["managed_files_consolidated"]:
+        click.secho("   Managed files: ✅ consolidated in state.yml", fg="green")
+    else:
+        if FILE_HASHES_FILENAME in diagnostics["legacy_files_present"]:
+            click.secho(
+                f"   Managed files: ⚠️  using legacy {FILE_HASHES_FILENAME}",
+                fg="yellow",
+            )
+        else:
+            click.echo("   Managed files: no records")
+
+    # Filesystem drift.
+    fs = diagnostics["filesystem_drift"]
+    orphaned = fs["orphaned_modules"]
+    missing = fs["missing_modules"]
+    if not orphaned and not missing:
+        click.secho("   Filesystem drift: ✅ clean", fg="green")
+    else:
+        parts: list[str] = []
+        if orphaned:
+            parts.append(f"{len(orphaned)} orphaned ({', '.join(orphaned)})")
+        if missing:
+            parts.append(f"{len(missing)} missing ({', '.join(missing)})")
+        click.secho(f"   Filesystem drift: ⚠️  {'; '.join(parts)}", fg="yellow")
+
+    # Managed file drift.
+    mf_drift = diagnostics["managed_file_drift"]
+    if not mf_drift:
+        click.secho("   Managed file drift: ✅ clean", fg="green")
+    else:
+        paths = ", ".join(r["path"] for r in mf_drift)
+        click.secho(
+            f"   Managed file drift: ⚠️  {len(mf_drift)} drifted ({paths})",
+            fg="yellow",
+        )
+
+    # Version drift.
+    vd = diagnostics["version_drift"]
+    if not vd:
+        click.secho("   Version drift: ✅ clean", fg="green")
+    else:
+        modules_str = ", ".join(w["module"] for w in vd)
+        click.secho(
+            f"   Version drift: ⚠️  {len(vd)} disagreement(s) ({modules_str})",
+            fg="yellow",
+        )
+
+
 def _build_json_output(
     project_path: Path,
     config_path: Path | None,
     state: QuickScaleState | None,
     config: QuickScaleConfig | None,
     manifests: dict[str, ModuleManifest] | None = None,
+    drift_diagnostics: dict | None = None,
 ) -> dict:
     """Build JSON output for status command."""
 
@@ -366,6 +592,10 @@ def _build_json_output(
     if docker_status:
         output["docker"] = docker_status
 
+    # Phase 4: include explicit drift/compatibility diagnostics.
+    if drift_diagnostics is not None:
+        output["drift"] = drift_diagnostics
+
     return output
 
 
@@ -378,6 +608,7 @@ def _display_text_status(
     state_manager: StateManager,
     project_state_manager: ProjectStateManager,
     manifests: dict[str, ModuleManifest] | None = None,
+    drift_diagnostics: dict | None = None,
 ) -> None:
     """Display status in text format."""
     # Display header
@@ -404,6 +635,10 @@ def _display_text_status(
     else:
         click.secho("\n⚠️  No state file found (.quickscale/state.yml)", fg="yellow")
         click.echo("   Run 'quickscale apply' to initialize the project state.")
+
+    # Phase 4: display explicit M2 drift & compatibility diagnostics.
+    if drift_diagnostics is not None:
+        _display_drift_diagnostics(drift_diagnostics)
 
     resolved_manifests = manifests
     if resolved_manifests is None and state and state.modules:
@@ -506,15 +741,24 @@ def status(json_output: bool) -> None:
 
     # Handle JSON output
     if json_output:
+        drift_diagnostics = _compute_drift_diagnostics(
+            project_path, state, project_state_manager, state_manager
+        )
         output = _build_json_output(
             project_path,
             config_path,
             state,
             config,
             manifests,
+            drift_diagnostics=drift_diagnostics,
         )
         click.echo(json_module.dumps(output, indent=2))
         return
+
+    # Compute drift diagnostics for text output.
+    drift_diagnostics = _compute_drift_diagnostics(
+        project_path, state, project_state_manager, state_manager
+    )
 
     # Display text status
     _display_text_status(
@@ -526,4 +770,5 @@ def status(json_output: bool) -> None:
         state_manager,
         project_state_manager,
         manifests,
+        drift_diagnostics=drift_diagnostics,
     )

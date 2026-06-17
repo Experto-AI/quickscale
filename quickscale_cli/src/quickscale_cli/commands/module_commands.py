@@ -24,7 +24,10 @@ from quickscale_core.config import (
     load_config,
     normalize_installed_version,
     remove_module,
-    update_module_version,
+)
+from quickscale_core.advisory_lock import (
+    AdvisoryLock,
+    AdvisoryLockContentionError,
 )
 from quickscale_core.project_state import (
     ProjectStateManager,
@@ -1014,7 +1017,6 @@ def _update_single_module(
                 )
 
                 installed_version = _read_embedded_module_version(project_path, name)
-                update_module_version(name, installed_version, project_path)
                 _sync_state_module_version(project_path, name, installed_version)
 
                 _commit_module_update(name, info.prefix)
@@ -1134,39 +1136,47 @@ def update(no_preview: bool) -> None:
     try:
         _validate_update_environment()
 
-        # Load configuration
+        # Load consolidated state. ProjectStateManager.load_state() performs
+        # read-through import of legacy config.yml tracking fields when
+        # state.yml lacks consolidated tracking metadata.
+        project_path = Path.cwd()
+        manager = ProjectStateManager(project_path)
         try:
-            config = load_config()
-        except ConfigError as error:
+            state = manager.load_state()
+        except Exception as error:
             click.secho(
-                f"❌ Failed to load .quickscale/config.yml: {error}",
+                f"❌ Failed to load .quickscale/state.yml: {error}",
                 fg="red",
                 err=True,
             )
             click.echo(
-                "💡 Fix or restore .quickscale/config.yml before running "
+                "💡 Fix or restore .quickscale/state.yml before running "
                 "'quickscale update'.",
                 err=True,
             )
             raise click.Abort() from error
 
-        if not config.modules:
+        if state is None or not state.modules:
             click.secho("✅ No modules installed. Nothing to update.", fg="green")
             click.echo("\n💡 Tip: Add modules with 'quickscale plan --add'")
             return
 
         # Surface module version drift between state and legacy config.
         # Non-fatal: update reconciles both files at the end.
-        _warn_version_drift_for_update(Path.cwd(), config)
+        try:
+            legacy_config = load_config()
+        except ConfigError:
+            legacy_config = None
+        _warn_version_drift_for_update(project_path, legacy_config)
 
-        for name in config.modules:
+        for name in state.modules:
             if not _validate_module_readiness(name):
                 raise click.Abort()
 
         # Show installed modules
-        click.echo(f"📦 Found {len(config.modules)} installed module(s):")
-        for name, info in config.modules.items():
-            click.echo(f"  - {name} ({info.installed_version})")
+        click.echo(f"📦 Found {len(state.modules)} installed module(s):")
+        for name, module_state in state.modules.items():
+            click.echo(f"  - {name} ({module_state.version})")
 
         if not no_preview:
             click.echo("\n🔍 Preview mode: Changes will be shown before updating")
@@ -1176,13 +1186,29 @@ def update(no_preview: bool) -> None:
             click.echo("❌ Update cancelled")
             return
 
+        # Acquire advisory lock after confirmation but before mutation.
+        lock = AdvisoryLock(project_path, operation="update")
+        try:
+            lock.acquire()
+        except AdvisoryLockContentionError as error:
+            click.secho(f"❌ {error}", fg="red", err=True)
+            raise click.Abort() from error
+
         failed_modules: list[str] = []
 
-        # Update each module
-        for name, info in config.modules.items():
-            if not _update_single_module(name, info, config.default_remote, no_preview):
-                failed_modules.append(name)
-                break
+        try:
+            # Update each module
+            for name, module_state in state.modules.items():
+                if not _update_single_module(
+                    name,
+                    module_state,
+                    "https://github.com/Experto-AI/quickscale.git",
+                    no_preview,
+                ):
+                    failed_modules.append(name)
+                    break
+        finally:
+            lock.release()
 
         if failed_modules:
             click.secho(
@@ -1251,22 +1277,28 @@ def push(module: str, branch: str, remote: str) -> None:
             click.secho("❌ Error: Not a git repository", fg="red", err=True)
             raise click.Abort()
 
-        # Check if module is installed
+        # Check if module is installed using consolidated state.
+        # ProjectStateManager.load_state() performs read-through import of
+        # legacy config.yml tracking fields when state.yml lacks consolidated
+        # tracking metadata, so this works for both new and legacy projects.
+        project_path = Path.cwd()
+        manager = ProjectStateManager(project_path)
         try:
-            config = load_config()
-        except ConfigError as error:
+            state = manager.load_state()
+        except Exception as error:
             click.secho(
-                f"❌ Failed to load .quickscale/config.yml: {error}",
+                f"❌ Failed to load .quickscale/state.yml: {error}",
                 fg="red",
                 err=True,
             )
             click.echo(
-                "💡 Fix or restore .quickscale/config.yml before running "
+                "💡 Fix or restore .quickscale/state.yml before running "
                 "'quickscale push'.",
                 err=True,
             )
             raise click.Abort() from error
-        if module not in config.modules:
+
+        if state is None or module not in state.modules:
             click.secho(
                 f"❌ Error: Module '{module}' is not installed", fg="red", err=True
             )
@@ -1276,7 +1308,21 @@ def push(module: str, branch: str, remote: str) -> None:
             )
             raise click.Abort()
 
-        module_info = config.modules[module]
+        module_state = state.modules[module]
+        prefix = module_state.prefix
+
+        if not prefix:
+            click.secho(
+                f"❌ Error: Module '{module}' has no recorded prefix in state",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "\n💡 Re-run 'quickscale apply' to consolidate module tracking "
+                "metadata into .quickscale/state.yml.",
+                err=True,
+            )
+            raise click.Abort()
 
         # Default branch name
         if not branch:
@@ -1284,7 +1330,7 @@ def push(module: str, branch: str, remote: str) -> None:
 
         # Show what will be pushed
         click.echo(f"📤 Preparing to push changes for module: {module}")
-        click.echo(f"   Local prefix: {module_info.prefix}")
+        click.echo(f"   Local prefix: {prefix}")
         click.echo(f"   Target branch: {branch}")
         click.echo(f"   Remote: {remote}")
 
@@ -1295,7 +1341,7 @@ def push(module: str, branch: str, remote: str) -> None:
 
         # Push subtree
         click.echo(f"\n🚀 Pushing to {branch}...")
-        run_git_subtree_push(prefix=module_info.prefix, remote=remote, branch=branch)
+        run_git_subtree_push(prefix=prefix, remote=remote, branch=branch)
 
         # Success message
         click.secho("\n✅ Changes pushed successfully!", fg="green", bold=True)

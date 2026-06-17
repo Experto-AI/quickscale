@@ -81,6 +81,7 @@ from quickscale_cli.schema.config_schema import (
 )
 from quickscale_cli.schema.delta import ConfigDelta, compute_delta, format_delta
 from quickscale_cli.schema.state_schema import (
+    ManagedFileRecord,
     ModuleState,
     ProjectState,
     QuickScaleState,
@@ -88,15 +89,18 @@ from quickscale_cli.schema.state_schema import (
     StateManager,
 )
 from quickscale_core.config import (
-    load_config as load_module_tracking_config,
     normalize_installed_version,
-    save_config as save_module_tracking_config,
+)
+from quickscale_core.advisory_lock import (
+    AdvisoryLock,
+    AdvisoryLockContentionError,
 )
 from quickscale_core.project_state import (
     DEFAULT_MANAGED_WIRING_PATHS,
     ProjectStateManager,
     VersionDriftWarning,
     check_version_drift,
+    compute_file_hashes,
 )
 from quickscale_core.utils.git_utils import is_working_directory_clean
 from quickscale_core.generator import ProjectGenerator
@@ -690,31 +694,6 @@ def _update_module_config_in_state(
             )
 
 
-def _sync_legacy_module_config_versions(
-    project_path: Path,
-    state: QuickScaleState,
-) -> None:
-    """Mirror normalized state versions into legacy module tracking for compatibility."""
-    legacy_config = load_module_tracking_config(project_path)
-    changed = False
-
-    for module_name, module_state in state.modules.items():
-        if module_name not in legacy_config.modules:
-            continue
-
-        normalized_version = normalize_installed_version(module_state.version)
-        if normalized_version is None:
-            continue
-
-        if legacy_config.modules[module_name].installed_version != normalized_version:
-            legacy_config.modules[module_name].installed_version = normalized_version
-            changed = True
-
-    if changed:
-        save_module_tracking_config(legacy_config, project_path)
-        click.secho("✅ Updated .quickscale/config.yml module versions", fg="green")
-
-
 def _resolve_managed_wiring_paths(
     qs_config: QuickScaleConfig,
 ) -> list[str]:
@@ -777,13 +756,15 @@ def _warn_version_drift_for_apply(
 def _capture_managed_file_hashes_after_apply(
     project_path: Path,
     qs_config: QuickScaleConfig,
+    state: QuickScaleState,
 ) -> None:
-    """Capture SHA-256 hashes for the managed wiring files.
+    """Capture SHA-256 hashes for the managed wiring files into consolidated state.
 
     Hash capture is best-effort: failures must not abort apply because
-    drift detection is informational. The captured hashes are written to
-    ``.quickscale/file_hashes.yml`` and consumed by ``quickscale status``
-    on subsequent runs.
+    drift detection is informational. The captured hashes are written into
+    the ``managed_files`` section of ``.quickscale/state.yml`` (Phase 2
+    consolidated form) and consumed by ``quickscale status`` on subsequent
+    runs.
 
     The function intentionally returns ``None``. The only caller treats
     hash capture as a fire-and-forget step, so a boolean success signal
@@ -791,9 +772,8 @@ def _capture_managed_file_hashes_after_apply(
     ``click.secho`` warnings and do not propagate.
     """
     try:
-        manager = ProjectStateManager(project_path)
         managed_paths = _resolve_managed_wiring_paths(qs_config)
-        records = manager.capture_managed_file_hashes(managed_paths)
+        hashes = compute_file_hashes(project_path, managed_paths)
     except OSError as error:
         click.secho(
             f"⚠️  Failed to capture managed file hashes: {error}",
@@ -801,10 +781,13 @@ def _capture_managed_file_hashes_after_apply(
         )
         return
 
-    if records:
+    for path, digest in hashes.items():
+        state.managed_files[path] = ManagedFileRecord(path=path, hash=digest)
+
+    if hashes:
         click.echo(
             "  • Tracked managed file hashes for "
-            f"{len(records)} managed file(s) in .quickscale/file_hashes.yml"
+            f"{len(hashes)} managed file(s) in .quickscale/state.yml"
         )
 
 
@@ -1803,6 +1786,38 @@ def _sync_project_module_dependencies_for_apply(
     return True
 
 
+def _populate_consolidated_tracking_from_legacy(
+    project_path: Path,
+    state: QuickScaleState,
+) -> None:
+    """Merge consolidated tracking fields from legacy config.yml into state.
+
+    After ``embed_module`` runs, the legacy ``config.yml`` carries
+    ``prefix``, ``branch``, and ``installed_at`` for each embedded module.
+    This helper reads those values and populates the corresponding
+    :class:`ModuleState` fields so that ``state.yml`` is self-contained
+    after apply.  Modules already carrying consolidated tracking are
+    left untouched.
+    """
+    from quickscale_core.config import load_config as _load_legacy_config
+
+    try:
+        legacy_config = _load_legacy_config(project_path)
+    except Exception:
+        return
+
+    for module_name, module_info in legacy_config.modules.items():
+        module_state = state.modules.get(module_name)
+        if module_state is None:
+            continue
+        if module_state.prefix is None:
+            module_state.prefix = module_info.prefix
+        if module_state.branch is None:
+            module_state.branch = module_info.branch
+        if module_state.installed_at is None:
+            module_state.installed_at = module_info.installed_at
+
+
 def _build_project_state_snapshot(
     output_path: Path,
     qs_config: QuickScaleConfig,
@@ -1861,6 +1876,12 @@ def _build_project_state_snapshot(
         normalized_version = normalize_installed_version(manifest.version)
         if normalized_version is not None:
             module_state.version = normalized_version
+
+    # Populate consolidated module-tracking fields (prefix, branch,
+    # installed_at) from the legacy config.yml that embed_module wrote
+    # during this apply pass.  This ensures state.yml is self-contained
+    # after apply so that fresh push/update/status work from state alone.
+    _populate_consolidated_tracking_from_legacy(output_path, new_state)
 
     return new_state
 
@@ -1963,13 +1984,6 @@ def _save_project_state(
 
         state_manager.save(new_state)
         click.secho("✅ State saved to .quickscale/state.yml", fg="green")
-        try:
-            _sync_legacy_module_config_versions(output_path, new_state)
-        except Exception as e:
-            click.secho(
-                f"⚠️  Failed to mirror module versions into .quickscale/config.yml: {e}",
-                fg="yellow",
-            )
         return True
     except Exception as e:
         click.secho(f"❌ Failed to save state: {e}", fg="red", err=True)
@@ -2193,10 +2207,16 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
     # Determine output path
     output_path = _determine_output_path(config_path, qs_config.project.slug)
 
-    # Load existing state if project exists
+    # Load existing state if project exists.
+    # Use ProjectStateManager.load_state() for read-through legacy
+    # compatibility so that apply planning sees the same consolidated
+    # state as the rest of M2 (CR-001).
+    project_state_manager = ProjectStateManager(output_path)
     state_manager = StateManager(output_path)
     try:
-        authoritative_state = state_manager.load() if output_path.exists() else None
+        authoritative_state = (
+            project_state_manager.load_state() if output_path.exists() else None
+        )
     except StateError as error:
         click.secho(
             f"\n❌ Failed to load .quickscale/state.yml: {error}",
@@ -2391,6 +2411,64 @@ def _context_had_existing_state(ctx: Any) -> bool:
     return getattr(ctx, "existing_state", None) is not None
 
 
+def _refresh_context_after_lock(ctx: ApplyContext) -> None:
+    """Re-read authoritative state and recompute delta after lock acquisition.
+
+    The pre-lock context loaded in :func:`_prepare_apply_context` may be
+    stale if another concurrent apply finished between the initial read
+    and lock acquisition.  Re-read state and recompute the delta so that
+    the locked planning phase operates on fresh data.
+
+    This is a no-op when the output path does not exist, has no
+    authoritative state, or when the refresh would produce an inconsistent
+    context (e.g. Mock objects in tests).
+    """
+    if not ctx.output_path.exists():
+        return
+
+    # Use ProjectStateManager.load_state() for read-through legacy
+    # compatibility so the post-lock refresh sees the same consolidated
+    # state as the rest of M2 (CR-001).
+    project_state_manager = ProjectStateManager(ctx.output_path)
+    try:
+        authoritative_state = project_state_manager.load_state()
+    except StateError:
+        return  # Keep the pre-lock context; the locked path will surface errors.
+
+    # If we could not load authoritative state, keep the pre-lock context.
+    # This handles both fresh-project paths and test fixtures that use
+    # non-project directories.
+    if authoritative_state is None:
+        return
+
+    try:
+        recovery_state = _load_apply_recovery_state(ctx.output_path)
+    except StateError:
+        recovery_state = None
+
+    merged_state = _merge_apply_recovery_state(authoritative_state, recovery_state)
+
+    # Reload manifests for the refreshed state.
+    manifests: dict[str, ModuleManifest] = {}
+    if merged_state and merged_state.modules:
+        try:
+            manifests = _load_module_manifests(
+                ctx.output_path,
+                list(merged_state.modules.keys()),
+                strict=True,
+            )
+        except ManifestError:
+            manifests = {}
+
+    delta = compute_delta(ctx.qs_config, merged_state, manifests)
+
+    ctx.existing_state = merged_state
+    ctx.manifests = manifests
+    ctx.delta = delta
+    ctx.has_pending_post_embed_recovery = recovery_state is not None
+    ctx.had_existing_state = True
+
+
 def _execute_apply_steps(
     ctx: ApplyContext,
     force: bool,
@@ -2424,6 +2502,58 @@ def _execute_apply_steps(
     if project_generated:
         _init_git_with_config(ctx.output_path)
 
+    # Acquire advisory lock after project directory exists but before any
+    # state mutation. For new projects, the directory was just created by
+    # project generation. For existing projects, it already exists.
+    lock = AdvisoryLock(ctx.output_path, operation="apply")
+    try:
+        lock.acquire()
+    except AdvisoryLockContentionError as error:
+        click.secho(f"❌ {error}", fg="red", err=True)
+        raise click.Abort() from error
+
+    try:
+        # Re-read authoritative state and recompute delta after acquiring
+        # the lock so that planning uses fresh state, not a stale snapshot
+        # taken before the lock was held.
+        _refresh_context_after_lock(ctx)
+
+        # Re-run top-level gate decisions with the refreshed state so that
+        # stale pre-lock no-op / immutable-change / config-removal decisions
+        # cannot continue mutating under the lock if another apply won the
+        # race between the initial read and lock acquisition (CR-002).
+        _handle_delta_and_existing_state(
+            ctx.delta,
+            ctx.existing_state,
+            has_pending_post_embed_recovery=ctx.has_pending_post_embed_recovery,
+        )
+
+        _execute_apply_steps_locked(
+            ctx,
+            force,
+            no_docker,
+            no_modules,
+            verbose_docker,
+            project_generated=project_generated,
+            existing_project=existing_project,
+            has_pending_post_embed_recovery=has_pending_post_embed_recovery,
+        )
+    finally:
+        lock.release()
+
+
+def _execute_apply_steps_locked(
+    ctx: ApplyContext,
+    force: bool,
+    no_docker: bool,
+    no_modules: bool,
+    verbose_docker: bool = False,
+    *,
+    project_generated: bool = False,
+    existing_project: bool = False,
+    has_pending_post_embed_recovery: bool = False,
+) -> None:
+    """Execute the apply steps while holding the advisory lock."""
     # Embed modules
     modules_to_embed = (
         ctx.delta.modules_to_add
@@ -2496,7 +2626,9 @@ def _execute_apply_steps(
 
     # Capture SHA-256 hashes of the freshly written managed wiring files so
     # `quickscale status` can detect drift on subsequent runs. Best-effort.
-    _capture_managed_file_hashes_after_apply(ctx.output_path, ctx.qs_config)
+    _capture_managed_file_hashes_after_apply(
+        ctx.output_path, ctx.qs_config, post_embed_state
+    )
 
     if not _ensure_backups_gitignore_rules(ctx.output_path, ctx.qs_config):
         _abort_after_post_embed_failure(

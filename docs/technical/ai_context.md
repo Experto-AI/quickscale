@@ -20,7 +20,9 @@ Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs 
 ## Workflow Baseline
 
 - Default workflow: run `quickscale plan <project>`, enter the generated directory, then run `quickscale apply`.
-- `quickscale.yml` is the desired-state file. `.quickscale/state.yml` and `.quickscale/config.yml` are system-managed state artifacts.
+- `quickscale.yml` is the desired-state file. `.quickscale/state.yml` is the sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records. Legacy `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibility inputs only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present).
+- `quickscale apply` acquires an advisory lock around `state.yml` read/modify/write so concurrent applies fail closed instead of racing.
+- `quickscale status` reports drift and compatibility diagnostics on demand (state consolidation, legacy files, module tracking, managed-file drift, version drift).
 - Generated projects are standalone Django projects. Do not assume automatic settings inheritance from `quickscale_core`.
 - Modules are embedded runtime dependencies managed through the documented git-subtree workflow. Themes are one-time scaffolding copied into user-owned project files.
 

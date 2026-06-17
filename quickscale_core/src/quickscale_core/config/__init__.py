@@ -30,6 +30,10 @@ _LAZY_EXPORTS = {
         "quickscale_core.project_state",
         "ManagedFileHash",
     ),
+    "ManagedFileRecord": (
+        "quickscale_core.project_state",
+        "ManagedFileRecord",
+    ),
     "VersionDriftWarning": (
         "quickscale_core.project_state",
         "VersionDriftWarning",
@@ -74,6 +78,7 @@ __all__ = [
     "update_module_version",
     "ProjectStateManager",
     "ManagedFileHash",
+    "ManagedFileRecord",
     "VersionDriftWarning",
     "check_version_drift",
     "compute_file_hashes",

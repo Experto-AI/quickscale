@@ -20,6 +20,7 @@ from quickscale_cli.social_manifest import (
     SOCIAL_LINK_TREE_PATH,
 )
 from quickscale_cli.commands.apply_command import (
+    ApplyContext,
     EmbedModulesResult,
     _check_output_directory,
     _commit_pending_config_changes,
@@ -41,6 +42,7 @@ from quickscale_cli.commands.apply_command import (
     _load_module_manifests,
     _normalize_backups_gitignore_entry,
     _prepare_apply_context,
+    _refresh_context_after_lock,
     _render_billing_env_example_block,
     _run_command,
     _run_migrations,
@@ -57,7 +59,11 @@ from quickscale_cli.commands.apply_command import (
     _sync_notifications_env_example,
     _update_module_config_in_state,
 )
-from quickscale_cli.schema.state_schema import ProjectState, QuickScaleState
+from quickscale_cli.schema.state_schema import (
+    ProjectState,
+    QuickScaleState,
+    StateManager,
+)
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest.loader import ManifestError
 
@@ -1747,6 +1753,7 @@ class TestCommitPendingConfigChanges:
         assert ".quickscale/apply-recovery.yml" not in commit_paths
         assert "?? .quickscale/apply-recovery.yml" in status_output
 
+    @patch("quickscale_cli.commands.apply_command._handle_delta_and_existing_state")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._commit_pending_config_changes")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -1755,6 +1762,7 @@ class TestCommitPendingConfigChanges:
         mock_generate_new_project,
         mock_commit_pending,
         mock_embed_modules_step,
+        mock_handle_delta,
     ):
         """Existing-project apply should stop before subtree embed on staged-scope violations."""
         mock_commit_pending.side_effect = click.Abort()
@@ -2102,7 +2110,10 @@ class TestSaveProjectState:
     def test_state_and_legacy_config_versions_sync_from_embedded_manifest(
         self, tmp_path
     ):
-        """Apply state should use embedded manifest versions and mirror them to config."""
+        """Apply state should use embedded manifest versions.
+
+        Phase 3: config.yml is no longer mirrored. Only state.yml is authoritative.
+        """
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
@@ -2133,7 +2144,8 @@ class TestSaveProjectState:
         legacy_config = yaml.safe_load((quickscale_dir / "config.yml").read_text())
 
         assert state_data["modules"]["auth"]["version"] == "0.82.0"
-        assert legacy_config["modules"]["auth"]["installed_version"] == "0.82.0"
+        # Phase 3: config.yml is no longer mirrored by apply.
+        assert legacy_config["modules"]["auth"]["installed_version"] == "v0.70.0"
 
 
 # ============================================================================
@@ -3445,6 +3457,7 @@ class TestExecuteApplySteps:
             existing_project=False,
         )
 
+    @patch("quickscale_cli.commands.apply_command._handle_delta_and_existing_state")
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
@@ -3475,6 +3488,7 @@ class TestExecuteApplySteps:
         mock_run_migrations,
         mock_save_state,
         mock_display_next_steps,
+        mock_handle_delta,
     ):
         """Existing-project local migration failures must take the recovery-gated abort path."""
         mock_embed_modules_step.return_value = EmbedModulesResult(
@@ -4022,3 +4036,406 @@ class TestManagedAnalyticsApplyRegression:
 
         assert "QUICKSCALE_ANALYTICS_ENABLED" in managed_settings
         assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR" in managed_settings
+
+
+# ============================================================================
+# CR-001 regression: apply planning must use ProjectStateManager.load_state()
+# ============================================================================
+
+
+class TestCR001PrepareApplyContextLegacyReadThrough:
+    """CR-001: _prepare_apply_context must use ProjectStateManager.load_state().
+
+    When ``state.yml`` lacks consolidated sections, apply planning must
+    read-through import legacy ``config.yml`` module-tracking metadata
+    instead of bypassing it via raw ``StateManager.load()``.
+    """
+
+    def test_prepare_apply_context_read_through_imports_legacy_config(self, tmp_path):
+        """Apply planning must surface legacy config.yml tracking via load_state()."""
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        config_path = project_path / "quickscale.yml"
+        config_path.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+        qs_dir = project_path / ".quickscale"
+        qs_dir.mkdir()
+        # state.yml WITHOUT consolidated sections (no managed_files, no
+        # module tracking fields like prefix/branch/installed_at).
+        (qs_dir / "state.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            '  created_at: "2025-01-01T00:00:00"\n'
+            '  last_applied: "2025-01-01T00:00:00"\n'
+            "modules:\n"
+            "  auth:\n"
+            '    version: "0.82.0"\n'
+        )
+        # Legacy config.yml WITH module tracking metadata.
+        (qs_dir / "config.yml").write_text(
+            'version: "1"\n'
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules:\n"
+            "  auth:\n"
+            '    installed_version: "0.82.0"\n'
+            "    prefix: auth_\n"
+            "    branch: main\n"
+            '    installed_at: "2025-06-01T00:00:00"\n'
+        )
+        # Manifest for the installed module so strict loading succeeds.
+        module_dir = project_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        ctx = _prepare_apply_context(config_path)
+
+        # The loaded state must carry the legacy tracking fields via
+        # read-through import, proving ProjectStateManager.load_state()
+        # was used instead of raw StateManager.load().
+        assert ctx.existing_state is not None
+        auth_state = ctx.existing_state.modules.get("auth")
+        assert auth_state is not None
+        assert auth_state.prefix == "auth_"
+        assert auth_state.branch == "main"
+        assert auth_state.installed_at == "2025-06-01T00:00:00"
+
+
+class TestCR001RefreshContextAfterLockLegacyReadThrough:
+    """CR-001: _refresh_context_after_lock must use ProjectStateManager.load_state().
+
+    The post-lock refresh must also read-through import legacy config.yml
+    data so that locked planning operates on the same consolidated view.
+    """
+
+    def test_refresh_context_after_lock_read_through_imports_legacy(self, tmp_path):
+        """Post-lock refresh must surface legacy config.yml tracking via load_state()."""
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        qs_dir = project_path / ".quickscale"
+        qs_dir.mkdir()
+        # state.yml WITHOUT consolidated sections.
+        (qs_dir / "state.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            '  created_at: "2025-01-01T00:00:00"\n'
+            '  last_applied: "2025-01-01T00:00:00"\n'
+            "modules:\n"
+            "  auth:\n"
+            '    version: "0.82.0"\n'
+        )
+        # Legacy config.yml WITH module tracking metadata.
+        (qs_dir / "config.yml").write_text(
+            'version: "1"\n'
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules:\n"
+            "  auth:\n"
+            '    installed_version: "0.82.0"\n'
+            "    prefix: auth_\n"
+            "    branch: main\n"
+            '    installed_at: "2025-06-01T00:00:00"\n'
+        )
+        # Manifest for the installed module.
+        module_dir = project_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        # Build a minimal ApplyContext with pre-lock state that lacks
+        # legacy tracking (simulating raw StateManager.load() behavior).
+        pre_lock_state = StateManager(project_path).load()
+        assert pre_lock_state is not None
+        # Pre-lock: auth module state has no tracking fields.
+        assert pre_lock_state.modules["auth"].prefix is None
+
+        qs_config = Mock()
+        qs_config.project.slug = "myapp"
+        qs_config.project.package = "myapp"
+        qs_config.project.theme = "showcase_html"
+        qs_config.modules = {"auth": Mock(options={})}
+        qs_config.docker.start = False
+        qs_config.docker.build = False
+
+        ctx = ApplyContext(
+            config_path=project_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=project_path,
+            state_manager=StateManager(project_path),
+            existing_state=pre_lock_state,
+            manifests={},
+            delta=Mock(),
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+        _refresh_context_after_lock(ctx)
+
+        # Post-lock refresh must have read-through imported legacy tracking.
+        assert ctx.existing_state is not None
+        auth_state = ctx.existing_state.modules.get("auth")
+        assert auth_state is not None
+        assert auth_state.prefix == "auth_"
+        assert auth_state.branch == "main"
+        assert auth_state.installed_at == "2025-06-01T00:00:00"
+
+
+# ============================================================================
+# CR-002 regression: post-lock gate re-evaluation
+# ============================================================================
+
+
+class TestCR002PostLockGateReEvaluation:
+    """CR-002: apply must re-run gate decisions after the lock refresh.
+
+    If another concurrent apply finishes between the pre-lock read and
+    lock acquisition, the refreshed state may show no changes. Apply
+    must abort instead of continuing to mutate based on stale decisions.
+    """
+
+    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
+    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    def test_post_lock_no_op_aborts_apply(self, mock_lock_cls, mock_refresh):
+        """Apply must abort when post-lock refresh reveals no changes."""
+
+        def _simulate_concurrent_apply_won(ctx):
+            """Simulate another apply winning the race: delta becomes no-op."""
+            ctx.existing_state = QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                    created_at="2025-01-01T00:00:00",
+                    last_applied="2025-06-17T00:00:00",
+                ),
+                modules={},
+            )
+            ctx.delta = Mock()
+            ctx.delta.has_changes = False
+            ctx.delta.modules_to_remove = []
+            ctx.delta.has_immutable_config_changes = False
+            ctx.delta.theme_changed = False
+            ctx.has_pending_post_embed_recovery = False
+            ctx.had_existing_state = True
+
+        mock_refresh.side_effect = _simulate_concurrent_apply_won
+
+        mock_lock = Mock()
+        mock_lock_cls.return_value = mock_lock
+
+        # Pre-lock context: delta shows changes (apply would proceed).
+        pre_lock_delta = Mock()
+        pre_lock_delta.has_changes = True
+        pre_lock_delta.modules_to_add = ["auth"]
+        pre_lock_delta.modules_to_remove = []
+        pre_lock_delta.has_immutable_config_changes = False
+        pre_lock_delta.theme_changed = False
+        pre_lock_delta.modules_unchanged = []
+
+        ctx = Mock()
+        ctx.existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={},
+        )
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = pre_lock_delta
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = False
+        ctx.has_pending_post_embed_recovery = False
+        ctx.had_existing_state = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=True,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        mock_lock.acquire.assert_called_once()
+        mock_lock.release.assert_called_once()
+
+    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
+    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    def test_post_lock_immutable_changes_abort_apply(self, mock_lock_cls, mock_refresh):
+        """Apply must abort when post-lock refresh reveals immutable changes."""
+
+        def _simulate_immutable_changes_appear(ctx):
+            """Simulate state change that introduces immutable config changes."""
+            ctx.existing_state = QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                    created_at="2025-01-01T00:00:00",
+                    last_applied="2025-06-17T00:00:00",
+                ),
+                modules={},
+            )
+            immutable_change = Mock()
+            immutable_change.option_name = "method"
+            immutable_change.old_value = "email"
+            immutable_change.new_value = "username"
+            ctx.delta = Mock()
+            ctx.delta.has_changes = True
+            ctx.delta.modules_to_remove = []
+            ctx.delta.has_immutable_config_changes = True
+            ctx.delta.get_all_immutable_changes.return_value = [
+                ("auth", immutable_change)
+            ]
+            ctx.delta.theme_changed = False
+            ctx.has_pending_post_embed_recovery = False
+            ctx.had_existing_state = True
+
+        mock_refresh.side_effect = _simulate_immutable_changes_appear
+
+        mock_lock = Mock()
+        mock_lock_cls.return_value = mock_lock
+
+        pre_lock_delta = Mock()
+        pre_lock_delta.has_changes = True
+        pre_lock_delta.modules_to_add = ["auth"]
+        pre_lock_delta.modules_to_remove = []
+        pre_lock_delta.has_immutable_config_changes = False
+        pre_lock_delta.theme_changed = False
+        pre_lock_delta.modules_unchanged = []
+
+        ctx = Mock()
+        ctx.existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={},
+        )
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = pre_lock_delta
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = False
+        ctx.has_pending_post_embed_recovery = False
+        ctx.had_existing_state = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command.format_delta",
+            return_value="changes",
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=True,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        mock_lock.acquire.assert_called_once()
+        mock_lock.release.assert_called_once()
+
+    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
+    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    def test_post_lock_config_removal_aborts_apply(self, mock_lock_cls, mock_refresh):
+        """Apply must abort when post-lock refresh reveals config-driven removals."""
+
+        def _simulate_config_removal_appears(ctx):
+            """Simulate state change that introduces module removals."""
+            ctx.existing_state = QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                    created_at="2025-01-01T00:00:00",
+                    last_applied="2025-06-17T00:00:00",
+                ),
+                modules={},
+            )
+            ctx.delta = Mock()
+            ctx.delta.has_changes = True
+            ctx.delta.modules_to_remove = ["auth"]
+            ctx.delta.has_immutable_config_changes = False
+            ctx.delta.theme_changed = False
+            ctx.has_pending_post_embed_recovery = False
+            ctx.had_existing_state = True
+
+        mock_refresh.side_effect = _simulate_config_removal_appears
+
+        mock_lock = Mock()
+        mock_lock_cls.return_value = mock_lock
+
+        pre_lock_delta = Mock()
+        pre_lock_delta.has_changes = True
+        pre_lock_delta.modules_to_add = ["auth"]
+        pre_lock_delta.modules_to_remove = []
+        pre_lock_delta.has_immutable_config_changes = False
+        pre_lock_delta.theme_changed = False
+        pre_lock_delta.modules_unchanged = []
+
+        ctx = Mock()
+        ctx.existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={},
+        )
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = pre_lock_delta
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = False
+        ctx.has_pending_post_embed_recovery = False
+        ctx.had_existing_state = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command.format_delta",
+            return_value="changes",
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=True,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        mock_lock.acquire.assert_called_once()
+        mock_lock.release.assert_called_once()

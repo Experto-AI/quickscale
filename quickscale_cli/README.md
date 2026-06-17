@@ -9,3 +9,19 @@ operations.
 
 All business logic lives in `quickscale-core`; this package is the
 command surface only.
+
+## Installation
+
+```bash
+pip install quickscale-cli
+```
+
+Or install the full bundle:
+
+```bash
+pip install quickscale
+```
+
+## Documentation
+
+See the [main repository README](../README.md) and [docs/](../docs/) for full documentation.

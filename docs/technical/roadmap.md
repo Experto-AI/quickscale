@@ -54,8 +54,8 @@ git merge --no-ff wt-track{N}-<branch>
 | # | Track | Phase | Condition |
 |---|-------|-------|-----------|
 | M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
-| M1 | Track 1 | F11.1d ✅ + 11.1d.1 + 11.1g + 11.1g.1 | **11.1d done:** nullable org FK on Tag/Company/Contact/Stage/Deal; ContactNote/DealNote parent-derived; CRM admin non-exposure explicit for all five admins; targeted migration/admin/serializer/model tests added; CRM baseline 158 passed / 1 xfailed. **Remaining:** legacy NULL-row uniqueness preserved (11.1d.1); org-scoped creates stamp current org (11.1g); queries scoped (11.1g.1); isolation test still xfail |
-| M2 | Track 3 | F2.1–2.2 | Advisory lock + sub-sections in state.yml schema |
+| M1 | Track 1 | F11.1d ✅ + 11.1d.1 + 11.1g + 11.1g.1 | **11.1d done:** nullable org FK on Tag/Company/Contact/Stage/Deal; ContactNote/DealNote parent-derived; CRM admin non-exposure explicit for all five admins; targeted migration/admin/serializer/model tests added; CRM baseline 158 passed / 1 xfailed. **Remaining:** 11.1d.1 is deferred pending re-scope (Tag legacy-NULL uniqueness still open; Stage terminal-semantic uniqueness deferred until org-aware helper/read-path work; Tag caller parity must cover create + rename/update); 11.1g is blocked — Contact/Deal create serializers still accept foreign-org or legacy-NULL related IDs via unscoped `company_id`/`tag_ids`/`contact_id`/`stage_id`, so org-scoped create stamping cannot land safely until a minimal org-aware related-ID rejection guard is added or 11.1g is re-scoped to self-contained resources first; org-scoped create stamping must stay explicitly tied to org-routed CRM create paths so solo `/crm/api/` create semantics stay unchanged; queries scoped (11.1g.1); isolation test still xfail |
+| M2 | Track 3 | F2.1–2.2 | Merged to `v87`; CR-005 resolved — partial-remove legacy read-through regression fixed and covered |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 11 wiring slices migrated (`social` deferred to M6) |
 | M5 | Track 3 | F2.3–2.4 | Provenance fields in state.yml; release tooling updated |
@@ -176,9 +176,9 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M1
 **Dependencies:** None externally (pull v87 after M0, then continue in same worktree).
 
-**Status:** 🟡 11.1d complete; 11.1d.1 + 11.1g + 11.1g.1 pending. M1 is not yet met.
+**Status:** 🟡 11.1d complete; 11.1d.1 deferred pending re-scope; 11.1g blocked by Contact/Deal create-path related-ID safety; 11.1g.1 pending. M1 is not yet met.
 
-**Explanation:** Plan review found the original M1 batch was still effectively Tier 3 because it mixed CRM ownership strategy, nullable schema rollout, uniqueness changes, org-scoped create behavior, and read-path scoping. Keep M1 inside CRM only: do **not** widen shared `TenantModel` nullability in `orgs`, preserve legacy `NULL`-owned uniqueness for `Tag` / `Stage` while ownership remains nullable, and land an explicit create-path bridge before org-scoped reads hide `NULL`-owned rows. The handoff slices below are the current non-Tier-3 breakdown; if any slice grows beyond a clean Tier 1–2 pass, split it again before implementation.
+**Explanation:** Plan review found the original M1 batch was still effectively Tier 3 because it mixed CRM ownership strategy, nullable schema rollout, uniqueness changes, org-scoped create behavior, and read-path scoping. Keep M1 inside CRM only: do **not** widen shared `TenantModel` nullability in `orgs`, preserve legacy `NULL`-owned uniqueness for `Tag` / `Stage` while ownership remains nullable, and land an explicit create-path bridge before org-scoped reads hide `NULL`-owned rows. The first attempt at 11.1d.1 is now explicitly deferred rather than forced through as written: Stage terminal-semantic uniqueness would break `_resolve_terminal_stage()` / bulk mark-won|mark-lost caller parity before org-aware helper/read-path work lands, and Tag uniqueness parity must cover rename/update as well as create. The handoff slices below are the current non-Tier-3 breakdown; if any slice grows beyond a clean Tier 1–2 pass, split it again before implementation.
 
 **Phase 11.1d — CRM-local nullable ownership groundwork** ✅ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 - [x] Add CRM-local nullable `organization_id` ownership to `Tag`, `Company`, `Contact`, `Stage`, and `Deal` without changing shared `TenantModel` nullability in `orgs`. _Migration `0004_add_organization_ownership.py` adds nullable `organization_id` FKs to all five models; model tests and migration tests cover the new fields. CRM admin classes remain non-exposed for all five admins (Tag, Company, Contact, Stage, Deal)._
@@ -187,8 +187,16 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Completion evidence (11.1d):** Targeted migration, admin, serializer, and model tests added. CRM baseline: 158 passed / 1 xfailed (the xfail is the known cross-tenant isolation assertion from Finding 14, unchanged by this slice). Query scoping, backfill, bootstrap, per-org uniqueness replacement, and NOT NULL enforcement remain in later slices.
 
 **Phase 11.1d.1 — Legacy-NULL-preserving uniqueness** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-- [ ] Replace global uniqueness on `Tag` / `Stage` only when the same migration preserves one legacy `NULL`-owned row globally and enforces per-org uniqueness for owned rows.
-- [ ] Add migration / model coverage proving `NULL`-owned duplicates remain blocked while owned-row duplicates are allowed only where intended.
+
+**Status:** ⏸️ Deferred pending re-scope.
+
+**Blocked findings (deferred by decision):**
+- `PR-11.1d.1-002` — Allowing per-org duplicate `Stage.terminal_semantic` values before org-aware helper/read-path work lands would break `_resolve_terminal_stage()` and bulk mark-won / mark-lost caller parity.
+- `PR-11.1d.1-003` — Removing `Tag.name` field-level `unique=True` requires replacement validation parity for both create and rename/update, not only duplicate create.
+
+- [ ] Re-scope 11.1d.1 as a Tag-first legacy-NULL-preserving uniqueness slice, preserving field-scoped duplicate validation parity for both create and rename/update paths.
+- [ ] Defer the `Stage.terminal_semantic` uniqueness split until the org-aware helper / read-path seam can preserve `_resolve_terminal_stage()` and bulk mark-won / mark-lost caller parity.
+- [ ] When the re-scoped slice resumes, add migration / model / serializer / API regression coverage proving legacy `NULL`-owned duplicates stay blocked, cross-org owned duplicates behave as intended, and duplicate Tag writes still fail as controlled 4xx responses.
 
 **Phase 11.1e — Existing-data rollout contract** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
@@ -207,6 +215,16 @@ _(implement between M1 and M3, same worktree as 11.1d)_
 **Phase 11.1g — Org-scoped create bridge** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 _(part of the M1 batch — implement alongside 11.1d)_
+
+**Status:** 🚫 Blocked — planning attempt stopped.
+
+**Blocked findings (from planning pass):**
+- Contact/Deal create serializers still accept foreign-org or legacy-NULL related IDs via unscoped `company_id`, `tag_ids`, `contact_id`, and `stage_id` fields. Stamping org ownership on Contact/Deal creates cannot land safely while those related-ID inputs can reference rows outside the creating org.
+- Org-scoped create stamping must stay explicitly tied to org-routed CRM create paths so solo `/crm/api/` create semantics stay unchanged and receive middleware-backed parity coverage.
+
+**Resume paths:**
+- Add a minimal org-aware rejection guard for the related-ID inputs (`company_id`, `tag_ids`, `contact_id`, `stage_id`) on Contact/Deal create serializers, then proceed with create-path stamping.
+- Or re-scope 11.1g to self-contained resources first (Tag, Company, Stage) and defer Contact/Deal create stamping until the related-ID guard is in place.
 
 - [ ] Stamp current-org ownership on org-scoped create paths for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` before M1 hides `NULL`-owned rows from org-scoped reads.
 - [ ] Add middleware-backed org-member create → list roundtrip coverage so SaaS-created CRM rows remain visible inside the creating org.
@@ -327,9 +345,13 @@ _(part of the M1 batch — implement after 11.1g in the same worktree)_
 **Track:** Track 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M2
 **Dependencies:** None — start immediately (fully parallel with Tracks 1 and 2).
 
-- [ ] Collapse to one authoritative applied-state store: retire `config.yml` into `state.yml` and fold `file_hashes.yml` into a sub-section.
-- [ ] Make reconciliation explicit and queryable (`quickscale status`/`doctor` reports drift on demand, not only during `apply`).
-- [ ] Add an advisory lock around `state.yml` read/modify/write so concurrent `apply` (CI + local, two terminals) fails closed instead of racing.
+- [x] Collapse to one authoritative applied-state store: retire `config.yml` into `state.yml` and fold `file_hashes.yml` into a sub-section. _`.quickscale/state.yml` is now the sole authoritative applied-state store with optional `managed_files` and per-module consolidated tracking sub-sections. Legacy `config.yml` and `file_hashes.yml` are read-through imported as compatibility inputs when consolidated sections are absent, and ignored when consolidated sections are present._
+- [x] Make reconciliation explicit and queryable (`quickscale status` reports drift on demand, not only during `apply`). _`quickscale status` text and `--json` output now surface M2 drift and compatibility diagnostics: state consolidation status, legacy files on disk, legacy-compat active mode, per-module tracking completeness, managed-files consolidation, filesystem drift, managed-file drift, and version drift. No `doctor` command was added; diagnostics live in `quickscale status` only._
+- [x] Add an advisory lock around `state.yml` read/modify/write so concurrent `apply` (CI + local, two terminals) fails closed instead of racing. _`AdvisoryLock` provides an exclusive-create (`O_CREAT | O_EXCL`) file-based advisory lock at `.quickscale/<name>.lock` with PID, hostname, timestamp, and operation metadata. Fail-fast contention with no retry loops; stale-lock inspection and manual-clear guidance only._
+
+**Merge status:** Substantial implementation is now merged to `v87` (state.yml consolidation, legacy read-through compatibility, drift diagnostics in `quickscale status` text and `--json`, advisory lock with fail-fast contention, roadmap and technical docs updated, package README / publish helper compatibility fixed). CR-005 resolved — remove-path state loading now uses `ProjectStateManager.load_state()` so partial removes on non-consolidated projects materialise surviving module tracking before save, and regression tests prove later `update`/`push` flows work for surviving modules. Phase 2.1–2.2 is complete.
+
+- [x] Fix CR-005: preserve legacy `config.yml` tracking import for surviving modules after a partial remove on a non-consolidated project, and add regression coverage proving later `quickscale update`/`push` still work for the surviving module. _Remove-path state loading now uses `ProjectStateManager.load_state()` so non-consolidated projects have surviving module tracking materialised from legacy `config.yml` before the removal save. Regression tests cover both state.yml tracking preservation and downstream `update` targeting after a partial remove on a non-consolidated project._
 
 **Phase 2.3–2.4 — Authoritative provenance fields + release tooling** _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 

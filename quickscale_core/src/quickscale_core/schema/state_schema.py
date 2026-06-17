@@ -2,6 +2,12 @@
 
 Dataclasses and operations for .quickscale/state.yml state tracking.
 Implements Terraform-style state management for incremental applies.
+
+Phase 2 (M2) extends the state schema with consolidated sub-sections for
+module-tracking metadata (previously in ``config.yml``) and managed-file
+drift/hash records (previously in ``file_hashes.yml``).  The new fields
+are optional so that existing ``state.yml`` files without consolidated
+sections continue to load unchanged.
 """
 
 from dataclasses import dataclass, field
@@ -23,17 +29,76 @@ class StateError(Exception):
 
 @dataclass
 class ModuleState:
-    """State tracking for an embedded module"""
+    """State tracking for an embedded module.
+
+    Phase 2 adds optional tracking fields (``prefix``, ``branch``,
+    ``installed_at``) that consolidate the module-tracking metadata
+    previously stored only in ``.quickscale/config.yml``.  When these
+    fields are present the state file is self-contained; when absent the
+    unified :class:`~quickscale_core.project_state.ProjectStateManager`
+    can read-through import from the legacy config file.
+    """
 
     name: str
     version: str | None = None
     commit_sha: str | None = None
     embedded_at: str = field(default_factory=lambda: datetime.now().isoformat())
     options: dict[str, Any] = field(default_factory=dict)
+    # Consolidated tracking fields (from legacy config.yml).
+    prefix: str | None = None
+    branch: str | None = None
+    installed_at: str | None = None
 
     def __post_init__(self) -> None:
         self.version = normalize_installed_version(self.version)
         self.options = sanitize_module_options(self.name, self.options)
+
+    @property
+    def has_consolidated_tracking(self) -> bool:
+        """Return True when the module carries full consolidated tracking."""
+        return (
+            self.prefix is not None
+            and self.branch is not None
+            and self.installed_at is not None
+        )
+
+
+@dataclass
+class ManagedFileRecord:
+    """Consolidated managed-file hash record stored inside ``state.yml``.
+
+    This is the state-schema counterpart of
+    :class:`~quickscale_core.project_state.ManagedFileHash`.  When the
+    ``managed_files`` section is present in ``state.yml`` the separate
+    ``file_hashes.yml`` ledger is no longer needed.
+
+    Attributes:
+        path: Repo-relative path of the managed file (forward slashes).
+        hash: SHA-256 hex digest of the file contents at capture time.
+        applied_at: ISO-8601 timestamp when the hash was recorded.
+
+    """
+
+    path: str
+    hash: str
+    applied_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> dict[str, str]:
+        """Return a YAML-friendly dictionary representation."""
+        return {
+            "path": self.path,
+            "hash": self.hash,
+            "applied_at": self.applied_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ManagedFileRecord":
+        """Build a :class:`ManagedFileRecord` from a YAML mapping."""
+        return cls(
+            path=str(data["path"]),
+            hash=str(data["hash"]),
+            applied_at=str(data.get("applied_at", datetime.now().isoformat())),
+        )
 
 
 @dataclass
@@ -49,11 +114,36 @@ class ProjectState:
 
 @dataclass
 class QuickScaleState:
-    """Complete QuickScale applied state from .quickscale/state.yml"""
+    """Complete QuickScale applied state from .quickscale/state.yml.
+
+    Phase 2 adds an optional ``managed_files`` mapping that consolidates
+    the managed-file hash ledger into the authoritative state file.
+    """
 
     version: str
     project: ProjectState
     modules: dict[str, ModuleState] = field(default_factory=dict)
+    managed_files: dict[str, ManagedFileRecord] = field(default_factory=dict)
+
+    @property
+    def has_consolidated_modules(self) -> bool:
+        """Return True when every module carries consolidated tracking."""
+        if not self.modules:
+            return True  # vacuously — no modules to track
+        return all(m.has_consolidated_tracking for m in self.modules.values())
+
+    @property
+    def has_consolidated_managed_files(self) -> bool:
+        """Return True when the managed_files section is populated.
+
+        An empty mapping with no legacy ``file_hashes.yml`` on disk is
+        considered fully consolidated (there is nothing to import).
+        """
+        # The presence of the section (even empty) means consolidation
+        # has happened.  Callers that need to distinguish "section absent"
+        # from "section empty" should check the raw YAML instead.
+        return True  # The field always exists; see ProjectStateManager for
+        # the on-disk presence check.
 
 
 class StateManager:
@@ -151,12 +241,42 @@ class StateManager:
                         module_name,
                         module_info.get("options") or {},
                     ),
+                    # Phase 2 consolidated tracking fields (optional).
+                    prefix=module_info.get("prefix"),
+                    branch=module_info.get("branch"),
+                    installed_at=module_info.get("installed_at"),
                 )
+
+            # Parse managed-file records (Phase 2 consolidated section).
+            managed_files: dict[str, ManagedFileRecord] = {}
+            managed_files_data = data.get("managed_files")
+            if managed_files_data is not None:
+                if isinstance(managed_files_data, list):
+                    for entry in managed_files_data:
+                        if not isinstance(entry, dict):
+                            continue
+                        try:
+                            record = ManagedFileRecord.from_dict(entry)
+                        except (KeyError, TypeError, ValueError):
+                            continue
+                        managed_files[record.path] = record
+                elif isinstance(managed_files_data, dict):
+                    for file_path, file_info in managed_files_data.items():
+                        if not isinstance(file_info, dict):
+                            continue
+                        try:
+                            record = ManagedFileRecord.from_dict(
+                                {**file_info, "path": file_path}
+                            )
+                        except (KeyError, TypeError, ValueError):
+                            continue
+                        managed_files[record.path] = record
 
             return QuickScaleState(
                 version=data.get("version", "1"),
                 project=project,
                 modules=modules,
+                managed_files=managed_files,
             )
         except yaml.YAMLError as e:
             raise StateError(f"Failed to parse state file: {e}") from e
@@ -192,17 +312,31 @@ class StateManager:
             if state.modules:
                 data["modules"] = {
                     name: {
-                        "version": normalize_installed_version(module.version),
-                        "commit_sha": module.commit_sha,
-                        "embedded_at": module.embedded_at,
-                        "options": (
-                            sanitize_module_options(name, module.options)
-                            if module.options
-                            else None
-                        ),
+                        k: v
+                        for k, v in {
+                            "version": normalize_installed_version(module.version),
+                            "commit_sha": module.commit_sha,
+                            "embedded_at": module.embedded_at,
+                            "options": (
+                                sanitize_module_options(name, module.options)
+                                if module.options
+                                else None
+                            ),
+                            # Phase 2 consolidated tracking fields.
+                            "prefix": module.prefix,
+                            "branch": module.branch,
+                            "installed_at": module.installed_at,
+                        }.items()
+                        if v is not None
                     }
                     for name, module in state.modules.items()
                 }
+
+            # Phase 2: write consolidated managed-file records when present.
+            if state.managed_files:
+                data["managed_files"] = [
+                    record.to_dict() for record in state.managed_files.values()
+                ]
 
             # Write atomically using temporary file
             temp_file = self.state_file.with_suffix(".tmp")
@@ -220,6 +354,53 @@ class StateManager:
 
         except Exception as e:
             raise StateError(f"Failed to save state: {e}") from e
+
+    def flush_empty_consolidated_sections(self) -> None:
+        """Rewrite state.yml with explicit empty consolidated sections.
+
+        After a removal that empties ``modules`` or ``managed_files``,
+        :meth:`save` omits those keys (they are empty collections).  Downstream
+        readers use the *absence* of consolidated keys to decide whether
+        legacy ``config.yml`` / ``file_hashes.yml`` should be read-through
+        imported.  An empty-but-authoritative state file must therefore
+        write explicit ``modules: {}`` / ``managed_files: []`` markers so
+        that readers can distinguish "M2 has spoken — nothing tracked"
+        from "pre-M2 state that never had consolidated sections."
+
+        This is a no-op when the state file already contains explicit
+        consolidated keys.
+        """
+        if not self.state_file.exists():
+            return
+        try:
+            with open(self.state_file) as fh:
+                data = yaml.safe_load(fh) or {}
+        except (yaml.YAMLError, OSError):
+            return
+
+        if not isinstance(data, dict):
+            return
+
+        needs_write = False
+        if "modules" not in data:
+            data["modules"] = {}
+            needs_write = True
+        if "managed_files" not in data:
+            data["managed_files"] = []
+            needs_write = True
+
+        if not needs_write:
+            return
+
+        temp_file = self.state_file.with_suffix(".tmp")
+        try:
+            with open(temp_file, "w") as fh:
+                yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
+            temp_file.replace(self.state_file)
+        except Exception:
+            if temp_file.exists():
+                temp_file.unlink()
+            raise
 
     def update(self, state: QuickScaleState) -> None:
         """Update state file with new last_applied timestamp and save

@@ -154,10 +154,13 @@ class TestRemoveCommand:
         config = yaml.safe_load((project_with_module / "quickscale.yml").read_text())
         assert "auth" not in config.get("modules", {})
 
+        # Phase 3: remove no longer writes to legacy config.yml.
+        # The legacy config.yml is a read-through compatibility input only.
         legacy_config = yaml.safe_load(
             (project_with_module / ".quickscale" / "config.yml").read_text()
         )
-        assert "auth" not in legacy_config.get("modules", {})
+        # Legacy config.yml is no longer mutated by remove; auth remains as-is.
+        assert "auth" in legacy_config.get("modules", {})
 
     def test_remove_module_not_found(
         self,
@@ -217,6 +220,9 @@ class TestRemoveCommand:
         )
 
         assert result.exit_code == 0
+        # Phase 3: remove no longer writes to legacy config.yml.
+        # The legacy config.yml is a read-through compatibility input only.
         updated_legacy_config = yaml.safe_load(legacy_config_path.read_text())
-        assert "auth" not in updated_legacy_config.get("modules", {})
+        # Legacy config.yml is no longer mutated by remove; auth remains as-is.
+        assert "auth" in updated_legacy_config.get("modules", {})
         assert "blog" in updated_legacy_config.get("modules", {})

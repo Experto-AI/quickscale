@@ -1185,10 +1185,11 @@ class TestApplyDriftDetection:
         assert "Module version drift" not in captured
 
     def test_capture_managed_file_hashes_writes_ledger(self, tmp_path, capsys):
-        """Apply should capture hashes for the default managed wiring files."""
+        """Apply should capture hashes into consolidated state managed_files."""
         from quickscale_cli.commands.apply_command import (
             _capture_managed_file_hashes_after_apply,
         )
+        from quickscale_core.schema.state_schema import QuickScaleState, ProjectState
 
         project = tmp_path / "myapp"
         project.mkdir()
@@ -1197,11 +1198,17 @@ class TestApplyDriftDetection:
         (project / "myapp" / "urls_modules.py").write_text("URLS = []\n")
 
         config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
+        )
 
-        _capture_managed_file_hashes_after_apply(project, config)
+        _capture_managed_file_hashes_after_apply(project, config, state)
 
-        ledger = project / ".quickscale" / "file_hashes.yml"
-        assert ledger.exists()
+        # Phase 3: hashes are stored in consolidated state, not file_hashes.yml.
+        assert state.managed_files, "Expected managed_files to be populated"
+        assert "myapp/settings/modules.py" in state.managed_files
+        assert "myapp/urls_modules.py" in state.managed_files
 
         captured = capsys.readouterr().out
         assert "Tracked managed file hashes" in captured

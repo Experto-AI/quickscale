@@ -21,7 +21,11 @@ from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_core.config.module_config import (
     load_config as load_legacy_module_config,
 )
-from quickscale_core.config.module_config import remove_module as remove_legacy_module
+from quickscale_core.advisory_lock import (
+    AdvisoryLock,
+    AdvisoryLockContentionError,
+)
+from quickscale_core.project_state import ProjectStateManager
 
 
 _APPLY_RECOVERY_FILENAME = "apply-recovery.yml"
@@ -71,10 +75,20 @@ def _load_quickscale_config(project_path: Path) -> QuickScaleConfig | None:
 def _load_state(
     project_path: Path, state_manager: StateManager
 ) -> QuickScaleState | None:
-    """Strictly load .quickscale/state.yml when present."""
-    del project_path
+    """Load ``.quickscale/state.yml`` with legacy read-through import.
+
+    Uses :meth:`ProjectStateManager.load_state` so that non-consolidated
+    projects (pre-M2 state without ``prefix``/``branch``/``installed_at``
+    tracking fields) have their surviving module metadata materialised
+    from legacy ``config.yml`` before the removal save.  Without this,
+    the post-remove ``flush_empty_consolidated_sections`` can write
+    explicit empty consolidated markers that suppress the legacy
+    read-through import on later loads, losing tracking for surviving
+    modules and breaking subsequent ``update``/``push`` flows.
+    """
+    del state_manager
     try:
-        return state_manager.load()
+        return ProjectStateManager(project_path).load_state()
     except Exception as error:
         raise click.ClickException(
             f"Failed to load .quickscale/state.yml: {error}"
@@ -479,11 +493,20 @@ def _update_state_for_removal(
     updated_state: QuickScaleState | None,
     state_manager: StateManager,
 ) -> None:
-    """Persist the updated applied state."""
+    """Persist the updated applied state.
+
+    After saving, flush explicit empty consolidated sections (``modules: {}``,
+    ``managed_files: []``) so that downstream ``ProjectStateManager.load_state()``
+    calls can distinguish "M2 authoritatively records no modules" from
+    "pre-M2 state that never had consolidated sections."  Without this,
+    stale legacy ``config.yml`` entries could resurrect removed modules
+    through the read-through import path.
+    """
     if updated_state is None:
         return
 
     state_manager.save(updated_state)
+    state_manager.flush_empty_consolidated_sections()
 
 
 def _build_removal_plan(
@@ -599,10 +622,6 @@ def _perform_removal_steps(
                     is_error=True,
                 )
 
-            if plan.legacy_tracking_needs_update:
-                remove_legacy_module(module_name, project_path)
-                _log_step_result(True, "Updated .quickscale/config.yml", is_error=True)
-
             success, message = _remove_module_directory(project_path, module_name)
             if not success:
                 raise RuntimeError(message)
@@ -697,8 +716,24 @@ def remove(module_name: str, force: bool, keep_data: bool) -> None:
             click.echo("❌ Cancelled")
             raise click.Abort()
 
-    # Remove module
-    _perform_removal_steps(project_path, module_name, plan, state_manager)
+    # Acquire advisory lock after confirmation but before mutation.
+    lock = AdvisoryLock(project_path, operation="remove")
+    try:
+        lock.acquire()
+    except AdvisoryLockContentionError as error:
+        click.secho(f"❌ {error}", fg="red", err=True)
+        raise click.Abort() from error
+
+    try:
+        # Rebuild the removal plan after acquiring the lock so that
+        # state reads and plan computations use fresh authoritative
+        # data, not a stale pre-lock snapshot.
+        plan = _build_removal_plan(project_path, module_name, state_manager)
+
+        # Remove module
+        _perform_removal_steps(project_path, module_name, plan, state_manager)
+    finally:
+        lock.release()
 
     # Success
     _show_success_message(module_name, keep_data)
