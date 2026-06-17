@@ -462,6 +462,70 @@ class TestTagViewSet:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "New Tag"
 
+    def test_create_duplicate_tag_returns_4xx(self, authenticated_client, tag):
+        """Creating a duplicate tag name returns a controlled 4xx, not a 500."""
+        response = authenticated_client.post(
+            reverse("quickscale_crm:tag-list"), {"name": "VIP"}
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "name" in response.data
+
+    def test_update_tag_rename_to_duplicate_returns_4xx(
+        self, authenticated_client, tag
+    ):
+        """Renaming a tag to an existing duplicate name returns a controlled 4xx."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.objects.create(name="Hot Lead")
+        response = authenticated_client.patch(
+            reverse("quickscale_crm:tag-detail", args=[tag.id]),
+            {"name": "Hot Lead"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "name" in response.data
+
+    def test_update_tag_same_name_is_valid(self, authenticated_client, tag):
+        """Updating a tag without changing its name succeeds (self-exclusion)."""
+        response = authenticated_client.patch(
+            reverse("quickscale_crm:tag-detail", args=[tag.id]),
+            {"name": "VIP"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_create_duplicate_tag_via_org_scoped_route_returns_4xx(
+        self, authenticated_client, tag
+    ):
+        """Creating a duplicate tag name via the org-scoped route returns a controlled 4xx."""
+        response = authenticated_client.post(
+            "/orgs/acme-corp/crm/api/tags/", {"name": "VIP"}
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "name" in response.data
+
+    def test_update_tag_rename_to_duplicate_via_org_scoped_route_returns_4xx(
+        self, authenticated_client, tag
+    ):
+        """Renaming a tag to a duplicate via the org-scoped route returns a controlled 4xx."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.objects.create(name="Hot Lead")
+        response = authenticated_client.patch(
+            f"/orgs/acme-corp/crm/api/tags/{tag.id}/",
+            {"name": "Hot Lead"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "name" in response.data
+
+    def test_update_tag_same_name_via_org_scoped_route_is_valid(
+        self, authenticated_client, tag
+    ):
+        """Updating a tag without changing its name via the org-scoped route succeeds."""
+        response = authenticated_client.patch(
+            f"/orgs/acme-corp/crm/api/tags/{tag.id}/",
+            {"name": "VIP"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+
     def test_delete_tag(self, authenticated_client, tag):
         """Test deleting a tag"""
         response = authenticated_client.delete(

@@ -35,6 +35,44 @@ class TestTagSerializer:
         tag = serializer.save()
         assert tag.name == "Hot Lead"
 
+    def test_create_duplicate_tag_rejected(self, tag):
+        """Creating a tag with a duplicate name in the same owner bucket is rejected."""
+        serializer = TagSerializer(data={"name": "VIP"})
+        assert not serializer.is_valid()
+        assert "name" in serializer.errors
+
+    def test_update_tag_same_name_is_valid(self, tag):
+        """Updating a tag without changing its name is valid (self-exclusion)."""
+        serializer = TagSerializer(tag, data={"name": "VIP"}, partial=True)
+        assert serializer.is_valid(), serializer.errors
+
+    def test_update_tag_rename_to_existing_duplicate_rejected(self, tag):
+        """Renaming a tag to an existing name in the same bucket is rejected."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.objects.create(name="Hot Lead")
+        serializer = TagSerializer(tag, data={"name": "Hot Lead"}, partial=True)
+        assert not serializer.is_valid()
+        assert "name" in serializer.errors
+
+    def test_create_tag_same_name_different_org_allowed(self, org_a, org_b):
+        """Same tag name across different orgs is allowed via serializer."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.objects.create(name="VIP", organization=org_a)
+        serializer = TagSerializer(data={"name": "VIP"})
+        # Serializer creates with organization_id=None (NULL bucket),
+        # which is different from org_a's bucket.
+        assert serializer.is_valid(), serializer.errors
+
+    def test_update_tag_rename_to_same_name_different_org_allowed(self, tag, org_a):
+        """Renaming a NULL-owned tag to a name that exists only in an org is allowed."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.objects.create(name="Renamed", organization=org_a)
+        serializer = TagSerializer(tag, data={"name": "Renamed"}, partial=True)
+        assert serializer.is_valid(), serializer.errors
+
 
 @pytest.mark.django_db
 class TestCompanySerializer:
