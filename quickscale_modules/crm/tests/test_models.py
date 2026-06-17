@@ -42,10 +42,39 @@ class TestTagModel:
         assert tag.created_at is not None
 
     def test_tag_unique_name(self):
-        """Test that tag names are unique"""
+        """Test that tag names are unique within the same owner bucket (NULL org)."""
         Tag.objects.create(name="VIP")
-        with pytest.raises(Exception):
+        with pytest.raises(IntegrityError):
             Tag.objects.create(name="VIP")
+
+    def test_tag_unique_name_field_is_no_longer_field_level_unique(self):
+        """Tag.name is no longer field-level unique; uniqueness is via constraint."""
+        field = Tag._meta.get_field("name")
+        assert field.unique is False
+
+    def test_tag_owner_bucket_constraint_exists(self):
+        """Tag has two partial UniqueConstraints for owner-bucket uniqueness."""
+        constraint_names = [c.name for c in Tag._meta.constraints]
+        assert "crm_tag_name_unique_null_org" in constraint_names
+        assert "crm_tag_name_organization_unique" in constraint_names
+
+    def test_tag_same_name_different_orgs_allowed(self, org_a, org_b):
+        """Same tag name is allowed across different organizations."""
+        tag_a = Tag.objects.create(name="VIP", organization=org_a)
+        tag_b = Tag.objects.create(name="VIP", organization=org_b)
+        assert tag_a.pk != tag_b.pk
+
+    def test_tag_same_name_null_and_org_allowed(self, org_a):
+        """Same tag name is allowed for NULL-owned and org-owned coexistence."""
+        tag_null = Tag.objects.create(name="VIP")
+        tag_org = Tag.objects.create(name="VIP", organization=org_a)
+        assert tag_null.pk != tag_org.pk
+
+    def test_tag_duplicate_name_same_org_blocked(self, org_a):
+        """Duplicate tag name within the same org is blocked at DB level."""
+        Tag.objects.create(name="VIP", organization=org_a)
+        with pytest.raises(IntegrityError):
+            Tag.objects.create(name="VIP", organization=org_a)
 
 
 @pytest.mark.django_db

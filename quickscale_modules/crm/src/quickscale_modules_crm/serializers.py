@@ -13,6 +13,24 @@ class TagSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "created_at"]
         read_only_fields = ["id", "created_at"]
 
+    def validate_name(self, value: str) -> str:
+        """Reject duplicate tag names within the same owner bucket.
+
+        Owner bucket = (name, organization).  NULL organization is a single
+        bucket (legacy NULL-owned duplicates stay blocked).  Same name across
+        different organizations is allowed.
+        """
+        organization_id = getattr(self.instance, "organization_id", None)
+        qs = Tag.objects.filter(name=value, organization_id=organization_id)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "A tag with this name already exists.",
+                code="unique",
+            )
+        return value
+
 
 class CompanySerializer(serializers.ModelSerializer):
     """Serializer for Company model"""
