@@ -12,6 +12,7 @@ class TagAdmin(admin.ModelAdmin):
     list_display = ["name", "created_at"]
     search_fields = ["name"]
     ordering = ["name"]
+    exclude = ["organization"]
 
 
 @admin.register(Company)
@@ -22,6 +23,7 @@ class CompanyAdmin(admin.ModelAdmin):
     list_filter = ["industry", "created_at"]
     search_fields = ["name", "industry"]
     ordering = ["name"]
+    exclude = ["organization"]
 
     def contact_count(self, obj: Company) -> int:
         """Return the number of contacts for this company"""
@@ -57,6 +59,7 @@ class ContactAdmin(admin.ModelAdmin):
     filter_horizontal = ["tags"]
     readonly_fields = ["created_at", "updated_at"]
     inlines = [ContactNoteInline]
+    exclude = ["organization"]
     fieldsets = (
         (None, {"fields": ("first_name", "last_name", "email", "phone", "title")}),
         ("Organization", {"fields": ("company", "tags")}),
@@ -75,6 +78,7 @@ class StageAdmin(admin.ModelAdmin):
     list_display = ["name", "order", "deal_count"]
     list_editable = ["order"]
     ordering = ["order"]
+    exclude = ["organization"]
 
     def deal_count(self, obj: Stage) -> int:
         """Return the number of deals in this stage"""
@@ -117,6 +121,7 @@ class DealAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at", "updated_at"]
     inlines = [DealNoteInline]
     raw_id_fields = ["contact"]
+    exclude = ["organization"]
     fieldsets = (
         (None, {"fields": ("title", "contact", "amount")}),
         ("Pipeline", {"fields": ("stage", "probability", "expected_close_date")}),
