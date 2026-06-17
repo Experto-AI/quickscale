@@ -54,7 +54,7 @@ git merge --no-ff wt-track{N}-<branch>
 | # | Track | Phase | Condition |
 |---|-------|-------|-----------|
 | M0 | Track 1 | v0.87.0 | Analytics module-owned page at `/analytics/`; `modulePaths.analytics` wired; dashboard card routes to analytics URL |
-| M1 | Track 1 | F11.1d ✅ + 11.1d.1 + 11.1g + 11.1g.1 | **11.1d done:** nullable org FK on Tag/Company/Contact/Stage/Deal; ContactNote/DealNote parent-derived; CRM admin non-exposure explicit for all five admins; targeted migration/admin/serializer/model tests added; CRM baseline 158 passed / 1 xfailed. **Remaining:** 11.1d.1 is deferred pending re-scope (Tag legacy-NULL uniqueness still open; Stage terminal-semantic uniqueness deferred until org-aware helper/read-path work; Tag caller parity must cover create + rename/update); org-scoped creates stamp current org (11.1g); queries scoped (11.1g.1); isolation test still xfail |
+| M1 | Track 1 | F11.1d ✅ + 11.1d.1 + 11.1g + 11.1g.1 | **11.1d done:** nullable org FK on Tag/Company/Contact/Stage/Deal; ContactNote/DealNote parent-derived; CRM admin non-exposure explicit for all five admins; targeted migration/admin/serializer/model tests added; CRM baseline 158 passed / 1 xfailed. **Remaining:** 11.1d.1 is deferred pending re-scope (Tag legacy-NULL uniqueness still open; Stage terminal-semantic uniqueness deferred until org-aware helper/read-path work; Tag caller parity must cover create + rename/update); 11.1g is blocked — Contact/Deal create serializers still accept foreign-org or legacy-NULL related IDs via unscoped `company_id`/`tag_ids`/`contact_id`/`stage_id`, so org-scoped create stamping cannot land safely until a minimal org-aware related-ID rejection guard is added or 11.1g is re-scoped to self-contained resources first; org-scoped create stamping must stay explicitly tied to org-routed CRM create paths so solo `/crm/api/` create semantics stay unchanged; queries scoped (11.1g.1); isolation test still xfail |
 | M2 | Track 3 | F2.1–2.2 | Merged to `v87`; CR-005 resolved — partial-remove legacy read-through regression fixed and covered |
 | M3 | Track 1 | F11.1h–11.1j | NOT NULL enforced; xfail removed; isolation test green |
 | M4 | Track 2 | F1.1–1.2 | 4 missing adapters added; 11 wiring slices migrated (`social` deferred to M6) |
@@ -176,7 +176,7 @@ Execute top-down. Earlier items are either prerequisites for, or de-risk, later 
 **Track:** Track 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M1
 **Dependencies:** None externally (pull v87 after M0, then continue in same worktree).
 
-**Status:** 🟡 11.1d complete; 11.1d.1 deferred pending re-scope; 11.1g + 11.1g.1 pending. M1 is not yet met.
+**Status:** 🟡 11.1d complete; 11.1d.1 deferred pending re-scope; 11.1g blocked by Contact/Deal create-path related-ID safety; 11.1g.1 pending. M1 is not yet met.
 
 **Explanation:** Plan review found the original M1 batch was still effectively Tier 3 because it mixed CRM ownership strategy, nullable schema rollout, uniqueness changes, org-scoped create behavior, and read-path scoping. Keep M1 inside CRM only: do **not** widen shared `TenantModel` nullability in `orgs`, preserve legacy `NULL`-owned uniqueness for `Tag` / `Stage` while ownership remains nullable, and land an explicit create-path bridge before org-scoped reads hide `NULL`-owned rows. The first attempt at 11.1d.1 is now explicitly deferred rather than forced through as written: Stage terminal-semantic uniqueness would break `_resolve_terminal_stage()` / bulk mark-won|mark-lost caller parity before org-aware helper/read-path work lands, and Tag uniqueness parity must cover rename/update as well as create. The handoff slices below are the current non-Tier-3 breakdown; if any slice grows beyond a clean Tier 1–2 pass, split it again before implementation.
 
@@ -215,6 +215,16 @@ _(implement between M1 and M3, same worktree as 11.1d)_
 **Phase 11.1g — Org-scoped create bridge** _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 _(part of the M1 batch — implement alongside 11.1d)_
+
+**Status:** 🚫 Blocked — planning attempt stopped.
+
+**Blocked findings (from planning pass):**
+- Contact/Deal create serializers still accept foreign-org or legacy-NULL related IDs via unscoped `company_id`, `tag_ids`, `contact_id`, and `stage_id` fields. Stamping org ownership on Contact/Deal creates cannot land safely while those related-ID inputs can reference rows outside the creating org.
+- Org-scoped create stamping must stay explicitly tied to org-routed CRM create paths so solo `/crm/api/` create semantics stay unchanged and receive middleware-backed parity coverage.
+
+**Resume paths:**
+- Add a minimal org-aware rejection guard for the related-ID inputs (`company_id`, `tag_ids`, `contact_id`, `stage_id`) on Contact/Deal create serializers, then proceed with create-path stamping.
+- Or re-scope 11.1g to self-contained resources first (Tag, Company, Stage) and defer Contact/Deal create stamping until the related-ID guard is in place.
 
 - [ ] Stamp current-org ownership on org-scoped create paths for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` before M1 hides `NULL`-owned rows from org-scoped reads.
 - [ ] Add middleware-backed org-member create → list roundtrip coverage so SaaS-created CRM rows remain visible inside the creating org.
