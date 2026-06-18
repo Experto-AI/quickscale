@@ -5,6 +5,25 @@ from rest_framework import serializers
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 
 
+def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
+    """Return the current organization ID for org-scoped create stamping.
+
+    Stamping only applies to true org-scoped routes (``/orgs/<slug>/...``).
+    In solo mode the TenantMiddleware attaches a personal org to ``request.org``
+    for all authenticated requests, but solo routes must NOT be stamped — they
+    retain the legacy NULL-org behavior.  The path check ensures stamping is
+    limited to the ``/orgs/`` namespace regardless of ``QUICKSCALE_MODE``.
+    """
+    request = serializer.context.get("request")
+    if request is None:
+        return None
+    path = getattr(request, "path", "") or ""
+    if not path.startswith("/orgs/"):
+        return None
+    org = getattr(request, "org", None)
+    return org.id if org is not None else None
+
+
 class TagSerializer(serializers.ModelSerializer):
     """Serializer for Tag model"""
 
@@ -16,11 +35,16 @@ class TagSerializer(serializers.ModelSerializer):
     def validate_name(self, value: str) -> str:
         """Reject duplicate tag names within the same owner bucket.
 
-        Owner bucket = (name, organization).  NULL organization is a single
+        Owner bucket = (name, organization).  On create the bucket uses the
+        request's current org (stamped at save time).  On update the bucket
+        uses the existing instance's org.  NULL organization is a single
         bucket (legacy NULL-owned duplicates stay blocked).  Same name across
         different organizations is allowed.
         """
-        organization_id = getattr(self.instance, "organization_id", None)
+        if self.instance is not None:
+            organization_id = self.instance.organization_id
+        else:
+            organization_id = _request_org_id(self)
         qs = Tag.objects.filter(name=value, organization_id=organization_id)
         if self.instance is not None:
             qs = qs.exclude(pk=self.instance.pk)
@@ -30,6 +54,13 @@ class TagSerializer(serializers.ModelSerializer):
                 code="unique",
             )
         return value
+
+    def create(self, validated_data: dict) -> Tag:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
 
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -53,6 +84,13 @@ class CompanySerializer(serializers.ModelSerializer):
     def get_contact_count(self, obj: Company) -> int:
         """Return the number of contacts for this company"""
         return obj.contacts.count()  # type: ignore
+
+    def create(self, validated_data: dict) -> Company:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
 
 
 class ContactNoteSerializer(serializers.ModelSerializer):
@@ -175,6 +213,13 @@ class StageSerializer(serializers.ModelSerializer):
     def get_deal_count(self, obj: Stage) -> int:
         """Return the number of deals in this stage"""
         return obj.deals.count()  # type: ignore
+
+    def create(self, validated_data: dict) -> Stage:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
 
 
 class DealNoteSerializer(serializers.ModelSerializer):
