@@ -1,5 +1,6 @@
 """DRF serializers for CRM module models"""
 
+from django.db import models
 from rest_framework import serializers
 
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
@@ -22,6 +23,39 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
         return None
     org = getattr(request, "org", None)
     return org.id if org is not None else None
+
+
+def _read_org_id(serializer: serializers.Serializer) -> int | str | None:
+    """Return the current organization ID for org-scoped read filtering.
+
+    Used by serializer helper methods (counts, tag names) to scope related
+    queries when serializing on an org-scoped SaaS route.  Returns ``None``
+    on solo routes so that legacy unscoped behavior is preserved.
+    """
+    request = serializer.context.get("request")
+    if request is None:
+        return None
+    path = getattr(request, "path", "") or ""
+    if not path.startswith("/orgs/"):
+        return None
+    org = getattr(request, "org", None)
+    return org.id if org is not None else None
+
+
+def _is_foreign_org_related(
+    related_obj: models.Model | None, org_id: int | str | None
+) -> bool:
+    """Return whether a related object belongs to a different organization.
+
+    Returns ``False`` when org_id is ``None`` (solo route) or when the
+    related object has ``organization_id=None`` (legacy/solo compatibility).
+    Returns ``True`` only when both the org context and the related object's
+    organization are non-NULL and differ.
+    """
+    if org_id is None or related_obj is None:
+        return False
+    related_org_id = getattr(related_obj, "organization_id", None)
+    return related_org_id is not None and related_org_id != org_id
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -82,8 +116,16 @@ class CompanySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_contact_count(self, obj: Company) -> int:
-        """Return the number of contacts for this company"""
-        return obj.contacts.count()  # type: ignore
+        """Return the number of contacts for this company.
+
+        On org-scoped SaaS routes, only contacts belonging to the active
+        organization are counted.  On solo routes, all contacts are counted.
+        """
+        org_id = _read_org_id(self)
+        contacts = obj.contacts  # type: ignore
+        if org_id is not None:
+            contacts = contacts.filter(organization_id=org_id)
+        return contacts.count()
 
     def create(self, validated_data: dict) -> Company:
         """Stamp the current organization on create."""
@@ -125,7 +167,7 @@ class ContactNoteSerializer(serializers.ModelSerializer):
 class ContactListSerializer(serializers.ModelSerializer):
     """Serializer for Contact list view (minimal fields)"""
 
-    company_name = serializers.CharField(source="company.name", read_only=True)
+    company_name = serializers.SerializerMethodField()
     tag_names = serializers.SerializerMethodField()
 
     class Meta:
@@ -147,9 +189,31 @@ class ContactListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "full_name", "created_at"]
 
+    def get_company_name(self, obj: Contact) -> str:
+        """Return the company name, omitting foreign-org companies on org-scoped routes.
+
+        On org-scoped SaaS routes, if the contact's company belongs to a
+        different organization, an empty string is returned to prevent
+        leaking foreign-org metadata.  On solo routes, the company name
+        is always returned.
+        """
+        org_id = _read_org_id(self)
+        company = obj.company
+        if _is_foreign_org_related(company, org_id):
+            return ""
+        return company.name if company else ""
+
     def get_tag_names(self, obj: Contact) -> list[str]:
-        """Return list of tag names"""
-        return list(obj.tags.values_list("name", flat=True))
+        """Return list of tag names.
+
+        On org-scoped SaaS routes, only tags belonging to the active
+        organization are included.  On solo routes, all tags are included.
+        """
+        tags_qs = obj.tags.all()
+        org_id = _read_org_id(self)
+        if org_id is not None:
+            tags_qs = tags_qs.filter(organization_id=org_id)
+        return list(tags_qs.values_list("name", flat=True))
 
 
 class ContactDetailSerializer(serializers.ModelSerializer):
@@ -196,20 +260,50 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "full_name", "created_at", "updated_at"]
 
     def get_deal_count(self, obj: Contact) -> int:
-        """Return the number of deals for this contact"""
-        return obj.deals.count()  # type: ignore
+        """Return the number of deals for this contact.
+
+        On org-scoped SaaS routes, only deals belonging to the active
+        organization are counted.  On solo routes, all deals are counted.
+        """
+        org_id = _read_org_id(self)
+        deals = obj.deals  # type: ignore
+        if org_id is not None:
+            deals = deals.filter(organization_id=org_id)
+        return deals.count()
+
+    def to_representation(self, instance: Contact) -> dict:
+        """Omit foreign-org related objects on org-scoped reads.
+
+        On org-scoped SaaS routes, the nested ``company`` is set to ``None``
+        and ``tags`` are filtered to only include same-org tags when the
+        related objects belong to a different organization.  Solo routes
+        preserve legacy unscoped behavior.
+        """
+        data = super().to_representation(instance)
+        org_id = _read_org_id(self)
+        if org_id is not None:
+            if _is_foreign_org_related(instance.company, org_id):
+                data["company"] = None
+            # Filter tags to only same-org tags on org-scoped routes.
+            if instance.tags.exists():
+                data["tags"] = [
+                    tag_data
+                    for tag_data, tag_obj in zip(
+                        data["tags"],
+                        instance.tags.all(),
+                    )
+                    if not _is_foreign_org_related(tag_obj, org_id)
+                ]
+        return data
 
     def validate(self, attrs: dict) -> dict:
-        """Reject foreign-org related IDs on org-scoped create.
+        """Reject foreign-org related IDs on org-scoped create and update.
 
-        When creating via an org-scoped route, the related company and tags
-        must belong to the same organization (or have NULL organization for
-        legacy/solo compatibility). Foreign-org references are rejected.
+        When creating or updating via an org-scoped route, the related
+        company and tags must belong to the same organization (or have
+        NULL organization for legacy/solo compatibility). Foreign-org
+        references are rejected.
         """
-        if self.instance is not None:
-            # Update path — skip foreign-org validation.
-            return attrs
-
         org_id = _request_org_id(self)
         if org_id is None:
             # Solo route or no org context — skip foreign-org validation.
@@ -264,8 +358,16 @@ class StageSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     def get_deal_count(self, obj: Stage) -> int:
-        """Return the number of deals in this stage"""
-        return obj.deals.count()  # type: ignore
+        """Return the number of deals in this stage.
+
+        On org-scoped SaaS routes, only deals belonging to the active
+        organization are counted.  On solo routes, all deals are counted.
+        """
+        org_id = _read_org_id(self)
+        deals = obj.deals  # type: ignore
+        if org_id is not None:
+            deals = deals.filter(organization_id=org_id)
+        return deals.count()
 
     def create(self, validated_data: dict) -> Stage:
         """Stamp the current organization on create."""
@@ -300,9 +402,9 @@ class DealNoteSerializer(serializers.ModelSerializer):
 class DealListSerializer(serializers.ModelSerializer):
     """Serializer for Deal list view (minimal fields)"""
 
-    contact_name = serializers.CharField(source="contact.full_name", read_only=True)
-    company_name = serializers.CharField(source="contact.company.name", read_only=True)
-    stage_name = serializers.CharField(source="stage.name", read_only=True)
+    contact_name = serializers.SerializerMethodField()
+    company_name = serializers.SerializerMethodField()
+    stage_name = serializers.SerializerMethodField()
     owner_name = serializers.SerializerMethodField()
     tag_names = serializers.SerializerMethodField()
 
@@ -326,6 +428,31 @@ class DealListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at"]
 
+    def get_contact_name(self, obj: Deal) -> str:
+        """Return the contact name, omitting foreign-org contacts on org-scoped routes."""
+        org_id = _read_org_id(self)
+        if _is_foreign_org_related(obj.contact, org_id):
+            return ""
+        return obj.contact.full_name if obj.contact else ""
+
+    def get_company_name(self, obj: Deal) -> str:
+        """Return the company name, omitting foreign-org companies on org-scoped routes."""
+        org_id = _read_org_id(self)
+        contact = obj.contact
+        if contact is None:
+            return ""
+        company = contact.company
+        if _is_foreign_org_related(company, org_id):
+            return ""
+        return company.name if company else ""
+
+    def get_stage_name(self, obj: Deal) -> str:
+        """Return the stage name, omitting foreign-org stages on org-scoped routes."""
+        org_id = _read_org_id(self)
+        if _is_foreign_org_related(obj.stage, org_id):
+            return ""
+        return obj.stage.name if obj.stage else ""
+
     def get_owner_name(self, obj: Deal) -> str:
         """Return the name of the deal owner"""
         if obj.owner:
@@ -333,8 +460,16 @@ class DealListSerializer(serializers.ModelSerializer):
         return ""
 
     def get_tag_names(self, obj: Deal) -> list[str]:
-        """Return list of tag names"""
-        return list(obj.tags.values_list("name", flat=True))
+        """Return list of tag names.
+
+        On org-scoped SaaS routes, only tags belonging to the active
+        organization are included.  On solo routes, all tags are included.
+        """
+        tags_qs = obj.tags.all()
+        org_id = _read_org_id(self)
+        if org_id is not None:
+            tags_qs = tags_qs.filter(organization_id=org_id)
+        return list(tags_qs.values_list("name", flat=True))
 
 
 class DealDetailSerializer(serializers.ModelSerializer):
@@ -383,18 +518,40 @@ class DealDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
-    def validate(self, attrs: dict) -> dict:
-        """Reject foreign-org related IDs on org-scoped create.
+    def to_representation(self, instance: Deal) -> dict:
+        """Omit foreign-org related objects on org-scoped reads.
 
-        When creating via an org-scoped route, the related contact, stage,
-        and tags must belong to the same organization (or have NULL
-        organization for legacy/solo compatibility). Foreign-org references
-        are rejected.
+        On org-scoped SaaS routes, the nested ``contact``, ``stage``, and
+        ``tags`` are filtered to prevent leaking foreign-org metadata.
+        Solo routes preserve legacy unscoped behavior.
         """
-        if self.instance is not None:
-            # Update path — skip foreign-org validation.
-            return attrs
+        data = super().to_representation(instance)
+        org_id = _read_org_id(self)
+        if org_id is not None:
+            if _is_foreign_org_related(instance.contact, org_id):
+                data["contact"] = None
+            if _is_foreign_org_related(instance.stage, org_id):
+                data["stage"] = None
+            # Filter tags to only same-org tags on org-scoped routes.
+            if instance.tags.exists():
+                data["tags"] = [
+                    tag_data
+                    for tag_data, tag_obj in zip(
+                        data["tags"],
+                        instance.tags.all(),
+                    )
+                    if not _is_foreign_org_related(tag_obj, org_id)
+                ]
+        return data
 
+    def validate(self, attrs: dict) -> dict:
+        """Reject foreign-org related IDs on org-scoped create and update.
+
+        When creating or updating via an org-scoped route, the related
+        contact, stage, and tags must belong to the same organization (or
+        have NULL organization for legacy/solo compatibility). Foreign-org
+        references are rejected.
+        """
         org_id = _request_org_id(self)
         if org_id is None:
             # Solo route or no org context — skip foreign-org validation.
