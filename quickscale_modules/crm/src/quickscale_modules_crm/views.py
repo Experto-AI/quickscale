@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, Sum
+from django.db.models import Case, CharField, Count, F, Q, QuerySet, Sum, Value, When
 from django.http import Http404, HttpRequest
 from django.http.response import HttpResponseBase
 from django.urls import reverse
@@ -37,6 +37,35 @@ from .serializers import (
     StageSerializer,
     TagSerializer,
 )
+
+
+def _is_org_scoped_route(request: Request | HttpRequest) -> bool:
+    """Return whether the request targets an org-scoped SaaS route.
+
+    Uses the same path-prefix contract as the serializer stamping helper:
+    only ``/orgs/<slug>/...`` routes are treated as org-scoped.  Solo
+    ``/crm/...`` routes are never org-scoped regardless of ``request.org``.
+    """
+    path = getattr(request, "path", "") or ""
+    return path.startswith("/orgs/")
+
+
+def _require_org_for_read(request: Request | HttpRequest) -> Any:
+    """Return the active organization or raise PermissionDenied.
+
+    Fail-closed seam for org-scoped read paths.  When an org-scoped route
+    lacks valid org context the request is denied rather than degrading to
+    an unscoped queryset.
+    """
+    from quickscale_modules_orgs.current_org import (
+        CurrentOrgError,
+        require_current_org,
+    )
+
+    try:
+        return require_current_org(request)
+    except CurrentOrgError:
+        raise PermissionDenied("Organization context is required for this route.")
 
 
 _TERMINAL_STAGE_DEFAULTS = {
@@ -97,33 +126,100 @@ class CRMDashboardView(TemplateView):
             context["crm_api_root_url"] = "/crm/api/"
             context["crm_api_prefix"] = "/crm/api/"
 
+        # Determine org-scoped read context for aggregate queries.
+        # On org-scoped SaaS routes, fail closed if org context is missing.
+        org_for_read: Any | None = None
+        if _is_org_scoped_route(self.request):
+            org_for_read = _require_org_for_read(self.request)
+
+        # Base querysets — scoped to the active org on SaaS routes.
+        if org_for_read is not None:
+            contact_qs = Contact.objects.filter(organization_id=org_for_read.id)
+            company_qs = Company.objects.filter(organization_id=org_for_read.id)
+            deal_qs = Deal.objects.filter(organization_id=org_for_read.id)
+            # Include legacy NULL-org stages so that visible current-org deals
+            # attached to allowed pre-backfill NULL-org stages still appear in
+            # the deals_by_stage breakdown during the migration window.
+            stage_qs = Stage.objects.filter(
+                Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
+            )
+        else:
+            contact_qs = Contact.objects.all()
+            company_qs = Company.objects.all()
+            deal_qs = Deal.objects.all()
+            stage_qs = Stage.objects.all()
+
         # Summary statistics
-        context["total_contacts"] = Contact.objects.count()
-        context["total_companies"] = Company.objects.count()
-        context["total_deals"] = Deal.objects.count()
+        context["total_contacts"] = contact_qs.count()
+        context["total_companies"] = company_qs.count()
+        context["total_deals"] = deal_qs.count()
 
         # Deal statistics
-        context["deals_by_stage"] = (
-            Stage.objects.annotate(deal_count=Count("deals"))
-            .values("name", "deal_count")
-            .order_by("order")
-        )
+        if org_for_read is not None:
+            # On org-scoped routes, filter the deal count to the active org
+            # to prevent counting cross-org deals linked to same-org stages.
+            context["deals_by_stage"] = (
+                stage_qs.annotate(
+                    deal_count=Count(
+                        "deals",
+                        filter=Q(deals__organization_id=org_for_read.id),
+                    )
+                )
+                .values("name", "deal_count")
+                .order_by("order")
+            )
+        else:
+            context["deals_by_stage"] = (
+                stage_qs.annotate(deal_count=Count("deals"))
+                .values("name", "deal_count")
+                .order_by("order")
+            )
 
         # Total deal value
-        deal_totals = Deal.objects.aggregate(
+        deal_totals = deal_qs.aggregate(
             total_value=Sum("amount"),
         )
         context["total_deal_value"] = deal_totals["total_value"] or 0
 
-        # Recent contacts
-        context["recent_contacts"] = Contact.objects.select_related("company").order_by(
-            "-created_at"
-        )[:5]
+        # Recent contacts — annotate a safe company display name so that
+        # cross-org FK references do not leak foreign company names on the
+        # org-scoped dashboard.
+        if org_for_read is not None:
+            context["recent_contacts"] = contact_qs.annotate(
+                display_company_name=Case(
+                    When(
+                        Q(company__organization_id=org_for_read.id)
+                        | Q(company__organization_id__isnull=True),
+                        then=F("company__name"),
+                    ),
+                    default=Value("-"),
+                    output_field=CharField(),
+                )
+            ).order_by("-created_at")[:5]
+        else:
+            context["recent_contacts"] = contact_qs.annotate(
+                display_company_name=F("company__name")
+            ).order_by("-created_at")[:5]
 
-        # Recent deals
-        context["recent_deals"] = Deal.objects.select_related(
-            "contact", "stage"
-        ).order_by("-created_at")[:5]
+        # Recent deals — annotate a safe stage display name so that
+        # cross-org FK references do not leak foreign stage names on the
+        # org-scoped dashboard.
+        if org_for_read is not None:
+            context["recent_deals"] = deal_qs.annotate(
+                display_stage_name=Case(
+                    When(
+                        Q(stage__organization_id=org_for_read.id)
+                        | Q(stage__organization_id__isnull=True),
+                        then=F("stage__name"),
+                    ),
+                    default=Value("-"),
+                    output_field=CharField(),
+                )
+            ).order_by("-created_at")[:5]
+        else:
+            context["recent_deals"] = deal_qs.annotate(
+                display_stage_name=F("stage__name")
+            ).order_by("-created_at")[:5]
 
         return context
 
@@ -169,6 +265,39 @@ class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
 
+class OrgScopedReadMixin(CRMModelViewSet):
+    """Route-aware read-scoping seam for CRM primary resource querysets.
+
+    On org-scoped SaaS routes (``/orgs/<slug>/...``) the queryset is filtered
+    to the active organization.  On solo routes (``/crm/...``) the base
+    queryset is returned unchanged, preserving legacy solo parity.
+
+    Org-scoped reads fail closed: if the route is org-scoped but no org
+    context is available, a 403 is raised instead of degrading to an
+    unscoped queryset.
+
+    Subclasses set ``_org_scope_field`` to the FK field used for filtering:
+    - ``"organization"`` for direct-org models (Tag, Company, Contact, Stage, Deal)
+    - ``"contact__organization"`` for ContactNote (parent-derived)
+    - ``"deal__organization"`` for DealNote (parent-derived)
+    """
+
+    _org_scope_field: str = "organization"
+
+    def get_queryset(self) -> QuerySet:  # type: ignore[override]
+        """Return the queryset, scoped to the active org on SaaS routes."""
+        queryset = super().get_queryset()
+
+        if not _is_org_scoped_route(self.request):
+            # Solo route — preserve legacy unscoped behavior.
+            return queryset
+
+        # Org-scoped SaaS route — fail closed if org context is missing.
+        organization = _require_org_for_read(self.request)
+        scope_filter = {f"{self._org_scope_field}_id": organization.id}
+        return queryset.filter(**scope_filter)
+
+
 class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
     """Staff-only API root for the CRM router."""
 
@@ -176,7 +305,7 @@ class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
     permission_classes = [IsAdminUser]
 
 
-class TagViewSet(CRMModelViewSet):
+class TagViewSet(OrgScopedReadMixin):
     """ViewSet for Tag model"""
 
     queryset = Tag.objects.all()
@@ -187,7 +316,7 @@ class TagViewSet(CRMModelViewSet):
     ordering = ["name"]
 
 
-class CompanyViewSet(CRMModelViewSet):
+class CompanyViewSet(OrgScopedReadMixin):
     """ViewSet for Company model"""
 
     queryset = Company.objects.all()
@@ -199,7 +328,7 @@ class CompanyViewSet(CRMModelViewSet):
     ordering = ["name"]
 
 
-class ContactViewSet(CRMModelViewSet):
+class ContactViewSet(OrgScopedReadMixin):
     """ViewSet for Contact model with nested notes"""
 
     queryset = Contact.objects.select_related("company").prefetch_related("tags")
@@ -217,7 +346,7 @@ class ContactViewSet(CRMModelViewSet):
         return ContactDetailSerializer
 
     @action(detail=True, methods=["get", "post"])  # type: ignore
-    def notes(self, request: Request, pk: int | None = None) -> Response:
+    def notes(self, request: Request, pk: int | None = None, **kwargs: Any) -> Response:
         """List or create notes for a contact"""
         contact = self.get_object()
 
@@ -236,7 +365,7 @@ class ContactViewSet(CRMModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class StageViewSet(CRMModelViewSet):
+class StageViewSet(OrgScopedReadMixin):
     """ViewSet for Stage model"""
 
     queryset = Stage.objects.all()
@@ -246,7 +375,7 @@ class StageViewSet(CRMModelViewSet):
     ordering = ["order"]
 
 
-class DealViewSet(CRMModelViewSet):
+class DealViewSet(OrgScopedReadMixin):
     """ViewSet for Deal model with nested notes and bulk operations"""
 
     queryset = Deal.objects.select_related(
@@ -266,7 +395,7 @@ class DealViewSet(CRMModelViewSet):
         return DealDetailSerializer
 
     @action(detail=True, methods=["get", "post"])  # type: ignore
-    def notes(self, request: Request, pk: int | None = None) -> Response:
+    def notes(self, request: Request, pk: int | None = None, **kwargs: Any) -> Response:
         """List or create notes for a deal"""
         deal = self.get_object()
 
@@ -348,8 +477,10 @@ class DealViewSet(CRMModelViewSet):
         return Response({"updated": updated}, status=status.HTTP_200_OK)
 
 
-class ContactNoteViewSet(CRMModelViewSet):
+class ContactNoteViewSet(OrgScopedReadMixin):
     """Standalone ViewSet for ContactNote model"""
+
+    _org_scope_field = "contact__organization"
 
     queryset = ContactNote.objects.select_related("contact", "created_by")
     serializer_class = ContactNoteSerializer
@@ -359,8 +490,10 @@ class ContactNoteViewSet(CRMModelViewSet):
     ordering = ["-created_at"]
 
 
-class DealNoteViewSet(CRMModelViewSet):
+class DealNoteViewSet(OrgScopedReadMixin):
     """Standalone ViewSet for DealNote model"""
+
+    _org_scope_field = "deal__organization"
 
     queryset = DealNote.objects.select_related("deal", "created_by")
     serializer_class = DealNoteSerializer

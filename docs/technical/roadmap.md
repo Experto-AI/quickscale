@@ -52,7 +52,7 @@ git merge --no-ff wt-track{N}
 
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
-| M1 | 1 | F11.2–F11.5 | 🟡 | **Next:** F11.5 (CRM read-path isolation). F11.2 ✅, F11.3 ✅, F11.4 ✅ complete. Pending F11.5 → M1 merge. |
+| M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | ⬜ | M1 merged; backfill (F11.6) + bootstrap (F11.7) green; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.7. F2.5 ✅ F2.6 ✅ (CR-M5-P3-003 resolved). Blocks F2.9. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
@@ -66,14 +66,13 @@ git merge --no-ff wt-track{N}
 ### M1 — F11 CRM create + read isolation
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Pending phases (serial):** F11.5
+**Status:** ✅ Merged to v87.
 
-F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.3 ✅ complete (self-contained resource create stamping for Tag, Company, Stage with org-member proof and same-org duplicate rejection). F11.4 ✅ complete (Contact/Deal related-ID guard + create stamping; 9 tests; CRM module validation green). F11.5 is next actionable.
+F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.3 ✅ complete (self-contained resource create stamping for Tag, Company, Stage with org-member proof and same-org duplicate rejection). F11.4 ✅ complete (Contact/Deal related-ID guard + create stamping; 9 tests; CRM module validation green). F11.5 ✅ complete (CRM read-path isolation: dashboard, list/detail, nested-note, and helper reads scoped to current org; no-context reads fail closed; targeted A/B/C/D green; CRM module validation green).
 
 **Next handoff decisions:**
-- F11.5 scope boundary: dashboard, list/detail, nested-note, and helper reads only; bulk actions and admin/operator paths are F11.9 (M3).
-
-**Deferred (unlocked by F11.5):** Stage `terminal_semantic` per-org uniqueness — see F11-deferred below.
+- M1 mergeback to v87 is Phase 5 (final closeout).
+- F11.9 (bulk deal scope + CRM admin path) and F11-deferred (Stage `terminal_semantic` per-org uniqueness) remain open for M3.
 
 ---
 
@@ -137,13 +136,14 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F11.5 — CRM read-path isolation** _(M1 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** F11.4 ✅ | **Status:** ⏳ Next actionable — M1 closeout.
+**Dependencies:** F11.4 ✅ | **Status:** ✅ Merged to v87.
 **Scope:** Dashboard, list/detail, nested-note, and helper reads. Bulk actions and admin/operator paths are F11.9.
-**Unlocks:** F11-deferred (Stage `terminal_semantic` per-org uniqueness).
 
-- [ ] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote`/`DealNote` parent-derived.
-- [ ] Confirm no-context reads fail closed.
-- [ ] Narrow the CRM isolation `xfail` to remaining open seams; remove if none remain.
+- [x] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote`/`DealNote` parent-derived.
+- [x] Confirm no-context reads fail closed.
+- [x] Targeted A/B/C/D validation green; CRM module validation green.
+
+**Findings:** OrgScopedReadMixin enforces org context on all CRM read paths. Dashboard aggregates, list/detail querysets, and nested-note reads are scoped to current org. No-context reads raise PermissionDenied (403) rather than degrading to unscoped querysets. TestF115Phase2ApiListFailClosed proves API list routes fail closed without org context.
 
 ---
 

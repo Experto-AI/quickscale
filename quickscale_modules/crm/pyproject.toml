@@ -47,7 +47,7 @@ django_settings_module = "tests.settings"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = [".", "src", "../orgs/src"]
+pythonpath = [".", "src", "../orgs/src", "../.."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
 addopts = "-v --cov=quickscale_modules_crm --cov-report=html --cov-report=term-missing --cov-fail-under=90"

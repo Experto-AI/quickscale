@@ -12,6 +12,14 @@ response-shape regressions fail normally so that infrastructure breakage is
 never masked by the expected-failure marker.  Once structural isolation is
 in place (Finding 11), the marker removal becomes an explicit part of the
 F11 rollout.
+
+F11.5 Phase 1 + 2 update: Primary resource read paths (Tag, Company, Contact,
+Stage, Deal, ContactNote, DealNote) are now org-scoped via OrgScopedReadMixin
+on org-scoped SaaS routes.  Dashboard aggregate/recent queries and serializer
+helper queries (counts, tag names) are also org-scoped.  The cross-tenant
+leak for the tested path (company list) is now fixed, so the xfail marker
+has been removed.  Remaining seams (bulk actions, admin/operator paths) are
+out of scope for F11.5.
 """
 
 import pytest
@@ -45,7 +53,9 @@ class TestCRMCrossTenantIsolation:
         """
         from quickscale_modules_crm.models import Company
 
-        Company.objects.create(name="Org A Corp", industry="Technology")
+        Company.objects.create(
+            name="Org A Corp", industry="Technology", organization=org_a
+        )
 
         client.force_login(org_a_admin)
         response = client.get(f"/orgs/{org_a.slug}/crm/api/companies/")
@@ -55,14 +65,6 @@ class TestCRMCrossTenantIsolation:
             f"Response: {response.content.decode()[:200]}"
         )
 
-    @pytest.mark.xfail(
-        reason=(
-            "CRM models have no organization FK and querysets are not "
-            "tenant-scoped.  Confirm cross-tenant leak exists (Phase 14.1). "
-            "Remove xfail once Finding 11 structural isolation lands."
-        ),
-        strict=True,
-    )
     def test_org_a_cannot_see_org_b_companies(
         self,
         org_a,
@@ -72,23 +74,27 @@ class TestCRMCrossTenantIsolation:
     ):
         """A request scoped to Org A must not return Org B's companies.
 
-        This assertion fails today because ``Company.objects.all()`` returns
-        every company regardless of the requesting organization.  The failure
-        is the expected outcome for Phase 14.1 — it proves the isolation gap
-        exists and gives F11 a concrete pass/fail target.
+        F11.5 Phase 1 + 2: This assertion now passes because CompanyViewSet
+        uses OrgScopedReadMixin to scope queries to the active organization
+        on org-scoped SaaS routes.  The xfail marker has been removed to
+        reflect the fixed seam state.
 
         The test exercises a real org-scoped request path through
         TenantMiddleware, so the assertion validates the full request seam
         rather than a bare ORM query.
 
-        Only the cross-tenant data assertion is expected to fail.  The
+        Only the cross-tenant data assertion is tested here.  The
         request-path, auth, status, and response-shape checks are in
         ``test_org_a_request_returns_200`` and fail normally.
         """
         from quickscale_modules_crm.models import Company
 
-        Company.objects.create(name="Org A Corp", industry="Technology")
-        Company.objects.create(name="Org B Corp", industry="Finance")
+        Company.objects.create(
+            name="Org A Corp", industry="Technology", organization=org_a
+        )
+        Company.objects.create(
+            name="Org B Corp", industry="Finance", organization=org_b
+        )
 
         client.force_login(org_a_admin)
         response = client.get(f"/orgs/{org_a.slug}/crm/api/companies/")
