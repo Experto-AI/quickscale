@@ -3,6 +3,7 @@
 import shutil
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -66,6 +67,24 @@ class _UpdatePathSnapshot:
     backup_path: Path | None
     existed: bool
     is_dir: bool
+
+
+@dataclass(frozen=True)
+class ModuleEmbedProvenance:
+    """Per-module provenance payload for the apply-side handoff seam.
+
+    Carries the exact source ref (commit SHA) resolved once per module add
+    during apply, along with the tracking metadata needed by later phases
+    for state/recovery persistence.  The same ``source_ref`` value is used
+    for both the subtree add operation and the in-memory handoff so that
+    the embedded content and the recorded provenance cannot drift.
+    """
+
+    module_name: str
+    prefix: str
+    tracking_branch: str
+    source_ref: str
+    installed_version: str
 
 
 def _validate_git_environment() -> bool:
@@ -229,9 +248,12 @@ def _sync_state_module_version(
     """Mirror embedded module versions and provenance into applied state.
 
     Updates ``state.modules[module].version`` and, when *commit_sha* is
-    provided, ``state.modules[module].commit_sha``.  The state file must
-    already contain the module entry; modules absent from state are
-    silently skipped (callers should ensure state is materialized first).
+    provided, ``state.modules[module].commit_sha``.  The ``embedded_at``
+    timestamp is always refreshed to reflect the current update so the
+    full provenance triple (version, commit_sha, embedded_at) stays
+    consistent.  The state file must already contain the module entry;
+    modules absent from state are silently skipped (callers should ensure
+    state is materialized first).
     """
     state_manager = StateManager(project_path)
     state = state_manager.load()
@@ -241,6 +263,7 @@ def _sync_state_module_version(
     state.modules[module].version = version
     if commit_sha is not None:
         state.modules[module].commit_sha = commit_sha
+    state.modules[module].embedded_at = datetime.now().isoformat()
     state_manager.save(state)
 
 
@@ -334,19 +357,30 @@ def _perform_module_embed(
     branch: str,
     config: dict[str, Any],
     *,
+    source_ref: str | None = None,
     sync_dependencies: bool = True,
     install_dependencies: bool = True,
     execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> bool:
+) -> tuple[bool, ModuleEmbedProvenance | None]:
     """Execute the actual module embedding.
 
+    When *source_ref* is provided it is forwarded to
+    :func:`run_git_subtree_add` instead of the tracking *branch* name so
+    that the subtree content is bound to the exact resolved commit SHA.
+    The same value is carried forward in the returned
+    :class:`ModuleEmbedProvenance` payload for later phases.
+
     Returns:
-        True if successful, False otherwise
+        Tuple of (success, provenance).  *provenance* is populated on
+        success and ``None`` on failure.
     """
     prefix = f"modules/{module}"
     click.echo(f"\n📦 Embedding {module} module from {branch}...")
 
-    run_git_subtree_add(prefix=prefix, remote=remote, branch=branch, squash=True)
+    # Bind the subtree add to the exact resolved commit SHA when the
+    # caller has already resolved the source ref (apply-side seam).
+    subtree_ref = source_ref if source_ref is not None else branch
+    run_git_subtree_add(prefix=prefix, remote=remote, branch=subtree_ref, squash=True)
 
     try:
         installed_version = _read_embedded_module_version(project_path, module)
@@ -364,7 +398,7 @@ def _perform_module_embed(
         )
         if execution_mode == APPLY_MODULE_EXECUTION_MODE:
             _cleanup_failed_apply_embed(project_path, module)
-        return False
+        return False, None
 
     if execution_mode != APPLY_MODULE_EXECUTION_MODE:
         add_module(
@@ -394,14 +428,14 @@ def _perform_module_embed(
                 err=True,
                 bold=True,
             )
-            return False
+            return False, None
         raise
 
     if sync_dependencies:
         if not _sync_module_dependencies(project_path, module, config):
             if execution_mode == APPLY_MODULE_EXECUTION_MODE:
                 _cleanup_failed_apply_embed(project_path, module)
-            return False
+            return False, None
 
     if (
         install_dependencies
@@ -410,7 +444,7 @@ def _perform_module_embed(
         if not _install_module_dependencies(project_path, module):
             if execution_mode == APPLY_MODULE_EXECUTION_MODE:
                 _cleanup_failed_apply_embed(project_path, module)
-            return False
+            return False, None
 
     if execution_mode == APPLY_MODULE_EXECUTION_MODE:
         try:
@@ -429,7 +463,7 @@ def _perform_module_embed(
                 err=True,
                 bold=True,
             )
-            return False
+            return False, None
 
     # Success message
     module_dir = project_path / "modules" / module
@@ -437,7 +471,18 @@ def _perform_module_embed(
     click.echo(f"   Location: {module_dir}")
     click.echo(f"   Branch: {branch}")
 
-    return True
+    provenance = (
+        ModuleEmbedProvenance(
+            module_name=module,
+            prefix=prefix,
+            tracking_branch=branch,
+            source_ref=source_ref,
+            installed_version=installed_version,
+        )
+        if source_ref is not None
+        else None
+    )
+    return True, provenance
 
 
 def embed_module(
@@ -451,6 +496,7 @@ def embed_module(
     install_dependencies: bool = True,
     *,
     execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+    provenance_sink: list[ModuleEmbedProvenance] | None = None,
 ) -> bool:
     """
     Embed a QuickScale module into a project via git subtree.
@@ -472,6 +518,10 @@ def embed_module(
         install_dependencies: Run `poetry install` after dependency sync
         execution_mode: Internal embedding mode used to control when managed
             wiring regeneration happens
+        provenance_sink: Optional mutable list that receives the per-module
+            :class:`ModuleEmbedProvenance` payload on successful apply-side
+            embeds.  The sink is only populated when the source ref has been
+            resolved (apply execution mode); standalone embeds leave it empty.
 
     Returns:
         True if embedding succeeded, False otherwise
@@ -517,6 +567,28 @@ def embed_module(
             ):
                 return False
 
+        # Phase 1 provenance seam: resolve the source ref exactly once
+        # after branch validation so the same SHA drives both the subtree
+        # add and the in-memory handoff to later phases.  Standalone
+        # (non-apply) embeds skip resolution and continue to use the
+        # tracking branch name directly.
+        source_ref: str | None = None
+        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+            try:
+                source_ref = resolve_remote_ref(remote, branch)
+            except GitError as ref_error:
+                click.secho(
+                    f"❌ Failed to resolve source ref for {module}: {ref_error}",
+                    fg="red",
+                    err=True,
+                    bold=True,
+                )
+                click.echo(
+                    "💡 Check network connectivity and remote branch availability.",
+                    err=True,
+                )
+                return False
+
         # Interactive module configuration
         config: dict[str, Any] = {}
         configurator_entry = MODULE_CONFIGURATOR_REGISTRY.get(module)
@@ -524,16 +596,22 @@ def embed_module(
             config = configurator_entry.configure(non_interactive=non_interactive)
 
         # Perform embedding
-        return _perform_module_embed(
+        success, provenance = _perform_module_embed(
             project_path,
             module,
             remote,
             branch,
             config,
+            source_ref=source_ref,
             sync_dependencies=sync_dependencies,
             install_dependencies=install_dependencies,
             execution_mode=execution_mode,
         )
+
+        if success and provenance is not None and provenance_sink is not None:
+            provenance_sink.append(provenance)
+
+        return success
 
     except GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
