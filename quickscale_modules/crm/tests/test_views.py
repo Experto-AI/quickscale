@@ -1658,6 +1658,157 @@ class TestF114OrgScopedContactDealCreateStamping:
         assert "tag_ids" in response.data
         assert Deal.objects.count() == before
 
+    # -- Contact: same-org related IDs accepted (positive acceptance) ----------
+
+    def test_org_member_create_contact_accepts_same_org_company_and_tags(
+        self, client, org_a, org_a_admin
+    ):
+        """A contact create with same-org company_id and tag_ids succeeds with 201."""
+        from quickscale_modules_crm.models import Company, Contact, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        tag_a = Tag.objects.create(name="Org-A-Tag", organization=org_a)
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/contacts/",
+            data={
+                "first_name": "Same",
+                "last_name": "Org",
+                "email": "same-org@example.com",
+                "company_id": company.id,
+                "tag_ids": [tag_a.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Contact.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {tag_a.id}
+
+    # -- Contact: NULL-org legacy related IDs accepted -------------------------
+
+    def test_org_member_create_contact_accepts_null_org_legacy_related_ids(
+        self, client, org_a, org_a_admin
+    ):
+        """A contact create with NULL-org (legacy) company and tags succeeds via org-scoped route.
+
+        Legacy rows with organization_id=NULL remain compatible with org-scoped
+        creates — the validator only rejects foreign-org references, not
+        NULL-owned rows.
+        """
+        from quickscale_modules_crm.models import Company, Contact, Tag
+
+        legacy_company = Company.objects.create(name="Legacy Corp")
+        assert legacy_company.organization_id is None
+        legacy_tag = Tag.objects.create(name="Legacy-Tag")
+        assert legacy_tag.organization_id is None
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/contacts/",
+            data={
+                "first_name": "Legacy",
+                "last_name": "Contact",
+                "email": "legacy-contact@example.com",
+                "company_id": legacy_company.id,
+                "tag_ids": [legacy_tag.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Contact.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {legacy_tag.id}
+
+    # -- Deal: same-org related IDs accepted (positive acceptance) -------------
+
+    def test_org_member_create_deal_accepts_same_org_contact_stage_and_tags(
+        self, client, org_a, org_a_admin
+    ):
+        """A deal create with same-org contact_id, stage_id, and tag_ids succeeds with 201."""
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org",
+            last_name="Contact",
+            email="same-org-deal@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        tag_a = Tag.objects.create(name="Org-A-Deal-Tag", organization=org_a)
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Same-Org Deal",
+                "contact_id": contact.id,
+                "stage_id": stage.id,
+                "amount": "15000.00",
+                "probability": 60,
+                "tag_ids": [tag_a.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Deal.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {tag_a.id}
+
+    # -- Deal: NULL-org legacy related IDs accepted ----------------------------
+
+    def test_org_member_create_deal_accepts_null_org_legacy_related_ids(
+        self, client, org_a, org_a_admin
+    ):
+        """A deal create with NULL-org (legacy) contact, stage, and tags succeeds.
+
+        Legacy rows with organization_id=NULL remain compatible with org-scoped
+        deal creates — the validator only rejects foreign-org references.
+        """
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+
+        legacy_company = Company.objects.create(name="Legacy Corp")
+        legacy_contact = Contact.objects.create(
+            first_name="Legacy",
+            last_name="Contact",
+            email="legacy-deal-contact@example.com",
+            company=legacy_company,
+        )
+        assert legacy_contact.organization_id is None
+        legacy_stage = Stage.objects.create(name="Legacy Stage", order=1)
+        assert legacy_stage.organization_id is None
+        legacy_tag = Tag.objects.create(name="Legacy-Deal-Tag")
+        assert legacy_tag.organization_id is None
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Legacy Deal",
+                "contact_id": legacy_contact.id,
+                "stage_id": legacy_stage.id,
+                "amount": "8000.00",
+                "probability": 40,
+                "tag_ids": [legacy_tag.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Deal.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {legacy_tag.id}
+
     # -- Solo-route regression (no stamping) ----------------------------------
 
     @override_settings(QUICKSCALE_MODE="solo")
