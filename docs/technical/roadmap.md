@@ -54,7 +54,7 @@ git merge --no-ff wt-track{N}
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Complete on wt-track1:** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. Pending merge to v87 (Phase 5). |
 | M3 | 1 | F11.6–F11.10 | ⬜ | M1 merged; backfill (F11.6) + bootstrap (F11.7) green; NOT NULL enforced; xfail removed |
-| M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.6. F2.5 ✅ (CR-M5-P3-007 resolved). Blocks F2.9. |
+| M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.7. F2.5 ✅ F2.6 ✅ (CR-M5-P3-003 resolved). Blocks F2.9. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
@@ -79,15 +79,14 @@ F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** 3 | **Worktree:** `quickscale-wt-track3` (branch `wt-track3-f2-3b` for M5)
 
-**Pending phases:** F2.6 → F2.7 → F2.8 → F2.9
+**Pending phases:** F2.7 → F2.8 → F2.9
 
-**Resolved finding:** CR-M5-P3-007 (F2.5 ✅).
+**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅).
 
 **Next handoff decisions:**
-- F2.6 is now the next actionable phase (provenance triple persistence).
-- Fix provenance triple consistency (F2.6) before adding caller-parity tests (F2.7) — tests depend on consistent behavior.
+- F2.7 is now the next actionable phase (caller parity across provenance paths).
 - F2.8 is independent of F2.5–F2.7; can parallelize on a separate handoff branch or run serially after F2.7.
-- F2.9 is the M5 closeout: blocked on both F2.5 ✅ and F2.8 (wrapper adoption).
+- F2.9 is the M5 closeout: blocked on F2.8 (wrapper adoption). F2.5 ✅.
 
 ---
 
@@ -219,7 +218,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 2 — Consolidate project state and make module provenance actionable
 
-**Why still open:** State consolidation and advisory locking are done (F2.1–F2.4 in CHANGELOG). Provenance persistence across apply/embed/no-op paths and release tooling (tagged-source gate, split-publish wrapper) remain.
+**Why still open:** State consolidation and advisory locking are done (F2.1–F2.4 in CHANGELOG). Provenance persistence across apply/embed/no-op paths is done (F2.5–F2.6 ✅). Release tooling (tagged-source gate, split-publish wrapper) remains.
 
 ---
 
@@ -234,14 +233,16 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F2.6 — Apply/embed/no-op provenance triple persistence** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ⏳ Next actionable — resolves CR-M5-P3-003. Can run in parallel with F2.5.
+**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ✅ Complete — resolves CR-M5-P3-003. Can run in parallel with F2.5.
 
-- [ ] Make apply/embed/no-op paths persist/backfill the full provenance triple consistently.
-- [ ] Add provenance-persistence tests for all three paths.
+- [x] Make apply/embed/no-op paths persist/backfill the full provenance triple consistently.
+- [x] Add provenance-persistence tests for all three paths.
+
+**Findings:** No-op repair path now backfills `version` + `commit_sha` + `embedded_at` for triple consistency. Update path refreshes `embedded_at` so all three paths (apply, update, no-op) persist the full provenance triple. Apply path already populated the full triple and is now covered explicitly by tests. Validation: Ruff green on 4 changed files, MyPy green on 2 source files, targeted F2.6 tests 281/281 in 6.75s, full CLI unit suite 1689/1689 (28 deselected) in 44.64s, coverage 90.98%.
 
 **Phase F2.7 — Caller parity across provenance paths** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Dependencies:** F2.6 | **Status:** 🚫 Blocked on F2.6 — resolves CR-M5-P3-004.
+**Dependencies:** F2.6 ✅ | **Status:** ⏳ Next actionable — resolves CR-M5-P3-004.
 
 - [ ] Establish caller parity across update/apply/embed/no-op provenance paths.
 - [ ] Add caller-parity tests proving consistent behavior across all entry points.
@@ -255,7 +256,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F2.9 — Tagged/versioned-source gate + operator diagnostics** _(M5 closeout)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Dependencies:** F2.5 + F2.8 | **Status:** 🚫 Blocked on F2.5 + F2.8.
+**Dependencies:** F2.8 | **Status:** 🚫 Blocked on F2.8.
 
 - [ ] Update subtree release tooling so split branches are cut only from tagged or versioned source states.
 - [ ] Add operator-facing diagnostics for untagged split provenance or version/SHA mismatches.
