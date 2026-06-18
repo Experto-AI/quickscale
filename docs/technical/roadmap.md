@@ -52,7 +52,7 @@ git merge --no-ff wt-track{N}
 
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
-| M1 | 1 | F11.2–F11.5 | 🟢 | **Complete on wt-track1:** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. Pending merge to v87 (Phase 5). |
+| M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | ⬜ | M1 merged; backfill (F11.6) + bootstrap (F11.7) green; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.7. F2.5 ✅ F2.6 ✅ (CR-M5-P3-003 resolved). Blocks F2.9. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 ### M1 — F11 CRM create + read isolation
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Status:** ✅ Complete on wt-track1 — pending merge to v87 (Phase 5).
+**Status:** ✅ Merged to v87.
 
 F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.3 ✅ complete (self-contained resource create stamping for Tag, Company, Stage with org-member proof and same-org duplicate rejection). F11.4 ✅ complete (Contact/Deal related-ID guard + create stamping; 9 tests; CRM module validation green). F11.5 ✅ complete (CRM read-path isolation: dashboard, list/detail, nested-note, and helper reads scoped to current org; no-context reads fail closed; targeted A/B/C/D green; CRM module validation green).
 
@@ -136,7 +136,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F11.5 — CRM read-path isolation** _(M1 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** F11.4 ✅ | **Status:** ✅ Complete on wt-track1 — pending merge to v87.
+**Dependencies:** F11.4 ✅ | **Status:** ✅ Merged to v87.
 **Scope:** Dashboard, list/detail, nested-note, and helper reads. Bulk actions and admin/operator paths are F11.9.
 
 - [x] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote`/`DealNote` parent-derived.
