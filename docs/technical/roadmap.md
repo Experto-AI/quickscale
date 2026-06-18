@@ -24,15 +24,15 @@ git worktree add /home/victor/code/quickscale-wt-track2 -b wt-track2 v87
 git worktree add /home/victor/code/quickscale-wt-track3 -b wt-track3 v87
 ```
 
-> **Track 3 note (M5):** M5 is currently active in `quickscale-wt-track3-f2-3b` (branch `wt-track3-f2-3b`). The old `quickscale-wt-track3` worktree (branch `wt-track3-f2-f12-f7`) is dirty and should be removed. Once M5 merges to v87, Track 3 resumes as `quickscale-wt-track3` per the setup above.
+> **Track 3 note (M5):** M5 is currently active in `quickscale-wt-track3` (branch `wt-track3-f2-3b`). The prior dirty Track 3 worktree is preserved at `quickscale-wt-track3-f2-f12-f7` (branch `wt-track3-f2-f12-f7`) until cleanup. Once M5 merges to v87, Track 3 continues in `quickscale-wt-track3` per the setup above.
 
 ### Track assignment
 
 | Track | Worktree | Branch | Owns |
 |-------|---------|--------|------|
 | 1 | `quickscale-wt-track1` | `wt-track1` | F11 tenant isolation (M1 → M3 → M7) → F13 billing SSOT (M9) |
-| 2 | `quickscale-wt-track2` | `wt-track2` | F5 DR engine split (M10) |
-| 3 | `quickscale-wt-track3` | `wt-track3` | F2 provenance (M5) → F12 recoverable apply (M8) → F7 runtime pins (M11) |
+| 2 | `quickscale-wt-track2` | `wt-track2-f1-f5` | F5 DR engine split (M10) |
+| 3 | `quickscale-wt-track3` | `wt-track3-f2-3b` (M5), then `wt-track3` | F2 provenance (M5) → F12 recoverable apply (M8) → F7 runtime pins (M11) |
 
 ### Cross-track dependency
 
@@ -80,7 +80,7 @@ F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.
 ---
 
 ### M5 — F2 Provenance persistence + release tooling
-**Track:** 3 | **Worktree:** `quickscale-wt-track3-f2-3b` (M5 only; future phases use `quickscale-wt-track3`)
+**Track:** 3 | **Worktree:** `quickscale-wt-track3` (branch `wt-track3-f2-3b` for M5)
 
 **Pending phases:** F2.6 → F2.7 → F2.8 → F2.9
 
