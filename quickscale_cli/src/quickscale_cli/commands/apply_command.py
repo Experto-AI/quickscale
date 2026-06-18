@@ -61,7 +61,7 @@ from quickscale_cli.social_manifest import (
     SOCIAL_LINK_TREE_PATH,
     validate_social_module_options,
 )
-from quickscale_cli.commands.module_commands import embed_module
+from quickscale_cli.commands.module_commands import embed_module, ModuleEmbedProvenance
 from quickscale_cli.commands.module_config import (
     APPLY_MODULE_EXECUTION_MODE,
     get_default_backups_config,
@@ -102,7 +102,10 @@ from quickscale_core.project_state import (
     check_version_drift,
     compute_file_hashes,
 )
-from quickscale_core.utils.git_utils import is_working_directory_clean
+from quickscale_core.utils.git_utils import (
+    is_working_directory_clean,
+    resolve_remote_ref,
+)
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
@@ -130,6 +133,7 @@ class EmbedModulesResult:
     success: bool
     embedded_modules: list[str]
     failed_module: str | None = None
+    provenance_payloads: dict[str, ModuleEmbedProvenance] | None = None
 
 
 @dataclass(frozen=True)
@@ -402,6 +406,7 @@ def _embed_module(
     project_path: Path,
     module_name: str,
     skip_auth_migration_check: bool = False,
+    provenance_sink: list[ModuleEmbedProvenance] | None = None,
 ) -> bool:
     """Embed a module using the embed_module function with non-interactive mode"""
     click.echo(f"⏳ Embedding module: {module_name}...")
@@ -416,6 +421,7 @@ def _embed_module(
             sync_dependencies=False,
             install_dependencies=False,
             execution_mode=APPLY_MODULE_EXECUTION_MODE,
+            provenance_sink=provenance_sink,
         )
 
         if success:
@@ -1415,11 +1421,122 @@ def _display_config_summary(qs_config: QuickScaleConfig) -> None:
     )
 
 
+def _provenance_repair_might_be_needed(ctx: ApplyContext) -> bool:
+    """Check whether any installed module has a missing commit_sha.
+
+    This is a cheap pre-lock probe used to decide whether the no-op gate
+    should defer to the locked provenance-repair path instead of aborting
+    immediately.  It does NOT perform the repair or write state.
+    """
+    if ctx.existing_state is None:
+        return False
+    if ctx.delta.has_changes:
+        return False
+    return any(
+        module_state.commit_sha is None
+        for module_state in ctx.existing_state.modules.values()
+    )
+
+
+def _attempt_provenance_repair_if_needed(ctx: ApplyContext) -> None:
+    """Phase 3: Attempt bounded provenance repair for no-op scenarios.
+
+    When delta.has_changes is False but some installed modules have missing
+    commit_sha, attempt one bounded resolve_remote_ref() using existing
+    tracking metadata. If successful, write authoritative state once. If
+    resolution fails, warn and preserve no-op behavior.
+
+    .. note::
+       This function writes to ``.quickscale/state.yml`` and MUST only be
+       called while the advisory lock is held (see :func:`_execute_apply_steps`).
+    """
+    if ctx.existing_state is None:
+        return
+
+    # Only attempt repair when this would otherwise be a no-op
+    if ctx.delta.has_changes:
+        return
+
+    # Check if any installed modules have missing commit_sha
+    modules_needing_repair = [
+        module_name
+        for module_name, module_state in ctx.existing_state.modules.items()
+        if module_state.commit_sha is None
+    ]
+
+    if not modules_needing_repair:
+        return
+
+    click.echo(
+        "\n🔧 Attempting provenance repair for modules with missing commit_sha..."
+    )
+
+    repaired_any = False
+    repair_timestamp = datetime.now().isoformat()
+    for module_name in modules_needing_repair:
+        module_state = ctx.existing_state.modules[module_name]
+        if module_state.branch is None:
+            click.secho(
+                f"⚠️  Cannot repair {module_name}: missing tracking branch metadata",
+                fg="yellow",
+            )
+            continue
+
+        # Use the default QuickScale remote URL
+        remote = "https://github.com/Experto-AI/quickscale.git"
+        branch = module_state.branch
+
+        try:
+            resolved_sha = resolve_remote_ref(remote, branch)
+            module_state.commit_sha = resolved_sha
+            # Backfill the full provenance triple: also refresh embedded_at
+            # to the repair timestamp and ensure version is populated from
+            # the embedded manifest when available.
+            module_state.embedded_at = repair_timestamp
+            manifest = get_manifest_for_module(ctx.output_path, module_name)
+            if manifest is not None:
+                normalized_version = normalize_installed_version(manifest.version)
+                if normalized_version is not None:
+                    module_state.version = normalized_version
+            repaired_any = True
+            click.secho(f"✅ Repaired {module_name}: {resolved_sha[:8]}", fg="green")
+        except Exception as e:
+            click.secho(
+                f"⚠️  Could not resolve {module_name} from {branch}: {e}",
+                fg="yellow",
+            )
+
+    if repaired_any:
+        # Write authoritative state once with repaired commit_sha
+        # Do NOT create recovery file — this is a best-effort repair
+        try:
+            state_manager = StateManager(ctx.output_path)
+            state_manager.save(ctx.existing_state)
+            click.secho(
+                "✅ Updated .quickscale/state.yml with repaired provenance",
+                fg="green",
+            )
+            # Refresh the delta so the next check sees no changes
+            ctx.delta = compute_delta(ctx.qs_config, ctx.existing_state, ctx.manifests)
+        except Exception as e:
+            click.secho(
+                f"⚠️  Failed to save repaired state: {e}",
+                fg="yellow",
+            )
+    else:
+        click.secho(
+            "⚠️  Provenance repair could not resolve any modules. "
+            "State remains unchanged.",
+            fg="yellow",
+        )
+
+
 def _handle_delta_and_existing_state(
     delta: ConfigDelta,
     existing_state: QuickScaleState | None,
     *,
     has_pending_post_embed_recovery: bool = False,
+    has_pending_provenance_repair: bool = False,
 ) -> None:
     """Handle delta display and abort conditions for existing state."""
     if existing_state is None:
@@ -1433,6 +1550,12 @@ def _handle_delta_and_existing_state(
             click.echo(
                 "\n♻️  Pending post-embed apply recovery detected. "
                 "Re-running the remaining apply steps."
+            )
+            return
+        if has_pending_provenance_repair:
+            click.echo(
+                "\n🔧 Provenance repair needed. "
+                "Continuing under advisory lock to repair state."
             )
             return
         click.secho(
@@ -1685,6 +1808,7 @@ def _embed_modules_step(
 ) -> EmbedModulesResult:
     """Embed modules with fail-fast semantics."""
     embedded_modules: list[str] = []
+    provenance_payloads: dict[str, ModuleEmbedProvenance] = {}
 
     if no_modules or not modules_to_embed:
         if existing_state and not modules_to_embed:
@@ -1694,10 +1818,12 @@ def _embed_modules_step(
     skip_auth_migration_check = existing_state is None
 
     for module_name in modules_to_embed:
+        module_provenance: list[ModuleEmbedProvenance] = []
         if not _embed_module(
             output_path,
             module_name,
             skip_auth_migration_check=skip_auth_migration_check,
+            provenance_sink=module_provenance,
         ):
             if not is_working_directory_clean(output_path):
                 if not _git_commit(
@@ -1730,8 +1856,17 @@ def _embed_modules_step(
             raise click.Abort()
 
         embedded_modules.append(module_name)
+        # Capture per-module provenance from the apply-side handoff seam.
+        # Each module resolves its source_ref exactly once; the payload is
+        # carried forward in-memory for later phases.
+        if module_provenance:
+            provenance_payloads[module_name] = module_provenance[0]
 
-    return EmbedModulesResult(success=True, embedded_modules=embedded_modules)
+    return EmbedModulesResult(
+        success=True,
+        embedded_modules=embedded_modules,
+        provenance_payloads=provenance_payloads if provenance_payloads else None,
+    )
 
 
 def _run_post_generation_steps(output_path: Path, run_migrations: bool = True) -> bool:
@@ -1824,6 +1959,8 @@ def _build_project_state_snapshot(
     existing_state: QuickScaleState | None,
     embedded_modules: list[str],
     delta: ConfigDelta,
+    *,
+    provenance_payloads: dict[str, ModuleEmbedProvenance] | None = None,
 ) -> QuickScaleState:
     """Build the state snapshot used for success or retry recovery."""
     timestamp = datetime.now().isoformat()
@@ -1849,12 +1986,19 @@ def _build_project_state_snapshot(
             continue
 
         existing_module_state = new_state.modules.get(module_name)
+        # Phase 2: populate commit_sha from the provenance payload when
+        # available.  The provenance source_ref is the exact commit SHA
+        # resolved once during apply embed (Phase 1 seam).
+        provenance = (provenance_payloads or {}).get(module_name)
+        commit_sha = (
+            provenance.source_ref
+            if provenance is not None
+            else (existing_module_state.commit_sha if existing_module_state else None)
+        )
         new_state.modules[module_name] = ModuleState(
             name=module_name,
             version=existing_module_state.version if existing_module_state else None,
-            commit_sha=(
-                existing_module_state.commit_sha if existing_module_state else None
-            ),
+            commit_sha=commit_sha,
             embedded_at=(
                 existing_module_state.embedded_at
                 if existing_module_state is not None
@@ -1924,6 +2068,7 @@ def _save_apply_recovery_state(
     delta: ConfigDelta,
     *,
     state_snapshot: QuickScaleState | None = None,
+    provenance_payloads: dict[str, ModuleEmbedProvenance] | None = None,
 ) -> bool:
     """Persist retry context for failures that happen after embedding succeeded."""
     try:
@@ -1933,6 +2078,7 @@ def _save_apply_recovery_state(
             existing_state,
             embedded_modules,
             delta,
+            provenance_payloads=provenance_payloads,
         )
         recovery_manager = _get_apply_recovery_state_manager(output_path)
         recovery_manager.save(recovery_state)
@@ -1970,6 +2116,7 @@ def _save_project_state(
     delta: ConfigDelta,
     *,
     state_snapshot: QuickScaleState | None = None,
+    provenance_payloads: dict[str, ModuleEmbedProvenance] | None = None,
 ) -> bool:
     """Save project state to .quickscale/state.yml."""
     try:
@@ -1980,6 +2127,7 @@ def _save_project_state(
             existing_state,
             embedded_modules,
             delta,
+            provenance_payloads=provenance_payloads,
         )
 
         state_manager.save(new_state)
@@ -2518,6 +2666,9 @@ def _execute_apply_steps(
         # taken before the lock was held.
         _refresh_context_after_lock(ctx)
 
+        # Phase 3: Attempt bounded provenance repair before no-op detection
+        _attempt_provenance_repair_if_needed(ctx)
+
         # Re-run top-level gate decisions with the refreshed state so that
         # stale pre-lock no-op / immutable-change / config-removal decisions
         # cannot continue mutating under the lock if another apply won the
@@ -2571,6 +2722,7 @@ def _execute_apply_steps_locked(
         ctx.output_path, modules_to_embed, no_modules, ctx.existing_state
     )
     embedded_modules = embed_result.embedded_modules
+    provenance_payloads = embed_result.provenance_payloads
 
     if not embed_result.success:
         # Persist successful partial embeds (explicit no-rollback contract).
@@ -2580,6 +2732,7 @@ def _execute_apply_steps_locked(
             ctx.existing_state,
             embedded_modules,
             ctx.delta,
+            provenance_payloads=provenance_payloads,
         ):
             _print_apply_failure_summary(
                 failed_step="authoritative state persistence",
@@ -2604,6 +2757,7 @@ def _execute_apply_steps_locked(
             ctx.existing_state,
             embedded_modules,
             ctx.delta,
+            provenance_payloads=provenance_payloads,
         )
     except Exception as error:
         _print_apply_failure_summary(
@@ -2800,11 +2954,17 @@ def apply(
     # Display configuration summary
     _display_config_summary(ctx.qs_config)
 
+    # Probe whether provenance repair might be needed before the no-op gate.
+    # The actual repair is deferred to the locked path inside
+    # _execute_apply_steps (CR-F26-001).
+    has_pending_provenance_repair = _provenance_repair_might_be_needed(ctx)
+
     # Handle delta and existing state
     _handle_delta_and_existing_state(
         ctx.delta,
         ctx.existing_state,
         has_pending_post_embed_recovery=ctx.has_pending_post_embed_recovery,
+        has_pending_provenance_repair=has_pending_provenance_repair,
     )
 
     # Check output directory

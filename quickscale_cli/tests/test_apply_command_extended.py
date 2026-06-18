@@ -2,7 +2,7 @@
 
 from pathlib import Path
 import subprocess
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import click
 import pytest
@@ -22,7 +22,11 @@ from quickscale_cli.social_manifest import (
 from quickscale_cli.commands.apply_command import (
     ApplyContext,
     EmbedModulesResult,
+    ModuleEmbedProvenance,
+    _attempt_provenance_repair_if_needed,
+    _build_project_state_snapshot,
     _check_output_directory,
+    _clear_apply_recovery_state,
     _commit_pending_config_changes,
     _determine_output_path,
     _display_config_summary,
@@ -31,6 +35,7 @@ from quickscale_cli.commands.apply_command import (
     _embed_modules_step,
     _ensure_backups_gitignore_rules,
     _execute_apply_steps,
+    _finalize_apply_state,
     _generate_project,
     _generate_with_existing_config,
     _git_commit,
@@ -42,6 +47,7 @@ from quickscale_cli.commands.apply_command import (
     _load_module_manifests,
     _normalize_backups_gitignore_entry,
     _prepare_apply_context,
+    _provenance_repair_might_be_needed,
     _refresh_context_after_lock,
     _render_billing_env_example_block,
     _run_command,
@@ -51,6 +57,7 @@ from quickscale_cli.commands.apply_command import (
     _run_poetry_install,
     _run_post_generation_steps,
     _render_analytics_env_example_block,
+    _save_apply_recovery_state,
     _save_project_state,
     _sync_billing_env_example,
     _sync_project_module_dependencies_for_apply,
@@ -60,6 +67,7 @@ from quickscale_cli.commands.apply_command import (
     _update_module_config_in_state,
 )
 from quickscale_cli.schema.state_schema import (
+    ModuleState,
     ProjectState,
     QuickScaleState,
     StateManager,
@@ -340,6 +348,7 @@ class TestEmbedModule:
             sync_dependencies=False,
             install_dependencies=False,
             execution_mode="apply",
+            provenance_sink=None,
         )
 
     @patch("quickscale_cli.commands.apply_command.embed_module")
@@ -363,6 +372,7 @@ class TestEmbedModule:
             sync_dependencies=False,
             install_dependencies=False,
             execution_mode="apply",
+            provenance_sink=None,
         )
 
     def test_apply_embed_defers_immediate_module_regeneration(self, tmp_path):
@@ -1843,6 +1853,7 @@ class TestEmbedModulesStep:
             Path("/tmp"),
             "auth",
             skip_auth_migration_check=True,
+            provenance_sink=ANY,
         )
 
     @patch("quickscale_cli.commands.apply_command._git_commit")
@@ -1906,7 +1917,275 @@ class TestEmbedModulesStep:
             Path("/tmp"),
             "auth",
             skip_auth_migration_check=False,
+            provenance_sink=ANY,
         )
+
+    @patch("quickscale_cli.commands.apply_command._git_commit")
+    @patch("quickscale_cli.commands.apply_command._embed_module")
+    def test_provenance_collected_from_embed(self, mock_embed, mock_commit):
+        """Phase 1 checkpoint: provenance payloads are collected per module."""
+        mock_commit.return_value = True
+
+        def _fake_embed(
+            path, module_name, *, skip_auth_migration_check, provenance_sink
+        ):
+            del path, skip_auth_migration_check
+            if provenance_sink is not None:
+                provenance_sink.append(
+                    ModuleEmbedProvenance(
+                        module_name=module_name,
+                        prefix=f"modules/{module_name}",
+                        tracking_branch=f"splits/{module_name}-module",
+                        source_ref="c" * 40,
+                        installed_version="0.82.0",
+                    )
+                )
+            return True
+
+        mock_embed.side_effect = _fake_embed
+        result = _embed_modules_step(Path("/tmp"), ["auth", "blog"], False, None)
+
+        assert result.success is True
+        assert result.embedded_modules == ["auth", "blog"]
+        assert result.provenance_payloads is not None
+        assert "auth" in result.provenance_payloads
+        assert "blog" in result.provenance_payloads
+        assert result.provenance_payloads["auth"].source_ref == "c" * 40
+        assert (
+            result.provenance_payloads["blog"].tracking_branch == "splits/blog-module"
+        )
+
+
+# ============================================================================
+# Phase 2: Provenance persistence into state and recovery
+# ============================================================================
+
+
+class TestProvenancePersistence:
+    """Phase 2 tests: provenance flows into authoritative and recovery state."""
+
+    def test_build_snapshot_populates_commit_sha_from_provenance(self, tmp_path):
+        """Phase 2 checkpoint: _build_project_state_snapshot writes commit_sha
+        from provenance source_ref into the module state."""
+        # Create a minimal embedded module manifest so version normalization works
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {"auth": Mock(options={})}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        resolved_sha = "d" * 40
+        provenance = {
+            "auth": ModuleEmbedProvenance(
+                module_name="auth",
+                prefix="modules/auth",
+                tracking_branch="splits/auth-module",
+                source_ref=resolved_sha,
+                installed_version="0.83.0",
+            )
+        }
+
+        state = _build_project_state_snapshot(
+            tmp_path,
+            config,
+            existing_state=None,
+            embedded_modules=["auth"],
+            delta=delta,
+            provenance_payloads=provenance,
+        )
+
+        assert "auth" in state.modules
+        assert state.modules["auth"].commit_sha == resolved_sha
+
+    def test_build_snapshot_without_provenance_preserves_existing_commit_sha(
+        self, tmp_path
+    ):
+        """Without provenance, existing commit_sha is preserved (no regression)."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.82.0",
+                    commit_sha="e" * 40,
+                ),
+            },
+        )
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {"auth": Mock(options={})}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        state = _build_project_state_snapshot(
+            tmp_path,
+            config,
+            existing_state=existing_state,
+            embedded_modules=["auth"],
+            delta=delta,
+        )
+
+        assert state.modules["auth"].commit_sha == "e" * 40
+
+    def test_save_recovery_state_contains_provenance_commit_sha(self, tmp_path):
+        """Phase 2 checkpoint: recovery file carries the same commit_sha as
+        authoritative state would."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {"auth": Mock(options={})}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        resolved_sha = "f" * 40
+        provenance = {
+            "auth": ModuleEmbedProvenance(
+                module_name="auth",
+                prefix="modules/auth",
+                tracking_branch="splits/auth-module",
+                source_ref=resolved_sha,
+                installed_version="0.83.0",
+            )
+        }
+
+        result = _save_apply_recovery_state(
+            tmp_path,
+            config,
+            existing_state=None,
+            embedded_modules=["auth"],
+            delta=delta,
+            provenance_payloads=provenance,
+        )
+
+        assert result is True
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        assert recovery_path.exists()
+
+        # Load the recovery file and verify commit_sha is present
+        recovery_manager = StateManager(tmp_path)
+        recovery_manager.state_file = recovery_path
+        recovery_state = recovery_manager.load()
+        assert recovery_state is not None
+        assert "auth" in recovery_state.modules
+        assert recovery_state.modules["auth"].commit_sha == resolved_sha
+
+    def test_save_project_state_persists_provenance_commit_sha(self, tmp_path):
+        """Phase 2 checkpoint: authoritative state.yml carries commit_sha
+        from provenance."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {"auth": Mock(options={})}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        resolved_sha = "a" * 40
+        provenance = {
+            "auth": ModuleEmbedProvenance(
+                module_name="auth",
+                prefix="modules/auth",
+                tracking_branch="splits/auth-module",
+                source_ref=resolved_sha,
+                installed_version="0.83.0",
+            )
+        }
+
+        result = _save_project_state(
+            tmp_path,
+            config,
+            existing_state=None,
+            embedded_modules=["auth"],
+            delta=delta,
+            provenance_payloads=provenance,
+        )
+
+        assert result is True
+        state_path = tmp_path / ".quickscale" / "state.yml"
+        assert state_path.exists()
+
+        state_manager = StateManager(tmp_path)
+        saved_state = state_manager.load()
+        assert saved_state is not None
+        assert "auth" in saved_state.modules
+        assert saved_state.modules["auth"].commit_sha == resolved_sha
+
+    def test_clear_recovery_after_successful_finalize(self, tmp_path):
+        """Phase 2 checkpoint: recovery file is removed after successful
+        authoritative state save."""
+        # Pre-create a recovery file
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        recovery_path.write_text("dummy: recovery\n")
+        assert recovery_path.exists()
+
+        _clear_apply_recovery_state(tmp_path)
+
+        assert not recovery_path.exists()
+
+    def test_finalize_clears_recovery_on_success(self, tmp_path):
+        """Phase 2: _finalize_apply_state clears recovery after successful save."""
+        # Pre-create a recovery file
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        recovery_path.write_text("dummy: recovery\n")
+
+        ctx = Mock()
+        ctx.output_path = tmp_path
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.project.package = "myapp"
+        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.modules = {}
+        ctx.existing_state = None
+        ctx.delta = Mock()
+        ctx.delta.config_deltas = {}
+
+        post_embed_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={},
+        )
+
+        _finalize_apply_state(ctx, post_embed_state)
+
+        # Recovery should be cleared after successful finalize
+        assert not recovery_path.exists()
+        # Authoritative state should exist
+        assert (tmp_path / ".quickscale" / "state.yml").exists()
 
 
 # ============================================================================
@@ -4439,3 +4718,569 @@ class TestCR002PostLockGateReEvaluation:
 
         mock_lock.acquire.assert_called_once()
         mock_lock.release.assert_called_once()
+
+
+# ============================================================================
+# Phase 3: Bounded no-op provenance repair
+# ============================================================================
+
+
+class TestPhase3NoOpProvenanceRepair:
+    """Phase 3 tests: bounded best-effort provenance repair for no-op scenarios."""
+
+    def test_successful_repair_writes_state_and_second_apply_is_noop(self, tmp_path):
+        """Phase 3 checkpoint: successful repair writes state, second apply is true no-op."""
+        # Create a minimal module manifest
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        # Build state with missing commit_sha
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.83.0",
+                    commit_sha=None,  # Missing!
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+
+        qs_config = Mock()
+        qs_config.project.slug = "myapp"
+        qs_config.project.package = "myapp"
+        qs_config.project.theme = "showcase_html"
+        qs_config.modules = {"auth": Mock(options={})}
+
+        # Delta shows no changes (no-op scenario)
+        delta = Mock()
+        delta.has_changes = False
+        delta.modules_to_add = []
+        delta.modules_to_remove = []
+
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=delta,
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+        # Mock resolve_remote_ref to return a SHA
+        resolved_sha = "b" * 40
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            return_value=resolved_sha,
+        ):
+            _attempt_provenance_repair_if_needed(ctx)
+
+        # Verify state was written with repaired commit_sha
+        state_path = tmp_path / ".quickscale" / "state.yml"
+        assert state_path.exists()
+
+        state_manager = StateManager(tmp_path)
+        saved_state = state_manager.load()
+        assert saved_state is not None
+        assert "auth" in saved_state.modules
+        assert saved_state.modules["auth"].commit_sha == resolved_sha
+
+        # Verify no recovery file was created
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        assert not recovery_path.exists()
+
+        # Verify delta was refreshed to show no changes
+        assert ctx.delta.has_changes is False
+
+    def test_failed_repair_warns_and_preserves_noop(self, tmp_path):
+        """Phase 3 checkpoint: failed repair warns, does not write state, preserves no-op."""
+        # Create a minimal module manifest
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        # Build state with missing commit_sha
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.83.0",
+                    commit_sha=None,  # Missing!
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+
+        qs_config = Mock()
+        qs_config.project.slug = "myapp"
+        qs_config.project.package = "myapp"
+        qs_config.project.theme = "showcase_html"
+        qs_config.modules = {"auth": Mock(options={})}
+
+        # Delta shows no changes (no-op scenario)
+        delta = Mock()
+        delta.has_changes = False
+        delta.modules_to_add = []
+        delta.modules_to_remove = []
+
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=delta,
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+        # Mock resolve_remote_ref to raise an error
+        from quickscale_core.utils.git_utils import GitError
+
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            side_effect=GitError("Network error"),
+        ):
+            _attempt_provenance_repair_if_needed(ctx)
+
+        # Verify state was NOT written
+        state_path = tmp_path / ".quickscale" / "state.yml"
+        assert not state_path.exists()
+
+        # Verify no recovery file was created
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        assert not recovery_path.exists()
+
+        # Verify existing state still has missing commit_sha
+        assert existing_state.modules["auth"].commit_sha is None
+
+    def test_no_repair_attempted_when_no_missing_commit_sha(self, tmp_path):
+        """Phase 3: repair is skipped when all modules have commit_sha."""
+        # Build state with commit_sha already present
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.83.0",
+                    commit_sha="a" * 40,  # Already present
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+
+        qs_config = Mock()
+        qs_config.modules = {"auth": Mock(options={})}
+
+        delta = Mock()
+        delta.has_changes = False
+
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=delta,
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+        # Mock resolve_remote_ref - should NOT be called
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_remote_ref"
+        ) as mock_resolve:
+            _attempt_provenance_repair_if_needed(ctx)
+            mock_resolve.assert_not_called()
+
+    def test_no_repair_attempted_when_delta_has_changes(self, tmp_path):
+        """Phase 3: repair is skipped when delta has changes (not a no-op)."""
+        # Build state with missing commit_sha
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.83.0",
+                    commit_sha=None,
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+
+        qs_config = Mock()
+        qs_config.modules = {"auth": Mock(options={})}
+
+        # Delta HAS changes (not a no-op)
+        delta = Mock()
+        delta.has_changes = True
+
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=delta,
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+        # Mock resolve_remote_ref - should NOT be called
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_remote_ref"
+        ) as mock_resolve:
+            _attempt_provenance_repair_if_needed(ctx)
+            mock_resolve.assert_not_called()
+
+
+# ============================================================================
+# Phase 4: Full provenance triple consistency
+# ============================================================================
+
+
+class TestProvenanceTripleConsistency:
+    """F2.6 tests: all three paths persist the full provenance triple
+    (version, commit_sha, embedded_at) consistently."""
+
+    def test_apply_path_populates_full_triple(self, tmp_path):
+        """Apply path: _build_project_state_snapshot populates version,
+        commit_sha, and embedded_at for freshly embedded modules."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {"auth": Mock(options={})}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        resolved_sha = "a" * 40
+        provenance = {
+            "auth": ModuleEmbedProvenance(
+                module_name="auth",
+                prefix="modules/auth",
+                tracking_branch="splits/auth-module",
+                source_ref=resolved_sha,
+                installed_version="0.83.0",
+            )
+        }
+
+        state = _build_project_state_snapshot(
+            tmp_path,
+            config,
+            existing_state=None,
+            embedded_modules=["auth"],
+            delta=delta,
+            provenance_payloads=provenance,
+        )
+
+        assert "auth" in state.modules
+        module_state = state.modules["auth"]
+        # Full triple: version, commit_sha, embedded_at
+        assert module_state.version == "0.83.0"
+        assert module_state.commit_sha == resolved_sha
+        assert module_state.embedded_at is not None
+        assert module_state.embedded_at != ""
+
+    def test_noop_repair_backfills_full_triple(self, tmp_path):
+        """No-op repair: _attempt_provenance_repair_if_needed backfills
+        version, commit_sha, and embedded_at for modules with missing
+        commit_sha."""
+        # Create a minimal module manifest
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
+
+        # Build state with missing commit_sha and no embedded_at
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version=None,  # Missing!
+                    commit_sha=None,  # Missing!
+                    embedded_at="",  # Empty!
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+
+        qs_config = Mock()
+        qs_config.project.slug = "myapp"
+        qs_config.project.package = "myapp"
+        qs_config.project.theme = "showcase_html"
+        qs_config.modules = {"auth": Mock(options={})}
+
+        delta = Mock()
+        delta.has_changes = False
+        delta.modules_to_add = []
+        delta.modules_to_remove = []
+
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=delta,
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+        resolved_sha = "c" * 40
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            return_value=resolved_sha,
+        ):
+            _attempt_provenance_repair_if_needed(ctx)
+
+        # Verify full triple was backfilled
+        state_path = tmp_path / ".quickscale" / "state.yml"
+        assert state_path.exists()
+
+        state_manager = StateManager(tmp_path)
+        saved_state = state_manager.load()
+        assert saved_state is not None
+        assert "auth" in saved_state.modules
+        module_state = saved_state.modules["auth"]
+        # Full triple: version, commit_sha, embedded_at
+        assert module_state.commit_sha == resolved_sha
+        assert module_state.version == "0.83.0"
+        assert module_state.embedded_at is not None
+        assert module_state.embedded_at != ""
+
+
+# ============================================================================
+# CR-F26-001: Lock-discipline regression coverage
+# ============================================================================
+
+
+class TestProvenanceRepairMightBeNeeded:
+    """Tests for _provenance_repair_might_be_needed probe."""
+
+    def test_returns_false_when_no_existing_state(self, tmp_path):
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=Mock(),
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=None,
+            manifests={},
+            delta=Mock(has_changes=False),
+        )
+        assert _provenance_repair_might_be_needed(ctx) is False
+
+    def test_returns_false_when_delta_has_changes(self, tmp_path):
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version=None,
+                    commit_sha=None,
+                    embedded_at="",
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=Mock(),
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=Mock(has_changes=True),
+        )
+        assert _provenance_repair_might_be_needed(ctx) is False
+
+    def test_returns_true_when_modules_missing_commit_sha(self, tmp_path):
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version=None,
+                    commit_sha=None,
+                    embedded_at="",
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=Mock(),
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=Mock(has_changes=False),
+        )
+        assert _provenance_repair_might_be_needed(ctx) is True
+
+    def test_returns_false_when_all_modules_have_commit_sha(self, tmp_path):
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.83.0",
+                    commit_sha="a" * 40,
+                    embedded_at="2025-01-01T00:00:00",
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=Mock(),
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=Mock(has_changes=False),
+        )
+        assert _provenance_repair_might_be_needed(ctx) is False
+
+
+class TestHandleDeltaPendingProvenanceRepair:
+    """CR-F26-001: no-op gate must defer to locked provenance-repair path."""
+
+    def test_noop_gate_defers_when_provenance_repair_pending(self):
+        """has_pending_provenance_repair=True must bypass the no-op abort."""
+        delta = Mock()
+        delta.has_changes = False
+        state = Mock()
+
+        with patch(
+            "quickscale_cli.commands.apply_command.format_delta", return_value="none"
+        ):
+            # Must NOT raise click.Abort
+            _handle_delta_and_existing_state(
+                delta,
+                state,
+                has_pending_provenance_repair=True,
+            )
+
+    def test_noop_gate_still_aborts_without_provenance_repair(self):
+        """Without the flag, no-op must still abort as before."""
+        delta = Mock()
+        delta.has_changes = False
+        state = Mock()
+
+        with pytest.raises(click.Abort):
+            _handle_delta_and_existing_state(
+                delta,
+                state,
+                has_pending_provenance_repair=False,
+            )
+
+    def test_noop_repair_does_not_write_state_before_lock(self, tmp_path):
+        """CR-F26-001 regression: the pre-lock probe must not write state.yml.
+
+        The probe (_provenance_repair_might_be_needed) is read-only.  The
+        actual state write must only happen inside the locked path.
+        """
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version=None,
+                    commit_sha=None,
+                    embedded_at="",
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=Mock(),
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=Mock(has_changes=False),
+        )
+
+        # The probe is read-only — it must not create state.yml
+        result = _provenance_repair_might_be_needed(ctx)
+        assert result is True
+
+        state_path = tmp_path / ".quickscale" / "state.yml"
+        assert not state_path.exists(), (
+            "CR-F26-001: pre-lock probe must not write state.yml"
+        )

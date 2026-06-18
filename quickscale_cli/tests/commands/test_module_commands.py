@@ -19,12 +19,14 @@ from quickscale_cli.commands.module_commands import (
     _perform_module_embed,
     _print_installation_error,
     _resolve_embedded_module_install_path,
+    _sync_state_module_version,
     _update_single_module,
     _validate_git_environment,
     _validate_module_not_exists,
     _validate_remote_branch,
     _validate_update_environment,
     embed_module,
+    ModuleEmbedProvenance,
     push,
     update,
 )
@@ -274,7 +276,7 @@ class TestPerformModuleEmbed:
             {},
         )
 
-        assert result is True
+        assert result == (True, None)
         mock_subtree.assert_called_once()
         mock_add_module.assert_called_once_with(
             module_name="auth",
@@ -325,7 +327,7 @@ class TestPerformModuleEmbed:
                 {"some": "config"},
             )
 
-        assert result is True
+        assert result == (True, None)
         applier.assert_called_once_with(tmp_path, {"some": "config"})
         mock_sync_dependencies.assert_called_once_with(
             tmp_path,
@@ -362,7 +364,7 @@ class TestPerformModuleEmbed:
             {},
         )
 
-        assert result is False
+        assert result == (False, None)
 
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
@@ -384,7 +386,7 @@ class TestPerformModuleEmbed:
             {},
         )
 
-        assert result is False
+        assert result == (False, None)
         mock_add_module.assert_not_called()
         mock_install.assert_not_called()
 
@@ -436,10 +438,57 @@ class TestPerformModuleEmbed:
                 execution_mode=APPLY_MODULE_EXECUTION_MODE,
             )
 
-        assert result is False
+        assert result == (False, None)
         assert not (tmp_path / "modules" / "blog").exists()
         config_path = tmp_path / ".quickscale" / "config.yml"
         assert not config_path.exists() or "blog:" not in config_path.read_text()
+
+    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
+    @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
+    @patch("quickscale_cli.commands.module_commands.add_module")
+    @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    def test_source_ref_forwarded_to_subtree_add_and_provenance_returned(
+        self,
+        mock_subtree,
+        mock_add_module,
+        mock_install,
+        mock_sync_dependencies,
+        tmp_path,
+    ):
+        """Phase 1: source_ref binds subtree add and populates provenance."""
+        mock_sync_dependencies.return_value = True
+        mock_install.return_value = True
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        resolved_sha = "b" * 40
+        success, provenance = _perform_module_embed(
+            tmp_path,
+            "auth",
+            "https://example.com/repo.git",
+            "splits/auth-module",
+            {},
+            source_ref=resolved_sha,
+        )
+
+        assert success is True
+        # subtree add received the resolved SHA, not the branch name
+        mock_subtree.assert_called_once_with(
+            prefix="modules/auth",
+            remote="https://example.com/repo.git",
+            branch=resolved_sha,
+            squash=True,
+        )
+        # provenance carries the same source_ref and tracking metadata
+        assert provenance is not None
+        assert provenance.source_ref == resolved_sha
+        assert provenance.tracking_branch == "splits/auth-module"
+        assert provenance.module_name == "auth"
+        assert provenance.prefix == "modules/auth"
+        assert provenance.installed_version == "0.82.0"
 
 
 class TestInstallModuleDependencies:
@@ -682,7 +731,7 @@ class TestEmbedModule:
         mock_git_env.return_value = True
         mock_not_exists.return_value = True
         mock_remote.return_value = True
-        mock_perform.return_value = True
+        mock_perform.return_value = (True, None)
 
         result = embed_module("billing", tmp_path)
         captured = capsys.readouterr()
@@ -715,7 +764,7 @@ class TestEmbedModule:
         mock_not_exists.return_value = True
         mock_remote.return_value = True
         mock_auth_check.return_value = True
-        mock_perform.return_value = True
+        mock_perform.return_value = (True, None)
 
         result = embed_module("auth", tmp_path, non_interactive=True)
 
@@ -794,7 +843,7 @@ class TestEmbedModule:
         mock_not_exists.return_value = True
         mock_remote.return_value = True
         mock_auth_check.return_value = True
-        mock_perform.return_value = True
+        mock_perform.return_value = (True, None)
 
         result = embed_module(
             "auth",
@@ -825,7 +874,7 @@ class TestEmbedModule:
         mock_git_env.return_value = True
         mock_not_exists.return_value = True
         mock_remote.return_value = True
-        mock_perform.return_value = True
+        mock_perform.return_value = (True, None)
 
         result = embed_module(
             "auth",
@@ -886,7 +935,7 @@ class TestEmbedModule:
         mock_git_env.return_value = True
         mock_not_exists.return_value = True
         mock_remote.return_value = True
-        mock_perform.return_value = True
+        mock_perform.return_value = (True, None)
 
         configurator = Mock(return_value={"test": "config"})
         applier = Mock()
@@ -903,6 +952,96 @@ class TestEmbedModule:
 
         assert result is True
         configurator.assert_called_once_with(non_interactive=True)
+
+    @patch("quickscale_cli.commands.module_commands.resolve_remote_ref")
+    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
+    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
+    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
+    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
+    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    def test_apply_embed_resolves_source_ref_once_and_carries_provenance(
+        self,
+        mock_git_env,
+        mock_not_exists,
+        mock_remote,
+        mock_auth_check,
+        mock_perform,
+        mock_resolve,
+        tmp_path,
+    ):
+        """Phase 1 seam: apply resolves source_ref once and forwards provenance."""
+        mock_git_env.return_value = True
+        mock_not_exists.return_value = True
+        mock_remote.return_value = True
+        mock_auth_check.return_value = True
+        resolved_sha = "a" * 40
+        mock_resolve.return_value = resolved_sha
+
+        expected_provenance = ModuleEmbedProvenance(
+            module_name="auth",
+            prefix="modules/auth",
+            tracking_branch="splits/auth-module",
+            source_ref=resolved_sha,
+            installed_version="0.82.0",
+        )
+        mock_perform.return_value = (True, expected_provenance)
+
+        sink: list[ModuleEmbedProvenance] = []
+        result = embed_module(
+            "auth",
+            tmp_path,
+            non_interactive=True,
+            execution_mode=APPLY_MODULE_EXECUTION_MODE,
+            provenance_sink=sink,
+        )
+
+        assert result is True
+        # source_ref resolved exactly once after branch validation
+        mock_resolve.assert_called_once_with(
+            "https://github.com/Experto-AI/quickscale.git",
+            "splits/auth-module",
+        )
+        # resolved SHA forwarded to _perform_module_embed for subtree add
+        mock_perform.assert_called_once()
+        assert mock_perform.call_args.kwargs["source_ref"] == resolved_sha
+        # provenance payload carried forward in the sink
+        assert sink == [expected_provenance]
+        assert sink[0].source_ref == resolved_sha
+        assert sink[0].tracking_branch == "splits/auth-module"
+
+    @patch("quickscale_cli.commands.module_commands.resolve_remote_ref")
+    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
+    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
+    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
+    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    def test_standalone_embed_does_not_resolve_source_ref(
+        self,
+        mock_git_env,
+        mock_not_exists,
+        mock_remote,
+        mock_perform,
+        mock_resolve,
+        tmp_path,
+    ):
+        """Standalone embeds must not resolve source_ref (Phase 1 scope)."""
+        mock_git_env.return_value = True
+        mock_not_exists.return_value = True
+        mock_remote.return_value = True
+        mock_perform.return_value = (True, None)
+
+        result = embed_module(
+            "auth",
+            tmp_path,
+            non_interactive=True,
+            skip_auth_migration_check=True,
+        )
+
+        assert result is True
+        mock_resolve.assert_not_called()
+        # No source_ref forwarded in standalone mode
+        assert mock_perform.call_args.kwargs.get("source_ref") is None
 
 
 class TestValidateUpdateEnvironment:
@@ -2128,3 +2267,67 @@ class TestUpdatePathProvenancePersistence:
         assert result is False
         assert "resolve source ref" in captured.err
         mock_pull.assert_not_called()
+
+
+# ============================================================================
+# F2.6: Full provenance triple consistency for update path
+# ============================================================================
+
+
+class TestSyncStateModuleVersionTriple:
+    """F2.6 tests: _sync_state_module_version refreshes the full provenance
+    triple (version, commit_sha, embedded_at) consistently."""
+
+    def test_sync_refreshes_full_triple(self, tmp_path):
+        """Update path: _sync_state_module_version writes version,
+        commit_sha, and refreshes embedded_at."""
+        from quickscale_cli.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+            StateManager,
+        )
+
+        # Pre-create state.yml with a module entry
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        initial_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.82.0",
+                    commit_sha="a" * 40,
+                    embedded_at="2025-01-01T00:00:00",
+                ),
+            },
+        )
+        state_manager = StateManager(tmp_path)
+        state_manager.save(initial_state)
+
+        # Call _sync_state_module_version with new version and commit_sha
+        new_sha = "b" * 40
+        _sync_state_module_version(
+            tmp_path,
+            "auth",
+            "0.83.0",
+            commit_sha=new_sha,
+        )
+
+        # Verify full triple was updated
+        updated_state = state_manager.load()
+        assert updated_state is not None
+        assert "auth" in updated_state.modules
+        module_state = updated_state.modules["auth"]
+        # Full triple: version, commit_sha, embedded_at
+        assert module_state.version == "0.83.0"
+        assert module_state.commit_sha == new_sha
+        assert module_state.embedded_at != "2025-01-01T00:00:00"
+        assert module_state.embedded_at is not None
+        assert module_state.embedded_at != ""
