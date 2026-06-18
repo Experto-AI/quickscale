@@ -68,7 +68,7 @@
                 {% for contact in recent_contacts %}
                 <tr>
                     <td>{{ contact.first_name }} {{ contact.last_name }}</td>
-                    <td>{{ contact.company.name|default:"-" }}</td>
+                    <td>{{ contact.display_company_name|default:"-" }}</td>
                     <td>{{ contact.email|default:"-" }}</td>
                 </tr>
                 {% endfor %}
@@ -94,7 +94,7 @@
                 {% for deal in recent_deals %}
                 <tr>
                     <td>{{ deal.title }}</td>
-                    <td>{{ deal.stage.name|default:"-" }}</td>
+                    <td>{{ deal.display_stage_name|default:"-" }}</td>
                     <td>${{ deal.amount|floatformat:0|default:"0" }}</td>
                 </tr>
                 {% endfor %}
