@@ -1066,3 +1066,130 @@ class TestCRMRouteContractParity:
         # The solo /crm/ URL should not appear as a link
         assert 'href="/crm/"' not in content
         assert 'href="/crm/api/"' not in content
+
+
+@pytest.mark.django_db
+class TestOrgScopedPostDenial:
+    """F11.2 — Prove org-scoped POST denial for Tag, Company, and Stage.
+
+    These tests exercise the real TenantMiddleware request path (via
+    ``client.force_login``) rather than DRF ``force_authenticate``, so the
+    middleware's membership check is the denial seam under test.
+
+    Two denial variants are covered for each resource:
+    - Wrong-org: a user who belongs to Org B POSTs to Org A's route → 403.
+    - Non-member staff: a staff user with no org membership POSTs to
+      Org A's route → 403.
+
+    Each test also confirms that no row is created on denial.
+    """
+
+    # -- Tag ------------------------------------------------------------------
+
+    def test_wrong_org_user_cannot_create_tag(self, client, org_a, org_b_admin):
+        """An org-B admin must receive 403 when POSTing to org-A's tag route."""
+        from quickscale_modules_crm.models import Tag
+
+        before = Tag.objects.count()
+        client.force_login(org_b_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Cross-Org Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Tag.objects.count() == before
+
+    def test_non_member_staff_cannot_create_tag(self, client, org_a, staff_user):
+        """A staff user with no org membership must receive 403 on tag create."""
+        from quickscale_modules_crm.models import Tag
+
+        before = Tag.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Ghost Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Tag.objects.count() == before
+
+    # -- Company --------------------------------------------------------------
+
+    def test_wrong_org_user_cannot_create_company(self, client, org_a, org_b_admin):
+        """An org-B admin must receive 403 when POSTing to org-A's company route."""
+        from quickscale_modules_crm.models import Company
+
+        before = Company.objects.count()
+        client.force_login(org_b_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/companies/",
+            data={
+                "name": "Cross-Org Corp",
+                "industry": "Finance",
+                "website": "https://cross-org.example.com",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Company.objects.count() == before
+
+    def test_non_member_staff_cannot_create_company(self, client, org_a, staff_user):
+        """A staff user with no org membership must receive 403 on company create."""
+        from quickscale_modules_crm.models import Company
+
+        before = Company.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/companies/",
+            data={
+                "name": "Ghost Corp",
+                "industry": "Tech",
+                "website": "https://ghost.example.com",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Company.objects.count() == before
+
+    # -- Stage ----------------------------------------------------------------
+
+    def test_wrong_org_user_cannot_create_stage(self, client, org_a, org_b_admin):
+        """An org-B admin must receive 403 when POSTing to org-A's stage route."""
+        from quickscale_modules_crm.models import Stage
+
+        before = Stage.objects.count()
+        client.force_login(org_b_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/stages/",
+            data={"name": "Cross-Org Stage", "order": 99},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Stage.objects.count() == before
+
+    def test_non_member_staff_cannot_create_stage(self, client, org_a, staff_user):
+        """A staff user with no org membership must receive 403 on stage create."""
+        from quickscale_modules_crm.models import Stage
+
+        before = Stage.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/stages/",
+            data={"name": "Ghost Stage", "order": 99},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Stage.objects.count() == before
