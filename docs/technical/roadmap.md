@@ -54,7 +54,7 @@ git merge --no-ff wt-track{N}
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟡 | **Next:** F11.2 (org-scoped POST denial). Pending F11.2 → F11.3 → F11.4 → F11.5. Blocker CR-P11GA-001 resolved by F11.2. |
 | M3 | 1 | F11.6–F11.10 | ⬜ | M1 merged; backfill (F11.6) + bootstrap (F11.7) green; NOT NULL enforced; xfail removed |
-| M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.5 + F2.6 (parallel). CR-M5-P3-007 resolved by F2.5; blocks F2.9. |
+| M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.6. F2.5 ✅ (CR-M5-P3-007 resolved). Blocks F2.9. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
@@ -83,15 +83,15 @@ F11.2 is next actionable (resolves CR-P11GA-001); F11.3–F11.5 blocked in seque
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** 3 | **Worktree:** `quickscale-wt-track3-f2-3b` (M5 only; future phases use `quickscale-wt-track3`)
 
-**Pending phases:** F2.5 + F2.6 (both next actionable, parallel) → F2.7 → F2.8 → F2.9
+**Pending phases:** F2.6 → F2.7 → F2.8 → F2.9
 
-**Open blocking finding:** CR-M5-P3-007 — branch-default-agnostic subtree-SHA proof. Resolved by F2.5. Blocks F2.9.
+**Resolved finding:** CR-M5-P3-007 (F2.5 ✅).
 
 **Next handoff decisions:**
-- F2.5 and F2.6 can proceed in parallel; default serial order is F2.5 then F2.6.
+- F2.6 is now the next actionable phase (provenance triple persistence).
 - Fix provenance triple consistency (F2.6) before adding caller-parity tests (F2.7) — tests depend on consistent behavior.
 - F2.8 is independent of F2.5–F2.7; can parallelize on a separate handoff branch or run serially after F2.7.
-- F2.9 is the M5 closeout: blocked on both F2.5 (SHA proof) and F2.8 (wrapper adoption).
+- F2.9 is the M5 closeout: blocked on both F2.5 ✅ and F2.8 (wrapper adoption).
 
 ---
 
@@ -228,10 +228,12 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F2.5 — Branch-default-agnostic subtree-SHA proof** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ⏳ Next actionable — resolves CR-M5-P3-007. Can run in parallel with F2.6.
+**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ✅ Complete — resolves CR-M5-P3-007. Can run in parallel with F2.6.
 
-- [ ] Harden subtree-SHA proof so provenance verification does not depend on a specific default branch name.
-- [ ] Add tests proving SHA proof works regardless of branch-default configuration.
+- [x] Harden subtree-SHA proof so provenance verification does not depend on a specific default branch name.
+- [x] Add tests proving SHA proof works regardless of branch-default configuration.
+
+**Findings:** Existing `TestSubtreePullWithCommitSha` tests hardcoded `master:main` push refs, breaking on systems where `init.defaultBranch ≠ master`. Fixed by explicitly creating known branch names (`source`, `feature`) after `git init`. Added `test_subtree_sha_proof_is_branch_default_agnostic` using non-standard remote branch `develop` and local branch `feature` to prove the SHA-pinned contract holds regardless of naming convention. No production code changes required — `resolve_remote_ref()` and `run_git_subtree_pull()` were already branch-name-agnostic.
 
 **Phase F2.6 — Apply/embed/no-op provenance triple persistence** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
