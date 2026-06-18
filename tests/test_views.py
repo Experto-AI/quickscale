@@ -2675,3 +2675,29 @@ class TestCRMRev002DashboardAggregateIsolation:
         # Foreign-org related names must NOT appear in the rendered dashboard.
         assert "Foreign-Corp-Secret" not in content
         assert "Foreign-Stage-Secret" not in content
+
+
+@pytest.mark.django_db
+class TestF115Phase2ApiListFailClosed:
+    """F11.5 Phase 2 gate D — OrgScopedReadMixin API list fails closed without org context.
+
+    Proves that an org-scoped SaaS API list route (TagViewSet) returns 403
+    when the request reaches the view without org context, rather than
+    degrading to an unscoped queryset.
+    """
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_tag_list_returns_403_without_org_context(
+        self, client, staff_user
+    ):
+        """GET /orgs/<slug>/crm/api/tags/ without org context returns 403.
+
+        The TenantMiddleware is excluded so request.org is never set.
+        OrgScopedReadMixin.get_queryset calls _require_org_for_read which
+        raises PermissionDenied when org context is missing on an org-scoped
+        route.
+        """
+        client.force_login(staff_user)
+        response = client.get("/orgs/nonexistent-org/crm/api/tags/")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
