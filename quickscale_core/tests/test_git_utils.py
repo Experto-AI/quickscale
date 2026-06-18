@@ -260,13 +260,23 @@ class TestSubtreePullWithCommitSha:
     accepts a fully-spelled hex commit SHA in the *branch* parameter, which
     is how ``_update_single_module`` binds the pull to the exact resolved
     commit (CR-M5-P3-005 / CR-M5-P3-007).
+
+    All tests are branch-default-agnostic (F2.5): they explicitly create
+    known branch names instead of relying on the system ``init.defaultBranch``
+    setting, and ``test_subtree_sha_proof_is_branch_default_agnostic`` proves
+    the SHA-pinned contract holds with non-standard branch names.
     """
 
     def test_subtree_pull_with_40_char_sha_updates_content(
         self,
         tmp_path: Path,
     ) -> None:
-        """git subtree pull with a 40-char SHA fetches the correct commit."""
+        """git subtree pull with a 40-char SHA fetches the correct commit.
+
+        Branch-default-agnostic: explicitly creates a ``source`` branch in the
+        working repo instead of relying on the system default branch name
+        (CR-M5-P3-007 / F2.5).
+        """
         remote_dir = tmp_path / "remote.git"
         work_dir = tmp_path / "work"
         local_dir = tmp_path / "local"
@@ -281,6 +291,13 @@ class TestSubtreePullWithCommitSha:
         # --- Create a working repo to push initial content ---
         subprocess.run(
             ["git", "init", str(work_dir)],
+            check=True,
+            capture_output=True,
+        )
+        # Explicitly create a known branch so the test does not depend on the
+        # system's ``init.defaultBranch`` setting (F2.5 branch-default-agnostic).
+        subprocess.run(
+            ["git", "-C", str(work_dir), "checkout", "-b", "source"],
             check=True,
             capture_output=True,
         )
@@ -319,7 +336,7 @@ class TestSubtreePullWithCommitSha:
                 str(work_dir),
                 "push",
                 "origin",
-                "master:main",
+                "source:main",
             ],
             check=True,
             capture_output=True,
@@ -354,7 +371,7 @@ class TestSubtreePullWithCommitSha:
                 str(work_dir),
                 "push",
                 "origin",
-                "master:main",
+                "source:main",
             ],
             check=True,
             capture_output=True,
@@ -433,7 +450,11 @@ class TestSubtreePullWithCommitSha:
         self,
         tmp_path: Path,
     ) -> None:
-        """git subtree add also accepts a 40-char SHA (companion proof)."""
+        """git subtree add also accepts a 40-char SHA (companion proof).
+
+        Branch-default-agnostic: explicitly creates a ``source`` branch
+        (F2.5 / CR-M5-P3-007).
+        """
         remote_dir = tmp_path / "remote.git"
         work_dir = tmp_path / "work"
         local_dir = tmp_path / "local"
@@ -448,6 +469,12 @@ class TestSubtreePullWithCommitSha:
         # Create working repo with one commit
         subprocess.run(
             ["git", "init", str(work_dir)],
+            check=True,
+            capture_output=True,
+        )
+        # Explicitly create a known branch (F2.5 branch-default-agnostic).
+        subprocess.run(
+            ["git", "-C", str(work_dir), "checkout", "-b", "source"],
             check=True,
             capture_output=True,
         )
@@ -478,7 +505,7 @@ class TestSubtreePullWithCommitSha:
             capture_output=True,
         )
         subprocess.run(
-            ["git", "-C", str(work_dir), "push", "origin", "master:main"],
+            ["git", "-C", str(work_dir), "push", "origin", "source:main"],
             check=True,
             capture_output=True,
         )
@@ -532,3 +559,160 @@ class TestSubtreePullWithCommitSha:
         module_file = local_dir / "modules" / "test" / "module.txt"
         assert module_file.exists()
         assert module_file.read_text() == "sha-pinned content\n"
+
+    def test_subtree_sha_proof_is_branch_default_agnostic(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """SHA-pinned subtree pull works with a non-standard remote branch name.
+
+        This test uses ``develop`` as the remote branch name (instead of
+        ``main``) and a local branch named ``feature`` (instead of ``master``
+        or ``main``) to prove the SHA proof does not depend on any specific
+        default branch naming convention (F2.5 / CR-M5-P3-007).
+        """
+        remote_dir = tmp_path / "remote.git"
+        work_dir = tmp_path / "work"
+        local_dir = tmp_path / "local"
+
+        # Create bare remote
+        subprocess.run(
+            ["git", "init", "--bare", str(remote_dir)],
+            check=True,
+            capture_output=True,
+        )
+
+        # Create working repo with explicit non-default branch names
+        subprocess.run(
+            ["git", "init", str(work_dir)],
+            check=True,
+            capture_output=True,
+        )
+        # Use a non-standard local branch name
+        subprocess.run(
+            ["git", "-C", str(work_dir), "checkout", "-b", "feature"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+
+        # First commit — push to a non-standard remote branch name
+        (work_dir / "module.txt").write_text("v1\n")
+        subprocess.run(
+            ["git", "-C", str(work_dir), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "commit", "-m", "first"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "remote", "add", "origin", str(remote_dir)],
+            check=True,
+            capture_output=True,
+        )
+        # Push local ``feature`` to remote ``develop`` (not ``main``)
+        subprocess.run(
+            ["git", "-C", str(work_dir), "push", "origin", "feature:develop"],
+            check=True,
+            capture_output=True,
+        )
+
+        initial_sha_result = subprocess.run(
+            ["git", "-C", str(work_dir), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        initial_sha = initial_sha_result.stdout.strip()
+        assert len(initial_sha) == 40
+
+        # Second commit
+        (work_dir / "module.txt").write_text("v2\n")
+        subprocess.run(
+            ["git", "-C", str(work_dir), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "commit", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(work_dir), "push", "origin", "feature:develop"],
+            check=True,
+            capture_output=True,
+        )
+
+        second_sha_result = subprocess.run(
+            ["git", "-C", str(work_dir), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        second_sha = second_sha_result.stdout.strip()
+        assert len(second_sha) == 40
+        assert second_sha != initial_sha
+
+        # Create local repo
+        subprocess.run(
+            ["git", "init", str(local_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (local_dir / "README.md").write_text("local\n")
+        subprocess.run(
+            ["git", "-C", str(local_dir), "add", "README.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(local_dir), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Subtree add with first SHA — remote branch is ``develop``, not ``main``
+        run_git_subtree_add(
+            prefix="modules/test",
+            remote=str(remote_dir),
+            branch=initial_sha,
+            squash=True,
+            path=local_dir,
+        )
+        module_file = local_dir / "modules" / "test" / "module.txt"
+        assert module_file.exists()
+        assert module_file.read_text() == "v1\n"
+
+        # Subtree pull with second SHA — proves SHA pin works regardless of
+        # the remote branch name
+        run_git_subtree_pull(
+            prefix="modules/test",
+            remote=str(remote_dir),
+            branch=second_sha,
+            squash=True,
+            path=local_dir,
+        )
+        assert module_file.read_text() == "v2\n"
