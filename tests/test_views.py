@@ -2701,3 +2701,172 @@ class TestF115Phase2ApiListFailClosed:
         response = client.get("/orgs/nonexistent-org/crm/api/tags/")
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestCRF115001OrgScopedPostFailClosed:
+    """CR-F11.5-001 — Prove org-scoped POSTs fail closed without org context.
+
+    When a POST reaches a CRM collection endpoint on an ``/orgs/<slug>/...``
+    route without ``request.org`` (e.g. middleware gap), the serializer must
+    reject the request rather than persisting a NULL-owned row.
+    """
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_tag_post_returns_400_without_org_context(
+        self, client, staff_user
+    ):
+        """POST /orgs/<slug>/crm/api/tags/ without org context returns 400."""
+        from quickscale_modules_crm.models import Tag
+
+        before = Tag.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/tags/",
+            data={"name": "Ghost Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Tag.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_company_post_returns_400_without_org_context(
+        self, client, staff_user
+    ):
+        """POST /orgs/<slug>/crm/api/companies/ without org context returns 400."""
+        from quickscale_modules_crm.models import Company
+
+        before = Company.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/companies/",
+            data={"name": "Ghost Corp", "industry": "Tech"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Company.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_stage_post_returns_400_without_org_context(
+        self, client, staff_user
+    ):
+        """POST /orgs/<slug>/crm/api/stages/ without org context returns 400."""
+        from quickscale_modules_crm.models import Stage
+
+        before = Stage.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/stages/",
+            data={"name": "Ghost Stage", "order": 99},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Stage.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_contact_post_returns_400_without_org_context(
+        self, client, staff_user, company
+    ):
+        """POST /orgs/<slug>/crm/api/contacts/ without org context returns 400."""
+        from quickscale_modules_crm.models import Contact
+
+        before = Contact.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/contacts/",
+            data={
+                "first_name": "Ghost",
+                "last_name": "Contact",
+                "email": "ghost@example.com",
+                "company_id": company.id,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Contact.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_deal_post_returns_400_without_org_context(
+        self, client, staff_user, contact, stage
+    ):
+        """POST /orgs/<slug>/crm/api/deals/ without org context returns 400."""
+        from quickscale_modules_crm.models import Deal
+
+        before = Deal.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/deals/",
+            data={
+                "title": "Ghost Deal",
+                "contact_id": contact.id,
+                "stage_id": stage.id,
+                "amount": "1000.00",
+                "probability": 50,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Deal.objects.count() == before
+
+
+@pytest.mark.django_db
+class TestCRF115002DashboardIncludesLegacyNullOrgStages:
+    """CR-F11.5-002 — Dashboard deals_by_stage includes legacy NULL-org stages.
+
+    During the pre-backfill window, visible current-org deals may reference
+    legacy NULL-org stages.  The dashboard ``deals_by_stage`` breakdown must
+    include those stages so the deal counts are not silently dropped.
+    """
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_org_scoped_dashboard_includes_deals_on_legacy_null_org_stages(
+        self, client, org_a, org_a_admin
+    ):
+        """Dashboard deals_by_stage counts deals on legacy NULL-org stages."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create a legacy NULL-org stage (pre-backfill).
+        legacy_stage = Stage.objects.create(name="Legacy Pipeline", order=1)
+        assert legacy_stage.organization_id is None
+
+        # Create an org-A deal attached to the legacy NULL-org stage.
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="LegacyDeal",
+            email="orga-legacy@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        Deal.objects.create(
+            title="Org-A Legacy Deal",
+            contact=contact_a,
+            amount=Decimal("5000.00"),
+            stage=legacy_stage,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # The legacy stage name should appear in the dashboard breakdown.
+        assert "Legacy Pipeline" in content
+        # The org-A deal should be counted (total_deals >= 1).
+        assert "Org-A Legacy Deal" in content or "5000" in content

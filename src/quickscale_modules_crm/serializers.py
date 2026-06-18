@@ -14,6 +14,10 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
     for all authenticated requests, but solo routes must NOT be stamped — they
     retain the legacy NULL-org behavior.  The path check ensures stamping is
     limited to the ``/orgs/`` namespace regardless of ``QUICKSCALE_MODE``.
+
+    On org-scoped routes, if the request lacks org context (``request.org``
+    is ``None``), a ``ValidationError`` is raised to fail closed rather than
+    silently persisting a NULL-owned row.
     """
     request = serializer.context.get("request")
     if request is None:
@@ -22,7 +26,12 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
     if not path.startswith("/orgs/"):
         return None
     org = getattr(request, "org", None)
-    return org.id if org is not None else None
+    if org is None:
+        raise serializers.ValidationError(
+            "Organization context is required for this route.",
+            code="org_required",
+        )
+    return org.id
 
 
 def _read_org_id(serializer: serializers.Serializer) -> int | str | None:
@@ -126,6 +135,11 @@ class CompanySerializer(serializers.ModelSerializer):
         if org_id is not None:
             contacts = contacts.filter(organization_id=org_id)
         return contacts.count()
+
+    def validate(self, attrs: dict) -> dict:
+        """Fail closed on org-scoped routes without org context."""
+        _request_org_id(self)
+        return attrs
 
     def create(self, validated_data: dict) -> Company:
         """Stamp the current organization on create."""
@@ -368,6 +382,11 @@ class StageSerializer(serializers.ModelSerializer):
         if org_id is not None:
             deals = deals.filter(organization_id=org_id)
         return deals.count()
+
+    def validate(self, attrs: dict) -> dict:
+        """Fail closed on org-scoped routes without org context."""
+        _request_org_id(self)
+        return attrs
 
     def create(self, validated_data: dict) -> Stage:
         """Stamp the current organization on create."""

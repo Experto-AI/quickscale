@@ -137,7 +137,12 @@ class CRMDashboardView(TemplateView):
             contact_qs = Contact.objects.filter(organization_id=org_for_read.id)
             company_qs = Company.objects.filter(organization_id=org_for_read.id)
             deal_qs = Deal.objects.filter(organization_id=org_for_read.id)
-            stage_qs = Stage.objects.filter(organization_id=org_for_read.id)
+            # Include legacy NULL-org stages so that visible current-org deals
+            # attached to allowed pre-backfill NULL-org stages still appear in
+            # the deals_by_stage breakdown during the migration window.
+            stage_qs = Stage.objects.filter(
+                Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
+            )
         else:
             contact_qs = Contact.objects.all()
             company_qs = Company.objects.all()
