@@ -5,6 +5,25 @@ from rest_framework import serializers
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 
 
+def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
+    """Return the current organization ID for org-scoped create stamping.
+
+    Stamping only applies to true org-scoped routes (``/orgs/<slug>/...``).
+    In solo mode the TenantMiddleware attaches a personal org to ``request.org``
+    for all authenticated requests, but solo routes must NOT be stamped — they
+    retain the legacy NULL-org behavior.  The path check ensures stamping is
+    limited to the ``/orgs/`` namespace regardless of ``QUICKSCALE_MODE``.
+    """
+    request = serializer.context.get("request")
+    if request is None:
+        return None
+    path = getattr(request, "path", "") or ""
+    if not path.startswith("/orgs/"):
+        return None
+    org = getattr(request, "org", None)
+    return org.id if org is not None else None
+
+
 class TagSerializer(serializers.ModelSerializer):
     """Serializer for Tag model"""
 
@@ -16,11 +35,16 @@ class TagSerializer(serializers.ModelSerializer):
     def validate_name(self, value: str) -> str:
         """Reject duplicate tag names within the same owner bucket.
 
-        Owner bucket = (name, organization).  NULL organization is a single
+        Owner bucket = (name, organization).  On create the bucket uses the
+        request's current org (stamped at save time).  On update the bucket
+        uses the existing instance's org.  NULL organization is a single
         bucket (legacy NULL-owned duplicates stay blocked).  Same name across
         different organizations is allowed.
         """
-        organization_id = getattr(self.instance, "organization_id", None)
+        if self.instance is not None:
+            organization_id = self.instance.organization_id
+        else:
+            organization_id = _request_org_id(self)
         qs = Tag.objects.filter(name=value, organization_id=organization_id)
         if self.instance is not None:
             qs = qs.exclude(pk=self.instance.pk)
@@ -30,6 +54,13 @@ class TagSerializer(serializers.ModelSerializer):
                 code="unique",
             )
         return value
+
+    def create(self, validated_data: dict) -> Tag:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
 
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -53,6 +84,13 @@ class CompanySerializer(serializers.ModelSerializer):
     def get_contact_count(self, obj: Company) -> int:
         """Return the number of contacts for this company"""
         return obj.contacts.count()  # type: ignore
+
+    def create(self, validated_data: dict) -> Company:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
 
 
 class ContactNoteSerializer(serializers.ModelSerializer):
@@ -161,6 +199,59 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         """Return the number of deals for this contact"""
         return obj.deals.count()  # type: ignore
 
+    def validate(self, attrs: dict) -> dict:
+        """Reject foreign-org related IDs on org-scoped create.
+
+        When creating via an org-scoped route, the related company and tags
+        must belong to the same organization (or have NULL organization for
+        legacy/solo compatibility). Foreign-org references are rejected.
+        """
+        if self.instance is not None:
+            # Update path — skip foreign-org validation.
+            return attrs
+
+        org_id = _request_org_id(self)
+        if org_id is None:
+            # Solo route or no org context — skip foreign-org validation.
+            return attrs
+
+        # Validate company_id belongs to the current org.
+        company = attrs.get("company")
+        if company is not None:
+            if (
+                company.organization_id is not None
+                and company.organization_id != org_id
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "company_id": "The specified company does not belong to this organization."
+                    }
+                )
+
+        # Validate tag_ids belong to the current org.
+        tags = attrs.get("tags")
+        if tags:
+            foreign_tags = [
+                tag
+                for tag in tags
+                if tag.organization_id is not None and tag.organization_id != org_id
+            ]
+            if foreign_tags:
+                raise serializers.ValidationError(
+                    {
+                        "tag_ids": "One or more specified tags do not belong to this organization."
+                    }
+                )
+
+        return attrs
+
+    def create(self, validated_data: dict) -> Contact:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
+
 
 class StageSerializer(serializers.ModelSerializer):
     """Serializer for Stage model"""
@@ -175,6 +266,13 @@ class StageSerializer(serializers.ModelSerializer):
     def get_deal_count(self, obj: Stage) -> int:
         """Return the number of deals in this stage"""
         return obj.deals.count()  # type: ignore
+
+    def create(self, validated_data: dict) -> Stage:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
 
 
 class DealNoteSerializer(serializers.ModelSerializer):
@@ -284,6 +382,70 @@ class DealDetailSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs: dict) -> dict:
+        """Reject foreign-org related IDs on org-scoped create.
+
+        When creating via an org-scoped route, the related contact, stage,
+        and tags must belong to the same organization (or have NULL
+        organization for legacy/solo compatibility). Foreign-org references
+        are rejected.
+        """
+        if self.instance is not None:
+            # Update path — skip foreign-org validation.
+            return attrs
+
+        org_id = _request_org_id(self)
+        if org_id is None:
+            # Solo route or no org context — skip foreign-org validation.
+            return attrs
+
+        # Validate contact_id belongs to the current org.
+        contact = attrs.get("contact")
+        if contact is not None:
+            if (
+                contact.organization_id is not None
+                and contact.organization_id != org_id
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "contact_id": "The specified contact does not belong to this organization."
+                    }
+                )
+
+        # Validate stage_id belongs to the current org.
+        stage = attrs.get("stage")
+        if stage is not None:
+            if stage.organization_id is not None and stage.organization_id != org_id:
+                raise serializers.ValidationError(
+                    {
+                        "stage_id": "The specified stage does not belong to this organization."
+                    }
+                )
+
+        # Validate tag_ids belong to the current org.
+        tags = attrs.get("tags")
+        if tags:
+            foreign_tags = [
+                tag
+                for tag in tags
+                if tag.organization_id is not None and tag.organization_id != org_id
+            ]
+            if foreign_tags:
+                raise serializers.ValidationError(
+                    {
+                        "tag_ids": "One or more specified tags do not belong to this organization."
+                    }
+                )
+
+        return attrs
+
+    def create(self, validated_data: dict) -> Deal:
+        """Stamp the current organization on create."""
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
+        return super().create(validated_data)
 
 
 class BulkUpdateStageSerializer(serializers.Serializer):

@@ -1066,3 +1066,796 @@ class TestCRMRouteContractParity:
         # The solo /crm/ URL should not appear as a link
         assert 'href="/crm/"' not in content
         assert 'href="/crm/api/"' not in content
+
+
+@pytest.mark.django_db
+class TestOrgScopedPostDenial:
+    """F11.2 — Prove org-scoped POST denial for Tag, Company, and Stage.
+
+    These tests exercise the real TenantMiddleware request path (via
+    ``client.force_login``) rather than DRF ``force_authenticate``, so the
+    middleware's membership check is the denial seam under test.
+
+    Two denial variants are covered for each resource:
+    - Wrong-org: a user who belongs to Org B POSTs to Org A's route → 403.
+    - Non-member staff: a staff user with no org membership POSTs to
+      Org A's route → 403.
+
+    Each test also confirms that no row is created on denial.
+    """
+
+    # -- Tag ------------------------------------------------------------------
+
+    def test_wrong_org_user_cannot_create_tag(self, client, org_a, org_b_admin):
+        """An org-B admin must receive 403 when POSTing to org-A's tag route."""
+        from quickscale_modules_crm.models import Tag
+
+        before = Tag.objects.count()
+        client.force_login(org_b_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Cross-Org Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Tag.objects.count() == before
+
+    def test_non_member_staff_cannot_create_tag(self, client, org_a, staff_user):
+        """A staff user with no org membership must receive 403 on tag create."""
+        from quickscale_modules_crm.models import Tag
+
+        before = Tag.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Ghost Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Tag.objects.count() == before
+
+    # -- Company --------------------------------------------------------------
+
+    def test_wrong_org_user_cannot_create_company(self, client, org_a, org_b_admin):
+        """An org-B admin must receive 403 when POSTing to org-A's company route."""
+        from quickscale_modules_crm.models import Company
+
+        before = Company.objects.count()
+        client.force_login(org_b_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/companies/",
+            data={
+                "name": "Cross-Org Corp",
+                "industry": "Finance",
+                "website": "https://cross-org.example.com",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Company.objects.count() == before
+
+    def test_non_member_staff_cannot_create_company(self, client, org_a, staff_user):
+        """A staff user with no org membership must receive 403 on company create."""
+        from quickscale_modules_crm.models import Company
+
+        before = Company.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/companies/",
+            data={
+                "name": "Ghost Corp",
+                "industry": "Tech",
+                "website": "https://ghost.example.com",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Company.objects.count() == before
+
+    # -- Stage ----------------------------------------------------------------
+
+    def test_wrong_org_user_cannot_create_stage(self, client, org_a, org_b_admin):
+        """An org-B admin must receive 403 when POSTing to org-A's stage route."""
+        from quickscale_modules_crm.models import Stage
+
+        before = Stage.objects.count()
+        client.force_login(org_b_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/stages/",
+            data={"name": "Cross-Org Stage", "order": 99},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Stage.objects.count() == before
+
+    def test_non_member_staff_cannot_create_stage(self, client, org_a, staff_user):
+        """A staff user with no org membership must receive 403 on stage create."""
+        from quickscale_modules_crm.models import Stage
+
+        before = Stage.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/stages/",
+            data={"name": "Ghost Stage", "order": 99},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Stage.objects.count() == before
+
+
+@pytest.mark.django_db
+class TestF113OrgScopedCreateStamping:
+    """F11.3 — Prove org-scoped create stamping for Tag, Company, and Stage.
+
+    These tests exercise the real TenantMiddleware request path (via
+    ``client.force_login`` with a session-authenticated org-member) on real
+    ``/orgs/{slug}/crm/api/...`` routes.  Each test asserts:
+    - 201 on create
+    - Persisted ``organization_id`` matches the current org
+    - The created row appears in the org-scoped list response
+    """
+
+    # -- Tag ------------------------------------------------------------------
+
+    def test_org_member_create_tag_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped tag route stamps current-org."""
+        from quickscale_modules_crm.models import Tag
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Org-A Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["name"] == "Org-A Tag"
+
+        created = Tag.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created tag appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/tags/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Company --------------------------------------------------------------
+
+    def test_org_member_create_company_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped company route stamps current-org."""
+        from quickscale_modules_crm.models import Company
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/companies/",
+            data={
+                "name": "Org-A Corp",
+                "industry": "Tech",
+                "website": "https://orga.example.com",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["name"] == "Org-A Corp"
+
+        created = Company.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created company appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/companies/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Stage ----------------------------------------------------------------
+
+    def test_org_member_create_stage_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped stage route stamps current-org."""
+        from quickscale_modules_crm.models import Stage
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/stages/",
+            data={"name": "Org-A Stage", "order": 5},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["name"] == "Org-A Stage"
+
+        created = Stage.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created stage appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/stages/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Tag duplicate regression under stamped context -----------------------
+
+    def test_same_org_tag_duplicate_rejected_under_stamped_context(
+        self, client, org_a, org_a_admin
+    ):
+        """A same-org duplicate tag name is rejected with 400 under stamped context.
+
+        After the first create stamps the org, a second create with the same
+        name in the same org must receive a controlled 4xx and no duplicate
+        row must be persisted.
+        """
+        from quickscale_modules_crm.models import Tag
+
+        client.force_login(org_a_admin)
+
+        # First create — should succeed and stamp org.
+        first = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Duplicate-Me"},
+            content_type="application/json",
+        )
+        assert first.status_code == status.HTTP_201_CREATED
+        first_tag = Tag.objects.get(pk=first.data["id"])
+        assert first_tag.organization_id == org_a.id
+
+        before_count = Tag.objects.count()
+
+        # Second create with same name in same org — must be rejected.
+        second = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Duplicate-Me"},
+            content_type="application/json",
+        )
+        assert second.status_code == status.HTTP_400_BAD_REQUEST
+        assert "name" in second.data
+        assert Tag.objects.count() == before_count
+
+    # -- Cross-org tag name allowance (advisory contract) ---------------------
+
+    def test_same_tag_name_allowed_across_different_orgs(
+        self, client, org_a, org_b, org_a_admin, org_b_admin
+    ):
+        """The same tag name can exist in different orgs (owner-bucket contract)."""
+        from quickscale_modules_crm.models import Tag
+
+        # Org A creates "Shared-Name".
+        client.force_login(org_a_admin)
+        resp_a = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Shared-Name"},
+            content_type="application/json",
+        )
+        assert resp_a.status_code == status.HTTP_201_CREATED
+        tag_a = Tag.objects.get(pk=resp_a.data["id"])
+        assert tag_a.organization_id == org_a.id
+
+        # Org B creates the same name — should succeed.
+        client.force_login(org_b_admin)
+        resp_b = client.post(
+            f"/orgs/{org_b.slug}/crm/api/tags/",
+            data={"name": "Shared-Name"},
+            content_type="application/json",
+        )
+        assert resp_b.status_code == status.HTTP_201_CREATED
+        tag_b = Tag.objects.get(pk=resp_b.data["id"])
+        assert tag_b.organization_id == org_b.id
+        assert tag_a.id != tag_b.id
+
+    # -- Solo-route regression (no stamping) ----------------------------------
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_create_does_not_stamp_organization(self, client, staff_user):
+        """Solo-route creates must NOT stamp organization_id.
+
+        In solo mode the TenantMiddleware attaches a personal org to
+        ``request.org``, but stamping is scoped to ``/orgs/`` routes only.
+        A solo ``/crm/api/tags/`` create must leave ``organization_id`` NULL.
+        """
+        from quickscale_modules_crm.models import Tag
+
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/crm/api/tags/",
+            data={"name": "Solo Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Tag.objects.get(pk=response.data["id"])
+        assert created.organization_id is None
+
+
+@pytest.mark.django_db
+class TestF114OrgScopedContactDealCreateStamping:
+    """F11.4 — Prove org-scoped create stamping and foreign-org rejection for Contact and Deal.
+
+    These tests exercise the real TenantMiddleware request path (via
+    ``client.force_login`` with a session-authenticated org-member) on real
+    ``/orgs/{slug}/crm/api/...`` routes.  Each test asserts:
+    - 201 on create (stamping tests)
+    - Persisted ``organization_id`` matches the current org
+    - The created row appears in the org-scoped list response
+    - 400 on create with foreign-org related IDs (rejection tests)
+    """
+
+    # -- Contact: org-stamped create ------------------------------------------
+
+    def test_org_member_create_contact_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped contact route stamps current-org."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        # Create an org-scoped company first.
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/contacts/",
+            data={
+                "first_name": "Org",
+                "last_name": "Contact",
+                "email": "org-contact@example.com",
+                "company_id": company.id,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["first_name"] == "Org"
+
+        created = Contact.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created contact appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Contact: foreign-org company_id rejected ----------------------------
+
+    def test_org_member_create_contact_rejects_foreign_org_company(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """A contact create with a foreign-org company_id is rejected with 400."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        # Create a company in org B (foreign to org A).
+        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
+
+        before = Contact.objects.count()
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/contacts/",
+            data={
+                "first_name": "Cross",
+                "last_name": "Org",
+                "email": "cross-org@example.com",
+                "company_id": foreign_company.id,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "company_id" in response.data
+        assert Contact.objects.count() == before
+
+    # -- Contact: foreign-org tag_ids rejected --------------------------------
+
+    def test_org_member_create_contact_rejects_foreign_org_tags(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """A contact create with foreign-org tag_ids is rejected with 400."""
+        from quickscale_modules_crm.models import Company, Contact, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        foreign_tag = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+
+        before = Contact.objects.count()
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/contacts/",
+            data={
+                "first_name": "Tag",
+                "last_name": "Test",
+                "email": "tag-test@example.com",
+                "company_id": company.id,
+                "tag_ids": [foreign_tag.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "tag_ids" in response.data
+        assert Contact.objects.count() == before
+
+    # -- Deal: org-stamped create ---------------------------------------------
+
+    def test_org_member_create_deal_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped deal route stamps current-org."""
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create org-scoped prerequisites.
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org",
+            last_name="Contact",
+            email="org-deal-contact@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Org-A Deal",
+                "contact_id": contact.id,
+                "stage_id": stage.id,
+                "amount": "10000.00",
+                "probability": 50,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["title"] == "Org-A Deal"
+
+        created = Deal.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created deal appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/deals/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Deal: foreign-org contact_id rejected --------------------------------
+
+    def test_org_member_create_deal_rejects_foreign_org_contact(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """A deal create with a foreign-org contact_id is rejected with 400."""
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create a contact in org B (foreign to org A).
+        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
+        foreign_contact = Contact.objects.create(
+            first_name="Foreign",
+            last_name="Contact",
+            email="foreign@example.com",
+            company=foreign_company,
+            organization=org_b,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+
+        before = Deal.objects.count()
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Cross-Org Deal",
+                "contact_id": foreign_contact.id,
+                "stage_id": stage.id,
+                "amount": "5000.00",
+                "probability": 30,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "contact_id" in response.data
+        assert Deal.objects.count() == before
+
+    # -- Deal: foreign-org stage_id rejected ----------------------------------
+
+    def test_org_member_create_deal_rejects_foreign_org_stage(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """A deal create with a foreign-org stage_id is rejected with 400."""
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org",
+            last_name="Contact",
+            email="stage-test@example.com",
+            company=company,
+            organization=org_a,
+        )
+        # Create a stage in org B (foreign to org A).
+        foreign_stage = Stage.objects.create(
+            name="Org-B Stage", order=1, organization=org_b
+        )
+
+        before = Deal.objects.count()
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Cross-Stage Deal",
+                "contact_id": contact.id,
+                "stage_id": foreign_stage.id,
+                "amount": "5000.00",
+                "probability": 30,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "stage_id" in response.data
+        assert Deal.objects.count() == before
+
+    # -- Deal: foreign-org tag_ids rejected -----------------------------------
+
+    def test_org_member_create_deal_rejects_foreign_org_tags(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """A deal create with foreign-org tag_ids is rejected with 400."""
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org",
+            last_name="Contact",
+            email="deal-tag-test@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        foreign_tag = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+
+        before = Deal.objects.count()
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Tag Test Deal",
+                "contact_id": contact.id,
+                "stage_id": stage.id,
+                "amount": "5000.00",
+                "probability": 30,
+                "tag_ids": [foreign_tag.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "tag_ids" in response.data
+        assert Deal.objects.count() == before
+
+    # -- Contact: same-org related IDs accepted (positive acceptance) ----------
+
+    def test_org_member_create_contact_accepts_same_org_company_and_tags(
+        self, client, org_a, org_a_admin
+    ):
+        """A contact create with same-org company_id and tag_ids succeeds with 201."""
+        from quickscale_modules_crm.models import Company, Contact, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        tag_a = Tag.objects.create(name="Org-A-Tag", organization=org_a)
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/contacts/",
+            data={
+                "first_name": "Same",
+                "last_name": "Org",
+                "email": "same-org@example.com",
+                "company_id": company.id,
+                "tag_ids": [tag_a.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Contact.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {tag_a.id}
+
+    # -- Contact: NULL-org legacy related IDs accepted -------------------------
+
+    def test_org_member_create_contact_accepts_null_org_legacy_related_ids(
+        self, client, org_a, org_a_admin
+    ):
+        """A contact create with NULL-org (legacy) company and tags succeeds via org-scoped route.
+
+        Legacy rows with organization_id=NULL remain compatible with org-scoped
+        creates — the validator only rejects foreign-org references, not
+        NULL-owned rows.
+        """
+        from quickscale_modules_crm.models import Company, Contact, Tag
+
+        legacy_company = Company.objects.create(name="Legacy Corp")
+        assert legacy_company.organization_id is None
+        legacy_tag = Tag.objects.create(name="Legacy-Tag")
+        assert legacy_tag.organization_id is None
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/contacts/",
+            data={
+                "first_name": "Legacy",
+                "last_name": "Contact",
+                "email": "legacy-contact@example.com",
+                "company_id": legacy_company.id,
+                "tag_ids": [legacy_tag.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Contact.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {legacy_tag.id}
+
+    # -- Deal: same-org related IDs accepted (positive acceptance) -------------
+
+    def test_org_member_create_deal_accepts_same_org_contact_stage_and_tags(
+        self, client, org_a, org_a_admin
+    ):
+        """A deal create with same-org contact_id, stage_id, and tag_ids succeeds with 201."""
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org",
+            last_name="Contact",
+            email="same-org-deal@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        tag_a = Tag.objects.create(name="Org-A-Deal-Tag", organization=org_a)
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Same-Org Deal",
+                "contact_id": contact.id,
+                "stage_id": stage.id,
+                "amount": "15000.00",
+                "probability": 60,
+                "tag_ids": [tag_a.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Deal.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {tag_a.id}
+
+    # -- Deal: NULL-org legacy related IDs accepted ----------------------------
+
+    def test_org_member_create_deal_accepts_null_org_legacy_related_ids(
+        self, client, org_a, org_a_admin
+    ):
+        """A deal create with NULL-org (legacy) contact, stage, and tags succeeds.
+
+        Legacy rows with organization_id=NULL remain compatible with org-scoped
+        deal creates — the validator only rejects foreign-org references.
+        """
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+
+        legacy_company = Company.objects.create(name="Legacy Corp")
+        legacy_contact = Contact.objects.create(
+            first_name="Legacy",
+            last_name="Contact",
+            email="legacy-deal-contact@example.com",
+            company=legacy_company,
+        )
+        assert legacy_contact.organization_id is None
+        legacy_stage = Stage.objects.create(name="Legacy Stage", order=1)
+        assert legacy_stage.organization_id is None
+        legacy_tag = Tag.objects.create(name="Legacy-Deal-Tag")
+        assert legacy_tag.organization_id is None
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/",
+            data={
+                "title": "Legacy Deal",
+                "contact_id": legacy_contact.id,
+                "stage_id": legacy_stage.id,
+                "amount": "8000.00",
+                "probability": 40,
+                "tag_ids": [legacy_tag.id],
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Deal.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+        assert set(created.tags.values_list("id", flat=True)) == {legacy_tag.id}
+
+    # -- Solo-route regression (no stamping) ----------------------------------
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_contact_create_does_not_stamp_organization(
+        self, client, staff_user, company
+    ):
+        """Solo-route contact creates must NOT stamp organization_id."""
+        from quickscale_modules_crm.models import Contact
+
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/crm/api/contacts/",
+            data={
+                "first_name": "Solo",
+                "last_name": "Contact",
+                "email": "solo-contact@example.com",
+                "company_id": company.id,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Contact.objects.get(pk=response.data["id"])
+        assert created.organization_id is None
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_deal_create_does_not_stamp_organization(
+        self, client, staff_user, contact, stage
+    ):
+        """Solo-route deal creates must NOT stamp organization_id."""
+        from quickscale_modules_crm.models import Deal
+
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/crm/api/deals/",
+            data={
+                "title": "Solo Deal",
+                "contact_id": contact.id,
+                "stage_id": stage.id,
+                "amount": "1000.00",
+                "probability": 50,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Deal.objects.get(pk=response.data["id"])
+        assert created.organization_id is None
