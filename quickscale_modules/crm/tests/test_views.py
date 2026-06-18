@@ -1193,3 +1193,196 @@ class TestOrgScopedPostDenial:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert Stage.objects.count() == before
+
+
+@pytest.mark.django_db
+class TestF113OrgScopedCreateStamping:
+    """F11.3 — Prove org-scoped create stamping for Tag, Company, and Stage.
+
+    These tests exercise the real TenantMiddleware request path (via
+    ``client.force_login`` with a session-authenticated org-member) on real
+    ``/orgs/{slug}/crm/api/...`` routes.  Each test asserts:
+    - 201 on create
+    - Persisted ``organization_id`` matches the current org
+    - The created row appears in the org-scoped list response
+    """
+
+    # -- Tag ------------------------------------------------------------------
+
+    def test_org_member_create_tag_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped tag route stamps current-org."""
+        from quickscale_modules_crm.models import Tag
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Org-A Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["name"] == "Org-A Tag"
+
+        created = Tag.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created tag appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/tags/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Company --------------------------------------------------------------
+
+    def test_org_member_create_company_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped company route stamps current-org."""
+        from quickscale_modules_crm.models import Company
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/companies/",
+            data={
+                "name": "Org-A Corp",
+                "industry": "Tech",
+                "website": "https://orga.example.com",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["name"] == "Org-A Corp"
+
+        created = Company.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created company appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/companies/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Stage ----------------------------------------------------------------
+
+    def test_org_member_create_stage_stamps_organization(
+        self, client, org_a, org_a_admin
+    ):
+        """An org-member POST to the org-scoped stage route stamps current-org."""
+        from quickscale_modules_crm.models import Stage
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/stages/",
+            data={"name": "Org-A Stage", "order": 5},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["name"] == "Org-A Stage"
+
+        created = Stage.objects.get(pk=response.data["id"])
+        assert created.organization_id == org_a.id
+
+        # The created stage appears in the org-scoped list.
+        list_response = client.get(f"/orgs/{org_a.slug}/crm/api/stages/")
+        assert list_response.status_code == status.HTTP_200_OK
+        list_ids = {item["id"] for item in list_response.data}
+        assert created.id in list_ids
+
+    # -- Tag duplicate regression under stamped context -----------------------
+
+    def test_same_org_tag_duplicate_rejected_under_stamped_context(
+        self, client, org_a, org_a_admin
+    ):
+        """A same-org duplicate tag name is rejected with 400 under stamped context.
+
+        After the first create stamps the org, a second create with the same
+        name in the same org must receive a controlled 4xx and no duplicate
+        row must be persisted.
+        """
+        from quickscale_modules_crm.models import Tag
+
+        client.force_login(org_a_admin)
+
+        # First create — should succeed and stamp org.
+        first = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Duplicate-Me"},
+            content_type="application/json",
+        )
+        assert first.status_code == status.HTTP_201_CREATED
+        first_tag = Tag.objects.get(pk=first.data["id"])
+        assert first_tag.organization_id == org_a.id
+
+        before_count = Tag.objects.count()
+
+        # Second create with same name in same org — must be rejected.
+        second = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Duplicate-Me"},
+            content_type="application/json",
+        )
+        assert second.status_code == status.HTTP_400_BAD_REQUEST
+        assert "name" in second.data
+        assert Tag.objects.count() == before_count
+
+    # -- Cross-org tag name allowance (advisory contract) ---------------------
+
+    def test_same_tag_name_allowed_across_different_orgs(
+        self, client, org_a, org_b, org_a_admin, org_b_admin
+    ):
+        """The same tag name can exist in different orgs (owner-bucket contract)."""
+        from quickscale_modules_crm.models import Tag
+
+        # Org A creates "Shared-Name".
+        client.force_login(org_a_admin)
+        resp_a = client.post(
+            f"/orgs/{org_a.slug}/crm/api/tags/",
+            data={"name": "Shared-Name"},
+            content_type="application/json",
+        )
+        assert resp_a.status_code == status.HTTP_201_CREATED
+        tag_a = Tag.objects.get(pk=resp_a.data["id"])
+        assert tag_a.organization_id == org_a.id
+
+        # Org B creates the same name — should succeed.
+        client.force_login(org_b_admin)
+        resp_b = client.post(
+            f"/orgs/{org_b.slug}/crm/api/tags/",
+            data={"name": "Shared-Name"},
+            content_type="application/json",
+        )
+        assert resp_b.status_code == status.HTTP_201_CREATED
+        tag_b = Tag.objects.get(pk=resp_b.data["id"])
+        assert tag_b.organization_id == org_b.id
+        assert tag_a.id != tag_b.id
+
+    # -- Solo-route regression (no stamping) ----------------------------------
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_create_does_not_stamp_organization(self, client, staff_user):
+        """Solo-route creates must NOT stamp organization_id.
+
+        In solo mode the TenantMiddleware attaches a personal org to
+        ``request.org``, but stamping is scoped to ``/orgs/`` routes only.
+        A solo ``/crm/api/tags/`` create must leave ``organization_id`` NULL.
+        """
+        from quickscale_modules_crm.models import Tag
+
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/crm/api/tags/",
+            data={"name": "Solo Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Tag.objects.get(pk=response.data["id"])
+        assert created.organization_id is None

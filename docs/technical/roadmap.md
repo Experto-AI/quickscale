@@ -52,7 +52,7 @@ git merge --no-ff wt-track{N}
 
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
-| M1 | 1 | F11.2–F11.5 | 🟡 | **Next:** F11.3 (self-contained resource create stamping). F11.2 ✅ complete. Pending F11.3 → F11.4 → F11.5. Blocker CR-P11GA-001 resolved by F11.2. |
+| M1 | 1 | F11.2–F11.5 | 🟡 | **Next:** F11.4 (Contact/Deal related-ID guard + create stamping). F11.2 ✅, F11.3 ✅ complete. Pending F11.4 → F11.5. Blocker CR-P11GA-001 resolved by F11.2. |
 | M3 | 1 | F11.6–F11.10 | ⬜ | M1 merged; backfill (F11.6) + bootstrap (F11.7) green; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.6. F2.5 ✅ (CR-M5-P3-007 resolved). Blocks F2.9. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
@@ -66,13 +66,12 @@ git merge --no-ff wt-track{N}
 ### M1 — F11 CRM create + read isolation
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Pending phases (serial):** F11.3 → F11.4 → F11.5
+**Pending phases (serial):** F11.4 → F11.5
 
-F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.3 is next actionable; F11.4–F11.5 blocked in sequence.
+F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.3 ✅ complete (self-contained resource create stamping for Tag, Company, Stage with org-member proof and same-org duplicate rejection). F11.4 is next actionable; F11.5 blocked on F11.4.
 
 **Next handoff decisions:**
-- F11.3 bundling: Tag/Company/Stage stay together unless one resource path proves structurally different.
-- F11.4 follow-on split: re-evaluate after F11.3 whether Contact and Deal stay in one slice.
+- F11.4 follow-on split: re-evaluate whether Contact and Deal stay in one slice.
 - F11.5 scope boundary: dashboard, list/detail, nested-note, and helper reads only; bulk actions and admin/operator paths are F11.9 (M3).
 
 **Deferred (unlocked by F11.5):** Stage `terminal_semantic` per-org uniqueness — see F11-deferred below.
@@ -125,14 +124,14 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F11.3 — Self-contained resource create stamping** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** F11.2 ✅ | **Status:** ⏳ Next actionable.
+**Dependencies:** F11.2 ✅ | **Status:** ✅ Complete.
 
-- [ ] Stamp current-org ownership on org-scoped create paths for Tag, Company, and Stage.
-- [ ] Add org-member create → list roundtrip tests for Tag, Company, and Stage.
+- [x] Stamp current-org ownership on org-scoped create paths for Tag, Company, and Stage.
+- [x] Add org-member create → list roundtrip tests for Tag, Company, and Stage.
 
 **Phase F11.4 — Contact/Deal related-ID guard + create stamping** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** F11.3 | **Status:** 🚫 Blocked on F11.3. Contact/Deal serializers accept foreign-org or legacy-NULL related IDs via unscoped `company_id`, `tag_ids`, `contact_id`, `stage_id` — guard required before stamping.
+**Dependencies:** F11.3 ✅ | **Status:** ⏳ Next actionable. Contact/Deal serializers accept foreign-org or legacy-NULL related IDs via unscoped `company_id`, `tag_ids`, `contact_id`, `stage_id` — guard required before stamping.
 
 - [ ] Reject foreign-org related IDs (`company_id`, `tag_ids`, `contact_id`, `stage_id`) on Contact and Deal create serializers.
 - [ ] Stamp current-org ownership on Contact and Deal org-scoped create paths.
