@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
-| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.8. F11.6 ✅ F11.7 ✅; NOT NULL enforced; xfail removed |
+| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.9. F11.6 ✅ F11.7 ✅ F11.8 ✅; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9b | 🟡 | **Next:** F2.9a. F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
@@ -181,15 +181,17 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 **Findings:** `ensure_org_default_stages()` now owns the canonical four-stage bootstrap (`Prospecting`, `Negotiation`, `Closed-Won`, `Closed-Lost`) and seeds only org-local rows. The helper ignores NULL-org legacy stages, uses `transaction.atomic()` + `Organization.select_for_update()` + an under-lock recheck to prevent duplicate first-access bootstrap, and leaves `terminal_semantic` unset so F11-deferred remains the owner of per-org terminal-semantic uniqueness. SaaS new-org create paths (`OrgCreateForm.save`, including `/orgs/new/` and `/api/orgs/`) eagerly call the guarded bootstrap seam when CRM is installed; org-scoped CRM reads lazily self-bootstrap migrated orgs with zero local stages; any org that already has a local stage now no-ops instead of topping up. Personal-org creation intentionally preserves the legacy solo `/crm/...` stage surface until solo CRM stops relying on the global NULL-owned defaults. Focused CRM-owned proofs cover `/orgs/new/`, `/api/orgs/`, migrated zero-local first access, partial-preseed no-op, and solo `/crm/` + `/crm/api/stages/` parity after personal-org creation; supporting seam tests prove the eager org-create and lazy read entrypoints stay wired to the shared helper. Validation: targeted Ruff + MyPy green; CRM focused pytest suites 13/13 green plus service/seam proofs 8/8 green; orgs seam pytest 2/2 green.
 
 **Next handoff decisions:**
-- F11.8 is now the next actionable Track 1 phase.
+- F11.8 ✅ complete. F11.9 is now the next actionable Track 1 phase.
 - F11.9 bulk/admin scope and F11-deferred `terminal_semantic` per-org uniqueness remain intentionally deferred from F11.7.
 
 **Phase F11.8 — Serializer related-field validation** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** M1 merged.
+**Dependencies:** M1 merged. | **Status:** ✅ Complete.
 
-- [ ] Make serializer related-field validation org-aware: `company_id`, `tag_ids`, `contact_id`, and `stage_id` must reject foreign-org IDs on all write paths.
-- [ ] Add coverage proving cross-org related-ID writes are rejected with controlled 4xx responses.
+- [x] Make serializer related-field validation org-aware: `company_id`, `tag_ids`, `contact_id`, and `stage_id` must reject foreign-org IDs on all write paths.
+- [x] Add coverage proving cross-org related-ID writes are rejected with controlled 4xx responses.
+
+**Findings:** Serializer `validate()` methods on `ContactDetailSerializer` and `DealDetailSerializer` already reject foreign-org related IDs on both create and update paths. This phase added create-path rejection coverage for all five related fields (`company_id`, `tag_ids` on Contact; `contact_id`, `stage_id`, `tag_ids` on Deal) plus a solo-route parity test proving foreign-org related IDs remain allowed on solo routes where org context is absent. No serializer code changes were required — the existing validation logic was already correct; only test coverage was missing.
 
 **Phase F11.9 — Bulk deal scope + CRM admin path** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
