@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3 | 🟡 | M5 merged ✅; F12.1 planned + split into F12.1a–e (Tier 1–2). **Next:** F12.1a (no decision needed); F12.1b/d/e **blocked on decision D-F12.1-LEDGER**. Correction: no `ApplyStep` model exists yet — `failed_step` is only a string label. |
+| M8 | 3 | F12.1–F12.3 | 🟡 | M5 merged ✅; F12.1 planned + split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **Next:** F12.1a. Correction: no `ApplyStep` model exists yet — `failed_step` is only a string label. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 + M8 both merged; DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -105,14 +105,13 @@ Open / Next:
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In planning. F12.1 was decomposed into **F12.1a–F12.1e** (all Adaptive Tier 1–2 — see Finding 12). Structural plan-review passed: findings R1 (resume semantics), R2 (dirty-path stem), and R3 (atomic temp path) are resolved. One design decision remains before the schema/write phases can start.
+**Status:** 🟢 Planned and **unblocked** — ready for implementation handoff. F12.1 was decomposed into **F12.1a–F12.1e** (all Adaptive Tier 1–2 — see Finding 12). Structural plan-review passed (R1/R2/R3/R6 resolved).
 
-**🚧 Blocked on decision D-F12.1-LEDGER** — what is the concrete authoritative recovery-ledger artifact? (Options + recommendation under Finding 12 / Phase F12.1.)
+**✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
-Open / Next:
-- **Decide D-F12.1-LEDGER** (recommend Option A: enrich the existing `.quickscale/apply-recovery.yml`).
-- **Implementable now without the decision:** F12.1a (`ApplyStep` model, Tier 1) and F12.1c (registry-driven step execution, Tier 2).
-- **Blocked on the decision:** F12.1b, F12.1d, F12.1e.
+Open / Next (no remaining blockers — implement in order):
+- **F12.1a** (`ApplyStep` model, Tier 1) and **F12.1c** (registry-driven step execution, Tier 2) — independent, can start immediately.
+- **F12.1b** (enrich ledger schema, Tier 2) → **F12.1d** (single authoritative file + consumer parity, Tier 2) → **F12.1e** (fold git-index snapshot, Tier 2).
 - Then F12.2 (consistent fail policy) and F12.3 (close recovery gaps).
 
 ---
@@ -128,7 +127,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
-| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 M5 merged; F12.1 planned + split (Tier 1–2); blocked on D-F12.1-LEDGER |
+| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 M5 merged; F12.1 planned + split (Tier 1–2), unblocked (D-F12.1-LEDGER → Option A) |
 | 5 | F5 — DR engine split | M10 | ⬜ Waits for M6 + M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
 
@@ -352,7 +351,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
-**Status:** 🟡 Planned and split into F12.1a–F12.1e (Adaptive Tier 1–2). Structural plan-review passed (R1/R2/R3 resolved); **blocked on decision D-F12.1-LEDGER** before the schema/write phases. The original two checklist items are decomposed below:
+**Status:** 🟢 Planned, split into F12.1a–F12.1e (Adaptive Tier 1–2), and **unblocked** — decision D-F12.1-LEDGER resolved to **Option A** (2026-06-19). Structural plan-review passed (R1/R2/R3/R6 resolved). All sub-phases are ready to hand off. The original two checklist items are decomposed below:
 - [ ] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action. → F12.1a + F12.1c
 - [ ] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling. → F12.1b + F12.1d + F12.1e
 
@@ -364,42 +363,41 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - Recovery state is shared across `apply`, `module_commands.py` (`_load_update_recovery_state`, `_check_local_pre_pull_guard`), and `remove_command.py` (`apply_recovery_path`, `_load/_build/_update/_clear_apply_recovery_state`, `_apply_recovery_snapshot_is_obsolete`) — any change must keep all consumers in agreement (write, clear, and read).
 - The pre-embed dirty-path gate `_is_transient_apply_recovery_path` (`162-167`) tolerates only `.quickscale/` files whose name starts with `apply-recovery`; a recovery file named off that stem would abort apply pre-embed.
 
-**🚧 BLOCKING DECISION — D-F12.1-LEDGER** (decide before F12.1b/d/e): What is the concrete authoritative recovery-ledger artifact? Plan-review rejected the abstract "ledger" because today the recovery snapshot *is* `apply-recovery.yml` — there is no separate file, so producer and all consumers must be pinned to one named artifact.
-- **Option A (recommended):** Enrich the existing `.quickscale/apply-recovery.yml` as the single authoritative recovery file (add diagnostic step-progress; fold the git-index checkpoint reference into it). Keeps the `apply-recovery` stem (dirty-path guard unaffected); no consumer migration; lowest risk on the no-rollback path.
-- **Option B:** New dedicated file that still begins with `apply-recovery` (e.g. `apply-recovery-ledger.yml`); requires migrating *all* consumers (apply reader `2033-2042`, `module_commands` reader `971-985`, remove read/write/clear) to it in the same phase.
-- **Option C:** A section inside `.quickscale/state.yml`; largest change; must extend the dirty-path guard and the legacy read-through contract.
-This decision also closes plan-review findings R6/R6b (the chosen name must keep the `apply-recovery` stem or the guard must be extended).
+**✅ RESOLVED DECISION — D-F12.1-LEDGER → Option A** (2026-06-19): The single authoritative recovery ledger is the **existing `.quickscale/apply-recovery.yml`, enriched in place** — add diagnostic step-progress fields and fold the git-index checkpoint reference into it. The filename and `apply-recovery` stem are unchanged, so the pre-embed dirty-path guard (`_is_transient_apply_recovery_path`) and the existing `.tmp` temp path already apply; no new file and no consumer migration. This closes plan-review findings R6/R6b by construction (one named artifact; all consumers already point at `apply-recovery.yml`). Options B (new dedicated file) and C (section inside `state.yml`) were rejected as higher-risk.
 
-**Constraints (binding for all sub-phases):** behavior-preserving — keep membership/presence-gated idempotent resume byte-for-byte (step-progress is diagnostics-only, never resume-gating); never delete legacy `apply-recovery.yml` from disk and keep reading it when no ledger is present; the step model + ledger schema live in `quickscale_core` (CLI is command-surface only); ledger atomic write must use a temp path distinct from `state.yml`'s `.tmp`. F12.2 (config.yml mirror fail-open) and F12.3 stay out of scope.
+**⚠️ No backward compatibility / fail-hard directive (owner decision, 2026-06-19):** This is an intentional **breaking change** with **no backward compatibility and no fallback**. Do **not** add a legacy-format fallback reader, do **not** preserve in-flight recoveries written by older versions, and do **not** silently degrade. If the recovery ledger is missing required fields, malformed, or otherwise inconsistent, **fail hard (raise)** rather than guessing or falling back. An in-flight `apply-recovery.yml` from an older QuickScale version is allowed to fail loudly after upgrade.
+
+**Constraints (binding for all sub-phases):** keep membership/presence-gated idempotent resume semantics (`recovery_state is not None`; step-progress is diagnostics-only, never resume-gating); enrich `apply-recovery.yml` in place as the single recovery channel — no second channel, no fallback, fail hard on read/parse errors (per the directive above); the step model + ledger schema live in `quickscale_core` (CLI is command-surface only); the atomic write keeps using a temp path distinct from `state.yml`'s `.tmp` (the existing `apply-recovery.tmp` already satisfies this). `state.yml` remains the authoritative *applied-state* store (separate concern). F12.2 (consistent fail policy / config.yml mirror) and F12.3 stay out of scope, though the fail-hard directive aligns with F12.2's intended direction.
 
 **Phase F12.1a — `ApplyStep` model in core** _(M8)_ _(Adaptive tier: 1)_
 **Dependencies:** none (pure additive; no D-F12.1-LEDGER needed). | **Status:** ⬜ Ready to implement.
 - [ ] Add `quickscale_core/src/quickscale_core/apply/step.py` + `__init__.py`: an `ApplyStep` dataclass (stable step id/label, apply-action ref, compensating/resume descriptor) and an ordered registry of the 15 steps, preserving current label strings as stable ids.
 - [ ] Core unit tests assert the registry enumerates exactly the 15 steps in order with current label strings preserved.
 
-**Phase F12.1b — Recovery-ledger schema + back-compat loader** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1a; **D-F12.1-LEDGER decided.** | **Status:** ⬜ Blocked on decision.
-- [ ] Add the recovery-ledger schema in `quickscale_core` (per the chosen artifact) with a loader that reads the ledger and falls back to legacy `apply-recovery.yml` (`QuickScaleState`). No writer wiring yet.
-- [ ] Step-progress fields are diagnostic-only; loader preserves `recovery_state is not None` presence semantics.
-- [ ] Tests: ledger-present parsed; ledger-absent + legacy-present parsed non-None; both-absent None; diagnostic progress optional/parse-tolerant.
+**Phase F12.1b — Enrich the `apply-recovery.yml` ledger schema (no fallback, fail hard)** _(M8)_ _(Adaptive tier: 2)_
+**Dependencies:** F12.1a. | **Status:** ⬜ Ready to implement.
+- [ ] Extend the `apply-recovery.yml` recovery schema in `quickscale_core` to carry diagnostic step-progress (keyed by F12.1a step ids). No second file, no legacy-format fallback reader. No writer wiring yet.
+- [ ] Step-progress fields are diagnostic-only; the loader preserves `recovery_state is not None` presence semantics.
+- [ ] Fail hard: a present-but-malformed/inconsistent ledger raises (no silent degradation, no fallback). Optional diagnostic fields absent on a fresh write is fine; a structurally invalid ledger is not.
+- [ ] Tests: ledger present → parsed; ledger absent → None; malformed/inconsistent ledger → raises; diagnostic step-progress round-trips.
 
 **Phase F12.1c — Drive `_execute_apply_steps_locked` from the registry** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1a (independent of the decision). | **Status:** ⬜ Ready after F12.1a.
+**Dependencies:** F12.1a. | **Status:** ⬜ Ready after F12.1a.
 - [ ] Refactor `_execute_apply_steps_locked` (`apply_command.py:2696-2891`) to source step identity/labels from the F12.1a registry, replacing the ~14 ad-hoc `failed_step` string literals. Behavior, ordering, and printed strings byte-identical.
 - [ ] Tests: existing apply/recovery tests green; assert failure-summary output is byte-identical; per-failure-site step id covered.
 
-**Phase F12.1d — Ledger authoritative write/read + consumer parity** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1b + F12.1c; **D-F12.1-LEDGER decided.** | **Status:** ⬜ Blocked on decision. Riskiest slice.
-- [ ] Make the ledger the single authoritative recovery channel: repoint apply (`_abort_after_post_embed_failure` `2473`, `_finalize_apply_state` `2502`, `_refresh_context_after_lock`), the `remove_command` **write and clear** paths (`_update_apply_recovery_state`, `_clear_apply_recovery_state`), and all readers (apply `2040-2042`, `module_commands` `971-985`, remove read paths) onto the same artifact.
-- [ ] Stop writing legacy once the ledger is authoritative; keep the legacy read fallback; never delete legacy on disk.
+**Phase F12.1d — Single authoritative `apply-recovery.yml` write/read + consumer parity (fail hard)** _(M8)_ _(Adaptive tier: 2)_
+**Dependencies:** F12.1b + F12.1c. | **Status:** ⬜ Ready after F12.1b + F12.1c. Riskiest slice.
+- [ ] Make the enriched `apply-recovery.yml` the single authoritative recovery channel: ensure apply (`_abort_after_post_embed_failure` `2473`, `_finalize_apply_state` `2502`, `_refresh_context_after_lock`), the `remove_command` **write and clear** paths (`_update_apply_recovery_state`, `_clear_apply_recovery_state`), and all readers (apply `2040-2042`, `module_commands` `971-985`, remove read paths) all read/write/clear that one file. Collapse the secondary recovery channel into it.
+- [ ] No backward compatibility / no fallback: do not preserve a legacy read path; a missing/malformed ledger fails hard. Breaking change is accepted.
 - [ ] Preserve presence-gated idempotent resume at every site (`2417`, `2616`, `2632-2634`, `2679`, `2690`, `2966`); `_merge_apply_recovery_state` membership semantics unchanged.
-- [ ] Atomic write uses a temp path distinct from `state.yml` `.tmp`.
-- [ ] Tests: dirty-ledger-no-abort (incl. the `apply-recovery`-stem `.tmp` recognized by `_is_transient_apply_recovery_path`); presence-gated idempotent resume; legacy-only read-through resume; consumer parity across apply/remove/module-update.
+- [ ] Atomic write keeps the existing `apply-recovery.tmp` temp path (distinct from `state.yml` `.tmp`).
+- [ ] Tests: presence-gated idempotent resume; consumer parity across apply/remove/module-update (all agree on the single file); malformed ledger fails hard; dirty `apply-recovery*` file does not abort pre-embed.
 
-**Phase F12.1e — Fold git-index snapshot into the ledger checkpoint** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1d. | **Status:** ⬜ Blocked on F12.1d.
-- [ ] Record the pre-commit git-index checkpoint reference (capture `183-219`, restore `222-252`, orchestrate `270-293`) in the ledger so progress is consolidated; keep `git write-tree`/`read-tree --reset` mechanics byte-identical. `_is_transient_apply_recovery_path` must still recognize legacy `apply-recovery.yml`.
-- [ ] Tests: git-index checkpoint/restore tests green; legacy recognition assertion; full `make test` integration gate.
+**Phase F12.1e — Fold git-index snapshot into the `apply-recovery.yml` checkpoint** _(M8)_ _(Adaptive tier: 2)_
+**Dependencies:** F12.1d. | **Status:** ⬜ Ready after F12.1d.
+- [ ] Record the pre-commit git-index checkpoint reference (capture `183-219`, restore `222-252`, orchestrate `270-293`) in `apply-recovery.yml` so progress is consolidated into the single ledger; keep `git write-tree`/`read-tree --reset` mechanics byte-identical. `_is_transient_apply_recovery_path` must still recognize `apply-recovery.yml`.
+- [ ] Tests: git-index checkpoint/restore tests green; `apply-recovery.yml` recognition assertion; full `make test` integration gate.
 
 **Phase F12.2 — Consistent fail policy** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
