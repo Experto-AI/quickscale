@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """
-Provenance-aware split-publish wrapper for QuickScale modules (F2.8).
+Provenance-aware split-publish wrapper for QuickScale modules (F2.8, F2.9a).
 
 This script replaces the hardcoded module-path and branch-resolution logic
 that previously lived entirely in ``scripts/publish_module.sh``.  It uses
 the provenance-aware helper surface from
 ``quickscale_core.utils.git_utils`` so the split/publish execution path
 shares the same resolution conventions as the embed/update paths.
+
+F2.9a adds a release-authoritative gate: mutating publish flows refuse to
+run unless the source state is release-authoritative (VERSION file matches
+a git tag pointing at HEAD), aligned with the publish workflow authority in
+.github/workflows/publish.yml.  The --status flag remains read-only and
+does not require release-authoritative state.
 
 Usage:
     poetry run python scripts/publish_module.py <module_name> [--clean]
@@ -32,6 +38,7 @@ if str(_CORE_SRC) not in sys.path:
 from quickscale_core.utils.git_utils import (  # noqa: E402
     GitError,
     is_git_repo,
+    is_release_authoritative,
     push_split_branch,
     resolve_module_path,
     resolve_split_branch,
@@ -127,6 +134,40 @@ def _maybe_clean_subtree_cache(clean: bool) -> None:
         cache_dir = _REPO_ROOT / ".git" / "subtree-cache"
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
+
+
+def _check_release_authoritative() -> None:
+    """
+    Gate: refuse mutating publish flows unless source is release-authoritative (F2.9a).
+
+    Release-authoritative means the VERSION file matches a git tag pointing at
+    HEAD, aligned with the publish workflow authority in
+    .github/workflows/publish.yml.
+
+    Raises SystemExit with a clear operator-facing message when the source is
+    not release-authoritative.  This gate applies to mutating flows only
+    (single-module publish and --publish-outdated); --status remains read-only
+    and must not fail closed just because HEAD is untagged.
+    """
+    is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT)
+    if is_auth:
+        _print_success(f"Source is release-authoritative (VERSION={version}, tag={tag})")
+        return
+
+    _print_error("Source is not release-authoritative (F2.9a gate)")
+    if reason:
+        _print_error(f"  Reason: {reason}")
+    _print_info(
+        "Mutating publish flows require the source state to match the publish workflow authority:"
+    )
+    _print_info("  - VERSION file must contain the release version")
+    _print_info("  - HEAD must be tagged with that version")
+    _print_info("  - The tag must match the VERSION file content")
+    _print_info("See .github/workflows/publish.yml for the authority chain.")
+    _print_info(
+        "Use --status for read-only inspection (does not require release-authoritative state)."
+    )
+    sys.exit(1)
 
 
 def _get_local_split_sha(module_path: str) -> str | None:
@@ -288,6 +329,11 @@ def _show_status() -> None:
 
 def _publish_outdated(clean: bool) -> None:
     """Publish only modules with missing or outdated split branches."""
+    # F2.9a: Gate mutating flows on release-authoritative source state
+    # This must fire BEFORE the uncommitted changes prompt so the gate
+    # error is clear and does not get masked by interactive prompts.
+    _check_release_authoritative()
+
     if not _confirm_uncommitted_changes():
         return
 
@@ -386,6 +432,11 @@ def main() -> None:
             for name in _list_modules():
                 print(f"  - {name}")
             sys.exit(1)
+
+        # F2.9a: Gate mutating flows on release-authoritative source state
+        # This must fire BEFORE the uncommitted changes prompt so the gate
+        # error is clear and does not get masked by interactive prompts.
+        _check_release_authoritative()
 
         if not _confirm_uncommitted_changes():
             return

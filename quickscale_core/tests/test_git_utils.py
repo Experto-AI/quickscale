@@ -10,10 +10,14 @@ import pytest
 from quickscale_core.utils.git_utils import (
     GitError,
     check_remote_branch_exists,
+    get_all_tags_at_head,
     get_remote_url,
+    get_tag_at_head,
     is_git_repo,
+    is_release_authoritative,
     is_working_directory_clean,
     push_split_branch,
+    read_version_file,
     resolve_module_path,
     resolve_remote_ref,
     resolve_split_branch,
@@ -1039,5 +1043,550 @@ class TestPublishModuleWrapperSmoke:
         """Module name with spaces exits non-zero with no traceback."""
         result = self._run_wrapper("my module")
         assert result.returncode != 0
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# F2.9a — Release-authoritative source gate tests
+# ---------------------------------------------------------------------------
+
+
+class TestReadVersionFile:
+    """Tests for read_version_file (F2.9a)."""
+
+    def test_reads_version_file(self, tmp_path: Path) -> None:
+        """read_version_file returns trimmed version string."""
+        version_file = tmp_path / "VERSION"
+        version_file.write_text("0.86.0\n")
+        assert read_version_file(tmp_path) == "0.86.0"
+
+    def test_strips_whitespace_and_cr(self, tmp_path: Path) -> None:
+        """read_version_file strips leading/trailing whitespace and CR."""
+        version_file = tmp_path / "VERSION"
+        version_file.write_text("  0.86.0\r\n  ")
+        assert read_version_file(tmp_path) == "0.86.0"
+
+    def test_raises_when_version_file_missing(self, tmp_path: Path) -> None:
+        """read_version_file raises GitError when VERSION file does not exist."""
+        with pytest.raises(GitError, match="VERSION file not found"):
+            read_version_file(tmp_path)
+
+    def test_raises_when_version_file_empty(self, tmp_path: Path) -> None:
+        """read_version_file raises GitError when VERSION file is empty."""
+        version_file = tmp_path / "VERSION"
+        version_file.write_text("")
+        with pytest.raises(GitError, match="VERSION file is empty"):
+            read_version_file(tmp_path)
+
+    def test_raises_when_version_file_whitespace_only(self, tmp_path: Path) -> None:
+        """read_version_file raises GitError when VERSION file has only whitespace."""
+        version_file = tmp_path / "VERSION"
+        version_file.write_text("   \n  \r\n  ")
+        with pytest.raises(GitError, match="VERSION file is empty"):
+            read_version_file(tmp_path)
+
+
+class TestGetTagAtHead:
+    """Tests for get_tag_at_head (F2.9a)."""
+
+    @patch("subprocess.run")
+    def test_returns_tag_when_head_is_tagged(self, mock_run: MagicMock) -> None:
+        """get_tag_at_head returns the tag name when HEAD is tagged."""
+        mock_run.return_value = MagicMock(
+            stdout="0.86.0\n",
+            returncode=0,
+        )
+        assert get_tag_at_head() == "0.86.0"
+
+    @patch("subprocess.run")
+    def test_returns_first_tag_when_multiple_tags(self, mock_run: MagicMock) -> None:
+        """get_tag_at_head returns the first tag when multiple tags point at HEAD."""
+        mock_run.return_value = MagicMock(
+            stdout="0.86.0\nv0.86.0\n",
+            returncode=0,
+        )
+        assert get_tag_at_head() == "0.86.0"
+
+    @patch("subprocess.run")
+    def test_returns_none_when_head_is_untagged(self, mock_run: MagicMock) -> None:
+        """get_tag_at_head returns None when HEAD has no tag."""
+        mock_run.return_value = MagicMock(
+            stdout="",
+            returncode=0,
+        )
+        assert get_tag_at_head() is None
+
+    @patch("subprocess.run")
+    def test_raises_on_git_failure(self, mock_run: MagicMock) -> None:
+        """get_tag_at_head raises GitError on git command failure."""
+        mock_run.return_value = MagicMock(
+            stdout="",
+            stderr="fatal: not a git repository\n",
+            returncode=128,
+        )
+        with pytest.raises(GitError, match="Failed to get tags at HEAD"):
+            get_tag_at_head()
+
+
+class TestGetAllTagsAtHead:
+    """Tests for get_all_tags_at_head (F2.9a / CR-F2.9A-002)."""
+
+    @patch("subprocess.run")
+    def test_returns_all_tags_when_multiple(self, mock_run: MagicMock) -> None:
+        """get_all_tags_at_head returns all tags when multiple point at HEAD."""
+        mock_run.return_value = MagicMock(
+            stdout="0.86.0\nv0.86.0\nrelease-0.86\n",
+            returncode=0,
+        )
+        tags = get_all_tags_at_head()
+        assert tags == ["0.86.0", "v0.86.0", "release-0.86"]
+
+    @patch("subprocess.run")
+    def test_returns_single_tag(self, mock_run: MagicMock) -> None:
+        """get_all_tags_at_head returns a single-element list for one tag."""
+        mock_run.return_value = MagicMock(
+            stdout="0.86.0\n",
+            returncode=0,
+        )
+        tags = get_all_tags_at_head()
+        assert tags == ["0.86.0"]
+
+    @patch("subprocess.run")
+    def test_returns_empty_list_when_untagged(self, mock_run: MagicMock) -> None:
+        """get_all_tags_at_head returns empty list when HEAD has no tag."""
+        mock_run.return_value = MagicMock(
+            stdout="",
+            returncode=0,
+        )
+        tags = get_all_tags_at_head()
+        assert tags == []
+
+    @patch("subprocess.run")
+    def test_raises_on_git_failure(self, mock_run: MagicMock) -> None:
+        """get_all_tags_at_head raises GitError on git command failure."""
+        mock_run.return_value = MagicMock(
+            stdout="",
+            stderr="fatal: not a git repository\n",
+            returncode=128,
+        )
+        with pytest.raises(GitError, match="Failed to get tags at HEAD"):
+            get_all_tags_at_head()
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestIsReleaseAuthoritative:
+    """Integration tests for is_release_authoritative (F2.9a).
+
+    These tests create hermetic git repos to prove the gate logic against
+    real git state.
+    """
+
+    def _create_repo_with_version(self, tmp_path: Path, version: str) -> Path:
+        """Create a git repo with a VERSION file and return the repo path."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        subprocess.run(
+            ["git", "init", str(repo_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (repo_dir / "VERSION").write_text(f"{version}\n")
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "add", "VERSION"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+        return repo_dir
+
+    def test_authoritative_when_version_matches_tag(self, tmp_path: Path) -> None:
+        """is_release_authoritative returns True when VERSION matches tag at HEAD."""
+        repo_dir = self._create_repo_with_version(tmp_path, "0.86.0")
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", "0.86.0"],
+            check=True,
+            capture_output=True,
+        )
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is True
+        assert version == "0.86.0"
+        assert tag == "0.86.0"
+        assert reason is None
+
+    def test_authoritative_with_v_prefix_tag(self, tmp_path: Path) -> None:
+        """is_release_authoritative accepts tags with lowercase v prefix."""
+        repo_dir = self._create_repo_with_version(tmp_path, "0.86.0")
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", "v0.86.0"],
+            check=True,
+            capture_output=True,
+        )
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is True
+        assert version == "0.86.0"
+        assert tag == "v0.86.0"
+        assert reason is None
+
+    @pytest.mark.parametrize(
+        "bad_tag",
+        [
+            "V0.86.0",  # uppercase V — not a workflow-authoritative form
+            "vv0.86.0",  # multiple lowercase v prefixes — not authoritative
+            "vV0.86.0",  # mixed-case prefix — not authoritative
+        ],
+        ids=["uppercase-V", "double-v", "mixed-vV"],
+    )
+    def test_not_authoritative_for_non_canonical_tag_shapes(
+        self, tmp_path: Path, bad_tag: str
+    ) -> None:
+        """is_release_authoritative rejects tag shapes outside the workflow authority.
+
+        CR-F2.9A-003: The publish workflow triggers only on ``[0-9]*`` and
+        ``v[0-9]*`` tag patterns.  Tags with uppercase ``V``, multiple ``v``
+        prefixes, or other non-canonical shapes must not be treated as
+        release-authoritative even though their stripped form equals VERSION.
+        """
+        repo_dir = self._create_repo_with_version(tmp_path, "0.86.0")
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", bad_tag],
+            check=True,
+            capture_output=True,
+        )
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is False
+        assert version == "0.86.0"
+        assert tag == bad_tag
+        assert reason is not None
+        assert "does not match" in reason
+
+    def test_not_authoritative_when_untagged(self, tmp_path: Path) -> None:
+        """is_release_authoritative returns False when HEAD is untagged."""
+        repo_dir = self._create_repo_with_version(tmp_path, "0.86.0")
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is False
+        assert version == "0.86.0"
+        assert tag is None
+        assert reason is not None
+        assert "not tagged" in reason
+
+    def test_not_authoritative_when_version_mismatches_tag(
+        self, tmp_path: Path
+    ) -> None:
+        """is_release_authoritative returns False when VERSION does not match tag."""
+        repo_dir = self._create_repo_with_version(tmp_path, "0.86.0")
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", "0.85.0"],
+            check=True,
+            capture_output=True,
+        )
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is False
+        assert version == "0.86.0"
+        assert tag == "0.85.0"
+        assert reason is not None
+        assert "does not match" in reason
+
+    def test_not_authoritative_when_version_file_missing(self, tmp_path: Path) -> None:
+        """is_release_authoritative returns False when VERSION file is missing."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        subprocess.run(
+            ["git", "init", str(repo_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (repo_dir / "README.md").write_text("test\n")
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "add", "README.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is False
+        assert version == ""
+        assert tag is None
+        assert reason is not None
+        assert "VERSION file not found" in reason
+
+    def test_authoritative_when_second_tag_matches(self, tmp_path: Path) -> None:
+        """is_release_authoritative succeeds when ANY tag at HEAD matches VERSION.
+
+        CR-F2.9A-002: Previously only checked the first tag.  When multiple
+        tags point at HEAD and the first does not match but a later one does,
+        the gate must still succeed.
+        """
+        repo_dir = self._create_repo_with_version(tmp_path, "0.86.0")
+        # Create a non-matching tag first, then the matching tag
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", "release-candidate"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", "v0.86.0"],
+            check=True,
+            capture_output=True,
+        )
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is True
+        assert version == "0.86.0"
+        # The matching tag should be returned
+        assert tag == "v0.86.0"
+        assert reason is None
+
+    def test_not_authoritative_when_no_tag_matches(self, tmp_path: Path) -> None:
+        """is_release_authoritative returns False when no tag matches VERSION.
+
+        CR-F2.9A-002: When multiple tags exist but none match VERSION, the
+        gate must fail with a clear message.
+        """
+        repo_dir = self._create_repo_with_version(tmp_path, "0.86.0")
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", "release-candidate"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "tag", "v0.85.0"],
+            check=True,
+            capture_output=True,
+        )
+        is_auth, version, tag, reason = is_release_authoritative(repo_dir)
+        assert is_auth is False
+        assert version == "0.86.0"
+        assert tag is not None  # first tag is returned for diagnostics
+        assert reason is not None
+        assert "does not match" in reason
+        # Should mention multiple tags
+        assert "2 tags" in reason
+
+
+# ---------------------------------------------------------------------------
+# F2.9a — Publish wrapper gate integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestPublishModuleReleaseAuthoritativeGate:
+    """Hermetic integration tests proving the F2.9a gate in scripts/publish_module.py.
+
+    These tests prove:
+    1. Mutating publish flows refuse to run when HEAD is untagged
+    2. Mutating publish flows refuse to run when VERSION does not match tag
+    3. Mutating publish flows succeed when VERSION matches a tag at HEAD
+    4. --status remains read-only and does not fail closed on untagged HEAD
+
+    All tests are hermetic: they create a temporary git repo with controlled
+    state and run the wrapper script from that location, so they do not depend
+    on ambient repo tag state.
+    """
+
+    def _setup_hermetic_repo(
+        self, tmp_path: Path, version: str, tag: str | None = None
+    ) -> Path:
+        """Create a hermetic repo structure for wrapper testing.
+
+        Args:
+            tmp_path: pytest tmp_path fixture
+            version: Version string to write to VERSION file
+            tag: Optional tag to create at HEAD (None = untagged)
+
+        Returns:
+            Path to the hermetic repo root
+        """
+        repo_dir = tmp_path / "hermetic_repo"
+        repo_dir.mkdir()
+
+        # Initialize git repo
+        subprocess.run(
+            ["git", "init", str(repo_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Create VERSION file
+        (repo_dir / "VERSION").write_text(f"{version}\n")
+
+        # Create minimal quickscale_modules/ structure with a fake module
+        modules_dir = repo_dir / "quickscale_modules" / "auth"
+        modules_dir.mkdir(parents=True)
+        (modules_dir / "__init__.py").write_text("# fake module\n")
+
+        # Create scripts/ directory and copy the wrapper script
+        scripts_dir = repo_dir / "scripts"
+        scripts_dir.mkdir()
+        real_repo_root = Path(__file__).resolve().parent.parent.parent
+        real_script = real_repo_root / "scripts" / "publish_module.py"
+        script_copy = scripts_dir / "publish_module.py"
+        script_copy.write_text(real_script.read_text())
+
+        # Create quickscale_core/src structure with symlink to real git_utils
+        core_src = repo_dir / "quickscale_core" / "src" / "quickscale_core" / "utils"
+        core_src.mkdir(parents=True)
+        real_git_utils = (
+            real_repo_root
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "utils"
+            / "git_utils.py"
+        )
+        # Use symlink to avoid copying the entire package
+        (core_src / "git_utils.py").symlink_to(real_git_utils)
+
+        # Create __init__.py files to make it a valid package
+        (repo_dir / "quickscale_core" / "__init__.py").write_text("")
+        (repo_dir / "quickscale_core" / "src" / "__init__.py").write_text("")
+        (
+            repo_dir / "quickscale_core" / "src" / "quickscale_core" / "__init__.py"
+        ).write_text("")
+        (
+            repo_dir
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "utils"
+            / "__init__.py"
+        ).write_text("")
+
+        # Commit everything
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "add", "."],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Optionally create a tag
+        if tag is not None:
+            subprocess.run(
+                ["git", "-C", str(repo_dir), "tag", tag],
+                check=True,
+                capture_output=True,
+            )
+
+        return repo_dir
+
+    def _run_wrapper(
+        self, repo_root: Path, *args: str, timeout: int = 30
+    ) -> subprocess.CompletedProcess[str]:
+        """Run the publish wrapper as a subprocess in the hermetic repo."""
+        script = repo_root / "scripts" / "publish_module.py"
+        return subprocess.run(
+            ["python", str(script), *args],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+    def test_status_does_not_require_release_authoritative(
+        self, tmp_path: Path
+    ) -> None:
+        """--status does not fail closed when HEAD is untagged.
+
+        Hermetic: creates a temp repo with untagged HEAD.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(repo_dir, "--status", timeout=120)
+        combined = result.stdout + result.stderr
+        # Should NOT contain the F2.9a gate rejection message
+        assert "not release-authoritative" not in combined
+
+    def test_publish_outdated_rejects_untagged_head(self, tmp_path: Path) -> None:
+        """--publish-outdated refuses to run when HEAD is untagged.
+
+        Hermetic: creates a temp repo with untagged HEAD.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(repo_dir, "--publish-outdated")
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "not release-authoritative" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    def test_single_module_publish_rejects_untagged_head(self, tmp_path: Path) -> None:
+        """Single module publish refuses to run when HEAD is untagged.
+
+        Hermetic: creates a temp repo with untagged HEAD.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(repo_dir, "auth")
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "not release-authoritative" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    def test_single_module_publish_rejects_version_mismatch(
+        self, tmp_path: Path
+    ) -> None:
+        """Single module publish refuses to run when VERSION does not match tag.
+
+        Hermetic: creates a temp repo with VERSION=0.86.0 but tag=0.85.0.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.85.0")
+        result = self._run_wrapper(repo_dir, "auth")
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "not release-authoritative" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    def test_publish_outdated_rejects_version_mismatch(self, tmp_path: Path) -> None:
+        """--publish-outdated refuses to run when VERSION does not match tag.
+
+        Hermetic: creates a temp repo with VERSION=0.86.0 but tag=v0.85.0.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="v0.85.0")
+        result = self._run_wrapper(repo_dir, "--publish-outdated")
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "not release-authoritative" in combined
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout

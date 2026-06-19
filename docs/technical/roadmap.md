@@ -67,7 +67,7 @@ git merge --no-ff wt-track{N}
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.8. F11.6 ✅ F11.7 ✅; NOT NULL enforced; xfail removed |
-| M5 | 3 | F2.5–F2.9b | 🟡 | **Next:** F2.9a. F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅. |
+| M5 | 3 | F2.5–F2.9b | 🟡 | **Next:** F2.9b. F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
@@ -92,16 +92,15 @@ F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Pending phases:** F2.9a → F2.9b
+**Pending phases:** F2.9b
 
-**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅), CR-M5-P3-004 (F2.7 ✅), CR-M5-P1-001 (F2.8 hardening ✅), CR-M5-P1-002 (F2.8 wrapper smoke ✅).
+**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅), CR-M5-P3-004 (F2.7 ✅), CR-M5-P1-001 (F2.8 hardening ✅), CR-M5-P1-002 (F2.8 wrapper smoke ✅), F2.9a release-authority publish gate ✅.
 
-**Blocked / pending:** M5 remains open only on the tagged/versioned-source publish gate and matching operator diagnostics. M8 / F12 still waits on M5 closeout.
+**Blocked / pending:** M5 remains open only on operator diagnostics for split publish mismatches (F2.9b). M8 / F12 still waits on M5 closeout.
 
 **Next handoff decisions:**
-- Confirm the F2.9a release-authority gate. Recommended baseline: reuse the existing publish workflow authority in `.github/workflows/publish.yml` (`VERSION` must match the release tag) instead of inventing a second source-of-truth.
-- Keep `--status` read-only; fail closed only on mutating publish flows (`<module>` and `--publish-outdated`) when the source state is untagged or version/SHA metadata disagrees.
-- Hand off F2.9a first (Adaptive Tier 2), then F2.9b (Adaptive Tier 1); do not batch them back into one Tier 3 closeout.
+- F2.9a is complete: mutating split publish flows refuse non-authoritative source states; authority mirrors the existing publish workflow. Accepted authoritative tag formats are exact `VERSION` (e.g. `0.86.0`) or single lowercase `v` + `VERSION` (e.g. `v0.86.0`); uppercase `V` and repeated prefixes are rejected. `--status` remains read-only.
+- F2.9b (Adaptive Tier 1) is the remaining M5 phase: add operator-facing diagnostics for untagged/mismatched split provenance and confirm M5 closeout readiness.
 
 ---
 
@@ -241,7 +240,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 2 — Consolidate project state and make module provenance actionable
 
-**Why still open:** State consolidation and advisory locking are done (F2.1–F2.4 in CHANGELOG). Provenance persistence across apply/embed/no-op paths is done (F2.5–F2.7 ✅). Split-publish wrapper adoption is done (F2.8 ✅). M5 remains open only on the tagged/versioned-source publish gate and the matching operator diagnostics.
+**Why still open:** State consolidation and advisory locking are done (F2.1–F2.4 in CHANGELOG). Provenance persistence across apply/embed/no-op paths is done (F2.5–F2.7 ✅). Split-publish wrapper adoption is done (F2.8 ✅). Tagged/versioned-source publish gate is done (F2.9a ✅). M5 remains open only on operator diagnostics for split publish mismatches (F2.9b).
 
 ---
 
@@ -283,11 +282,13 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F2.9a — Tagged/versioned-source publish gate** _(M5, handoff 1/2)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Dependencies:** F2.8 ✅ | **Adaptive tier:** 2.
+**Dependencies:** F2.8 ✅ | **Adaptive tier:** 2. | **Status:** ✅ Complete.
 
-- [ ] Reuse the F2.8 Python wrapper/helper surface to refuse mutating split publish when the source state is not release-authoritative.
-- [ ] Align the gate with the existing publish workflow authority (`VERSION` + matching git tag) instead of introducing a parallel release source.
-- [ ] Add focused tests covering allowed publish from authoritative version/tag state and rejected publish from untagged or mismatched states.
+- [x] Reuse the F2.8 Python wrapper/helper surface to refuse mutating split publish when the source state is not release-authoritative.
+- [x] Align the gate with the existing publish workflow authority (`VERSION` + matching git tag) instead of introducing a parallel release source.
+- [x] Add focused tests covering allowed publish from authoritative version/tag state and rejected publish from untagged or mismatched states.
+
+**Findings:** Mutating split publish flows (`<module>` and `--publish-outdated`) now refuse non-authoritative source states. Authority mirrors the existing publish workflow: the source must carry a release-authoritative tag matching the current `VERSION`. Accepted authoritative tag formats are exact `VERSION` (e.g. `0.86.0`) or single lowercase `v` + `VERSION` (e.g. `v0.86.0`); uppercase `V` prefixes and repeated prefixes (`vv0.86.0`) are rejected. `--status` remains read-only and is not gated. Focused tests prove allowed authoritative state plus rejected untagged, mismatched, and non-canonical tag shapes.
 
 **Phase F2.9b — Operator diagnostics for split publish mismatches** _(M5 closeout, handoff 2/2)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
