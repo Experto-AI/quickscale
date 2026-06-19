@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
-| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.8. F11.6 ✅ F11.7 ✅; NOT NULL enforced; xfail removed |
+| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9b | 🟡 | **Next:** F2.9b. F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
@@ -85,7 +85,7 @@ F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.
 
 **Next handoff decisions:**
 - M1 mergeback to v87 is Phase 5 (final closeout).
-- F11.9 (bulk deal scope + CRM admin path) and F11-deferred (Stage `terminal_semantic` per-org uniqueness) remain open for M3.
+- F11.9 ✅ complete (bulk deal scope + CRM admin path). F11.10 (NOT NULL enforcement + isolation closeout) and F11-deferred (Stage `terminal_semantic` per-org uniqueness) remain open for M3.
 
 ---
 
@@ -180,22 +180,26 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 **Findings:** `ensure_org_default_stages()` now owns the canonical four-stage bootstrap (`Prospecting`, `Negotiation`, `Closed-Won`, `Closed-Lost`) and seeds only org-local rows. The helper ignores NULL-org legacy stages, uses `transaction.atomic()` + `Organization.select_for_update()` + an under-lock recheck to prevent duplicate first-access bootstrap, and leaves `terminal_semantic` unset so F11-deferred remains the owner of per-org terminal-semantic uniqueness. SaaS new-org create paths (`OrgCreateForm.save`, including `/orgs/new/` and `/api/orgs/`) eagerly call the guarded bootstrap seam when CRM is installed; org-scoped CRM reads lazily self-bootstrap migrated orgs with zero local stages; any org that already has a local stage now no-ops instead of topping up. Personal-org creation intentionally preserves the legacy solo `/crm/...` stage surface until solo CRM stops relying on the global NULL-owned defaults. Focused CRM-owned proofs cover `/orgs/new/`, `/api/orgs/`, migrated zero-local first access, partial-preseed no-op, and solo `/crm/` + `/crm/api/stages/` parity after personal-org creation; supporting seam tests prove the eager org-create and lazy read entrypoints stay wired to the shared helper. Validation: targeted Ruff + MyPy green; CRM focused pytest suites 13/13 green plus service/seam proofs 8/8 green; orgs seam pytest 2/2 green.
 
 **Next handoff decisions:**
-- F11.8 is now the next actionable Track 1 phase.
-- F11.9 bulk/admin scope and F11-deferred `terminal_semantic` per-org uniqueness remain intentionally deferred from F11.7.
+- F11.8 ✅ complete. F11.9 ✅ complete (bulk deal scope + CRM admin path). F11.10 is now the next actionable Track 1 phase.
+- F11-deferred `terminal_semantic` per-org uniqueness remains intentionally deferred from F11.7.
 
 **Phase F11.8 — Serializer related-field validation** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** M1 merged.
+**Dependencies:** M1 merged. | **Status:** ✅ Complete.
 
-- [ ] Make serializer related-field validation org-aware: `company_id`, `tag_ids`, `contact_id`, and `stage_id` must reject foreign-org IDs on all write paths.
-- [ ] Add coverage proving cross-org related-ID writes are rejected with controlled 4xx responses.
+- [x] Make serializer related-field validation org-aware: `company_id`, `tag_ids`, `contact_id`, and `stage_id` must reject foreign-org IDs on all write paths.
+- [x] Add coverage proving cross-org related-ID writes are rejected with controlled 4xx responses.
+
+**Findings:** Serializer `validate()` methods on `ContactDetailSerializer` and `DealDetailSerializer` already reject foreign-org related IDs on both create and update paths. This phase added create-path rejection coverage for all five related fields (`company_id`, `tag_ids` on Contact; `contact_id`, `stage_id`, `tag_ids` on Deal) plus a solo-route parity test proving foreign-org related IDs remain allowed on solo routes where org context is absent. No serializer code changes were required — the existing validation logic was already correct; only test coverage was missing.
 
 **Phase F11.9 — Bulk deal scope + CRM admin path** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** F11.8.
+**Dependencies:** F11.8 ✅ | **Status:** ✅ Complete.
 
-- [ ] Scope bulk deal actions (mark-won, mark-lost) by current-org deal visibility so raw `deal_ids` cannot mutate cross-org rows.
-- [ ] Route CRM admin through the deliberate unscoped/operator path; add coverage proving access is explicit, not an accidental bypass.
+- [x] Scope bulk deal actions (`bulk_update_stage`, `mark_won`, `mark_lost`) by current-org deal visibility so raw `deal_ids` cannot mutate cross-org rows.
+- [x] Route CRM admin through the deliberate superuser/operator path; add coverage proving access is explicit, not an accidental bypass.
+
+**Findings:** Phase 1 added org-scoped bulk deal mutation protection: `bulk_update_stage`, `mark_won`, and `mark_lost` views scope deal mutations to the active organization — foreign-org deal IDs produce a 200/updated=0 no-op rather than mutating cross-org rows. `bulk_update_stage` additionally rejects foreign-org stage IDs with a controlled 400. `mark_won` and `mark_lost` use org-aware terminal-stage resolution: same-org terminal stages are preferred, legacy NULL-org terminal stages are accepted for backfill compatibility, and foreign-org terminal stages are never used. Phase 2 established the deliberate CRM admin superuser/operator path: organization is visible in admin changelists and filters while remaining excluded from editable forms, with focused tests proving admin access is an explicit design choice rather than an accidental isolation bypass. Both phases passed CRM module validation (lint, typecheck, unit tests) with no new failures.
 
 **Phase F11.10 — NOT NULL enforcement + isolation closeout** _(M3 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 

@@ -9,7 +9,8 @@ from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 class TagAdmin(admin.ModelAdmin):
     """Admin configuration for Tag model"""
 
-    list_display = ["name", "created_at"]
+    list_display = ["name", "organization", "created_at"]
+    list_filter = ["organization", "created_at"]
     search_fields = ["name"]
     ordering = ["name"]
     exclude = ["organization"]
@@ -19,8 +20,15 @@ class TagAdmin(admin.ModelAdmin):
 class CompanyAdmin(admin.ModelAdmin):
     """Admin configuration for Company model"""
 
-    list_display = ["name", "industry", "website", "contact_count", "created_at"]
-    list_filter = ["industry", "created_at"]
+    list_display = [
+        "name",
+        "industry",
+        "website",
+        "organization",
+        "contact_count",
+        "created_at",
+    ]
+    list_filter = ["organization", "industry", "created_at"]
     search_fields = ["name", "industry"]
     ordering = ["name"]
     exclude = ["organization"]
@@ -50,11 +58,12 @@ class ContactAdmin(admin.ModelAdmin):
         "email",
         "phone",
         "company",
+        "organization",
         "status",
         "last_contacted_at",
         "created_at",
     ]
-    list_filter = ["status", "company", "tags", "created_at"]
+    list_filter = ["organization", "status", "company", "tags", "created_at"]
     search_fields = ["first_name", "last_name", "email", "company__name"]
     filter_horizontal = ["tags"]
     readonly_fields = ["created_at", "updated_at"]
@@ -75,7 +84,8 @@ class ContactAdmin(admin.ModelAdmin):
 class StageAdmin(admin.ModelAdmin):
     """Admin configuration for Stage model"""
 
-    list_display = ["name", "order", "deal_count"]
+    list_display = ["name", "order", "organization", "deal_count"]
+    list_filter = ["organization"]
     list_editable = ["order"]
     ordering = ["order"]
     exclude = ["organization"]
@@ -107,10 +117,11 @@ class DealAdmin(admin.ModelAdmin):
         "amount",
         "probability",
         "owner",
+        "organization",
         "expected_close_date",
         "created_at",
     ]
-    list_filter = ["stage", "owner", "tags", "created_at"]
+    list_filter = ["organization", "stage", "owner", "tags", "created_at"]
     search_fields = [
         "title",
         "contact__first_name",

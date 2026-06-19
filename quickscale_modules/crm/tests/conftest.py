@@ -48,6 +48,27 @@ def staff_user(db):
 
 
 @pytest.fixture
+def superuser(db):
+    """Create a Django superuser — the platform operator who accesses /admin/."""
+    user_model = get_user_model()
+    return user_model.objects.create_superuser(
+        username="operator",
+        email="operator@example.com",
+        password="TestPass123!",
+    )
+
+
+@pytest.fixture
+def admin_client(superuser):
+    """A Django test client authenticated as the platform-operator superuser."""
+    from django.test import Client
+
+    client = Client()
+    client.force_login(superuser)
+    return client
+
+
+@pytest.fixture
 def api_client():
     """Create an API client"""
     return APIClient()

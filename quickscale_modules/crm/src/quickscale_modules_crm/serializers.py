@@ -633,6 +633,34 @@ class BulkUpdateStageSerializer(serializers.Serializer):
     )
     stage_id = serializers.PrimaryKeyRelatedField(queryset=Stage.objects.all())
 
+    def validate_stage_id(self, value: Stage) -> Stage:
+        """Reject foreign-org stages on org-scoped routes.
+
+        On org-scoped SaaS routes, the target stage must belong to the same
+        organization (or have NULL organization for legacy/solo compatibility).
+        Foreign-org stages are rejected.  Solo routes preserve legacy behavior.
+        """
+        request = self.context.get("request")
+        if request is None:
+            return value
+        path = getattr(request, "path", "") or ""
+        if not path.startswith("/orgs/"):
+            # Solo route — no org-scoped validation.
+            return value
+        org = getattr(request, "org", None)
+        if org is None:
+            # Org-scoped route without org context — fail closed.
+            raise serializers.ValidationError(
+                "Organization context is required for this route.",
+                code="org_required",
+            )
+        if value.organization_id is not None and value.organization_id != org.id:
+            raise serializers.ValidationError(
+                "The specified stage does not belong to this organization.",
+                code="foreign_org",
+            )
+        return value
+
 
 class BulkMarkSerializer(serializers.Serializer):
     """Serializer for bulk mark as won/lost action"""

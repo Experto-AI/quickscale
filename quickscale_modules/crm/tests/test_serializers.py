@@ -888,3 +888,340 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         )
         assert not serializer.is_valid()
         assert "stage_id" in serializer.errors
+
+
+@pytest.mark.django_db
+class TestF118SerializerCreatePathRelatedFieldValidation:
+    """F11.8 — Prove serializer related-field validation rejects foreign-org IDs on create.
+
+    The serializer ``validate()`` methods on ``ContactDetailSerializer`` and
+    ``DealDetailSerializer`` already reject foreign-org related IDs on both
+    create and update paths.  These tests prove the create-path rejection
+    behaviour and solo-route parity (foreign-org IDs remain allowed on solo
+    routes where org context is absent).
+
+    Coverage matrix:
+    - ContactDetailSerializer rejects foreign-org company_id on create
+    - ContactDetailSerializer rejects foreign-org tag_ids on create
+    - DealDetailSerializer rejects foreign-org contact_id on create
+    - DealDetailSerializer rejects foreign-org stage_id on create
+    - DealDetailSerializer rejects foreign-org tag_ids on create
+    - Solo-route parity: foreign-org related IDs are allowed on create
+    """
+
+    def test_contact_create_rejects_foreign_org_company(
+        self, org_a, org_b, org_a_admin
+    ):
+        """ContactDetailSerializer rejects foreign-org company_id on create."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/contacts/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = ContactDetailSerializer(
+            data={
+                "first_name": "Org-A",
+                "last_name": "Contact",
+                "email": "orga-create@example.com",
+                "company_id": company_b.id,
+            },
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "company_id" in serializer.errors
+
+    def test_contact_create_rejects_foreign_org_tags(self, org_a, org_b, org_a_admin):
+        """ContactDetailSerializer rejects foreign-org tag_ids on create."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Tag
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/contacts/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = ContactDetailSerializer(
+            data={
+                "first_name": "Org-A",
+                "last_name": "Contact",
+                "email": "orga-tag-create@example.com",
+                "company_id": company_a.id,
+                "tag_ids": [tag_b.id],
+            },
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "tag_ids" in serializer.errors
+
+    def test_deal_create_rejects_foreign_org_contact(self, org_a, org_b, org_a_admin):
+        """DealDetailSerializer rejects foreign-org contact_id on create."""
+        from decimal import Decimal
+
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Contact, Stage
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-deal-create@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = DealDetailSerializer(
+            data={
+                "title": "Org-A Deal",
+                "contact_id": contact_b.id,
+                "amount": str(Decimal("1000.00")),
+                "stage_id": stage_a.id,
+            },
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "contact_id" in serializer.errors
+
+    def test_deal_create_rejects_foreign_org_stage(self, org_a, org_b, org_a_admin):
+        """DealDetailSerializer rejects foreign-org stage_id on create."""
+        from decimal import Decimal
+
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Contact, Stage
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-deal-stage-create@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = DealDetailSerializer(
+            data={
+                "title": "Org-A Deal",
+                "contact_id": contact_a.id,
+                "amount": str(Decimal("1000.00")),
+                "stage_id": stage_b.id,
+            },
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "stage_id" in serializer.errors
+
+    def test_deal_create_rejects_foreign_org_tags(self, org_a, org_b, org_a_admin):
+        """DealDetailSerializer rejects foreign-org tag_ids on create."""
+        from decimal import Decimal
+
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Contact, Stage, Tag
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-deal-tag-create@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        tag_b = Tag.objects.create(name="Org-B-Deal-Tag", organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = DealDetailSerializer(
+            data={
+                "title": "Org-A Deal",
+                "contact_id": contact_a.id,
+                "amount": str(Decimal("1000.00")),
+                "stage_id": stage_a.id,
+                "tag_ids": [tag_b.id],
+            },
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "tag_ids" in serializer.errors
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_allows_foreign_org_related_ids_on_create(
+        self, staff_user, org_a, org_b
+    ):
+        """Solo routes allow foreign-org related IDs on create (parity preserved)."""
+        from decimal import Decimal
+
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Company, Contact, Stage, Tag
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-solo@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+
+        factory = APIRequestFactory()
+
+        # Contact create with foreign-org company and tags on solo route
+        contact_request = factory.post("/crm/api/contacts/")
+        contact_request.user = staff_user
+        # No request.org on solo routes
+
+        contact_serializer = ContactDetailSerializer(
+            data={
+                "first_name": "Solo",
+                "last_name": "Contact",
+                "email": "solo-contact@example.com",
+                "company_id": company_b.id,
+                "tag_ids": [tag_b.id],
+            },
+            context={"request": contact_request},
+        )
+        assert contact_serializer.is_valid(), contact_serializer.errors
+
+        # Deal create with foreign-org contact, stage, and tags on solo route
+        deal_request = factory.post("/crm/api/deals/")
+        deal_request.user = staff_user
+
+        deal_serializer = DealDetailSerializer(
+            data={
+                "title": "Solo Deal",
+                "contact_id": contact_b.id,
+                "amount": str(Decimal("1000.00")),
+                "stage_id": stage_b.id,
+                "tag_ids": [tag_b.id],
+            },
+            context={"request": deal_request},
+        )
+        assert deal_serializer.is_valid(), deal_serializer.errors
+
+
+@pytest.mark.django_db
+class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
+    """F11.9 Phase 1 — Prove BulkUpdateStageSerializer rejects foreign-org stages.
+
+    These tests verify that the BulkUpdateStageSerializer validates stage_id
+    against the current organization on org-scoped SaaS routes, while solo
+    routes preserve legacy unscoped behavior.
+
+    Coverage matrix:
+    - Org-scoped route: foreign-org stage_id is rejected
+    - Org-scoped route: same-org stage_id is accepted
+    - Org-scoped route: NULL-org legacy stage_id is accepted
+    - Solo route: any stage_id is accepted (parity preserved)
+    """
+
+    def test_org_scoped_rejects_foreign_org_stage(self, org_a, org_b, org_a_admin):
+        """BulkUpdateStageSerializer rejects foreign-org stage_id on org-scoped route."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": stage_b.id},
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "stage_id" in serializer.errors
+
+    def test_org_scoped_accepts_same_org_stage(self, org_a, org_a_admin):
+        """BulkUpdateStageSerializer accepts same-org stage_id on org-scoped route."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": stage_a.id},
+            context={"request": request},
+        )
+        assert serializer.is_valid(), serializer.errors
+
+    def test_org_scoped_accepts_null_org_legacy_stage(self, org_a, org_a_admin):
+        """BulkUpdateStageSerializer accepts NULL-org legacy stage on org-scoped route."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        legacy_stage = Stage.objects.create(name="Legacy Stage", order=1)
+        assert legacy_stage.organization_id is None
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": legacy_stage.id},
+            context={"request": request},
+        )
+        assert serializer.is_valid(), serializer.errors
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_accepts_any_stage(self, staff_user, org_b):
+        """BulkUpdateStageSerializer accepts any stage_id on solo route (parity)."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post("/crm/api/deals/bulk-update-stage/")
+        request.user = staff_user
+        # No request.org on solo routes.
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": stage_b.id},
+            context={"request": request},
+        )
+        assert serializer.is_valid(), serializer.errors

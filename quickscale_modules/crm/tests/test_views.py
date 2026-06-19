@@ -2870,3 +2870,718 @@ class TestCRF115002DashboardIncludesLegacyNullOrgStages:
         assert "Legacy Pipeline" in content
         # The org-A deal should be counted (total_deals >= 1).
         assert "Org-A Legacy Deal" in content or "5000" in content
+
+
+@pytest.mark.django_db
+class TestF119Phase1BulkDealMutationOrgScoping:
+    """F11.9 Phase 1 — Prove org-scoped bulk deal mutation seams.
+
+    These tests verify that bulk deal actions (``bulk_update_stage``,
+    ``mark_won``, ``mark_lost``) on org-scoped SaaS routes cannot mutate
+    foreign-org deals.  Solo routes preserve legacy unscoped behavior.
+
+    Coverage matrix:
+    - Same-org success: bulk action updates only same-org deals
+    - Foreign-org denial: bulk action does not affect foreign-org deals
+    - Missing-org fail-closed: org-scoped route without org context returns 403
+    - Solo-route parity: bulk actions work as before on solo routes
+    - Foreign-org stage rejection: BulkUpdateStageSerializer rejects foreign-org stages
+    """
+
+    # -- Same-org success: bulk_update_stage ----------------------------------
+
+    def test_org_scoped_bulk_update_stage_updates_same_org_deals(
+        self, client, org_a, org_a_admin
+    ):
+        """bulk_update_stage on org-scoped route updates only same-org deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-bulk@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        target_stage = Stage.objects.create(
+            name="Org-A Target", order=2, organization=org_a
+        )
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/",
+            data={"deal_ids": [deal.id], "stage_id": target_stage.id},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage == target_stage
+
+    # -- Foreign-org denial: bulk_update_stage --------------------------------
+
+    def test_org_scoped_bulk_update_stage_does_not_affect_foreign_org_deals(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """bulk_update_stage on org-scoped route does not update foreign-org deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create org-B deal (foreign to org-A).
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-bulk@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        foreign_deal = Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("2000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+        original_stage = foreign_deal.stage
+
+        # Org-A admin tries to bulk-update the foreign deal via org-A route.
+        target_stage = Stage.objects.create(
+            name="Org-A Target", order=2, organization=org_a
+        )
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/",
+            data={"deal_ids": [foreign_deal.id], "stage_id": target_stage.id},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        # The update count should be 0 — foreign deal was not mutated.
+        assert response.data["updated"] == 0
+        foreign_deal.refresh_from_db()
+        assert foreign_deal.stage == original_stage
+
+    # -- Same-org success: mark_won -------------------------------------------
+
+    def test_org_scoped_mark_won_updates_same_org_deals(
+        self, client, org_a, org_a_admin
+    ):
+        """mark_won on org-scoped route updates only same-org deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-won@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_WON
+        assert deal.probability == 100
+
+    # -- Foreign-org denial: mark_won -----------------------------------------
+
+    def test_org_scoped_mark_won_does_not_affect_foreign_org_deals(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """mark_won on org-scoped route does not update foreign-org deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-won@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        foreign_deal = Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("2000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+        original_stage = foreign_deal.stage
+        original_probability = foreign_deal.probability
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
+            data={"deal_ids": [foreign_deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 0
+        foreign_deal.refresh_from_db()
+        assert foreign_deal.stage == original_stage
+        assert foreign_deal.probability == original_probability
+
+    # -- Same-org success: mark_lost ------------------------------------------
+
+    def test_org_scoped_mark_lost_updates_same_org_deals(
+        self, client, org_a, org_a_admin
+    ):
+        """mark_lost on org-scoped route updates only same-org deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-lost@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-lost/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_LOST
+        assert deal.probability == 0
+
+    # -- Foreign-org denial: mark_lost ----------------------------------------
+
+    def test_org_scoped_mark_lost_does_not_affect_foreign_org_deals(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """mark_lost on org-scoped route does not update foreign-org deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-lost@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        foreign_deal = Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("2000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+        original_stage = foreign_deal.stage
+        original_probability = foreign_deal.probability
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-lost/",
+            data={"deal_ids": [foreign_deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 0
+        foreign_deal.refresh_from_db()
+        assert foreign_deal.stage == original_stage
+        assert foreign_deal.probability == original_probability
+
+    # -- Missing-org fail-closed: bulk actions --------------------------------
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_bulk_update_stage_returns_400_without_org_context(
+        self, client, staff_user, stage
+    ):
+        """bulk_update_stage on org-scoped route without org context returns 400.
+
+        The BulkUpdateStageSerializer validates stage_id against org context
+        before the view runs, returning 400 (Bad Request) rather than 403.
+        """
+        from quickscale_modules_crm.models import Company, Contact, Deal
+
+        company = Company.objects.create(name="Corp")
+        contact = Contact.objects.create(
+            first_name="Contact",
+            last_name="Test",
+            email="test@example.com",
+            company=company,
+        )
+        deal = Deal.objects.create(
+            title="Deal",
+            contact=contact,
+            amount="1000.00",
+            stage=stage,
+        )
+
+        client.force_login(staff_user)
+        response = client.post(
+            "/orgs/nonexistent-org/crm/api/deals/bulk-update-stage/",
+            data={"deal_ids": [deal.id], "stage_id": stage.id},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_mark_won_returns_403_without_org_context(
+        self, client, staff_user, deal
+    ):
+        """mark_won on org-scoped route without org context returns 403."""
+        client.force_login(staff_user)
+        response = client.post(
+            "/orgs/nonexistent-org/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_mark_lost_returns_403_without_org_context(
+        self, client, staff_user, deal
+    ):
+        """mark_lost on org-scoped route without org context returns 403."""
+        client.force_login(staff_user)
+        response = client.post(
+            "/orgs/nonexistent-org/crm/api/deals/mark-lost/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    # -- Solo-route parity: bulk actions work as before -----------------------
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_bulk_update_stage_updates_all_deals(
+        self, client, staff_user, deal, closed_won_stage
+    ):
+        """Solo route bulk_update_stage updates deals regardless of org."""
+        client.force_login(staff_user)
+        response = client.post(
+            "/crm/api/deals/bulk-update-stage/",
+            data={"deal_ids": [deal.id], "stage_id": closed_won_stage.id},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage == closed_won_stage
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_mark_won_updates_all_deals(self, client, staff_user, deal):
+        """Solo route mark_won updates deals regardless of org."""
+        client.force_login(staff_user)
+        response = client.post(
+            "/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_WON
+        assert deal.probability == 100
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_mark_lost_updates_all_deals(self, client, staff_user, deal):
+        """Solo route mark_lost updates deals regardless of org."""
+        client.force_login(staff_user)
+        response = client.post(
+            "/crm/api/deals/mark-lost/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_LOST
+        assert deal.probability == 0
+
+    # -- Foreign-org stage rejection: BulkUpdateStageSerializer ---------------
+
+    def test_org_scoped_bulk_update_stage_rejects_foreign_org_stage(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """bulk_update_stage on org-scoped route rejects foreign-org stage_id."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-stage-reject@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+        # Foreign stage (org-B).
+        foreign_stage = Stage.objects.create(
+            name="Org-B Stage", order=2, organization=org_b
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/",
+            data={"deal_ids": [deal.id], "stage_id": foreign_stage.id},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "stage_id" in response.data
+        # Deal should not be updated.
+        deal.refresh_from_db()
+        assert deal.stage == stage_a
+
+    def test_org_scoped_bulk_update_stage_accepts_null_org_legacy_stage(
+        self, client, org_a, org_a_admin
+    ):
+        """bulk_update_stage on org-scoped route accepts NULL-org legacy stage."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-legacy-stage@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+        # Legacy NULL-org stage.
+        legacy_stage = Stage.objects.create(name="Legacy Stage", order=2)
+        assert legacy_stage.organization_id is None
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/",
+            data={"deal_ids": [deal.id], "stage_id": legacy_stage.id},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage == legacy_stage
+
+
+@pytest.mark.django_db
+class TestF119Phase2OrgScopedTerminalStageResolution:
+    """F11.9 Phase 2 — Prove org-scoped terminal-stage resolution for mark_won/mark_lost.
+
+    These tests verify that ``mark_won`` and ``mark_lost`` on org-scoped SaaS
+    routes use org-aware terminal-stage resolution:
+    - Same-org terminal stages are preferred
+    - Legacy NULL-org terminal stages are accepted for backfill compatibility
+    - Foreign-org terminal stages are never used (security boundary)
+    - When no valid terminal stage exists for the org, the action no-ops safely
+
+    Coverage matrix:
+    - Org-scoped mark_won accepts legacy NULL-org terminal stage
+    - Org-scoped mark_lost accepts legacy NULL-org terminal stage
+    - Org-scoped mark_won refuses foreign-org terminal stage (no-op)
+    - Org-scoped mark_lost refuses foreign-org terminal stage (no-op)
+    """
+
+    # -- Legacy NULL-org terminal stage accepted on org-scoped routes ---------
+
+    def test_org_scoped_mark_won_accepts_legacy_null_org_terminal_stage(
+        self, client, org_a, org_a_admin
+    ):
+        """mark_won on org-scoped route accepts legacy NULL-org terminal stage."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Clear any existing terminal_semantic stages from prior tests.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
+        # Create a legacy NULL-org terminal won stage (pre-backfill).
+        legacy_won_stage = Stage.objects.create(
+            name="Legacy Closed-Won",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+        )
+        assert legacy_won_stage.organization_id is None
+
+        # Create an org-A deal on an org-A stage.
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-legacy-won@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        # The deal should be attached to the legacy NULL-org terminal stage.
+        assert deal.stage == legacy_won_stage
+        assert deal.probability == 100
+
+    def test_org_scoped_mark_lost_accepts_legacy_null_org_terminal_stage(
+        self, client, org_a, org_a_admin
+    ):
+        """mark_lost on org-scoped route accepts legacy NULL-org terminal stage."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Clear any existing terminal_semantic stages from prior tests.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
+        # Create a legacy NULL-org terminal lost stage (pre-backfill).
+        legacy_lost_stage = Stage.objects.create(
+            name="Legacy Closed-Lost",
+            order=4,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
+        )
+        assert legacy_lost_stage.organization_id is None
+
+        # Create an org-A deal on an org-A stage.
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-legacy-lost@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-lost/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        # The deal should be attached to the legacy NULL-org terminal stage.
+        assert deal.stage == legacy_lost_stage
+        assert deal.probability == 0
+
+    # -- Foreign-org terminal stage refused on org-scoped routes --------------
+
+    def test_org_scoped_mark_won_refuses_foreign_org_terminal_stage(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """mark_won on org-scoped route does not attach deals to foreign-org terminal stage.
+
+        When the only terminal_semantic='won' stage belongs to another org,
+        org-scoped mark_won must not use it.  The action returns updated=0
+        (no-op) rather than attaching org-A's deal to org-B's stage.
+        """
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Clear any existing terminal_semantic stages from prior tests.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
+        # Create a terminal won stage owned by org-B (foreign to org-A).
+        foreign_won_stage = Stage.objects.create(
+            name="Org-B Closed-Won",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_b,
+        )
+        assert foreign_won_stage.organization_id == org_b.id
+
+        # Create an org-A deal on an org-A stage.
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-foreign-won@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+        original_stage = deal.stage
+        original_probability = deal.probability
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        # The update count should be 0 — foreign terminal stage was not used.
+        assert response.data["updated"] == 0
+        deal.refresh_from_db()
+        # The deal should NOT be attached to the foreign-org terminal stage.
+        assert deal.stage == original_stage
+        assert deal.probability == original_probability
+        assert deal.stage != foreign_won_stage
+
+    def test_org_scoped_mark_lost_refuses_foreign_org_terminal_stage(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """mark_lost on org-scoped route does not attach deals to foreign-org terminal stage.
+
+        When the only terminal_semantic='lost' stage belongs to another org,
+        org-scoped mark_lost must not use it.  The action returns updated=0
+        (no-op) rather than attaching org-A's deal to org-B's stage.
+        """
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Clear any existing terminal_semantic stages from prior tests.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
+        # Create a terminal lost stage owned by org-B (foreign to org-A).
+        foreign_lost_stage = Stage.objects.create(
+            name="Org-B Closed-Lost",
+            order=4,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
+            organization=org_b,
+        )
+        assert foreign_lost_stage.organization_id == org_b.id
+
+        # Create an org-A deal on an org-A stage.
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-foreign-lost@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+        original_stage = deal.stage
+        original_probability = deal.probability
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-lost/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        # The update count should be 0 — foreign terminal stage was not used.
+        assert response.data["updated"] == 0
+        deal.refresh_from_db()
+        # The deal should NOT be attached to the foreign-org terminal stage.
+        assert deal.stage == original_stage
+        assert deal.probability == original_probability
+        assert deal.stage != foreign_lost_stage
