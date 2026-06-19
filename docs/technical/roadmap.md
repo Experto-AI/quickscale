@@ -67,9 +67,9 @@ git merge --no-ff wt-track{N}
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
-| M5 | 3 | F2.5–F2.9b | 🟢 | **All phases ✅; ready for mergeback (unblocks M8).** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
+| M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
+| M8 | 3 | F12.1–F12.3 | 🟡 | M5 merged ✅; **Next:** F12.1. `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 + M8 both merged; DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -92,7 +92,7 @@ F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Pending phases:** none — all M5 phases complete. Ready for mergeback to v87; closeout unblocks M8 / F12.
+**Pending phases:** none — all M5 phases complete. **Merged to v87** (eb63c7b). M8 / F12 is now unblocked.
 
 **Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅), CR-M5-P3-004 (F2.7 ✅), CR-M5-P1-001 (F2.8 hardening ✅), CR-M5-P1-002 (F2.8 wrapper smoke ✅), F2.9a release-authority publish gate ✅, F2.9b operator diagnostics ✅.
 
@@ -116,7 +116,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
-| 2 | F2 — Project state + module provenance | M5 | 🟢 M5 complete; ready for mergeback |
+| 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
 | 4 | F12 — Recoverable `apply` (saga) | M8 | ⬜ Waits for M5 |
 | 5 | F5 — DR engine split | M10 | ⬜ Waits for M6 + M8 |
@@ -247,7 +247,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 2 — Consolidate project state and make module provenance actionable
 
-**Status:** All M5 phases complete (F2.1–F2.4 in CHANGELOG; F2.5–F2.7 ✅ provenance persistence; F2.8 ✅ split-publish wrapper adoption; F2.9a ✅ tagged/versioned-source publish gate; F2.9b ✅ operator diagnostics for split publish mismatches). M5 is ready for mergeback to v87, which unblocks M8 / F12.
+**Status:** All M5 phases complete and merged to v87 (eb63c7b). F2.1–F2.4 in CHANGELOG; F2.5–F2.7 ✅ provenance persistence; F2.8 ✅ split-publish wrapper adoption; F2.9a ✅ tagged/versioned-source publish gate; F2.9b ✅ operator diagnostics for split publish mismatches. M8 / F12 is now unblocked.
 
 ---
 
