@@ -98,7 +98,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 in-flight |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟡 M5 in-flight |
 | 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
 | 4 | F12 — Recoverable `apply` (saga) | M8 | ⬜ Waits for M5 |
@@ -149,10 +149,12 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F11.6 — Existing-data backfill** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** M1 merged. Must complete before F11.10 (NOT NULL).
+**Dependencies:** M1 merged ✅. Must complete before F11.10 (NOT NULL). | **Status:** ✅ Complete.
 
-- [ ] Ship an idempotent CRM backfill command that assigns legacy CRM rows to one operator-selected org or aborts without partial writes.
-- [ ] Document and test rollout sequence: backup → deploy nullable slice → run backfill → verify counts → continue or restore.
+- [x] Ship an idempotent CRM backfill command that assigns legacy CRM rows to one operator-selected org or aborts without partial writes.
+- [x] Document and test rollout sequence: backup → deploy nullable slice → run backfill → verify counts → continue or restore.
+
+**Findings:** `backfill_crm_org_ownership` management command ships with explicit `--org-slug` selector, NULL-org-only updates, conflict detection that aborts before write on mixed ownership, `--dry-run` support, `transaction.atomic()` writes, and per-model updated/remaining counts. 8 focused tests prove required-arg validation, nonexistent-org rejection, full backfill, idempotency, conflict abort, same-org tolerance, dry-run safety, and zero-row grace. CRM module validation green (lint, typecheck, 252 unit tests).
 
 **Phase F11.7 — Tenant-local CRM bootstrap** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
