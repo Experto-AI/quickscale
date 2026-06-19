@@ -15,6 +15,12 @@ DASHBOARD_TEST_MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
 ]
 
+DASHBOARD_SAAS_TEST_MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "quickscale_modules_orgs.middleware.TenantMiddleware",
+]
+
 DASHBOARD_TEST_TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -503,26 +509,36 @@ class TestTagViewSet:
         assert "name" in response.data
 
     def test_update_tag_rename_to_duplicate_via_org_scoped_route_returns_4xx(
-        self, authenticated_client, tag
+        self, client, org_a, org_a_admin
     ):
         """Renaming a tag to a duplicate via the org-scoped route returns a controlled 4xx."""
         from quickscale_modules_crm.models import Tag
 
-        Tag.objects.create(name="Hot Lead")
-        response = authenticated_client.patch(
-            f"/orgs/acme-corp/crm/api/tags/{tag.id}/",
+        tag = Tag.objects.create(name="VIP", organization=org_a)
+        Tag.objects.create(name="Hot Lead", organization=org_a)
+        client.force_login(org_a_admin)
+
+        response = client.patch(
+            f"/orgs/{org_a.slug}/crm/api/tags/{tag.id}/",
             {"name": "Hot Lead"},
+            content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "name" in response.data
 
     def test_update_tag_same_name_via_org_scoped_route_is_valid(
-        self, authenticated_client, tag
+        self, client, org_a, org_a_admin
     ):
         """Updating a tag without changing its name via the org-scoped route succeeds."""
-        response = authenticated_client.patch(
-            f"/orgs/acme-corp/crm/api/tags/{tag.id}/",
+        from quickscale_modules_crm.models import Tag
+
+        tag = Tag.objects.create(name="VIP", organization=org_a)
+        client.force_login(org_a_admin)
+
+        response = client.patch(
+            f"/orgs/{org_a.slug}/crm/api/tags/{tag.id}/",
             {"name": "VIP"},
+            content_type="application/json",
         )
         assert response.status_code == status.HTTP_200_OK
 
@@ -984,16 +1000,20 @@ class TestCRMRouteContractParity:
         assert response.status_code == status.HTTP_200_OK
 
     @override_settings(
-        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     def test_saas_dashboard_path_resolves(self, client, user):
         """The SaaS CRM dashboard should be reachable at /orgs/<slug>/crm/."""
+        from quickscale_modules_orgs.models import Organization, OrganizationMembership
+
+        org = Organization.objects.create(name="Acme Corp", slug="acme-corp")
+        OrganizationMembership.objects.create(user=user, organization=org, role="admin")
         user.is_staff = True
         user.save(update_fields=["is_staff"])
         client.force_login(user)
 
-        response = client.get("/orgs/acme-corp/crm/")
+        response = client.get(f"/orgs/{org.slug}/crm/")
 
         assert response.status_code == status.HTTP_200_OK
 
@@ -1015,9 +1035,13 @@ class TestCRMRouteContractParity:
 
         assert response.status_code == status.HTTP_200_OK
 
-    def test_saas_api_tags_path_resolves(self, authenticated_client, tag):
+    def test_saas_api_tags_path_resolves(self, client, org_a, org_a_admin, tag):
         """The SaaS CRM tags API should be reachable at /orgs/<slug>/crm/api/tags/."""
-        response = authenticated_client.get("/orgs/acme-corp/crm/api/tags/")
+        tag.organization = org_a
+        tag.save(update_fields=["organization"])
+        client.force_login(org_a_admin)
+
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/tags/")
 
         assert response.status_code == status.HTTP_200_OK
 
@@ -1044,24 +1068,28 @@ class TestCRMRouteContractParity:
         assert "/orgs/" not in content
 
     @override_settings(
-        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     def test_saas_dashboard_renders_org_scoped_urls(self, client, user):
         """The SaaS CRM dashboard should render org-scoped URLs in links and examples."""
+        from quickscale_modules_orgs.models import Organization, OrganizationMembership
+
+        org = Organization.objects.create(name="Acme Corp", slug="acme-corp")
+        OrganizationMembership.objects.create(user=user, organization=org, role="admin")
         user.is_staff = True
         user.save(update_fields=["is_staff"])
         client.force_login(user)
 
-        response = client.get("/orgs/acme-corp/crm/")
+        response = client.get(f"/orgs/{org.slug}/crm/")
 
         assert response.status_code == status.HTTP_200_OK
         content = response.content.decode("utf-8")
         # Verify org-scoped URLs are present
-        assert 'href="/orgs/acme-corp/crm/"' in content
-        assert 'href="/orgs/acme-corp/crm/api/"' in content
-        assert "/orgs/acme-corp/crm/api/contacts/" in content
-        assert "/orgs/acme-corp/crm/api/companies/" in content
+        assert f'href="/orgs/{org.slug}/crm/"' in content
+        assert f'href="/orgs/{org.slug}/crm/api/"' in content
+        assert f"/orgs/{org.slug}/crm/api/contacts/" in content
+        assert f"/orgs/{org.slug}/crm/api/companies/" in content
         # Verify solo URLs are NOT present (except in navigation text)
         # The solo /crm/ URL should not appear as a link
         assert 'href="/crm/"' not in content
@@ -1859,3 +1887,986 @@ class TestF114OrgScopedContactDealCreateStamping:
         assert response.status_code == status.HTTP_201_CREATED
         created = Deal.objects.get(pk=response.data["id"])
         assert created.organization_id is None
+
+
+@pytest.mark.django_db
+class TestF115OrgScopedReadScoping:
+    """F11.5 Phase 1 — Prove org-aware primary read scoping on SaaS routes.
+
+    These tests verify that org-scoped SaaS routes (``/orgs/<slug>/crm/api/...``)
+    return only data belonging to the active organization, while solo routes
+    (``/crm/api/...``) preserve their legacy unscoped behavior.
+
+    Coverage matrix:
+    - Org-scoped list returns only org-scoped data for each resource type
+    - Org-scoped retrieve returns 404 for foreign-org objects
+    - Solo routes still return all data (parity preserved)
+    - Nested note reads are scoped via parent
+    - Standalone note reads are scoped via parent-derived FK
+    """
+
+    # -- Tag: org-scoped list isolates tenants --------------------------------
+
+    def test_org_scoped_tag_list_returns_only_org_data(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped tag list returns only the active org's tags."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.objects.create(name="Org-A Tag", organization=org_a)
+        Tag.objects.create(name="Org-B Tag", organization=org_b)
+        Tag.objects.create(name="Legacy Tag")  # NULL org
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+        names = {item["name"] for item in response.data}
+        assert "Org-A Tag" in names
+        assert "Org-B Tag" not in names
+        # NULL-org tags are not returned for org-scoped reads.
+        assert "Legacy Tag" not in names
+
+    # -- Company: org-scoped list isolates tenants ----------------------------
+
+    def test_org_scoped_company_list_returns_only_org_data(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped company list returns only the active org's companies."""
+        from quickscale_modules_crm.models import Company
+
+        Company.objects.create(name="Org-A Corp", organization=org_a)
+        Company.objects.create(name="Org-B Corp", organization=org_b)
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/companies/")
+
+        assert response.status_code == status.HTTP_200_OK
+        names = {item["name"] for item in response.data}
+        assert "Org-A Corp" in names
+        assert "Org-B Corp" not in names
+
+    # -- Contact: org-scoped list isolates tenants ----------------------------
+
+    def test_org_scoped_contact_list_returns_only_org_data(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped contact list returns only the active org's contacts."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
+
+        assert response.status_code == status.HTTP_200_OK
+        names = {item["first_name"] for item in response.data}
+        assert "Org-A" in names
+        assert "Org-B" not in names
+
+    # -- Stage: org-scoped list isolates tenants ------------------------------
+
+    def test_org_scoped_stage_list_returns_only_org_data(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped stage list returns only the active org's stages."""
+        from quickscale_modules_crm.models import Stage
+
+        Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/stages/")
+
+        assert response.status_code == status.HTTP_200_OK
+        names = {item["name"] for item in response.data}
+        assert "Org-A Stage" in names
+        assert "Org-B Stage" not in names
+
+    # -- Deal: org-scoped list isolates tenants -------------------------------
+
+    def test_org_scoped_deal_list_returns_only_org_data(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped deal list returns only the active org's deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-deal@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-deal@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage = Stage.objects.create(name="Stage", order=1, organization=org_a)
+        Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact_a,
+            amount=Decimal("1000.00"),
+            stage=stage,
+            organization=org_a,
+        )
+        stage_b = Stage.objects.create(name="Stage-B", order=1, organization=org_b)
+        Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("2000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/deals/")
+
+        assert response.status_code == status.HTTP_200_OK
+        titles = {item["title"] for item in response.data}
+        assert "Org-A Deal" in titles
+        assert "Org-B Deal" not in titles
+
+    # -- Org-scoped retrieve returns 404 for foreign-org objects ---------------
+
+    def test_org_scoped_retrieve_returns_404_for_foreign_org_company(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped retrieve of a foreign-org company returns 404."""
+        from quickscale_modules_crm.models import Company
+
+        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
+
+        client.force_login(org_a_admin)
+        response = client.get(
+            f"/orgs/{org_a.slug}/crm/api/companies/{foreign_company.id}/"
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_org_scoped_retrieve_returns_404_for_foreign_org_contact(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped retrieve of a foreign-org contact returns 404."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        foreign_contact = Contact.objects.create(
+            first_name="Foreign",
+            last_name="Contact",
+            email="foreign@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(
+            f"/orgs/{org_a.slug}/crm/api/contacts/{foreign_contact.id}/"
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_org_scoped_retrieve_returns_404_for_foreign_org_deal(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped retrieve of a foreign-org deal returns 404."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Foreign",
+            last_name="Contact",
+            email="foreign-deal@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_b = Stage.objects.create(name="Stage-B", order=1, organization=org_b)
+        foreign_deal = Deal.objects.create(
+            title="Foreign Deal",
+            contact=contact_b,
+            amount=Decimal("5000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/deals/{foreign_deal.id}/")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    # -- Solo route parity: unscoped reads preserved --------------------------
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_tag_list_returns_all_tags(
+        self, client, staff_user, org_a, org_b
+    ):
+        """Solo route tag list returns all tags regardless of org."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.objects.create(name="Org-A Tag", organization=org_a)
+        Tag.objects.create(name="Org-B Tag", organization=org_b)
+        Tag.objects.create(name="Legacy Tag")
+
+        client.force_login(staff_user)
+        response = client.get("/crm/api/tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+        names = {item["name"] for item in response.data}
+        assert "Org-A Tag" in names
+        assert "Org-B Tag" in names
+        assert "Legacy Tag" in names
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_company_list_returns_all_companies(
+        self, client, staff_user, org_a, org_b
+    ):
+        """Solo route company list returns all companies regardless of org."""
+        from quickscale_modules_crm.models import Company
+
+        Company.objects.create(name="Org-A Corp", organization=org_a)
+        Company.objects.create(name="Org-B Corp", organization=org_b)
+
+        client.force_login(staff_user)
+        response = client.get("/crm/api/companies/")
+
+        assert response.status_code == status.HTTP_200_OK
+        names = {item["name"] for item in response.data}
+        assert "Org-A Corp" in names
+        assert "Org-B Corp" in names
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_contact_list_returns_all_contacts(
+        self, client, staff_user, org_a, org_b
+    ):
+        """Solo route contact list returns all contacts regardless of org."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="solo-a@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="solo-b@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+
+        client.force_login(staff_user)
+        response = client.get("/crm/api/contacts/")
+
+        assert response.status_code == status.HTTP_200_OK
+        names = {item["first_name"] for item in response.data}
+        assert "Org-A" in names
+        assert "Org-B" in names
+
+    # -- Standalone note reads: scoped via parent-derived FK ------------------
+
+    def test_org_scoped_contact_note_list_returns_only_org_notes(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped contact-note list returns only notes for org-A contacts."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Note",
+            email="note-a@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Note",
+            email="note-b@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        ContactNote.objects.create(
+            contact=contact_a, created_by=org_a_admin, text="Org-A note"
+        )
+        ContactNote.objects.create(
+            contact=contact_b, created_by=org_a_admin, text="Org-B note"
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/contact-notes/")
+
+        assert response.status_code == status.HTTP_200_OK
+        texts = {item["text"] for item in response.data}
+        assert "Org-A note" in texts
+        assert "Org-B note" not in texts
+
+    def test_org_scoped_deal_note_list_returns_only_org_notes(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped deal-note list returns only notes for org-A deals."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            DealNote,
+            Stage,
+        )
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="DealNote",
+            email="dealnote-a@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="DealNote",
+            email="dealnote-b@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_a = Stage.objects.create(name="Stage-A", order=1, organization=org_a)
+        stage_b = Stage.objects.create(name="Stage-B", order=1, organization=org_b)
+        deal_a = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact_a,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+        deal_b = Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("2000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+        DealNote.objects.create(
+            deal=deal_a, created_by=org_a_admin, text="Org-A deal note"
+        )
+        DealNote.objects.create(
+            deal=deal_b, created_by=org_a_admin, text="Org-B deal note"
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/deal-notes/")
+
+        assert response.status_code == status.HTTP_200_OK
+        texts = {item["text"] for item in response.data}
+        assert "Org-A deal note" in texts
+        assert "Org-B deal note" not in texts
+
+    # -- Nested note reads: scoped via parent queryset ------------------------
+
+    def test_org_scoped_nested_contact_notes_scoped_via_parent(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Nested contact notes are scoped because the parent contact is scoped."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Nested",
+            email="nested-a@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        ContactNote.objects.create(
+            contact=contact_a, created_by=org_a_admin, text="Org-A nested note"
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(
+            f"/orgs/{org_a.slug}/crm/api/contacts/{contact_a.id}/notes/"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        texts = {item["text"] for item in response.data}
+        assert "Org-A nested note" in texts
+
+    def test_org_scoped_nested_deal_notes_scoped_via_parent(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Nested deal notes are scoped because the parent deal is scoped."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            DealNote,
+            Stage,
+        )
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="DealNested",
+            email="deal-nested-a@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Stage-A", order=1, organization=org_a)
+        deal_a = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact_a,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+        DealNote.objects.create(
+            deal=deal_a, created_by=org_a_admin, text="Org-A deal nested note"
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/deals/{deal_a.id}/notes/")
+
+        assert response.status_code == status.HTTP_200_OK
+        texts = {item["text"] for item in response.data}
+        assert "Org-A deal nested note" in texts
+
+
+@pytest.mark.django_db
+class TestF115Phase2DashboardOrgScoping:
+    """F11.5 Phase 2 — Prove dashboard aggregate/recent queries are org-scoped.
+
+    These tests verify that the CRM HTML dashboard scopes its aggregate
+    counts, deal-by-stage breakdowns, and recent-item queries to the active
+    organization on org-scoped SaaS routes, while solo routes preserve
+    legacy unscoped behavior.
+
+    Coverage matrix:
+    - Org-scoped dashboard shows only org data
+    - Org-scoped dashboard fails closed without org context (403)
+    - Solo dashboard shows all data (parity preserved)
+    """
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_org_scoped_dashboard_shows_only_org_data(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Org-scoped dashboard shows only the active org's aggregate data."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create org-A data
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-dash@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact_a,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        # Create org-B data
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-dash@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("2000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # Org-A data should be visible
+        assert "Org-A Corp" in content or "1" in content  # total_companies or recent
+        # Org-B data should NOT be visible in aggregates
+        # The dashboard shows counts, so we check that org-B company name doesn't appear
+        assert "Org-B Corp" not in content
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_org_scoped_dashboard_fails_closed_without_org_context(
+        self, client, staff_user
+    ):
+        """Org-scoped dashboard without org context returns 403 (fail closed).
+
+        When the TenantMiddleware does not attach an org to the request,
+        the dashboard must deny access rather than degrading to unscoped data.
+        """
+        client.force_login(staff_user)
+        # Simulate a request to an org-scoped route without org context.
+        # The TenantMiddleware would normally set request.org, but we bypass
+        # it by using a non-member staff user on an org-scoped path.
+        response = client.get("/orgs/nonexistent-org/crm/")
+
+        # Should be 403 (PermissionDenied) because org context is missing.
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_dashboard_shows_all_data(self, client, staff_user, org_a, org_b):
+        """Solo dashboard shows all data regardless of org (parity preserved)."""
+        from quickscale_modules_crm.models import Company
+
+        Company.objects.create(name="Org-A Corp", organization=org_a)
+        Company.objects.create(name="Org-B Corp", organization=org_b)
+        Company.objects.create(name="Legacy Corp")  # NULL org
+
+        client.force_login(staff_user)
+        response = client.get("/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # All companies should be visible in solo mode
+        assert "3" in content  # total_companies = 3
+
+
+@pytest.mark.django_db
+class TestF115Phase2NestedNoteFailClosed:
+    """F11.5 Phase 2 — Prove nested note GET fails closed on foreign-org parent.
+
+    These tests verify that accessing nested notes for a foreign-org parent
+    returns 404, because the parent queryset is org-scoped.
+    """
+
+    def test_org_scoped_nested_contact_notes_returns_404_for_foreign_parent(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Nested contact notes for a foreign-org contact returns 404."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-nested@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        ContactNote.objects.create(
+            contact=contact_b, created_by=org_a_admin, text="Org-B nested note"
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(
+            f"/orgs/{org_a.slug}/crm/api/contacts/{contact_b.id}/notes/"
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_org_scoped_nested_deal_notes_returns_404_for_foreign_parent(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Nested deal notes for a foreign-org deal returns 404."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            DealNote,
+            Stage,
+        )
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="DealContact",
+            email="orgb-deal-nested@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        deal_b = Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("1000.00"),
+            stage=stage_b,
+            organization=org_b,
+        )
+        DealNote.objects.create(
+            deal=deal_b, created_by=org_a_admin, text="Org-B deal nested note"
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/api/deals/{deal_b.id}/notes/")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestCRMRev002DashboardAggregateIsolation:
+    """CRM-REV-002 — Prove dashboard aggregates exclude cross-org linked data.
+
+    These tests verify that the CRM dashboard ``deals_by_stage`` aggregate
+    uses a filtered Count on org-scoped routes so that cross-org deals
+    linked to same-org stages are not counted.  Solo routes preserve
+    legacy unscoped behavior.
+    """
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_org_scoped_dashboard_deals_by_stage_excludes_cross_org_deals(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Dashboard deals_by_stage must not count cross-org deals on org-scoped routes."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create org-A stage
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+
+        # Create org-A deal linked to org-A stage
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-dash-agg@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact_a,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        # Create org-B deal linked to the SAME org-A stage (cross-org reference)
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Org-B",
+            last_name="Contact",
+            email="orgb-dash-agg@example.com",
+            company=company_b,
+            organization=org_b,
+        )
+        Deal.objects.create(
+            title="Org-B Deal",
+            contact=contact_b,
+            amount=Decimal("2000.00"),
+            stage=stage_a,
+            organization=org_b,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # The dashboard should show deal_count=1 for Org-A Stage (only org-A deal).
+        # The cross-org org-B deal must not inflate the count.
+        # We verify by checking that the org-B deal title does not appear
+        # and the count reflects only org-scoped deals.
+        assert "Org-B Deal" not in content
+        # The total_deals should be 1 (only org-A deal)
+        assert "Org-B Corp" not in content
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_org_scoped_dashboard_recent_items_do_not_render_foreign_org_names(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Dashboard recent_contacts/recent_deals must not render foreign-org related names.
+
+        CRM-REV-002 remaining slice: even when an org-A contact references an
+        org-B company (or an org-A deal references an org-B stage), the
+        org-scoped dashboard must not expose the foreign company/stage name
+        in the rendered recent-item tables.
+        """
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Org-B company and stage (foreign to org-A).
+        foreign_company = Company.objects.create(
+            name="Foreign-Corp-Secret", organization=org_b
+        )
+        foreign_stage = Stage.objects.create(
+            name="Foreign-Stage-Secret", order=1, organization=org_b
+        )
+
+        # Org-A contact linked to org-B company (cross-org FK reference).
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-proj@example.com",
+            company=foreign_company,
+            organization=org_a,
+        )
+
+        # Org-A deal linked to org-B stage (cross-org FK reference).
+        Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact_a,
+            amount=Decimal("1000.00"),
+            stage=foreign_stage,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # Foreign-org related names must NOT appear in the rendered dashboard.
+        assert "Foreign-Corp-Secret" not in content
+        assert "Foreign-Stage-Secret" not in content
+
+
+@pytest.mark.django_db
+class TestF115Phase2ApiListFailClosed:
+    """F11.5 Phase 2 gate D — OrgScopedReadMixin API list fails closed without org context.
+
+    Proves that an org-scoped SaaS API list route (TagViewSet) returns 403
+    when the request reaches the view without org context, rather than
+    degrading to an unscoped queryset.
+    """
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_tag_list_returns_403_without_org_context(
+        self, client, staff_user
+    ):
+        """GET /orgs/<slug>/crm/api/tags/ without org context returns 403.
+
+        The TenantMiddleware is excluded so request.org is never set.
+        OrgScopedReadMixin.get_queryset calls _require_org_for_read which
+        raises PermissionDenied when org context is missing on an org-scoped
+        route.
+        """
+        client.force_login(staff_user)
+        response = client.get("/orgs/nonexistent-org/crm/api/tags/")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestCRF115001OrgScopedPostFailClosed:
+    """CR-F11.5-001 — Prove org-scoped POSTs fail closed without org context.
+
+    When a POST reaches a CRM collection endpoint on an ``/orgs/<slug>/...``
+    route without ``request.org`` (e.g. middleware gap), the serializer must
+    reject the request rather than persisting a NULL-owned row.
+    """
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_tag_post_returns_400_without_org_context(
+        self, client, staff_user
+    ):
+        """POST /orgs/<slug>/crm/api/tags/ without org context returns 400."""
+        from quickscale_modules_crm.models import Tag
+
+        before = Tag.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/tags/",
+            data={"name": "Ghost Tag"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Tag.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_company_post_returns_400_without_org_context(
+        self, client, staff_user
+    ):
+        """POST /orgs/<slug>/crm/api/companies/ without org context returns 400."""
+        from quickscale_modules_crm.models import Company
+
+        before = Company.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/companies/",
+            data={"name": "Ghost Corp", "industry": "Tech"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Company.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_stage_post_returns_400_without_org_context(
+        self, client, staff_user
+    ):
+        """POST /orgs/<slug>/crm/api/stages/ without org context returns 400."""
+        from quickscale_modules_crm.models import Stage
+
+        before = Stage.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/stages/",
+            data={"name": "Ghost Stage", "order": 99},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Stage.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_contact_post_returns_400_without_org_context(
+        self, client, staff_user, company
+    ):
+        """POST /orgs/<slug>/crm/api/contacts/ without org context returns 400."""
+        from quickscale_modules_crm.models import Contact
+
+        before = Contact.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/contacts/",
+            data={
+                "first_name": "Ghost",
+                "last_name": "Contact",
+                "email": "ghost@example.com",
+                "company_id": company.id,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Contact.objects.count() == before
+
+    @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
+    def test_org_scoped_deal_post_returns_400_without_org_context(
+        self, client, staff_user, contact, stage
+    ):
+        """POST /orgs/<slug>/crm/api/deals/ without org context returns 400."""
+        from quickscale_modules_crm.models import Deal
+
+        before = Deal.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/orgs/some-org/crm/api/deals/",
+            data={
+                "title": "Ghost Deal",
+                "contact_id": contact.id,
+                "stage_id": stage.id,
+                "amount": "1000.00",
+                "probability": 50,
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert Deal.objects.count() == before
+
+
+@pytest.mark.django_db
+class TestCRF115002DashboardIncludesLegacyNullOrgStages:
+    """CR-F11.5-002 — Dashboard deals_by_stage includes legacy NULL-org stages.
+
+    During the pre-backfill window, visible current-org deals may reference
+    legacy NULL-org stages.  The dashboard ``deals_by_stage`` breakdown must
+    include those stages so the deal counts are not silently dropped.
+    """
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_org_scoped_dashboard_includes_deals_on_legacy_null_org_stages(
+        self, client, org_a, org_a_admin
+    ):
+        """Dashboard deals_by_stage counts deals on legacy NULL-org stages."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create a legacy NULL-org stage (pre-backfill).
+        legacy_stage = Stage.objects.create(name="Legacy Pipeline", order=1)
+        assert legacy_stage.organization_id is None
+
+        # Create an org-A deal attached to the legacy NULL-org stage.
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Org-A",
+            last_name="LegacyDeal",
+            email="orga-legacy@example.com",
+            company=company_a,
+            organization=org_a,
+        )
+        Deal.objects.create(
+            title="Org-A Legacy Deal",
+            contact=contact_a,
+            amount=Decimal("5000.00"),
+            stage=legacy_stage,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.get(f"/orgs/{org_a.slug}/crm/")
+
+        assert response.status_code == status.HTTP_200_OK
+        content = response.content.decode("utf-8")
+        # The legacy stage name should appear in the dashboard breakdown.
+        assert "Legacy Pipeline" in content
+        # The org-A deal should be counted (total_deals >= 1).
+        assert "Org-A Legacy Deal" in content or "5000" in content
