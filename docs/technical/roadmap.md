@@ -54,7 +54,7 @@ git merge --no-ff wt-track{N}
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟡 | **Next:** F11.5 (CRM read-path isolation). F11.2 ✅, F11.3 ✅, F11.4 ✅ complete. Pending F11.5 → M1 merge. |
 | M3 | 1 | F11.6–F11.10 | ⬜ | M1 merged; backfill (F11.6) + bootstrap (F11.7) green; NOT NULL enforced; xfail removed |
-| M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.7. F2.5 ✅ F2.6 ✅ (CR-M5-P3-003 resolved). Blocks F2.9. |
+| M5 | 3 | F2.5–F2.9 | 🟡 | **Next:** F2.8. F2.5 ✅ F2.6 ✅ F2.7 ✅ (CR-M5-P3-004 resolved). Blocks F2.9. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
@@ -80,13 +80,13 @@ F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** 3 | **Worktree:** `quickscale-wt-track3` (branch `wt-track3-f2-3b` for M5)
 
-**Pending phases:** F2.7 → F2.8 → F2.9
+**Pending phases:** F2.8 → F2.9
 
-**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅).
+**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅), CR-M5-P3-004 (F2.7 ✅).
 
 **Next handoff decisions:**
-- F2.7 is now the next actionable phase (caller parity across provenance paths).
-- F2.8 is independent of F2.5–F2.7; can parallelize on a separate handoff branch or run serially after F2.7.
+- F2.8 is now the next actionable phase (split-publish wrapper adoption).
+- F2.8 is independent of F2.5–F2.7; can parallelize on a separate handoff branch or run serially.
 - F2.9 is the M5 closeout: blocked on F2.8 (wrapper adoption). F2.5 ✅.
 
 ---
@@ -242,10 +242,12 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F2.7 — Caller parity across provenance paths** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Dependencies:** F2.6 ✅ | **Status:** ⏳ Next actionable — resolves CR-M5-P3-004.
+**Dependencies:** F2.6 ✅ | **Status:** ✅ Complete — resolves CR-M5-P3-004.
 
-- [ ] Establish caller parity across update/apply/embed/no-op provenance paths.
-- [ ] Add caller-parity tests proving consistent behavior across all entry points.
+- [x] Establish caller parity across update/apply/embed/no-op provenance paths.
+- [x] Add caller-parity tests proving consistent behavior across all entry points.
+
+**Findings:** All three convergent provenance paths (apply, update, no-op repair) follow the same resolution and persistence pattern: resolve source_ref exactly once per module and persist the full provenance triple (version, commit_sha, embedded_at). Apply and update use the resolved SHA for both the git subtree operation and state persistence. No-op repair resolves once and backfills authoritative state but performs no git operation. Standalone embed intentionally diverges (does not resolve source_ref; uses tracking branch directly). Caller-parity tests prove structural equivalence across all convergent paths and document the intentional standalone-embed divergence. Validation: `make lint -- --cli` green; targeted provenance-path pytest suite 98 passed, 196 deselected, 0 failed.
 
 **Phase F2.8 — Split-publish wrapper adoption** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
