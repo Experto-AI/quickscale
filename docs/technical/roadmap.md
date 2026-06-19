@@ -71,41 +71,15 @@ git merge --no-ff wt-track{N}
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **Next:** F12.1c, then F12.1d. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
-| M10 | 2 | F5.1–F5.4 | ⬜ | M6 + M8 both merged; DR engine in CLI; backups module slimmed |
+| M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ merged; M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
 
 ## In-Flight Milestones
 
-### M1 — F11 CRM create + read isolation
-**Track:** 1 | **Worktree:** `quickscale-wt-track1`
-
-**Status:** ✅ Merged to v87.
-
-Completed work (moved to CHANGELOG.md): F11.2–F11.9 — org-scoped create/read isolation, serializer related-field validation, tenant-local CRM bootstrap, existing-data backfill, bulk-deal scoping, and related tests and hardening.
-
-Open / Next:
-- F11.10 — NOT NULL enforcement + isolation closeout
-- F11-deferred — Stage `terminal_semantic` per-org uniqueness
-- F11.11–F11.13b — Module rollout and M7 closeout items
-
----
-
-### M5 — F2 Provenance persistence + release tooling
-**Track:** 3 | **Worktree:** `quickscale-wt-track3`
-
-**Status:** ✅ All M5 phases complete and merged to v87 (eb63c7b).
-
-Completed work (moved to CHANGELOG.md): F2.5–F2.9b — provenance persistence, branch/default-agnostic SHA proof, split-publish wrapper adoption, tagged/versioned-source publish gate, and operator diagnostics.
-
-Open / Next:
-- M8 / F12 — Recoverable apply (saga) now in planning (see M8 below).
-
----
-
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟢 Planned and **unblocked** — ready for implementation handoff. F12.1 was decomposed into **F12.1a–F12.1e** (all Adaptive Tier 1–2 — see Finding 12). Structural plan-review passed (R1/R2/R3/R6 resolved).
+**Status:** 🟡 In progress — F12.1a ✅ (ApplyStep model + registry), F12.1b ✅ (ledger schema + loader). **Next:** F12.1c.
 
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
@@ -129,91 +103,17 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
-| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 M5 merged; F12.1 planned + split (Tier 1–2), unblocked (D-F12.1-LEDGER → Option A) |
-| 5 | F5 — DR engine split | M10 | ⬜ Waits for M6 + M8 |
+| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a ✅ F12.1b ✅; F12.1c next |
+| 5 | F5 — DR engine split | M10 | ⬜ M6 ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
 
 ---
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** Tenant isolation is asserted by per-view decorators that gate the request but never scope the query. Any admin, shell, management command, or async path returns cross-tenant data silently. Must fail closed at the data layer. CRM groundwork (F11.1: 11.1a–11.1d.1) is done and in CHANGELOG. Org-scoped create + read isolation (M1), backfill/NOT NULL closeout (M3), and module rollout (M7) remain.
+**Why still open:** CRM isolation phases F11.1–F11.9 complete and in CHANGELOG (groundwork, org-scoped create/read isolation, backfill, bootstrap, serializer hardening, bulk-deal scope). Remaining: NOT NULL enforcement closeout (F11.10 / M3 closeout), then module rollout to blog, forms, listings, and social (M7). Non-CRM admin, shell, and async paths still need data-layer isolation per module.
 
 ---
-
-**Phase F11.2 — Org-scoped create denial** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.1 complete ✅ | **Status:** ✅ Complete — CR-P11GA-001 resolved.
-
-- [x] Prove that a wrong-org or non-member staff user receives 403 with no row created on org-scoped POST for Tag, Company, and Stage.
-
-**Phase F11.3 — Self-contained resource create stamping** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.2 ✅ | **Status:** ✅ Complete.
-
-- [x] Stamp current-org ownership on org-scoped create paths for Tag, Company, and Stage.
-- [x] Add org-member create → list roundtrip tests for Tag, Company, and Stage.
-
-**Phase F11.4 — Contact/Deal related-ID guard + create stamping** _(M1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.3 ✅ | **Status:** ✅ Complete.
-
-- [x] Reject foreign-org related IDs (`company_id`, `tag_ids`, `contact_id`, `stage_id`) on Contact and Deal create serializers.
-- [x] Stamp current-org ownership on Contact and Deal org-scoped create paths.
-- [x] Add org-member create → list roundtrip tests for Contact and Deal.
-
-**Phase F11.5 — CRM read-path isolation** _(M1 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.4 ✅ | **Status:** ✅ Merged to v87.
-**Scope:** Dashboard, list/detail, nested-note, and helper reads. Bulk actions and admin/operator paths are F11.9.
-
-- [x] Scope dashboard, list/detail, nested-note, and helper read queries to the current org; keep `ContactNote`/`DealNote` parent-derived.
-- [x] Confirm no-context reads fail closed.
-- [x] Targeted A/B/C/D validation green; CRM module validation green.
-
-**Findings:** OrgScopedReadMixin enforces org context on all CRM read paths. Dashboard aggregates, list/detail querysets, and nested-note reads are scoped to current org. No-context reads raise PermissionDenied (403) rather than degrading to unscoped querysets. TestF115Phase2ApiListFailClosed proves API list routes fail closed without org context.
-
----
-
-**Phase F11.6 — Existing-data backfill** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** M1 merged ✅. Must complete before F11.10 (NOT NULL). | **Status:** ✅ Complete.
-
-- [x] Ship an idempotent CRM backfill command that assigns legacy CRM rows to one operator-selected org or aborts without partial writes.
-- [x] Document and test rollout sequence: backup → deploy nullable slice → run backfill → verify counts → continue or restore.
-
-**Findings:** `backfill_crm_org_ownership` management command ships with explicit `--org-slug` selector, NULL-org-only updates, conflict detection that aborts before write when any non-target organization rows exist (including mixed ownership where target and other orgs coexist), `--dry-run` support, `transaction.atomic()` writes, per-model updated counts, and an aggregate remaining-NULL warning. 9 focused tests prove required-arg validation, nonexistent-org rejection, full backfill, idempotency, conflict abort, mixed-ownership abort, same-org tolerance, dry-run safety, and zero-row grace. CRM module validation green (lint, typecheck, 253 unit tests).
-
-**Phase F11.7 — Tenant-local CRM bootstrap** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** M1 merged. Must complete before F11.10. | **Status:** ✅ Complete.
-
-- [x] Add tenant-local default CRM stage bootstrap for migrated and newly created orgs.
-- [x] Prove a fresh org can use CRM without manual stage seeding.
-
-**Findings:** `ensure_org_default_stages()` now owns the canonical four-stage bootstrap (`Prospecting`, `Negotiation`, `Closed-Won`, `Closed-Lost`) and seeds only org-local rows. The helper ignores NULL-org legacy stages, uses `transaction.atomic()` + `Organization.select_for_update()` + an under-lock recheck to prevent duplicate first-access bootstrap, and leaves `terminal_semantic` unset so F11-deferred remains the owner of per-org terminal-semantic uniqueness. SaaS new-org create paths (`OrgCreateForm.save`, including `/orgs/new/` and `/api/orgs/`) eagerly call the guarded bootstrap seam when CRM is installed; org-scoped CRM reads lazily self-bootstrap migrated orgs with zero local stages; any org that already has a local stage now no-ops instead of topping up. Personal-org creation intentionally preserves the legacy solo `/crm/...` stage surface until solo CRM stops relying on the global NULL-owned defaults. Focused CRM-owned proofs cover `/orgs/new/`, `/api/orgs/`, migrated zero-local first access, partial-preseed no-op, and solo `/crm/` + `/crm/api/stages/` parity after personal-org creation; supporting seam tests prove the eager org-create and lazy read entrypoints stay wired to the shared helper. Validation: targeted Ruff + MyPy green; CRM focused pytest suites 13/13 green plus service/seam proofs 8/8 green; orgs seam pytest 2/2 green.
-
-**Next handoff decisions:**
-- F11.8 ✅ complete. F11.9 ✅ complete (bulk deal scope + CRM admin path). F11.10 is now the next actionable Track 1 phase.
-- F11-deferred `terminal_semantic` per-org uniqueness remains intentionally deferred from F11.7.
-
-**Phase F11.8 — Serializer related-field validation** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** M1 merged. | **Status:** ✅ Complete.
-
-- [x] Make serializer related-field validation org-aware: `company_id`, `tag_ids`, `contact_id`, and `stage_id` must reject foreign-org IDs on all write paths.
-- [x] Add coverage proving cross-org related-ID writes are rejected with controlled 4xx responses.
-
-**Findings:** Serializer `validate()` methods on `ContactDetailSerializer` and `DealDetailSerializer` already reject foreign-org related IDs on both create and update paths. This phase added create-path rejection coverage for all five related fields (`company_id`, `tag_ids` on Contact; `contact_id`, `stage_id`, `tag_ids` on Deal) plus a solo-route parity test proving foreign-org related IDs remain allowed on solo routes where org context is absent. No serializer code changes were required — the existing validation logic was already correct; only test coverage was missing.
-
-**Phase F11.9 — Bulk deal scope + CRM admin path** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.8 ✅ | **Status:** ✅ Complete.
-
-- [x] Scope bulk deal actions (`bulk_update_stage`, `mark_won`, `mark_lost`) by current-org deal visibility so raw `deal_ids` cannot mutate cross-org rows.
-- [x] Route CRM admin through the deliberate superuser/operator path; add coverage proving access is explicit, not an accidental bypass.
-
-**Findings:** Phase 1 added org-scoped bulk deal mutation protection: `bulk_update_stage`, `mark_won`, and `mark_lost` views scope deal mutations to the active organization — foreign-org deal IDs produce a 200/updated=0 no-op rather than mutating cross-org rows. `bulk_update_stage` additionally rejects foreign-org stage IDs with a controlled 400. `mark_won` and `mark_lost` use org-aware terminal-stage resolution: same-org terminal stages are preferred, legacy NULL-org terminal stages are accepted for backfill compatibility, and foreign-org terminal stages are never used. Phase 2 established the deliberate CRM admin superuser/operator path: organization is visible in admin changelists and filters while remaining excluded from editable forms, with focused tests proving admin access is an explicit design choice rather than an accidental isolation bypass. Both phases passed CRM module validation (lint, typecheck, unit tests) with no new failures.
 
 **Phase F11.10 — NOT NULL enforcement + isolation closeout** _(M3 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
@@ -267,70 +167,6 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ---
 
-### Finding 2 — Consolidate project state and make module provenance actionable
-
-**Status:** All M5 phases complete and merged to v87 (eb63c7b). F2.1–F2.4 in CHANGELOG; F2.5–F2.7 ✅ provenance persistence; F2.8 ✅ split-publish wrapper adoption; F2.9a ✅ tagged/versioned-source publish gate; F2.9b ✅ operator diagnostics for split publish mismatches. M8 / F12 is now unblocked.
-
----
-
-**Phase F2.5 — Branch-default-agnostic subtree-SHA proof** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
-
-**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ✅ Complete — resolves CR-M5-P3-007. Can run in parallel with F2.6.
-
-- [x] Harden subtree-SHA proof so provenance verification does not depend on a specific default branch name.
-- [x] Add tests proving SHA proof works regardless of branch-default configuration.
-
-**Findings:** Existing `TestSubtreePullWithCommitSha` tests hardcoded `master:main` push refs, breaking on systems where `init.defaultBranch ≠ master`. Fixed by explicitly creating known branch names (`source`, `feature`) after `git init`. Added `test_subtree_sha_proof_is_branch_default_agnostic` using non-standard remote branch `develop` and local branch `feature` to prove the SHA-pinned contract holds regardless of naming convention. No production code changes required — `resolve_remote_ref()` and `run_git_subtree_pull()` were already branch-name-agnostic.
-
-**Phase F2.6 — Apply/embed/no-op provenance triple persistence** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
-
-**Dependencies:** F2.1–F2.4 merged ✅ | **Status:** ✅ Complete — resolves CR-M5-P3-003. Can run in parallel with F2.5.
-
-- [x] Make apply/embed/no-op paths persist/backfill the full provenance triple consistently.
-- [x] Add provenance-persistence tests for all three paths.
-
-**Findings:** No-op repair path now backfills `version` + `commit_sha` + `embedded_at` for triple consistency. Update path refreshes `embedded_at` so all three paths (apply, update, no-op) persist the full provenance triple. Apply path already populated the full triple and is now covered explicitly by tests. Validation: Ruff green on 4 changed files, MyPy green on 2 source files, targeted F2.6 tests 281/281 in 6.75s, full CLI unit suite 1689/1689 (28 deselected) in 44.64s, coverage 90.98%.
-
-**Phase F2.7 — Caller parity across provenance paths** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
-
-**Dependencies:** F2.6 ✅ | **Status:** ✅ Complete — resolves CR-M5-P3-004.
-
-- [x] Establish caller parity across update/apply/embed/no-op provenance paths.
-- [x] Add caller-parity tests proving consistent behavior across all entry points.
-
-**Findings:** All three convergent provenance paths (apply, update, no-op repair) follow the same resolution and persistence pattern: resolve source_ref exactly once per module and persist the full provenance triple (version, commit_sha, embedded_at). Apply and update use the resolved SHA for both the git subtree operation and state persistence. No-op repair resolves once and backfills authoritative state but performs no git operation. Standalone embed intentionally diverges (does not resolve source_ref; uses tracking branch directly). Caller-parity tests prove structural equivalence across all convergent paths and document the intentional standalone-embed divergence. Validation: `make lint -- --cli` green; targeted provenance-path pytest suite 98 passed, 196 deselected, 0 failed.
-
-**Phase F2.8 — Split-publish wrapper adoption** _(M5)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
-
-**Dependencies:** F2.1–F2.4 merged ✅ Independent of F2.5–F2.7; can parallelize on a separate handoff branch.
-**Status:** ✅ Complete — resolves split-publish wrapper adoption.
-
-- [x] Adopt the split-publish wrapper across actual split/publish execution paths; replace hardcoded module-path/branch resolution with the provenance-aware helper surface.
-
-**Findings:** Added `resolve_module_path()`, `resolve_split_branch()`, `run_git_subtree_split()`, and `push_split_branch()` to `quickscale_core/utils/git_utils.py` as the provenance-aware split-publish helper surface. Created `scripts/publish_module.py` as the Python wrapper that uses these helpers for all split/publish operations, replacing the hardcoded `quickscale_modules/<name>` and `splits/<name>-module` conventions that previously lived in the bash script. Refactored `scripts/publish_module.sh` into a thin compatibility shim that delegates to the Python wrapper via `poetry run python scripts/publish_module.py`, preserving the existing Makefile `publish-module` target interface. Added unit tests for all four new helpers covering success paths, error handling, and edge cases (empty names, path separators, force vs non-force push). Hardened module-name validation (CR-M5-P1-001): replaced ad-hoc separator checks with a strict `[a-zA-Z0-9][a-zA-Z0-9_-]*` allowlist via `validate_module_name()`, rejecting path traversal (`..`), flag injection (`-prefix`), spaces, and shell metacharacters before any path resolution or subtree operation. Wrapper catches `GitError` at the CLI boundary so invalid input fails closed with a clean operator-facing error (no traceback). Added wrapper subprocess smoke tests (CR-M5-P1-002) proving clean failure for path-traversal, flag-injection, empty, and space-containing inputs. Validation: bash syntax check green on `publish_module.sh`; Ruff green on all touched files; MyPy green on source packages; targeted F2.8 test suite 60/60 pass (including 11 new `TestValidateModuleName` tests and 4 wrapper smoke tests); full quickscale_core suite 1103 passed with 1 pre-existing unrelated React-theme failure.
-
-**Phase F2.9a — Tagged/versioned-source publish gate** _(M5, handoff 1/2)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
-
-**Dependencies:** F2.8 ✅ | **Adaptive tier:** 2. | **Status:** ✅ Complete.
-
-- [x] Reuse the F2.8 Python wrapper/helper surface to refuse mutating split publish when the source state is not release-authoritative.
-- [x] Align the gate with the existing publish workflow authority (`VERSION` + matching git tag) instead of introducing a parallel release source.
-- [x] Add focused tests covering allowed publish from authoritative version/tag state and rejected publish from untagged or mismatched states.
-
-**Findings:** Mutating split publish flows (`<module>` and `--publish-outdated`) now refuse non-authoritative source states. Authority mirrors the existing publish workflow: the source must carry a release-authoritative tag matching the current `VERSION`. Accepted authoritative tag formats are exact `VERSION` (e.g. `0.86.0`) or single lowercase `v` + `VERSION` (e.g. `v0.86.0`); uppercase `V` prefixes and repeated prefixes (`vv0.86.0`) are rejected. `--status` remains read-only and is not gated. Focused tests prove allowed authoritative state plus rejected untagged, mismatched, and non-canonical tag shapes.
-
-**Phase F2.9b — Operator diagnostics for split publish mismatches** _(M5 closeout, handoff 2/2)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
-
-**Dependencies:** F2.9a | **Adaptive tier:** 1. | **Status:** ✅ Complete.
-
-- [x] Add operator-facing diagnostics for untagged split provenance, unpublished split branches, or version/SHA mismatches.
-- [x] Keep `--status` read-only while mutating publish flows fail closed with explicit next-action guidance.
-- [x] Confirm M5 closeout is ready once diagnostics and gate behavior agree across `<module>`, `--status`, and `--publish-outdated`.
-
-**Findings:** `scripts/publish_module.py --status` now runs a read-only `_show_provenance_diagnostics()` that reports whether the source is release-authoritative ("authoritative (VERSION=…, tag=…)" vs "NOT authoritative" + reason for untagged/mismatched HEAD) without ever exiting. `_show_status()` additionally prints per-module local-vs-published short SHAs for outdated split branches and flags unpublished split branches, then emits an explicit "Next action(s)" block (tag HEAD first when non-authoritative, otherwise run `--publish-outdated`). `--status` never fails closed; the mutating single-module and `--publish-outdated` flows continue to fail closed via the F2.9a `_check_release_authoritative()` gate with the same next-action guidance. Both the gate and the read-only diagnostic derive state from the same `is_release_authoritative()` helper, so behavior agrees by construction across `<module>`, `--status`, and `--publish-outdated`. The `--status` NOT-authoritative wording deliberately avoids the lowercase substring "not release-authoritative" so the read-only status test does not collide with the gate-rejection assertion. Three new hermetic F2.9b tests prove untagged-provenance reporting (read-only, exit 0), authoritative-provenance reporting, and unpublished + next-action guidance. Validation: Ruff + format clean and MyPy clean on changed files; `quickscale_core/tests/test_git_utils.py` 91 passed (3 new); full `quickscale_core/tests/` suite 1135 passed at 90.52% coverage (gate met). Independent change-review: STATUS ok, advisory-only findings (CR-F29B-P1-002 addressed inline; CR-F29B-P1-001 documented as pre-existing optional follow-up).
-
----
-
 ### Finding 13 — Establish a single billing customer source of truth
 
 **Why still open:** `Subscription` carries concurrent `organization` and `user` FKs; `_sync_subscription_authority()` (`billing/services.py:~2288`) can leave a row owned by both. The active-subscription invariant is ambiguous at the schema level. Must resolve before team/seat-scoped billing.
@@ -364,7 +200,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
-**Status:** 🟢 Planned, split into F12.1a–F12.1e (Adaptive Tier 1–2), and **unblocked** — decision D-F12.1-LEDGER resolved to **Option A** (2026-06-19). Structural plan-review passed (R1/R2/R3/R6 resolved). All sub-phases are ready to hand off. The original two checklist items are decomposed below:
+**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅; F12.1c next. D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
 - [ ] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action. → F12.1a + F12.1c
 - [ ] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling. → F12.1b + F12.1d + F12.1e
 
@@ -387,8 +223,6 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Add `quickscale_core/src/quickscale_core/apply/step.py` + `__init__.py`: an `ApplyStep` dataclass (stable step id/label, apply-action ref, compensating/resume descriptor) and an ordered registry of the 15 steps, preserving current label strings as stable ids.
 - [x] Core unit tests assert the registry enumerates exactly the 15 steps in order with current label strings preserved.
 
-**Findings:** Added `quickscale_core/src/quickscale_core/apply/{step.py,__init__.py}` with a frozen `ApplyStep` dataclass (`order`, `step_id`, `failed_step_label`, `apply_action`, `resume`, `reversible`) and `APPLY_STEPS` — an ordered registry of exactly 15 steps mirroring `_execute_apply_steps_locked` (`apply_command.py` `_execute_apply_steps_locked`, verified via discovery snapshot `discovery-apply-steps-v1-20260619`), plus a `step_by_id()` helper. The 12 steps that carry a current `failed_step` label preserve that string **verbatim** as both `step_id` and `failed_step_label`; the three non-aborting steps (4 `capture managed file hashes`, 11 `apply mutable config`, 15 `display next steps`) carry `failed_step_label=None` with descriptive stable ids. Step 14 `step_id`/label = `"authoritative state persistence"`. `resume` uses three stable sentinels: `idempotent-rerun` (steps 1–13, irreversible), `finalize` (14), `display` (15). No `quickscale_cli` import (core stays command-surface-independent); pure-additive — no existing files modified. Tests (`quickscale_core/tests/test_apply_step.py`, 27): lock step count/order, verbatim label sequence (incl. the three `None` positions), `step_id`==label for labeled steps, full `(apply_action, resume)` sequence, immutability, and id uniqueness. Validation: Ruff + format clean; MyPy clean; full `quickscale_core` suite green via canonical **root** invocation — 1162 passed, 28 deselected, coverage 90.58% (90% gate met); `apply/step.py` 100% covered. Independent change-review STATUS ok (advisory-only; the advisory `apply_action`/`resume` test-lock was applied inline).
-
 **Findings / pendings for downstream sub-phases:**
 - ❗ **Gate-invocation note (for all Track 3 / quickscale_core phases):** run the core suite via the canonical **root** invocation (`poetry run python -m pytest quickscale_core/tests -m "not e2e"`, i.e. `make test`). Running pytest from *inside* `quickscale_core/` drops `quickscale_cli/src` from the resolved pythonpath and produces ~21 spurious `ModuleNotFoundError: No module named 'quickscale_cli'` failures + a false coverage miss. These are **not** real failures.
 - **For F12.1c:** the registry intentionally models only the **15 ordered steps**. The recovery-write sentinel `"apply recovery state persistence"` (`apply_command.py:2493`, inside step 14's `_abort_after_post_embed_failure` path) is **not** one of the 15 steps and is **not** in `APPLY_STEPS`. When F12.1c replaces the ad-hoc `failed_step` string literals from the registry, that sentinel must be sourced separately (it is a recovery-write failure label, not a saga step). Steps 4/11/15 have no `failed_step` literal to replace.
@@ -399,8 +233,6 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Step-progress fields are diagnostic-only; the loader preserves `recovery_state is not None` presence semantics.
 - [x] Fail hard: a present-but-malformed/inconsistent ledger raises (no silent degradation, no fallback). Optional diagnostic fields absent on a fresh write is fine; a structurally invalid ledger is not.
 - [x] Tests: ledger present → parsed; ledger absent → None; malformed/inconsistent ledger → raises; diagnostic step-progress round-trips.
-
-**Findings:** Added `quickscale_core/src/quickscale_core/apply/ledger.py` introducing the recovery-ledger schema + loader (the ledger previously had **no** dedicated schema — it reused `QuickScaleState` via `StateManager`). New public symbols (re-exported from `apply/__init__.py`): `RecoveryLedger` (composes `QuickScaleState` for applied-state content + an optional diagnostic `step_progress`), `StepProgress`, `LedgerManager` (load/save), and `LedgerError` (subclasses `StateError` for catch-compatibility). `LedgerManager.load()`: absent → `None` (presence-gating `recovery_state is not None` preserved); present + valid → parsed (a valid ledger **without** `step_progress` parses, with `step_progress=None`); present + malformed/inconsistent → **raises** (not-a-dict, missing required applied-state fields, or a `step_progress` key not in the F12.1a `APPLY_STEPS` registry). `step_progress` is **diagnostic-only**, never resume-gating, keys validated against an `APPLY_STEPS`-derived frozenset. `save()` mirrors `StateManager`'s atomic write via the distinct `apply-recovery.tmp` temp path; YAML dump uses `default_flow_style=False, sort_keys=False`. **Scope held:** no `state.yml`/`QuickScaleState` schema pollution; **no** writer wiring into `apply_command.py`/`remove_command.py`/`module_commands.py` (that is F12.1d); `apply/step.py` import-only; no `quickscale_cli` import. Tests: `quickscale_core/tests/test_apply_ledger.py` (52 tests, 10 classes) cover all four acceptance criteria + round-trip; `ledger.py` at 95% (only the `save()` temp-file cleanup branch uncovered). Validation: Ruff + format clean; MyPy clean; full core suite green via canonical **root** invocation — 1214 passed, 28 deselected, coverage 90.84% (90% gate met). Independent change-review STATUS ok (advisory-only).
 
 **Advisory findings carried to F12.1d** (none blocking; confirm when the ledger becomes the single authoritative channel):
 - Per-entry `managed_files` corruption is silently skipped (parity with `StateManager.load()`, `ledger.py:430-451`); decide whether to keep that tolerance or fail hard once the ledger is authoritative.
