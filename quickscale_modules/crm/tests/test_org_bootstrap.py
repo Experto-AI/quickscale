@@ -1,0 +1,204 @@
+"""End-to-end F11.7 proofs for org creation and migrated-org CRM bootstrap."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+from django.test import override_settings
+
+from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
+
+
+def _assert_canonical_stage_set(organization: Organization) -> list[Stage]:
+    stages = list(
+        Stage.objects.filter(organization=organization).order_by("order", "id")
+    )
+
+    assert [stage.name for stage in stages] == [
+        "Prospecting",
+        "Negotiation",
+        "Closed-Won",
+        "Closed-Lost",
+    ]
+    assert [stage.order for stage in stages] == [1, 2, 3, 4]
+    assert all(stage.terminal_semantic is None for stage in stages)
+    return stages
+
+
+@pytest.mark.django_db
+@override_settings(QUICKSCALE_MODE="solo")
+def test_solo_crm_route_preserves_legacy_stage_surface_after_personal_org_creation(
+    client, staff_user
+) -> None:
+    """A real solo CRM route should create a personal org without local stage seeding."""
+
+    client.force_login(staff_user)
+
+    response = client.get("/crm/api/stages/")
+
+    assert response.status_code == 200
+    organization = Organization.objects.get(
+        is_personal=True, memberships__user=staff_user
+    )
+    assert Stage.objects.filter(organization=organization).count() == 0
+    assert [item["name"] for item in response.json()] == [
+        "Prospecting",
+        "Negotiation",
+        "Closed-Won",
+        "Closed-Lost",
+    ]
+
+    dashboard_response = client.get("/crm/")
+    assert dashboard_response.status_code == 200
+    assert Stage.objects.filter(organization=organization).count() == 0
+
+
+@pytest.mark.django_db
+def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
+    client, staff_user
+) -> None:
+    """The /orgs/new/ flow should make CRM immediately usable with seeded stages."""
+
+    client.force_login(staff_user)
+
+    create_response = client.post("/orgs/new/", {"name": "Fresh Org"})
+
+    assert create_response.status_code == 302
+    organization = Organization.objects.get(slug="fresh-org")
+    membership = OrganizationMembership.objects.get(
+        user=staff_user,
+        organization=organization,
+    )
+    assert membership.role == OrgRole.OWNER
+
+    stage_list = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+    assert stage_list.status_code == 200
+    seeded_stages = _assert_canonical_stage_set(organization)
+    seeded_stage_id = seeded_stages[0].id
+
+    company_response = client.post(
+        f"/orgs/{organization.slug}/crm/api/companies/",
+        data={
+            "name": "Fresh Org Corp",
+            "industry": "Tech",
+            "website": "https://fresh.example.com",
+        },
+        content_type="application/json",
+    )
+    assert company_response.status_code == 201
+    company = Company.objects.get(pk=company_response.json()["id"])
+    assert company.organization_id == organization.id
+
+    contact_response = client.post(
+        f"/orgs/{organization.slug}/crm/api/contacts/",
+        data={
+            "first_name": "Fresh",
+            "last_name": "Contact",
+            "email": "fresh-contact@example.com",
+            "company_id": company.id,
+        },
+        content_type="application/json",
+    )
+    assert contact_response.status_code == 201
+    contact = Contact.objects.get(pk=contact_response.json()["id"])
+    assert contact.organization_id == organization.id
+
+    deal_response = client.post(
+        f"/orgs/{organization.slug}/crm/api/deals/",
+        data={
+            "title": "Fresh Org Deal",
+            "contact_id": contact.id,
+            "stage_id": seeded_stage_id,
+            "amount": "1000.00",
+            "probability": 50,
+        },
+        content_type="application/json",
+    )
+    assert deal_response.status_code == 201
+    deal = Deal.objects.get(pk=deal_response.json()["id"])
+    assert deal.organization_id == organization.id
+
+
+@pytest.mark.django_db
+def test_api_org_create_flow_seeds_canonical_stages(client, staff_user) -> None:
+    """The /api/orgs/ flow should seed exactly one canonical local stage set."""
+
+    client.force_login(staff_user)
+
+    create_response = client.post(
+        "/api/orgs/",
+        data=json.dumps({"name": "API Org"}),
+        content_type="application/json",
+    )
+
+    assert create_response.status_code == 201
+    organization = Organization.objects.get(slug="api-org")
+
+    stage_list = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+    assert stage_list.status_code == 200
+    seeded_stages = _assert_canonical_stage_set(organization)
+    stage_ids = {item["id"] for item in stage_list.json()}
+    assert stage_ids == {stage.id for stage in seeded_stages}
+
+
+@pytest.mark.django_db
+def test_migrated_zero_local_org_bootstraps_on_first_crm_access(
+    client, staff_user
+) -> None:
+    """A migrated org with zero local stages should self-bootstrap on first CRM read."""
+
+    organization = Organization.objects.create(name="Migrated Org", slug="migrated-org")
+    OrganizationMembership.objects.create(
+        user=staff_user,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    Stage.objects.create(name="Legacy Prospecting", order=1)
+    client.force_login(staff_user)
+
+    first_response = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+    second_response = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    seeded_stages = _assert_canonical_stage_set(organization)
+    assert len(second_response.json()) == 4
+    assert {item["id"] for item in second_response.json()} == {
+        stage.id for stage in seeded_stages
+    }
+
+
+@pytest.mark.django_db
+def test_migrated_partial_preseed_org_is_left_unchanged(client, staff_user) -> None:
+    """Any existing org-local stage should block bootstrap/top-up behavior."""
+
+    organization = Organization.objects.create(name="Partial Org", slug="partial-org")
+    OrganizationMembership.objects.create(
+        user=staff_user,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    existing_stage = Stage.objects.create(
+        name="Custom Existing",
+        order=99,
+        organization=organization,
+    )
+    client.force_login(staff_user)
+
+    response = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+
+    assert response.status_code == 200
+    local_stages = list(Stage.objects.filter(organization=organization).order_by("id"))
+    assert [(stage.id, stage.name, stage.order) for stage in local_stages] == [
+        (existing_stage.id, "Custom Existing", 99)
+    ]
+    assert response.json() == [
+        {
+            "id": existing_stage.id,
+            "name": "Custom Existing",
+            "order": 99,
+            "deal_count": 0,
+        }
+    ]
