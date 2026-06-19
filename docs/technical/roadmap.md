@@ -81,29 +81,24 @@ git merge --no-ff wt-track{N}
 
 **Status:** ✅ Merged to v87.
 
-F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.3 ✅ complete (self-contained resource create stamping for Tag, Company, Stage with org-member proof and same-org duplicate rejection). F11.4 ✅ complete (Contact/Deal related-ID guard + create stamping; 9 tests; CRM module validation green). F11.5 ✅ complete (CRM read-path isolation: dashboard, list/detail, nested-note, and helper reads scoped to current org; no-context reads fail closed; targeted A/B/C/D green; CRM module validation green).
+Completed work (moved to CHANGELOG.md): F11.2–F11.9 — org-scoped create/read isolation, serializer related-field validation, tenant-local CRM bootstrap, existing-data backfill, bulk-deal scoping, and related tests and hardening.
 
-**Next handoff decisions:**
-- M1 mergeback to v87 is Phase 5 (final closeout).
-- F11.9 ✅ complete (bulk deal scope + CRM admin path). F11.10 (NOT NULL enforcement + isolation closeout) and F11-deferred (Stage `terminal_semantic` per-org uniqueness) remain open for M3.
+Open / Next:
+- F11.10 — NOT NULL enforcement + isolation closeout
+- F11-deferred — Stage `terminal_semantic` per-org uniqueness
+- F11.11–F11.13 — Module rollout and M7 closeout items
 
 ---
 
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Pending phases:** none — all M5 phases complete. **Merged to v87** (eb63c7b). M8 / F12 is now unblocked.
+**Status:** ✅ All M5 phases complete and merged to v87 (eb63c7b).
 
-**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅), CR-M5-P3-004 (F2.7 ✅), CR-M5-P1-001 (F2.8 hardening ✅), CR-M5-P1-002 (F2.8 wrapper smoke ✅), F2.9a release-authority publish gate ✅, F2.9b operator diagnostics ✅.
+Completed work (moved to CHANGELOG.md): F2.5–F2.9b — provenance persistence, branch/default-agnostic SHA proof, split-publish wrapper adoption, tagged/versioned-source publish gate, and operator diagnostics.
 
-**Advisory (non-blocking, from F2.9b review):**
-- CR-F29B-P1-001: `--status` can still exit non-zero if an internal subtree-split/path resolution fails inside `_get_module_publish_state` (pre-existing F2.8/F2.9a behavior, not the F2.9a gate). Optional: emit an "error/unknown" row instead of `sys.exit`.
-- CR-F29B-P1-002: addressed — added an inline comment pinning the `--status` substring-sensitivity invariant.
-
-**Next handoff decisions:**
-- F2.9a is complete: mutating split publish flows refuse non-authoritative source states; authority mirrors the existing publish workflow. Accepted authoritative tag formats are exact `VERSION` (e.g. `0.86.0`) or single lowercase `v` + `VERSION` (e.g. `v0.86.0`); uppercase `V` and repeated prefixes are rejected. `--status` remains read-only.
-- F2.9b is complete: `--status` now reports release provenance (authoritative / NOT-authoritative with reason), per-module local-vs-published short SHAs for outdated/unpublished split branches, and explicit next-action guidance — all read-only (never fails closed). Mutating flows continue to fail closed via the F2.9a gate with the same next-action guidance. Diagnostics and gate behavior agree across `<module>`, `--status`, and `--publish-outdated` by sharing `is_release_authoritative`.
-- M5 closeout is ready: merge wt-track3 back to v87 to unblock M8 / F12.
+Open / Next:
+- M8 / F12 — Recoverable apply (saga) now unblocked; proceed with F12.1.
 
 ---
 
