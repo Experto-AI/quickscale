@@ -316,3 +316,151 @@ def push_split_branch(
         subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to push split branch {branch}: {e.stderr}") from e
+
+
+# ---------------------------------------------------------------------------
+# F2.9a — Release-authoritative source gate
+# ---------------------------------------------------------------------------
+
+
+def read_version_file(repo_root: Path) -> str:
+    """Read and return the trimmed version string from the VERSION file.
+
+    Raises:
+        GitError: If the VERSION file does not exist or cannot be read.
+    """
+    version_file = repo_root / "VERSION"
+    if not version_file.is_file():
+        raise GitError(f"VERSION file not found at {version_file}")
+    try:
+        content = version_file.read_text(encoding="utf-8")
+        # Match the publish workflow's trimming: strip CR, leading/trailing whitespace
+        version = content.replace("\r", "").strip()
+        if not version:
+            raise GitError("VERSION file is empty")
+        return version
+    except OSError as e:
+        raise GitError(f"Failed to read VERSION file: {e}") from e
+
+
+def get_all_tags_at_head(path: Path | None = None) -> list[str]:
+    """Return all tag names pointing at HEAD (may be empty if untagged).
+
+    Uses ``git tag --points-at HEAD`` to find tags that point directly at
+    the current commit.  Works with both lightweight and annotated tags.
+    Returns all tags if multiple tags point at HEAD, or an empty list if no
+    tags point at HEAD.
+
+    Raises:
+        GitError: If the git command fails.
+    """
+    cwd = path or Path.cwd()
+    try:
+        result = subprocess.run(
+            ["git", "tag", "--points-at", "HEAD"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise GitError(f"Failed to get tags at HEAD: {result.stderr}")
+        tags = result.stdout.strip().splitlines()
+        return [t for t in tags if t]
+    except FileNotFoundError as e:
+        raise GitError(f"git command not found: {e}") from e
+
+
+def get_tag_at_head(path: Path | None = None) -> str | None:
+    """Return the tag name pointing at HEAD, or None if HEAD is untagged.
+
+    Uses ``git tag --points-at HEAD`` to find tags that point directly at
+    the current commit.  Works with both lightweight and annotated tags.
+    Returns the first tag if multiple tags point at HEAD, or None if no
+    tags point at HEAD.
+
+    Raises:
+        GitError: If the git command fails.
+    """
+    tags = get_all_tags_at_head(path)
+    return tags[0] if tags else None
+
+
+def is_release_authoritative(
+    repo_root: Path,
+) -> tuple[bool, str, str | None, str | None]:
+    """Check if the source state is release-authoritative (F2.9a).
+
+    Release-authoritative means the VERSION file content matches at least one
+    git tag pointing at HEAD using one of the two workflow-authoritative tag
+    forms (see .github/workflows/publish.yml):
+
+    * exact VERSION match (e.g. ``0.86.0``), or
+    * single lowercase ``v`` prefix + VERSION (e.g. ``v0.86.0``).
+
+    Uppercase ``V``, multiple ``v`` prefixes, and other tag shapes are **not**
+    accepted — they do not trigger the publish workflow and must not be treated
+    as release-authoritative here either.  When multiple tags point at HEAD,
+    the gate succeeds if *any* of them matches VERSION in one of these two
+    forms — this prevents a stale or unrelated tag from shadowing a valid
+    release tag.
+
+    Returns:
+        A tuple ``(is_authoritative, version_from_file, tag_at_head, mismatch_reason)``:
+        - ``is_authoritative``: True if VERSION matches at least one tag at HEAD
+        - ``version_from_file``: The version string from the VERSION file
+        - ``tag_at_head``: The matching tag name, or the first tag if none match,
+          or None if untagged
+        - ``mismatch_reason``: Human-readable reason if not authoritative, or None
+
+    This function does not raise on expected conditions (missing VERSION, untagged
+    HEAD, version mismatch).  It returns structured diagnostics so callers can
+    decide how to report or handle the situation.
+    """
+    try:
+        version_from_file = read_version_file(repo_root)
+    except GitError as e:
+        return False, "", None, str(e)
+
+    tags_at_head = get_all_tags_at_head(repo_root)
+
+    if not tags_at_head:
+        return (
+            False,
+            version_from_file,
+            None,
+            f"HEAD is not tagged; VERSION file contains {version_from_file}",
+        )
+
+    # Check each tag against the two workflow-authoritative forms only:
+    # exact VERSION (e.g. "0.86.0") or single lowercase v + VERSION
+    # (e.g. "v0.86.0").  Uppercase V, multiple v prefixes, and other shapes
+    # do not trigger the publish workflow and must not match here either.
+    # The gate succeeds if ANY tag matches VERSION in one of these forms.
+    def _is_authoritative_tag(tag: str) -> bool:
+        return tag == version_from_file or tag == f"v{version_from_file}"
+
+    for tag in tags_at_head:
+        if _is_authoritative_tag(tag):
+            return True, version_from_file, tag, None
+
+    # No tag matched.  Report the first tag in the mismatch reason for
+    # operator clarity, but note if multiple tags were present.
+    first_tag = tags_at_head[0]
+    # Compute the stripped form for diagnostic parity with prior messages.
+    first_version = first_tag.lstrip("vV")
+    if len(tags_at_head) > 1:
+        return (
+            False,
+            version_from_file,
+            first_tag,
+            f"VERSION file ({version_from_file}) does not match any of the "
+            f"{len(tags_at_head)} tags at HEAD "
+            f"(e.g. {first_tag} -> {first_version})",
+        )
+    return (
+        False,
+        version_from_file,
+        first_tag,
+        f"VERSION file ({version_from_file}) does not match tag at HEAD "
+        f"({first_tag} -> {first_version})",
+    )

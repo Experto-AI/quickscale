@@ -1043,11 +1043,11 @@ class TestReactThemeModuleActivationMatrix:
         assert "CreditCard" in lucide_imports
         assert "name: 'Billing'" in billing_card
         assert "icon: CreditCard" in billing_card
-        assert "href: billingPath" in billing_card
+        assert "modulePaths.billing" in billing_card
         assert "reloadDocument: true" in billing_card
         assert "actionLabel: 'Open billing'" in billing_card
         assert re.search(
-            r"buildModuleInfo\(\s*\(modulePaths as \{ crm\?: string \}\)\.crm \?\? '',\s*\(modulePaths as \{ social\?: string \}\)\.social \?\? '',\s*\(modulePaths as \{ billing\?: string \}\)\.billing \?\? '',\s*\(modulePaths as \{ analytics\?: string \}\)\.analytics \?\? '',\s*\)",
+            r"buildModuleInfo\(modulePaths\)",
             dashboard,
         )
         self._assert_no_hardcoded_billing_paths(dashboard)
