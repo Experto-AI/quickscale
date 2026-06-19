@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (`ApplyStep` model + 15-step registry in core, merged to v87). **Next:** F12.1b + F12.1c (both depend only on F12.1a). |
+| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **Next:** F12.1c, then F12.1d. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 + M8 both merged; DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -110,9 +110,10 @@ Open / Next:
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
 Open / Next (no remaining blockers — implement in order):
-- **F12.1a** ✅ (`ApplyStep` model + 15-step registry in core, merged to v87).
-- **F12.1b** (enrich ledger schema, Tier 2) and **F12.1c** (registry-driven step execution, Tier 2) — both unblocked (depend only on F12.1a); **F12.1b next**.
-- **F12.1d** (single authoritative file + consumer parity, Tier 2) → **F12.1e** (fold git-index snapshot, Tier 2).
+- **F12.1a** ✅ (`ApplyStep` model + 15-step registry in core).
+- **F12.1b** ✅ (recovery-ledger schema + fail-hard loader in core; `apply/ledger.py`).
+- **F12.1c** (registry-driven step execution, Tier 2) — unblocked (depends only on F12.1a); **next**.
+- **F12.1d** (single authoritative file + consumer parity, Tier 2; wires the F12.1b ledger into commands) → **F12.1e** (fold git-index snapshot, Tier 2).
 - Then F12.2 (consistent fail policy) and F12.3a + F12.3b (close recovery gaps).
 
 ---
@@ -393,11 +394,18 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - **For F12.1c:** the registry intentionally models only the **15 ordered steps**. The recovery-write sentinel `"apply recovery state persistence"` (`apply_command.py:2493`, inside step 14's `_abort_after_post_embed_failure` path) is **not** one of the 15 steps and is **not** in `APPLY_STEPS`. When F12.1c replaces the ad-hoc `failed_step` string literals from the registry, that sentinel must be sourced separately (it is a recovery-write failure label, not a saga step). Steps 4/11/15 have no `failed_step` literal to replace.
 
 **Phase F12.1b — Enrich the `apply-recovery.yml` ledger schema (no fallback, fail hard)** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1a. | **Status:** ⬜ Ready to implement.
-- [ ] Extend the `apply-recovery.yml` recovery schema in `quickscale_core` to carry diagnostic step-progress (keyed by F12.1a step ids). No second file, no legacy-format fallback reader. No writer wiring yet.
-- [ ] Step-progress fields are diagnostic-only; the loader preserves `recovery_state is not None` presence semantics.
-- [ ] Fail hard: a present-but-malformed/inconsistent ledger raises (no silent degradation, no fallback). Optional diagnostic fields absent on a fresh write is fine; a structurally invalid ledger is not.
-- [ ] Tests: ledger present → parsed; ledger absent → None; malformed/inconsistent ledger → raises; diagnostic step-progress round-trips.
+**Dependencies:** F12.1a. | **Status:** ✅ Complete.
+- [x] Extend the `apply-recovery.yml` recovery schema in `quickscale_core` to carry diagnostic step-progress (keyed by F12.1a step ids). No second file, no legacy-format fallback reader. No writer wiring yet.
+- [x] Step-progress fields are diagnostic-only; the loader preserves `recovery_state is not None` presence semantics.
+- [x] Fail hard: a present-but-malformed/inconsistent ledger raises (no silent degradation, no fallback). Optional diagnostic fields absent on a fresh write is fine; a structurally invalid ledger is not.
+- [x] Tests: ledger present → parsed; ledger absent → None; malformed/inconsistent ledger → raises; diagnostic step-progress round-trips.
+
+**Findings:** Added `quickscale_core/src/quickscale_core/apply/ledger.py` introducing the recovery-ledger schema + loader (the ledger previously had **no** dedicated schema — it reused `QuickScaleState` via `StateManager`). New public symbols (re-exported from `apply/__init__.py`): `RecoveryLedger` (composes `QuickScaleState` for applied-state content + an optional diagnostic `step_progress`), `StepProgress`, `LedgerManager` (load/save), and `LedgerError` (subclasses `StateError` for catch-compatibility). `LedgerManager.load()`: absent → `None` (presence-gating `recovery_state is not None` preserved); present + valid → parsed (a valid ledger **without** `step_progress` parses, with `step_progress=None`); present + malformed/inconsistent → **raises** (not-a-dict, missing required applied-state fields, or a `step_progress` key not in the F12.1a `APPLY_STEPS` registry). `step_progress` is **diagnostic-only**, never resume-gating, keys validated against an `APPLY_STEPS`-derived frozenset. `save()` mirrors `StateManager`'s atomic write via the distinct `apply-recovery.tmp` temp path; YAML dump uses `default_flow_style=False, sort_keys=False`. **Scope held:** no `state.yml`/`QuickScaleState` schema pollution; **no** writer wiring into `apply_command.py`/`remove_command.py`/`module_commands.py` (that is F12.1d); `apply/step.py` import-only; no `quickscale_cli` import. Tests: `quickscale_core/tests/test_apply_ledger.py` (52 tests, 10 classes) cover all four acceptance criteria + round-trip; `ledger.py` at 95% (only the `save()` temp-file cleanup branch uncovered). Validation: Ruff + format clean; MyPy clean; full core suite green via canonical **root** invocation — 1214 passed, 28 deselected, coverage 90.84% (90% gate met). Independent change-review STATUS ok (advisory-only).
+
+**Advisory findings carried to F12.1d** (none blocking; confirm when the ledger becomes the single authoritative channel):
+- Per-entry `managed_files` corruption is silently skipped (parity with `StateManager.load()`, `ledger.py:430-451`); decide whether to keep that tolerance or fail hard once the ledger is authoritative.
+- `version` is coerced via `str(version)` (`ledger.py:454`) vs the canonical reader's pass-through — harmless divergence.
+- Dict-keyed `step_progress` lets an entry-level `step_id` override the dict key (`ledger.py:488`); cannot inject an invalid id but could retarget an entry — consider forbidding entry-level `step_id` in dict-keyed form.
 
 **Phase F12.1c — Drive `_execute_apply_steps_locked` from the registry** _(M8)_ _(Adaptive tier: 2)_
 **Dependencies:** F12.1a. | **Status:** ⬜ Ready after F12.1a.
