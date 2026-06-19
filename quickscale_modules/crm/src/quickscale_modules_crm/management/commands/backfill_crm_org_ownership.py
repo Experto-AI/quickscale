@@ -73,17 +73,18 @@ class Command(BaseCommand):
             null_counts[model_name] = null_count
 
             # Check for rows that already have a different organization.
-            # This is a conflict: we cannot safely assign NULL rows if some
-            # rows already point to a different org (mixed ownership).
+            # Any non-target org among existing rows is a conflict: we cannot
+            # safely assign NULL rows when ownership is mixed (even if some
+            # rows already belong to the target org).
             non_null_qs = model_class.objects.filter(organization__isnull=False)
             non_null_org_ids = set(
                 non_null_qs.values_list("organization_id", flat=True).distinct()
             )
-            if non_null_org_ids and target_org.pk not in non_null_org_ids:
-                # All non-null rows point to a different org — this is a conflict.
+            other_org_ids = non_null_org_ids - {target_org.pk}
+            if other_org_ids:
                 conflicts.append(
-                    f"{model_name}: {len(non_null_org_ids)} existing organization(s) "
-                    f"found, none matching target {target_org.slug}"
+                    f"{model_name}: {len(other_org_ids)} non-target organization(s) "
+                    f"found alongside target {target_org.slug}"
                 )
 
         # Report pre-flight findings.

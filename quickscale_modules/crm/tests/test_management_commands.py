@@ -154,6 +154,32 @@ class TestBackfillCrmOrgOwnership:
         # Verify target_org still exists (used by slug in command).
         assert target_org.pk is not None
 
+    def test_aborts_on_mixed_ownership_with_target_and_other_orgs(self) -> None:
+        """Command aborts when target-org, other-org, and NULL rows all coexist."""
+        target_org = Organization.objects.create(name="Target Org", slug="target-org")
+        other_org = Organization.objects.create(name="Other Org", slug="other-org")
+
+        # Create a mix: target-owned, other-owned, and NULL-owned rows for the same model.
+        target_tag = Tag.objects.create(name="TargetTag", organization=target_org)
+        other_tag = Tag.objects.create(name="OtherTag", organization=other_org)
+        null_tag = Tag.objects.create(name="NullTag")
+
+        with pytest.raises(CommandError, match="conflicting organization ownership"):
+            call_command(
+                "backfill_crm_org_ownership",
+                "--org-slug=target-org",
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+
+        # Verify no writes occurred: all rows retain their original state.
+        target_tag.refresh_from_db()
+        other_tag.refresh_from_db()
+        null_tag.refresh_from_db()
+        assert target_tag.organization == target_org
+        assert other_tag.organization == other_org
+        assert null_tag.organization is None
+
     def test_allows_backfill_when_existing_rows_match_target_org(self) -> None:
         """Command succeeds when existing non-null rows already point to target org."""
         target_org = Organization.objects.create(name="Target Org", slug="target-org")

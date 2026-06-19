@@ -154,7 +154,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Ship an idempotent CRM backfill command that assigns legacy CRM rows to one operator-selected org or aborts without partial writes.
 - [x] Document and test rollout sequence: backup → deploy nullable slice → run backfill → verify counts → continue or restore.
 
-**Findings:** `backfill_crm_org_ownership` management command ships with explicit `--org-slug` selector, NULL-org-only updates, conflict detection that aborts before write on mixed ownership, `--dry-run` support, `transaction.atomic()` writes, and per-model updated/remaining counts. 8 focused tests prove required-arg validation, nonexistent-org rejection, full backfill, idempotency, conflict abort, same-org tolerance, dry-run safety, and zero-row grace. CRM module validation green (lint, typecheck, 252 unit tests).
+**Findings:** `backfill_crm_org_ownership` management command ships with explicit `--org-slug` selector, NULL-org-only updates, conflict detection that aborts before write when any non-target organization rows exist (including mixed ownership where target and other orgs coexist), `--dry-run` support, `transaction.atomic()` writes, per-model updated counts, and an aggregate remaining-NULL warning. 9 focused tests prove required-arg validation, nonexistent-org rejection, full backfill, idempotency, conflict abort, mixed-ownership abort, same-org tolerance, dry-run safety, and zero-row grace. CRM module validation green (lint, typecheck, 253 unit tests).
 
 **Phase F11.7 — Tenant-local CRM bootstrap** _(M3)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
