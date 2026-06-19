@@ -72,14 +72,131 @@ def _require_org_for_read(request: Request | HttpRequest) -> Any:
     return organization
 
 
+def _get_bulk_deal_queryset(
+    request: Request | HttpRequest, deal_ids: list[int]
+) -> QuerySet:
+    """Return the deal queryset for bulk actions, scoped to the active org on SaaS routes.
+
+    On org-scoped SaaS routes (``/orgs/<slug>/...``), the queryset is filtered
+    to deals belonging to the active organization.  On solo routes (``/crm/...``),
+    the base queryset is returned unchanged, preserving legacy solo parity.
+
+    Org-scoped bulk actions fail closed: if the route is org-scoped but no org
+    context is available, a ``PermissionDenied`` is raised.
+    """
+    if not _is_org_scoped_route(request):
+        # Solo route — preserve legacy unscoped behavior.
+        return Deal.objects.filter(id__in=deal_ids)
+
+    # Org-scoped SaaS route — fail closed if org context is missing.
+    from quickscale_modules_orgs.current_org import (
+        CurrentOrgError,
+        require_current_org,
+    )
+
+    try:
+        organization = require_current_org(request)
+    except CurrentOrgError:
+        raise PermissionDenied("Organization context is required for this route.")
+
+    return Deal.objects.filter(id__in=deal_ids, organization_id=organization.id)
+
+
 _TERMINAL_STAGE_DEFAULTS = {
     Stage.TERMINAL_SEMANTIC_WON: ("Closed-Won", 3),
     Stage.TERMINAL_SEMANTIC_LOST: ("Closed-Lost", 4),
 }
 
 
-def _resolve_terminal_stage(terminal_semantic: str) -> Stage:
-    """Return the terminal stage for a semantic, creating the canonical row if needed."""
+def _resolve_org_id_for_terminal_stage(request: Request | HttpRequest) -> int | None:
+    """Return the active org ID for terminal-stage resolution, or None on solo routes.
+
+    On org-scoped SaaS routes (``/orgs/<slug>/...``), returns the current org
+    ID so terminal-stage resolution is org-aware.  On solo routes
+    (``/crm/...``), returns None to preserve legacy global resolution.
+
+    Org-scoped routes fail closed: if the route is org-scoped but no org
+    context is available, a ``PermissionDenied`` is raised before terminal
+    stage resolution proceeds.
+    """
+    if not _is_org_scoped_route(request):
+        return None
+
+    from quickscale_modules_orgs.current_org import (
+        CurrentOrgError,
+        require_current_org,
+    )
+
+    try:
+        organization = require_current_org(request)
+    except CurrentOrgError:
+        raise PermissionDenied("Organization context is required for this route.")
+
+    return organization.id
+
+
+def _resolve_terminal_stage(
+    terminal_semantic: str, organization_id: int | None = None
+) -> Stage | None:
+    """Return the terminal stage for a semantic, scoped to the active org on SaaS routes.
+
+    On org-scoped routes (``organization_id`` is not None), resolution is
+    org-aware: same-org stages are preferred, then legacy NULL-org stages
+    are accepted for backfill compatibility.  Foreign-org stages are never
+    returned.  If no same-org or legacy stage exists, a new org-local
+    canonical row is created.  When the global ``terminal_semantic``
+    uniqueness constraint prevents creation (another org already owns the
+    semantic), ``None`` is returned so the caller can no-op safely.
+
+    On solo routes (``organization_id`` is None), the legacy global
+    resolution is preserved: any stage matching the semantic is accepted,
+    and a canonical NULL-org row is created if none exists.
+    """
+    if organization_id is not None:
+        # Org-scoped: prefer same-org terminal stage.
+        terminal_stage = (
+            Stage.objects.filter(
+                terminal_semantic=terminal_semantic,
+                organization_id=organization_id,
+            )
+            .order_by("order", "id")
+            .first()
+        )
+        if terminal_stage is not None:
+            return terminal_stage
+
+        # Accept legacy NULL-org terminal stage for backfill compatibility.
+        terminal_stage = (
+            Stage.objects.filter(
+                terminal_semantic=terminal_semantic,
+                organization_id__isnull=True,
+            )
+            .order_by("order", "id")
+            .first()
+        )
+        if terminal_stage is not None:
+            return terminal_stage
+
+        # No same-org or legacy stage exists — create an org-local canonical row.
+        stage_name, stage_order = _TERMINAL_STAGE_DEFAULTS[terminal_semantic]
+        terminal_stage, _ = Stage.objects.get_or_create(
+            terminal_semantic=terminal_semantic,
+            defaults={
+                "name": stage_name,
+                "order": stage_order,
+                "organization_id": organization_id,
+            },
+        )
+        # Guard: if get_or_create returned a foreign-org row (unique constraint
+        # collision), refuse to attach this org's deals to it.
+        if (
+            terminal_stage.organization_id is not None
+            and terminal_stage.organization_id != organization_id
+        ):
+            return None
+        return terminal_stage
+
+    # Solo route: legacy global resolution.
     terminal_stage = (
         Stage.objects.filter(terminal_semantic=terminal_semantic)
         .order_by("order", "id")
@@ -423,15 +540,18 @@ class DealViewSet(OrgScopedReadMixin):
         url_path="bulk-update-stage",
         url_name="bulk-update-stage",
     )
-    def bulk_update_stage(self, request: Request) -> Response:
+    def bulk_update_stage(self, request: Request, **kwargs: Any) -> Response:
         """Bulk update stage for multiple deals"""
-        serializer = BulkUpdateStageSerializer(data=request.data)
+        serializer = BulkUpdateStageSerializer(
+            data=request.data, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
 
         deal_ids = serializer.validated_data["deal_ids"]
         stage = serializer.validated_data["stage_id"]
 
-        updated = Deal.objects.filter(id__in=deal_ids).update(stage=stage)
+        scoped_qs = _get_bulk_deal_queryset(request, deal_ids)
+        updated = scoped_qs.update(stage=stage)
 
         return Response(
             {"updated": updated, "stage": stage.name},
@@ -444,18 +564,20 @@ class DealViewSet(OrgScopedReadMixin):
         url_path="mark-won",
         url_name="mark-won",
     )
-    def mark_won(self, request: Request) -> Response:
+    def mark_won(self, request: Request, **kwargs: Any) -> Response:
         """Mark multiple deals as won using the terminal won stage."""
         serializer = BulkMarkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         deal_ids = serializer.validated_data["deal_ids"]
 
-        won_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_WON)
+        org_id = _resolve_org_id_for_terminal_stage(request)
+        won_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_WON, org_id)
+        if won_stage is None:
+            return Response({"updated": 0}, status=status.HTTP_200_OK)
 
-        updated = Deal.objects.filter(id__in=deal_ids).update(
-            stage=won_stage, probability=100
-        )
+        scoped_qs = _get_bulk_deal_queryset(request, deal_ids)
+        updated = scoped_qs.update(stage=won_stage, probability=100)
 
         return Response({"updated": updated}, status=status.HTTP_200_OK)
 
@@ -465,18 +587,20 @@ class DealViewSet(OrgScopedReadMixin):
         url_path="mark-lost",
         url_name="mark-lost",
     )
-    def mark_lost(self, request: Request) -> Response:
+    def mark_lost(self, request: Request, **kwargs: Any) -> Response:
         """Mark multiple deals as lost using the terminal lost stage."""
         serializer = BulkMarkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         deal_ids = serializer.validated_data["deal_ids"]
 
-        lost_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_LOST)
+        org_id = _resolve_org_id_for_terminal_stage(request)
+        lost_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_LOST, org_id)
+        if lost_stage is None:
+            return Response({"updated": 0}, status=status.HTTP_200_OK)
 
-        updated = Deal.objects.filter(id__in=deal_ids).update(
-            stage=lost_stage, probability=0
-        )
+        scoped_qs = _get_bulk_deal_queryset(request, deal_ids)
+        updated = scoped_qs.update(stage=lost_stage, probability=0)
 
         return Response({"updated": updated}, status=status.HTTP_200_OK)
 

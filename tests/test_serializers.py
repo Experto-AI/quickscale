@@ -1126,3 +1126,102 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
             context={"request": deal_request},
         )
         assert deal_serializer.is_valid(), deal_serializer.errors
+
+
+@pytest.mark.django_db
+class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
+    """F11.9 Phase 1 — Prove BulkUpdateStageSerializer rejects foreign-org stages.
+
+    These tests verify that the BulkUpdateStageSerializer validates stage_id
+    against the current organization on org-scoped SaaS routes, while solo
+    routes preserve legacy unscoped behavior.
+
+    Coverage matrix:
+    - Org-scoped route: foreign-org stage_id is rejected
+    - Org-scoped route: same-org stage_id is accepted
+    - Org-scoped route: NULL-org legacy stage_id is accepted
+    - Solo route: any stage_id is accepted (parity preserved)
+    """
+
+    def test_org_scoped_rejects_foreign_org_stage(self, org_a, org_b, org_a_admin):
+        """BulkUpdateStageSerializer rejects foreign-org stage_id on org-scoped route."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": stage_b.id},
+            context={"request": request},
+        )
+        assert not serializer.is_valid()
+        assert "stage_id" in serializer.errors
+
+    def test_org_scoped_accepts_same_org_stage(self, org_a, org_a_admin):
+        """BulkUpdateStageSerializer accepts same-org stage_id on org-scoped route."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": stage_a.id},
+            context={"request": request},
+        )
+        assert serializer.is_valid(), serializer.errors
+
+    def test_org_scoped_accepts_null_org_legacy_stage(self, org_a, org_a_admin):
+        """BulkUpdateStageSerializer accepts NULL-org legacy stage on org-scoped route."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        legacy_stage = Stage.objects.create(name="Legacy Stage", order=1)
+        assert legacy_stage.organization_id is None
+
+        factory = APIRequestFactory()
+        request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
+        request.user = org_a_admin
+        request.org = org_a
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": legacy_stage.id},
+            context={"request": request},
+        )
+        assert serializer.is_valid(), serializer.errors
+
+    @override_settings(QUICKSCALE_MODE="solo")
+    def test_solo_route_accepts_any_stage(self, staff_user, org_b):
+        """BulkUpdateStageSerializer accepts any stage_id on solo route (parity)."""
+        from rest_framework.test import APIRequestFactory
+
+        from quickscale_modules_crm.models import Stage
+        from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+
+        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+
+        factory = APIRequestFactory()
+        request = factory.post("/crm/api/deals/bulk-update-stage/")
+        request.user = staff_user
+        # No request.org on solo routes.
+
+        serializer = BulkUpdateStageSerializer(
+            data={"deal_ids": [1], "stage_id": stage_b.id},
+            context={"request": request},
+        )
+        assert serializer.is_valid(), serializer.errors
