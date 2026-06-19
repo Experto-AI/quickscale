@@ -68,8 +68,8 @@ git merge --no-ff wt-track{N}
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
-| M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3 | 🟡 | M5 merged ✅; F12.1 planned + split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **Next:** F12.1a. Correction: no `ApplyStep` model exists yet — `failed_step` is only a string label. |
+| M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
+| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (`ApplyStep` model + 15-step registry in core, merged to v87). **Next:** F12.1b + F12.1c (both depend only on F12.1a). |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 + M8 both merged; DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -86,7 +86,7 @@ Completed work (moved to CHANGELOG.md): F11.2–F11.9 — org-scoped create/read
 Open / Next:
 - F11.10 — NOT NULL enforcement + isolation closeout
 - F11-deferred — Stage `terminal_semantic` per-org uniqueness
-- F11.11–F11.13 — Module rollout and M7 closeout items
+- F11.11–F11.13b — Module rollout and M7 closeout items
 
 ---
 
@@ -110,9 +110,10 @@ Open / Next:
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
 Open / Next (no remaining blockers — implement in order):
-- **F12.1a** (`ApplyStep` model, Tier 1) and **F12.1c** (registry-driven step execution, Tier 2) — independent, can start immediately.
-- **F12.1b** (enrich ledger schema, Tier 2) → **F12.1d** (single authoritative file + consumer parity, Tier 2) → **F12.1e** (fold git-index snapshot, Tier 2).
-- Then F12.2 (consistent fail policy) and F12.3 (close recovery gaps).
+- **F12.1a** ✅ (`ApplyStep` model + 15-step registry in core, merged to v87).
+- **F12.1b** (enrich ledger schema, Tier 2) and **F12.1c** (registry-driven step execution, Tier 2) — both unblocked (depend only on F12.1a); **F12.1b next**.
+- **F12.1d** (single authoritative file + consumer parity, Tier 2) → **F12.1e** (fold git-index snapshot, Tier 2).
+- Then F12.2 (consistent fail policy) and F12.3a + F12.3b (close recovery gaps).
 
 ---
 
@@ -222,32 +223,43 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ---
 
-**F11-deferred — Stage `terminal_semantic` per-org uniqueness** _(unlocked by F11.5)_
+**F11-deferred — Stage `terminal_semantic` per-org uniqueness** _(Adaptive tier: 2)_ _(unlocked by F11.5)_
 
 - [ ] Split `Stage.terminal_semantic` uniqueness to per-bucket partial `UniqueConstraint`s; add migration + serializer + API regression coverage.
 
 ---
 
-**Phase F11.11 — Blog isolation** _(M7)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.11 — Blog isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 **Dependencies:** M3 merged.
 
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `blog`.
 - [ ] Unskip and confirm `blog` isolation test green.
 
-**Phase F11.12 — Forms + listings isolation** _(M7)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.12a — Forms isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
 **Dependencies:** M3 merged.
 
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `forms`.
-- [ ] Apply the same to `listings`.
-- [ ] Unskip and confirm `forms` and `listings` isolation tests green.
+- [ ] Unskip and confirm `forms` isolation test green.
 
-**Phase F11.13 — Social isolation + rollout closeout** _(M7 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.12b — Listings isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** F11.11 + F11.12.
+**Dependencies:** M3 merged.
+
+- [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `listings`.
+- [ ] Unskip and confirm `listings` isolation test green.
+
+**Phase F11.13a — Social isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.11 + F11.12a + F11.12b.
 
 - [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `social` (and any other tenant tables discovered during rollout).
+
+**Phase F11.13b — Rollout closeout** _(M7 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.13a.
+
 - [ ] Keep `require_org_role`/`require_org_feature` as second-line defense; verify isolation fails closed for non-view paths (admin, shell, management commands, async jobs).
 - [ ] Document the migration path for already-generated projects adopting structural isolation.
 - [ ] Unskip all remaining module isolation tests and confirm all green.
@@ -325,17 +337,17 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 **Track:** 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M9
 **Dependencies:** M7 merged.
 
-**Phase F13.1 — Declare the authoritative billing subject** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+**Phase F13.1 — Declare the authoritative billing subject** _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
 
 - [ ] Declare organization as the authoritative billing subject; make `user` non-authoritative (derived/nullable) or remove it.
 - [ ] Fix `_sync_subscription_authority()` so it cannot leave a row owned by both FKs.
 
-**Phase F13.2 — Single "current subscription" invariant** _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+**Phase F13.2 — Single "current subscription" invariant** _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
 
 - [ ] Define the "current subscription" status set once; share it between ORM queries and the unique constraint.
 - [ ] Enforce "one current subscription per organization" structurally.
 
-**Phase F13.3 — Reconcile and gate** _(M9 closeout)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+**Phase F13.3 — Reconcile and gate** _(M9 closeout)_ _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
 
 - [ ] Reconcile existing dual-FK rows to the canonical owner via migration.
 - [ ] Confirm ownership-authority semantics are resolved before any team/seat-scoped billing work begins.
@@ -370,9 +382,15 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 **Constraints (binding for all sub-phases):** keep membership/presence-gated idempotent resume semantics (`recovery_state is not None`; step-progress is diagnostics-only, never resume-gating); enrich `apply-recovery.yml` in place as the single recovery channel — no second channel, no fallback, fail hard on read/parse errors (per the directive above); the step model + ledger schema live in `quickscale_core` (CLI is command-surface only); the atomic write keeps using a temp path distinct from `state.yml`'s `.tmp` (the existing `apply-recovery.tmp` already satisfies this). `state.yml` remains the authoritative *applied-state* store (separate concern). F12.2 (consistent fail policy / config.yml mirror) and F12.3 stay out of scope, though the fail-hard directive aligns with F12.2's intended direction.
 
 **Phase F12.1a — `ApplyStep` model in core** _(M8)_ _(Adaptive tier: 1)_
-**Dependencies:** none (pure additive; no D-F12.1-LEDGER needed). | **Status:** ⬜ Ready to implement.
-- [ ] Add `quickscale_core/src/quickscale_core/apply/step.py` + `__init__.py`: an `ApplyStep` dataclass (stable step id/label, apply-action ref, compensating/resume descriptor) and an ordered registry of the 15 steps, preserving current label strings as stable ids.
-- [ ] Core unit tests assert the registry enumerates exactly the 15 steps in order with current label strings preserved.
+**Dependencies:** none (pure additive; no D-F12.1-LEDGER needed). | **Status:** ✅ Complete.
+- [x] Add `quickscale_core/src/quickscale_core/apply/step.py` + `__init__.py`: an `ApplyStep` dataclass (stable step id/label, apply-action ref, compensating/resume descriptor) and an ordered registry of the 15 steps, preserving current label strings as stable ids.
+- [x] Core unit tests assert the registry enumerates exactly the 15 steps in order with current label strings preserved.
+
+**Findings:** Added `quickscale_core/src/quickscale_core/apply/{step.py,__init__.py}` with a frozen `ApplyStep` dataclass (`order`, `step_id`, `failed_step_label`, `apply_action`, `resume`, `reversible`) and `APPLY_STEPS` — an ordered registry of exactly 15 steps mirroring `_execute_apply_steps_locked` (`apply_command.py` `_execute_apply_steps_locked`, verified via discovery snapshot `discovery-apply-steps-v1-20260619`), plus a `step_by_id()` helper. The 12 steps that carry a current `failed_step` label preserve that string **verbatim** as both `step_id` and `failed_step_label`; the three non-aborting steps (4 `capture managed file hashes`, 11 `apply mutable config`, 15 `display next steps`) carry `failed_step_label=None` with descriptive stable ids. Step 14 `step_id`/label = `"authoritative state persistence"`. `resume` uses three stable sentinels: `idempotent-rerun` (steps 1–13, irreversible), `finalize` (14), `display` (15). No `quickscale_cli` import (core stays command-surface-independent); pure-additive — no existing files modified. Tests (`quickscale_core/tests/test_apply_step.py`, 27): lock step count/order, verbatim label sequence (incl. the three `None` positions), `step_id`==label for labeled steps, full `(apply_action, resume)` sequence, immutability, and id uniqueness. Validation: Ruff + format clean; MyPy clean; full `quickscale_core` suite green via canonical **root** invocation — 1162 passed, 28 deselected, coverage 90.58% (90% gate met); `apply/step.py` 100% covered. Independent change-review STATUS ok (advisory-only; the advisory `apply_action`/`resume` test-lock was applied inline).
+
+**Findings / pendings for downstream sub-phases:**
+- ❗ **Gate-invocation note (for all Track 3 / quickscale_core phases):** run the core suite via the canonical **root** invocation (`poetry run python -m pytest quickscale_core/tests -m "not e2e"`, i.e. `make test`). Running pytest from *inside* `quickscale_core/` drops `quickscale_cli/src` from the resolved pythonpath and produces ~21 spurious `ModuleNotFoundError: No module named 'quickscale_cli'` failures + a false coverage miss. These are **not** real failures.
+- **For F12.1c:** the registry intentionally models only the **15 ordered steps**. The recovery-write sentinel `"apply recovery state persistence"` (`apply_command.py:2493`, inside step 14's `_abort_after_post_embed_failure` path) is **not** one of the 15 steps and is **not** in `APPLY_STEPS`. When F12.1c replaces the ad-hoc `failed_step` string literals from the registry, that sentinel must be sourced separately (it is a recovery-write failure label, not a saga step). Steps 4/11/15 have no `failed_step` literal to replace.
 
 **Phase F12.1b — Enrich the `apply-recovery.yml` ledger schema (no fallback, fail hard)** _(M8)_ _(Adaptive tier: 2)_
 **Dependencies:** F12.1a. | **Status:** ⬜ Ready to implement.
@@ -399,13 +417,18 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [ ] Record the pre-commit git-index checkpoint reference (capture `183-219`, restore `222-252`, orchestrate `270-293`) in `apply-recovery.yml` so progress is consolidated into the single ledger; keep `git write-tree`/`read-tree --reset` mechanics byte-identical. `_is_transient_apply_recovery_path` must still recognize `apply-recovery.yml`.
 - [ ] Tests: git-index checkpoint/restore tests green; `apply-recovery.yml` recognition assertion; full `make test` integration gate.
 
-**Phase F12.2 — Consistent fail policy** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
+**Phase F12.2 — Consistent fail policy** _(Adaptive tier: 2)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
 - [ ] Adopt one consistent fail policy (default fail-closed); document and audit any fail-open exceptions, including the `config.yml` mirror at `apply_command.py:1969-1972` and the fail-silent `_populate_consolidated_tracking_from_legacy` mirror at `apply_command.py:~1924-1954` (catches all exceptions and silently returns — masks state.yml/config.yml drift).
 
-**Phase F12.3 — Close recovery gaps** _(M8 closeout)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
+**Phase F12.3a — Pre-embed recovery coverage** _(M8)_ _(Adaptive tier: 1)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
 - [ ] Add pre-embed recovery coverage (generation / `git init` failure).
+
+**Phase F12.3b — Railway rollback/resume semantics** _(M8 closeout)_ _(Adaptive tier: 2)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
+
+**Dependencies:** F12.3a.
+
 - [ ] Define rollback/resume semantics for the external Railway deploy step.
 
 ---
@@ -417,30 +440,30 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 **Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
 **Dependencies:** M6 + M8 both merged — both touch `apply_command.py`.
 
-**Phase F5.1 — Define the boundary** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.1 — Define the boundary** _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
 - [ ] Define the DR boundary contract between embeddable Django surfaces and the centrally owned backup/restore engine.
 
-**Phase F5.2a — Extract snapshot and archive primitives** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.2a — Extract snapshot and archive primitives** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
 **Dependencies:** F5.1.
 
 - [ ] Extract snapshot and archive primitives into a CLI/core-owned engine library while preserving current behavior.
 
-**Phase F5.2b — Extract restore and orchestration** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.2b — Extract restore and orchestration** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
 **Dependencies:** F5.2a.
 
 - [ ] Extract restore/orchestration flow, verification, and rollback-pin handling into the centrally owned engine layer.
 
-**Phase F5.3 — Slim the module and protocol** _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.3 — Slim the module and protocol** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
 **Dependencies:** F5.2b.
 
 - [ ] Replace the hidden CLI↔module management-command/env-var protocol with a smaller explicit internal boundary or adapter.
 - [ ] Shrink the embeddable backups module to thin Django-facing surfaces only.
 
-**Phase F5.4 — Migration docs** _(M10 closeout)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.4 — Migration docs** _(M10 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
 - [ ] Document the migration and compatibility contract for existing generated projects adopting the split DR architecture.
 
@@ -453,16 +476,16 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 **Track:** 3 | **Worktree:** `quickscale-wt-track3` (fresh from v87) | **Merges as:** M11
 **Dependencies:** M8 merged.
 
-**Phase F7.1 — Inventory** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.1 — Inventory** _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
 - [ ] Inventory which Python, Django, and PostgreSQL constraints belong to the generator runtime versus generated-project templates.
 
-**Phase F7.2 — Split ownership** _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.2 — Split ownership** _(Adaptive tier: 2)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
 - [ ] Split configuration ownership so generator and generated-project runtime pins are managed independently.
 - [ ] Update generation so emitted project templates use generated-project-owned runtime pins instead of inheriting generator constraints accidentally.
 
-**Phase F7.3 — Validate and document** _(M11 closeout)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.3 — Validate and document** _(M11 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
 - [ ] Add validation coverage for intentionally diverged generator-vs-generated-project runtime pin sets.
 - [ ] Align documentation and operator messaging with the decoupled runtime-pin model.
@@ -471,9 +494,12 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ## Deferred / Monitor
 
-- [ ] **Documentation consolidation** — defer until doc drift causes real onboarding failures; manifest work (F1) simplifies auto-generated module facts.
-- [ ] **Broader compatibility-window widening** (F7 follow-on) — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
-- [ ] **Emitted-project operability & API-contract substrate** — generated modules ship with no structured logging/correlation IDs and no versioned public API (`/api/vN` absent across module `urls.py`); Stripe SDK is not `api_version`-pinned; webhook payloads lack boundary validation. Promote to active backlog when a second external provider lands or the first public-API consumer appears.
+- [ ] **Documentation consolidation** _(Adaptive tier: 2)_ — defer until doc drift causes real onboarding failures; manifest work (F1) simplifies auto-generated module facts.
+- [ ] **Broader compatibility-window widening** _(Adaptive tier: 2)_ (F7 follow-on) — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
+- [ ] **Emitted-project operability & API-contract substrate** _(deferred — split into Tier 1/2 sub-items below)_ — generated modules ship with no structured logging/correlation IDs, no versioned public API, and no webhook payload boundary validation. Promote to active backlog when a second external provider lands or the first public-API consumer appears. Stripe SDK `api_version` pinning is already listed below as a one-liner.
+  - [ ] _(Tier 1)_ Add structured logging and correlation-ID baseline to generated modules.
+  - [ ] _(Tier 2)_ Add versioned public-API surface (`/api/vN`) to generated module `urls.py`.
+  - [ ] _(Tier 2)_ Add webhook payload boundary validation baseline.
 
 ### Explicitly out of scope
 
