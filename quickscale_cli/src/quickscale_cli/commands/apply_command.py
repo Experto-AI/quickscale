@@ -91,6 +91,7 @@ from quickscale_cli.schema.state_schema import (
 from quickscale_core.config import (
     normalize_installed_version,
 )
+from quickscale_core.apply import APPLY_STEPS
 from quickscale_core.advisory_lock import (
     AdvisoryLock,
     AdvisoryLockContentionError,
@@ -152,6 +153,15 @@ _PRE_EMBED_AUTHORITATIVE_GIT_PATHS = (
     ".quickscale/state.yml",
     ".quickscale/config.yml",
 )
+
+#: Registry-backed failed-step labels (sourced from quickscale_core.apply).
+#: Kept byte-identical to the former ad-hoc literals so that operator-visible
+#: failure-summary text and recovery sentinels remain stable.
+_FAILED_STEP = {
+    step.step_id: step.failed_step_label
+    for step in APPLY_STEPS
+    if step.failed_step_label is not None
+}
 
 
 def _is_pre_embed_authoritative_path(path: str) -> bool:
@@ -2525,7 +2535,7 @@ def _finalize_apply_state(
     )
     if recovery_saved:
         _print_apply_failure_summary(
-            failed_step="authoritative state persistence",
+            failed_step=_FAILED_STEP["authoritative state persistence"],
             reason=(
                 "All apply steps completed, but QuickScale could not save "
                 ".quickscale/state.yml. Recovery state was saved to "
@@ -2535,7 +2545,7 @@ def _finalize_apply_state(
         raise click.Abort()
 
     _print_apply_failure_summary(
-        failed_step="authoritative state persistence",
+        failed_step=_FAILED_STEP["authoritative state persistence"],
         reason=(
             "All apply steps completed, but QuickScale could not save "
             ".quickscale/state.yml and could not preserve rerunnable recovery state "
@@ -2735,7 +2745,7 @@ def _execute_apply_steps_locked(
             provenance_payloads=provenance_payloads,
         ):
             _print_apply_failure_summary(
-                failed_step="authoritative state persistence",
+                failed_step=_FAILED_STEP["authoritative state persistence"],
                 reason=(
                     f"required module '{embed_result.failed_module}' failed to embed, "
                     "and QuickScale could not save partial authoritative state to "
@@ -2745,7 +2755,7 @@ def _execute_apply_steps_locked(
             raise click.Abort()
         _clear_apply_recovery_state(ctx.output_path)
         _print_apply_failure_summary(
-            failed_step="module embedding",
+            failed_step=_FAILED_STEP["module embedding"],
             reason=f"required module '{embed_result.failed_module}' failed to embed",
         )
         raise click.Abort()
@@ -2761,7 +2771,7 @@ def _execute_apply_steps_locked(
         )
     except Exception as error:
         _print_apply_failure_summary(
-            failed_step="post-embed state snapshot",
+            failed_step=_FAILED_STEP["post-embed state snapshot"],
             reason=(
                 "QuickScale could not compute the post-embed state required for "
                 f"safe apply recovery: {error}"
@@ -2774,7 +2784,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
-            failed_step="managed module wiring generation",
+            failed_step=_FAILED_STEP["managed module wiring generation"],
             reason="unable to render managed settings, URL, and integration files",
         )
 
@@ -2788,7 +2798,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
-            failed_step="backups gitignore hardening",
+            failed_step=_FAILED_STEP["backups gitignore hardening"],
             reason="Unable to update .gitignore with the configured private backups directory.",
         )
 
@@ -2796,7 +2806,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
-            failed_step="notifications env example sync",
+            failed_step=_FAILED_STEP["notifications env example sync"],
             reason="Unable to update .env.example with the configured notifications env-var names.",
         )
 
@@ -2804,7 +2814,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
-            failed_step="analytics env example sync",
+            failed_step=_FAILED_STEP["analytics env example sync"],
             reason="Unable to update .env.example with the configured analytics env-var names.",
         )
 
@@ -2812,7 +2822,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
-            failed_step="billing env example sync",
+            failed_step=_FAILED_STEP["billing env example sync"],
             reason="Unable to update .env.example with the configured billing env-var names.",
         )
 
@@ -2823,7 +2833,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
-            failed_step="module dependency sync",
+            failed_step=_FAILED_STEP["module dependency sync"],
             reason="Unable to reconcile embedded-module Poetry dependency entries in pyproject.toml.",
         )
 
@@ -2841,7 +2851,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
-            failed_step="post-generation dependency and migration setup",
+            failed_step=_FAILED_STEP["post-generation dependency and migration setup"],
             reason="Poetry lock refresh, dependency installation, or local migrations failed after module dependency sync.",
         )
 
@@ -2862,7 +2872,7 @@ def _execute_apply_steps_locked(
             _abort_after_post_embed_failure(
                 ctx,
                 post_embed_state,
-                failed_step="docker startup",
+                failed_step=_FAILED_STEP["docker startup"],
                 reason="Docker auto-start failed. Run 'quickscale logs' to inspect the failing service.",
             )
 
@@ -2874,7 +2884,7 @@ def _execute_apply_steps_locked(
                 _abort_after_post_embed_failure(
                     ctx,
                     post_embed_state,
-                    failed_step="database migrations",
+                    failed_step=_FAILED_STEP["database migrations"],
                     reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
                 )
 

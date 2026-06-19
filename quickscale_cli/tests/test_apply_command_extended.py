@@ -47,6 +47,7 @@ from quickscale_cli.commands.apply_command import (
     _load_module_manifests,
     _normalize_backups_gitignore_entry,
     _prepare_apply_context,
+    _print_apply_failure_summary,
     _provenance_repair_might_be_needed,
     _refresh_context_after_lock,
     _render_billing_env_example_block,
@@ -5647,3 +5648,395 @@ class TestCallerParityAcrossProvenancePaths:
         # The ModuleEmbedProvenance is only produced when source_ref is
         # resolved, which only happens in APPLY_MODULE_EXECUTION_MODE.
         # Standalone embeds leave provenance_sink empty.
+
+
+# ============================================================================
+# F12.1c Phase 3: Caller-Parity Pass — failure-summary text parity
+# ============================================================================
+
+
+# All 12 unique failed_step labels from APPLY_STEPS (registry-backed).
+_F12_1C_UNIQUE_FAILED_STEP_LABELS: list[tuple[str, str]] = [
+    ("module embedding", "required module 'blog' failed to embed"),
+    ("post-embed state snapshot", "could not compute post-embed state"),
+    ("managed module wiring generation", "unable to render managed files"),
+    ("backups gitignore hardening", "unable to update .gitignore"),
+    ("notifications env example sync", "unable to sync notifications env vars"),
+    ("analytics env example sync", "unable to sync analytics env vars"),
+    ("billing env example sync", "unable to sync billing env vars"),
+    ("module dependency sync", "unable to reconcile module deps"),
+    (
+        "post-generation dependency and migration setup",
+        "poetry lock/install/migrations failed",
+    ),
+    ("docker startup", "Docker auto-start failed"),
+    ("database migrations", "migrations failed inside Docker"),
+    ("authoritative state persistence", "could not save authoritative state"),
+]
+
+
+def _expected_failure_summary_lines(failed_step: str, reason: str) -> list[str]:
+    """Return the expected output lines from _print_apply_failure_summary."""
+    sep = "=" * 50
+    return [
+        "",
+        sep,
+        "❌ Apply failed",
+        sep,
+        "",
+        f"Failed step: {failed_step}",
+        f"Reason: {reason}",
+        "",
+        "Skipped downstream steps:",
+        "  • poetry install",
+        "  • migrations",
+        "  • docker start",
+        "  • success completion output",
+    ]
+
+
+class TestApplyFailureSummaryParity:
+    """F12.1c Phase 3: Byte-identical failure-summary output for all 15 callers.
+
+    The 12 unique registry-backed labels are tested via parametrized
+    direct calls to :func:`_print_apply_failure_summary`.  The three
+    ``authoritative state persistence`` callers (with distinct reason
+    text) are tested in separate integration-style tests.  The sentinel
+    ``apply recovery state persistence`` receives its own test confirming
+    it is a literal outside the registry.
+    """
+
+    @pytest.mark.parametrize("failed_step,reason", _F12_1C_UNIQUE_FAILED_STEP_LABELS)
+    def test_failure_summary_exact_output(self, capsys, failed_step, reason):
+        """Every registry-backed failed_step label produces byte-identical summary."""
+        _print_apply_failure_summary(failed_step=failed_step, reason=reason)
+
+        captured = capsys.readouterr()
+        output_lines = captured.out.splitlines()
+
+        expected = _expected_failure_summary_lines(failed_step, reason)
+        assert output_lines == expected, (
+            f"Output mismatch for failed_step={failed_step!r}"
+        )
+
+        # Also confirm the label survived through to stderr (secho to stdout
+        # for the header, but no err output from _print_apply_failure_summary).
+        assert captured.err == ""
+
+    @pytest.mark.parametrize("failed_step,reason", _F12_1C_UNIQUE_FAILED_STEP_LABELS)
+    def test_failure_summary_contains_label_and_reason(
+        self, capsys, failed_step, reason
+    ):
+        """Substring smoke test: each label and reason appears in output."""
+        _print_apply_failure_summary(failed_step=failed_step, reason=reason)
+
+        captured = capsys.readouterr()
+        output = captured.out
+
+        assert failed_step in output
+        assert reason in output
+        assert "❌ Apply failed" in output
+        assert "Skipped downstream steps:" in output
+        assert "  • poetry install" in output
+        assert "  • migrations" in output
+        assert "  • docker start" in output
+        assert "  • success completion output" in output
+
+    def test_sentinel_apply_recovery_state_persistence_not_in_registry(self):
+        """The sentinel 'apply recovery state persistence' is a literal, not
+        registry-backed.  It must not appear in APPLY_STEPS with a
+        failed_step_label."""
+        from quickscale_core.apply import APPLY_STEPS
+
+        sentinel = "apply recovery state persistence"
+        registry_labels = {
+            s.failed_step_label for s in APPLY_STEPS if s.failed_step_label is not None
+        }
+        registry_ids = {s.step_id for s in APPLY_STEPS}
+
+        assert sentinel not in registry_labels, (
+            "The sentinel must not be registry-backed"
+        )
+        assert sentinel not in registry_ids, "The sentinel must not appear as a step_id"
+
+    def test_authoritative_state_persistence_site_1_partial_embed_save_failure(
+        self, capsys
+    ):
+        """Site 1 (L2748): partial embed saves succeeded but state save failed.
+
+        Output must show ``Failed step: authoritative state persistence``
+        with the exact reason text containing the failed module name and
+        ``.quickscale/state.yml``.  Recovery state must not be cleared.
+        """
+        from quickscale_cli.commands.apply_command import (
+            _execute_apply_steps,
+        )
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._generate_new_project",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._init_git_with_config",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command.AdvisoryLock",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._refresh_context_after_lock",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._attempt_provenance_repair_if_needed",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._handle_delta_and_existing_state",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+            ) as mock_embed,
+            patch(
+                "quickscale_cli.commands.apply_command._save_project_state",
+                return_value=False,
+            ) as mock_save_state,
+            patch(
+                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+            ) as mock_clear_recovery,
+        ):
+            mock_embed.return_value = EmbedModulesResult(
+                success=False,
+                embedded_modules=["auth"],
+                failed_module="blog",
+            )
+
+            ctx = Mock()
+            ctx.existing_state = None
+            ctx.output_path = Path("/tmp/proj")
+            ctx.manifests = {}
+            ctx.delta = Mock()
+            ctx.delta.modules_to_add = ["auth", "blog"]
+            ctx.delta.has_mutable_config_changes = False
+            ctx.qs_config = Mock()
+            ctx.qs_config.modules = {
+                "auth": Mock(options={}),
+                "blog": Mock(options={}),
+            }
+            ctx.qs_config.docker.start = False
+            ctx.qs_config.docker.build = True
+
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        combined = capsys.readouterr()
+        output = combined.out + combined.err
+
+        # Full failure summary structure
+        assert "❌ Apply failed" in output
+        assert "Failed step: authoritative state persistence" in output
+        assert "failed to embed" in output
+        assert ".quickscale/state.yml" in output
+        assert "Skipped downstream steps:" in output
+        mock_save_state.assert_called_once()
+        mock_clear_recovery.assert_not_called()
+
+    def test_authoritative_state_persistence_site_2_recovery_preserved(self, capsys):
+        """Site 2 (L2538): state save failed, recovery was preserved.
+
+        Output must contain ``Failed step: authoritative state persistence``
+        with reason text mentioning recovery state saved to ``apply-recovery.yml``
+        so apply remains rerunnable.
+        """
+        from quickscale_cli.commands.apply_command import _finalize_apply_state
+
+        ctx = Mock()
+        ctx.output_path = Path("/tmp/proj")
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.project.package = "myapp"
+        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.modules = {}
+        ctx.existing_state = None
+        ctx.delta = Mock()
+        ctx.delta.config_deltas = {}
+
+        post_embed_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={},
+        )
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._save_project_state",
+                return_value=False,
+            ) as mock_save_state,
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ) as mock_save_recovery,
+            patch(
+                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+            ) as mock_clear_recovery,
+        ):
+            with pytest.raises(click.Abort):
+                _finalize_apply_state(ctx, post_embed_state)
+
+        combined = capsys.readouterr()
+        output = combined.out + combined.err
+
+        assert "❌ Apply failed" in output
+        assert "Failed step: authoritative state persistence" in output
+        assert "could not save" in output
+        assert ".quickscale/state.yml" in output
+        assert "apply-recovery.yml" in output
+        assert "rerunnable" in output
+        assert "Skipped downstream steps:" in output
+        mock_save_state.assert_called_once()
+        mock_save_recovery.assert_called_once()
+        mock_clear_recovery.assert_not_called()
+
+    def test_authoritative_state_persistence_site_3_recovery_not_preserved(
+        self, capsys
+    ):
+        """Site 3 (L2548): state save AND recovery save both failed.
+
+        Output must contain ``Failed step: authoritative state persistence``
+        with reason text mentioning both ``.quickscale/state.yml`` and
+        ``could not preserve rerunnable recovery state``.
+        """
+        from quickscale_cli.commands.apply_command import _finalize_apply_state
+
+        ctx = Mock()
+        ctx.output_path = Path("/tmp/proj")
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.project.package = "myapp"
+        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.modules = {}
+        ctx.existing_state = None
+        ctx.delta = Mock()
+        ctx.delta.config_deltas = {}
+
+        post_embed_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={},
+        )
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._save_project_state",
+                return_value=False,
+            ) as mock_save_state,
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=False,
+            ) as mock_save_recovery,
+            patch(
+                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+            ) as mock_clear_recovery,
+        ):
+            with pytest.raises(click.Abort):
+                _finalize_apply_state(ctx, post_embed_state)
+
+        combined = capsys.readouterr()
+        output = combined.out + combined.err
+
+        assert "❌ Apply failed" in output
+        assert "Failed step: authoritative state persistence" in output
+        assert "could not save" in output
+        assert ".quickscale/state.yml" in output
+        assert "could not preserve rerunnable recovery state" in output
+        assert "Skipped downstream steps:" in output
+        mock_save_state.assert_called_once()
+        mock_save_recovery.assert_called_once()
+        mock_clear_recovery.assert_not_called()
+
+    @patch(
+        "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+        return_value=False,
+    )
+    @patch(
+        "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+        return_value=False,
+    )
+    @patch(
+        "quickscale_cli.commands.apply_command._embed_modules_step",
+    )
+    def test_sentinel_apply_recovery_state_persistence_literal_output(
+        self,
+        mock_embed,
+        mock_regenerate,
+        mock_save_recovery,
+        capsys,
+    ):
+        """The sentinel 'apply recovery state persistence' is emitted as a
+        literal when post-embed failure abort cannot save recovery state.
+
+        Output must contain exactly that literal — not sourced from any
+        registry — plus the failed-step reason referencing the original
+        step failure and apply-recovery.yml.
+        """
+        from quickscale_cli.commands.apply_command import _execute_apply_steps
+
+        mock_embed.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=["auth"],
+            failed_module=None,
+        )
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch("quickscale_cli.commands.apply_command._generate_new_project"),
+            patch("quickscale_cli.commands.apply_command._init_git_with_config"),
+            patch("quickscale_cli.commands.apply_command.AdvisoryLock"),
+            patch("quickscale_cli.commands.apply_command._refresh_context_after_lock"),
+            patch(
+                "quickscale_cli.commands.apply_command._attempt_provenance_repair_if_needed",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._handle_delta_and_existing_state",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        combined = capsys.readouterr()
+        output = combined.out + combined.err
+
+        assert "❌ Apply failed" in output
+        assert "Failed step: apply recovery state persistence" in output
+        assert "managed module wiring generation failed" in output
+        assert ".quickscale/apply-recovery.yml" in output
+        assert "Skipped downstream steps:" in output
+        mock_save_recovery.assert_called_once()

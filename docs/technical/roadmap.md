@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **Next:** F12.1c, then F12.1d. |
+| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven CLI labels; 14 _FAILED_STEP sites + parity tests). **Next:** F12.1d. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ merged; M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -79,15 +79,15 @@ git merge --no-ff wt-track{N}
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F12.1a ✅ (ApplyStep model + registry), F12.1b ✅ (ledger schema + loader). **Next:** F12.1c.
+**Status:** 🟡 In progress — F12.1a ✅ (ApplyStep model + registry), F12.1b ✅ (ledger schema + loader), F12.1c ✅ (registry-driven CLI labels). **Next:** F12.1d.
 
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
 Open / Next (no remaining blockers — implement in order):
 - **F12.1a** ✅ (`ApplyStep` model + 15-step registry in core).
 - **F12.1b** ✅ (recovery-ledger schema + fail-hard loader in core; `apply/ledger.py`).
-- **F12.1c** (registry-driven step execution, Tier 2) — unblocked (depends only on F12.1a); **next**.
-- **F12.1d** (single authoritative file + consumer parity, Tier 2; wires the F12.1b ledger into commands) → **F12.1e** (fold git-index snapshot, Tier 2).
+- **F12.1c** ✅ (registry-driven step execution, Tier 2) — 14 ad-hoc failed_step literals replaced with `_FAILED_STEP` dict sourced from `APPLY_STEPS`; sentinel `"apply recovery state persistence"` preserved as literal; 29 caller-parity tests added.
+- **F12.1d** (single authoritative file + consumer parity, Tier 2; wires the F12.1b ledger into commands) — **next** → **F12.1e** (fold git-index snapshot, Tier 2).
 - Then F12.2 (consistent fail policy) and F12.3a + F12.3b (close recovery gaps).
 
 ---
@@ -103,7 +103,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
-| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a ✅ F12.1b ✅; F12.1c next |
+| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a-c ✅; F12.1d next |
 | 5 | F5 — DR engine split | M10 | ⬜ M6 ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
 
@@ -200,8 +200,8 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
-**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅; F12.1c next. D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
-- [ ] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action. → F12.1a + F12.1c
+**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅ F12.1c ✅; F12.1d next. D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
+- [x] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action. → F12.1a + F12.1c
 - [ ] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling. → F12.1b + F12.1d + F12.1e
 
 **Discovery findings (correct the prior M8 note):**
@@ -240,9 +240,11 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - Dict-keyed `step_progress` lets an entry-level `step_id` override the dict key (`ledger.py:488`); cannot inject an invalid id but could retarget an entry — consider forbidding entry-level `step_id` in dict-keyed form.
 
 **Phase F12.1c — Drive `_execute_apply_steps_locked` from the registry** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1a. | **Status:** ⬜ Ready after F12.1a.
-- [ ] Refactor `_execute_apply_steps_locked` (`apply_command.py:2696-2891`) to source step identity/labels from the F12.1a registry, replacing the ~14 ad-hoc `failed_step` string literals. Behavior, ordering, and printed strings byte-identical.
-- [ ] Tests: existing apply/recovery tests green; assert failure-summary output is byte-identical; per-failure-site step id covered.
+**Dependencies:** F12.1a. | **Status:** ✅ Complete.
+- [x] Refactor `_execute_apply_steps_locked` (`apply_command.py:2696-2891`) to source step identity/labels from the F12.1a registry, replacing the ~14 ad-hoc `failed_step` string literals. Behavior, ordering, and printed strings byte-identical.
+- [x] Tests: existing apply/recovery tests green; assert failure-summary output is byte-identical; per-failure-site step id covered.
+
+**Completion notes:** 14 ad-hoc `failed_step` literals replaced with `_FAILED_STEP` dict sourced from `APPLY_STEPS`; sentinel `"apply recovery state persistence"` kept as literal (not in registry). Steps 4/11/15 remain unlabeled. `make lint -- --core --cli`, `make typecheck -- --core --cli`, and `make test -- --core --cli` all pass (1731 passed, 28 e2e deselected). 29 caller-parity tests added in `test_apply_command_extended.py` (exact line-by-line output assertions for all 12 unique labels + 3 authoritative-state-persistence callers + sentinel).
 
 **Phase F12.1d — Single authoritative `apply-recovery.yml` write/read + consumer parity (fail hard)** _(M8)_ _(Adaptive tier: 2)_
 **Dependencies:** F12.1b + F12.1c. | **Status:** ⬜ Ready after F12.1b + F12.1c. Riskiest slice.
