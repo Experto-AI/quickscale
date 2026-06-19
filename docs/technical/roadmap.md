@@ -67,7 +67,7 @@ git merge --no-ff wt-track{N}
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
-| M5 | 3 | F2.5–F2.9b | 🟡 | **Next:** F2.9b. F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅. |
+| M5 | 3 | F2.5–F2.9b | 🟢 | **All phases ✅; ready for mergeback (unblocks M8).** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13 | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3 | ⬜ | M5 merged; `ApplyStep` model done; recovery ledger has `failed_step` |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
@@ -92,15 +92,18 @@ F11.2 ✅ complete (org-scoped POST denial proved for Tag, Company, Stage). F11.
 ### M5 — F2 Provenance persistence + release tooling
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Pending phases:** F2.9b
+**Pending phases:** none — all M5 phases complete. Ready for mergeback to v87; closeout unblocks M8 / F12.
 
-**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅), CR-M5-P3-004 (F2.7 ✅), CR-M5-P1-001 (F2.8 hardening ✅), CR-M5-P1-002 (F2.8 wrapper smoke ✅), F2.9a release-authority publish gate ✅.
+**Resolved findings:** CR-M5-P3-007 (F2.5 ✅), CR-M5-P3-003 (F2.6 ✅), CR-M5-P3-004 (F2.7 ✅), CR-M5-P1-001 (F2.8 hardening ✅), CR-M5-P1-002 (F2.8 wrapper smoke ✅), F2.9a release-authority publish gate ✅, F2.9b operator diagnostics ✅.
 
-**Blocked / pending:** M5 remains open only on operator diagnostics for split publish mismatches (F2.9b). M8 / F12 still waits on M5 closeout.
+**Advisory (non-blocking, from F2.9b review):**
+- CR-F29B-P1-001: `--status` can still exit non-zero if an internal subtree-split/path resolution fails inside `_get_module_publish_state` (pre-existing F2.8/F2.9a behavior, not the F2.9a gate). Optional: emit an "error/unknown" row instead of `sys.exit`.
+- CR-F29B-P1-002: addressed — added an inline comment pinning the `--status` substring-sensitivity invariant.
 
 **Next handoff decisions:**
 - F2.9a is complete: mutating split publish flows refuse non-authoritative source states; authority mirrors the existing publish workflow. Accepted authoritative tag formats are exact `VERSION` (e.g. `0.86.0`) or single lowercase `v` + `VERSION` (e.g. `v0.86.0`); uppercase `V` and repeated prefixes are rejected. `--status` remains read-only.
-- F2.9b (Adaptive Tier 1) is the remaining M5 phase: add operator-facing diagnostics for untagged/mismatched split provenance and confirm M5 closeout readiness.
+- F2.9b is complete: `--status` now reports release provenance (authoritative / NOT-authoritative with reason), per-module local-vs-published short SHAs for outdated/unpublished split branches, and explicit next-action guidance — all read-only (never fails closed). Mutating flows continue to fail closed via the F2.9a gate with the same next-action guidance. Diagnostics and gate behavior agree across `<module>`, `--status`, and `--publish-outdated` by sharing `is_release_authoritative`.
+- M5 closeout is ready: merge wt-track3 back to v87 to unblock M8 / F12.
 
 ---
 
@@ -113,7 +116,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
-| 2 | F2 — Project state + module provenance | M5 | 🟡 M5 in-flight |
+| 2 | F2 — Project state + module provenance | M5 | 🟢 M5 complete; ready for mergeback |
 | 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
 | 4 | F12 — Recoverable `apply` (saga) | M8 | ⬜ Waits for M5 |
 | 5 | F5 — DR engine split | M10 | ⬜ Waits for M6 + M8 |
@@ -244,7 +247,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 2 — Consolidate project state and make module provenance actionable
 
-**Why still open:** State consolidation and advisory locking are done (F2.1–F2.4 in CHANGELOG). Provenance persistence across apply/embed/no-op paths is done (F2.5–F2.7 ✅). Split-publish wrapper adoption is done (F2.8 ✅). Tagged/versioned-source publish gate is done (F2.9a ✅). M5 remains open only on operator diagnostics for split publish mismatches (F2.9b).
+**Status:** All M5 phases complete (F2.1–F2.4 in CHANGELOG; F2.5–F2.7 ✅ provenance persistence; F2.8 ✅ split-publish wrapper adoption; F2.9a ✅ tagged/versioned-source publish gate; F2.9b ✅ operator diagnostics for split publish mismatches). M5 is ready for mergeback to v87, which unblocks M8 / F12.
 
 ---
 
@@ -296,11 +299,13 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F2.9b — Operator diagnostics for split publish mismatches** _(M5 closeout, handoff 2/2)_ _(why → [Finding 2](#finding-2--consolidate-project-state-and-make-module-provenance-actionable))_
 
-**Dependencies:** F2.9a | **Adaptive tier:** 1.
+**Dependencies:** F2.9a | **Adaptive tier:** 1. | **Status:** ✅ Complete.
 
-- [ ] Add operator-facing diagnostics for untagged split provenance, unpublished split branches, or version/SHA mismatches.
-- [ ] Keep `--status` read-only while mutating publish flows fail closed with explicit next-action guidance.
-- [ ] Confirm M5 closeout is ready once diagnostics and gate behavior agree across `<module>`, `--status`, and `--publish-outdated`.
+- [x] Add operator-facing diagnostics for untagged split provenance, unpublished split branches, or version/SHA mismatches.
+- [x] Keep `--status` read-only while mutating publish flows fail closed with explicit next-action guidance.
+- [x] Confirm M5 closeout is ready once diagnostics and gate behavior agree across `<module>`, `--status`, and `--publish-outdated`.
+
+**Findings:** `scripts/publish_module.py --status` now runs a read-only `_show_provenance_diagnostics()` that reports whether the source is release-authoritative ("authoritative (VERSION=…, tag=…)" vs "NOT authoritative" + reason for untagged/mismatched HEAD) without ever exiting. `_show_status()` additionally prints per-module local-vs-published short SHAs for outdated split branches and flags unpublished split branches, then emits an explicit "Next action(s)" block (tag HEAD first when non-authoritative, otherwise run `--publish-outdated`). `--status` never fails closed; the mutating single-module and `--publish-outdated` flows continue to fail closed via the F2.9a `_check_release_authoritative()` gate with the same next-action guidance. Both the gate and the read-only diagnostic derive state from the same `is_release_authoritative()` helper, so behavior agrees by construction across `<module>`, `--status`, and `--publish-outdated`. The `--status` NOT-authoritative wording deliberately avoids the lowercase substring "not release-authoritative" so the read-only status test does not collide with the gate-rejection assertion. Three new hermetic F2.9b tests prove untagged-provenance reporting (read-only, exit 0), authoritative-provenance reporting, and unpublished + next-action guidance. Validation: Ruff + format clean and MyPy clean on changed files; `quickscale_core/tests/test_git_utils.py` 91 passed (3 new); full `quickscale_core/tests/` suite 1135 passed at 90.52% coverage (gate met). Independent change-review: STATUS ok, advisory-only findings (CR-F29B-P1-002 addressed inline; CR-F29B-P1-001 documented as pre-existing optional follow-up).
 
 ---
 

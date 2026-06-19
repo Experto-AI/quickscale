@@ -1590,3 +1590,55 @@ class TestPublishModuleReleaseAuthoritativeGate:
         assert "not release-authoritative" in combined
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
+
+    # -----------------------------------------------------------------------
+    # F2.9b — Operator diagnostics for split publish mismatches
+    # -----------------------------------------------------------------------
+
+    def test_status_reports_untagged_provenance(self, tmp_path: Path) -> None:
+        """--status reports NOT-authoritative provenance for untagged HEAD (read-only).
+
+        Hermetic: untagged HEAD.  --status must surface the untagged split
+        provenance as a diagnostic without firing the mutating F2.9a gate.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(repo_dir, "--status", timeout=120)
+        combined = result.stdout + result.stderr
+        # Read-only: --status never fails closed.
+        assert result.returncode == 0
+        # Diagnostic surfaces the untagged provenance state...
+        assert "Release provenance: NOT authoritative" in combined
+        assert "not tagged" in combined
+        # ...but must NOT emit the mutating F2.9a gate rejection.
+        assert "F2.9a gate" not in combined
+        assert "not release-authoritative" not in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    def test_status_reports_authoritative_provenance(self, tmp_path: Path) -> None:
+        """--status reports authoritative provenance when VERSION matches a tag at HEAD.
+
+        Hermetic: VERSION=0.86.0 tagged v0.86.0.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="v0.86.0")
+        result = self._run_wrapper(repo_dir, "--status", timeout=120)
+        combined = result.stdout + result.stderr
+        assert result.returncode == 0
+        assert "Release provenance: authoritative" in combined
+
+    def test_status_reports_unpublished_with_next_action(self, tmp_path: Path) -> None:
+        """--status reports unpublished split branches with explicit next-action guidance.
+
+        Hermetic: untagged HEAD with a never-published fake module.  --status
+        must report the unpublished split branch and give explicit next-action
+        guidance (tag HEAD first) while remaining read-only.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(repo_dir, "--status", timeout=120)
+        combined = result.stdout + result.stderr
+        assert result.returncode == 0
+        # The fake 'auth' module has no published split branch.
+        assert "unpublished" in combined
+        # Explicit next-action guidance points at tagging first.
+        assert "Next action" in combined
+        assert "Tag HEAD to match VERSION" in combined
