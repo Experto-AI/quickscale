@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
-| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; NOT NULL enforced; xfail removed |
+| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10a. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; local `wt-track1` groundwork already includes CRM isolation `xfail` removal, but NOT NULL enforcement + M3 closeout remain open. `wt-track1` is already merged into `v87`; remaining F11.10 work exists only as uncommitted local worktree state. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **Next:** F12.1c, then F12.1d. |
@@ -111,16 +111,59 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** CRM isolation phases F11.1–F11.9 complete and in CHANGELOG (groundwork, org-scoped create/read isolation, backfill, bootstrap, serializer hardening, bulk-deal scope). Remaining: NOT NULL enforcement closeout (F11.10 / M3 closeout), then module rollout to blog, forms, listings, and social (M7). Non-CRM admin, shell, and async paths still need data-layer isolation per module.
+**Why still open:** CRM isolation phases F11.1–F11.9 complete and in CHANGELOG (groundwork, org-scoped create/read isolation, backfill, bootstrap, serializer hardening, bulk-deal scope). F11.10 is only partially prepared in the local `quickscale-wt-track1` worktree: admin/org guardrails, manager-first CRM scoping, and serializer/view/service/test groundwork exist there, but the NOT NULL schema flip, historical-test split, and M3 merge closeout are still open. After M3, module rollout to blog, forms, listings, and social (M7) remains. Non-CRM admin, shell, and async paths still need data-layer isolation per module.
 
 ---
 
-**Phase F11.10 — NOT NULL enforcement + isolation closeout** _(M3 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.10 — CRM NOT NULL enforcement + isolation closeout handoff** _(M3 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
-**Dependencies:** F11.8 + F11.9 + F11.6 + F11.7 all green.
+**Dependencies:** F11.6 + F11.7 + F11.8 + F11.9 merged on `v87`.
 
-- [ ] Enforce NOT NULL org ownership and the manager-first CRM isolation policy.
-- [ ] Remove the CRM isolation `xfail`; confirm the Finding 14 isolation test now passes for `crm`.
+**Local handoff checkpoint (not merged as new commits):**
+- ✅ Already present in the dirty `quickscale-wt-track1` worktree: admin organization add/change guardrails; manager-first CRM scoping (`objects` + operator escape hatch); org-scoped serializer/view/service/test groundwork; CRM isolation `xfail` removal.
+- ⚠️ `wt-track1` is already an ancestor of `v87`; there is no pending branch merge commit. The remaining F11.10 code exists only as uncommitted local worktree changes and cannot merge back until it is committed, validated, and reviewed.
+- ⚠️ Before the next implementation handoff: clean/commit/stash `quickscale-wt-track1`, then merge `v87` into that worktree before continuing.
+
+**Blocking findings / decisions for the next handoff:**
+- [ ] Decide the final `Organization -> {Tag, Company, Contact, Stage, Deal}` delete policy once `organization` becomes required; do not leave the current nullable / `SET_NULL` contract implicit.
+- [ ] Preserve the full historical `0004` nullable contract in migration-history coverage before removing live nullable-era model tests: `null=True`, `blank=True`, create/persist without organization where applicable, and `on_delete=SET_NULL` for all five owned CRM models.
+- [ ] Decide whether historical NULL-row / backfill-command coverage remains partially in `quickscale_modules/crm/tests/test_management_commands.py` or moves fully into `quickscale_modules/crm/tests/test_migrations.py`.
+- [ ] Confirm the recommended post-`0006` solo-stage contract: seed and resolve solo CRM stages through the active personal org via `ensure_org_default_stages()` / same-org stage resolution, not legacy NULL-owned `0001` stage rows.
+
+**Phase F11.10a — Historical nullable-contract harness** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.6 + F11.7 + F11.8 + F11.9 merged.
+
+- [ ] Preserve the full `0004` nullable contract for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` in migration/history coverage (`null=True`, `blank=True`, create/persist without org where applicable, `on_delete=SET_NULL`).
+- [ ] Remove `TestOrganizationFieldNullable` from live current-state expectations once the same historical contract is proven elsewhere.
+
+**Phase F11.10b — Schema flip + owner contract** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.10a.
+
+- [ ] Add `0006` to hard-stop residual NULL-owned upgraded rows, tighten the five owned CRM `organization` FKs to the final NOT NULL contract, and apply the chosen delete policy.
+- [ ] Keep F11-deferred per-org `terminal_semantic` uniqueness out of scope for this slice.
+
+**Phase F11.10c — Solo/personal-org stage bootstrap closeout** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.10b.
+
+- [ ] Replace live solo `/crm/` and `/crm/api/stages/` dependence on legacy NULL-owned stage rows with personal-org-backed stage seeding via `ensure_org_default_stages()`.
+- [ ] Keep bulk stage mutation, `stage_id` validation, and terminal-stage actions same-org / personal-org only.
+
+**Phase F11.10d — Backfill + current-state regression split** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.10b + F11.10c.
+
+- [ ] Split historical NULL-row / backfill-command coverage from latest-schema current-state coverage.
+- [ ] Rewrite current-state `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py` assertions to the post-`0006` contract; keep only historical NULL-era proofs in migration/history harnesses.
+
+**Phase F11.10e — Isolation + M3 merge closeout** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+
+**Dependencies:** F11.10d.
+
+- [ ] Run the narrow CRM closeout set before and after syncing from `v87`: migration/history proofs, stage/bootstrap/runtime slices, and `quickscale_modules/crm/tests/test_isolation.py`.
+- [ ] Update roadmap / changelog status from the validated post-merge evidence set, then merge the completed M3 slice back to `v87`.
 
 ---
 
