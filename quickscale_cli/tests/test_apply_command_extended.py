@@ -5656,6 +5656,10 @@ class TestCallerParityAcrossProvenancePaths:
 
 
 # All 12 unique failed_step labels from APPLY_STEPS (registry-backed).
+# NOTE: reason strings here are synthetic/shortened for formatter-shape testing.
+# Exact production reason text is asserted only in the 3 authoritative-state-
+# persistence caller-driven tests.  Full caller-driven parity for the remaining
+# 11 callers is deferred to F12.1c-closeout (CR-F12.1C-004).
 _F12_1C_UNIQUE_FAILED_STEP_LABELS: list[tuple[str, str]] = [
     ("module embedding", "required module 'blog' failed to embed"),
     ("post-embed state snapshot", "could not compute post-embed state"),
@@ -5696,14 +5700,18 @@ def _expected_failure_summary_lines(failed_step: str, reason: str) -> list[str]:
 
 
 class TestApplyFailureSummaryParity:
-    """F12.1c Phase 3: Byte-identical failure-summary output for all 15 callers.
+    """F12.1c Phase 3: Failure-summary output parity for all 15 callers.
 
     The 12 unique registry-backed labels are tested via parametrized
-    direct calls to :func:`_print_apply_failure_summary`.  The three
-    ``authoritative state persistence`` callers (with distinct reason
-    text) are tested in separate integration-style tests.  The sentinel
-    ``apply recovery state persistence`` receives its own test confirming
-    it is a literal outside the registry.
+    direct calls to :func:`_print_apply_failure_summary` with synthetic
+    reason strings, proving the formatter shape (header, label, reason,
+    skipped-steps tail).  The three ``authoritative state persistence``
+    callers are tested via caller-driven integration-style tests that
+    exercise the real production branches.  The sentinel ``apply
+    recovery state persistence`` is tested as a literal outside the
+    registry.  Full byte-identical line-by-line equality for the 11
+    non-authoritative caller branches is deferred to
+    ``F12.1c-closeout`` (CR-F12.1C-004).
     """
 
     @pytest.mark.parametrize("failed_step,reason", _F12_1C_UNIQUE_FAILED_STEP_LABELS)

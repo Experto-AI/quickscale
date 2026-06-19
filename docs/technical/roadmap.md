@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10a. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅; local `wt-track1` groundwork already includes CRM isolation `xfail` removal, but NOT NULL enforcement + M3 closeout remain open. `wt-track1` is already merged into `v87`; remaining F11.10 work exists only as uncommitted local worktree state. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven CLI labels; 14 _FAILED_STEP sites + parity tests). **Next:** F12.1d. |
+| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ▶️** (implementation accepted for merge; CR-F12.1C-004 open — exact full-summary parity deferred to Tier 1 `F12.1c-closeout`). **Next:** Tier 1 `F12.1c-closeout` → Tier 2 `F12.1d`. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ merged; M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -79,16 +79,15 @@ git merge --no-ff wt-track{N}
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F12.1a ✅ (ApplyStep model + registry), F12.1b ✅ (ledger schema + loader), F12.1c ✅ (registry-driven CLI labels). **Next:** F12.1d.
+**Status:** 🟡 In progress — F12.1a ✅ (ApplyStep model + registry), F12.1b ✅ (ledger schema + loader), F12.1c ▶️ (implementation accepted for merge; CR-F12.1C-004 open). **Next:** Tier 1 `F12.1c-closeout`.
 
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
-Open / Next (no remaining blockers — implement in order):
+Open / Next (no remaining non-evidence blockers — implement in order):
 - **F12.1a** ✅ (`ApplyStep` model + 15-step registry in core).
 - **F12.1b** ✅ (recovery-ledger schema + fail-hard loader in core; `apply/ledger.py`).
-- **F12.1c** ✅ (registry-driven step execution, Tier 2) — 14 ad-hoc failed_step literals replaced with `_FAILED_STEP` dict sourced from `APPLY_STEPS`; sentinel `"apply recovery state persistence"` preserved as literal; 29 caller-parity tests added.
-- **F12.1d** (single authoritative file + consumer parity, Tier 2; wires the F12.1b ledger into commands) — **next** → **F12.1e** (fold git-index snapshot, Tier 2).
-- Then F12.2 (consistent fail policy) and F12.3a + F12.3b (close recovery gaps).
+- **F12.1c ▶️** (registry-driven step execution, Tier 2) — implementation accepted for this merge. 14 ad-hoc `failed_step` literals replaced with `_FAILED_STEP` dict sourced from `APPLY_STEPS`; sentinel `"apply recovery state persistence"` preserved as literal. Parity tests in `TestApplyFailureSummaryParity`: 12 unique registry-backed labels covered by parametrized synthetic formatter-shape tests, 3 authoritative-state-persistence caller-driven tests, 2 sentinel tests (registry-absence + caller-driven output). ⚠️ **Accepted open blocker CR-F12.1C-004** (medium, breaking-change): exact byte-identical full-summary equality is not yet proven for the 11 non-authoritative callers; the parametrized tests use synthetic reason strings. Strengthening parity tests belongs to `F12.1c-closeout`.
+- **F12.1c-closeout** — prove exact byte-identical full-summary equality for all 15 callers (Tier 1). **Next.** → **F12.1d** (single authoritative file + consumer parity, Tier 2; wires the F12.1b ledger into commands) → **F12.1e** (fold git-index snapshot, Tier 2). Then **F12.2** (consistent fail policy, Tier 2), **F12.3a** (pre-embed recovery coverage, Tier 1), **F12.3b** (Railway rollback/resume, Tier 2).
 
 ---
 
@@ -103,7 +102,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
-| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a-c ✅; F12.1d next |
+| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a-b ✅; F12.1c ▶️ implementation accepted, CR-F12.1C-004 open; next `F12.1c-closeout` |
 | 5 | F5 — DR engine split | M10 | ⬜ M6 ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
 
@@ -243,7 +242,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
-**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅ F12.1c ✅; F12.1d next. D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
+**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅; F12.1c ▶️ implementation accepted for merge (CR-F12.1C-004 open). D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
 - [x] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action. → F12.1a + F12.1c
 - [ ] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling. → F12.1b + F12.1d + F12.1e
 
@@ -283,14 +282,29 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - Dict-keyed `step_progress` lets an entry-level `step_id` override the dict key (`ledger.py:488`); cannot inject an invalid id but could retarget an entry — consider forbidding entry-level `step_id` in dict-keyed form.
 
 **Phase F12.1c — Drive `_execute_apply_steps_locked` from the registry** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1a. | **Status:** ✅ Complete.
+**Dependencies:** F12.1a. | **Status:** ▶️ Implementation accepted for this merge; closeout evidence not yet complete.
 - [x] Refactor `_execute_apply_steps_locked` (`apply_command.py:2696-2891`) to source step identity/labels from the F12.1a registry, replacing the ~14 ad-hoc `failed_step` string literals. Behavior, ordering, and printed strings byte-identical.
-- [x] Tests: existing apply/recovery tests green; assert failure-summary output is byte-identical; per-failure-site step id covered.
+- [x] Tests: existing apply/recovery tests green; per-failure-site step id covered; `TestApplyFailureSummaryParity` added (12 parametrized synthetic formatter-shape tests + 3 authoritative-state caller-driven tests + sentinel coverage).
+- [ ] Exact byte-identical full-summary equality for all 15 callers → deferred to **F12.1c-closeout** (Tier 1).
 
-**Completion notes:** 14 ad-hoc `failed_step` literals replaced with `_FAILED_STEP` dict sourced from `APPLY_STEPS`; sentinel `"apply recovery state persistence"` kept as literal (not in registry). Steps 4/11/15 remain unlabeled. `make lint -- --core --cli`, `make typecheck -- --core --cli`, and `make test -- --core --cli` all pass (1731 passed, 28 e2e deselected). 29 caller-parity tests added in `test_apply_command_extended.py` (exact line-by-line output assertions for all 12 unique labels + 3 authoritative-state-persistence callers + sentinel).
+⚠️ **Accepted open blocker CR-F12.1C-004** (medium, breaking-change): the 11 non-authoritative caller branches are covered only by synthetic parametrized formatter-shape tests (proving header/label/reason/skipped-steps structure) but not by caller-driven tests with exact production reason text. The 3 authoritative-state-persistence callers are already tested caller-driven. Exact byte-identical parity is not yet fully proven. Resolving this is the primary goal of `F12.1c-closeout`. The implementation itself (14 `_FAILED_STEP` sites, sentinel preservation) is stable and accepted for merge.
+
+**Completion notes (implementation):** 14 ad-hoc `failed_step` literals replaced with `_FAILED_STEP` dict sourced from `APPLY_STEPS`; sentinel `"apply recovery state persistence"` kept as literal (not in registry). Steps 4/11/15 remain unlabeled. `make lint -- --core --cli`, `make typecheck -- --core --cli`, and `make test -- --core --cli` all pass (1731 passed, 28 e2e deselected). `TestApplyFailureSummaryParity`: 12 unique labels covered by synthetic formatter-shape tests (proving header/label/reason/skipped-steps structure), 3 authoritative-state-persistence caller-driven tests, sentinel covered by registry-absence + caller-driven output. The 11 non-authoritative caller branches are not yet covered by caller-driven tests with exact production reasons.
+
+**Phase F12.1c-closeout — Prove exact byte-identical full-summary equality** _(M8)_ _(Adaptive tier: 1)_
+**Dependencies:** F12.1c. | **Status:** ⬜ **Next.** Primary goal: resolve CR-F12.1C-004.
+- [ ] Add caller-driven tests for the 11 non-authoritative caller branches that exercise each real production failure branch through `_execute_apply_steps` and assert exact line-by-line full-summary output (header, Failed step line, production Reason line, skipped-steps tail).
+- [ ] Verify the 3 authoritative-state-persistence callers and the sentinel also achieve exact byte-identical coverage.
+- [ ] Preferred to complete before `F12.1d` so that the registry-driven contract is proven before wiring the ledger.
+
+**Next-time decisions (recorded here for the next handoff):**
+- **CR-F12.1C-004** is accepted for this merge only. Any semantic parity-test strengthening (exact line-by-line equality) belongs to `F12.1c-closeout`, not to this merge.
+- **Preferred next order:** Tier 1 `F12.1c-closeout` → Tier 2 `F12.1d` → Tier 2 `F12.1e` → Tier 2 `F12.2` → Tier 1 `F12.3a` → Tier 2 `F12.3b`.
+- **D-F12.1-LEDGER** Option A (enrich `apply-recovery.yml` in place) and the **no-back-compat / fail-hard directive** remain binding for all subsequent F12.1 sub-phases.
+
 
 **Phase F12.1d — Single authoritative `apply-recovery.yml` write/read + consumer parity (fail hard)** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1b + F12.1c. | **Status:** ⬜ Ready after F12.1b + F12.1c. Riskiest slice.
+**Dependencies:** F12.1b + F12.1c. **Recommended:** complete `F12.1c-closeout` first. **Status:** ⬜ Ready after F12.1b + F12.1c. Riskiest slice.
 - [ ] Make the enriched `apply-recovery.yml` the single authoritative recovery channel: ensure apply (`_abort_after_post_embed_failure` `2473`, `_finalize_apply_state` `2502`, `_refresh_context_after_lock`), the `remove_command` **write and clear** paths (`_update_apply_recovery_state`, `_clear_apply_recovery_state`), and all readers (apply `2040-2042`, `module_commands` `971-985`, remove read paths) all read/write/clear that one file. Collapse the secondary recovery channel into it.
 - [ ] No backward compatibility / no fallback: do not preserve a legacy read path; a missing/malformed ledger fails hard. Breaking change is accepted.
 - [ ] Preserve presence-gated idempotent resume at every site (`2417`, `2616`, `2632-2634`, `2679`, `2690`, `2966`); `_merge_apply_recovery_state` membership semantics unchanged.
