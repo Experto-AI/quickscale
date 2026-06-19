@@ -13,10 +13,15 @@ from quickscale_core.utils.git_utils import (
     get_remote_url,
     is_git_repo,
     is_working_directory_clean,
+    push_split_branch,
+    resolve_module_path,
     resolve_remote_ref,
+    resolve_split_branch,
     run_git_subtree_add,
     run_git_subtree_pull,
     run_git_subtree_push,
+    run_git_subtree_split,
+    validate_module_name,
 )
 
 
@@ -716,3 +721,323 @@ class TestSubtreePullWithCommitSha:
             path=local_dir,
         )
         assert module_file.read_text() == "v2\n"
+
+
+# ---------------------------------------------------------------------------
+# F2.8 — Provenance-aware split-publish helper surface tests
+# ---------------------------------------------------------------------------
+
+
+class TestValidateModuleName:
+    """Tests for validate_module_name (CR-M5-P1-001 security boundary)."""
+
+    def test_accepts_simple_slug(self) -> None:
+        """validate_module_name accepts plain alphanumeric slugs."""
+        validate_module_name("auth")  # must not raise
+        validate_module_name("billing")
+        validate_module_name("crm")
+
+    def test_accepts_hyphens_and_underscores(self) -> None:
+        """validate_module_name accepts slugs with hyphens and underscores."""
+        validate_module_name("my-module")
+        validate_module_name("my_module")
+        validate_module_name("module-v2")
+        validate_module_name("a_b-c")
+
+    def test_accepts_leading_digit(self) -> None:
+        """validate_module_name accepts slugs starting with a digit."""
+        validate_module_name("v2module")
+        validate_module_name("3drender")
+
+    def test_rejects_empty(self) -> None:
+        """validate_module_name rejects empty string."""
+        with pytest.raises(GitError, match="must not be empty"):
+            validate_module_name("")
+
+    def test_rejects_path_traversal(self) -> None:
+        """validate_module_name rejects path-traversal attempts."""
+        with pytest.raises(GitError):
+            validate_module_name("..")
+        with pytest.raises(GitError):
+            validate_module_name("../etc/passwd")
+        with pytest.raises(GitError):
+            validate_module_name("foo/../../etc/passwd")
+
+    def test_rejects_forward_slash(self) -> None:
+        """validate_module_name rejects names with forward slashes."""
+        with pytest.raises(GitError):
+            validate_module_name("foo/bar")
+
+    def test_rejects_backslash(self) -> None:
+        """validate_module_name rejects names with backslashes."""
+        with pytest.raises(GitError):
+            validate_module_name("foo\\bar")
+
+    def test_rejects_flag_injection(self) -> None:
+        """validate_module_name rejects names starting with a hyphen."""
+        with pytest.raises(GitError):
+            validate_module_name("-flag")
+        with pytest.raises(GitError):
+            validate_module_name("--force")
+
+    def test_rejects_spaces(self) -> None:
+        """validate_module_name rejects names with spaces."""
+        with pytest.raises(GitError):
+            validate_module_name("my module")
+        with pytest.raises(GitError):
+            validate_module_name(" leading")
+
+    def test_rejects_shell_metacharacters(self) -> None:
+        """validate_module_name rejects shell meta-characters."""
+        for bad in ["foo;rm -rf /", "foo$(evil)", "foo`evil`", "foo|bar", "foo&bar"]:
+            with pytest.raises(GitError):
+                validate_module_name(bad)
+
+    def test_rejects_dot_prefix(self) -> None:
+        """validate_module_name rejects names starting with a dot."""
+        with pytest.raises(GitError):
+            validate_module_name(".hidden")
+
+
+class TestResolveModulePath:
+    """Tests for resolve_module_path (F2.8)."""
+
+    def test_returns_canonical_path(self) -> None:
+        """resolve_module_path returns quickscale_modules/<name>."""
+        assert resolve_module_path("auth") == "quickscale_modules/auth"
+        assert resolve_module_path("billing") == "quickscale_modules/billing"
+
+    def test_rejects_empty_name(self) -> None:
+        """resolve_module_path raises GitError for empty module name."""
+        with pytest.raises(GitError, match="must not be empty"):
+            resolve_module_path("")
+
+    def test_rejects_path_separators(self) -> None:
+        """resolve_module_path rejects names containing path separators."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_module_path("foo/bar")
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_module_path("foo\\bar")
+
+    def test_rejects_path_traversal(self) -> None:
+        """resolve_module_path rejects .. traversal (CR-M5-P1-001)."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_module_path("..")
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_module_path("../etc/passwd")
+
+    def test_rejects_flag_injection(self) -> None:
+        """resolve_module_path rejects names starting with - (CR-M5-P1-001)."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_module_path("--force")
+
+    def test_rejects_spaces(self) -> None:
+        """resolve_module_path rejects names with spaces (CR-M5-P1-001)."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_module_path("my module")
+
+
+class TestResolveSplitBranch:
+    """Tests for resolve_split_branch (F2.8)."""
+
+    def test_returns_canonical_branch(self) -> None:
+        """resolve_split_branch returns splits/<name>-module."""
+        assert resolve_split_branch("auth") == "splits/auth-module"
+        assert resolve_split_branch("billing") == "splits/billing-module"
+
+    def test_rejects_empty_name(self) -> None:
+        """resolve_split_branch raises GitError for empty module name."""
+        with pytest.raises(GitError, match="must not be empty"):
+            resolve_split_branch("")
+
+    def test_rejects_path_separators(self) -> None:
+        """resolve_split_branch rejects names containing path separators."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_split_branch("foo/bar")
+
+    def test_rejects_path_traversal(self) -> None:
+        """resolve_split_branch rejects .. traversal (CR-M5-P1-001)."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_split_branch("..")
+
+    def test_rejects_flag_injection(self) -> None:
+        """resolve_split_branch rejects names starting with - (CR-M5-P1-001)."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_split_branch("-flag")
+
+    def test_rejects_spaces(self) -> None:
+        """resolve_split_branch rejects names with spaces (CR-M5-P1-001)."""
+        with pytest.raises(GitError, match="Invalid module name"):
+            resolve_split_branch("my module")
+
+
+class TestRunGitSubtreeSplit:
+    """Tests for run_git_subtree_split (F2.8)."""
+
+    @patch("subprocess.run")
+    def test_successful_split(self, mock_run: MagicMock) -> None:
+        """run_git_subtree_split returns the 40-char SHA on success."""
+        expected_sha = "a" * 40
+        mock_run.return_value = MagicMock(
+            stdout=f"{expected_sha}\n",
+            returncode=0,
+        )
+        sha = run_git_subtree_split(
+            prefix="quickscale_modules/auth",
+            branch="splits/auth-module",
+        )
+        assert sha == expected_sha
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert "subtree" in args
+        assert "split" in args
+        assert "--prefix=quickscale_modules/auth" in args
+        assert "-b" in args
+        assert "splits/auth-module" in args
+        assert "--rejoin" in args
+        assert "--ignore-joins" in args
+
+    @patch("subprocess.run")
+    def test_split_without_rejoin(self, mock_run: MagicMock) -> None:
+        """run_git_subtree_split omits --rejoin when rejoin=False."""
+        mock_run.return_value = MagicMock(
+            stdout=f"{'b' * 40}\n",
+            returncode=0,
+        )
+        run_git_subtree_split(
+            prefix="quickscale_modules/auth",
+            branch="splits/auth-module",
+            rejoin=False,
+        )
+        args = mock_run.call_args[0][0]
+        assert "--rejoin" not in args
+
+    @patch("subprocess.run")
+    def test_split_failure_raises(self, mock_run: MagicMock) -> None:
+        """run_git_subtree_split raises GitError on failure."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "git", stderr="fatal: not a subtree"
+        )
+        with pytest.raises(GitError, match="Failed to split git subtree"):
+            run_git_subtree_split(
+                prefix="quickscale_modules/auth",
+                branch="splits/auth-module",
+            )
+
+    @patch("subprocess.run")
+    def test_split_unexpected_output_raises(self, mock_run: MagicMock) -> None:
+        """run_git_subtree_split raises GitError when output is not a 40-char SHA."""
+        mock_run.return_value = MagicMock(
+            stdout="short-sha\n",
+            returncode=0,
+        )
+        with pytest.raises(GitError, match="Unexpected subtree split output"):
+            run_git_subtree_split(
+                prefix="quickscale_modules/auth",
+                branch="splits/auth-module",
+            )
+
+
+class TestPushSplitBranch:
+    """Tests for push_split_branch (F2.8)."""
+
+    @patch("subprocess.run")
+    def test_force_push_by_default(self, mock_run: MagicMock) -> None:
+        """push_split_branch force-pushes by default."""
+        mock_run.return_value = MagicMock(returncode=0)
+        push_split_branch("splits/auth-module")
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert "push" in args
+        assert "--force" in args
+        assert "origin" in args
+        assert "splits/auth-module" in args
+
+    @patch("subprocess.run")
+    def test_non_force_push(self, mock_run: MagicMock) -> None:
+        """push_split_branch omits --force when force=False."""
+        mock_run.return_value = MagicMock(returncode=0)
+        push_split_branch("splits/auth-module", force=False)
+        args = mock_run.call_args[0][0]
+        assert "--force" not in args
+
+    @patch("subprocess.run")
+    def test_custom_remote(self, mock_run: MagicMock) -> None:
+        """push_split_branch accepts a custom remote name."""
+        mock_run.return_value = MagicMock(returncode=0)
+        push_split_branch("splits/auth-module", remote="upstream")
+        args = mock_run.call_args[0][0]
+        assert "upstream" in args
+
+    @patch("subprocess.run")
+    def test_push_failure_raises(self, mock_run: MagicMock) -> None:
+        """push_split_branch raises GitError on push failure."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "git", stderr="remote rejected"
+        )
+        with pytest.raises(GitError, match="Failed to push split branch"):
+            push_split_branch("splits/auth-module")
+
+
+# ---------------------------------------------------------------------------
+# CR-M5-P1-001 / CR-M5-P1-002: Wrapper smoke test for invalid module names
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestPublishModuleWrapperSmoke:
+    """Subprocess smoke tests for scripts/publish_module.py (CR-M5-P1-002).
+
+    Proves the wrapper fails closed with a clean operator-facing error
+    (no traceback) when given an invalid module name.
+    """
+
+    def _repo_root(self) -> Path:
+        """Return the repository root (quickscale_core/tests -> repo root)."""
+        # test_git_utils.py -> tests/ -> quickscale_core/ -> repo_root
+        return Path(__file__).resolve().parent.parent.parent
+
+    def _run_wrapper(self, *args: str) -> subprocess.CompletedProcess[str]:
+        """Run the publish wrapper as a subprocess."""
+        repo_root = self._repo_root()
+        script = repo_root / "scripts" / "publish_module.py"
+        return subprocess.run(
+            ["python", str(script), *args],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def test_invalid_module_name_exits_cleanly(self) -> None:
+        """Invalid module name exits non-zero with no traceback."""
+        result = self._run_wrapper("../etc/passwd")
+        assert result.returncode != 0
+        # Must NOT contain a Python traceback
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+        # Must contain a clean error message
+        combined = result.stdout + result.stderr
+        assert "Invalid module name" in combined
+
+    def test_flag_injection_exits_cleanly(self) -> None:
+        """Flag-injection module name exits non-zero with no traceback."""
+        result = self._run_wrapper("--force")
+        assert result.returncode != 0
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    def test_empty_module_name_exits_cleanly(self) -> None:
+        """Empty module name (just --) exits non-zero with no traceback."""
+        # argparse treats bare '' as a positional arg
+        result = self._run_wrapper("")
+        assert result.returncode != 0
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    def test_space_in_module_name_exits_cleanly(self) -> None:
+        """Module name with spaces exits non-zero with no traceback."""
+        result = self._run_wrapper("my module")
+        assert result.returncode != 0
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout

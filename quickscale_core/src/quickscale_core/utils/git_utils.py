@@ -1,5 +1,6 @@
 """Git utilities for module management via git subtree operations."""
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,29 @@ class GitError(Exception):
     """Raised when a git operation fails."""
 
     pass
+
+
+# Strict module-name allowlist: alphanumeric, hyphens, underscores; must start
+# with an alphanumeric character.  This prevents path-traversal (``..``, ``/``),
+# flag-injection (``-leading``), and shell-meta characters from reaching
+# ``git subtree --prefix=`` or branch-name arguments.
+_MODULE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+
+
+def validate_module_name(module_name: str) -> None:
+    """Reject *module_name* unless it is a safe bare slug.
+
+    Raises :class:`GitError` with an operator-facing message when the name is
+    empty, contains path separators, starts with ``-``, or includes any
+    character outside ``[a-zA-Z0-9_-]``.
+    """
+    if not module_name:
+        raise GitError("Module name must not be empty")
+    if not _MODULE_NAME_RE.match(module_name):
+        raise GitError(
+            f"Invalid module name {module_name!r}; "
+            "expected a bare slug matching [a-zA-Z0-9][a-zA-Z0-9_-]*"
+        )
 
 
 def is_git_repo(path: Path | None = None) -> bool:
@@ -190,3 +214,105 @@ def get_remote_url(remote_name: str = "origin", path: Path | None = None) -> str
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to get remote URL: {e.stderr}")
+
+
+# ---------------------------------------------------------------------------
+# F2.8 — Provenance-aware split-publish helper surface
+# ---------------------------------------------------------------------------
+
+
+def resolve_module_path(module_name: str) -> str:
+    """Return the canonical maintainer-side module path for *module_name*.
+
+    Centralizes the ``quickscale_modules/<name>`` convention so split-publish
+    callers do not hardcode the path template.  Raises :class:`GitError` when
+    *module_name* is not a valid bare module slug (empty, path separators,
+    ``..`` traversal, flag-injection prefixes, or shell-meta characters).
+    """
+    validate_module_name(module_name)
+    return f"quickscale_modules/{module_name}"
+
+
+def resolve_split_branch(module_name: str) -> str:
+    """Return the canonical split branch name for *module_name*.
+
+    Centralizes the ``splits/<name>-module`` convention so split-publish
+    callers do not hardcode the branch template.  Raises :class:`GitError`
+    when *module_name* is not a valid bare module slug (empty, path
+    separators, ``..`` traversal, flag-injection prefixes, or shell-meta
+    characters).
+    """
+    validate_module_name(module_name)
+    return f"splits/{module_name}-module"
+
+
+def run_git_subtree_split(
+    prefix: str,
+    branch: str,
+    *,
+    rejoin: bool = True,
+    ignore_joins: bool = True,
+    path: Path | None = None,
+) -> str:
+    """Execute ``git subtree split`` and return the resulting commit SHA.
+
+    Creates or updates the local split *branch* from the subtree at *prefix*.
+    The *rejoin* and *ignore_joins* flags match the provenance-aware split
+    convention used by the maintainer publish workflow (F2.8).
+
+    Returns:
+        The 40-character hex commit SHA of the split result.
+
+    Raises:
+        GitError: If the subtree split fails.
+    """
+    cwd = path or Path.cwd()
+    cmd = ["git", "subtree", "split", f"--prefix={prefix}", "-b", branch]
+    if rejoin:
+        cmd.append("--rejoin")
+    if ignore_joins:
+        cmd.append("--ignore-joins")
+
+    try:
+        result = subprocess.run(
+            cmd, cwd=cwd, check=True, capture_output=True, text=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to split git subtree: {e.stderr}") from e
+
+    # ``git subtree split -b <branch>`` prints the resulting SHA to stdout.
+    split_sha = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    if not split_sha or len(split_sha) != 40:
+        raise GitError(
+            f"Unexpected subtree split output for {prefix}; "
+            f"could not extract a 40-char SHA (got {split_sha!r})"
+        )
+    return split_sha
+
+
+def push_split_branch(
+    branch: str,
+    remote: str = "origin",
+    *,
+    force: bool = True,
+    path: Path | None = None,
+) -> None:
+    """Push a split *branch* to *remote*.
+
+    Split branches are force-pushed by default because they are rewritten
+    history derived from subtree splits.  Set *force* to ``False`` for a
+    non-destructive push.
+
+    Raises:
+        GitError: If the push fails.
+    """
+    cwd = path or Path.cwd()
+    cmd = ["git", "push"]
+    if force:
+        cmd.append("--force")
+    cmd.extend([remote, branch])
+
+    try:
+        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to push split branch {branch}: {e.stderr}") from e
