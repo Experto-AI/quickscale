@@ -67,7 +67,16 @@ def run_git_subtree_add(
     squash: bool = True,
     path: Path | None = None,
 ) -> None:
-    """Execute git subtree add with error handling"""
+    """Execute git subtree add with error handling.
+
+    The *branch* parameter accepts either a branch name or a fully-spelled
+    40-character hex commit SHA.  Passing a SHA binds the add to the exact
+    commit so the fetched content cannot drift if the remote branch advances
+    between ref resolution and the subtree operation.  This relies on
+    ``git fetch <url> <hex>`` officially supporting fully-spelled hex object
+    names and ``git-subtree`` forwarding the ref to ``git fetch``.  Verified
+    on Git 2.43.0+.
+    """
     cwd = path or Path.cwd()
     cmd = ["git", "subtree", "add", f"--prefix={prefix}", remote, branch]
     if squash:

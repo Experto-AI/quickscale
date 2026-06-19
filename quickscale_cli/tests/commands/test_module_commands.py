@@ -2331,3 +2331,63 @@ class TestSyncStateModuleVersionTriple:
         assert module_state.embedded_at != "2025-01-01T00:00:00"
         assert module_state.embedded_at is not None
         assert module_state.embedded_at != ""
+
+
+# ============================================================================
+# F2.7: Caller parity — update path sync helper produces same triple
+# ============================================================================
+
+
+class TestCallerParityUpdateSyncHelper:
+    """F2.7 tests: _sync_state_module_version produces the same triple
+    structure as the apply and no-op repair paths."""
+
+    def test_sync_helper_produces_same_triple_as_other_paths(self, tmp_path):
+        """_sync_state_module_version writes version, commit_sha, and
+        embedded_at — the same triple that apply and no-op repair persist."""
+        from quickscale_cli.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+            StateManager,
+        )
+
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        initial_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.82.0",
+                    commit_sha="a" * 40,
+                    embedded_at="2025-01-01T00:00:00",
+                ),
+            },
+        )
+        state_manager = StateManager(tmp_path)
+        state_manager.save(initial_state)
+
+        new_sha = "e" * 40
+        _sync_state_module_version(
+            tmp_path,
+            "auth",
+            "0.83.0",
+            commit_sha=new_sha,
+        )
+
+        updated_state = state_manager.load()
+        assert updated_state is not None
+        module_state = updated_state.modules["auth"]
+        # Same triple structure as apply and no-op repair paths.
+        assert module_state.version == "0.83.0"
+        assert module_state.commit_sha == new_sha
+        assert module_state.embedded_at is not None
+        assert module_state.embedded_at != ""
+        assert module_state.embedded_at != "2025-01-01T00:00:00"
