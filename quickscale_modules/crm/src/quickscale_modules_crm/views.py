@@ -37,6 +37,7 @@ from .serializers import (
     StageSerializer,
     TagSerializer,
 )
+from .services import ensure_org_default_stages
 
 
 def _is_org_scoped_route(request: Request | HttpRequest) -> bool:
@@ -63,9 +64,12 @@ def _require_org_for_read(request: Request | HttpRequest) -> Any:
     )
 
     try:
-        return require_current_org(request)
+        organization = require_current_org(request)
     except CurrentOrgError:
         raise PermissionDenied("Organization context is required for this route.")
+
+    ensure_org_default_stages(organization)
+    return organization
 
 
 _TERMINAL_STAGE_DEFAULTS = {

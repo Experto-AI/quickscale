@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
+from .crm_bootstrap import maybe_seed_crm_default_stages
 from .models import (
     OrgRole,
     Organization,
@@ -113,6 +114,7 @@ class OrgCreateForm(forms.Form):
                     organization=organization,
                     role=OrgRole.OWNER,
                 )
+                maybe_seed_crm_default_stages(organization)
                 return organization
 
 
