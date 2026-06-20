@@ -215,6 +215,41 @@ class ContactNoteSerializer(serializers.ModelSerializer):
             return str(obj.created_by)
         return ""
 
+    def validate(self, attrs: dict) -> dict:
+        """Reject foreign-org parent contact on org-scoped create.
+
+        When creating a ContactNote via an org-scoped route, the parent
+        contact must belong to the same organization (or have NULL
+        organization for legacy/solo compatibility).  Foreign-org parent
+        references are rejected.  Solo routes skip this validation.
+        """
+        request = self.context.get("request")
+        if request is not None:
+            path = getattr(request, "path", "") or ""
+            if not path.startswith("/orgs/"):
+                # Solo route — skip foreign-org validation.
+                return attrs
+
+        org_id = _request_org_id(self)
+        if org_id is None:
+            # No org context — skip foreign-org validation.
+            return attrs
+
+        # Validate contact_id belongs to the current org.
+        contact = attrs.get("contact")
+        if contact is not None:
+            if (
+                contact.organization_id is not None
+                and contact.organization_id != org_id
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "contact": "The specified contact does not belong to this organization."
+                    }
+                )
+
+        return attrs
+
     def create(self, validated_data: dict) -> ContactNote:
         """Set created_by to the current user"""
         validated_data["created_by"] = self.context["request"].user
@@ -461,6 +496,36 @@ class DealNoteSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return str(obj.created_by)
         return ""
+
+    def validate(self, attrs: dict) -> dict:
+        """Reject foreign-org parent deal on org-scoped create.
+
+        When creating a DealNote via an org-scoped route, the parent deal
+        must belong to the same organization (or have NULL organization
+        for legacy/solo compatibility).  Foreign-org parent references
+        are rejected.  Solo routes skip this validation.
+        """
+        request = self.context.get("request")
+        if request is not None:
+            path = getattr(request, "path", "") or ""
+            if not path.startswith("/orgs/"):
+                # Solo route — skip foreign-org validation.
+                return attrs
+
+        org_id = _request_org_id(self)
+        if org_id is None:
+            # No org context — skip foreign-org validation.
+            return attrs
+
+        # Validate deal_id belongs to the current org.
+        deal = attrs.get("deal")
+        if deal is not None:
+            if deal.organization_id is not None and deal.organization_id != org_id:
+                raise serializers.ValidationError(
+                    {"deal": "The specified deal does not belong to this organization."}
+                )
+
+        return attrs
 
     def create(self, validated_data: dict) -> DealNote:
         """Set created_by to the current user"""
@@ -716,7 +781,7 @@ class BulkUpdateStageSerializer(serializers.Serializer):
                 code="org_required",
             )
         # Org-scoped: reject both foreign-org and NULL-org stages.
-        if value.organization_id != org.id:
+        if value.organization_id != org.id:  # type: ignore[attr-defined]
             raise serializers.ValidationError(
                 "The specified stage does not belong to this organization.",
                 code="foreign_org",

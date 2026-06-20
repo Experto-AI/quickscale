@@ -100,7 +100,7 @@ def _resolve_active_org(request: Request | HttpRequest) -> Any:
         ).first()
         if personal_org is not None:
             # Attach the personal org to the request for subsequent access.
-            request.org = personal_org
+            request.org = personal_org  # type: ignore[union-attr]
             # Solo routes do NOT seed default stages — preserve legacy stage surface.
             return personal_org
 
@@ -238,11 +238,25 @@ class CRMDashboardView(TemplateView):
 
         # Phase 2: resolve active org for both route types.
         org_for_read = _resolve_active_org(self.request)
+        is_solo = not _is_org_scoped_route(self.request)
 
         # Base querysets — scoped to the active org via tenant-scoped seam.
-        contact_qs = Contact.objects.for_org(org_for_read.id)
-        company_qs = Company.objects.for_org(org_for_read.id)
-        deal_qs = Deal.objects.for_org(org_for_read.id)
+        if is_solo:
+            # Solo routes include legacy NULL-owned rows for backward
+            # compatibility until the NOT NULL migration (0006) lands.
+            contact_qs = Contact.all_objects.filter(
+                Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
+            )
+            company_qs = Company.all_objects.filter(
+                Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
+            )
+            deal_qs = Deal.all_objects.filter(
+                Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
+            )
+        else:
+            contact_qs = Contact.objects.for_org(org_for_read.id)
+            company_qs = Company.objects.for_org(org_for_read.id)
+            deal_qs = Deal.objects.for_org(org_for_read.id)
         # Stage queryset includes legacy NULL-org stages for dashboard breakdown.
         stage_qs = Stage.objects.filter(
             Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
@@ -254,12 +268,18 @@ class CRMDashboardView(TemplateView):
         context["total_deals"] = deal_qs.count()
 
         # Deal statistics
+        if is_solo:
+            # Solo routes include legacy NULL-owned deals for backward
+            # compatibility (CR-F11.10-DASH-003).
+            deal_count_filter = Q(deals__organization_id=org_for_read.id) | Q(
+                deals__organization_id__isnull=True
+            )
+        else:
+            deal_count_filter = Q(deals__organization_id=org_for_read.id)
+
         context["deals_by_stage"] = (
             stage_qs.annotate(
-                deal_count=Count(
-                    "deals",
-                    filter=Q(deals__organization_id=org_for_read.id),
-                )
+                deal_count=Count("deals", filter=deal_count_filter),
             )
             .values("name", "deal_count")
             .order_by("order")
@@ -273,12 +293,18 @@ class CRMDashboardView(TemplateView):
 
         # Recent contacts — annotate a safe company display name so that
         # cross-org FK references do not leak foreign company names.
+        # Solo routes include NULL-owned companies for backward compatibility
+        # (CR-F11.10-DASH-003).
+        if is_solo:
+            company_name_filter = Q(company__organization_id=org_for_read.id) | Q(
+                company__organization_id__isnull=True
+            )
+        else:
+            company_name_filter = Q(company__organization_id=org_for_read.id)
+
         context["recent_contacts"] = contact_qs.annotate(
             display_company_name=Case(
-                When(
-                    Q(company__organization_id=org_for_read.id),
-                    then=F("company__name"),
-                ),
+                When(company_name_filter, then=F("company__name")),
                 default=Value("-"),
                 output_field=CharField(),
             )
@@ -381,10 +407,10 @@ class OrgScopedReadMixin(CRMModelViewSet):
 
         if is_solo:
             # Solo routes include legacy NULL-org data.
-            scope_filter = Q(**{f"{self._org_scope_field}_id": organization.id}) | Q(
+            scope_q = Q(**{f"{self._org_scope_field}_id": organization.id}) | Q(
                 **{f"{self._org_scope_field}_id__isnull": True}
             )
-            return base_qs.filter(scope_filter)
+            return base_qs.filter(scope_q)
         else:
             # Org-scoped routes filter strictly by org.
             scope_filter = {f"{self._org_scope_field}_id": organization.id}
