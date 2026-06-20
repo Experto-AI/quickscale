@@ -37,7 +37,7 @@ def _has_org_stages(organization: Organization) -> bool:
     Only rows with ``organization=<organization>`` satisfy this check;
     NULL-organization legacy stages do not.
     """
-    return Stage.objects.filter(organization=organization).exists()
+    return Stage.objects.for_org(organization.id).exists()
 
 
 def ensure_org_default_stages(organization: Organization) -> list[Stage]:
@@ -55,7 +55,7 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
     """
     # --- Optimistic precheck (no lock) ------------------------------------
     if _has_org_stages(organization):
-        return list(Stage.objects.filter(organization=organization))
+        return list(Stage.objects.for_org(organization.id))
 
     # --- Serialized critical section --------------------------------------
     with transaction.atomic():
@@ -65,12 +65,12 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
         # Under-lock recheck — another thread may have seeded between the
         # optimistic precheck and the lock acquisition.
         if _has_org_stages(organization):
-            return list(Stage.objects.filter(organization=organization))
+            return list(Stage.objects.for_org(organization.id))
 
         # Seed the canonical default stages.
         _seed_default_stages(organization)
 
-    return list(Stage.objects.filter(organization=organization))
+    return list(Stage.objects.for_org(organization.id))
 
 
 def _seed_default_stages(organization: Organization) -> Sequence[Stage]:

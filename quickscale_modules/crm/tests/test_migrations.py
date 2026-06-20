@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
@@ -22,7 +24,7 @@ def _create_contact(apps):
     )
 
 
-def _create_deal(apps, *, contact, stage, title: str):
+def _create_deal(apps: Any, *, contact: Any, stage: Any, title: str) -> Any:
     Deal = apps.get_model("quickscale_modules_crm", "Deal")
 
     return Deal.objects.create(
@@ -291,6 +293,72 @@ def test_0004_adds_nullable_organization_without_backfill() -> None:
     assert deal.title == "Legacy Deal"
     assert deal.contact_id == legacy_contact.pk
     assert deal.stage_id == legacy_stage.pk
+
+
+def test_0004_nullable_organization_contract() -> None:
+    """Migration 0004 establishes nullable org FKs with correct metadata.
+
+    Phase 11.1d nullable contract preserved in migration history:
+    all five owned models (Tag, Company, Contact, Stage, Deal) must have
+    organization FK with null=True, blank=True, on_delete=SET_NULL,
+    and must allow creating and persisting rows without organization
+    assignment.
+    """
+    migrate_from = ("quickscale_modules_crm", "0003_stage_terminal_semantic_unique")
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_from])
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    apps = executor.loader.project_state([migrate_to]).apps
+
+    MigratedTag = apps.get_model("quickscale_modules_crm", "Tag")
+    MigratedCompany = apps.get_model("quickscale_modules_crm", "Company")
+    MigratedContact = apps.get_model("quickscale_modules_crm", "Contact")
+    MigratedStage = apps.get_model("quickscale_modules_crm", "Stage")
+    MigratedDeal = apps.get_model("quickscale_modules_crm", "Deal")
+
+    # --- Field metadata: null=True, blank=True, on_delete=SET_NULL ---
+    for model_cls, label in [
+        (MigratedTag, "Tag"),
+        (MigratedCompany, "Company"),
+        (MigratedContact, "Contact"),
+        (MigratedStage, "Stage"),
+        (MigratedDeal, "Deal"),
+    ]:
+        field = model_cls._meta.get_field("organization")
+        assert field.null is True, f"{label}.organization.null is not True"
+        assert field.blank is True, f"{label}.organization.blank is not True"
+        assert field.remote_field.on_delete.__name__ == "SET_NULL", (
+            f"{label}.organization.on_delete is not SET_NULL"
+        )
+
+    # --- Create/persist without organization assignment ---
+    tag = MigratedTag.objects.create(name="VIP")
+    assert tag.organization_id is None
+
+    company = MigratedCompany.objects.create(name="Acme Corp")
+    assert company.organization_id is None
+
+    contact = MigratedContact.objects.create(
+        first_name="Jane",
+        last_name="Doe",
+        email="jane@example.com",
+        company=company,
+    )
+    assert contact.organization_id is None
+
+    stage = MigratedStage.objects.create(name="New", order=1)
+    assert stage.organization_id is None
+
+    deal = MigratedDeal.objects.create(
+        title="Test Deal",
+        contact=contact,
+        stage=stage,
+    )
+    assert deal.organization_id is None
 
 
 def test_0005_replaces_tag_name_unique_with_owner_bucket_constraint() -> None:

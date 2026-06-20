@@ -7,8 +7,13 @@ This module provides 7 core models for CRM functionality:
 - Contact: Contact person with status tracking
 - Stage: Pipeline stage with ordering
 - Deal: Sales opportunity with pipeline tracking
-- ContactNote: Notes on contacts
-- DealNote: Notes on deals
+- ContactNote: Notes on contacts (parent-derived, no dual manager)
+- DealNote: Notes on deals (parent-derived, no dual manager)
+
+Phase 2 (F11.10): Owned models (Tag, Company, Contact, Stage, Deal) use
+the dual-manager contract:
+- ``objects`` (TenantScopedManager): tenant-scoped seam with .for_org()
+- ``all_objects`` (OperatorManager): operator escape hatch (unfiltered)
 """
 
 from typing import Any
@@ -17,6 +22,8 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+
+from .managers import OperatorManager, TenantScopedManager
 
 
 class Tag(models.Model):
@@ -31,6 +38,10 @@ class Tag(models.Model):
     )
     name = models.CharField(max_length=50)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Phase 2: dual-manager contract.
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -69,6 +80,10 @@ class Company(models.Model):
     website = models.URLField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Phase 2: dual-manager contract.
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -121,6 +136,10 @@ class Contact(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Phase 2: dual-manager contract.
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
+
     class Meta:
         app_label = "quickscale_modules_crm"
         ordering = ["last_name", "first_name"]
@@ -161,6 +180,10 @@ class Stage(models.Model):
         editable=False,
         unique=True,
     )
+
+    # Phase 2: dual-manager contract.
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -213,6 +236,10 @@ class Deal(models.Model):
     tags = models.ManyToManyField(Tag, blank=True, related_name="deals")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Phase 2: dual-manager contract.
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
 
     class Meta:
         app_label = "quickscale_modules_crm"
