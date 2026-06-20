@@ -2092,8 +2092,15 @@ def _save_apply_recovery_state(
     *,
     state_snapshot: QuickScaleState | None = None,
     provenance_payloads: dict[str, ModuleEmbedProvenance] | None = None,
+    checkpoint_tree_id: str,
 ) -> bool:
-    """Persist retry context for failures that happen after embedding succeeded."""
+    """Persist retry context for failures that happen after embedding succeeded.
+
+    The *checkpoint_tree_id* is the exact git tree id captured at the post-embed
+    checkpoint so the recovery ledger records the authoritative index state
+    rather than a later tree re-captured at save time.  It is **required** —
+    the F12.1e contract fails hard when the checkpoint reference is unavailable.
+    """
     try:
         recovery_state = state_snapshot or _build_project_state_snapshot(
             output_path,
@@ -2104,7 +2111,11 @@ def _save_apply_recovery_state(
             provenance_payloads=provenance_payloads,
         )
         mgr = _get_apply_recovery_manager(output_path)
-        ledger = RecoveryLedger(applied_state=recovery_state, step_progress=None)
+        ledger = RecoveryLedger(
+            applied_state=recovery_state,
+            step_progress=None,
+            git_index_checkpoint=checkpoint_tree_id,
+        )
         mgr.save(ledger)
         click.secho(
             f"✅ Apply recovery saved to .quickscale/{_APPLY_RECOVERY_FILENAME}",
@@ -2505,6 +2516,7 @@ def _abort_after_post_embed_failure(
     ctx: ApplyContext,
     post_embed_state: QuickScaleState,
     *,
+    checkpoint_tree_id: str,
     failed_step: str,
     reason: str,
 ) -> None:
@@ -2516,6 +2528,7 @@ def _abort_after_post_embed_failure(
         list(post_embed_state.modules.keys()),
         ctx.delta,
         state_snapshot=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
     ):
         _print_apply_failure_summary(failed_step=failed_step, reason=reason)
         raise click.Abort()
@@ -2533,6 +2546,8 @@ def _abort_after_post_embed_failure(
 def _finalize_apply_state(
     ctx: ApplyContext,
     post_embed_state: QuickScaleState,
+    *,
+    checkpoint_tree_id: str,
 ) -> None:
     """Persist authoritative state and keep rerun recovery if it fails."""
     if _save_project_state(
@@ -2553,6 +2568,7 @@ def _finalize_apply_state(
         list(post_embed_state.modules.keys()),
         ctx.delta,
         state_snapshot=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
     )
     if recovery_saved:
         _print_apply_failure_summary(
@@ -2800,11 +2816,26 @@ def _execute_apply_steps_locked(
         )
         raise click.Abort() from error
 
+    # Capture the git index checkpoint immediately after embedding succeeds
+    # and before any post-embed steps modify the working tree.  Threading
+    # the exact tree id through the recovery save path (instead of
+    # re-capturing later) ensures the ledger records the authoritative
+    # post-embed index state (CR-F12.1E-002).
+    checkpoint_snapshot = _capture_git_index_snapshot(ctx.output_path)
+    if checkpoint_snapshot is None:
+        _print_apply_failure_summary(
+            failed_step=_FAILED_STEP["post-embed state snapshot"],
+            reason="QuickScale could not capture the git index tree id after module embedding for apply recovery state.",
+        )
+        raise click.Abort()
+    checkpoint_tree_id = checkpoint_snapshot.tree_id
+
     # Deterministic managed wiring generation for selected modules.
     if not _regenerate_managed_wiring_for_apply(ctx, embedded_modules):
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
             failed_step=_FAILED_STEP["managed module wiring generation"],
             reason="unable to render managed settings, URL, and integration files",
         )
@@ -2819,6 +2850,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
             failed_step=_FAILED_STEP["backups gitignore hardening"],
             reason="Unable to update .gitignore with the configured private backups directory.",
         )
@@ -2827,6 +2859,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
             failed_step=_FAILED_STEP["notifications env example sync"],
             reason="Unable to update .env.example with the configured notifications env-var names.",
         )
@@ -2835,6 +2868,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
             failed_step=_FAILED_STEP["analytics env example sync"],
             reason="Unable to update .env.example with the configured analytics env-var names.",
         )
@@ -2843,6 +2877,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
             failed_step=_FAILED_STEP["billing env example sync"],
             reason="Unable to update .env.example with the configured billing env-var names.",
         )
@@ -2854,6 +2889,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
             failed_step=_FAILED_STEP["module dependency sync"],
             reason="Unable to reconcile embedded-module Poetry dependency entries in pyproject.toml.",
         )
@@ -2872,6 +2908,7 @@ def _execute_apply_steps_locked(
         _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
             failed_step=_FAILED_STEP["post-generation dependency and migration setup"],
             reason="Poetry lock refresh, dependency installation, or local migrations failed after module dependency sync.",
         )
@@ -2893,6 +2930,7 @@ def _execute_apply_steps_locked(
             _abort_after_post_embed_failure(
                 ctx,
                 post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
                 failed_step=_FAILED_STEP["docker startup"],
                 reason="Docker auto-start failed. Run 'quickscale logs' to inspect the failing service.",
             )
@@ -2905,12 +2943,13 @@ def _execute_apply_steps_locked(
                 _abort_after_post_embed_failure(
                     ctx,
                     post_embed_state,
+                    checkpoint_tree_id=checkpoint_tree_id,
                     failed_step=_FAILED_STEP["database migrations"],
                     reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
                 )
 
     # Save state
-    _finalize_apply_state(ctx, post_embed_state)
+    _finalize_apply_state(ctx, post_embed_state, checkpoint_tree_id=checkpoint_tree_id)
 
     # Display next steps
     _display_next_steps(

@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10b. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅. **F11.10a ✅** (historical nullable-contract preserved in `quickscale_modules/crm/tests/test_migrations.py`; `TestOrganizationFieldNullable` removed from `test_models.py`; Phase 3 checkpoint — 311 CRM tests green). **F11.10 groundwork committed** (dual-manager contract, admin org guardrails, serializer/view/service/test hardening, xfail removal — 321 tests green). Still pending: `0006` NOT NULL migration does not exist yet; model `organization` FKs remain `null=True, blank=True, on_delete=SET_NULL`. Delete policy resolved (PROTECT). Test-ownership assignments for post-`0006` validation and the historical-test split remain open. M3 cannot close out until F11.10b–F11.10e complete, validated, and merged. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **F12.1d1 ✅** (managed_files fail-hard type guard). **F12.1d2 ✅** (consumer-parity groundwork committed, validated, synced, and merged to `v87`). **Next:** `F12.1e` (fold git-index snapshot into `apply-recovery.yml`, Tier 2). |
+| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **F12.1d1 ✅** (managed_files fail-hard type guard). **F12.1d2 ✅** (consumer-parity groundwork committed, validated, synced, and merged to `v87`). **F12.1e ✅** (git-index checkpoint folded into single `apply-recovery.yml` ledger; change review closed STATUS ok). **Next:** `F12.2` (consistent fail policy, Tier 2). |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -79,13 +79,13 @@ git merge --no-ff wt-track{N}
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F12.1a ✅, F12.1b ✅, F12.1c ✅, F12.1c-closeout ✅ (CR-F12.1C-004 resolved), **F12.1d1 ✅**, **F12.1d2 ✅**. F12.1d is complete: consumer-parity wiring for the single `apply-recovery.yml` channel landed, the recovery ledger now fails hard on invalid top-level `managed_files` types, the full root-invocation non-e2e `quickscale_core` and `quickscale_cli` suites passed, `wt-track3` synced from `v87`, and the branch merged back to `v87`. **Next:** `F12.1e`.
+**Status:** 🟡 In progress — **F12.1e ✅** completes F12.1 (all sub-phases F12.1a–e). The single `apply-recovery.yml` ledger now stores the exact checkpoint tree id; present ledgers fail hard when `git_index_checkpoint` is missing; remove-path rewrites preserve the checkpoint. F12.1e change review returned STATUS ok (CR-F12.1E-001, CR-F12.1E-002 resolved). Validation: focused ledger suite (61 passed), CLI seam suites (318 passed), broader core suite (1223 passed + 28 deselected), broader CLI suite (1746 passed + 28 deselected), and all `quickscale_modules` suites passed — zero test-case failures repo-wide; `make test` exit nonzero solely from pre-existing per-file coverage threshold misses in unrelated files outside F12.1e scope. Merge-back to `v87` is not yet complete. **Next:** `F12.2`.
 
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
 Open / Next (implement in order):
-- **F12.1e** (fold git-index snapshot into `apply-recovery.yml`, Tier 2).
-- **F12.2** (consistent fail policy, Tier 2).
+- **F12.1e** ✅ Complete — git-index checkpoint folded into single `apply-recovery.yml` ledger; change review closed STATUS ok.
+- **F12.2** (consistent fail policy, Tier 2) — **Next**.
 - **F12.3a** (pre-embed recovery coverage, Tier 1).
 - **F12.3b** (Railway rollback/resume, Tier 2).
 
@@ -101,7 +101,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a ✅ F12.1b ✅ F12.1c ✅ F12.1c-closeout ✅ (CR-F12.1C-004 resolved) F12.1d1 ✅ F12.1d2 ✅; next `F12.1e` |
+| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a ✅ F12.1b ✅ F12.1c ✅ F12.1c-closeout ✅ (CR-F12.1C-004 resolved) F12.1d1 ✅ F12.1d2 ✅ **F12.1e ✅**; next `F12.2` |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
 | 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
@@ -248,9 +248,9 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
-**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅; F12.1c ✅; F12.1c-closeout ✅ (CR-F12.1C-004 resolved); **F12.1d1 ✅**; **F12.1d2 ✅**. F12.1d is complete: consumer-parity wiring for the single authoritative `apply-recovery.yml` channel landed, the recovery ledger now fails hard on invalid top-level `managed_files` types, the full root-invocation non-e2e `quickscale_core` and `quickscale_cli` suites passed, `wt-track3` synced from `v87`, and the branch merged back to `v87`. D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
+**Status:** 🟢 Complete — **F12.1e ✅** completes F12.1 (all sub-phases F12.1a–e). F12.1d is complete (consumer-parity wiring for the single authoritative `apply-recovery.yml` channel). F12.1e completes the phase (git-index checkpoint folded into the single `apply-recovery.yml` ledger; change review closed with STATUS ok). D-F12.1-LEDGER → Option A (binding). The original two checklist items are complete:
 - [x] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action. → F12.1a + F12.1c
-- [ ] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling. → F12.1b + F12.1d + F12.1e
+- [x] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling. → F12.1b + F12.1d + F12.1e
 
 **Discovery findings (correct the prior M8 note):**
 - ❗ No `ApplyStep` model exists in production. `failed_step` is only a string label passed to `_print_apply_failure_summary` (`apply_command.py:2459`), set ad-hoc at ~14 failure sites. `TestExecuteApplySteps` in tests is a grouping class, not a model. The earlier checkpoint note ("ApplyStep model done; recovery ledger has `failed_step`") was inaccurate.
@@ -298,15 +298,15 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Verify the 3 authoritative-state-persistence callers and the sentinel also achieve exact byte-identical coverage.
 - [x] All 15 caller branches now proven with exact byte-identical coverage.
 
-**Next:** `F12.1e` → `F12.2` → `F12.3a` → `F12.3b`.
+**Next:** `F12.2` → `F12.3a` → `F12.3b`.
 
-**Binding constraints carried forward:** D-F12.1-LEDGER Option A (enrich `apply-recovery.yml` in place) and the **no-back-compat / fail-hard directive** remain binding for all subsequent F12.1 sub-phases.
+**Binding constraints carried forward:** D-F12.1-LEDGER Option A (enrich `apply-recovery.yml` in place) and the **no-back-compat / fail-hard directive** remain binding for all subsequent F12 sub-phases.
 
 
 **Phase F12.1e — Fold git-index snapshot into the `apply-recovery.yml` checkpoint** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1d2 complete. | **Status:** ⬜ Ready after F12.1d complete.
-- [ ] Record the pre-commit git-index checkpoint reference (capture `183-219`, restore `222-252`, orchestrate `270-293`) in `apply-recovery.yml` so progress is consolidated into the single ledger; keep `git write-tree`/`read-tree --reset` mechanics byte-identical. `_is_transient_apply_recovery_path` must still recognize `apply-recovery.yml`.
-- [ ] Tests: git-index checkpoint/restore tests green; `apply-recovery.yml` recognition assertion; full `make test` integration gate.
+**Dependencies:** F12.1d2 complete. | **Status:** ✅ Complete. Change review closed STATUS ok; CR-F12.1E-001 and CR-F12.1E-002 resolved.
+- [x] Record the pre-commit git-index checkpoint reference (capture `183-219`, restore `222-252`, orchestrate `270-293`) in `apply-recovery.yml` so progress is consolidated into the single ledger; keep `git write-tree`/`read-tree --reset` mechanics byte-identical. `_is_transient_apply_recovery_path` still recognizes `apply-recovery.yml`.
+- [x] Tests: git-index checkpoint/restore tests green; `apply-recovery.yml` recognition assertion; repo-wide test execution produced zero test-case failures; `make test` exit nonzero solely from pre-existing per-file coverage threshold misses in unrelated files outside F12.1e scope.
 
 **Phase F12.2 — Consistent fail policy** _(Adaptive tier: 2)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 

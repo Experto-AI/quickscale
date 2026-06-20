@@ -375,12 +375,29 @@ def _update_apply_recovery_state(
     project_path: Path,
     updated_state: QuickScaleState | None,
 ) -> None:
-    """Persist the updated apply recovery snapshot."""
+    """Persist the updated apply recovery snapshot.
+
+    The existing git-index checkpoint is loaded from the on-disk recovery
+    ledger and preserved in the rewritten file.  If the on-disk ledger is
+    absent, malformed, or missing the checkpoint, the operation fails hard
+    (``LedgerError`` / ``RuntimeError``) — present recovery ledgers must
+    always carry a valid ``git_index_checkpoint``.
+    """
     if updated_state is None:
         return
 
     mgr = _get_apply_recovery_manager(project_path)
-    ledger = RecoveryLedger(applied_state=updated_state, step_progress=None)
+    existing_ledger = mgr.load()
+    if existing_ledger is None:
+        raise RuntimeError(
+            "Cannot update recovery state: existing apply-recovery.yml "
+            "is absent, but the removal plan reported it needs an update."
+        )
+    ledger = RecoveryLedger(
+        applied_state=updated_state,
+        step_progress=None,
+        git_index_checkpoint=existing_ledger.git_index_checkpoint,
+    )
     mgr.save(ledger)
 
 

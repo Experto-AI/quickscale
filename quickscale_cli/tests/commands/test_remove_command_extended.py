@@ -123,6 +123,7 @@ def _write_apply_recovery_state(project_path: Path, module_names: list[str]) -> 
                     }
                     for module_name in module_names
                 },
+                "git_index_checkpoint": "deadbeefcafebabedeadbeefcafebabedeadbeef",
             },
             sort_keys=False,
         )
@@ -402,3 +403,33 @@ class TestRemoveCommandIntegration:
 
         assert result.exit_code != 0
         assert "cancelled" in result.output.lower()
+
+    def test_remove_preserves_git_index_checkpoint_in_surviving_recovery(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Partial remove must preserve the git_index_checkpoint in the
+        surviving apply-recovery.yml."""
+        _CHECKPOINT = "aabbccddeeff00112233445566778899aabbccdd"
+        _write_valid_remove_project(tmp_path)
+        _write_apply_recovery_state(tmp_path, ["auth", "blog"])
+        # Rewrite the recovery file with a known checkpoint value.
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        recovery_data = yaml.safe_load(recovery_path.read_text())
+        recovery_data["git_index_checkpoint"] = _CHECKPOINT
+        recovery_path.write_text(yaml.safe_dump(recovery_data, sort_keys=False))
+
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0
+        rewritten = yaml.safe_load(recovery_path.read_text())
+        assert "auth" not in rewritten.get("modules", {})
+        assert "blog" in rewritten.get("modules", {})
+        # The checkpoint must be preserved byte-identical.
+        assert rewritten["git_index_checkpoint"] == _CHECKPOINT

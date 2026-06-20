@@ -250,6 +250,7 @@ def _write_apply_recovery_state_with_modules(
             }
             for module_name in module_names
         },
+        "git_index_checkpoint": "deadbeefcafebabedeadbeefcafebabedeadbeef",
     }
     state_dir = project_path / ".quickscale"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -450,6 +451,10 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
             side_effect=_embed_step,
         ) as mock_embed_modules_step,
         patch(
+            "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+            return_value=Mock(tree_id="d" * 40),
+        ),
+        patch(
             "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
             return_value=True,
         ),
@@ -528,6 +533,10 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
             side_effect=_embed_step,
         ) as mock_embed_modules_step,
         patch(
+            "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+            return_value=Mock(tree_id="d" * 40),
+        ),
+        patch(
             "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
             return_value=True,
         ),
@@ -591,6 +600,10 @@ def test_apply_backups_local_adds_private_gitignore_and_state() -> None:
                 "quickscale_cli.commands.apply_command._embed_modules_step",
                 side_effect=_embed_modules_into_project,
             ) as mock_embed_modules_step,
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="d" * 40),
+            ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
                 return_value=True,
@@ -673,6 +686,10 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
                 side_effect=_embed_modules_into_project,
             ) as mock_embed_modules_step,
             patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="d" * 40),
+            ),
+            patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
@@ -749,6 +766,10 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
                 "quickscale_cli.commands.apply_command._embed_modules_step",
                 wraps=_embed_modules_step,
             ) as mock_embed_modules_step,
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="d" * 40),
+            ),
             patch(
                 "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
                 return_value=True,
