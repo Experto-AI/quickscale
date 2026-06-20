@@ -1655,6 +1655,119 @@ class TestMaterializeAuthoritativeState:
         # Must abort — incomplete timestamps.
         assert result is None
 
+    # ------------------------------------------------------------------
+    # CR-F12.2-001: fail-open legacy import logging + shape-invalid YAML
+    # ------------------------------------------------------------------
+
+    def test_skips_malformed_legacy_config(self, tmp_path: Path) -> None:
+        """Malformed legacy config.yml is skipped (fail-open) during materialization.
+
+        CR-F12.2-001: materialize_authoritative_state logs a warning and
+        continues without legacy module tracking when config.yml is
+        YAML-malformed.
+        """
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        # Malformed YAML in legacy config.yml.
+        (quickscale_dir / "config.yml").write_text("invalid: [unclosed bracket\n")
+
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        # Must still succeed (fail-open) with no module tracking.
+        assert result is not None
+        assert result.project.slug == "myproject"
+        assert len(result.modules) == 0
+
+    def test_skips_shape_invalid_legacy_config(self, tmp_path: Path) -> None:
+        """Shape-invalid legacy config.yml is skipped (fail-open) during materialization.
+
+        CR-F12.2-001: YAML that parses but lacks required config structure
+        now raises ConfigError (via load_config), which is caught and
+        logged by materialize_authoritative_state.
+        """
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        # Valid YAML but not a valid module config: missing default_remote.
+        (quickscale_dir / "config.yml").write_text("modules: {}\n")
+
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        # Must still succeed (fail-open).
+        assert result is not None
+        assert result.project.slug == "myproject"
+
+    def test_skips_malformed_legacy_file_hashes(self, tmp_path: Path) -> None:
+        """Malformed legacy file_hashes.yml is skipped (fail-open) during materialization.
+
+        CR-F12.2-001: materialize_authoritative_state logs a warning and
+        continues without legacy file hashes when file_hashes.yml is
+        malformed.
+        """
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2024-06-15T10:30:00'\n"
+            "  last_applied: '2024-12-01T14:45:00'\n"
+        )
+        (tmp_path / "quickscale.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "modules: {}\n"
+        )
+        # Malformed YAML in legacy file_hashes.yml.
+        (quickscale_dir / "file_hashes.yml").write_text("invalid: [unclosed bracket\n")
+
+        manager = ProjectStateManager(tmp_path)
+        result = manager.materialize_authoritative_state()
+
+        # Must still succeed (fail-open) with no managed files.
+        assert result is not None
+        assert result.project.slug == "myproject"
+
 
 # ---------------------------------------------------------------------------
 # Phase 2.3b: _read_raw_project_timestamps

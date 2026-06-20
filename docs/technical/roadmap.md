@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10b. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅. **F11.10a ✅** (historical nullable-contract preserved in `quickscale_modules/crm/tests/test_migrations.py`; `TestOrganizationFieldNullable` removed from `test_models.py`; Phase 3 checkpoint — 311 CRM tests green). **F11.10 groundwork committed** (dual-manager contract, admin org guardrails, serializer/view/service/test hardening, xfail removal — 321 tests green). Still pending: `0006` NOT NULL migration does not exist yet; model `organization` FKs remain `null=True, blank=True, on_delete=SET_NULL`. Delete policy resolved (PROTECT). Test-ownership assignments for post-`0006` validation and the historical-test split remain open. M3 cannot close out until F11.10b–F11.10e complete, validated, and merged. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **F12.1d1 ✅** (managed_files fail-hard type guard). **F12.1d2 ✅** (consumer-parity groundwork committed, validated, synced, and merged to `v87`). **F12.1e ✅** (git-index checkpoint folded into single `apply-recovery.yml` ledger; change review closed STATUS ok). **Next:** `F12.2` (consistent fail policy, Tier 2). |
+| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **F12.1d1 ✅** (managed_files fail-hard type guard). **F12.1d2 ✅** (consumer-parity groundwork committed, validated, synced, and merged to `v87`). **F12.1e ✅** (git-index checkpoint folded into single `apply-recovery.yml` ledger; change review closed STATUS ok). **F12.2 ✅** (consistent fail policy, Tier 2). **Next:** `F12.3a` (pre-embed recovery coverage, Tier 1). |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -79,14 +79,14 @@ git merge --no-ff wt-track{N}
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — **F12.1e ✅** completes F12.1 (all sub-phases F12.1a–e). The single `apply-recovery.yml` ledger now stores the exact checkpoint tree id; present ledgers fail hard when `git_index_checkpoint` is missing; remove-path rewrites preserve the checkpoint. F12.1e change review returned STATUS ok (CR-F12.1E-001, CR-F12.1E-002 resolved). Validation: focused ledger suite (61 passed), CLI seam suites (318 passed), broader core suite (1223 passed + 28 deselected), broader CLI suite (1746 passed + 28 deselected), and all `quickscale_modules` suites passed — zero test-case failures repo-wide; `make test` exit nonzero solely from pre-existing per-file coverage threshold misses in unrelated files outside F12.1e scope. Merge-back to `v87` is not yet complete. **Next:** `F12.2`.
+**Status:** 🟡 In progress — **F12.1e ✅** completes F12.1 (all sub-phases F12.1a–e). **F12.2 ✅** adopts a consistent default fail-closed policy: the primary fail-open point in `_populate_consolidated_tracking_from_legacy` (silent `except Exception: return`) is now fail-closed — `ConfigError`/`OSError` propagate. The helper-level fail-open in `_save_project_state` is documented (callers already handle `False` by persisting recovery state and aborting). Legacy read-through imports in `ProjectStateManager` are documented as justified fail-open (compatibility path for pre-M2 migration). Targeted tests cover malformed config.yml propagation, empty config.yml no-op, and missing config.yml no-op. Merge-back to `v87` is not yet complete. **Next:** `F12.3a`.
 
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
 Open / Next (implement in order):
 - **F12.1e** ✅ Complete — git-index checkpoint folded into single `apply-recovery.yml` ledger; change review closed STATUS ok.
-- **F12.2** (consistent fail policy, Tier 2) — **Next**.
-- **F12.3a** (pre-embed recovery coverage, Tier 1).
+- **F12.2** ✅ Complete — consistent fail policy; fail-closed for config.yml mirror and `_populate_consolidated_tracking_from_legacy`; justified fail-open documented for legacy read-through imports and helper-level `_save_project_state`.
+- **F12.3a** (pre-embed recovery coverage, Tier 1) — **Next**.
 - **F12.3b** (Railway rollback/resume, Tier 2).
 
 ---
@@ -101,7 +101,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a ✅ F12.1b ✅ F12.1c ✅ F12.1c-closeout ✅ (CR-F12.1C-004 resolved) F12.1d1 ✅ F12.1d2 ✅ **F12.1e ✅**; next `F12.2` |
+| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a ✅ F12.1b ✅ F12.1c ✅ F12.1c-closeout ✅ (CR-F12.1C-004 resolved) F12.1d1 ✅ F12.1d2 ✅ **F12.1e ✅** **F12.2 ✅**; next `F12.3a` |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
 | 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
@@ -298,7 +298,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Verify the 3 authoritative-state-persistence callers and the sentinel also achieve exact byte-identical coverage.
 - [x] All 15 caller branches now proven with exact byte-identical coverage.
 
-**Next:** `F12.2` → `F12.3a` → `F12.3b`.
+**Next:** `F12.3a` → `F12.3b`.
 
 **Binding constraints carried forward:** D-F12.1-LEDGER Option A (enrich `apply-recovery.yml` in place) and the **no-back-compat / fail-hard directive** remain binding for all subsequent F12 sub-phases.
 
@@ -310,7 +310,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F12.2 — Consistent fail policy** _(Adaptive tier: 2)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
-- [ ] Adopt one consistent fail policy (default fail-closed); document and audit any fail-open exceptions, including the `config.yml` mirror at `apply_command.py:1969-1972` and the fail-silent `_populate_consolidated_tracking_from_legacy` mirror at `apply_command.py:~1924-1954` (catches all exceptions and silently returns — masks state.yml/config.yml drift).
+- [x] Adopt one consistent fail policy (default fail-closed); document and audit any fail-open exceptions. Primary fix: `_populate_consolidated_tracking_from_legacy` no longer swallows `ConfigError`/`OSError` via `except Exception: return` — `ConfigError`/`OSError` propagate (fail-closed). `_save_project_state` documented as helper-level fail-open (callers already handle `False` by persisting recovery state and aborting). Legacy read-through import in `ProjectStateManager._read_through_import_legacy` and `materialize_authoritative_state` documented as justified fail-open (compatibility path for pre-M2 migration). Targeted tests added for malformed config.yml propagation, empty config.yml no-op, and missing config.yml no-op.
 
 **Phase F12.3a — Pre-embed recovery coverage** _(M8)_ _(Adaptive tier: 1)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 

@@ -41,6 +41,7 @@ from quickscale_cli.commands.apply_command import (
     _generate_with_existing_config,
     _git_commit,
     _handle_delta_and_existing_state,
+    _populate_consolidated_tracking_from_legacy,
     _regenerate_managed_wiring_for_apply,
     _init_git,
     _init_git_with_config,
@@ -76,6 +77,7 @@ from quickscale_cli.schema.state_schema import (
     StateError,
     StateManager,
 )
+from quickscale_core.config import ConfigError
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest.loader import ManifestError
 
@@ -7112,3 +7114,132 @@ class TestApplyFailureSummaryParity:
             "Byte-identical mismatch for non-auth caller: database migrations"
         )
         assert captured.err == ""
+
+
+# ============================================================================
+# F12.2: _populate_consolidated_tracking_from_legacy
+# ============================================================================
+
+
+class TestPopulateConsolidatedTrackingFromLegacy:
+    """Tests for _populate_consolidated_tracking_from_legacy (F12.2 fail-closed)."""
+
+    def test_missing_config_is_no_op(self, tmp_path):
+        """When config.yml does not exist, the function is a no-op.
+
+        ``load_config`` returns an empty default config for missing files,
+        so no error is raised and module tracking fields are left untouched.
+        """
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            modules={
+                "auth": ModuleState(name="auth", version="0.62.0"),
+            },
+        )
+
+        # Should not raise despite config.yml being absent
+        _populate_consolidated_tracking_from_legacy(tmp_path, state)
+
+        # auth module should still be present with unchanged fields
+        assert "auth" in state.modules
+        assert state.modules["auth"].version == "0.62.0"
+
+    def test_empty_config_is_no_op(self, tmp_path):
+        """When config.yml exists but is empty/trivial, the loop is a no-op."""
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".quickscale" / "config.yml").write_text(
+            "default_remote: https://github.com/Experto-AI/quickscale.git\nmodules: {}\n"
+        )
+
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            modules={
+                "auth": ModuleState(name="auth", version="0.62.0"),
+            },
+        )
+
+        _populate_consolidated_tracking_from_legacy(tmp_path, state)
+        assert "auth" in state.modules
+
+    def test_malformed_config_raises_config_error(self, tmp_path):
+        """F12.2: malformed config.yml must raise ConfigError (fail-closed)."""
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".quickscale" / "config.yml").write_text(
+            "invalid: [unclosed bracket\n"
+        )
+
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            modules={},
+        )
+
+        with pytest.raises(ConfigError):
+            _populate_consolidated_tracking_from_legacy(tmp_path, state)
+
+    def test_populates_tracking_from_legacy(self, tmp_path):
+        """Consolidated tracking fields are populated from a valid legacy config."""
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".quickscale" / "config.yml").write_text(
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules:\n"
+            "  auth:\n"
+            "    prefix: modules/auth\n"
+            "    branch: splits/auth-module\n"
+            "    installed_version: v0.62.0\n"
+            "    installed_at: '2026-06-20'\n"
+        )
+
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.62.0",
+                    prefix=None,
+                    branch=None,
+                    installed_at=None,
+                ),
+            },
+        )
+
+        _populate_consolidated_tracking_from_legacy(tmp_path, state)
+
+        auth = state.modules["auth"]
+        assert auth.prefix == "modules/auth"
+        assert auth.branch == "splits/auth-module"
+        assert auth.installed_at == "2026-06-20"
+
+    def test_existing_tracking_not_overwritten(self, tmp_path):
+        """Modules already carrying consolidated tracking are left untouched."""
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".quickscale" / "config.yml").write_text(
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules:\n"
+            "  auth:\n"
+            "    prefix: modules/auth\n"
+            "    branch: splits/auth-module\n"
+            "    installed_version: v0.62.0\n"
+            "    installed_at: '2026-06-20'\n"
+        )
+
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.62.0",
+                    prefix="modules/auth",
+                    branch="splits/auth-module",
+                    installed_at="2026-06-19",
+                ),
+            },
+        )
+
+        # installed_at should NOT be overwritten (already populated)
+        _populate_consolidated_tracking_from_legacy(tmp_path, state)
+        assert state.modules["auth"].installed_at == "2026-06-19"

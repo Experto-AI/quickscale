@@ -112,10 +112,12 @@ def load_config(project_path: Path | None = None) -> ModuleConfig:
     exist.
 
     Raises:
-        ConfigError: If the file exists but cannot be parsed as YAML.
-            ``OSError`` (for example a permission error) is left to propagate
-            unchanged so that callers can distinguish it from a malformed
-            configuration.
+        ConfigError: If the file exists but cannot be parsed as YAML,
+            or if the YAML structure is not a valid module configuration
+            (missing required keys, wrong type, etc.).
+        OSError: For I/O or permission errors reading the file. Left to
+            propagate unchanged so that callers can distinguish filesystem
+            errors from configuration errors.
     """
     config_path = get_config_path(project_path)
 
@@ -131,7 +133,12 @@ def load_config(project_path: Path | None = None) -> ModuleConfig:
     except yaml.YAMLError as error:
         raise ConfigError(f"Failed to parse {config_path}: {error}") from error
 
-    return ModuleConfig.from_dict(data)
+    try:
+        return ModuleConfig.from_dict(data)
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ConfigError(
+            f"Failed to parse {config_path}: invalid config structure — {error}"
+        ) from error
 
 
 def save_config(config: ModuleConfig, project_path: Path | None = None) -> None:

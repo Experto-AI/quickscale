@@ -422,6 +422,11 @@ class ProjectStateManager:
 
         The returned state is not persisted; callers should save it if they
         want to materialize the consolidation.
+
+        F12.2: justified fail-open — legacy read-through is a compatibility
+        path for pre-M2 projects.  Failing hard on legacy file issues would
+        block the M2 migration.  Failures are logged and the import is
+        gracefully skipped.
         """
         # Import legacy module tracking from config.yml.
         try:
@@ -732,6 +737,10 @@ class ProjectStateManager:
 
         Raises:
             StateError: When ``state.yml`` exists but is malformed.
+
+        F12.2: justified fail-open — legacy config.yml and file_hashes.yml
+        reads are compatibility paths.  Failures are logged and the import
+        is gracefully skipped so the M2 migration is not blocked.
         """
         # Already consolidated — nothing to materialize.
         if self._state_file_has_consolidated_sections():
@@ -760,7 +769,11 @@ class ProjectStateManager:
         # Merge legacy module tracking from config.yml.
         try:
             legacy_config = self.load_config()
-        except (ConfigError, OSError, yaml.YAMLError):
+        except (ConfigError, OSError, yaml.YAMLError) as error:
+            logger.warning(
+                "Failed to load legacy config.yml during materialization: %s",
+                error,
+            )
             legacy_config = None
 
         if legacy_config is not None:
@@ -791,7 +804,11 @@ class ProjectStateManager:
             managed_files.update(existing_state.managed_files)
         try:
             legacy_hashes = self.load_managed_file_hashes()
-        except StateError:
+        except StateError as error:
+            logger.warning(
+                "Failed to load legacy file_hashes.yml during materialization: %s",
+                error,
+            )
             legacy_hashes = {}
         for path, record in legacy_hashes.items():
             if path not in managed_files:
@@ -822,7 +839,15 @@ class ProjectStateManager:
             managed_files=managed_files,
         )
 
-        self.save_state(state)
+        # Only persist when new data was added from legacy sources or
+        # when creating a brand-new state from scratch.  Skipping the
+        # save for unchanged states avoids unnecessary YAML
+        # re-serialization that could alter quoting (F12.2).
+        _has_new_data = (
+            existing_state is None or (legacy_config is not None) or bool(legacy_hashes)
+        )
+        if _has_new_data:
+            self.save_state(state)
         return state
 
     # ------------------------------------------------------------------
