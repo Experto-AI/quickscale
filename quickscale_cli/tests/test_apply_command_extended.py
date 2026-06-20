@@ -1209,6 +1209,7 @@ class TestPrepareApplyContext:
             "    commit_sha:\n"
             '    embedded_at: "2025-01-01T00:00:00"\n'
             "    options: {}\n"
+            'git_index_checkpoint: "cafebabedeadbeefcafebabedeadbeefcafebabe"\n'
         )
         module_dir = project_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
@@ -2084,6 +2085,7 @@ class TestProvenancePersistence:
             embedded_modules=["auth"],
             delta=delta,
             provenance_payloads=provenance,
+            checkpoint_tree_id="d" * 40,
         )
 
         assert result is True
@@ -2156,6 +2158,67 @@ class TestProvenancePersistence:
 
         assert not recovery_path.exists()
 
+    def test_save_recovery_state_writes_exact_checkpoint_tree_id(self, tmp_path):
+        """F12.1e checkpoint: _save_apply_recovery_state writes the threaded
+        checkpoint_tree_id into the recovery ledger, not a re-captured value."""
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        tree_id = "aabbccddeeff00112233445566778899aabbccdd"
+
+        result = _save_apply_recovery_state(
+            tmp_path,
+            config,
+            existing_state=None,
+            embedded_modules=[],
+            delta=delta,
+            checkpoint_tree_id=tree_id,
+        )
+
+        assert result is True
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        assert recovery_path.exists()
+
+        recovery_data = yaml.safe_load(recovery_path.read_text())
+        assert recovery_data["git_index_checkpoint"] == tree_id
+
+    def test_save_recovery_state_persists_diff_checkpoint_tree_id(self, tmp_path):
+        """The threaded checkpoint_tree_id is persisted verbatim, proving no
+        re-capture replaces it with a later tree value."""
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        threaded_id = "bbccddeeff00112233445566778899aabbccddee"
+
+        result = _save_apply_recovery_state(
+            tmp_path,
+            config,
+            existing_state=None,
+            embedded_modules=[],
+            delta=delta,
+            checkpoint_tree_id=threaded_id,
+        )
+
+        assert result is True
+        recovery_data = yaml.safe_load(
+            (tmp_path / ".quickscale" / "apply-recovery.yml").read_text()
+        )
+        assert recovery_data["git_index_checkpoint"] == threaded_id
+
     def test_finalize_clears_recovery_on_success(self, tmp_path):
         """Phase 2: _finalize_apply_state clears recovery after successful save."""
         # Pre-create a recovery file
@@ -2184,7 +2247,7 @@ class TestProvenancePersistence:
             modules={},
         )
 
-        _finalize_apply_state(ctx, post_embed_state)
+        _finalize_apply_state(ctx, post_embed_state, checkpoint_tree_id="e" * 40)
 
         # Recovery should be cleared after successful finalize
         assert not recovery_path.exists()
@@ -2958,6 +3021,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -2966,6 +3030,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_backups_gitignore,
         mock_notifications_env_sync,
@@ -2981,6 +3046,7 @@ class TestExecuteApplySteps:
             embedded_modules=["blog"],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_backups_gitignore.return_value = True
         mock_notifications_env_sync.return_value = True
@@ -3157,6 +3223,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3165,6 +3232,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_backups_gitignore,
         mock_notifications_env_sync,
@@ -3180,6 +3248,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_backups_gitignore.return_value = True
         mock_notifications_env_sync.return_value = True
@@ -3227,6 +3296,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3235,6 +3305,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_save_state,
         mock_display_next_steps,
@@ -3246,6 +3317,7 @@ class TestExecuteApplySteps:
             embedded_modules=["auth"],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = False
 
         ctx = Mock()
@@ -3299,6 +3371,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3307,6 +3380,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_backups_gitignore,
         mock_notifications_env_sync,
@@ -3321,6 +3395,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_backups_gitignore.return_value = True
         mock_notifications_env_sync.return_value = True
@@ -3374,6 +3449,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3382,6 +3458,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_backups_gitignore,
         mock_notifications_env_sync,
@@ -3398,6 +3475,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_backups_gitignore.return_value = True
         mock_notifications_env_sync.return_value = True
@@ -3452,6 +3530,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3460,6 +3539,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_backups_gitignore,
         mock_notifications_env_sync,
@@ -3475,6 +3555,7 @@ class TestExecuteApplySteps:
             embedded_modules=["backups"],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_backups_gitignore.return_value = False
 
@@ -3542,6 +3623,7 @@ class TestExecuteApplySteps:
         "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
     )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3550,6 +3632,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_sync_module_dependencies,
         mock_run_post,
@@ -3565,6 +3648,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_sync_module_dependencies.return_value = True
         mock_start_docker.return_value = True
@@ -3621,6 +3705,7 @@ class TestExecuteApplySteps:
         "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
     )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3629,6 +3714,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_sync_module_dependencies,
         mock_run_post,
@@ -3643,6 +3729,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_sync_module_dependencies.return_value = True
 
@@ -3683,6 +3770,7 @@ class TestExecuteApplySteps:
         "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
     )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3691,6 +3779,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_sync_module_dependencies,
         mock_run_post,
@@ -3705,6 +3794,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_sync_module_dependencies.return_value = True
         mock_run_post.return_value = True
@@ -3753,6 +3843,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3761,6 +3852,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_backups_gitignore,
         mock_notifications_env_sync,
@@ -3779,6 +3871,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_backups_gitignore.return_value = True
         mock_notifications_env_sync.return_value = True
@@ -3846,6 +3939,7 @@ class TestExecuteApplySteps:
         "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
     )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3854,6 +3948,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_sync_module_dependencies,
         mock_run_post,
@@ -3869,6 +3964,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_sync_module_dependencies.return_value = True
         mock_start_docker.return_value = False
@@ -3922,6 +4018,7 @@ class TestExecuteApplySteps:
         "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
     )
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -3930,6 +4027,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_sync_module_dependencies,
         mock_run_post,
@@ -3945,6 +4043,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_sync_module_dependencies.return_value = True
         mock_start_docker.return_value = True
@@ -4000,6 +4099,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
     @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -4008,6 +4108,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_capture_checkpoint,
         mock_regenerate_wiring,
         mock_backups_gitignore,
         mock_notifications_env_sync,
@@ -4025,6 +4126,7 @@ class TestExecuteApplySteps:
             embedded_modules=[],
             failed_module=None,
         )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
         mock_regenerate_wiring.return_value = True
         mock_backups_gitignore.return_value = True
         mock_notifications_env_sync.return_value = True
@@ -5864,6 +5966,10 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
+            ),
+            patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
                 return_value=False,
             ),
@@ -6007,7 +6113,9 @@ class TestApplyFailureSummaryParity:
             ) as mock_clear_recovery,
         ):
             with pytest.raises(click.Abort):
-                _finalize_apply_state(ctx, post_embed_state)
+                _finalize_apply_state(
+                    ctx, post_embed_state, checkpoint_tree_id="c" * 40
+                )
 
         captured = capsys.readouterr()
         lines = captured.out.splitlines()
@@ -6068,7 +6176,9 @@ class TestApplyFailureSummaryParity:
             ) as mock_clear_recovery,
         ):
             with pytest.raises(click.Abort):
-                _finalize_apply_state(ctx, post_embed_state)
+                _finalize_apply_state(
+                    ctx, post_embed_state, checkpoint_tree_id="c" * 40
+                )
 
         captured = capsys.readouterr()
         lines = captured.out.splitlines()
@@ -6233,6 +6343,10 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
+            ),
+            patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
                 return_value=False,
             ),
@@ -6297,6 +6411,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
@@ -6371,6 +6489,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
@@ -6449,6 +6571,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
@@ -6531,6 +6657,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
@@ -6616,6 +6746,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
@@ -6706,6 +6840,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
@@ -6800,6 +6938,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
@@ -6898,6 +7040,10 @@ class TestApplyFailureSummaryParity:
                         theme="showcase_html",
                     ),
                 ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                return_value=Mock(tree_id="a" * 40),
             ),
             patch(
                 "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",

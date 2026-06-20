@@ -38,6 +38,9 @@ from quickscale_core.schema.state_schema import (
 _FIRST_STEP_ID = APPLY_STEPS[0].step_id  # "module embedding"
 _SECOND_STEP_ID = APPLY_STEPS[1].step_id  # "post-embed state snapshot"
 
+#: Stable checkpoint-like tree id used throughout ledger tests.
+_GIT_INDEX_CHECKPOINT = "cafebabedeadbeefcafebabedeadbeefcafebabe"
+
 
 def _minimal_state() -> QuickScaleState:
     """Build the smallest valid QuickScaleState for ledger tests."""
@@ -64,6 +67,7 @@ def _minimal_ledger_dict() -> dict[str, Any]:
             "created_at": "2025-01-01T00:00:00",
             "last_applied": "2025-06-01T00:00:00",
         },
+        "git_index_checkpoint": _GIT_INDEX_CHECKPOINT,
     }
 
 
@@ -319,7 +323,11 @@ class TestLedgerRoundTrip:
 
     def test_round_trip_no_step_progress(self, tmp_path: Path) -> None:
         state = _minimal_state()
-        ledger = RecoveryLedger(applied_state=state, step_progress=None)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            step_progress=None,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -340,7 +348,11 @@ class TestLedgerRoundTrip:
                 step_id=_SECOND_STEP_ID, status="failed", detail="network timeout"
             ),
         }
-        ledger = RecoveryLedger(applied_state=state, step_progress=sp)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            step_progress=sp,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -363,7 +375,10 @@ class TestLedgerRoundTrip:
     def test_round_trip_preserves_applied_state_version(self, tmp_path: Path) -> None:
         state = _minimal_state()
         state.version = "2"
-        ledger = RecoveryLedger(applied_state=state)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -379,7 +394,11 @@ class TestLedgerRoundTrip:
             s.step_id: StepProgress(step_id=s.step_id, status="completed")
             for s in APPLY_STEPS
         }
-        ledger = RecoveryLedger(applied_state=state, step_progress=sp)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            step_progress=sp,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -392,7 +411,10 @@ class TestLedgerRoundTrip:
     def test_save_uses_tmp_then_replaces(self, tmp_path: Path) -> None:
         """Atomic write: tmp file must not exist after a successful save."""
         state = _minimal_state()
-        ledger = RecoveryLedger(applied_state=state)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -403,7 +425,10 @@ class TestLedgerRoundTrip:
     def test_save_creates_quickscale_dir(self, tmp_path: Path) -> None:
         """save() must create .quickscale/ if it does not exist."""
         state = _minimal_state()
-        ledger = RecoveryLedger(applied_state=state)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         assert not (tmp_path / ".quickscale").exists()
@@ -413,7 +438,10 @@ class TestLedgerRoundTrip:
     def test_yaml_convention_default_flow_style_false(self, tmp_path: Path) -> None:
         """Saved YAML must use block style (not inline flow style)."""
         state = _minimal_state()
-        ledger = RecoveryLedger(applied_state=state)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -537,7 +565,10 @@ class TestRecoveryLedgerToDictWithModules:
             commit_sha="abc123",
             embedded_at="2025-01-01T00:00:00",
         )
-        ledger = RecoveryLedger(applied_state=state)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -557,7 +588,10 @@ class TestRecoveryLedgerToDictWithModules:
             hash="deadbeef",
             applied_at="2025-01-01T00:00:00",
         )
-        ledger = RecoveryLedger(applied_state=state)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
         mgr = LedgerManager(tmp_path)
 
         mgr.save(ledger)
@@ -751,6 +785,101 @@ class TestAppliedStateMalformedModules:
         mgr = LedgerManager(tmp_path)
         with pytest.raises(LedgerError, match="mapping"):
             mgr.load()
+
+
+# ---------------------------------------------------------------------------
+# Git-index checkpoint field
+# ---------------------------------------------------------------------------
+
+
+class TestRecoveryLedgerGitIndexCheckpoint:
+    """git_index_checkpoint field in RecoveryLedger must survive save+load."""
+
+    def test_round_trip_with_git_index_checkpoint(self, tmp_path: Path) -> None:
+        """A ledger with a valid git_index_checkpoint round-trips."""
+        state = _minimal_state()
+        ledger = RecoveryLedger(
+            applied_state=state,
+            step_progress=None,
+            git_index_checkpoint="abc123def456abc123def456abc123def456abc1",
+        )
+        mgr = LedgerManager(tmp_path)
+        mgr.save(ledger)
+
+        loaded = mgr.load()
+        assert loaded is not None
+        assert loaded.git_index_checkpoint == "abc123def456abc123def456abc123def456abc1"
+
+    def test_fail_hard_on_missing_git_index_checkpoint(self, tmp_path: Path) -> None:
+        """A present ledger without git_index_checkpoint must raise LedgerError."""
+        data = {
+            "version": "1",
+            "project": {
+                "slug": "myapp",
+                "package": "myapp",
+                "theme": "showcase_html",
+                "created_at": "2025-01-01T00:00:00",
+                "last_applied": "2025-06-01T00:00:00",
+            },
+        }
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="is required"):
+            mgr.load()
+
+    def test_parse_with_inline_git_index_checkpoint(self, tmp_path: Path) -> None:
+        """A YAML file with git_index_checkpoint set must parse correctly."""
+        data = _minimal_ledger_dict()
+        data["git_index_checkpoint"] = "deadbeefcafebabedeadbeefcafebabedeadbeef"
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        result = mgr.load()
+
+        assert result is not None
+        assert result.git_index_checkpoint == "deadbeefcafebabedeadbeefcafebabedeadbeef"
+
+    def test_empty_string_raises(self, tmp_path: Path) -> None:
+        """An empty git_index_checkpoint must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["git_index_checkpoint"] = ""
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError):
+            mgr.load()
+
+    def test_non_string_value_raises(self, tmp_path: Path) -> None:
+        """A non-string git_index_checkpoint must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["git_index_checkpoint"] = 12345
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError):
+            mgr.load()
+
+    def test_dict_includes_git_index_checkpoint_when_set(self) -> None:
+        """to_dict must include git_index_checkpoint when it is set."""
+        state = _minimal_state()
+        ledger = RecoveryLedger(
+            applied_state=state,
+            git_index_checkpoint="aabbccddeeff00112233445566778899aabbccdd",
+        )
+        d = ledger.to_dict()
+        assert d["git_index_checkpoint"] == "aabbccddeeff00112233445566778899aabbccdd"
+
+    def test_dict_includes_git_index_checkpoint_always(self) -> None:
+        """to_dict must always include git_index_checkpoint."""
+        state = _minimal_state()
+        ledger = RecoveryLedger(
+            applied_state=state,
+            step_progress=None,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
+        d = ledger.to_dict()
+        assert d["git_index_checkpoint"] == _GIT_INDEX_CHECKPOINT
 
 
 # ---------------------------------------------------------------------------

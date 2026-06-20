@@ -975,6 +975,7 @@ modules:
     commit_sha:
     embedded_at: "2025-01-01T00:00:00"
     options: {}
+git_index_checkpoint: "deadbeefcafebabedeadbeefcafebabedeadbeef"
 """
                 )
 

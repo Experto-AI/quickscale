@@ -163,9 +163,14 @@ class RecoveryLedger:
         step_progress: Optional mapping of step_id to
             :class:`StepProgress`.  May be empty or absent (``None``);
             both are treated as valid.  **Diagnostic-only.**
+        git_index_checkpoint: Git tree-id captured at the time the recovery
+            ledger was written.  Records the current git-index state for
+            diagnostic or recovery reference.  **Required — present ledgers
+            must carry a non-empty string.**
     """
 
     applied_state: QuickScaleState
+    git_index_checkpoint: str
     step_progress: dict[str, StepProgress] | None = field(default=None)
 
     def to_dict(self) -> dict[str, Any]:
@@ -219,6 +224,8 @@ class RecoveryLedger:
             data["step_progress"] = [
                 entry.to_dict() for entry in self.step_progress.values()
             ]
+
+        data["git_index_checkpoint"] = self.git_index_checkpoint
 
         return data
 
@@ -322,6 +329,9 @@ class LedgerManager:
 def _parse_ledger(raw: Any) -> RecoveryLedger:
     """Parse raw ``yaml.safe_load`` output into a :class:`RecoveryLedger`.
 
+    ``git_index_checkpoint`` is **required** — present ledgers that omit the
+    field raise :class:`LedgerError`.
+
     Raises:
         LedgerError: On any structural or consistency violation.
     """
@@ -339,7 +349,20 @@ def _parse_ledger(raw: Any) -> RecoveryLedger:
     if raw_sp is not None:
         step_progress = _parse_step_progress(raw_sp)
 
-    return RecoveryLedger(applied_state=applied_state, step_progress=step_progress)
+    # --- Required git_index_checkpoint field ----------------------------
+    raw_gic = raw.get("git_index_checkpoint")
+    if not isinstance(raw_gic, str) or not raw_gic:
+        raise LedgerError(
+            f"'git_index_checkpoint' is required and must be a non-empty string, "
+            f"got {raw_gic!r}"
+        )
+    git_index_checkpoint = raw_gic
+
+    return RecoveryLedger(
+        applied_state=applied_state,
+        step_progress=step_progress,
+        git_index_checkpoint=git_index_checkpoint,
+    )
 
 
 def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
