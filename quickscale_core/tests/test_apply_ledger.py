@@ -642,6 +642,17 @@ class TestRecoveryLedgerToDictWithModules:
         with pytest.raises(LedgerError, match="list or mapping"):
             mgr.load()
 
+    def test_managed_files_explicit_null_raises(self, tmp_path: Path) -> None:
+        """managed_files: null must raise LedgerError — explicit null is not the
+        same as key absence."""
+        data = _minimal_ledger_dict()
+        data["managed_files"] = None  # YAML null → Python None
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="got None"):
+            mgr.load()
+
     def test_managed_files_dict_form_missing_hash_raises(self, tmp_path: Path) -> None:
         """Dict-keyed entry missing required 'hash' must raise LedgerError."""
         data = _minimal_ledger_dict()

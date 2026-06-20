@@ -426,6 +426,8 @@ def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
         )
 
     # managed_files section is optional
+    # Distinguish "key absent" (valid — use empty dict) from
+    # "key present with explicit null" (invalid — fail hard).
     managed_files: dict[str, ManagedFileRecord] = {}
     managed_files_data = raw.get("managed_files")
     if managed_files_data is not None:
@@ -465,6 +467,11 @@ def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
                 f"'managed_files' must be a list or mapping, "
                 f"got {type(managed_files_data).__name__}"
             )
+    elif "managed_files" in raw:
+        # Key present with explicit null — fail hard.
+        raise LedgerError(
+            "'managed_files' must be a list or mapping when present, got None"
+        )
 
     return QuickScaleState(
         version=str(version),
