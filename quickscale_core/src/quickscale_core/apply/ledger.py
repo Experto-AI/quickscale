@@ -432,23 +432,39 @@ def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
         if isinstance(managed_files_data, list):
             for entry in managed_files_data:
                 if not isinstance(entry, dict):
-                    continue
+                    raise LedgerError(
+                        f"Each managed_files entry must be a mapping, "
+                        f"got {type(entry).__name__}"
+                    )
                 try:
                     record = ManagedFileRecord.from_dict(entry)
-                except (KeyError, TypeError, ValueError):
-                    continue
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise LedgerError(
+                        f"Managed file record is missing required fields: {exc}"
+                    ) from exc
                 managed_files[record.path] = record
         elif isinstance(managed_files_data, dict):
             for file_path, file_info in managed_files_data.items():
                 if not isinstance(file_info, dict):
-                    continue
+                    raise LedgerError(
+                        f"Managed file '{file_path}' value must be a mapping, "
+                        f"got {type(file_info).__name__}"
+                    )
                 try:
                     record = ManagedFileRecord.from_dict(
                         {**file_info, "path": file_path}
                     )
-                except (KeyError, TypeError, ValueError):
-                    continue
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise LedgerError(
+                        f"Managed file record for '{file_path}' is missing "
+                        f"required fields: {exc}"
+                    ) from exc
                 managed_files[record.path] = record
+        else:
+            raise LedgerError(
+                f"'managed_files' must be a list or mapping, "
+                f"got {type(managed_files_data).__name__}"
+            )
 
     return QuickScaleState(
         version=str(version),

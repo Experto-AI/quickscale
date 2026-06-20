@@ -19,6 +19,7 @@ from quickscale_cli.utils.module_dependency_sync import (
     sync_project_module_dependencies,
 )
 
+from quickscale_core.apply import LedgerError, LedgerManager
 from quickscale_core.config import (
     ConfigError,
     add_module,
@@ -969,20 +970,28 @@ def _ensure_authoritative_state_for_update(
 
 
 def _load_update_recovery_state(project_path: Path) -> Any | None:
-    """Load the optional apply recovery snapshot used by update guardrails."""
-    recovery_path = project_path / ".quickscale" / "apply-recovery.yml"
-    if not recovery_path.exists():
+    """Load the optional apply recovery snapshot used by update guardrails.
+
+    Returns the embedded applied-state (:class:`QuickScaleState`) when the
+    recovery ledger file exists and is valid, or ``None`` when the file
+    does not exist.  Malformed content raises :class:`LedgerError` which
+    is surfaced as a :class:`RuntimeError`.
+    """
+    mgr = LedgerManager(project_path)
+    if not mgr.ledger_file.exists():
         return None
 
-    recovery_manager = StateManager(project_path)
-    recovery_manager.state_file = recovery_path
     try:
-        return recovery_manager.load()
-    except StateError as error:
+        ledger = mgr.load()
+    except LedgerError as error:
         raise RuntimeError(
             "Failed to load .quickscale/apply-recovery.yml: "
             f"{error}. Fix or clear the recovery snapshot before updating modules."
         ) from error
+
+    if ledger is None:
+        return None
+    return ledger.applied_state
 
 
 def _report_local_pre_pull_guard_block(

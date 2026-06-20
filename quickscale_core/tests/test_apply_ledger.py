@@ -566,10 +566,10 @@ class TestRecoveryLedgerToDictWithModules:
         assert loaded is not None
         assert "myapp/settings/modules.py" in loaded.applied_state.managed_files
 
-    def test_managed_files_list_with_non_dict_entry_skipped(
+    def test_managed_files_list_with_non_dict_entry_raises(
         self, tmp_path: Path
     ) -> None:
-        """Non-dict entries in a list-form managed_files section are skipped silently."""
+        """Non-dict entries in a list-form managed_files section must raise LedgerError."""
         data = _minimal_ledger_dict()
         data["managed_files"] = [
             "not-a-dict",
@@ -582,29 +582,23 @@ class TestRecoveryLedgerToDictWithModules:
         _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
 
         mgr = LedgerManager(tmp_path)
-        result = mgr.load()
+        with pytest.raises(LedgerError, match="must be a mapping"):
+            mgr.load()
 
-        assert result is not None
-        # The valid entry is included; the bad entry is skipped
-        assert "myapp/settings/base.py" in result.applied_state.managed_files
-
-    def test_managed_files_list_with_missing_required_field_skipped(
+    def test_managed_files_list_with_missing_required_field_raises(
         self, tmp_path: Path
     ) -> None:
-        """Entries missing required fields in list-form managed_files are skipped."""
+        """Entries missing required fields in list-form managed_files must raise LedgerError."""
         data = _minimal_ledger_dict()
         data["managed_files"] = [
             {"path": "ok/file.py", "hash": "abc", "applied_at": "2025-01-01"},
-            {"path": "bad/file.py"},  # missing hash — will be skipped
+            {"path": "bad/file.py"},  # missing hash — must raise
         ]
         _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
 
         mgr = LedgerManager(tmp_path)
-        result = mgr.load()
-
-        assert result is not None
-        assert "ok/file.py" in result.applied_state.managed_files
-        assert "bad/file.py" not in result.applied_state.managed_files
+        with pytest.raises(LedgerError, match="missing required fields"):
+            mgr.load()
 
     def test_managed_files_dict_form_parses(self, tmp_path: Path) -> None:
         """Dict-keyed form of managed_files section also parses correctly."""
@@ -623,10 +617,10 @@ class TestRecoveryLedgerToDictWithModules:
         assert result is not None
         assert "myapp/settings/base.py" in result.applied_state.managed_files
 
-    def test_managed_files_dict_form_non_dict_value_skipped(
+    def test_managed_files_dict_form_non_dict_value_raises(
         self, tmp_path: Path
     ) -> None:
-        """Non-dict value in dict-keyed managed_files is skipped silently."""
+        """Non-dict value in dict-keyed managed_files must raise LedgerError."""
         data = _minimal_ledger_dict()
         data["managed_files"] = {
             "ok/file.py": {"hash": "abc", "applied_at": "2025-01-01"},
@@ -635,14 +629,21 @@ class TestRecoveryLedgerToDictWithModules:
         _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
 
         mgr = LedgerManager(tmp_path)
-        result = mgr.load()
+        with pytest.raises(LedgerError, match="must be a mapping"):
+            mgr.load()
 
-        assert result is not None
-        assert "ok/file.py" in result.applied_state.managed_files
-        assert "bad/file.py" not in result.applied_state.managed_files
+    def test_managed_files_invalid_top_level_type_raises(self, tmp_path: Path) -> None:
+        """managed_files must fail hard when present with a non-list/non-mapping type."""
+        data = _minimal_ledger_dict()
+        data["managed_files"] = "not-a-list-or-mapping"
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
 
-    def test_managed_files_dict_form_missing_hash_skipped(self, tmp_path: Path) -> None:
-        """Dict-keyed entry missing required 'hash' is skipped silently."""
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="list or mapping"):
+            mgr.load()
+
+    def test_managed_files_dict_form_missing_hash_raises(self, tmp_path: Path) -> None:
+        """Dict-keyed entry missing required 'hash' must raise LedgerError."""
         data = _minimal_ledger_dict()
         data["managed_files"] = {
             "ok/file.py": {"hash": "abc", "applied_at": "2025-01-01"},
@@ -651,11 +652,8 @@ class TestRecoveryLedgerToDictWithModules:
         _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
 
         mgr = LedgerManager(tmp_path)
-        result = mgr.load()
-
-        assert result is not None
-        assert "ok/file.py" in result.applied_state.managed_files
-        assert "no-hash/file.py" not in result.applied_state.managed_files
+        with pytest.raises(LedgerError, match="missing required fields"):
+            mgr.load()
 
 
 # ---------------------------------------------------------------------------

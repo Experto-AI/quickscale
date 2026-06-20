@@ -73,6 +73,7 @@ from quickscale_cli.schema.state_schema import (
     ModuleState,
     ProjectState,
     QuickScaleState,
+    StateError,
     StateManager,
 )
 from quickscale_core.generator import ProjectGenerator
@@ -4472,6 +4473,55 @@ class TestCR001RefreshContextAfterLockLegacyReadThrough:
         assert auth_state.prefix == "auth_"
         assert auth_state.branch == "main"
         assert auth_state.installed_at == "2025-06-01T00:00:00"
+
+    def test_malformed_recovery_ledger_fails_hard_in_refresh(self, tmp_path) -> None:
+        """CR-F12.1D-001: malformed apply-recovery.yml must fail hard in
+        _refresh_context_after_lock instead of being silently treated as absent."""
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        qs_dir = project_path / ".quickscale"
+        qs_dir.mkdir()
+        # Valid state.yml so the refresh proceeds past the authoritative
+        # state load to the recovery state load.
+        (qs_dir / "state.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            '  created_at: "2025-01-01T00:00:00"\n'
+            '  last_applied: "2025-01-01T00:00:00"\n'
+            "modules: {}\n"
+        )
+        # Malformed recovery ledger — not valid YAML for the schema.
+        (qs_dir / "apply-recovery.yml").write_text("not-a-valid-ledger: [broken\n")
+
+        pre_lock_state = StateManager(project_path).load()
+        assert pre_lock_state is not None
+
+        qs_config = Mock()
+        qs_config.project.slug = "myapp"
+        qs_config.project.package = "myapp"
+        qs_config.project.theme = "showcase_html"
+        qs_config.modules = {}
+        qs_config.docker.start = False
+        qs_config.docker.build = False
+
+        ctx = ApplyContext(
+            config_path=project_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=project_path,
+            state_manager=StateManager(project_path),
+            existing_state=pre_lock_state,
+            manifests={},
+            delta=Mock(),
+            has_pending_post_embed_recovery=False,
+            had_existing_state=True,
+        )
+
+        # Must propagate StateError/LedgerError instead of suppressing it.
+        with pytest.raises(StateError, match="Failed to parse recovery ledger"):
+            _refresh_context_after_lock(ctx)
 
 
 # ============================================================================
