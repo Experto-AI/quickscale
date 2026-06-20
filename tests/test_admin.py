@@ -73,13 +73,19 @@ class TestStageAdmin:
         stage_admin = StageAdmin(Stage, admin.site)
         assert stage_admin.deal_count(stage) == 1
 
-    def test_stage_form_hides_terminal_semantic_and_keeps_name_order_editable(self):
-        """Stage admin form should expose only the public editable fields."""
+    def test_stage_form_hides_terminal_semantic_and_keeps_name_order_editable(
+        self, staff_user
+    ):
+        """Stage admin form should expose public editable fields plus organization."""
         request = RequestFactory().get("/admin/")
+        request.user = staff_user
         stage_admin = StageAdmin(Stage, admin.site)
-        form_class = stage_admin.get_form(request)
+        form_class = stage_admin.get_form(request, obj=None, change=False)
 
-        assert list(form_class.base_fields) == ["name", "order"]
+        # Phase 1: organization is required on add, terminal_semantic stays hidden.
+        assert "name" in form_class.base_fields
+        assert "order" in form_class.base_fields
+        assert "organization" in form_class.base_fields
         assert "terminal_semantic" not in form_class.base_fields
 
 
@@ -120,75 +126,64 @@ class TestDealNoteAdmin:
 
 @pytest.mark.django_db
 class TestOrganizationFieldExcludedFromAdmin:
-    """Phase 11.1d: organization must be excluded from all five affected admin forms.
+    """Phase 11.1d (superseded by F11.10 Phase 1): organization is now explicit.
 
-    The nullable organization groundwork must not leak into the Django admin
-    surface.  Each of the five admin classes that own an organization FK
-    (Tag, Company, Contact, Stage, Deal) must explicitly exclude it from
-    both the ``exclude`` tuple and the generated form fields.
+    The Phase 11.1d groundwork originally excluded organization from all five
+    admin forms.  F11.10 Phase 1 makes organization explicit: required on add,
+    read-only on change.  This test class is retained for historical reference
+    but the assertions are inverted by the Phase 1 contract.
     """
 
-    def test_tag_admin_excludes_organization(self):
-        """TagAdmin must exclude organization from its form."""
+    def test_tag_admin_includes_organization_on_add(self, staff_user):
+        """TagAdmin must include organization as a required field on add forms."""
         from quickscale_modules_crm.admin import TagAdmin
 
         tag_admin = TagAdmin(Tag, admin.site)
-        assert "organization" in tag_admin.exclude
         request = RequestFactory().get("/admin/")
-        form_class = tag_admin.get_form(request)
-        assert "organization" not in form_class.base_fields
+        request.user = staff_user
+        form_class = tag_admin.get_form(request, obj=None, change=False)
+        assert "organization" in form_class.base_fields
+        assert form_class.base_fields["organization"].required
 
-    def test_company_admin_excludes_organization(self):
-        """CompanyAdmin must exclude organization from its form."""
+    def test_company_admin_includes_organization_on_add(self, staff_user):
+        """CompanyAdmin must include organization as a required field on add forms."""
         company_admin = CompanyAdmin(Company, admin.site)
-        assert "organization" in company_admin.exclude
         request = RequestFactory().get("/admin/")
-        form_class = company_admin.get_form(request)
-        assert "organization" not in form_class.base_fields
+        request.user = staff_user
+        form_class = company_admin.get_form(request, obj=None, change=False)
+        assert "organization" in form_class.base_fields
+        assert form_class.base_fields["organization"].required
 
-    def test_contact_admin_excludes_organization(self, staff_user):
-        """ContactAdmin must exclude organization from its form and fieldsets."""
+    def test_contact_admin_includes_organization_on_add(self, staff_user):
+        """ContactAdmin must include organization as a required field on add forms."""
         from quickscale_modules_crm.admin import ContactAdmin
 
         contact_admin = ContactAdmin(Contact, admin.site)
-        assert "organization" in contact_admin.exclude
         request = RequestFactory().get("/admin/")
         request.user = staff_user
-        form_class = contact_admin.get_form(request)
-        assert "organization" not in form_class.base_fields
-        # Also verify fieldsets do not reference organization.
-        fieldset_fields = [
-            field
-            for _, options in contact_admin.fieldsets
-            for field in options.get("fields", ())
-        ]
-        assert "organization" not in fieldset_fields
+        form_class = contact_admin.get_form(request, obj=None, change=False)
+        assert "organization" in form_class.base_fields
+        assert form_class.base_fields["organization"].required
 
-    def test_stage_admin_excludes_organization(self):
-        """StageAdmin must exclude organization from its form."""
+    def test_stage_admin_includes_organization_on_add(self, staff_user):
+        """StageAdmin must include organization as a required field on add forms."""
         stage_admin = StageAdmin(Stage, admin.site)
-        assert "organization" in stage_admin.exclude
         request = RequestFactory().get("/admin/")
-        form_class = stage_admin.get_form(request)
-        assert "organization" not in form_class.base_fields
+        request.user = staff_user
+        form_class = stage_admin.get_form(request, obj=None, change=False)
+        assert "organization" in form_class.base_fields
+        assert form_class.base_fields["organization"].required
 
-    def test_deal_admin_excludes_organization(self, staff_user):
-        """DealAdmin must exclude organization from its form and fieldsets."""
+    def test_deal_admin_includes_organization_on_add(self, staff_user):
+        """DealAdmin must include organization as a required field on add forms."""
         from quickscale_modules_crm.admin import DealAdmin
 
         deal_admin = DealAdmin(Deal, admin.site)
-        assert "organization" in deal_admin.exclude
         request = RequestFactory().get("/admin/")
         request.user = staff_user
-        form_class = deal_admin.get_form(request)
-        assert "organization" not in form_class.base_fields
-        # Also verify fieldsets do not reference organization.
-        fieldset_fields = [
-            field
-            for _, options in deal_admin.fieldsets
-            for field in options.get("fields", ())
-        ]
-        assert "organization" not in fieldset_fields
+        form_class = deal_admin.get_form(request, obj=None, change=False)
+        assert "organization" in form_class.base_fields
+        assert form_class.base_fields["organization"].required
 
 
 @pytest.mark.django_db
@@ -324,24 +319,86 @@ class TestOperatorPathHTTPAccess:
         assert response.status_code == 200
         assert company.name in response.content.decode()
 
-    def test_superuser_add_form_excludes_organization(self, admin_client):
-        """Platform operator add forms must not expose organization as editable."""
+    def test_superuser_add_form_includes_organization(self, admin_client):
+        """Platform operator add forms must expose organization as a required field."""
         response = admin_client.get("/admin/quickscale_modules_crm/tag/add/")
         assert response.status_code == 200
-        # The rendered form should not contain an organization field.
+        # The rendered form should contain an organization field.
         content = response.content.decode()
-        assert 'name="organization"' not in content
+        assert 'name="organization"' in content
 
-    def test_superuser_change_form_excludes_organization(
+    def test_superuser_change_form_shows_organization_readonly(
         self, admin_client, org_a, tag
     ):
-        """Platform operator change forms must not expose organization as editable."""
+        """Platform operator change forms must show organization read-only."""
         tag.organization = org_a
         tag.save(update_fields=["organization"])
         response = admin_client.get(
             f"/admin/quickscale_modules_crm/tag/{tag.pk}/change/"
         )
         assert response.status_code == 200
-        # The rendered form should not contain an organization field.
+        # The rendered form should contain the organization value but not as an editable input.
         content = response.content.decode()
-        assert 'name="organization"' not in content
+        # Organization value should be visible in the page.
+        assert org_a.name in content
+
+
+@pytest.mark.django_db
+class TestF1110Phase1AdminReadOnlyOrganizationOnChange:
+    """F11.10 Phase 1 — Prove organization is read-only on admin change forms.
+
+    The Phase 1 admin contract requires organization to be displayed read-only
+    on change forms so the operator can see which organization owns the row
+    but cannot reassign it.
+    """
+
+    def test_tag_admin_organization_readonly_on_change(self, org_a, tag):
+        """TagAdmin change form includes organization in readonly_fields."""
+        from quickscale_modules_crm.admin import TagAdmin
+
+        tag.organization = org_a
+        tag.save(update_fields=["organization"])
+        tag_admin = TagAdmin(Tag, admin.site)
+        request = RequestFactory().get("/admin/")
+        readonly = tag_admin.get_readonly_fields(request, obj=tag)
+        assert "organization" in readonly
+
+    def test_company_admin_organization_readonly_on_change(self, org_a, company):
+        """CompanyAdmin change form includes organization in readonly_fields."""
+        company.organization = org_a
+        company.save(update_fields=["organization"])
+        company_admin = CompanyAdmin(Company, admin.site)
+        request = RequestFactory().get("/admin/")
+        readonly = company_admin.get_readonly_fields(request, obj=company)
+        assert "organization" in readonly
+
+    def test_contact_admin_organization_readonly_on_change(self, org_a, contact):
+        """ContactAdmin change form includes organization in readonly_fields."""
+        from quickscale_modules_crm.admin import ContactAdmin
+
+        contact.organization = org_a
+        contact.save(update_fields=["organization"])
+        contact_admin = ContactAdmin(Contact, admin.site)
+        request = RequestFactory().get("/admin/")
+        readonly = contact_admin.get_readonly_fields(request, obj=contact)
+        assert "organization" in readonly
+
+    def test_stage_admin_organization_readonly_on_change(self, org_a, stage):
+        """StageAdmin change form includes organization in readonly_fields."""
+        stage.organization = org_a
+        stage.save(update_fields=["organization"])
+        stage_admin = StageAdmin(Stage, admin.site)
+        request = RequestFactory().get("/admin/")
+        readonly = stage_admin.get_readonly_fields(request, obj=stage)
+        assert "organization" in readonly
+
+    def test_deal_admin_organization_readonly_on_change(self, org_a, deal):
+        """DealAdmin change form includes organization in readonly_fields."""
+        from quickscale_modules_crm.admin import DealAdmin
+
+        deal.organization = org_a
+        deal.save(update_fields=["organization"])
+        deal_admin = DealAdmin(Deal, admin.site)
+        request = RequestFactory().get("/admin/")
+        readonly = deal_admin.get_readonly_fields(request, obj=deal)
+        assert "organization" in readonly

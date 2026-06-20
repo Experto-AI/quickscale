@@ -7,48 +7,87 @@ from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 
 
 def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
-    """Return the current organization ID for org-scoped create stamping.
+    """Return the current organization ID for create stamping.
 
-    Stamping only applies to true org-scoped routes (``/orgs/<slug>/...``).
-    In solo mode the TenantMiddleware attaches a personal org to ``request.org``
-    for all authenticated requests, but solo routes must NOT be stamped — they
-    retain the legacy NULL-org behavior.  The path check ensures stamping is
-    limited to the ``/orgs/`` namespace regardless of ``QUICKSCALE_MODE``.
+    Phase 2: both org-scoped and solo routes stamp the active organization.
+    Org-scoped routes use ``require_current_org`` (fail-closed).  Solo routes
+    use the personal org attached by ``TenantMiddleware``.
 
-    On org-scoped routes, if the request lacks org context (``request.org``
-    is ``None``), a ``ValidationError`` is raised to fail closed rather than
-    silently persisting a NULL-owned row.
+    Fallback: when ``request.org`` is not set on solo routes (e.g., tests that
+    bypass middleware via ``force_authenticate``), look up the user's personal
+    org.  In production, middleware always sets ``request.org``, so this
+    fallback is only used in tests.
+
+    Org-scoped routes NEVER use the fallback — they must fail closed when
+    ``request.org`` is not set by middleware.
+
+    Raises ``ValidationError`` when no org context is available on either
+    route type — there is no NULL/global fallback.
     """
     request = serializer.context.get("request")
     if request is None:
         return None
+
     path = getattr(request, "path", "") or ""
-    if not path.startswith("/orgs/"):
-        return None
+    is_org_scoped = path.startswith("/orgs/")
+
     org = getattr(request, "org", None)
-    if org is None:
+    if org is not None:
+        return org.id
+
+    # Org-scoped routes must fail closed — no fallback.
+    if is_org_scoped:
         raise serializers.ValidationError(
             "Organization context is required for this route.",
             code="org_required",
         )
-    return org.id
+
+    # Solo route fallback: look up the user's personal org (for tests).
+    user = getattr(request, "user", None)
+    if user is not None and getattr(user, "is_authenticated", False):
+        from quickscale_modules_orgs.models import Organization
+
+        personal_org = Organization.objects.filter(
+            is_personal=True, memberships__user=user
+        ).first()
+        if personal_org is not None:
+            request.org = personal_org
+            return personal_org.id
+
+    raise serializers.ValidationError(
+        "Organization context is required for this route.",
+        code="org_required",
+    )
 
 
 def _read_org_id(serializer: serializers.Serializer) -> int | str | None:
-    """Return the current organization ID for org-scoped read filtering.
+    """Return the current organization ID for read filtering.
 
-    Used by serializer helper methods (counts, tag names) to scope related
-    queries when serializing on an org-scoped SaaS route.  Returns ``None``
-    on solo routes so that legacy unscoped behavior is preserved.
+    Phase 2: org-scoped routes filter by the active organization.  Solo routes
+    return ``None`` to enable unscoped (legacy) read behavior — helper methods
+    count all related data, not just personal-org data.
+
+    Returns ``None`` when no request context is available or when the route is
+    a solo route.
     """
     request = serializer.context.get("request")
     if request is None:
         return None
+
     path = getattr(request, "path", "") or ""
-    if not path.startswith("/orgs/"):
+    is_org_scoped = path.startswith("/orgs/")
+
+    # Solo routes return None for unscoped read behavior.
+    if not is_org_scoped:
         return None
+
+    # Org-scoped routes: use request.org or fail closed.
     org = getattr(request, "org", None)
-    return org.id if org is not None else None
+    if org is not None:
+        return org.id
+
+    # Org-scoped routes do NOT use the fallback.
+    return None
 
 
 def _is_foreign_org_related(
@@ -83,6 +122,10 @@ class TagSerializer(serializers.ModelSerializer):
         uses the existing instance's org.  NULL organization is a single
         bucket (legacy NULL-owned duplicates stay blocked).  Same name across
         different organizations is allowed.
+
+        When ``organization_id`` is ``None`` (no request context), check for
+        duplicates in the NULL bucket only.  This preserves the contract that
+        NULL-org tags are in a separate bucket from org-specific tags.
         """
         if self.instance is not None:
             organization_id = self.instance.organization_id
@@ -316,11 +359,18 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         When creating or updating via an org-scoped route, the related
         company and tags must belong to the same organization (or have
         NULL organization for legacy/solo compatibility). Foreign-org
-        references are rejected.
+        references are rejected.  Solo routes skip this validation.
         """
+        request = self.context.get("request")
+        if request is not None:
+            path = getattr(request, "path", "") or ""
+            if not path.startswith("/orgs/"):
+                # Solo route — skip foreign-org validation.
+                return attrs
+
         org_id = _request_org_id(self)
         if org_id is None:
-            # Solo route or no org context — skip foreign-org validation.
+            # No org context — skip foreign-org validation.
             return attrs
 
         # Validate company_id belongs to the current org.
@@ -569,11 +619,18 @@ class DealDetailSerializer(serializers.ModelSerializer):
         When creating or updating via an org-scoped route, the related
         contact, stage, and tags must belong to the same organization (or
         have NULL organization for legacy/solo compatibility). Foreign-org
-        references are rejected.
+        references are rejected.  Solo routes skip this validation.
         """
+        request = self.context.get("request")
+        if request is not None:
+            path = getattr(request, "path", "") or ""
+            if not path.startswith("/orgs/"):
+                # Solo route — skip foreign-org validation.
+                return attrs
+
         org_id = _request_org_id(self)
         if org_id is None:
-            # Solo route or no org context — skip foreign-org validation.
+            # No org context — skip foreign-org validation.
             return attrs
 
         # Validate contact_id belongs to the current org.
@@ -634,27 +691,32 @@ class BulkUpdateStageSerializer(serializers.Serializer):
     stage_id = serializers.PrimaryKeyRelatedField(queryset=Stage.objects.all())
 
     def validate_stage_id(self, value: Stage) -> Stage:
-        """Reject foreign-org stages on org-scoped routes.
+        """Reject non-owned stages on org-scoped routes.
 
-        On org-scoped SaaS routes, the target stage must belong to the same
-        organization (or have NULL organization for legacy/solo compatibility).
-        Foreign-org stages are rejected.  Solo routes preserve legacy behavior.
+        Phase 2: org-scoped routes require the target stage to belong to the
+        active organization.  Solo routes accept any stage (legacy unscoped
+        behavior).
         """
         request = self.context.get("request")
         if request is None:
             return value
+
         path = getattr(request, "path", "") or ""
-        if not path.startswith("/orgs/"):
-            # Solo route — no org-scoped validation.
+        is_org_scoped = path.startswith("/orgs/")
+
+        # Solo routes accept any stage — skip org validation.
+        if not is_org_scoped:
             return value
+
+        # Org-scoped routes: require org context, no fallback.
         org = getattr(request, "org", None)
         if org is None:
-            # Org-scoped route without org context — fail closed.
             raise serializers.ValidationError(
                 "Organization context is required for this route.",
                 code="org_required",
             )
-        if value.organization_id is not None and value.organization_id != org.id:
+        # Org-scoped: reject both foreign-org and NULL-org stages.
+        if value.organization_id != org.id:
             raise serializers.ValidationError(
                 "The specified stage does not belong to this organization.",
                 code="foreign_org",

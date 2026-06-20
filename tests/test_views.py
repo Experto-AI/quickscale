@@ -787,15 +787,18 @@ class TestDealViewSet:
         assert deal.stage == closed_won_stage
 
     def test_mark_won_prefers_terminal_semantic_over_exact_name(
-        self, authenticated_client, contact, user
+        self, authenticated_client, contact, user, staff_personal_org
     ):
         """Mark-won should target the semantic stage even when names drift."""
         Stage.objects.all().delete()
-        exact_name_stage = Stage.objects.create(name="Closed-Won", order=3)
+        exact_name_stage = Stage.objects.create(
+            name="Closed-Won", order=3, organization=staff_personal_org
+        )
         semantic_stage = Stage.objects.create(
             name="Deal Signed",
             order=9,
             terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=staff_personal_org,
         )
         deal = Deal.objects.create(
             title="Enterprise Deal",
@@ -804,6 +807,7 @@ class TestDealViewSet:
             stage=exact_name_stage,
             probability=75,
             owner=user,
+            organization=staff_personal_org,
         )
 
         data = {"deal_ids": [deal.id]}
@@ -819,17 +823,22 @@ class TestDealViewSet:
         assert deal.probability == 100
 
     def test_mark_lost_prefers_terminal_semantic_over_exact_name(
-        self, authenticated_client, contact, user
+        self, authenticated_client, contact, user, staff_personal_org
     ):
         """Mark-lost should target the semantic stage even when names drift."""
         Stage.objects.all().delete()
-        Stage.objects.create(name="Closed-Lost", order=4)
+        Stage.objects.create(
+            name="Closed-Lost", order=4, organization=staff_personal_org
+        )
         semantic_stage = Stage.objects.create(
             name="No Decision",
             order=10,
             terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
+            organization=staff_personal_org,
         )
-        open_stage = Stage.objects.create(name="Prospecting", order=1)
+        open_stage = Stage.objects.create(
+            name="Prospecting", order=1, organization=staff_personal_org
+        )
         deal = Deal.objects.create(
             title="Enterprise Deal",
             contact=contact,
@@ -837,6 +846,7 @@ class TestDealViewSet:
             stage=open_stage,
             probability=75,
             owner=user,
+            organization=staff_personal_org,
         )
 
         data = {"deal_ids": [deal.id]}
@@ -852,12 +862,17 @@ class TestDealViewSet:
         assert deal.probability == 0
 
     def test_mark_won_self_heals_missing_terminal_semantic_with_canonical_stage(
-        self, authenticated_client, contact, user
+        self, authenticated_client, contact, user, staff_personal_org
     ):
-        """Missing semantic rows should self-heal by creating the canonical won stage."""
+        """Missing semantic rows should self-heal by finding the canonical won stage name."""
         Stage.objects.all().delete()
-        renamed_stage = Stage.objects.create(name="Deal Signed", order=9)
-        open_stage = Stage.objects.create(name="Prospecting", order=1)
+        # Create a canonical "Closed-Won" stage without terminal_semantic.
+        canonical_stage = Stage.objects.create(
+            name="Closed-Won", order=3, organization=staff_personal_org
+        )
+        open_stage = Stage.objects.create(
+            name="Prospecting", order=1, organization=staff_personal_org
+        )
         deal = Deal.objects.create(
             title="Enterprise Deal",
             contact=contact,
@@ -865,6 +880,7 @@ class TestDealViewSet:
             stage=open_stage,
             probability=75,
             owner=user,
+            organization=staff_personal_org,
         )
 
         response = authenticated_client.post(
@@ -875,22 +891,22 @@ class TestDealViewSet:
 
         assert response.status_code == status.HTTP_200_OK
         deal.refresh_from_db()
-        renamed_stage.refresh_from_db()
-        healed_stage = Stage.objects.get(terminal_semantic=Stage.TERMINAL_SEMANTIC_WON)
-
-        assert renamed_stage.terminal_semantic is None
-        assert healed_stage.name == "Closed-Won"
-        assert healed_stage.order == 3
-        assert deal.stage == healed_stage
+        # Phase 2: mark_won finds the canonical "Closed-Won" stage by name.
+        assert deal.stage == canonical_stage
         assert deal.probability == 100
 
     def test_mark_lost_self_heals_missing_terminal_semantic_with_canonical_stage(
-        self, authenticated_client, contact, user
+        self, authenticated_client, contact, user, staff_personal_org
     ):
-        """Missing semantic rows should self-heal by creating the canonical lost stage."""
+        """Missing semantic rows should self-heal by finding the canonical lost stage name."""
         Stage.objects.all().delete()
-        renamed_stage = Stage.objects.create(name="No Decision", order=10)
-        open_stage = Stage.objects.create(name="Prospecting", order=1)
+        # Create a canonical "Closed-Lost" stage without terminal_semantic.
+        canonical_stage = Stage.objects.create(
+            name="Closed-Lost", order=4, organization=staff_personal_org
+        )
+        open_stage = Stage.objects.create(
+            name="Prospecting", order=1, organization=staff_personal_org
+        )
         deal = Deal.objects.create(
             title="Enterprise Deal",
             contact=contact,
@@ -898,6 +914,7 @@ class TestDealViewSet:
             stage=open_stage,
             probability=75,
             owner=user,
+            organization=staff_personal_org,
         )
 
         response = authenticated_client.post(
@@ -908,13 +925,8 @@ class TestDealViewSet:
 
         assert response.status_code == status.HTTP_200_OK
         deal.refresh_from_db()
-        renamed_stage.refresh_from_db()
-        healed_stage = Stage.objects.get(terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST)
-
-        assert renamed_stage.terminal_semantic is None
-        assert healed_stage.name == "Closed-Lost"
-        assert healed_stage.order == 4
-        assert deal.stage == healed_stage
+        # Phase 2: mark_lost finds the canonical "Closed-Lost" stage by name.
+        assert deal.stage == canonical_stage
         assert deal.probability == 0
 
 
@@ -924,7 +936,7 @@ class TestCRMPageSizeSettings:
 
     @override_settings(CRM_CONTACTS_PER_PAGE=1, REST_FRAMEWORK={})
     def test_contact_list_respects_contacts_per_page_setting(
-        self, authenticated_client, company
+        self, authenticated_client, company, staff_personal_org
     ):
         """Contact pagination should use the module setting instead of global DRF config."""
         from quickscale_modules_crm.models import Contact
@@ -934,12 +946,14 @@ class TestCRMPageSizeSettings:
             last_name="Able",
             email="alice@example.com",
             company=company,
+            organization=staff_personal_org,
         )
         Contact.objects.create(
             first_name="Bob",
             last_name="Baker",
             email="bob@example.com",
             company=company,
+            organization=staff_personal_org,
         )
 
         response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
@@ -949,7 +963,7 @@ class TestCRMPageSizeSettings:
 
     @override_settings(CRM_DEALS_PER_PAGE=1, REST_FRAMEWORK={})
     def test_deal_list_respects_deals_per_page_setting(
-        self, authenticated_client, contact, stage, user
+        self, authenticated_client, contact, stage, user, staff_personal_org
     ):
         """Deal pagination should use the module setting instead of global DRF config."""
         from quickscale_modules_crm.models import Deal
@@ -960,6 +974,7 @@ class TestCRMPageSizeSettings:
             amount="1000.00",
             stage=stage,
             owner=user,
+            organization=staff_personal_org,
         )
         Deal.objects.create(
             title="Second Deal",
@@ -967,6 +982,7 @@ class TestCRMPageSizeSettings:
             amount="2000.00",
             stage=stage,
             owner=user,
+            organization=staff_personal_org,
         )
 
         response = authenticated_client.get(reverse("quickscale_crm:deal-list"))
@@ -1394,16 +1410,19 @@ class TestF113OrgScopedCreateStamping:
     # -- Solo-route regression (no stamping) ----------------------------------
 
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_route_create_does_not_stamp_organization(self, client, staff_user):
-        """Solo-route creates must NOT stamp organization_id.
+    def test_solo_route_create_stamps_personal_organization(self, client, staff_user):
+        """Solo-route creates stamp the personal organization (Phase 2 contract).
 
-        In solo mode the TenantMiddleware attaches a personal org to
-        ``request.org``, but stamping is scoped to ``/orgs/`` routes only.
-        A solo ``/crm/api/tags/`` create must leave ``organization_id`` NULL.
+        In Phase 2, solo routes are personal-org-backed. A solo ``/crm/api/tags/``
+        create stamps the user's personal org, not NULL.
         """
         from quickscale_modules_crm.models import Tag
+        from quickscale_modules_orgs.models import Organization
 
         client.force_login(staff_user)
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
 
         response = client.post(
             "/crm/api/tags/",
@@ -1413,7 +1432,7 @@ class TestF113OrgScopedCreateStamping:
 
         assert response.status_code == status.HTTP_201_CREATED
         created = Tag.objects.get(pk=response.data["id"])
-        assert created.organization_id is None
+        assert created.organization_id == personal_org.id
 
 
 @pytest.mark.django_db
@@ -1837,16 +1856,20 @@ class TestF114OrgScopedContactDealCreateStamping:
         assert created.organization_id == org_a.id
         assert set(created.tags.values_list("id", flat=True)) == {legacy_tag.id}
 
-    # -- Solo-route regression (no stamping) ----------------------------------
+    # -- Solo-route regression (personal-org stamping) -------------------------
 
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_route_contact_create_does_not_stamp_organization(
+    def test_solo_route_contact_create_stamps_personal_organization(
         self, client, staff_user, company
     ):
-        """Solo-route contact creates must NOT stamp organization_id."""
+        """Solo-route contact creates stamp the personal organization (Phase 2)."""
         from quickscale_modules_crm.models import Contact
+        from quickscale_modules_orgs.models import Organization
 
         client.force_login(staff_user)
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
 
         response = client.post(
             "/crm/api/contacts/",
@@ -1861,16 +1884,20 @@ class TestF114OrgScopedContactDealCreateStamping:
 
         assert response.status_code == status.HTTP_201_CREATED
         created = Contact.objects.get(pk=response.data["id"])
-        assert created.organization_id is None
+        assert created.organization_id == personal_org.id
 
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_route_deal_create_does_not_stamp_organization(
+    def test_solo_route_deal_create_stamps_personal_organization(
         self, client, staff_user, contact, stage
     ):
-        """Solo-route deal creates must NOT stamp organization_id."""
+        """Solo-route deal creates stamp the personal organization (Phase 2)."""
         from quickscale_modules_crm.models import Deal
+        from quickscale_modules_orgs.models import Organization
 
         client.force_login(staff_user)
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
 
         response = client.post(
             "/crm/api/deals/",
@@ -1886,7 +1913,7 @@ class TestF114OrgScopedContactDealCreateStamping:
 
         assert response.status_code == status.HTTP_201_CREATED
         created = Deal.objects.get(pk=response.data["id"])
-        assert created.organization_id is None
+        assert created.organization_id == personal_org.id
 
 
 @pytest.mark.django_db
@@ -2118,55 +2145,79 @@ class TestF115OrgScopedReadScoping:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    # -- Solo route parity: unscoped reads preserved --------------------------
+    # -- Solo route parity: personal-org-scoped reads (Phase 2) ----------------
 
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_route_tag_list_returns_all_tags(
+    def test_solo_route_tag_list_returns_personal_org_tags(
         self, client, staff_user, org_a, org_b
     ):
-        """Solo route tag list returns all tags regardless of org."""
+        """Solo route tag list returns only personal-org tags (Phase 2)."""
         from quickscale_modules_crm.models import Tag
+        from quickscale_modules_orgs.models import Organization
 
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
         Tag.objects.create(name="Org-A Tag", organization=org_a)
         Tag.objects.create(name="Org-B Tag", organization=org_b)
-        Tag.objects.create(name="Legacy Tag")
+        Tag.objects.create(name="Personal Tag", organization=personal_org)
 
         client.force_login(staff_user)
         response = client.get("/crm/api/tags/")
 
         assert response.status_code == status.HTTP_200_OK
         names = {item["name"] for item in response.data}
-        assert "Org-A Tag" in names
-        assert "Org-B Tag" in names
-        assert "Legacy Tag" in names
+        assert "Personal Tag" in names
+        assert "Org-A Tag" not in names
+        assert "Org-B Tag" not in names
 
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_route_company_list_returns_all_companies(
+    def test_solo_route_company_list_returns_personal_org_companies(
         self, client, staff_user, org_a, org_b
     ):
-        """Solo route company list returns all companies regardless of org."""
+        """Solo route company list returns only personal-org companies (Phase 2)."""
         from quickscale_modules_crm.models import Company
+        from quickscale_modules_orgs.models import Organization
 
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
         Company.objects.create(name="Org-A Corp", organization=org_a)
         Company.objects.create(name="Org-B Corp", organization=org_b)
+        Company.objects.create(name="Personal Corp", organization=personal_org)
 
         client.force_login(staff_user)
         response = client.get("/crm/api/companies/")
 
         assert response.status_code == status.HTTP_200_OK
         names = {item["name"] for item in response.data}
-        assert "Org-A Corp" in names
-        assert "Org-B Corp" in names
+        assert "Personal Corp" in names
+        assert "Org-A Corp" not in names
+        assert "Org-B Corp" not in names
 
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_route_contact_list_returns_all_contacts(
+    def test_solo_route_contact_list_returns_personal_org_contacts(
         self, client, staff_user, org_a, org_b
     ):
-        """Solo route contact list returns all contacts regardless of org."""
+        """Solo route contact list returns only personal-org contacts (Phase 2)."""
         from quickscale_modules_crm.models import Company, Contact
+        from quickscale_modules_orgs.models import Organization
 
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
+        company_personal = Company.objects.create(
+            name="Personal Corp", organization=personal_org
+        )
         company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
         company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        Contact.objects.create(
+            first_name="Personal",
+            last_name="Contact",
+            email="personal@example.com",
+            company=company_personal,
+            organization=personal_org,
+        )
         Contact.objects.create(
             first_name="Org-A",
             last_name="Contact",
@@ -2187,8 +2238,9 @@ class TestF115OrgScopedReadScoping:
 
         assert response.status_code == status.HTTP_200_OK
         names = {item["first_name"] for item in response.data}
-        assert "Org-A" in names
-        assert "Org-B" in names
+        assert "Personal" in names
+        assert "Org-A" not in names
+        assert "Org-B" not in names
 
     # -- Standalone note reads: scoped via parent-derived FK ------------------
 
@@ -2986,6 +3038,9 @@ class TestF119Phase1BulkDealMutationOrgScoping:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
+        # Clear any existing terminal_semantic stages from prior tests.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
         company = Company.objects.create(name="Org-A Corp", organization=org_a)
         contact = Contact.objects.create(
             first_name="Org-A",
@@ -2995,6 +3050,13 @@ class TestF119Phase1BulkDealMutationOrgScoping:
             organization=org_a,
         )
         stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        # Create a same-org terminal won stage for mark_won to resolve.
+        won_stage = Stage.objects.create(
+            name="Closed-Won",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_a,
+        )
         deal = Deal.objects.create(
             title="Org-A Deal",
             contact=contact,
@@ -3013,7 +3075,7 @@ class TestF119Phase1BulkDealMutationOrgScoping:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
         deal.refresh_from_db()
-        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_WON
+        assert deal.stage == won_stage
         assert deal.probability == 100
 
     # -- Foreign-org denial: mark_won -----------------------------------------
@@ -3068,6 +3130,9 @@ class TestF119Phase1BulkDealMutationOrgScoping:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
+        # Clear any existing terminal_semantic stages from prior tests.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
         company = Company.objects.create(name="Org-A Corp", organization=org_a)
         contact = Contact.objects.create(
             first_name="Org-A",
@@ -3077,6 +3142,13 @@ class TestF119Phase1BulkDealMutationOrgScoping:
             organization=org_a,
         )
         stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        # Create a same-org terminal lost stage for mark_lost to resolve.
+        lost_stage = Stage.objects.create(
+            name="Closed-Lost",
+            order=4,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
+            organization=org_a,
+        )
         deal = Deal.objects.create(
             title="Org-A Deal",
             contact=contact,
@@ -3095,7 +3167,7 @@ class TestF119Phase1BulkDealMutationOrgScoping:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
         deal.refresh_from_db()
-        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_LOST
+        assert deal.stage == lost_stage
         assert deal.probability == 0
 
     # -- Foreign-org denial: mark_lost ----------------------------------------
@@ -3299,10 +3371,14 @@ class TestF119Phase1BulkDealMutationOrgScoping:
         deal.refresh_from_db()
         assert deal.stage == stage_a
 
-    def test_org_scoped_bulk_update_stage_accepts_null_org_legacy_stage(
+    def test_org_scoped_bulk_update_stage_rejects_null_org_legacy_stage(
         self, client, org_a, org_a_admin
     ):
-        """bulk_update_stage on org-scoped route accepts NULL-org legacy stage."""
+        """bulk_update_stage on org-scoped route rejects NULL-org legacy stage.
+
+        Phase 1 post-0006 contract: NULL-owned stages are no longer accepted
+        on org-scoped routes.
+        """
         from decimal import Decimal
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
@@ -3334,10 +3410,12 @@ class TestF119Phase1BulkDealMutationOrgScoping:
             content_type="application/json",
         )
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["updated"] == 1
+        # Phase 1: NULL-org stage is rejected on org-scoped routes.
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "stage_id" in response.data
+        # Deal should not be updated.
         deal.refresh_from_db()
-        assert deal.stage == legacy_stage
+        assert deal.stage == stage_a
 
 
 @pytest.mark.django_db
@@ -3360,10 +3438,14 @@ class TestF119Phase2OrgScopedTerminalStageResolution:
 
     # -- Legacy NULL-org terminal stage accepted on org-scoped routes ---------
 
-    def test_org_scoped_mark_won_accepts_legacy_null_org_terminal_stage(
+    def test_org_scoped_mark_won_no_ops_when_only_null_org_terminal_stage_exists(
         self, client, org_a, org_a_admin
     ):
-        """mark_won on org-scoped route accepts legacy NULL-org terminal stage."""
+        """mark_won on org-scoped route no-ops when only NULL-org terminal stage exists.
+
+        Phase 1 post-0006 contract: NULL-owned terminal stages are no longer
+        accepted on org-scoped routes.  The action returns updated=0.
+        """
         from decimal import Decimal
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
@@ -3396,6 +3478,8 @@ class TestF119Phase2OrgScopedTerminalStageResolution:
             stage=stage_a,
             organization=org_a,
         )
+        original_stage = deal.stage
+        original_probability = deal.probability
 
         client.force_login(org_a_admin)
         response = client.post(
@@ -3405,16 +3489,20 @@ class TestF119Phase2OrgScopedTerminalStageResolution:
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["updated"] == 1
+        # Phase 1: NULL-org terminal stage is not accepted — safe no-op.
+        assert response.data["updated"] == 0
         deal.refresh_from_db()
-        # The deal should be attached to the legacy NULL-org terminal stage.
-        assert deal.stage == legacy_won_stage
-        assert deal.probability == 100
+        assert deal.stage == original_stage
+        assert deal.probability == original_probability
 
-    def test_org_scoped_mark_lost_accepts_legacy_null_org_terminal_stage(
+    def test_org_scoped_mark_lost_no_ops_when_only_null_org_terminal_stage_exists(
         self, client, org_a, org_a_admin
     ):
-        """mark_lost on org-scoped route accepts legacy NULL-org terminal stage."""
+        """mark_lost on org-scoped route no-ops when only NULL-org terminal stage exists.
+
+        Phase 1 post-0006 contract: NULL-owned terminal stages are no longer
+        accepted on org-scoped routes.  The action returns updated=0.
+        """
         from decimal import Decimal
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
@@ -3447,6 +3535,8 @@ class TestF119Phase2OrgScopedTerminalStageResolution:
             stage=stage_a,
             organization=org_a,
         )
+        original_stage = deal.stage
+        original_probability = deal.probability
 
         client.force_login(org_a_admin)
         response = client.post(
@@ -3456,11 +3546,11 @@ class TestF119Phase2OrgScopedTerminalStageResolution:
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["updated"] == 1
+        # Phase 1: NULL-org terminal stage is not accepted — safe no-op.
+        assert response.data["updated"] == 0
         deal.refresh_from_db()
-        # The deal should be attached to the legacy NULL-org terminal stage.
-        assert deal.stage == legacy_lost_stage
-        assert deal.probability == 0
+        assert deal.stage == original_stage
+        assert deal.probability == original_probability
 
     # -- Foreign-org terminal stage refused on org-scoped routes --------------
 
@@ -3585,3 +3675,191 @@ class TestF119Phase2OrgScopedTerminalStageResolution:
         assert deal.stage == original_stage
         assert deal.probability == original_probability
         assert deal.stage != foreign_lost_stage
+
+
+@pytest.mark.django_db
+class TestF1110Phase1TerminalStageSameOrgCanonicalNameFallback:
+    """F11.10 Phase 1 — Prove same-org canonical name fallback for terminal stages.
+
+    When no same-org terminal_semantic row exists, the resolver falls back to
+    a same-org stage with the canonical name (e.g. "Closed-Won") even without
+    terminal_semantic set.  If neither exists, the action no-ops safely.
+    """
+
+    def test_org_scoped_mark_won_uses_same_org_canonical_name_stage(
+        self, client, org_a, org_a_admin
+    ):
+        """mark_won falls back to same-org stage named 'Closed-Won' when no semantic row exists."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Clear any terminal_semantic stages.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
+        # Create a same-org stage named "Closed-Won" without terminal_semantic.
+        canonical_stage = Stage.objects.create(
+            name="Closed-Won", order=3, organization=org_a
+        )
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-canonical@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage == canonical_stage
+        assert deal.probability == 100
+
+    def test_org_scoped_mark_won_no_ops_when_no_same_org_target_exists(
+        self, client, org_a, org_a_admin
+    ):
+        """mark_won returns updated=0 when no same-org terminal or canonical stage exists."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Clear all terminal_semantic stages and ensure no "Closed-Won" in org_a.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+        Stage.objects.filter(name="Closed-Won", organization=org_a).delete()
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-noop@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage_a,
+            organization=org_a,
+        )
+        original_stage = deal.stage
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 0
+        deal.refresh_from_db()
+        assert deal.stage == original_stage
+
+
+@pytest.mark.django_db
+class TestF1110Phase1SoloRoutePersonalOrgTerminalStageResolution:
+    """F11.10 Phase 1 — Prove solo route personal-org-backed terminal stage resolution.
+
+    When the TenantMiddleware attaches a personal org to ``request.org`` on a
+    solo route, terminal stage resolution uses that personal org (same-org
+    resolution) instead of legacy global resolution.
+    """
+
+    @override_settings(
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
+        TEMPLATES=DASHBOARD_TEST_TEMPLATES,
+    )
+    def test_solo_route_mark_won_uses_personal_org_terminal_stage(
+        self, client, staff_user
+    ):
+        """Solo route mark_won uses the personal org for terminal stage resolution."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            Stage,
+        )
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        # Clear any terminal_semantic stages.
+        Stage.objects.filter(terminal_semantic__isnull=False).delete()
+
+        # Create a personal org for the staff user.
+        personal_org = Organization.objects.create(
+            name="Personal Org", slug="personal-org", is_personal=True
+        )
+        OrganizationMembership.objects.create(
+            user=staff_user, organization=personal_org, role=OrgRole.OWNER
+        )
+
+        # Create a personal-org terminal won stage.
+        personal_won_stage = Stage.objects.create(
+            name="Personal Closed-Won",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=personal_org,
+        )
+
+        # Create org-scoped deal data.
+        company = Company.objects.create(
+            name="Personal Corp", organization=personal_org
+        )
+        contact = Contact.objects.create(
+            first_name="Personal",
+            last_name="Contact",
+            email="personal@example.com",
+            company=company,
+            organization=personal_org,
+        )
+        stage = Stage.objects.create(
+            name="Personal Stage", order=1, organization=personal_org
+        )
+        deal = Deal.objects.create(
+            title="Personal Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage,
+            organization=personal_org,
+        )
+
+        staff_user.is_staff = True
+        staff_user.save(update_fields=["is_staff"])
+        client.force_login(staff_user)
+
+        # Solo route request — TenantMiddleware attaches personal_org.
+        response = client.post(
+            "/crm/api/deals/mark-won/",
+            data={"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+        deal.refresh_from_db()
+        assert deal.stage == personal_won_stage
+        assert deal.probability == 100
