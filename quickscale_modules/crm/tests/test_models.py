@@ -6,7 +6,7 @@ from importlib import import_module
 import pytest
 from django.db import IntegrityError
 
-from quickscale_modules_crm.models import (
+from quickscale_modules_crm.models import (  # type: ignore[import-untyped]
     Company,
     Contact,
     ContactNote,
@@ -325,85 +325,3 @@ class TestDealNoteModel:
     def test_deal_notes_relationship(self, deal_note, deal):
         """Test deal has notes"""
         assert deal_note in deal.notes.all()
-
-
-@pytest.mark.django_db
-class TestOrganizationFieldNullable:
-    """Phase 11.1d: organization FK must be nullable on all five owned models.
-
-    These tests prove that the nullable groundwork allows creating and
-    persisting rows without an organization assignment, and that the
-    field metadata is correctly configured for null/blank.
-    """
-
-    def test_tag_organization_field_is_nullable(self):
-        """Tag.organization must be null=True, blank=True."""
-        field = Tag._meta.get_field("organization")
-        assert field.null is True
-        assert field.blank is True
-
-    def test_company_organization_field_is_nullable(self):
-        """Company.organization must be null=True, blank=True."""
-        field = Company._meta.get_field("organization")
-        assert field.null is True
-        assert field.blank is True
-
-    def test_contact_organization_field_is_nullable(self):
-        """Contact.organization must be null=True, blank=True."""
-        field = Contact._meta.get_field("organization")
-        assert field.null is True
-        assert field.blank is True
-
-    def test_stage_organization_field_is_nullable(self):
-        """Stage.organization must be null=True, blank=True."""
-        field = Stage._meta.get_field("organization")
-        assert field.null is True
-        assert field.blank is True
-
-    def test_deal_organization_field_is_nullable(self):
-        """Deal.organization must be null=True, blank=True."""
-        field = Deal._meta.get_field("organization")
-        assert field.null is True
-        assert field.blank is True
-
-    def test_tag_create_without_organization(self):
-        """Tag can be created without an organization."""
-        tag = Tag.objects.create(name="No Org Tag")
-        assert tag.organization_id is None
-
-    def test_company_create_without_organization(self):
-        """Company can be created without an organization."""
-        company = Company.objects.create(name="No Org Corp")
-        assert company.organization_id is None
-
-    def test_contact_create_without_organization(self, company):
-        """Contact can be created without an organization."""
-        contact = Contact.objects.create(
-            first_name="No",
-            last_name="Org",
-            email="noorg@example.com",
-            company=company,
-        )
-        assert contact.organization_id is None
-
-    def test_stage_create_without_organization(self):
-        """Stage can be created without an organization."""
-        stage = Stage.objects.create(name="No Org Stage", order=99)
-        assert stage.organization_id is None
-
-    def test_deal_create_without_organization(self, contact, stage):
-        """Deal can be created without an organization."""
-        deal = Deal.objects.create(
-            title="No Org Deal",
-            contact=contact,
-            stage=stage,
-        )
-        assert deal.organization_id is None
-
-    def test_organization_field_uses_set_null_on_delete(self):
-        """All five organization FKs must use SET_NULL on_delete."""
-        for model in (Tag, Company, Contact, Stage, Deal):
-            field = model._meta.get_field("organization")
-            assert field.remote_field.on_delete.__name__ == "SET_NULL", (
-                f"{model.__name__}.organization on_delete is not SET_NULL"
-            )

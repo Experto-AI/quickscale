@@ -51,6 +51,62 @@ def _is_org_scoped_route(request: Request | HttpRequest) -> bool:
     return path.startswith("/orgs/")
 
 
+def _resolve_active_org(request: Request | HttpRequest) -> Any:
+    """Return the active organization for the current request.
+
+    Phase 2 unified seam: both org-scoped and solo routes resolve an
+    organization.  Org-scoped routes use ``require_current_org`` (fail-closed).
+    Solo routes use the personal org attached by ``TenantMiddleware``.
+
+    Fallback: when ``request.org`` is not set on solo routes (e.g., tests that
+    bypass middleware via ``force_authenticate``), look up the user's personal
+    org.  In production, middleware always sets ``request.org``, so this
+    fallback is only used in tests.
+
+    Org-scoped routes NEVER use the fallback — they must fail closed when
+    ``request.org`` is not set by middleware.
+
+    Raises ``PermissionDenied`` when no org context is available on either
+    route type — there is no NULL/global fallback.
+    """
+    if _is_org_scoped_route(request):
+        from quickscale_modules_orgs.current_org import (
+            CurrentOrgError,
+            require_current_org,
+        )
+
+        try:
+            organization = require_current_org(request)
+        except CurrentOrgError:
+            raise PermissionDenied("Organization context is required for this route.")
+
+        ensure_org_default_stages(organization)
+        return organization
+
+    # Solo route: use the personal org attached by TenantMiddleware.
+    org = getattr(request, "org", None)
+    if org is not None:
+        # Solo routes do NOT seed default stages — preserve legacy stage surface.
+        return org
+
+    # Fallback: look up the user's personal org (for tests that bypass middleware).
+    # This fallback is ONLY for solo routes — org-scoped routes must fail closed.
+    user = getattr(request, "user", None)
+    if user is not None and getattr(user, "is_authenticated", False):
+        from quickscale_modules_orgs.models import Organization
+
+        personal_org = Organization.objects.filter(
+            is_personal=True, memberships__user=user
+        ).first()
+        if personal_org is not None:
+            # Attach the personal org to the request for subsequent access.
+            request.org = personal_org
+            # Solo routes do NOT seed default stages — preserve legacy stage surface.
+            return personal_org
+
+    raise PermissionDenied("Organization context is required for this route.")
+
+
 def _require_org_for_read(request: Request | HttpRequest) -> Any:
     """Return the active organization or raise PermissionDenied.
 
@@ -58,48 +114,25 @@ def _require_org_for_read(request: Request | HttpRequest) -> Any:
     lacks valid org context the request is denied rather than degrading to
     an unscoped queryset.
     """
-    from quickscale_modules_orgs.current_org import (
-        CurrentOrgError,
-        require_current_org,
-    )
-
-    try:
-        organization = require_current_org(request)
-    except CurrentOrgError:
-        raise PermissionDenied("Organization context is required for this route.")
-
-    ensure_org_default_stages(organization)
-    return organization
+    return _resolve_active_org(request)
 
 
 def _get_bulk_deal_queryset(
     request: Request | HttpRequest, deal_ids: list[int]
 ) -> QuerySet:
-    """Return the deal queryset for bulk actions, scoped to the active org on SaaS routes.
+    """Return the deal queryset for bulk actions, scoped to the active org.
 
-    On org-scoped SaaS routes (``/orgs/<slug>/...``), the queryset is filtered
-    to deals belonging to the active organization.  On solo routes (``/crm/...``),
-    the base queryset is returned unchanged, preserving legacy solo parity.
-
-    Org-scoped bulk actions fail closed: if the route is org-scoped but no org
-    context is available, a ``PermissionDenied`` is raised.
+    Phase 2: org-scoped routes filter strictly by org.  Solo routes include
+    legacy NULL-organization deals for backward compatibility.
     """
-    if not _is_org_scoped_route(request):
-        # Solo route — preserve legacy unscoped behavior.
-        return Deal.objects.filter(id__in=deal_ids)
-
-    # Org-scoped SaaS route — fail closed if org context is missing.
-    from quickscale_modules_orgs.current_org import (
-        CurrentOrgError,
-        require_current_org,
-    )
-
-    try:
-        organization = require_current_org(request)
-    except CurrentOrgError:
-        raise PermissionDenied("Organization context is required for this route.")
-
-    return Deal.objects.filter(id__in=deal_ids, organization_id=organization.id)
+    org = _resolve_active_org(request)
+    is_solo = not _is_org_scoped_route(request)
+    if is_solo:
+        return Deal.objects.filter(
+            Q(organization_id=org.id) | Q(organization_id__isnull=True),
+            id__in=deal_ids,
+        )
+    return Deal.objects.for_org(org.id).filter(id__in=deal_ids)
 
 
 _TERMINAL_STAGE_DEFAULTS = {
@@ -108,109 +141,65 @@ _TERMINAL_STAGE_DEFAULTS = {
 }
 
 
-def _resolve_org_id_for_terminal_stage(request: Request | HttpRequest) -> int | None:
-    """Return the active org ID for terminal-stage resolution, or None on solo routes.
+def _resolve_org_id_for_terminal_stage(request: Request | HttpRequest) -> int:
+    """Return the active org ID for terminal-stage resolution.
 
-    On org-scoped SaaS routes (``/orgs/<slug>/...``), returns the current org
-    ID so terminal-stage resolution is org-aware.  On solo routes
-    (``/crm/...``), returns None to preserve legacy global resolution.
-
-    Org-scoped routes fail closed: if the route is org-scoped but no org
-    context is available, a ``PermissionDenied`` is raised before terminal
-    stage resolution proceeds.
+    Phase 2: both org-scoped and solo routes always resolve an org ID.
+    No transitional fallback to legacy global resolution.
     """
-    if not _is_org_scoped_route(request):
-        return None
-
-    from quickscale_modules_orgs.current_org import (
-        CurrentOrgError,
-        require_current_org,
-    )
-
-    try:
-        organization = require_current_org(request)
-    except CurrentOrgError:
-        raise PermissionDenied("Organization context is required for this route.")
-
-    return organization.id
+    org = _resolve_active_org(request)
+    return org.id
 
 
 def _resolve_terminal_stage(
-    terminal_semantic: str, organization_id: int | None = None
+    terminal_semantic: str, organization_id: int, include_null_org: bool = False
 ) -> Stage | None:
-    """Return the terminal stage for a semantic, scoped to the active org on SaaS routes.
+    """Return the terminal stage for a semantic, scoped to the active org.
 
-    On org-scoped routes (``organization_id`` is not None), resolution is
-    org-aware: same-org stages are preferred, then legacy NULL-org stages
-    are accepted for backfill compatibility.  Foreign-org stages are never
-    returned.  If no same-org or legacy stage exists, a new org-local
-    canonical row is created.  When the global ``terminal_semantic``
-    uniqueness constraint prevents creation (another org already owns the
-    semantic), ``None`` is returned so the caller can no-op safely.
+    Phase 2 post-0006 contract — strictly same-org resolution:
+    1. Prefer a same-org row with a matching ``terminal_semantic``.
+    2. Fall back to a same-org row with the canonical stage name.
+    3. Return ``None`` (safe no-op) when no same-org target exists.
+    No NULL-owned or foreign-org fallback is used.
 
-    On solo routes (``organization_id`` is None), the legacy global
-    resolution is preserved: any stage matching the semantic is accepted,
-    and a canonical NULL-org row is created if none exists.
+    When ``include_null_org`` is ``True`` (solo routes), also consider
+    legacy NULL-organization stages as fallback targets.
     """
-    if organization_id is not None:
-        # Org-scoped: prefer same-org terminal stage.
-        terminal_stage = (
-            Stage.objects.filter(
-                terminal_semantic=terminal_semantic,
-                organization_id=organization_id,
-            )
-            .order_by("order", "id")
-            .first()
+    # Build the org filter — include NULL-org for solo routes.
+    if include_null_org:
+        org_filter = Q(organization_id=organization_id) | Q(
+            organization_id__isnull=True
         )
-        if terminal_stage is not None:
-            return terminal_stage
+    else:
+        org_filter = Q(organization_id=organization_id)
 
-        # Accept legacy NULL-org terminal stage for backfill compatibility.
-        terminal_stage = (
-            Stage.objects.filter(
-                terminal_semantic=terminal_semantic,
-                organization_id__isnull=True,
-            )
-            .order_by("order", "id")
-            .first()
-        )
-        if terminal_stage is not None:
-            return terminal_stage
-
-        # No same-org or legacy stage exists — create an org-local canonical row.
-        stage_name, stage_order = _TERMINAL_STAGE_DEFAULTS[terminal_semantic]
-        terminal_stage, _ = Stage.objects.get_or_create(
-            terminal_semantic=terminal_semantic,
-            defaults={
-                "name": stage_name,
-                "order": stage_order,
-                "organization_id": organization_id,
-            },
-        )
-        # Guard: if get_or_create returned a foreign-org row (unique constraint
-        # collision), refuse to attach this org's deals to it.
-        if (
-            terminal_stage.organization_id is not None
-            and terminal_stage.organization_id != organization_id
-        ):
-            return None
-        return terminal_stage
-
-    # Solo route: legacy global resolution.
+    # Step 1: same-org terminal stage by semantic.
     terminal_stage = (
-        Stage.objects.filter(terminal_semantic=terminal_semantic)
+        Stage.objects.filter(
+            org_filter,
+            terminal_semantic=terminal_semantic,
+        )
         .order_by("order", "id")
         .first()
     )
     if terminal_stage is not None:
         return terminal_stage
 
-    stage_name, stage_order = _TERMINAL_STAGE_DEFAULTS[terminal_semantic]
-    terminal_stage, _ = Stage.objects.get_or_create(
-        terminal_semantic=terminal_semantic,
-        defaults={"name": stage_name, "order": stage_order},
+    # Step 2: same-org canonical stage name (no terminal_semantic required).
+    stage_name = _TERMINAL_STAGE_DEFAULTS[terminal_semantic][0]
+    terminal_stage = (
+        Stage.objects.filter(
+            org_filter,
+            name=stage_name,
+        )
+        .order_by("order", "id")
+        .first()
     )
-    return terminal_stage
+    if terminal_stage is not None:
+        return terminal_stage
+
+    # Step 3: safe no-op — no same-org target available.
+    return None
 
 
 class CRMDashboardView(TemplateView):
@@ -247,28 +236,17 @@ class CRMDashboardView(TemplateView):
             context["crm_api_root_url"] = "/crm/api/"
             context["crm_api_prefix"] = "/crm/api/"
 
-        # Determine org-scoped read context for aggregate queries.
-        # On org-scoped SaaS routes, fail closed if org context is missing.
-        org_for_read: Any | None = None
-        if _is_org_scoped_route(self.request):
-            org_for_read = _require_org_for_read(self.request)
+        # Phase 2: resolve active org for both route types.
+        org_for_read = _resolve_active_org(self.request)
 
-        # Base querysets — scoped to the active org on SaaS routes.
-        if org_for_read is not None:
-            contact_qs = Contact.objects.filter(organization_id=org_for_read.id)
-            company_qs = Company.objects.filter(organization_id=org_for_read.id)
-            deal_qs = Deal.objects.filter(organization_id=org_for_read.id)
-            # Include legacy NULL-org stages so that visible current-org deals
-            # attached to allowed pre-backfill NULL-org stages still appear in
-            # the deals_by_stage breakdown during the migration window.
-            stage_qs = Stage.objects.filter(
-                Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
-            )
-        else:
-            contact_qs = Contact.objects.all()
-            company_qs = Company.objects.all()
-            deal_qs = Deal.objects.all()
-            stage_qs = Stage.objects.all()
+        # Base querysets — scoped to the active org via tenant-scoped seam.
+        contact_qs = Contact.objects.for_org(org_for_read.id)
+        company_qs = Company.objects.for_org(org_for_read.id)
+        deal_qs = Deal.objects.for_org(org_for_read.id)
+        # Stage queryset includes legacy NULL-org stages for dashboard breakdown.
+        stage_qs = Stage.objects.filter(
+            Q(organization_id=org_for_read.id) | Q(organization_id__isnull=True)
+        )
 
         # Summary statistics
         context["total_contacts"] = contact_qs.count()
@@ -276,25 +254,16 @@ class CRMDashboardView(TemplateView):
         context["total_deals"] = deal_qs.count()
 
         # Deal statistics
-        if org_for_read is not None:
-            # On org-scoped routes, filter the deal count to the active org
-            # to prevent counting cross-org deals linked to same-org stages.
-            context["deals_by_stage"] = (
-                stage_qs.annotate(
-                    deal_count=Count(
-                        "deals",
-                        filter=Q(deals__organization_id=org_for_read.id),
-                    )
+        context["deals_by_stage"] = (
+            stage_qs.annotate(
+                deal_count=Count(
+                    "deals",
+                    filter=Q(deals__organization_id=org_for_read.id),
                 )
-                .values("name", "deal_count")
-                .order_by("order")
             )
-        else:
-            context["deals_by_stage"] = (
-                stage_qs.annotate(deal_count=Count("deals"))
-                .values("name", "deal_count")
-                .order_by("order")
-            )
+            .values("name", "deal_count")
+            .order_by("order")
+        )
 
         # Total deal value
         deal_totals = deal_qs.aggregate(
@@ -303,44 +272,32 @@ class CRMDashboardView(TemplateView):
         context["total_deal_value"] = deal_totals["total_value"] or 0
 
         # Recent contacts — annotate a safe company display name so that
-        # cross-org FK references do not leak foreign company names on the
-        # org-scoped dashboard.
-        if org_for_read is not None:
-            context["recent_contacts"] = contact_qs.annotate(
-                display_company_name=Case(
-                    When(
-                        Q(company__organization_id=org_for_read.id)
-                        | Q(company__organization_id__isnull=True),
-                        then=F("company__name"),
-                    ),
-                    default=Value("-"),
-                    output_field=CharField(),
-                )
-            ).order_by("-created_at")[:5]
-        else:
-            context["recent_contacts"] = contact_qs.annotate(
-                display_company_name=F("company__name")
-            ).order_by("-created_at")[:5]
+        # cross-org FK references do not leak foreign company names.
+        context["recent_contacts"] = contact_qs.annotate(
+            display_company_name=Case(
+                When(
+                    Q(company__organization_id=org_for_read.id),
+                    then=F("company__name"),
+                ),
+                default=Value("-"),
+                output_field=CharField(),
+            )
+        ).order_by("-created_at")[:5]
 
         # Recent deals — annotate a safe stage display name so that
-        # cross-org FK references do not leak foreign stage names on the
-        # org-scoped dashboard.
-        if org_for_read is not None:
-            context["recent_deals"] = deal_qs.annotate(
-                display_stage_name=Case(
-                    When(
-                        Q(stage__organization_id=org_for_read.id)
-                        | Q(stage__organization_id__isnull=True),
-                        then=F("stage__name"),
-                    ),
-                    default=Value("-"),
-                    output_field=CharField(),
-                )
-            ).order_by("-created_at")[:5]
-        else:
-            context["recent_deals"] = deal_qs.annotate(
-                display_stage_name=F("stage__name")
-            ).order_by("-created_at")[:5]
+        # cross-org FK references do not leak foreign stage names.
+        # Include NULL-org stages (legacy) as valid same-org display names.
+        context["recent_deals"] = deal_qs.annotate(
+            display_stage_name=Case(
+                When(
+                    Q(stage__organization_id=org_for_read.id)
+                    | Q(stage__organization_id__isnull=True),
+                    then=F("stage__name"),
+                ),
+                default=Value("-"),
+                output_field=CharField(),
+            )
+        ).order_by("-created_at")[:5]
 
         return context
 
@@ -389,13 +346,9 @@ class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
 class OrgScopedReadMixin(CRMModelViewSet):
     """Route-aware read-scoping seam for CRM primary resource querysets.
 
-    On org-scoped SaaS routes (``/orgs/<slug>/...``) the queryset is filtered
-    to the active organization.  On solo routes (``/crm/...``) the base
-    queryset is returned unchanged, preserving legacy solo parity.
-
-    Org-scoped reads fail closed: if the route is org-scoped but no org
-    context is available, a 403 is raised instead of degrading to an
-    unscoped queryset.
+    Phase 2: both org-scoped and solo routes are scoped to the active
+    organization via the unified ``_resolve_active_org`` seam.  No
+    NULL/global fallback.
 
     Subclasses set ``_org_scope_field`` to the FK field used for filtering:
     - ``"organization"`` for direct-org models (Tag, Company, Contact, Stage, Deal)
@@ -406,17 +359,36 @@ class OrgScopedReadMixin(CRMModelViewSet):
     _org_scope_field: str = "organization"
 
     def get_queryset(self) -> QuerySet:  # type: ignore[override]
-        """Return the queryset, scoped to the active org on SaaS routes."""
-        queryset = super().get_queryset()
+        """Return the queryset, scoped to the active org on all routes.
 
-        if not _is_org_scoped_route(self.request):
-            # Solo route — preserve legacy unscoped behavior.
-            return queryset
+        Solo routes include legacy NULL-organization data for backward
+        compatibility.  Org-scoped routes filter strictly by org.
+        """
+        # Use all_objects for the base queryset (operator escape hatch) when
+        # available.  Parent-derived models (ContactNote, DealNote) use the
+        # default manager.
+        model = self.queryset.model
+        base_manager = getattr(model, "all_objects", model.objects)
+        base_qs = base_manager.all()
 
-        # Org-scoped SaaS route — fail closed if org context is missing.
-        organization = _require_org_for_read(self.request)
-        scope_filter = {f"{self._org_scope_field}_id": organization.id}
-        return queryset.filter(**scope_filter)
+        # Apply any select_related/prefetch_related from the original queryset.
+        if self.queryset.query.select_related:
+            base_qs = base_qs.select_related(*self.queryset.query.select_related)
+
+        # Phase 2: scope to active org on all routes.
+        organization = _resolve_active_org(self.request)
+        is_solo = not _is_org_scoped_route(self.request)
+
+        if is_solo:
+            # Solo routes include legacy NULL-org data.
+            scope_filter = Q(**{f"{self._org_scope_field}_id": organization.id}) | Q(
+                **{f"{self._org_scope_field}_id__isnull": True}
+            )
+            return base_qs.filter(scope_filter)
+        else:
+            # Org-scoped routes filter strictly by org.
+            scope_filter = {f"{self._org_scope_field}_id": organization.id}
+            return base_qs.filter(**scope_filter)
 
 
 class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
@@ -429,7 +401,7 @@ class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
 class TagViewSet(OrgScopedReadMixin):
     """ViewSet for Tag model"""
 
-    queryset = Tag.objects.all()
+    queryset = Tag.all_objects.all()
     serializer_class = TagSerializer
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ["name"]
@@ -440,7 +412,7 @@ class TagViewSet(OrgScopedReadMixin):
 class CompanyViewSet(OrgScopedReadMixin):
     """ViewSet for Company model"""
 
-    queryset = Company.objects.all()
+    queryset = Company.all_objects.all()
     serializer_class = CompanySerializer
     filter_backends = [SearchFilter, DjangoFilterBackend, OrderingFilter]
     search_fields = ["name", "industry"]
@@ -452,7 +424,7 @@ class CompanyViewSet(OrgScopedReadMixin):
 class ContactViewSet(OrgScopedReadMixin):
     """ViewSet for Contact model with nested notes"""
 
-    queryset = Contact.objects.select_related("company").prefetch_related("tags")
+    queryset = Contact.all_objects.select_related("company").prefetch_related("tags")
     pagination_class = ContactPagination
     filter_backends = [SearchFilter, DjangoFilterBackend, OrderingFilter]
     search_fields = ["first_name", "last_name", "email", "company__name"]
@@ -489,7 +461,7 @@ class ContactViewSet(OrgScopedReadMixin):
 class StageViewSet(OrgScopedReadMixin):
     """ViewSet for Stage model"""
 
-    queryset = Stage.objects.all()
+    queryset = Stage.all_objects.all()
     serializer_class = StageSerializer
     filter_backends = [OrderingFilter]
     ordering_fields = ["order", "name"]
@@ -499,7 +471,7 @@ class StageViewSet(OrgScopedReadMixin):
 class DealViewSet(OrgScopedReadMixin):
     """ViewSet for Deal model with nested notes and bulk operations"""
 
-    queryset = Deal.objects.select_related(
+    queryset = Deal.all_objects.select_related(
         "contact", "contact__company", "stage", "owner"
     ).prefetch_related("tags")
     pagination_class = DealPagination
@@ -572,7 +544,10 @@ class DealViewSet(OrgScopedReadMixin):
         deal_ids = serializer.validated_data["deal_ids"]
 
         org_id = _resolve_org_id_for_terminal_stage(request)
-        won_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_WON, org_id)
+        is_solo = not _is_org_scoped_route(request)
+        won_stage = _resolve_terminal_stage(
+            Stage.TERMINAL_SEMANTIC_WON, org_id, include_null_org=is_solo
+        )
         if won_stage is None:
             return Response({"updated": 0}, status=status.HTTP_200_OK)
 
@@ -595,7 +570,10 @@ class DealViewSet(OrgScopedReadMixin):
         deal_ids = serializer.validated_data["deal_ids"]
 
         org_id = _resolve_org_id_for_terminal_stage(request)
-        lost_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_LOST, org_id)
+        is_solo = not _is_org_scoped_route(request)
+        lost_stage = _resolve_terminal_stage(
+            Stage.TERMINAL_SEMANTIC_LOST, org_id, include_null_org=is_solo
+        )
         if lost_stage is None:
             return Response({"updated": 0}, status=status.HTTP_200_OK)
 
