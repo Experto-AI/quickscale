@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅, F11.3 ✅, F11.4 ✅, F11.5 ✅. |
-| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10a. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅. **F11.10 groundwork committed** (dual-manager contract, admin org guardrails, serializer/view/service/test hardening, xfail removal — 321 tests green). `wt-track1` synced with `v87`. Still pending: `0006` NOT NULL migration does not exist yet; model `organization` FKs remain `null=True, blank=True, on_delete=SET_NULL`. Delete policy resolved (PROTECT). Test-ownership assignments for post-`0006` validation and the historical-test split remain open. M3 cannot close out until F11.10a–F11.10e complete, validated, and merged. |
+| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10b. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅. **F11.10a ✅** (historical nullable-contract preserved in `quickscale_modules/crm/tests/test_migrations.py`; `TestOrganizationFieldNullable` removed from `test_models.py`; Phase 3 checkpoint — 311 CRM tests green). **F11.10 groundwork committed** (dual-manager contract, admin org guardrails, serializer/view/service/test hardening, xfail removal — 321 tests green). Still pending: `0006` NOT NULL migration does not exist yet; model `organization` FKs remain `null=True, blank=True, on_delete=SET_NULL`. Delete policy resolved (PROTECT). Test-ownership assignments for post-`0006` validation and the historical-test split remain open. M3 cannot close out until F11.10b–F11.10e complete, validated, and merged. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **Next:** Tier 2 `F12.1d`. |
@@ -111,7 +111,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** CRM isolation phases F11.1–F11.9 complete and in CHANGELOG (groundwork, org-scoped create/read isolation, backfill, bootstrap, serializer hardening, bulk-deal scope). F11.10 is only partially prepared in the local `quickscale-wt-track1` worktree: admin/org guardrails, manager-first CRM scoping, and serializer/view/service/test groundwork exist there. Delete policy is resolved (PROTECT), but no `0006` NOT NULL migration exists yet — model `organization` FKs remain nullable. The historical-test split, post-`0006` test-ownership assignments, and M3 merge closeout are still open. After M3, module rollout to blog, forms, listings, and social (M7) remains. Non-CRM admin, shell, and async paths still need data-layer isolation per module.
+**Why still open:** CRM isolation phases F11.1–F11.9 complete and in CHANGELOG (groundwork, org-scoped create/read isolation, backfill, bootstrap, serializer hardening, bulk-deal scope). F11.10a (historical nullable-contract harness) is complete locally and validated (311 CRM tests green). F11.10b–F11.10e remain open: no `0006` NOT NULL migration exists yet — model `organization` FKs remain nullable. The historical-test split, post-`0006` test-ownership assignments, and M3 merge closeout are still open. After M3, module rollout to blog, forms, listings, and social (M7) remains. Non-CRM admin, shell, and async paths still need data-layer isolation per module.
 
 ---
 
@@ -121,27 +121,27 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Groundwork committed and synced (2026-06-20):**
 - ✅ Committed to `wt-track1`: admin organization add/change guardrails; manager-first CRM scoping (`objects` + `all_objects` operator escape hatch); dual-manager contract on all 5 owned models; org-scoped serializer/view/service/test hardening; CRM isolation `xfail` removal. 321 CRM tests green.
-- ✅ `wt-track1` merged with latest `v87` — clean worktree, ready to implement F11.10a.
+- ✅ `wt-track1` synced from `v87` at that baseline. F11.10a completed afterward (historical nullable-contract preserved — 311 CRM tests green).
 
 **Findings / decisions status:**
 
 **Resolved:**
 - [x] **Delete policy** (2026-06-19): Once `organization` becomes required on Tag/Company/Contact/Stage/Deal, use `on_delete=PROTECT`. This is the sole owned-model delete policy for all five CRM models.
 - [x] **Post-`0006` solo-stage contract confirmed**: Seed and resolve solo CRM stages through the active personal org via `ensure_org_default_stages()` / same-org stage resolution, not legacy NULL-owned `0001` stage rows. (Already captured in F11.10c scope below.)
+- [x] **Historical `0004` nullable-contract preserved** (2026-06-20, F11.10a): The full `0004` nullable contract (`null=True`, `blank=True`, create/persist without org where applicable, `on_delete=SET_NULL`) is preserved in `quickscale_modules/crm/tests/test_migrations.py`. `TestOrganizationFieldNullable` removed from `test_models.py`. Phase 3 checkpoint passed — 311 CRM tests green.
 
 **Still open (need decision or assignment before or during next execution):**
-- [ ] Preserve the full historical `0004` nullable contract in migration-history coverage before removing live nullable-era model tests: `null=True`, `blank=True`, create/persist without organization where applicable, and `on_delete=SET_NULL` for all five owned CRM models. (Owned by F11.10a.)
 - [ ] Decide whether historical NULL-row / backfill-command coverage in `test_management_commands.py` stays alongside post-migration coverage (with conditional guards) or moves fully into `test_migrations.py`. This affects whether the split belongs in F11.10d or needs a separate phase.
 - [ ] **Post-`0006` test-ownership assignment** — Before F11.10b (schema flip) completes, confirm the named home for rewriting each of `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py` to the NOT NULL contract. F11.10d currently claims these rewrites (see below); this assignment must be confirmed or the phases re-scoped so no file is left with stale nullable-era assertions and no owner.
 
-**Summary for next handoff:** Before F11.10b (schema flip) starts, three things must be settled: the `test_management_commands.py` split policy, the post-`0006` test-ownership assignments for the four test files listed in F11.10d, and confirmation that F11.10a (historical harness) completes before the flip removes the nullable contract it needs to test.
+**Summary for next handoff:** F11.10a ✅ (historical nullable-contract preserved — 311 CRM tests green). Before F11.10b (schema flip) starts, two open items remain: the `test_management_commands.py` split policy, and the post-`0006` test-ownership assignments for the four test files listed in F11.10d.
 
-**Phase F11.10a — Historical nullable-contract harness** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.10a — Historical nullable-contract harness** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ | **Status:** ✅ Complete.
 
 **Dependencies:** F11.6 + F11.7 + F11.8 + F11.9 merged.
 
-- [ ] Preserve the full `0004` nullable contract for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` in migration/history coverage (`null=True`, `blank=True`, create/persist without org where applicable, `on_delete=SET_NULL`).
-- [ ] Remove `TestOrganizationFieldNullable` from live current-state expectations once the same historical contract is proven elsewhere.
+- [x] Preserve the full `0004` nullable contract for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` in migration/history coverage (`null=True`, `blank=True`, create/persist without org where applicable, `on_delete=SET_NULL`).
+- [x] Remove `TestOrganizationFieldNullable` from live current-state expectations once the same historical contract is proven elsewhere.
 
 **Phase F11.10b — Schema flip + owner contract** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
