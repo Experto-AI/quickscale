@@ -71,7 +71,7 @@ git merge --no-ff wt-track{N}
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **Next:** Tier 2 `F12.1d`. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
-| M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ merged; M8 remaining — then DR engine in CLI; backups module slimmed |
+| M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
 
 ## In-Flight Milestones
@@ -102,9 +102,9 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 |
-| 4 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a-b ✅; F12.1c-closeout ✅ (CR-F12.1C-004 resolved); next `F12.1d` |
-| 5 | F5 — DR engine split | M10 | ⬜ M6 ✅; waits for M8 |
+| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a-b ✅; F12.1c-closeout ✅ (CR-F12.1C-004 resolved); next `F12.1d` |
+| 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
+| 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
 
 ---
@@ -333,7 +333,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 **Why still open:** The backups module carries platform-level backup/restore orchestration that communicates with the CLI through a hidden management-command/env-var protocol. Move the engine into centrally owned code; leave only thin Django-facing surfaces in the embeddable module.
 
 **Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
-**Dependencies:** M6 + M8 both merged — both touch `apply_command.py`.
+**Dependencies:** M6 (archived ✅, see CHANGELOG) + M8 both merged — both touch `apply_command.py`.
 
 **Phase F5.1 — Define the boundary** _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
