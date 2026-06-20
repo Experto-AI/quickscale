@@ -402,3 +402,263 @@ class TestF1110Phase1AdminReadOnlyOrganizationOnChange:
         request = RequestFactory().get("/admin/")
         readonly = deal_admin.get_readonly_fields(request, obj=deal)
         assert "organization" in readonly
+
+
+@pytest.mark.django_db
+class TestF1110AdminTagFormLevelValidation:
+    """CR-F11.10-ADMIN-002 — Admin tag validation at form-level clean hook.
+
+    These tests verify that the admin form-level ``clean()`` hook rejects
+    foreign-org tag selections before any save occurs, for both ContactAdmin
+    and DealAdmin add forms.
+    """
+
+    # -- ContactAdmin add form: foreign tag rejected --------------------------
+
+    def test_contact_admin_add_form_rejects_foreign_tag(
+        self, admin_client, org_a, org_b
+    ):
+        """ContactAdmin add form rejects a foreign-org tag selection."""
+        from quickscale_modules_crm.models import Company, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        foreign_tag = Tag.objects.create(name="Foreign Tag", organization=org_b)
+
+        _inline_mgmt = {
+            "notes-TOTAL_FORMS": "0",
+            "notes-INITIAL_FORMS": "0",
+            "notes-MIN_NUM_FORMS": "0",
+            "notes-MAX_NUM_FORMS": "1000",
+        }
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/contact/add/",
+            data={
+                "first_name": "Test",
+                "last_name": "User",
+                "email": "test@example.com",
+                "phone": "+1234567890",
+                "title": "Manager",
+                "company": company.id,
+                "tags": [foreign_tag.id],
+                "status": "new",
+                "organization": org_a.id,
+                **_inline_mgmt,
+                "_save": "Save",
+            },
+        )
+
+        # Form re-rendered with errors (200), not a redirect (302).
+        assert response.status_code == 200
+        content = response.content.decode("utf-8")
+        assert "All tags must belong to the same organization" in content
+
+    # -- ContactAdmin add form: same-org tag accepted -------------------------
+
+    def test_contact_admin_add_form_accepts_same_org_tag(self, admin_client, org_a):
+        """ContactAdmin add form accepts a same-org tag selection."""
+        from quickscale_modules_crm.models import Company, Tag
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        same_org_tag = Tag.objects.create(name="Same-Org Tag", organization=org_a)
+
+        _inline_mgmt = {
+            "notes-TOTAL_FORMS": "0",
+            "notes-INITIAL_FORMS": "0",
+            "notes-MIN_NUM_FORMS": "0",
+            "notes-MAX_NUM_FORMS": "1000",
+        }
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/contact/add/",
+            data={
+                "first_name": "Test",
+                "last_name": "User",
+                "email": "test@example.com",
+                "phone": "+1234567890",
+                "title": "Manager",
+                "company": company.id,
+                "tags": [same_org_tag.id],
+                "status": "new",
+                "organization": org_a.id,
+                **_inline_mgmt,
+                "_save": "Save",
+            },
+        )
+
+        # Successful create redirects to changelist.
+        assert response.status_code == 302
+
+    # -- ContactAdmin add form: no tags valid ---------------------------------
+
+    def test_contact_admin_add_form_accepts_no_tags(self, admin_client, org_a):
+        """ContactAdmin add form accepts a submission with no tags."""
+        from quickscale_modules_crm.models import Company
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+
+        _inline_mgmt = {
+            "notes-TOTAL_FORMS": "0",
+            "notes-INITIAL_FORMS": "0",
+            "notes-MIN_NUM_FORMS": "0",
+            "notes-MAX_NUM_FORMS": "1000",
+        }
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/contact/add/",
+            data={
+                "first_name": "Test",
+                "last_name": "User",
+                "email": "test@example.com",
+                "phone": "+1234567890",
+                "title": "Manager",
+                "company": company.id,
+                "status": "new",
+                "organization": org_a.id,
+                **_inline_mgmt,
+                "_save": "Save",
+            },
+        )
+
+        # Successful create redirects to changelist.
+        assert response.status_code == 302
+
+    # -- DealAdmin add form: foreign tag rejected -----------------------------
+
+    def test_deal_admin_add_form_rejects_foreign_tag(self, admin_client, org_a, org_b):
+        """DealAdmin add form rejects a foreign-org tag selection."""
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Stage,
+            Tag,
+        )
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Test",
+            last_name="Contact",
+            email="deal-test@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        foreign_tag = Tag.objects.create(name="Foreign Tag", organization=org_b)
+
+        _deal_inline_mgmt = {
+            "notes-TOTAL_FORMS": "0",
+            "notes-INITIAL_FORMS": "0",
+            "notes-MIN_NUM_FORMS": "0",
+            "notes-MAX_NUM_FORMS": "1000",
+        }
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/deal/add/",
+            data={
+                "title": "Test Deal",
+                "contact": contact.id,
+                "stage": stage.id,
+                "amount": "1000.00",
+                "probability": 50,
+                "tags": [foreign_tag.id],
+                "organization": org_a.id,
+                **_deal_inline_mgmt,
+                "_save": "Save",
+            },
+        )
+
+        # Form re-rendered with errors (200), not a redirect (302).
+        assert response.status_code == 200
+        content = response.content.decode("utf-8")
+        assert "All tags must belong to the same organization" in content
+
+    # -- DealAdmin add form: same-org tag accepted ----------------------------
+
+    def test_deal_admin_add_form_accepts_same_org_tag(self, admin_client, org_a):
+        """DealAdmin add form accepts a same-org tag selection."""
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Stage,
+            Tag,
+        )
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Test",
+            last_name="Contact",
+            email="deal-same-org@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        same_org_tag = Tag.objects.create(name="Same-Org Tag", organization=org_a)
+
+        _deal_inline_mgmt = {
+            "notes-TOTAL_FORMS": "0",
+            "notes-INITIAL_FORMS": "0",
+            "notes-MIN_NUM_FORMS": "0",
+            "notes-MAX_NUM_FORMS": "1000",
+        }
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/deal/add/",
+            data={
+                "title": "Test Deal",
+                "contact": contact.id,
+                "stage": stage.id,
+                "amount": "1000.00",
+                "probability": 50,
+                "tags": [same_org_tag.id],
+                "organization": org_a.id,
+                **_deal_inline_mgmt,
+                "_save": "Save",
+            },
+        )
+
+        # Successful create redirects to changelist.
+        assert response.status_code == 302
+
+    # -- DealAdmin add form: no tags valid ------------------------------------
+
+    def test_deal_admin_add_form_accepts_no_tags(self, admin_client, org_a):
+        """DealAdmin add form accepts a submission with no tags."""
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Stage,
+        )
+
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Test",
+            last_name="Contact",
+            email="deal-no-tags@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+
+        _deal_inline_mgmt = {
+            "notes-TOTAL_FORMS": "0",
+            "notes-INITIAL_FORMS": "0",
+            "notes-MIN_NUM_FORMS": "0",
+            "notes-MAX_NUM_FORMS": "1000",
+        }
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/deal/add/",
+            data={
+                "title": "Test Deal",
+                "contact": contact.id,
+                "stage": stage.id,
+                "amount": "1000.00",
+                "probability": 50,
+                "organization": org_a.id,
+                **_deal_inline_mgmt,
+                "_save": "Save",
+            },
+        )
+
+        # Successful create redirects to changelist.
+        assert response.status_code == 302

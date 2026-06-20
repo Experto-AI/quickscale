@@ -3,10 +3,80 @@
 from typing import Any
 
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.forms import ModelForm
 
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
+
+
+def _make_same_org_validated_form(
+    base_form_class: type[ModelForm],
+    org_related_fields: list[str],
+) -> type[ModelForm]:
+    """Return a form subclass that validates same-org membership for related fields.
+
+    The returned form's ``clean()`` checks that all FK and M2M values in
+    ``org_related_fields`` belong to the same organization as the row's
+    ``organization`` field (add forms) or the instance's current
+    ``organization_id`` (change forms).  NULL-org related values are
+    accepted for legacy compatibility.
+    """
+
+    class SameOrgValidatedForm(base_form_class):  # type: ignore[misc, valid-type]
+        def clean(self) -> dict[str, Any]:
+            cleaned_data = super().clean()
+
+            # Determine org_id from cleaned_data (add) or instance (change).
+            org = cleaned_data.get("organization")
+            if org is not None:
+                org_id = org.pk if hasattr(org, "pk") else org
+            elif (
+                self.instance is not None
+                and self.instance.pk is not None
+                and hasattr(self.instance, "organization_id")
+            ):
+                org_id = self.instance.organization_id
+            else:
+                org_id = None
+
+            if org_id is not None:
+                for field_name in org_related_fields:
+                    values = cleaned_data.get(field_name)
+                    if not values:
+                        continue
+                    # FK fields return a single model instance; M2M fields
+                    # return a list/QuerySet of instances.
+                    if hasattr(values, "_meta"):
+                        # Single FK value.
+                        related_org_id = getattr(values, "organization_id", None)
+                        if related_org_id is not None and related_org_id != org_id:
+                            raise ValidationError(
+                                {
+                                    field_name: (
+                                        f"{field_name} must belong to the "
+                                        "same organization."
+                                    )
+                                }
+                            )
+                    else:
+                        # M2M iterable of values.
+                        for val in values:
+                            related_org_id = getattr(val, "organization_id", None)
+                            if related_org_id is not None and related_org_id != org_id:
+                                raise ValidationError(
+                                    {
+                                        field_name: (
+                                            f"All {field_name} must belong "
+                                            "to the same organization."
+                                        )
+                                    }
+                                )
+
+            return cleaned_data
+
+    SameOrgValidatedForm.__name__ = f"{base_form_class.__name__}SameOrgValidated"
+    return SameOrgValidatedForm
 
 
 class _CrmOrgAwareAdminMixin:
@@ -33,32 +103,46 @@ class _CrmOrgAwareAdminMixin:
         change: bool | None = None,
         **kwargs: Any,
     ) -> type[ModelForm]:  # type: ignore[override]
-        """Return a form class that includes organization on add and limits related choices."""
+        """Return a form class that includes organization on add and validates same-org membership.
+
+        The returned form validates that FK and M2M related field selections
+        belong to the same organization as the row, rejecting foreign-org
+        values at the form level before any save occurs.
+        """
         is_change = change if change is not None else obj is not None
-        form_class = super().get_form(request, obj, change=change, **kwargs)
+        form_class = super().get_form(request, obj, change=change, **kwargs)  # type: ignore[misc]
+
+        # Wrap in a same-org validated form if there are related fields to
+        # check (must happen before field customization because
+        # ModelFormMetaclass creates fresh field instances on subclass).
+        if self._org_related_fields:
+            form_class = _make_same_org_validated_form(
+                form_class, list(self._org_related_fields)
+            )
 
         if not is_change:
             # Add form: ensure organization is present and required.
             if "organization" in form_class.base_fields:
                 form_class.base_fields["organization"].required = True
+
         return form_class
 
     def get_readonly_fields(self, request: Any, obj: Any | None = None) -> list[str]:  # type: ignore[override]
         """Show organization read-only on change forms."""
-        readonly = list(super().get_readonly_fields(request, obj))
+        readonly = list(super().get_readonly_fields(request, obj))  # type: ignore[misc]
         if obj is not None and "organization" not in readonly:
             readonly.append("organization")
         return readonly
 
     def get_exclude(self, request: Any, obj: Any | None = None) -> list[str] | None:  # type: ignore[override]
         """Include organization in the form on both add and change."""
-        excludes = list(super().get_exclude(request, obj) or [])
+        excludes = list(super().get_exclude(request, obj) or [])  # type: ignore[misc]
         excludes = [f for f in excludes if f != "organization"]
         return excludes or None
 
-    def get_fieldsets(self, request: Any, obj: Any | None = None):  # type: ignore[override]
+    def get_fieldsets(self, request: Any, obj: Any | None = None):  # type: ignore[override, no-untyped-def]
         """Ensure organization appears in the fieldsets."""
-        fieldsets = super().get_fieldsets(request, obj)
+        fieldsets = super().get_fieldsets(request, obj)  # type: ignore[misc]
         # Collect all fields currently in fieldsets.
         all_fields: list[str] = []
         for _, options in fieldsets:
@@ -73,11 +157,11 @@ class _CrmOrgAwareAdminMixin:
             fieldsets = [(first_name, first_opts)] + list(fieldsets[1:])
         return fieldsets
 
-    def get_form_for_validation(
+    def get_form_for_validation(  # type: ignore[no-untyped-def]
         self, request: Any, obj: Any | None = None, **kwargs: Any
     ):  # type: ignore[override]
         """Limit related-field querysets to the same organization."""
-        form_class = super().get_form(request, obj, **kwargs)
+        form_class = super().get_form(request, obj, **kwargs)  # type: ignore[misc]
         return form_class
 
     def _get_org_id_from_form(self, form: ModelForm) -> int | None:
@@ -89,19 +173,28 @@ class _CrmOrgAwareAdminMixin:
         )
         if org is not None:
             return org.pk
-        if self.instance and hasattr(self.instance, "organization_id"):
-            return self.instance.organization_id
+        if self.instance and hasattr(self.instance, "organization_id"):  # type: ignore[attr-defined]
+            return self.instance.organization_id  # type: ignore[attr-defined]
         return None
 
     def save_model(self, request: Any, obj: Any, form: Any, change: bool) -> None:  # type: ignore[override]
-        """Validate cross-org related selections before saving."""
+        """Validate cross-org FK selections before saving.
+
+        M2M fields (tags) require a PK and are handled in ``save_related``.
+        """
         org_id = getattr(obj, "organization_id", None)
         if org_id is not None:
+            # Only process FK fields — M2M requires a PK and is handled
+            # in save_related.
+            opts = obj._meta
+            m2m_field_names = {f.name for f in opts.many_to_many}
             for field_name in self._org_related_fields:
+                if field_name in m2m_field_names:
+                    continue
                 value = getattr(obj, field_name, None)
                 if value is None:
                     continue
-                # Handle M2M via through or direct.
+                # FK field — single model instance.
                 if hasattr(value, "organization_id"):
                     related_org_id = value.organization_id
                     if related_org_id is not None and related_org_id != org_id:
@@ -110,17 +203,22 @@ class _CrmOrgAwareAdminMixin:
                         raise ValidationError(
                             f"{field_name} must belong to the same organization."
                         )
-                # For M2M (tags), check all related objects.
-                if hasattr(value, "all"):
-                    for related_obj in value.all():
-                        related_org_id = getattr(related_obj, "organization_id", None)
-                        if related_org_id is not None and related_org_id != org_id:
-                            from django.core.exceptions import ValidationError
+        super().save_model(request, obj, form, change)  # type: ignore[misc]
 
-                            raise ValidationError(
-                                f"All {field_name} must belong to the same organization."
-                            )
-        super().save_model(request, obj, form, change)
+    def save_related(  # type: ignore[override]
+        self,
+        request: Any,
+        form: ModelForm,
+        formsets: list[Any],
+        change: bool,
+    ) -> None:
+        """Save related objects.
+
+        M2M same-org validation is handled in the form-level ``clean()``
+        hook before any save occurs.  This method delegates to the default
+        admin save_related for actual persistence.
+        """
+        super().save_related(request, form, formsets, change)  # type: ignore[misc]
 
 
 @admin.register(Tag)
