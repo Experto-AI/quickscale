@@ -36,8 +36,11 @@ class TestTagSerializer:
         tag = serializer.save()
         assert tag.name == "Hot Lead"
 
-    def test_create_duplicate_tag_rejected(self, tag):
-        """Creating a tag with a duplicate name in the same owner bucket is rejected."""
+    def test_create_duplicate_tag_rejected(self, db):
+        """Creating a tag with a duplicate name in the NULL owner bucket is rejected."""
+        from quickscale_modules_crm.models import Tag
+
+        Tag.all_objects.create(name="VIP")  # NULL org bucket
         serializer = TagSerializer(data={"name": "VIP"})
         assert not serializer.is_valid()
         assert "name" in serializer.errors
@@ -1184,8 +1187,12 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         )
         assert serializer.is_valid(), serializer.errors
 
-    def test_org_scoped_accepts_null_org_legacy_stage(self, org_a, org_a_admin):
-        """BulkUpdateStageSerializer accepts NULL-org legacy stage on org-scoped route."""
+    def test_org_scoped_rejects_null_org_legacy_stage(self, org_a, org_a_admin):
+        """BulkUpdateStageSerializer rejects NULL-org legacy stage on org-scoped route.
+
+        Phase 1 post-0006 contract: NULL-owned stages are no longer accepted
+        on org-scoped routes.
+        """
         from rest_framework.test import APIRequestFactory
 
         from quickscale_modules_crm.models import Stage
@@ -1203,7 +1210,8 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
             data={"deal_ids": [1], "stage_id": legacy_stage.id},
             context={"request": request},
         )
-        assert serializer.is_valid(), serializer.errors
+        assert not serializer.is_valid()
+        assert "stage_id" in serializer.errors
 
     @override_settings(QUICKSCALE_MODE="solo")
     def test_solo_route_accepts_any_stage(self, staff_user, org_b):
