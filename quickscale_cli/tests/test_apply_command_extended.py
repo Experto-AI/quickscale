@@ -4188,6 +4188,106 @@ class TestExecuteApplySteps:
         mock_clear_recovery.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
+    # ------------------------------------------------------------------ #
+    # F12.3a: Pre-embed recovery coverage                                 #
+    # ------------------------------------------------------------------ #
+
+    def test_generation_failure_aborts_apply_before_git_init(self):
+        """Pre-embed generation failure must abort apply before git init
+        and before advisory lock acquisition."""
+        with patch(
+            "quickscale_cli.commands.apply_command._generate_new_project",
+            side_effect=click.Abort(),
+        ):
+            with patch(
+                "quickscale_cli.commands.apply_command._init_git_with_config"
+            ) as mock_init_git:
+                with patch(
+                    "quickscale_cli.commands.apply_command.AdvisoryLock"
+                ) as mock_lock_cls:
+                    ctx = Mock()
+                    ctx.existing_state = None
+                    ctx.output_path = Path("/tmp/proj")
+
+                    with pytest.raises(click.Abort):
+                        _execute_apply_steps(
+                            ctx,
+                            force=False,
+                            no_docker=False,
+                            no_modules=False,
+                        )
+
+                    mock_init_git.assert_not_called()
+                    mock_lock_cls.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_git_init_failure_does_not_block_apply(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Pre-embed git init failure must not block apply from continuing."""
+        mock_init_git.return_value = False  # git init fails
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+        mock_save_state.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=False,
+            no_modules=False,
+        )
+
+        # Pre-embed generation was called
+        mock_generate_new_project.assert_called_once_with(
+            ctx.qs_config,
+            ctx.output_path,
+            False,
+        )
+        # _init_git was called (by the real _init_git_with_config) and returned False
+        mock_init_git.assert_called_once_with(ctx.output_path)
+        # Locked section still proceeds after non-fatal git init failure
+        mock_embed_modules_step.assert_called_once()
+        mock_regenerate_wiring.assert_called_once()
+        mock_display_next_steps.assert_called_once()
+
 
 # ============================================================================
 # _generate_with_existing_config
