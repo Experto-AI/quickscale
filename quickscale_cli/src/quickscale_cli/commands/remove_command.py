@@ -18,6 +18,7 @@ from quickscale_cli.schema.config_schema import (
 )
 from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
+from quickscale_core.apply import LedgerError, LedgerManager, RecoveryLedger
 from quickscale_core.config.module_config import (
     load_config as load_legacy_module_config,
 )
@@ -100,17 +101,29 @@ def apply_recovery_path(project_path: Path) -> Path:
     return project_path / ".quickscale" / _APPLY_RECOVERY_FILENAME
 
 
-def _get_apply_recovery_state_manager(project_path: Path) -> StateManager:
-    """Return a state manager bound to .quickscale/apply-recovery.yml."""
-    recovery_manager = StateManager(project_path)
-    recovery_manager.state_file = apply_recovery_path(project_path)
-    return recovery_manager
+def _get_apply_recovery_manager(project_path: Path) -> LedgerManager:
+    """Return a LedgerManager bound to the recovery ledger file."""
+    return LedgerManager(project_path)
 
 
 def _load_apply_recovery_state(project_path: Path) -> QuickScaleState | None:
-    """Strictly load .quickscale/apply-recovery.yml when present."""
+    """Strictly load .quickscale/apply-recovery.yml when present.
+
+    Returns the embedded applied-state (:class:`QuickScaleState`) when the
+    recovery ledger file exists and is valid, or ``None`` when the file
+    does not exist.  Malformed content raises :class:`LedgerError` which
+    is surfaced as a :class:`click.ClickException`.
+    """
     try:
-        return _get_apply_recovery_state_manager(project_path).load()
+        mgr = _get_apply_recovery_manager(project_path)
+        ledger = mgr.load()
+        if ledger is None:
+            return None
+        return ledger.applied_state
+    except LedgerError as error:
+        raise click.ClickException(
+            f"Failed to load .quickscale/{_APPLY_RECOVERY_FILENAME}: {error}"
+        ) from error
     except Exception as error:
         raise click.ClickException(
             f"Failed to load .quickscale/{_APPLY_RECOVERY_FILENAME}: {error}"
@@ -366,7 +379,9 @@ def _update_apply_recovery_state(
     if updated_state is None:
         return
 
-    _get_apply_recovery_state_manager(project_path).save(updated_state)
+    mgr = _get_apply_recovery_manager(project_path)
+    ledger = RecoveryLedger(applied_state=updated_state, step_progress=None)
+    mgr.save(ledger)
 
 
 def _clear_apply_recovery_state(project_path: Path) -> None:

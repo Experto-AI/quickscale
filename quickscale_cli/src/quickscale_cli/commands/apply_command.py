@@ -91,7 +91,12 @@ from quickscale_cli.schema.state_schema import (
 from quickscale_core.config import (
     normalize_installed_version,
 )
-from quickscale_core.apply import APPLY_STEPS
+from quickscale_core.apply import (
+    APPLY_STEPS,
+    LedgerError,
+    LedgerManager,
+    RecoveryLedger,
+)
 from quickscale_core.advisory_lock import (
     AdvisoryLock,
     AdvisoryLockContentionError,
@@ -2040,16 +2045,24 @@ def _build_project_state_snapshot(
     return new_state
 
 
-def _get_apply_recovery_state_manager(project_path: Path) -> StateManager:
-    """Return a state manager bound to the post-embed recovery snapshot."""
-    recovery_manager = StateManager(project_path)
-    recovery_manager.state_file = recovery_manager.state_dir / _APPLY_RECOVERY_FILENAME
-    return recovery_manager
+def _get_apply_recovery_manager(project_path: Path) -> LedgerManager:
+    """Return a LedgerManager bound to the recovery ledger file."""
+    return LedgerManager(project_path)
 
 
 def _load_apply_recovery_state(project_path: Path) -> QuickScaleState | None:
-    """Load any pending post-embed recovery snapshot."""
-    return _get_apply_recovery_state_manager(project_path).load()
+    """Load any pending post-embed recovery snapshot.
+
+    Returns the embedded applied-state (:class:`QuickScaleState`) when the
+    recovery ledger file exists and is valid, or ``None`` when the file
+    does not exist.  Malformed content raises :class:`LedgerError` which
+    propagates as a ``StateError`` to existing callers.
+    """
+    mgr = _get_apply_recovery_manager(project_path)
+    ledger = mgr.load()
+    if ledger is None:
+        return None
+    return ledger.applied_state
 
 
 def _merge_apply_recovery_state(
@@ -2090,13 +2103,21 @@ def _save_apply_recovery_state(
             delta,
             provenance_payloads=provenance_payloads,
         )
-        recovery_manager = _get_apply_recovery_state_manager(output_path)
-        recovery_manager.save(recovery_state)
+        mgr = _get_apply_recovery_manager(output_path)
+        ledger = RecoveryLedger(applied_state=recovery_state, step_progress=None)
+        mgr.save(ledger)
         click.secho(
             f"✅ Apply recovery saved to .quickscale/{_APPLY_RECOVERY_FILENAME}",
             fg="green",
         )
         return True
+    except (LedgerError, OSError) as e:
+        click.secho(
+            f"❌ Failed to save apply recovery state: {e}",
+            fg="red",
+            err=True,
+        )
+        return False
     except Exception as e:
         click.secho(
             f"❌ Failed to save apply recovery state: {e}",
@@ -2108,12 +2129,12 @@ def _save_apply_recovery_state(
 
 def _clear_apply_recovery_state(output_path: Path) -> None:
     """Remove any stale post-embed recovery snapshot."""
-    recovery_path = _get_apply_recovery_state_manager(output_path).state_file
-    if not recovery_path.exists():
+    mgr = _get_apply_recovery_manager(output_path)
+    if not mgr.ledger_file.exists():
         return
 
     try:
-        recovery_path.unlink()
+        mgr.ledger_file.unlink()
     except OSError as e:
         click.secho(f"⚠️  Failed to clear apply recovery state: {e}", fg="yellow")
 
@@ -2599,10 +2620,10 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
     if authoritative_state is None:
         return
 
-    try:
-        recovery_state = _load_apply_recovery_state(ctx.output_path)
-    except StateError:
-        recovery_state = None
+    # F12.1d: malformed authoritative recovery ledger must fail hard
+    # rather than being silently treated as absent.  LedgerError
+    # (subclass of StateError) propagates to the operator.
+    recovery_state = _load_apply_recovery_state(ctx.output_path)
 
     merged_state = _merge_apply_recovery_state(authoritative_state, recovery_state)
 
