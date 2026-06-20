@@ -35,6 +35,7 @@ from quickscale_cli.commands.apply_command import (
     _embed_modules_step,
     _ensure_backups_gitignore_rules,
     _execute_apply_steps,
+    _execute_apply_steps_locked,
     _finalize_apply_state,
     _generate_project,
     _generate_with_existing_config,
@@ -47,6 +48,7 @@ from quickscale_cli.commands.apply_command import (
     _load_module_manifests,
     _normalize_backups_gitignore_entry,
     _prepare_apply_context,
+    _print_apply_failure_summary,
     _provenance_repair_might_be_needed,
     _refresh_context_after_lock,
     _render_billing_env_example_block,
@@ -5647,3 +5649,1270 @@ class TestCallerParityAcrossProvenancePaths:
         # The ModuleEmbedProvenance is only produced when source_ref is
         # resolved, which only happens in APPLY_MODULE_EXECUTION_MODE.
         # Standalone embeds leave provenance_sink empty.
+
+
+# ============================================================================
+# F12.1c Phase 3: Caller-Parity Pass — failure-summary text parity
+# ============================================================================
+
+
+# All 12 unique failed_step labels from APPLY_STEPS (registry-backed).
+# NOTE: reason strings here are synthetic/shortened for formatter-shape testing.
+_F12_1C_UNIQUE_FAILED_STEP_LABELS: list[tuple[str, str]] = [
+    ("module embedding", "required module 'blog' failed to embed"),
+    ("post-embed state snapshot", "could not compute post-embed state"),
+    ("managed module wiring generation", "unable to render managed files"),
+    ("backups gitignore hardening", "unable to update .gitignore"),
+    ("notifications env example sync", "unable to sync notifications env vars"),
+    ("analytics env example sync", "unable to sync analytics env vars"),
+    ("billing env example sync", "unable to sync billing env vars"),
+    ("module dependency sync", "unable to reconcile module deps"),
+    (
+        "post-generation dependency and migration setup",
+        "poetry lock/install/migrations failed",
+    ),
+    ("docker startup", "Docker auto-start failed"),
+    ("database migrations", "migrations failed inside Docker"),
+    ("authoritative state persistence", "could not save authoritative state"),
+]
+
+
+def _expected_failure_summary_lines(failed_step: str, reason: str) -> list[str]:
+    """Return the expected output lines from _print_apply_failure_summary."""
+    sep = "=" * 50
+    return [
+        "",
+        sep,
+        "❌ Apply failed",
+        sep,
+        "",
+        f"Failed step: {failed_step}",
+        f"Reason: {reason}",
+        "",
+        "Skipped downstream steps:",
+        "  • poetry install",
+        "  • migrations",
+        "  • docker start",
+        "  • success completion output",
+    ]
+
+
+class TestApplyFailureSummaryParity:
+    """F12.1c Phase 3 + closeout: Failure-summary output parity for all 15 callers.
+
+    The 12 unique registry-backed labels are tested via parametrized
+    direct calls to :func:`_print_apply_failure_summary` with synthetic
+    reason strings, proving the formatter shape (header, label, reason,
+    skipped-steps tail).  The three ``authoritative state persistence``
+    callers are tested via caller-driven integration-style tests that
+    exercise the real production branches with exact byte-identical
+    line-by-line assertions.  The sentinel ``apply recovery state
+    persistence`` is tested as a literal outside the registry.  The 11
+    non-authoritative caller branches are tested via real production
+    failure branches through :func:`_execute_apply_steps_locked` with
+    exact byte-identical line-by-line parity (F12.1c-closeout).
+    """
+
+    @pytest.mark.parametrize("failed_step,reason", _F12_1C_UNIQUE_FAILED_STEP_LABELS)
+    def test_failure_summary_exact_output(self, capsys, failed_step, reason):
+        """Every registry-backed failed_step label produces byte-identical summary."""
+        _print_apply_failure_summary(failed_step=failed_step, reason=reason)
+
+        captured = capsys.readouterr()
+        output_lines = captured.out.splitlines()
+
+        expected = _expected_failure_summary_lines(failed_step, reason)
+        assert output_lines == expected, (
+            f"Output mismatch for failed_step={failed_step!r}"
+        )
+
+        # Also confirm the label survived through to stderr (secho to stdout
+        # for the header, but no err output from _print_apply_failure_summary).
+        assert captured.err == ""
+
+    @pytest.mark.parametrize("failed_step,reason", _F12_1C_UNIQUE_FAILED_STEP_LABELS)
+    def test_failure_summary_contains_label_and_reason(
+        self, capsys, failed_step, reason
+    ):
+        """Substring smoke test: each label and reason appears in output."""
+        _print_apply_failure_summary(failed_step=failed_step, reason=reason)
+
+        captured = capsys.readouterr()
+        output = captured.out
+
+        assert failed_step in output
+        assert reason in output
+        assert "❌ Apply failed" in output
+        assert "Skipped downstream steps:" in output
+        assert "  • poetry install" in output
+        assert "  • migrations" in output
+        assert "  • docker start" in output
+        assert "  • success completion output" in output
+
+    # ------------------------------------------------------------------
+    # Sentinel structural check (not in registry)
+    # ------------------------------------------------------------------
+
+    def test_sentinel_apply_recovery_state_persistence_not_in_registry(self):
+        """The sentinel 'apply recovery state persistence' is a literal, not
+        registry-backed.  It must not appear in APPLY_STEPS with a
+        failed_step_label."""
+        from quickscale_core.apply import APPLY_STEPS
+
+        sentinel = "apply recovery state persistence"
+        registry_labels = {
+            s.failed_step_label for s in APPLY_STEPS if s.failed_step_label is not None
+        }
+        registry_ids = {s.step_id for s in APPLY_STEPS}
+
+        assert sentinel not in registry_labels, (
+            "The sentinel must not be registry-backed"
+        )
+        assert sentinel not in registry_ids, "The sentinel must not appear as a step_id"
+
+    # ------------------------------------------------------------------
+    # Sentinel caller-driven literal test (exact byte-identical)
+    # ------------------------------------------------------------------
+
+    def test_sentinel_apply_recovery_state_persistence_literal_output(self, capsys):
+        """The sentinel 'apply recovery state persistence' is emitted as a
+        literal when post-embed failure abort cannot save recovery state.
+        Output must contain exactly that literal — not sourced from any
+        registry — plus the failed-step reason referencing the original
+        step failure and apply-recovery.yml.
+        """
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=False,
+            ) as mock_save_recovery,
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "apply recovery state persistence",
+            "managed module wiring generation failed and QuickScale "
+            "could not save .quickscale/apply-recovery.yml for rerun recovery.",
+        )
+        assert lines == expected, "Byte-identical output mismatch for sentinel literal"
+        assert captured.err == ""
+        mock_save_recovery.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # Authoritative-state-persistence callers (exact byte-identical)
+    # ------------------------------------------------------------------
+
+    def test_authoritative_state_persistence_site_1_partial_embed_save_failure(
+        self, capsys
+    ):
+        """Site 1 (L2747-L2754): partial embed saved state but final save failed.
+        Output must show ``Failed step: authoritative state persistence``
+        with the exact reason text containing the failed module name and
+        ``.quickscale/state.yml``.  Recovery state must not be cleared.
+        """
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth", "blog"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {
+            "auth": Mock(options={}),
+            "blog": Mock(options={}),
+        }
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+            ) as mock_embed,
+            patch(
+                "quickscale_cli.commands.apply_command._save_project_state",
+                return_value=False,
+            ) as mock_save_state,
+            patch(
+                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+            ) as mock_clear_recovery,
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            mock_embed.return_value = EmbedModulesResult(
+                success=False,
+                embedded_modules=["auth"],
+                failed_module="blog",
+            )
+
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "authoritative state persistence",
+            "required module 'blog' failed to embed, and QuickScale "
+            "could not save partial authoritative state to "
+            ".quickscale/state.yml.",
+        )
+        assert lines == expected, (
+            "Byte-identical output mismatch for authoritative site 1"
+        )
+        assert captured.err == ""
+        mock_save_state.assert_called_once()
+        mock_clear_recovery.assert_not_called()
+
+    def test_authoritative_state_persistence_site_2_recovery_preserved(self, capsys):
+        """Site 2 (L2537-L2544): state save failed, recovery was preserved.
+        Output must be exact byte-identical with reason mentioning
+        ``apply-recovery.yml`` and ``rerunnable``.
+        """
+        ctx = Mock()
+        ctx.output_path = Path("/tmp/proj")
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.project.package = "myapp"
+        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.modules = {}
+        ctx.existing_state = None
+        ctx.delta = Mock()
+        ctx.delta.config_deltas = {}
+
+        post_embed_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={},
+        )
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._save_project_state",
+                return_value=False,
+            ) as mock_save_state,
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ) as mock_save_recovery,
+            patch(
+                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+            ) as mock_clear_recovery,
+        ):
+            with pytest.raises(click.Abort):
+                _finalize_apply_state(ctx, post_embed_state)
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "authoritative state persistence",
+            "All apply steps completed, but QuickScale could not save "
+            ".quickscale/state.yml. Recovery state was saved to "
+            ".quickscale/apply-recovery.yml so apply remains rerunnable.",
+        )
+        assert lines == expected, (
+            "Byte-identical output mismatch for authoritative site 2"
+        )
+        assert captured.err == ""
+        mock_save_state.assert_called_once()
+        mock_save_recovery.assert_called_once()
+        mock_clear_recovery.assert_not_called()
+
+    def test_authoritative_state_persistence_site_3_recovery_not_preserved(
+        self, capsys
+    ):
+        """Site 3 (L2547-L2554): state save AND recovery save both failed.
+        Output must be exact byte-identical with reason mentioning both
+        ``.quickscale/state.yml`` and ``could not preserve rerunnable
+        recovery state``.
+        """
+        ctx = Mock()
+        ctx.output_path = Path("/tmp/proj")
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.project.package = "myapp"
+        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.modules = {}
+        ctx.existing_state = None
+        ctx.delta = Mock()
+        ctx.delta.config_deltas = {}
+
+        post_embed_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={},
+        )
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._save_project_state",
+                return_value=False,
+            ) as mock_save_state,
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=False,
+            ) as mock_save_recovery,
+            patch(
+                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+            ) as mock_clear_recovery,
+        ):
+            with pytest.raises(click.Abort):
+                _finalize_apply_state(ctx, post_embed_state)
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "authoritative state persistence",
+            "All apply steps completed, but QuickScale could not save "
+            ".quickscale/state.yml and could not preserve rerunnable "
+            "recovery state in .quickscale/apply-recovery.yml.",
+        )
+        assert lines == expected, (
+            "Byte-identical output mismatch for authoritative site 3"
+        )
+        assert captured.err == ""
+        mock_save_state.assert_called_once()
+        mock_save_recovery.assert_called_once()
+        mock_clear_recovery.assert_not_called()
+
+    # ====================================================================
+    # F12.1c-closeout: caller-driven parity for 11 non-authoritative branches
+    # ====================================================================
+
+    def test_non_auth_module_embedding(self, capsys):
+        """Non-authoritative caller (L2757-L2760): embed failed, state save succeeded."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=False,
+                    embedded_modules=["auth"],
+                    failed_module="auth",
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_project_state",
+                return_value=True,
+            ) as mock_save,
+            patch(
+                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+            ) as mock_clear,
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "module embedding",
+            "required module 'auth' failed to embed",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: module embedding"
+        )
+        assert captured.err == ""
+        mock_save.assert_called_once()
+        mock_clear.assert_called_once()
+
+    def test_non_auth_post_embed_state_snapshot(self, capsys):
+        """Non-authoritative caller (L2773-L2779): state snapshot raised."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                side_effect=ValueError("oops"),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "post-embed state snapshot",
+            "QuickScale could not compute the post-embed state required "
+            "for safe apply recovery: oops",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: post-embed state snapshot"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_managed_wiring(self, capsys):
+        """Non-auth (L2784-L2789) abort Path A: managed module wiring generation."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "managed module wiring generation",
+            "unable to render managed settings, URL, and integration files",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: managed wiring"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_backups_gitignore(self, capsys):
+        """Non-auth (L2798-L2803) abort Path A: backups gitignore hardening."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "backups gitignore hardening",
+            "Unable to update .gitignore with the configured private "
+            "backups directory.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: backups gitignore"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_notifications_env_sync(self, capsys):
+        """Non-auth (L2806-L2811) abort Path A: notifications env example sync."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "notifications env example sync",
+            "Unable to update .env.example with the configured "
+            "notifications env-var names.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: notifications env sync"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_analytics_env_sync(self, capsys):
+        """Non-auth (L2814-L2819) abort Path A: analytics env example sync."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "analytics env example sync",
+            "Unable to update .env.example with the configured "
+            "analytics env-var names.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: analytics env sync"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_billing_env_sync(self, capsys):
+        """Non-auth (L2822-L2827) abort Path A: billing env example sync."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "billing env example sync",
+            "Unable to update .env.example with the configured billing env-var names.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: billing env sync"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_module_dependency_sync(self, capsys):
+        """Non-auth (L2833-L2838) abort Path A: module dependency sync."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "module dependency sync",
+            "Unable to reconcile embedded-module Poetry dependency "
+            "entries in pyproject.toml.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: dep sync"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_post_gen_steps(self, capsys):
+        """Non-auth (L2851-L2856) abort Path A: post-gen dependency / migration setup."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "post-generation dependency and migration setup",
+            "Poetry lock refresh, dependency installation, or local "
+            "migrations failed after module dependency sync.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: post-gen steps"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_docker_startup(self, capsys):
+        """Non-auth (L2872-L2877) abort Path A: docker startup failed."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = True
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._start_docker",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "docker startup",
+            "Docker auto-start failed. Run 'quickscale logs' to "
+            "inspect the failing service.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: docker startup"
+        )
+        assert captured.err == ""
+
+    def test_non_auth_database_migrations(self, capsys):
+        """Non-auth (L2884-L2889) abort Path A: database migrations inside Docker."""
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = ["auth"]
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(options={})}
+        ctx.qs_config.docker.start = True
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                return_value=EmbedModulesResult(
+                    success=True,
+                    embedded_modules=["auth"],
+                    failed_module=None,
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                return_value=QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="myapp",
+                        package="myapp",
+                        theme="showcase_html",
+                    ),
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._start_docker",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_migrations_in_docker",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            ),
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps_locked(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    verbose_docker=False,
+                )
+
+        captured = capsys.readouterr()
+        lines = captured.out.splitlines()
+        expected = _expected_failure_summary_lines(
+            "database migrations",
+            "Migrations failed inside Docker backend container. "
+            "Run 'quickscale logs backend' for details.",
+        )
+        assert lines == expected, (
+            "Byte-identical mismatch for non-auth caller: database migrations"
+        )
+        assert captured.err == ""

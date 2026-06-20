@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """
-Provenance-aware split-publish wrapper for QuickScale modules (F2.8).
+Provenance-aware split-publish wrapper for QuickScale modules (F2.8, F2.9a, F2.9b).
 
 This script replaces the hardcoded module-path and branch-resolution logic
 that previously lived entirely in ``scripts/publish_module.sh``.  It uses
 the provenance-aware helper surface from
 ``quickscale_core.utils.git_utils`` so the split/publish execution path
 shares the same resolution conventions as the embed/update paths.
+
+F2.9a adds a release-authoritative gate: mutating publish flows refuse to
+run unless the source state is release-authoritative (VERSION file matches
+a git tag pointing at HEAD), aligned with the publish workflow authority in
+.github/workflows/publish.yml.  The --status flag remains read-only and
+does not require release-authoritative state.
+
+F2.9b adds operator-facing diagnostics: --status reports release provenance
+(tagged/untagged/mismatched source state), per-module split-branch state with
+local-vs-published SHAs, and explicit next-action guidance.  --status stays
+read-only and never fails closed; the mutating flows continue to fail closed
+with the same explicit next-action guidance.
 
 Usage:
     poetry run python scripts/publish_module.py <module_name> [--clean]
@@ -32,6 +44,7 @@ if str(_CORE_SRC) not in sys.path:
 from quickscale_core.utils.git_utils import (  # noqa: E402
     GitError,
     is_git_repo,
+    is_release_authoritative,
     push_split_branch,
     resolve_module_path,
     resolve_split_branch,
@@ -127,6 +140,40 @@ def _maybe_clean_subtree_cache(clean: bool) -> None:
         cache_dir = _REPO_ROOT / ".git" / "subtree-cache"
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
+
+
+def _check_release_authoritative() -> None:
+    """
+    Gate: refuse mutating publish flows unless source is release-authoritative (F2.9a).
+
+    Release-authoritative means the VERSION file matches a git tag pointing at
+    HEAD, aligned with the publish workflow authority in
+    .github/workflows/publish.yml.
+
+    Raises SystemExit with a clear operator-facing message when the source is
+    not release-authoritative.  This gate applies to mutating flows only
+    (single-module publish and --publish-outdated); --status remains read-only
+    and must not fail closed just because HEAD is untagged.
+    """
+    is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT)
+    if is_auth:
+        _print_success(f"Source is release-authoritative (VERSION={version}, tag={tag})")
+        return
+
+    _print_error("Source is not release-authoritative (F2.9a gate)")
+    if reason:
+        _print_error(f"  Reason: {reason}")
+    _print_info(
+        "Mutating publish flows require the source state to match the publish workflow authority:"
+    )
+    _print_info("  - VERSION file must contain the release version")
+    _print_info("  - HEAD must be tagged with that version")
+    _print_info("  - The tag must match the VERSION file content")
+    _print_info("See .github/workflows/publish.yml for the authority chain.")
+    _print_info(
+        "Use --status for read-only inspection (does not require release-authoritative state)."
+    )
+    sys.exit(1)
 
 
 def _get_local_split_sha(module_path: str) -> str | None:
@@ -255,39 +302,91 @@ def _publish_module(module_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _show_provenance_diagnostics() -> bool:
+    """
+    Report read-only release-provenance diagnostics (F2.9b).
+
+    Inspects whether the source state is release-authoritative (VERSION matches
+    a git tag at HEAD) and prints an operator-facing summary.  This is strictly
+    read-only: it never fails closed and never exits, so operators can inspect
+    untagged or mismatched split provenance without triggering the mutating
+    F2.9a gate.
+
+    Returns True when the source is release-authoritative, False otherwise.
+    """
+    is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT)
+    if is_auth:
+        _print_success(f"Release provenance: authoritative (VERSION={version}, tag={tag})")
+        return True
+
+    _print_warning(f"Release provenance: NOT authoritative (VERSION={version or 'unknown'})")
+    if reason:
+        _print_warning(f"  Reason: {reason}")
+    _print_info("  Mutating publish flows are blocked until HEAD is tagged to match VERSION.")
+    return False
+
+
 def _show_status() -> None:
-    """Show split-branch status for every module."""
+    """Show split-branch status and provenance diagnostics for every module (F2.9b)."""
     _warn_uncommitted_changes()
     _print_info("Inspecting module publish status...")
+    print()
+
+    # F2.9b: read-only release-provenance diagnostic (never fails closed).
+    is_auth = _show_provenance_diagnostics()
     print()
 
     outdated: list[str] = []
     unpublished: list[str] = []
 
     for module_name in _list_modules():
-        state, _local_sha, _pub_sha, pub_source = _get_module_publish_state(module_name)
+        state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name)
         if state == "up-to-date":
-            print(f"  {module_name:<16} up to date ({pub_source})")
+            print(f"  {module_name:<16} up to date ({pub_source}, {local_sha[:12]})")
         elif state == "outdated":
-            print(f"  {module_name:<16} outdated ({pub_source})")
+            print(
+                f"  {module_name:<16} outdated "
+                f"({pub_source}: local {local_sha[:12]} != published {pub_sha[:12]})"
+            )
             outdated.append(module_name)
         elif state == "unpublished":
-            print(f"  {module_name:<16} unpublished")
+            print(f"  {module_name:<16} unpublished (local {local_sha[:12]}, no split branch)")
             unpublished.append(module_name)
 
     print()
     if not outdated and not unpublished:
         _print_success("All module split branches are up to date.")
+        if not is_auth:
+            print()
+            _print_info("Next action:")
+            _print_info("  Tag HEAD to match VERSION before any mutating publish flow.")
         return
 
     if outdated:
-        _print_warning(f"Outdated modules: {' '.join(outdated)}")
+        _print_warning(f"Outdated split branches: {' '.join(outdated)}")
     if unpublished:
-        _print_warning(f"Unpublished modules: {' '.join(unpublished)}")
+        _print_warning(f"Unpublished split branches: {' '.join(unpublished)}")
+
+    # F2.9b: explicit next-action guidance (read-only; --status never fails closed).
+    print()
+    _print_info("Next actions:")
+    if not is_auth:
+        # NOTE: keep --status output free of the lowercase substring
+        # "not release-authoritative"; the read-only status test asserts that
+        # substring is absent so --status is never mistaken for the F2.9a gate.
+        _print_info("  1. Tag HEAD to match VERSION so the source is release-authoritative.")
+        _print_info("  2. Re-run 'make publish-module MODULE=<name>' or '--publish-outdated'.")
+    else:
+        _print_info("  Run '--publish-outdated' to publish missing/outdated split branches.")
 
 
 def _publish_outdated(clean: bool) -> None:
     """Publish only modules with missing or outdated split branches."""
+    # F2.9a: Gate mutating flows on release-authoritative source state
+    # This must fire BEFORE the uncommitted changes prompt so the gate
+    # error is clear and does not get masked by interactive prompts.
+    _check_release_authoritative()
+
     if not _confirm_uncommitted_changes():
         return
 
@@ -386,6 +485,11 @@ def main() -> None:
             for name in _list_modules():
                 print(f"  - {name}")
             sys.exit(1)
+
+        # F2.9a: Gate mutating flows on release-authoritative source state
+        # This must fire BEFORE the uncommitted changes prompt so the gate
+        # error is clear and does not get masked by interactive prompts.
+        _check_release_authoritative()
 
         if not _confirm_uncommitted_changes():
             return
