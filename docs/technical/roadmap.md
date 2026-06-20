@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10b. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅. **F11.10a ✅** (historical nullable-contract preserved in `quickscale_modules/crm/tests/test_migrations.py`; `TestOrganizationFieldNullable` removed from `test_models.py`; Phase 3 checkpoint — 311 CRM tests green). **F11.10 groundwork committed** (dual-manager contract, admin org guardrails, serializer/view/service/test hardening, xfail removal — 321 tests green). Still pending: `0006` NOT NULL migration does not exist yet; model `organization` FKs remain `null=True, blank=True, on_delete=SET_NULL`. Delete policy resolved (PROTECT). Test-ownership assignments for post-`0006` validation and the historical-test split remain open. M3 cannot close out until F11.10b–F11.10e complete, validated, and merged. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **Next:** Tier 2 `F12.1d`. |
+| M8 | 3 | F12.1–F12.3b | 🟡 | M5 merged ✅; F12.1 split into F12.1a–e (Tier 1–2), **unblocked** (D-F12.1-LEDGER → Option A; no-back-compat/fail-hard). **F12.1a ✅** (ApplyStep model + 15-step registry). **F12.1b ✅** (recovery-ledger schema + fail-hard loader in core). **F12.1c ✅** (registry-driven execution, Tier 2). **F12.1c-closeout ✅** (exact byte-identical parity proven for all 15 callers; CR-F12.1C-004 resolved). **F12.1d groundwork exists** in dirty local `wt-track3` state — CR-F12.1D-001 ✅ (local only), CR-F12.1D-002 ❌ (still blocking). **No mergeable commit yet** — `wt-track3` (at `61b4a9e`) is behind `v87` (at `ee3555e`) by 1 commit with dirty local F12.1d code (`git rev-list --left-right --count v87...wt-track3` = `1 0`). **Next:** Tier 1 `F12.1d1` (CR-F12.1D-002) → Tier 1 `F12.1d2` (commit+merge). |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -79,16 +79,16 @@ git merge --no-ff wt-track{N}
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F12.1a ✅ (ApplyStep model + registry), F12.1b ✅ (ledger schema + loader), F12.1c ✅ (registry-driven execution), F12.1c-closeout ✅ (exact byte-identical parity proven; CR-F12.1C-004 resolved). **Next:** Tier 2 `F12.1d`.
+**Status:** 🟡 In progress — F12.1a ✅, F12.1b ✅, F12.1c ✅, F12.1c-closeout ✅ (CR-F12.1C-004 resolved). **F12.1d groundwork** exists locally in dirty `wt-track3` state (green validation, CR-F12.1D-001 ✅ locally, CR-F12.1D-002 ❌ still blocking). **Phase split:** Tier 1 `F12.1d1` (CR-F12.1D-002 fix) → Tier 1 `F12.1d2` (committed closeout + merge readiness). **No mergeable commit yet** — `wt-track3` (at `61b4a9e`) is behind `v87` (at `ee3555e`) by 1 commit with dirty local F12.1d code.
 
 **✅ Decision D-F12.1-LEDGER resolved → Option A:** enrich the existing `.quickscale/apply-recovery.yml` in place as the single recovery ledger. **Owner directive:** no backward compatibility, no fallback, fail hard — this is an intentional breaking change. (Full decision + binding constraints under Finding 12 / Phase F12.1.)
 
-Open / Next (no remaining non-evidence blockers — implement in order):
+Open / Next (implement in order; F12.1d split into Tier 1 sub-phases due to blocking CR-F12.1D-002):
 - **F12.1a** ✅ (`ApplyStep` model + 15-step registry in core).
 - **F12.1b** ✅ (recovery-ledger schema + fail-hard loader in core; `apply/ledger.py`).
 - **F12.1c** ✅ (registry-driven step execution, Tier 2) — 14 ad-hoc `failed_step` literals replaced with `_FAILED_STEP` dict sourced from `APPLY_STEPS`; sentinel `"apply recovery state persistence"` preserved as literal.
 - **F12.1c-closeout** ✅ (exact byte-identical full-summary equality proven for all 15 callers; CR-F12.1C-004 resolved).
-- **F12.1d** — single authoritative file + consumer parity, Tier 2; wires the F12.1b ledger into commands. **Next.** → **F12.1e** (fold git-index snapshot, Tier 2). Then **F12.2** (consistent fail policy, Tier 2), **F12.3a** (pre-embed recovery coverage, Tier 1), **F12.3b** (Railway rollback/resume, Tier 2).
+- **F12.1d (split)** — original Tier 2 slice split into Tier 1 `F12.1d1` (CR-F12.1D-002 fix) + Tier 1 `F12.1d2` (committed closeout + merge readiness) . **Next:** see sub-phases under Finding 12 below. → **F12.1e** (fold git-index snapshot, Tier 2). Then **F12.2** (consistent fail policy, Tier 2), **F12.3a** (pre-embed recovery coverage, Tier 1), **F12.3b** (Railway rollback/resume, Tier 2).
 
 ---
 
@@ -102,7 +102,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a-b ✅; F12.1c-closeout ✅ (CR-F12.1C-004 resolved); next `F12.1d` |
+| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1a ✅ F12.1b ✅ F12.1c ✅ F12.1c-closeout ✅ (CR-F12.1C-004 resolved); F12.1d groundwork locally dirty; next Tier 1 `F12.1d1` (CR-F12.1D-002) |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
 | 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
@@ -244,12 +244,12 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Why still open:** `apply` performs an ordered sequence of irreversible cross-system side effects — filesystem generation, `git subtree add`, `pyproject.toml`/lock edits, `poetry install`, Django migrations, Docker, Railway — with an explicit no-rollback contract and inconsistent fail policy. Each new step bolted in widens partial-failure states with no rollback abstraction.
 
-**Track:** 3 | **Worktree:** `quickscale-wt-track3` (fresh from v87) | **Merges as:** M8
+**Track:** 3 | **Worktree:** `quickscale-wt-track3` (local dirty — F12.1d groundwork, green validation evidence, none committed) | **Merges as:** M8
 **Dependencies:** M5 merged.
 
 **Phase F12.1 — Saga step model + recovery ledger** _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
 
-**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅; F12.1c ✅; F12.1c-closeout ✅ (CR-F12.1C-004 resolved). D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
+**Status:** 🟡 In progress — F12.1a ✅ F12.1b ✅; F12.1c ✅; F12.1c-closeout ✅ (CR-F12.1C-004 resolved). **F12.1d groundwork** in dirty local `wt-track3`: CR-F12.1D-001 ✅ resolved locally; CR-F12.1D-002 ❌ still blocking (managed_files fail-hard policy). **Phase split:** Tier 1 `F12.1d1` → Tier 1 `F12.1d2`. **No mergeable commit — `wt-track3` (at `61b4a9e`) is behind `v87` (at `ee3555e`) by 1 commit with dirty local F12.1d code.** D-F12.1-LEDGER → Option A (binding). The original two checklist items are decomposed below:
 - [x] Model `apply` as an explicit ordered list of steps, each declaring an apply and a compensating/resume action. → F12.1a + F12.1c
 - [ ] Consolidate progress into a single recovery ledger; replace ad-hoc `apply-recovery.yml`/git-index snapshot handling. → F12.1b + F12.1d + F12.1e
 
@@ -283,10 +283,10 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Fail hard: a present-but-malformed/inconsistent ledger raises (no silent degradation, no fallback). Optional diagnostic fields absent on a fresh write is fine; a structurally invalid ledger is not.
 - [x] Tests: ledger present → parsed; ledger absent → None; malformed/inconsistent ledger → raises; diagnostic step-progress round-trips.
 
-**Advisory findings carried to F12.1d** (none blocking; confirm when the ledger becomes the single authoritative channel):
-- Per-entry `managed_files` corruption is silently skipped (parity with `StateManager.load()`, `ledger.py:430-451`); decide whether to keep that tolerance or fail hard once the ledger is authoritative.
-- `version` is coerced via `str(version)` (`ledger.py:454`) vs the canonical reader's pass-through — harmless divergence.
-- Dict-keyed `step_progress` lets an entry-level `step_id` override the dict key (`ledger.py:488`); cannot inject an invalid id but could retarget an entry — consider forbidding entry-level `step_id` in dict-keyed form.
+**Advisory findings carried to F12.1d sub-phases** (address per sub-phase ownership):
+- [F12.1d1] Top-level `managed_files` type guard missing: when `managed_files` is present but has a non-list/non-mapping type, the recovery ledger silently skips the entry instead of failing hard (parity with `StateManager.load()`, `ledger.py:430-451`). The no-back-compat / fail-hard directive already mandates fail-hard — implement the guard. → **CR-F12.1D-002** (Tier 1).
+- [Post-closeout follow-up] `version` is coerced via `str(version)` (`ledger.py:454`) vs the canonical reader's pass-through — harmless divergence.
+- [Post-closeout follow-up] Dict-keyed `step_progress` lets an entry-level `step_id` override the dict key (`ledger.py:488`); cannot inject an invalid id but could retarget an entry — consider forbidding entry-level `step_id` in dict-keyed form.
 
 **Phase F12.1c — Drive `_execute_apply_steps_locked` from the registry** _(M8)_ _(Adaptive tier: 2)_
 **Dependencies:** F12.1a. | **Status:** ✅ Complete.
@@ -300,21 +300,50 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Verify the 3 authoritative-state-persistence callers and the sentinel also achieve exact byte-identical coverage.
 - [x] All 15 caller branches now proven with exact byte-identical coverage.
 
-**Next:** Tier 2 `F12.1d` → `F12.1e` → `F12.2` → `F12.3a` → `F12.3b`.
+**Next:** Tier 1 `F12.1d1` → Tier 1 `F12.1d2` → `F12.1e` → `F12.2` → `F12.3a` → `F12.3b`.
 
 **Binding constraints carried forward:** D-F12.1-LEDGER Option A (enrich `apply-recovery.yml` in place) and the **no-back-compat / fail-hard directive** remain binding for all subsequent F12.1 sub-phases.
 
 
-**Phase F12.1d — Single authoritative `apply-recovery.yml` write/read + consumer parity (fail hard)** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1b + F12.1c + F12.1c-closeout. **Status:** ⬜ **Next.** Riskiest slice.
-- [ ] Make the enriched `apply-recovery.yml` the single authoritative recovery channel: ensure apply (`_abort_after_post_embed_failure` `2473`, `_finalize_apply_state` `2502`, `_refresh_context_after_lock`), the `remove_command` **write and clear** paths (`_update_apply_recovery_state`, `_clear_apply_recovery_state`), and all readers (apply `2040-2042`, `module_commands` `971-985`, remove read paths) all read/write/clear that one file. Collapse the secondary recovery channel into it.
-- [ ] No backward compatibility / no fallback: do not preserve a legacy read path; a missing/malformed ledger fails hard. Breaking change is accepted.
-- [ ] Preserve presence-gated idempotent resume at every site (`2417`, `2616`, `2632-2634`, `2679`, `2690`, `2966`); `_merge_apply_recovery_state` membership semantics unchanged.
-- [ ] Atomic write keeps the existing `apply-recovery.tmp` temp path (distinct from `state.yml` `.tmp`).
-- [ ] Tests: presence-gated idempotent resume; consumer parity across apply/remove/module-update (all agree on the single file); malformed ledger fails hard; dirty `apply-recovery*` file does not abort pre-embed.
+> **🔔 F12.1d local handoff checkpoint (2026-06-20)**
+>
+> **`wt-track3` dirty local state contains:**
+> - F12.1d consumer-parity groundwork (writes, clears, readers for the single authoritative `apply-recovery.yml` channel)
+> - CR-F12.1D-001 ✅ resolved (local only — not committed)
+> - Targeted F12.1d coverage + full `quickscale_core` and `quickscale_cli` suites ran green twice in this dirty state
+>
+> **Still blocking:**
+> - CR-F12.1D-002 ❌ — missing top-level `managed_files` type guard: when `managed_files` is present but has a non-list/non-mapping type, the recovery ledger silently skips the entry instead of failing hard (contradicts the binding no-back-compat / fail-hard directive). The guard must be implemented, not debated.
+>
+> **Mergeability snapshot:**
+> - `v87` = `ee3555e` (one commit ahead — Track 1 groundwork commit landed)
+> - `wt-track3` = `61b4a9e` (behind `v87` by 1 commit, dirty with 6 uncommitted F12.1d files)
+> - `git rev-list --left-right --count v87...wt-track3` = `1 0` — `v87` is ahead, `wt-track3` is behind
+> - **No mergeable Track 3 commit exists yet** — the F12.1d groundwork must be committed, closeout-validated, and merged to `v87` before downstream phases can build on it.
+> - **Next-handoff procedure:** preserve the dirty local work (commit or stash), then `git merge v87` on `wt-track3` to catch up before continuing implementation.
+>
+> **Next-time decisions/actions:**
+> 1. **F12.1d1** (Tier 1) — resolve CR-F12.1D-002: add a top-level `managed_files` type guard in the recovery ledger that fails hard when `managed_files` is present but has a non-list/non-mapping type. The fail-hard policy is already mandated by the D-F12.1-LEDGER no-back-compat directive; no tolerance option remains open.
+> 2. **F12.1d2** (Tier 1) — committed closeout + merge readiness: commit the F12.1d groundwork (including resolved CR-F12.1D-001), run full closeout validation, sync from `v87`, merge `wt-track3` → `v87`, then update roadmap/changelog.
+
+
+**Phase F12.1d1 — Implement top-level `managed_files` type guard (fail hard)** _(M8)_ _(Adaptive tier: 1)_
+**Dependencies:** F12.1b + F12.1c + F12.1c-closeout. | **Status:** ⬜ **Next (Tier 1 blocker).**
+- [ ] Implement a top-level `managed_files` type guard in `ledger.py`: when `managed_files` is present but has a non-list/non-mapping type, fail hard (raise) instead of silently skipping. The D-F12.1-LEDGER no-back-compat / fail-hard directive already mandates this — no tolerance option remains open.
+- [ ] Tests: malformed top-level `managed_files` entry fails hard; existing ledger tests remain green; per-site consumer parity coverage for the guard path.
+
+**Phase F12.1d2 — Commit closeout + merge readiness** _(M8)_ _(Adaptive tier: 1)_
+**Dependencies:** F12.1d1. | **Status:** ⬜ (after F12.1d1).
+- [ ] Commit all F12.1d groundwork from dirty `wt-track3` state (including resolved CR-F12.1D-001).
+- [ ] Before syncing, preserve any remaining dirty work (commit or stash) so local changes are not lost.
+- [ ] Run full closeout validation: targeted F12.1d coverage + `quickscale_core` + `quickscale_cli` suites.
+- [ ] Sync: `git merge v87` on `wt-track3` (v87 is 1 commit ahead at `ee3555e`), resolve any conflicts.
+- [ ] Merge: `git checkout v87 && git merge --no-ff wt-track3`.
+- [ ] Update roadmap / changelog with validated post-merge evidence.
+
 
 **Phase F12.1e — Fold git-index snapshot into the `apply-recovery.yml` checkpoint** _(M8)_ _(Adaptive tier: 2)_
-**Dependencies:** F12.1d. | **Status:** ⬜ Ready after F12.1d.
+**Dependencies:** F12.1d2 complete. | **Status:** ⬜ Ready after F12.1d complete.
 - [ ] Record the pre-commit git-index checkpoint reference (capture `183-219`, restore `222-252`, orchestrate `270-293`) in `apply-recovery.yml` so progress is consolidated into the single ledger; keep `git write-tree`/`read-tree --reset` mechanics byte-identical. `_is_transient_apply_recovery_path` must still recognize `apply-recovery.yml`.
 - [ ] Tests: git-index checkpoint/restore tests green; `apply-recovery.yml` recognition assertion; full `make test` integration gate.
 
