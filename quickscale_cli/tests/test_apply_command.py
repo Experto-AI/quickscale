@@ -1185,6 +1185,30 @@ class TestApplyDriftDetection:
         captured = capsys.readouterr().out
         assert "Module version drift" not in captured
 
+    def test_warn_version_drift_for_apply_tolerates_shape_invalid_config(
+        self, tmp_path, capsys
+    ):
+        """A shape-invalid config.yml must warn and return [] rather than raise."""
+        from quickscale_cli.commands.apply_command import (
+            _warn_version_drift_for_apply,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+        qs_dir = project / ".quickscale"
+        qs_dir.mkdir()
+        # Write a config.yml that is valid YAML but has an invalid shape
+        # (e.g. a bare scalar instead of a mapping) so ConfigError is raised.
+        (qs_dir / "config.yml").write_text("- not_a_mapping\n")
+
+        config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
+
+        drift = _warn_version_drift_for_apply(project, config)
+
+        assert drift == []
+        captured = capsys.readouterr().out
+        assert "Could not read managed state files" in captured
+
     def test_capture_managed_file_hashes_writes_ledger(self, tmp_path, capsys):
         """Apply should capture hashes into consolidated state managed_files."""
         from quickscale_cli.commands.apply_command import (

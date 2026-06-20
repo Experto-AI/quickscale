@@ -194,6 +194,46 @@ class TestLoadConfigMalformed:
         with pytest.raises(PermissionError):
             load_config(tmp_path)
 
+    # ------------------------------------------------------------------
+    # CR-F12.2-001: shape-invalid YAML must raise ConfigError
+    # ------------------------------------------------------------------
+
+    def test_load_config_raises_config_error_on_none_data(self, tmp_path: Path) -> None:
+        """An empty YAML file (yaml.safe_load returns None) raises ConfigError."""
+        config_dir = tmp_path / ".quickscale"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text("")
+
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(tmp_path)
+
+        assert "config.yml" in str(excinfo.value)
+        assert "invalid config structure" in str(excinfo.value).lower()
+
+    def test_load_config_raises_config_error_on_list_yaml(self, tmp_path: Path) -> None:
+        """A YAML list (not a dict) raises ConfigError, not AttributeError."""
+        config_dir = tmp_path / ".quickscale"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text("- item1\n- item2\n")
+
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(tmp_path)
+
+        assert "config.yml" in str(excinfo.value)
+
+    def test_load_config_raises_config_error_on_missing_default_remote(
+        self, tmp_path: Path
+    ) -> None:
+        """Valid YAML dict missing required 'default_remote' key raises ConfigError."""
+        config_dir = tmp_path / ".quickscale"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text("modules: {}\n")
+
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(tmp_path)
+
+        assert "config.yml" in str(excinfo.value)
+
 
 class TestSaveConfig:
     """Tests for save_config function"""

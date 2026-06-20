@@ -102,6 +102,7 @@ from quickscale_core.advisory_lock import (
     AdvisoryLockContentionError,
 )
 from quickscale_core.project_state import (
+    ConfigError,
     DEFAULT_MANAGED_WIRING_PATHS,
     ProjectStateManager,
     VersionDriftWarning,
@@ -747,7 +748,7 @@ def _warn_version_drift_for_apply(
     try:
         state = state_manager.load_state()
         config = state_manager.load_config()
-    except StateError as error:
+    except (StateError, ConfigError) as error:
         click.secho(
             f"⚠️  Could not read managed state files for drift check: {error}",
             fg="yellow",
@@ -1948,13 +1949,19 @@ def _populate_consolidated_tracking_from_legacy(
     :class:`ModuleState` fields so that ``state.yml`` is self-contained
     after apply.  Modules already carrying consolidated tracking are
     left untouched.
+
+    F12.2: fail-closed — ``ConfigError`` / ``OSError`` propagate instead
+    of being silently swallowed.  ``load_config`` returns a default empty
+    config when the file does not exist, so this is a no-op for
+    config-only / non-consolidated projects.
     """
     from quickscale_core.config import load_config as _load_legacy_config
 
-    try:
-        legacy_config = _load_legacy_config(project_path)
-    except Exception:
-        return
+    # load_config returns an empty default ModuleConfig when the file does
+    # not exist, so a missing config.yml is a safe no-op.  Malformed or
+    # unreadable legacy config propagates as ConfigError / OSError
+    # (fail-close per F12.2).
+    legacy_config = _load_legacy_config(project_path)
 
     for module_name, module_info in legacy_config.modules.items():
         module_state = state.modules.get(module_name)
@@ -2160,7 +2167,14 @@ def _save_project_state(
     state_snapshot: QuickScaleState | None = None,
     provenance_payloads: dict[str, ModuleEmbedProvenance] | None = None,
 ) -> bool:
-    """Save project state to .quickscale/state.yml."""
+    """Save project state to .quickscale/state.yml.
+
+    F12.2: helper-level fail-open (catches all exceptions, returns
+    ``False``).  This is a deliberate pattern so that callers can decide
+    the correct recovery action.  All direct callers handle the ``False``
+    return by persisting recovery state and/or aborting with a clear
+    message — the effective behavior is fail-closed.
+    """
     try:
         state_manager = StateManager(output_path)
         new_state = state_snapshot or _build_project_state_snapshot(
