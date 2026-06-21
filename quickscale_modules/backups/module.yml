@@ -81,6 +81,7 @@ config:
 dependencies:
   - django-storages>=1.14.6
   - boto3>=1.40.46
+  - quickscale-core>=0.86.0
 
 django_apps:
   - quickscale_modules_backups

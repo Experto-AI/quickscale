@@ -72,6 +72,10 @@ from quickscale_cli.utils.module_dependency_sync import (
     sync_project_module_dependencies,
 )
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
+from quickscale_cli.utils.railway_utils import (
+    deploy_railway_service,
+    get_app_service_name,
+)
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     ModuleConfig,
@@ -2523,6 +2527,7 @@ def _print_apply_failure_summary(failed_step: str, reason: str) -> None:
     click.echo("  • poetry install")
     click.echo("  • migrations")
     click.echo("  • docker start")
+    click.echo("  • railway deploy")
     click.echo("  • success completion output")
 
 
@@ -2691,9 +2696,6 @@ def _execute_apply_steps(
     click.echo("=" * 50)
 
     has_pending_post_embed_recovery = _context_has_pending_post_embed_recovery(ctx)
-    existing_project = _context_had_existing_state(ctx) or (
-        ctx.existing_state is not None and not has_pending_post_embed_recovery
-    )
 
     # Surface module version drift between state and legacy config early.
     # Drift is non-fatal: apply reconciles the two at finalize time.
@@ -2747,7 +2749,6 @@ def _execute_apply_steps(
             no_modules,
             verbose_docker,
             project_generated=project_generated,
-            existing_project=existing_project,
             has_pending_post_embed_recovery=has_pending_post_embed_recovery,
         )
     finally:
@@ -2762,7 +2763,6 @@ def _execute_apply_steps_locked(
     verbose_docker: bool = False,
     *,
     project_generated: bool = False,
-    existing_project: bool = False,
     has_pending_post_embed_recovery: bool = False,
 ) -> None:
     """Execute the apply steps while holding the advisory lock."""
@@ -2909,7 +2909,12 @@ def _execute_apply_steps_locked(
         )
 
     should_auto_start_docker = not no_docker and ctx.qs_config.docker.start
-    should_run_local_migrations = existing_project and not ctx.qs_config.docker.start
+    # When --no-docker overrides a Docker-first project, local migrations must
+    # still run so that Railway-linked checkouts have a migration path before
+    # the deploy trigger fires (CR-F12.3B-002).
+    should_run_local_migrations = (ctx.existing_state is not None) and (
+        not ctx.qs_config.docker.start or no_docker
+    )
 
     # Fresh scaffolds without Docker auto-start stop after dependency install and
     # hand database setup to the manual next steps. Existing projects still run
@@ -2962,6 +2967,42 @@ def _execute_apply_steps_locked(
                     reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
                 )
 
+    # Railway deploy (if project is Railway-linked)
+    # The .railway directory is created by `railway init` when the project
+    # is linked to a Railway project, making it the correct gate.
+    # railway.json alone is not sufficient — the ProjectGenerator always
+    # creates one from template.
+    if (ctx.output_path / ".railway").is_dir():
+        service_name = get_app_service_name(ctx.qs_config.project.slug)
+        try:
+            result = deploy_railway_service(
+                project_path=ctx.output_path,
+                service_name=service_name,
+            )
+        except (FileNotFoundError, TimeoutError) as error:
+            _abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["railway deploy"],
+                reason=f"Railway CLI error: {error}",
+            )
+
+        if result.returncode != 0:
+            error_detail = (result.stderr or result.stdout or "").strip()
+            reason = (
+                error_detail or "Railway deploy command returned non-zero exit code"
+            )
+            _abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["railway deploy"],
+                reason=reason,
+            )
+
+        click.secho("✅ Railway deploy triggered", fg="green")
+
     # Save state
     _finalize_apply_state(ctx, post_embed_state, checkpoint_tree_id=checkpoint_tree_id)
 
@@ -2971,7 +3012,7 @@ def _execute_apply_steps_locked(
         ctx.qs_config,
         no_docker,
         docker_started,
-        existing_project=existing_project,
+        existing_project=ctx.existing_state is not None,
     )
 
 
@@ -3023,14 +3064,21 @@ def apply(
     \b
     Execution Order:
       1. Validate configuration
-      2. Generate project
-      3. Initialize git + initial commit
-      4. Embed modules (if configured, fail-fast on required module failure)
-      5. Regenerate managed module wiring files
-            6. Refresh poetry.lock + run poetry install
-      7. Start Docker (if configured)
-            8. Run migrations when Docker auto-start is enabled or when applying
-                 to an existing project without Docker auto-start
+      2. Generate project (new projects only)
+      3. Initialize git + initial commit (new projects only)
+      4. Embed modules (fail-fast on required module failure)
+      5. Snapshot post-embed state for recovery
+      6. Regenerate managed module wiring
+      7. Capture managed file hashes
+      8. Harden backups gitignore + sync env-example files
+      9. Sync embedded-module Poetry dependencies
+      10. Refresh poetry.lock + install + run local migrations
+      11. Apply mutable config changes
+      12. Start Docker (if configured)
+      13. Run database migrations in Docker (if Docker auto-start)
+      14. Trigger Railway deploy (if Railway-linked)
+      15. Finalize authoritative state
+      16. Display next steps
     """
     # Prepare context
     ctx = _prepare_apply_context(Path(config))

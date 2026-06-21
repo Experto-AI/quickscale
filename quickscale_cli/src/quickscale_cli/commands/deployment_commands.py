@@ -1,6 +1,7 @@
 """Deployment commands for production platforms."""
 
 import sys
+from pathlib import Path
 
 import click
 
@@ -8,6 +9,7 @@ from quickscale_cli.utils.railway_utils import (
     check_poetry_lock_consistency,
     check_railway_cli_version,
     check_uncommitted_changes,
+    deploy_railway_service,
     fix_poetry_lock,
     generate_django_secret_key,
     generate_railway_domain,
@@ -350,8 +352,10 @@ def _deploy_app_step(app_service: str) -> None:
     click.echo("This may take a few minutes...")
 
     try:
-        result = run_railway_command(
-            ["up", "--service", app_service, "--detach"], timeout=60
+        result = deploy_railway_service(
+            project_path=Path.cwd(),
+            service_name=app_service,
+            timeout=60,
         )
 
         if result.returncode != 0:

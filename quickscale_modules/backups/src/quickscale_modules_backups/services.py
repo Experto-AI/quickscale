@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
 from enum import StrEnum
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, replace
@@ -18,8 +17,7 @@ from importlib import import_module
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
-from typing import TYPE_CHECKING, Any, Callable, Protocol, Sequence, cast
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any, Callable, Protocol, cast
 
 import django
 from django.apps import apps
@@ -34,6 +32,35 @@ from quickscale_modules_backups.models import (
     BackupPolicy,
     BackupSnapshot,
 )
+from quickscale_core.dr_engine.primitives import (
+    BackupError,
+    BackupConfigurationError,
+    ShellCommandRunner,
+    _build_pg_dump_command,  # noqa: F401 - re-exported for helper parity/tests
+    _build_pg_restore_command,
+    _build_snapshot_child_descriptor,
+    _compute_sha256,
+    _database_engine_family,
+    _dump_postgresql_database,
+    _expected_backup_format_for_engine,
+    _extract_any_major_version,
+    _extract_leading_major_version,
+    _get_postgresql_tool_version,
+    _mint_snapshot_id,
+    _postgresql_18_client_tooling_guidance,
+    _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC,
+    _relative_snapshot_child_path,
+    _REQUIRED_POSTGRESQL_MAJOR,
+    _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES,
+    _run_shell_command,
+    _SNAPSHOTS_DIRECTORY_NAME,
+    _SNAPSHOT_DATABASE_DIRECTORY_NAME,
+    _ENV_VAR_MANIFEST_FILENAME,
+    _MEDIA_SYNC_MANIFEST_FILENAME,
+    _PROMOTION_VERIFICATION_FILENAME,
+    _RELEASE_METADATA_FILENAME,
+    _write_json_file,
+)
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -44,43 +71,8 @@ _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID
 _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
     "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
 )
-_REQUIRED_POSTGRESQL_MAJOR = 18
-_LEADING_MAJOR_VERSION_PATTERN = re.compile(r"^\s*(\d+)")
-_ANY_MAJOR_VERSION_PATTERN = re.compile(r"(\d+)")
-_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC = b"PGDMP"
-_SNAPSHOTS_DIRECTORY_NAME = "snapshots"
-_SNAPSHOT_DATABASE_DIRECTORY_NAME = "database"
-_MEDIA_SYNC_MANIFEST_FILENAME = "media-sync-manifest.json"
-_ENV_VAR_MANIFEST_FILENAME = "env-var-manifest.json"
-_RELEASE_METADATA_FILENAME = "release-metadata.json"
-_PROMOTION_VERIFICATION_FILENAME = "promotion-verification.json"
-_REQUIRED_SNAPSHOT_SIDECAR_FILENAMES = (
-    _MEDIA_SYNC_MANIFEST_FILENAME,
-    _ENV_VAR_MANIFEST_FILENAME,
-    _RELEASE_METADATA_FILENAME,
-    _PROMOTION_VERIFICATION_FILENAME,
-)
 _DR_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"
 _DR_TARGET_ROUTE_KIND_KEY = "ROUTE_KIND"
-
-
-def _postgresql_18_client_tooling_guidance() -> str:
-    """Return operator guidance for the PostgreSQL 18 client-tooling contract."""
-    return (
-        " Install PostgreSQL 18 client tooling via the PGDG apt repository plus "
-        "'postgresql-client-18' in Docker/CI runtimes, or run the command in an "
-        "environment that already provides PostgreSQL 18 pg_dump/pg_restore. "
-        "Existing generated projects must adopt those Docker/CI/E2E file changes "
-        "manually because quickscale apply does not rewrite user-owned files."
-    )
-
-
-class BackupError(Exception):
-    """Base error for backup operations."""
-
-
-class BackupConfigurationError(BackupError):
-    """Raised when backup policy settings are invalid for the requested operation."""
 
 
 class BackupLockError(BackupError):
@@ -89,17 +81,6 @@ class BackupLockError(BackupError):
 
 class BackupRestoreBlocked(BackupError):
     """Raised when destructive restore execution is intentionally blocked."""
-
-
-class ShellCommandRunner(Protocol):
-    """Protocol for shell-based backup and restore runners."""
-
-    def __call__(
-        self,
-        command: Sequence[str],
-        *,
-        env: dict[str, str] | None = None,
-    ) -> None: ...
 
 
 class RemoteUploader(Protocol):
@@ -414,11 +395,6 @@ def _get_source_environment() -> str:
     return os.getenv("QUICKSCALE_ENVIRONMENT", "local").strip() or "local"
 
 
-def _mint_snapshot_id() -> str:
-    """Return an opaque stable identifier for one stored snapshot."""
-    return uuid4().hex
-
-
 def _build_snapshot_local_root(
     policy: BackupPolicySnapshot,
     snapshot_id: str,
@@ -447,43 +423,6 @@ def _replace_policy_remote_prefix(
     return replace(policy, remote_prefix=remote_prefix)
 
 
-def _relative_snapshot_child_path(snapshot_root: Path, child_path: Path) -> str:
-    """Return a stable snapshot-relative path for one child file."""
-    return child_path.relative_to(snapshot_root).as_posix()
-
-
-def _build_snapshot_child_descriptor(
-    *,
-    kind: str,
-    status: str,
-    relative_path: str,
-    local_path: Path | None = None,
-    remote_key: str = "",
-    error: str = "",
-    size_bytes: int | None = None,
-    checksum_sha256: str = "",
-    metadata: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Build JSON metadata describing one child stored under a snapshot root."""
-    descriptor: dict[str, Any] = {
-        "kind": kind,
-        "status": status,
-        "relative_path": relative_path,
-        "local_path": str(local_path) if local_path is not None else "",
-    }
-    if remote_key:
-        descriptor["remote_key"] = remote_key
-    if error:
-        descriptor["error"] = error
-    if size_bytes is not None:
-        descriptor["size_bytes"] = size_bytes
-    if checksum_sha256:
-        descriptor["checksum_sha256"] = checksum_sha256
-    if metadata:
-        descriptor["metadata"] = metadata
-    return descriptor
-
-
 def _build_snapshot_database_descriptor(
     snapshot: BackupSnapshot,
     artifact: BackupArtifact,
@@ -507,15 +446,6 @@ def _build_snapshot_database_descriptor(
         size_bytes=artifact.size_bytes,
         checksum_sha256=artifact.checksum_sha256,
         metadata={"backup_format": artifact.backup_format},
-    )
-
-
-def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
-    """Write a JSON payload with deterministic formatting."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
 
 
@@ -3549,32 +3479,6 @@ def _get_database_server_version(engine: str) -> str | None:
     return database_server_version or None
 
 
-def _extract_leading_major_version(version_text: str | None) -> int | None:
-    """Return the leading major version number from a server version string."""
-    if not version_text:
-        return None
-
-    match = _LEADING_MAJOR_VERSION_PATTERN.match(version_text)
-    if match is None:
-        return None
-
-    major = int(match.group(1))
-    return major if major > 0 else None
-
-
-def _extract_any_major_version(version_text: str | None) -> int | None:
-    """Return the first major version number found in a tool version string."""
-    if not version_text:
-        return None
-
-    match = _ANY_MAJOR_VERSION_PATTERN.search(version_text)
-    if match is None:
-        return None
-
-    major = int(match.group(1))
-    return major if major > 0 else None
-
-
 def _require_postgresql_18_contract(
     *,
     database_engine: str,
@@ -3627,39 +3531,6 @@ def _require_postgresql_18_contract(
         )
 
     return database_server_version, database_server_major, tool_version, tool_major
-
-
-def _get_postgresql_tool_version(executable: str) -> str:
-    """Return the installed PostgreSQL client-tool version string."""
-    guidance = (
-        _postgresql_18_client_tooling_guidance()
-        if executable in {"pg_dump", "pg_restore"}
-        else ""
-    )
-    try:
-        result = subprocess.run(
-            [executable, "--version"],
-            capture_output=True,
-            check=False,
-            text=True,
-            env=os.environ.copy(),
-        )
-    except FileNotFoundError as exc:
-        raise _missing_executable_backup_error(executable) from exc
-
-    if result.returncode != 0:
-        stderr = result.stderr.strip() or result.stdout.strip() or "unknown error"
-        raise BackupError(
-            f"Unable to determine {executable} version: {stderr}{guidance}"
-        )
-
-    output = result.stdout.strip() or result.stderr.strip()
-    if not output:
-        raise BackupError(
-            f"Unable to determine {executable} version: command returned no output."
-            + guidance
-        )
-    return output
 
 
 def _database_server_version_query(engine: str) -> str | None:
@@ -3962,23 +3833,6 @@ def _ensure_postgresql_18_restore_runtime(current_engine: str) -> None:
         raise BackupRestoreBlocked(str(exc)) from exc
 
 
-def _database_engine_family(engine: str) -> str:
-    """Normalize database engines into restore compatibility families."""
-    normalized_engine = engine.strip().lower()
-    if "postgresql" in normalized_engine:
-        return "postgresql"
-    if "sqlite" in normalized_engine:
-        return "sqlite"
-    return normalized_engine
-
-
-def _expected_backup_format_for_engine(engine: str) -> str:
-    """Return the backup format QuickScale expects for the current engine."""
-    if _database_engine_family(engine) == "postgresql":
-        return "pg_dump_custom"
-    return "json"
-
-
 def _collect_module_versions() -> dict[str, str]:
     versions: dict[str, str] = {}
     for app_config in apps.get_app_configs():
@@ -4000,117 +3854,10 @@ def _get_project_slug() -> str:
     return settings.ROOT_URLCONF.split(".", maxsplit=1)[0]
 
 
-def _compute_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 64), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _dump_database_as_json(local_path: Path) -> None:
     buffer = StringIO()
     call_command("dumpdata", stdout=buffer)
     local_path.write_text(buffer.getvalue(), encoding="utf-8")
-
-
-def _dump_postgresql_database(
-    local_path: Path,
-    connection_settings: dict[str, Any],
-    *,
-    shell_runner: ShellCommandRunner | None = None,
-) -> None:
-    command, env = _build_pg_dump_command(local_path, connection_settings)
-    runner = shell_runner or _run_shell_command
-    runner(command, env=env)
-
-
-def _build_pg_dump_command(
-    local_path: Path,
-    connection_settings: dict[str, Any],
-) -> tuple[list[str], dict[str, str] | None]:
-    command = ["pg_dump", "--format=c", "--file", str(local_path)]
-    if host := str(connection_settings.get("HOST") or "").strip():
-        command.extend(["--host", host])
-    if port := str(connection_settings.get("PORT") or "").strip():
-        command.extend(["--port", port])
-    if user := str(connection_settings.get("USER") or "").strip():
-        command.extend(["--username", user])
-
-    database_name = str(connection_settings.get("NAME") or "").strip()
-    if not database_name:
-        raise BackupConfigurationError("DATABASES['default']['NAME'] is required")
-    command.append(database_name)
-
-    password = str(connection_settings.get("PASSWORD") or "").strip()
-    env = None
-    if password:
-        env = {"PGPASSWORD": password}
-    return command, env
-
-
-def _build_pg_restore_command(
-    local_path: Path,
-    connection_settings: dict[str, Any],
-) -> tuple[list[str], dict[str, str] | None]:
-    command = [
-        "pg_restore",
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-    ]
-    if host := str(connection_settings.get("HOST") or "").strip():
-        command.extend(["--host", host])
-    if port := str(connection_settings.get("PORT") or "").strip():
-        command.extend(["--port", port])
-    if user := str(connection_settings.get("USER") or "").strip():
-        command.extend(["--username", user])
-
-    database_name = str(connection_settings.get("NAME") or "").strip()
-    if not database_name:
-        raise BackupConfigurationError("DATABASES['default']['NAME'] is required")
-
-    command.extend(["--dbname", database_name, str(local_path)])
-    password = str(connection_settings.get("PASSWORD") or "").strip()
-    env = None
-    if password:
-        env = {"PGPASSWORD": password}
-    return command, env
-
-
-def _run_shell_command(
-    command: Sequence[str],
-    *,
-    env: dict[str, str] | None = None,
-) -> None:
-    command_env = os.environ.copy()
-    if env:
-        command_env.update(env)
-
-    try:
-        result = subprocess.run(
-            list(command),
-            capture_output=True,
-            check=False,
-            text=True,
-            env=command_env,
-        )
-    except FileNotFoundError as exc:
-        executable = str(command[0]).strip() if command else "command"
-        raise _missing_executable_backup_error(executable) from exc
-    if result.returncode != 0:
-        stderr = result.stderr.strip() or result.stdout.strip() or "unknown error"
-        raise BackupError(f"Command failed: {' '.join(command)} :: {stderr}")
-
-
-def _missing_executable_backup_error(executable: str) -> BackupError:
-    """Build a consistent missing-executable error for shell-backed operations."""
-    hint = ""
-    if executable in {"pg_dump", "pg_restore"}:
-        hint = _postgresql_18_client_tooling_guidance()
-    return BackupError(
-        f"Required executable '{executable}' is not installed in this runtime.{hint}"
-    )
 
 
 def _resolve_private_remote_credentials(

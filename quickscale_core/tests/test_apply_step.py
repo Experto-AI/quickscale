@@ -1,9 +1,9 @@
 """Tests for quickscale_core.apply — ApplyStep dataclass and APPLY_STEPS registry.
 
-Verifies that the registry satisfies the F12.1a roadmap acceptance criteria:
-* Exactly 15 steps in strict 1-based order.
+Verifies that the registry satisfies the F12.1a/F12.3b roadmap acceptance criteria:
+* Exactly 16 steps in strict 1-based order.
 * Verbatim ``failed_step_label`` values (including the three ``None`` entries).
-* ``step_id`` equals the verbatim label for the 12 labeled steps.
+* ``step_id`` equals the verbatim label for the 13 labeled steps.
 * ``ApplyStep`` is frozen/immutable.
 * All ``step_id`` values are unique.
 """
@@ -21,14 +21,18 @@ from quickscale_core.apply import APPLY_STEPS, ApplyStep, step_by_id
 
 
 class TestApplyStepsRegistryShape:
-    """The registry must contain exactly 15 steps in strict 1-based order."""
+    """The registry must contain exactly 16 steps in strict 1-based order.
 
-    def test_length_is_15(self) -> None:
-        assert len(APPLY_STEPS) == 15
+    F12.3b adds the railway deploy step (order 14) between database
+    migrations (13) and authoritative state persistence (now 15).
+    """
+
+    def test_length_is_16(self) -> None:
+        assert len(APPLY_STEPS) == 16
 
     def test_order_is_one_based_contiguous(self) -> None:
         orders = [step.order for step in APPLY_STEPS]
-        assert orders == list(range(1, 16))
+        assert orders == list(range(1, 17))
 
     def test_order_is_strictly_increasing(self) -> None:
         orders = [step.order for step in APPLY_STEPS]
@@ -60,8 +64,9 @@ _EXPECTED_LABELS: tuple[str | None, ...] = (
     None,  # step 11 — informational
     "docker startup",  # step 12
     "database migrations",  # step 13
-    "authoritative state persistence",  # step 14
-    None,  # step 15 — informational
+    "railway deploy",  # step 14 — F12.3b
+    "authoritative state persistence",  # step 15
+    None,  # step 16 — informational
 )
 
 
@@ -72,15 +77,15 @@ class TestApplyStepsLabels:
         actual = tuple(step.failed_step_label for step in APPLY_STEPS)
         assert actual == _EXPECTED_LABELS
 
-    def test_none_positions_are_4_11_15(self) -> None:
+    def test_none_positions_are_4_11_16(self) -> None:
         none_orders = [
             step.order for step in APPLY_STEPS if step.failed_step_label is None
         ]
-        assert none_orders == [4, 11, 15]
+        assert none_orders == [4, 11, 16]
 
-    def test_labeled_steps_count_is_12(self) -> None:
+    def test_labeled_steps_count_is_13(self) -> None:
         labeled = [step for step in APPLY_STEPS if step.failed_step_label is not None]
-        assert len(labeled) == 12
+        assert len(labeled) == 13
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +94,7 @@ class TestApplyStepsLabels:
 
 
 class TestApplyStepsStepId:
-    """For the 12 labeled steps, step_id must equal the failed_step_label string."""
+    """For the 13 labeled steps, step_id must equal the failed_step_label string."""
 
     def test_labeled_step_ids_equal_labels(self) -> None:
         for step in APPLY_STEPS:
@@ -165,9 +170,15 @@ class TestStepById:
         assert step.order == 4
         assert step.failed_step_label is None
 
+    def test_lookup_railway_deploy_step(self) -> None:
+        step = step_by_id("railway deploy")
+        assert step.order == 14
+        assert step.failed_step_label == "railway deploy"
+        assert step.resume == "idempotent-rerun"
+
     def test_lookup_last_step(self) -> None:
         step = step_by_id("display next steps")
-        assert step.order == 15
+        assert step.order == 16
         assert step.failed_step_label is None
 
     def test_lookup_unknown_id_raises_key_error(self) -> None:
@@ -198,17 +209,18 @@ _EXPECTED_ACTION_RESUME: tuple[tuple[str, str], ...] = (
     ("apply mutable config", "idempotent-rerun"),  # step 11
     ("docker startup", "idempotent-rerun"),  # step 12
     ("database migrations", "idempotent-rerun"),  # step 13
-    ("finalize apply state", "finalize"),  # step 14 — differs from step_id
-    ("display next steps", "display"),  # step 15 — resume=display, not idempotent-rerun
+    ("railway deploy", "idempotent-rerun"),  # step 14 — F12.3b
+    ("finalize apply state", "finalize"),  # step 15 — differs from step_id
+    ("display next steps", "display"),  # step 16 — resume=display, not idempotent-rerun
 )
 
 
 class TestApplyStepsActionResume:
     """apply_action and resume values must match the authoritative sequence verbatim.
 
-    Steps 14 and 15 are intentionally different from the general pattern:
-    - step 14: apply_action='finalize apply state' (not the step_id), resume='finalize'
-    - step 15: resume='display' (not 'idempotent-rerun')
+    Steps 15 and 16 are intentionally different from the general pattern:
+    - step 15: apply_action='finalize apply state' (not the step_id), resume='finalize'
+    - step 16: resume='display' (not 'idempotent-rerun')
     Any future edit to step.py that silently changes these will cause a test failure.
     """
 
@@ -216,21 +228,21 @@ class TestApplyStepsActionResume:
         actual = tuple((step.apply_action, step.resume) for step in APPLY_STEPS)
         assert actual == _EXPECTED_ACTION_RESUME
 
-    def test_idempotent_rerun_steps_are_1_through_13(self) -> None:
+    def test_idempotent_rerun_steps_are_1_through_14(self) -> None:
         idempotent_orders = [
             step.order for step in APPLY_STEPS if step.resume == "idempotent-rerun"
         ]
-        assert idempotent_orders == list(range(1, 14))
+        assert idempotent_orders == list(range(1, 15))
 
-    def test_step_14_has_finalize_resume(self) -> None:
-        step = APPLY_STEPS[13]  # 0-based index for order=14
-        assert step.order == 14
+    def test_step_15_has_finalize_resume(self) -> None:
+        step = APPLY_STEPS[14]  # 0-based index for order=15
+        assert step.order == 15
         assert step.resume == "finalize"
         assert step.apply_action == "finalize apply state"
 
-    def test_step_15_has_display_resume(self) -> None:
-        step = APPLY_STEPS[14]  # 0-based index for order=15
-        assert step.order == 15
+    def test_step_16_has_display_resume(self) -> None:
+        step = APPLY_STEPS[15]  # 0-based index for order=16
+        assert step.order == 16
         assert step.resume == "display"
         assert step.apply_action == "display next steps"
 

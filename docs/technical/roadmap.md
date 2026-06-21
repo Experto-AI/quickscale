@@ -68,23 +68,25 @@ git merge --no-ff wt-track{N}
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
-| M7 | 1 | F11.11–F11.13b | 🟡 | F11.11 ✅. Org ownership on Category/Tag/Post/BlogMediaAsset; per-org uniqueness; org-scoped blog routes + flat compat preserved; isolation tests green; review-driven fixes applied; final re-review resolved CR-001 and CR-002. **Next:** F11.12a. |
-| M8 | 3 | F12.1–F12.3b | 🟡 | F12.1 ✅ F12.2 ✅ F12.3a ✅ (all merged to v87). **Next:** F12.3b. |
+| M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅. Org ownership on Category/Tag/Post/BlogMediaAsset; per-org uniqueness; org-scoped blog routes + flat compat preserved; isolation tests green; review-driven fixes applied; final re-review resolved CR-001 and CR-002. **Next:** F11.12a. |
+| M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
-| M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
-| M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
+| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **Next:** F5.2b extract restore/orchestration. |
+| M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅ (inventory in implementation_contract.md). F7.2/F7.3 pending. |
 
 ## In-Flight Milestones
 
-### M8 — F12 Recoverable `apply` (saga)
+### M7 — F11 Module isolation rollout (blog/forms/listings/social)
+**Track:** 1 | **Worktree:** `quickscale-wt-track1`
+
+**Status:** 🟡 In progress — F11.11 ✅ merged to `v87`. F11.12a/F11.12b/F11.13a/F11.13b pending.
+
+---
+
+### M11 — F7 Generator vs generated-project runtime pins
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F12.1 (all sub-phases), F12.2, and F12.3a complete and merged to `v87` (see CHANGELOG). **Next:** `F12.3b`.
-
-**Binding constraints for F12.3b:** D-F12.1-LEDGER Option A (enrich `apply-recovery.yml` in place, no second file); no backward compatibility, fail hard on malformed ledger; membership/presence-gated idempotent resume semantics (`recovery_state is not None`; step-progress is diagnostics-only, never resume-gating).
-
-Open / Next:
-- **F12.3b** (Railway rollback/resume, Tier 2) — **Next**.
+**Status:** 🟡 In progress — F7.1 inventory complete and merged on `wt-track3`; F7.2/F7.3 pending.
 
 ---
 
@@ -98,10 +100,9 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1 ✅ F12.2 ✅ F12.3a ✅; next `F12.3b` |
-| 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
-| 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; waits for M8 |
-| 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
+| 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (Track 1 independent of Track 3) |
+| 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a–F5.4 pending |
+| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅ (inventory complete). F7.2/F7.3 pending. |
 
 ---
 
@@ -270,37 +271,16 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ---
 
-### Finding 12 — Make `apply` recoverable via a saga model
-
-**Why still open:** F12.1–F12.3a complete (see CHANGELOG). F12.3b (Railway rollback/resume) remains open.
-
-**Track:** 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M8
-**Dependencies:** M5 merged.
-
-**Phase F12.3b — Railway rollback/resume semantics** _(M8 closeout)_ _(Adaptive tier: 2)_ _(why → [Finding 12](#finding-12--make-apply-recoverable-via-a-saga-model))_
-
-**Dependencies:** F12.3a.
-
-- [ ] Define rollback/resume semantics for the external Railway deploy step.
-
----
-
 ### Finding 5 — Split the DR engine out of the embeddable backups module
 
-**Why still open:** The backups module carries platform-level backup/restore orchestration that communicates with the CLI through a hidden management-command/env-var protocol. Move the engine into centrally owned code; leave only thin Django-facing surfaces in the embeddable module.
+**Why still open:** **F5.1 ✅** — boundary contract defined in `decisions.md`. **F5.2a ✅** — snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives` (Django-free pg_dump/restore command building, shell execution, checksum, snapshot structure helpers, version extraction, engine-family helpers, sidecar constants). `services.py` imports from the new module; all 178 passing tests green; 9 pre-existing failures in `backups` test suite unchanged. Target: centrally owned engine for restore/orchestration/verification (F5.2b) and protocol replacement (F5.3).
 
 **Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
-**Dependencies:** M6 (archived ✅, see CHANGELOG) + M8 both merged — both touch `apply_command.py`.
+**Dependencies:** M6 ✅ + M8 ✅ merged.
 
-**Phase F5.1 — Define the boundary** _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.2a — Extract snapshot and archive primitives** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
 
-- [ ] Define the DR boundary contract between embeddable Django surfaces and the centrally owned backup/restore engine.
-
-**Phase F5.2a — Extract snapshot and archive primitives** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
-
-**Dependencies:** F5.1.
-
-- [ ] Extract snapshot and archive primitives into a CLI/core-owned engine library while preserving current behavior.
+- [x] Extract snapshot and archive primitives into a CLI/core-owned engine library while preserving current behavior.
 
 **Phase F5.2b — Extract restore and orchestration** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
@@ -323,19 +303,36 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 7 — Decouple generator runtime pins from generated-project pins
 
-**Why still open:** Generator and generated projects share one compatibility window. Split ownership so generated projects carry their own runtime policy without inheriting generator constraints accidentally.
+**Why still open:** Generator and generated projects share one compatibility window. Split ownership so generated projects carry their own runtime policy rather than silently duplicating generator constraints.
 
 **Track:** 3 | **Worktree:** `quickscale-wt-track3` (fresh from v87) | **Merges as:** M11
 **Dependencies:** M8 merged.
 
-**Phase F7.1 — Inventory** _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.1 — Inventory** _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_ — ✅ **Complete.**
 
-- [ ] Inventory which Python, Django, and PostgreSQL constraints belong to the generator runtime versus generated-project templates.
+- [x] Inventory which Python, Django, and PostgreSQL constraints belong to the generator runtime versus generated-project templates.
+
+**Inventory findings (recorded in [`implementation_contract.md`](./implementation_contract.md#runtime-pins-constraints)):**
+
+| Layer | Python | Django | PostgreSQL | Frontend |
+|-------|--------|--------|-----------|----------|
+| Generator (repo `pyproject.toml` files) | `>=3.13,<3.15` | None | None | None |
+| Embedded modules (`quickscale_modules/*/pyproject.toml`) | `>=3.13,<3.15` | `>=6.0.5,<6.1.0` | None | None |
+| Generated project (template `.j2` files) | `>=3.13,<3.15` | `>=6.0.3,<6.1.0` | 18 (Docker + client) | Node 24, pnpm 11, React 19 |
+
+**Pending notes for F7.2/F7.3:**
+- Python constraint `>=3.13,<3.15` is currently identical across generator and generated-project — split ownership so each can drift independently.
+- Dockerfile hardcodes `python:3.13-slim-bookworm` — must be generated from the project-owned Python pin after split.
+- Generated-project CI matrix (`python-version: ["3.13"]`, `django-version: ["6.0"]`) mirrors template pins — ownership split must keep CI aligned.
+- PostgreSQL 18 version is coupled across `docker-compose.yml.j2`, `Dockerfile.j2`, and `ci.yml.j2` — treat as a single generated-project-owned configuration concern.
+- Embedded-module pin drift: All 12 modules carry Django `>=6.0.5,<6.1.0` while the generated-project template uses `>=6.0.3,<6.1.0`. These are independent manual-synchronization points with a verified lower-bound drift.
+- Frontend constraints (Node 24, pnpm 11, React 19) are already generated-project-owned via theme templates — no split needed.
+- Generator has **zero** Django or PostgreSQL runtime dependency — confirmed pure. Ownership split is a one-direction change (emit correct pins from generator; generator does not absorb generated-project deps).
 
 **Phase F7.2 — Split ownership** _(Adaptive tier: 2)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
 - [ ] Split configuration ownership so generator and generated-project runtime pins are managed independently.
-- [ ] Update generation so emitted project templates use generated-project-owned runtime pins instead of inheriting generator constraints accidentally.
+- [ ] Update generation so emitted project templates use generated-project-owned runtime pins rather than carrying forward duplicated generator constraints.
 
 **Phase F7.3 — Validate and document** _(M11 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 

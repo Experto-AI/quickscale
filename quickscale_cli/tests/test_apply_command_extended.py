@@ -4288,6 +4288,423 @@ class TestExecuteApplySteps:
         mock_regenerate_wiring.assert_called_once()
         mock_display_next_steps.assert_called_once()
 
+    # ------------------------------------------------------------------ #
+    # F12.3b: Railway deploy integration                                  #
+    # ------------------------------------------------------------------ #
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_railway_deploy_skipped_when_not_linked(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Railway deploy must be skipped when railway.json does not exist."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+        mock_save_state.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        # Confirm railway.json does NOT exist at output_path
+        railway_json = ctx.output_path / "railway.json"
+        assert not railway_json.exists()
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=False,
+            no_modules=False,
+        )
+
+        mock_save_state.assert_called_once()
+        mock_display_next_steps.assert_called_once()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_railway_deploy_triggers_when_linked(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+        tmp_path,
+    ):
+        """Railway deploy must trigger when .railway directory exists at output_path."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+        mock_save_state.return_value = True
+
+        # Create .railway directory so deploy gate triggers
+        (tmp_path / ".railway").mkdir(parents=True, exist_ok=True)
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = tmp_path
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command.deploy_railway_service",
+        ) as mock_deploy:
+            mock_deploy.return_value = Mock(
+                returncode=0, stderr="", stdout="Deploy started"
+            )
+
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+            )
+
+        mock_deploy.assert_called_once_with(
+            project_path=tmp_path,
+            service_name="myapp",
+        )
+        mock_save_state.assert_called_once()
+        mock_display_next_steps.assert_called_once()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_railway_deploy_failure_aborts_with_recovery(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+        tmp_path,
+    ):
+        """Railway deploy failure must abort apply and save recovery state."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+
+        # Create .railway directory so deploy gate triggers
+        (tmp_path / ".railway").mkdir(parents=True, exist_ok=True)
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = tmp_path
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command.deploy_railway_service",
+            ) as mock_deploy,
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ) as mock_save_recovery,
+        ):
+            mock_deploy.return_value = Mock(
+                returncode=1, stderr="Deployment failed: build error", stdout=""
+            )
+
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                )
+
+        mock_deploy.assert_called_once_with(
+            project_path=tmp_path,
+            service_name="myapp",
+        )
+        mock_save_recovery.assert_called_once()
+        mock_save_state.assert_not_called()
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_railway_deploy_cli_not_installed_aborts_with_recovery(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+        tmp_path,
+    ):
+        """Railway deploy must abort with recovery when Railway CLI is not installed."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+
+        # Create .railway directory so deploy gate triggers
+        (tmp_path / ".railway").mkdir(parents=True, exist_ok=True)
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = tmp_path
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command.deploy_railway_service",
+                side_effect=FileNotFoundError("Railway CLI not found"),
+            ) as mock_deploy,
+            patch(
+                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                return_value=True,
+            ) as mock_save_recovery,
+        ):
+            with pytest.raises(click.Abort):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                )
+
+        mock_deploy.assert_called_once_with(
+            project_path=tmp_path,
+            service_name="myapp",
+        )
+        mock_save_recovery.assert_called_once()
+        mock_save_state.assert_not_called()
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_railway_deploy_with_no_docker_and_docker_start(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+        tmp_path,
+    ):
+        """Railway deploy must still trigger when --no-docker overrides docker.start.
+
+        CR-F12.3B-002 regression: when docker.start=True but --no-docker is used,
+        local migrations run before the deploy trigger fires.
+        """
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+        mock_save_state.return_value = True
+
+        # Create .railway directory so deploy gate triggers
+        (tmp_path / ".railway").mkdir(parents=True, exist_ok=True)
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = tmp_path
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.slug = "myapp"
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = True  # Docker-first project
+        ctx.qs_config.docker.build = True
+
+        with patch(
+            "quickscale_cli.commands.apply_command.deploy_railway_service",
+        ) as mock_deploy:
+            mock_deploy.return_value = Mock(
+                returncode=0, stderr="", stdout="Deploy started"
+            )
+
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=True,  # --no-docker overrides docker.start
+                no_modules=False,
+            )
+
+        mock_deploy.assert_called_once_with(
+            project_path=tmp_path,
+            service_name="myapp",
+        )
+        mock_save_state.assert_called_once()
+        mock_display_next_steps.assert_called_once()
+
 
 # ============================================================================
 # _generate_with_existing_config
@@ -4975,6 +5392,132 @@ class TestCR002PostLockGateReEvaluation:
 
         mock_lock.acquire.assert_called_once()
         mock_lock.release.assert_called_once()
+
+
+# ============================================================================
+# CR-F12.3B-002 regression: recovery-rerun migration gate
+# ============================================================================
+
+
+class TestCRF12_3B_002RecoveryRerunMigrationGate:
+    """CR-F12.3B-002: recovery rerun migration gate must use post-refresh context.
+
+    When a recovery rerun acquires the lock, ``_refresh_context_after_lock``
+    populates ``ctx.existing_state`` from the recovery ledger. The migration
+    gate inside ``_execute_apply_steps_locked`` must re-evaluate using this
+    fresh ``ctx.existing_state`` — not a stale pre-lock capture — so that
+    local migrations run before Railway deploy (CR-F12.3B-002).
+    """
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch(
+        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
+    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    def test_recovery_rerun_migration_gate_uses_post_lock_context(
+        self,
+        mock_lock_cls,
+        mock_refresh,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_sync_module_dependencies,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Recovery rerun: migration gate re-evaluates with refreshed context.
+
+        Pre-lock ``ctx.existing_state`` is None (no authoritative state.yml,
+        only a recovery ledger).  After ``_refresh_context_after_lock``
+        populates state from the ledger, the migration gate must see an
+        existing project and schedule local migrations.
+        """
+
+        def _simulate_recovery_rerun(ctx):
+            """Simulate a rerun that populates state after lock acquisition."""
+            ctx.existing_state = QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_html",
+                    created_at="2025-01-01T00:00:00",
+                    last_applied="2025-06-21T00:00:00",
+                ),
+                modules={},
+            )
+            ctx.delta = Mock()
+            ctx.delta.modules_to_add = []
+            ctx.delta.has_changes = False
+            ctx.delta.modules_to_remove = []
+            ctx.delta.has_immutable_config_changes = False
+            ctx.delta.theme_changed = False
+            ctx.has_pending_post_embed_recovery = True
+            ctx.had_existing_state = True
+
+        mock_refresh.side_effect = _simulate_recovery_rerun
+
+        mock_lock = Mock()
+        mock_lock_cls.return_value = mock_lock
+
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = True
+        mock_sync_module_dependencies.return_value = True
+        mock_run_post.return_value = True
+        mock_save_state.return_value = True
+
+        # Pre-lock: existing_state is None so a stale pre-lock capture
+        # would set existing_project=False.  The fix must use the
+        # post-refresh ctx.existing_state instead.
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=True,
+            no_modules=False,
+            verbose_docker=False,
+        )
+
+        # The migration gate must re-evaluate with the post-refresh
+        # context: existing_state is populated → existing_project=True →
+        # should_run_local_migrations=True → run_migrations=True.
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
 
 
 # ============================================================================
@@ -5947,6 +6490,7 @@ def _expected_failure_summary_lines(failed_step: str, reason: str) -> list[str]:
         "  • poetry install",
         "  • migrations",
         "  • docker start",
+        "  • railway deploy",
         "  • success completion output",
     ]
 
@@ -6001,6 +6545,7 @@ class TestApplyFailureSummaryParity:
         assert "  • poetry install" in output
         assert "  • migrations" in output
         assert "  • docker start" in output
+        assert "  • railway deploy" in output
         assert "  • success completion output" in output
 
     # ------------------------------------------------------------------
