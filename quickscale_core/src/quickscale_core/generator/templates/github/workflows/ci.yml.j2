@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: ["3.13"]
-        django-version: ["6.0"]
+        python-version: ["{{ python_version }}"]
+        django-version: ["{{ django_ci_version }}"]
 
     steps:
     - uses: actions/checkout@v6
@@ -22,7 +22,7 @@ jobs:
       with:
         python-version: {% raw %}${{ matrix.python-version }}{% endraw %}
 
-    - name: Install PostgreSQL 18 client tooling
+    - name: Install PostgreSQL {{ postgres_version }} client tooling
       run: |
         sudo apt-get update
         sudo apt-get install -y ca-certificates curl
@@ -36,17 +36,17 @@ jobs:
         echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
           | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
         sudo apt-get update
-        sudo apt-get install -y postgresql-client-18
-        echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+        sudo apt-get install -y postgresql-client-{{ postgres_version }}
+        echo "/usr/lib/postgresql/{{ postgres_version }}/bin" >> "$GITHUB_PATH"
 
-    - name: Verify PostgreSQL 18 client tooling
+    - name: Verify PostgreSQL {{ postgres_version }} client tooling
       run: |
-        test -x /usr/lib/postgresql/18/bin/pg_dump
-        test -x /usr/lib/postgresql/18/bin/pg_restore
-        test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
-        test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
-        /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
-        /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
+        test -x /usr/lib/postgresql/{{ postgres_version }}/bin/pg_dump
+        test -x /usr/lib/postgresql/{{ postgres_version }}/bin/pg_restore
+        test "$(command -v pg_dump)" = "/usr/lib/postgresql/{{ postgres_version }}/bin/pg_dump"
+        test "$(command -v pg_restore)" = "/usr/lib/postgresql/{{ postgres_version }}/bin/pg_restore"
+        /usr/lib/postgresql/{{ postgres_version }}/bin/pg_dump --version | grep -F "(PostgreSQL) {{ postgres_version }}"
+        /usr/lib/postgresql/{{ postgres_version }}/bin/pg_restore --version | grep -F "(PostgreSQL) {{ postgres_version }}"
 
     - name: Install Poetry
       uses: snok/install-poetry@v1
@@ -82,7 +82,7 @@ jobs:
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
-      if: matrix.python-version == '3.13' && matrix.django-version == '6.0'
+      if: matrix.python-version == '{{ python_version }}' && matrix.django-version == '{{ django_ci_version }}'
       with:
         files: ./coverage.xml
         fail_ci_if_error: false
