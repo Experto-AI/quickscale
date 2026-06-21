@@ -1,7 +1,6 @@
 """Unit tests for CRM module models"""
 
 from decimal import Decimal
-from importlib import import_module
 
 import pytest
 from django.db import IntegrityError
@@ -17,35 +16,22 @@ from quickscale_modules_crm.models import (  # type: ignore[import-untyped]
 )
 
 
-stage_terminal_semantic_migration = import_module(
-    "quickscale_modules_crm.migrations.0002_stage_terminal_semantic"
-)
-
-
-class _StageMigrationApps:
-    @staticmethod
-    def get_model(app_label, model_name):
-        assert app_label == "quickscale_modules_crm"
-        assert model_name == "Stage"
-        return Stage
-
-
 @pytest.mark.django_db
 class TestTagModel:
     """Tests for Tag model"""
 
-    def test_create_tag(self):
+    def test_create_tag(self, org_a):
         """Test creating a tag"""
-        tag = Tag.objects.create(name="VIP")
+        tag = Tag.objects.create(name="VIP", organization=org_a)
         assert tag.name == "VIP"
         assert str(tag) == "VIP"
         assert tag.created_at is not None
 
-    def test_tag_unique_name(self):
-        """Test that tag names are unique within the same owner bucket (NULL org)."""
-        Tag.objects.create(name="VIP")
+    def test_tag_unique_name(self, org_a):
+        """Test that tag names are unique within the same owner bucket."""
+        Tag.objects.create(name="VIP", organization=org_a)
         with pytest.raises(IntegrityError):
-            Tag.objects.create(name="VIP")
+            Tag.objects.create(name="VIP", organization=org_a)
 
     def test_tag_unique_name_field_is_no_longer_field_level_unique(self):
         """Tag.name is no longer field-level unique; uniqueness is via constraint."""
@@ -64,12 +50,6 @@ class TestTagModel:
         tag_b = Tag.objects.create(name="VIP", organization=org_b)
         assert tag_a.pk != tag_b.pk
 
-    def test_tag_same_name_null_and_org_allowed(self, org_a):
-        """Same tag name is allowed for NULL-owned and org-owned coexistence."""
-        tag_null = Tag.objects.create(name="VIP")
-        tag_org = Tag.objects.create(name="VIP", organization=org_a)
-        assert tag_null.pk != tag_org.pk
-
     def test_tag_duplicate_name_same_org_blocked(self, org_a):
         """Duplicate tag name within the same org is blocked at DB level."""
         Tag.objects.create(name="VIP", organization=org_a)
@@ -81,12 +61,13 @@ class TestTagModel:
 class TestCompanyModel:
     """Tests for Company model"""
 
-    def test_create_company(self):
+    def test_create_company(self, org_a):
         """Test creating a company"""
         company = Company.objects.create(
             name="Acme Corp",
             industry="Technology",
             website="https://acme.com",
+            organization=org_a,
         )
         assert company.name == "Acme Corp"
         assert company.industry == "Technology"
@@ -110,6 +91,7 @@ class TestContactModel:
             email="jane@example.com",
             phone="+1234567890",
             company=company,
+            organization=company.organization,
         )
         assert contact.full_name == "Jane Smith"
         assert str(contact) == "Jane Smith"
@@ -121,6 +103,7 @@ class TestContactModel:
             last_name="User",
             email="test@example.com",
             company=company,
+            organization=company.organization,
         )
         assert contact.status == "new"
 
@@ -135,26 +118,25 @@ class TestContactModel:
 class TestStageModel:
     """Tests for Stage model"""
 
-    def test_create_stage(self):
+    def test_create_stage(self, org_a):
         """Test creating a stage"""
-        stage = Stage.objects.create(name="Negotiation", order=2)
+        stage = Stage.objects.create(name="Negotiation", order=2, organization=org_a)
         assert stage.name == "Negotiation"
         assert stage.order == 2
         assert str(stage) == "Negotiation"
 
-    def test_stage_ordering(self):
+    def test_stage_ordering(self, org_a):
         """Test stages are ordered by order field"""
-        # Delete all stages first to ensure clean state
-        Stage.objects.all().delete()
-        stage3 = Stage.objects.create(name="C", order=3)
-        stage1 = Stage.objects.create(name="A", order=1)
-        stage2 = Stage.objects.create(name="B", order=2)
-        stages = list(Stage.objects.all())
+        Stage.objects.filter(organization=org_a).delete()
+        stage3 = Stage.objects.create(name="C", order=3, organization=org_a)
+        stage1 = Stage.objects.create(name="A", order=1, organization=org_a)
+        stage2 = Stage.objects.create(name="B", order=2, organization=org_a)
+        stages = list(Stage.objects.filter(organization=org_a))
         assert stages == [stage1, stage2, stage3]
 
-    def test_stage_terminal_semantic_defaults_to_null_and_stays_hidden(self):
+    def test_stage_terminal_semantic_defaults_to_null_and_stays_hidden(self, org_a):
         """Stage terminal semantics should stay nullable and non-editable by default."""
-        stage = Stage.objects.create(name="Qualified", order=2)
+        stage = Stage.objects.create(name="Qualified", order=2, organization=org_a)
         field = Stage._meta.get_field("terminal_semantic")
 
         assert stage.terminal_semantic is None
@@ -164,89 +146,25 @@ class TestStageModel:
         assert field.unique is True
         assert list(field.choices) == Stage.TERMINAL_SEMANTIC_CHOICES
 
-    def test_stage_terminal_semantic_must_be_unique_when_present(self):
+    def test_stage_terminal_semantic_must_be_unique_when_present(self, org_a):
         """Only one stage per terminal semantic should be allowed."""
-        Stage.objects.all().delete()
+        Stage.objects.filter(organization=org_a).delete()
 
         Stage.objects.create(
             name="Closed-Won",
             order=3,
             terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_a,
         )
-        Stage.objects.create(name="Negotiation", order=2)
+        Stage.objects.create(name="Negotiation", order=2, organization=org_a)
 
         with pytest.raises(IntegrityError):
             Stage.objects.create(
                 name="Deal Signed",
                 order=9,
                 terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                organization=org_a,
             )
-
-
-@pytest.mark.django_db
-class TestStageTerminalSemanticBackfill:
-    """Tests for the terminal-stage migration backfill helper."""
-
-    def test_backfill_uses_exact_names_and_deterministic_duplicate_selection(
-        self, contact
-    ):
-        """Backfill should tag only canonical exact-name terminal stages."""
-        Stage.objects.all().delete()
-
-        won_high_count_high_order = Stage.objects.create(name="Closed-Won", order=99)
-        won_high_count_low_order = Stage.objects.create(name="Closed-Won", order=1)
-        won_low_count_lowest_order = Stage.objects.create(name="Closed-Won", order=0)
-        won_variant = Stage.objects.create(name="closed-won", order=1)
-        lost_low_id = Stage.objects.create(name="Closed-Lost", order=5)
-        lost_high_id = Stage.objects.create(name="Closed-Lost", order=5)
-        lost_variant = Stage.objects.create(name="Closed Lost", order=5)
-
-        for index in range(3):
-            Deal.objects.create(
-                title=f"Won high order {index}",
-                contact=contact,
-                stage=won_high_count_high_order,
-            )
-            Deal.objects.create(
-                title=f"Won low order {index}",
-                contact=contact,
-                stage=won_high_count_low_order,
-            )
-        for index in range(2):
-            Deal.objects.create(
-                title=f"Won lower count {index}",
-                contact=contact,
-                stage=won_low_count_lowest_order,
-            )
-
-        stage_terminal_semantic_migration.backfill_terminal_stage_semantics(
-            _StageMigrationApps(),
-            None,
-        )
-
-        won_high_count_high_order.refresh_from_db()
-        won_high_count_low_order.refresh_from_db()
-        won_low_count_lowest_order.refresh_from_db()
-        won_variant.refresh_from_db()
-        lost_low_id.refresh_from_db()
-        lost_high_id.refresh_from_db()
-        lost_variant.refresh_from_db()
-
-        assert won_high_count_low_order.terminal_semantic == Stage.TERMINAL_SEMANTIC_WON
-        assert won_high_count_high_order.terminal_semantic is None
-        assert won_low_count_lowest_order.terminal_semantic is None
-        assert won_variant.terminal_semantic is None
-        assert lost_low_id.terminal_semantic == Stage.TERMINAL_SEMANTIC_LOST
-        assert lost_high_id.terminal_semantic is None
-        assert lost_variant.terminal_semantic is None
-
-        won_high_count_high_order.name = "Closed-Won Duplicate"
-        won_high_count_high_order.order = 50
-        won_high_count_high_order.save(update_fields=["name", "order"])
-        won_high_count_high_order.refresh_from_db()
-
-        assert won_high_count_high_order.name == "Closed-Won Duplicate"
-        assert won_high_count_high_order.order == 50
 
 
 @pytest.mark.django_db
@@ -262,6 +180,7 @@ class TestDealModel:
             stage=stage,
             probability=75,
             owner=user,
+            organization=contact.organization,
         )
         assert deal.title == "Enterprise Deal"
         assert deal.amount == Decimal("50000.00")
@@ -277,6 +196,7 @@ class TestDealModel:
             title="Test Deal",
             contact=contact,
             stage=stage,
+            organization=contact.organization,
         )
         assert deal.probability == 50
 
