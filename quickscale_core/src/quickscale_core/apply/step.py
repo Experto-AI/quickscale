@@ -2,7 +2,7 @@
 
 Each :class:`ApplyStep` captures the stable identity and descriptive
 metadata for one step of the ``quickscale apply`` command.  The registry
-:data:`APPLY_STEPS` enumerates all 15 steps in their canonical execution
+:data:`APPLY_STEPS` enumerates all 16 steps in their canonical execution
 order.
 
 The ``step_id`` for each step is the stable identifier used in the
@@ -25,24 +25,24 @@ class ApplyStep:
     """Immutable descriptor for a single step in the apply pipeline.
 
     Attributes:
-        order: 1-based position in the canonical execution order (1..15).
-        step_id: Stable identifier for this step.  For the 12 steps that
+        order: 1-based position in the canonical execution order (1..16).
+        step_id: Stable identifier for this step.  For the 13 steps that
             carry a ``failed_step`` abort label in the apply implementation,
             this equals that verbatim label string so recovery sentinels
-            remain valid.  For steps without a label (steps 4, 11, 15) the
+            remain valid.  For steps without a label (steps 4, 11, 16) the
             descriptive name is used.
         failed_step_label: The verbatim ``failed_step`` string used by the
             apply command when aborting on this step, or ``None`` for steps
             that do not abort with a labelled sentinel (best-effort or
-            informational steps).
+            informational steps).  Currently None for steps 4, 11, and 16.
         apply_action: Short stable descriptor of what the step does.
         resume: Compensating/resume descriptor.  There is no rollback today;
             all irreversible steps use ``"idempotent-rerun"`` (presence-gated
             re-execution).  Finalization and display steps use ``"finalize"``
             and ``"display"`` respectively.
         reversible: ``False`` for all steps; the full apply pipeline has no
-            rollback capability.  Steps 1-13 are tagged explicitly
-            irreversible (cross-system side effects); steps 14-15 are
+            rollback capability.  Steps 1-14 are tagged explicitly
+            irreversible (cross-system side effects); steps 15-16 are
             finalization/display steps.
 
     """
@@ -55,7 +55,7 @@ class ApplyStep:
     reversible: bool
 
 
-#: Ordered registry of all 15 apply steps.
+#: Ordered registry of all 16 apply steps.
 #:
 #: The ordering matches ``_execute_apply_steps_locked`` in
 #: ``quickscale_cli.commands.apply_command``.  Step IDs and
@@ -168,6 +168,14 @@ APPLY_STEPS: tuple[ApplyStep, ...] = (
     ),
     ApplyStep(
         order=14,
+        step_id="railway deploy",
+        failed_step_label="railway deploy",
+        apply_action="railway deploy",
+        resume="idempotent-rerun",
+        reversible=False,
+    ),
+    ApplyStep(
+        order=15,
         step_id="authoritative state persistence",
         failed_step_label="authoritative state persistence",
         apply_action="finalize apply state",
@@ -175,7 +183,7 @@ APPLY_STEPS: tuple[ApplyStep, ...] = (
         reversible=False,
     ),
     ApplyStep(
-        order=15,
+        order=16,
         step_id="display next steps",
         failed_step_label=None,
         apply_action="display next steps",

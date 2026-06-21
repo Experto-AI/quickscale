@@ -415,23 +415,23 @@ class TestCreateAppServiceStep:
 class TestDeployAppStep:
     """Tests for _deploy_app_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
-    def test_success(self, mock_run):
+    @patch("quickscale_cli.commands.deployment_commands.deploy_railway_service")
+    def test_success(self, mock_deploy):
         """Test successful deployment"""
-        mock_run.return_value = Mock(returncode=0, stderr="")
+        mock_deploy.return_value = Mock(returncode=0, stderr="")
         _deploy_app_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
-    def test_failure(self, mock_run):
+    @patch("quickscale_cli.commands.deployment_commands.deploy_railway_service")
+    def test_failure(self, mock_deploy):
         """Test deployment failure"""
-        mock_run.return_value = Mock(returncode=1, stderr="build failed")
+        mock_deploy.return_value = Mock(returncode=1, stderr="build failed")
         with pytest.raises(SystemExit):
             _deploy_app_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
-    def test_timeout(self, mock_run):
+    @patch("quickscale_cli.commands.deployment_commands.deploy_railway_service")
+    def test_timeout(self, mock_deploy):
         """Test deployment timeout"""
-        mock_run.side_effect = TimeoutError("timeout")
+        mock_deploy.side_effect = TimeoutError("timeout")
         _deploy_app_step("myapp")
 
 

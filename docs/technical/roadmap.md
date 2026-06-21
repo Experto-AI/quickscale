@@ -69,7 +69,7 @@ git merge --no-ff wt-track{N}
 | M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10b. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅. Still pending: F11.10b–F11.10e. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | F12.1 ✅ F12.2 ✅ F12.3a ✅ (all merged to v87). **Next:** F12.3b. |
+| M8 | 3 | F12.1–F12.3b | 🟡 | F12.1 ✅ F12.2 ✅ F12.3a ✅ (all merged to v87). F12.3b ✅ (validated in wt-track3; merge-back to v87 pending). |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
@@ -79,12 +79,15 @@ git merge --no-ff wt-track{N}
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F12.1 (all sub-phases), F12.2, and F12.3a complete and merged to `v87` (see CHANGELOG). **Next:** `F12.3b`.
+**Status:** 🟡 All F12 sub-phases (F12.1–F12.3b) complete. F12.3a and earlier merged to `v87`; F12.3b validated in wt-track3, merge-back pending. See CHANGELOG for individual entries.
 
 **Binding constraints for F12.3b:** D-F12.1-LEDGER Option A (enrich `apply-recovery.yml` in place, no second file); no backward compatibility, fail hard on malformed ledger; membership/presence-gated idempotent resume semantics (`recovery_state is not None`; step-progress is diagnostics-only, never resume-gating).
 
-Open / Next:
-- **F12.3b** (Railway rollback/resume, Tier 2) — **Next**.
+Completed (in wt-track3, pending merge-back to v87):
+- **F12.3b** (Railway rollback/resume, Tier 2) — ✅ Inserts Railway deploy after DB migrations and before authoritative state persistence; Railway-linked checkouts only (`.railway/` present); immediate trigger failures save recovery state and abort for rerun; async downstream Railway failures remain manual/operator-owned. All assertions/tests passed — only pre-existing unrelated coverage gaps outside changed files. Merge-back to `v87` not yet executed.
+
+Next (after merge-back):
+- M8 closeout — Merge F12.3b back to `v87` and update M8 status to 🟢.
 
 ---
 
@@ -98,7 +101,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1 ✅ F12.2 ✅ F12.3a ✅; next `F12.3b` |
+| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅; merge-back to v87 pending |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
 | 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; waits for M8 |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
@@ -231,7 +234,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 12 — Make `apply` recoverable via a saga model
 
-**Why still open:** F12.1–F12.3a complete (see CHANGELOG). F12.3b (Railway rollback/resume) remains open.
+**Why still open:** All F12 sub-phases (F12.1–F12.3b) complete and validated. Merge-back to `v87` pending — M8 will close once merged.
 
 **Track:** 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M8
 **Dependencies:** M5 merged.
@@ -240,7 +243,13 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** F12.3a.
 
-- [ ] Define rollback/resume semantics for the external Railway deploy step.
+- [x] Define rollback/resume semantics for the external Railway deploy step.
+  - Inserts Railway deploy after DB migrations and before authoritative state persistence.
+  - Triggers only for Railway-linked checkouts (`.railway/` present).
+  - Immediate trigger failures save recovery state and abort for rerun.
+  - Async downstream Railway failures remain manual/operator-owned.
+  - All assertions/tests passed; exit code impact only from 5 unrelated pre-existing per-file coverage gaps outside the changed-files set.
+  - Merge-back to `v87` not yet executed.
 
 ---
 

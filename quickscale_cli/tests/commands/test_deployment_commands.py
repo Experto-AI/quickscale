@@ -114,37 +114,45 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_run.return_value = Mock(
-                                            returncode=0,
-                                            stdout="postgres available",
-                                            stderr="",
-                                        )
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        result = runner.invoke(railway)
+                                            result = runner.invoke(railway)
 
-                                        assert result.exit_code == 0
-                                        assert (
-                                            "Deployment process completed successfully!"
-                                            in result.output
-                                        )
-                                        assert (
-                                            "Railway project already initialized"
-                                            in result.output
-                                        )
+                                            assert result.exit_code == 0
+                                            assert (
+                                                "Deployment process completed successfully!"
+                                                in result.output
+                                            )
+                                            assert (
+                                                "Railway project already initialized"
+                                                in result.output
+                                            )
 
     def test_railway_initializes_new_project(self):
         """Test railway command initializes new project."""
@@ -164,33 +172,41 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = False
-                                        mock_run.return_value = Mock(
-                                            returncode=0,
-                                            stdout="postgres available",
-                                            stderr="",
-                                        )
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = False
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        result = runner.invoke(railway, input="\n")
+                                            result = runner.invoke(railway, input="\n")
 
-                                        assert result.exit_code == 0
-                                        assert (
-                                            "Railway project initialized"
-                                            in result.output
-                                        )
+                                            assert result.exit_code == 0
+                                            assert (
+                                                "Railway project initialized"
+                                                in result.output
+                                            )
 
     def test_railway_with_project_name_option(self):
         """Test railway command with --project-name option."""
@@ -210,39 +226,49 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_run.return_value = Mock(
-                                            returncode=0,
-                                            stdout="postgres available",
-                                            stderr="",
-                                        )
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        result = runner.invoke(
-                                            railway,
-                                            ["--project-name", "myapp"],
-                                        )
+                                            result = runner.invoke(
+                                                railway,
+                                                ["--project-name", "myapp"],
+                                            )
 
-                                        assert result.exit_code == 0
-                                        # Verify DJANGO_SETTINGS_MODULE was included in batch
-                                        batch_vars = mock_batch_set.call_args[0][0]
-                                        assert "DJANGO_SETTINGS_MODULE" in batch_vars
-                                        assert (
-                                            "myapp.settings.production"
-                                            in batch_vars["DJANGO_SETTINGS_MODULE"]
-                                        )
+                                            assert result.exit_code == 0
+                                            # Verify DJANGO_SETTINGS_MODULE was included in batch
+                                            batch_vars = mock_batch_set.call_args[0][0]
+                                            assert (
+                                                "DJANGO_SETTINGS_MODULE" in batch_vars
+                                            )
+                                            assert (
+                                                "myapp.settings.production"
+                                                in batch_vars["DJANGO_SETTINGS_MODULE"]
+                                            )
 
     def test_railway_with_hyphenated_project_name_option(self):
         """Hyphenated project names should use underscore Django package path."""
@@ -262,39 +288,45 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_run.return_value = Mock(
-                                            returncode=0,
-                                            stdout="postgres available",
-                                            stderr="",
-                                        )
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://bap-web-production.up.railway.app"
-                                        )
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://bap-web-production.up.railway.app"
 
-                                        result = runner.invoke(
-                                            railway,
-                                            ["--project-name", "bap-web"],
-                                        )
+                                            result = runner.invoke(
+                                                railway,
+                                                ["--project-name", "bap-web"],
+                                            )
 
-                                        assert result.exit_code == 0
-                                        batch_vars = mock_batch_set.call_args[0][0]
-                                        assert (
-                                            batch_vars["DJANGO_SETTINGS_MODULE"]
-                                            == "bap_web.settings.production"
-                                        )
+                                            assert result.exit_code == 0
+                                            batch_vars = mock_batch_set.call_args[0][0]
+                                            assert (
+                                                batch_vars["DJANGO_SETTINGS_MODULE"]
+                                                == "bap_web.settings.production"
+                                            )
 
     def test_railway_deployment_failure(self):
         """Test railway command when deployment fails."""
@@ -314,46 +346,50 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        # Call sequence: postgres service check, app service
-                                        # check, deployment (fails)
-                                        mock_run.side_effect = [
-                                            Mock(
-                                                returncode=0,
-                                                stdout="postgres",
-                                                stderr="",
-                                            ),  # postgres service check
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # app service check (not found)
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # app service creation
-                                            Mock(
+                                            # Call sequence: postgres service check, app service
+                                            # check, app service creation (deploy goes through
+                                            # deploy_railway_service not run_railway_command)
+                                            mock_run.side_effect = [
+                                                Mock(
+                                                    returncode=0,
+                                                    stdout="postgres",
+                                                    stderr="",
+                                                ),  # postgres service check
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # app service check (not found)
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # app service creation
+                                            ]
+                                            mock_deploy.return_value = Mock(
                                                 returncode=1,
                                                 stdout="",
                                                 stderr="Build failed",
-                                            ),  # deployment fails
-                                        ]
+                                            )
 
-                                        result = runner.invoke(railway)
+                                            result = runner.invoke(railway)
 
-                                        assert result.exit_code == 1
-                                        assert "Deployment failed" in result.output
+                                            assert result.exit_code == 1
+                                            assert "Deployment failed" in result.output
 
     def test_railway_project_init_failure(self):
         """Test railway command when project init fails."""
@@ -404,49 +440,58 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_run.return_value = Mock(
-                                            returncode=0,
-                                            stdout="postgres available",
-                                            stderr="",
-                                        )
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        result = runner.invoke(railway)
+                                            result = runner.invoke(railway)
 
-                                        assert result.exit_code == 0
-                                        # Verify batch set was called once
-                                        assert mock_batch_set.call_count == 1
+                                            assert result.exit_code == 0
+                                            # Verify batch set was called once
+                                            assert mock_batch_set.call_count == 1
 
-                                        # Verify all environment variables were included in batch
-                                        batch_vars = mock_batch_set.call_args[0][0]
-                                        assert "SECRET_KEY" in batch_vars
-                                        assert "ALLOWED_HOSTS" in batch_vars
-                                        assert "DEBUG" in batch_vars
-                                        assert batch_vars["DEBUG"] == "False"
+                                            # Verify all environment variables were included in batch
+                                            batch_vars = mock_batch_set.call_args[0][0]
+                                            assert "SECRET_KEY" in batch_vars
+                                            assert "ALLOWED_HOSTS" in batch_vars
+                                            assert "DEBUG" in batch_vars
+                                            assert batch_vars["DEBUG"] == "False"
 
-                                        # Verify ALLOWED_HOSTS was set with the domain (without https://)
-                                        assert (
-                                            "myapp-production-abc123.up.railway.app"
-                                            in batch_vars["ALLOWED_HOSTS"]
-                                        )
+                                            # Verify ALLOWED_HOSTS was set with the domain (without https://)
+                                            assert (
+                                                "myapp-production-abc123.up.railway.app"
+                                                in batch_vars["ALLOWED_HOSTS"]
+                                            )
 
-                                        # Verify this triggers only ONE deployment
-                                        assert (
-                                            "triggers ONE deployment" in result.output
-                                        )
+                                            # Verify this triggers only ONE deployment
+                                            assert (
+                                                "triggers ONE deployment"
+                                                in result.output
+                                            )
 
     def test_railway_handles_timeout(self):
         """Test railway command handles deployment timeout gracefully."""
@@ -466,46 +511,50 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        # Call sequence: postgres check, app service check,
-                                        # app service creation, deployment times out
-                                        mock_run.side_effect = [
-                                            Mock(
-                                                returncode=0,
-                                                stdout="postgres",
-                                                stderr="",
-                                            ),  # postgres service check
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # app service check (not found)
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # app service creation
-                                            TimeoutError(
+                                            # Call sequence: postgres check, app service check,
+                                            # app service creation (deploy goes through
+                                            # deploy_railway_service not run_railway_command)
+                                            mock_run.side_effect = [
+                                                Mock(
+                                                    returncode=0,
+                                                    stdout="postgres",
+                                                    stderr="",
+                                                ),  # postgres service check
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # app service check (not found)
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # app service creation
+                                            ]
+                                            mock_deploy.side_effect = TimeoutError(
                                                 "Railway command timed out"
-                                            ),  # deployment times out
-                                        ]
+                                            )
 
-                                        result = runner.invoke(railway)
+                                            result = runner.invoke(railway)
 
-                                        assert (
-                                            "Deployment command timed out"
-                                            in result.output
-                                        )
+                                            assert (
+                                                "Deployment command timed out"
+                                                in result.output
+                                            )
 
     def test_railway_uncommitted_changes_user_cancels(self):
         """Test railway command when user cancels deployment due to uncommitted changes."""
@@ -623,46 +672,59 @@ class TestRailwayCommand:
                                     "quickscale_cli.commands.deployment_commands.run_railway_command"
                                 ) as mock_run:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                                    ) as mock_batch_set:
+                                        "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                    ) as mock_deploy:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                        ) as mock_secret:
+                                            "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                        ) as mock_batch_set:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                            ) as mock_domain:
-                                                mock_poetry_check.return_value = (
-                                                    False,
-                                                    "poetry.lock is inconsistent",
-                                                )
-                                                mock_fix.return_value = (
-                                                    True,
-                                                    "poetry.lock updated successfully",
-                                                )
-                                                mock_installed.return_value = True
-                                                mock_auth.return_value = True
-                                                mock_project_init.return_value = True
-                                                mock_run.return_value = Mock(
-                                                    returncode=0,
-                                                    stdout="postgres available",
-                                                    stderr="",
-                                                )
-                                                mock_batch_set.return_value = (True, [])
-                                                mock_secret.return_value = (
-                                                    "test-secret-key"
-                                                )
-                                                mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                                "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                            ) as mock_secret:
+                                                with patch(
+                                                    "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                ) as mock_domain:
+                                                    mock_poetry_check.return_value = (
+                                                        False,
+                                                        "poetry.lock is inconsistent",
+                                                    )
+                                                    mock_fix.return_value = (
+                                                        True,
+                                                        "poetry.lock updated successfully",
+                                                    )
+                                                    mock_installed.return_value = True
+                                                    mock_auth.return_value = True
+                                                    mock_project_init.return_value = (
+                                                        True
+                                                    )
+                                                    mock_run.return_value = Mock(
+                                                        returncode=0,
+                                                        stdout="postgres available",
+                                                        stderr="",
+                                                    )
+                                                    mock_deploy.return_value = Mock(
+                                                        returncode=0,
+                                                        stdout="Deployment started",
+                                                        stderr="",
+                                                    )
+                                                    mock_batch_set.return_value = (
+                                                        True,
+                                                        [],
+                                                    )
+                                                    mock_secret.return_value = (
+                                                        "test-secret-key"
+                                                    )
+                                                    mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                                result = runner.invoke(
-                                                    railway, input="y\n"
-                                                )
+                                                    result = runner.invoke(
+                                                        railway, input="y\n"
+                                                    )
 
-                                                assert result.exit_code == 0
-                                                assert (
-                                                    "poetry.lock updated successfully"
-                                                    in result.output
-                                                )
-                                                mock_fix.assert_called_once()
+                                                    assert result.exit_code == 0
+                                                    assert (
+                                                        "poetry.lock updated successfully"
+                                                        in result.output
+                                                    )
+                                                    mock_fix.assert_called_once()
 
     def test_railway_poetry_lock_inconsistent_user_cancels(self):
         """Test railway command when poetry.lock is inconsistent and user cancels without fixing."""
@@ -704,38 +766,51 @@ class TestRailwayCommand:
                                     "quickscale_cli.commands.deployment_commands.run_railway_command"
                                 ) as mock_run:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                                    ) as mock_batch_set:
+                                        "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                    ) as mock_deploy:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                        ) as mock_secret:
+                                            "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                        ) as mock_batch_set:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                            ) as mock_domain:
-                                                mock_installed.return_value = False
-                                                mock_npm.return_value = True
-                                                mock_install.return_value = True
-                                                mock_auth.return_value = True
-                                                mock_project_init.return_value = True
-                                                mock_run.return_value = Mock(
-                                                    returncode=0,
-                                                    stdout="postgres available",
-                                                    stderr="",
-                                                )
-                                                mock_batch_set.return_value = (True, [])
-                                                mock_secret.return_value = (
-                                                    "test-secret-key"
-                                                )
-                                                mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                                "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                            ) as mock_secret:
+                                                with patch(
+                                                    "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                ) as mock_domain:
+                                                    mock_installed.return_value = False
+                                                    mock_npm.return_value = True
+                                                    mock_install.return_value = True
+                                                    mock_auth.return_value = True
+                                                    mock_project_init.return_value = (
+                                                        True
+                                                    )
+                                                    mock_run.return_value = Mock(
+                                                        returncode=0,
+                                                        stdout="postgres available",
+                                                        stderr="",
+                                                    )
+                                                    mock_deploy.return_value = Mock(
+                                                        returncode=0,
+                                                        stdout="Deployment started",
+                                                        stderr="",
+                                                    )
+                                                    mock_batch_set.return_value = (
+                                                        True,
+                                                        [],
+                                                    )
+                                                    mock_secret.return_value = (
+                                                        "test-secret-key"
+                                                    )
+                                                    mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                                result = runner.invoke(railway)
+                                                    result = runner.invoke(railway)
 
-                                                assert result.exit_code == 0
-                                                assert (
-                                                    "Railway CLI installed successfully"
-                                                    in result.output
-                                                )
-                                                mock_install.assert_called_once()
+                                                    assert result.exit_code == 0
+                                                    assert (
+                                                        "Railway CLI installed successfully"
+                                                        in result.output
+                                                    )
+                                                    mock_install.assert_called_once()
 
     def test_railway_cli_upgrade_success(self):
         """Test railway command upgrades CLI successfully when version is outdated."""
@@ -764,49 +839,55 @@ class TestRailwayCommand:
                                         "quickscale_cli.commands.deployment_commands.run_railway_command"
                                     ) as mock_run:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                                        ) as mock_batch_set:
+                                            "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                        ) as mock_deploy:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                            ) as mock_secret:
+                                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                            ) as mock_batch_set:
                                                 with patch(
-                                                    "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                                ) as mock_domain:
-                                                    mock_installed.return_value = True
-                                                    mock_version.side_effect = [
-                                                        "3.0.0",
-                                                        "4.1.0",
-                                                    ]  # Before and after upgrade
-                                                    mock_check_version.return_value = (
-                                                        False  # Version < 4.0.0
-                                                    )
-                                                    mock_upgrade.return_value = True
-                                                    mock_auth.return_value = True
-                                                    mock_project_init.return_value = (
-                                                        True
-                                                    )
-                                                    mock_run.return_value = Mock(
-                                                        returncode=0,
-                                                        stdout="postgres available",
-                                                        stderr="",
-                                                    )
-                                                    mock_batch_set.return_value = (
-                                                        True,
-                                                        [],
-                                                    )
-                                                    mock_secret.return_value = (
-                                                        "test-secret-key"
-                                                    )
-                                                    mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                                ) as mock_secret:
+                                                    with patch(
+                                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                    ) as mock_domain:
+                                                        mock_installed.return_value = (
+                                                            True
+                                                        )
+                                                        mock_version.side_effect = [
+                                                            "3.0.0",
+                                                            "4.1.0",
+                                                        ]  # Before and after upgrade
+                                                        mock_check_version.return_value = False  # Version < 4.0.0
+                                                        mock_upgrade.return_value = True
+                                                        mock_auth.return_value = True
+                                                        mock_project_init.return_value = True
+                                                        mock_run.return_value = Mock(
+                                                            returncode=0,
+                                                            stdout="postgres available",
+                                                            stderr="",
+                                                        )
+                                                        mock_deploy.return_value = Mock(
+                                                            returncode=0,
+                                                            stdout="Deployment started",
+                                                            stderr="",
+                                                        )
+                                                        mock_batch_set.return_value = (
+                                                            True,
+                                                            [],
+                                                        )
+                                                        mock_secret.return_value = (
+                                                            "test-secret-key"
+                                                        )
+                                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                                    result = runner.invoke(railway)
+                                                        result = runner.invoke(railway)
 
-                                                    assert result.exit_code == 0
-                                                    assert (
-                                                        "Railway CLI upgraded to 4.1.0"
-                                                        in result.output
-                                                    )
-                                                    mock_upgrade.assert_called_once()
+                                                        assert result.exit_code == 0
+                                                        assert (
+                                                            "Railway CLI upgraded to 4.1.0"
+                                                            in result.output
+                                                        )
+                                                        mock_upgrade.assert_called_once()
 
     def test_railway_postgres_service_created(self):
         """Test railway command creates PostgreSQL service when not present."""
@@ -826,47 +907,54 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_batch_set.return_value = (True, [])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        # Call sequence: postgres check (not found), add postgres,
-                                        # app service check, app service creation, deployment
-                                        mock_run.side_effect = [
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # postgres check (not found)
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # add postgres
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # app service check (not found)
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # app service creation
-                                            Mock(
-                                                returncode=0, stdout="", stderr=""
-                                            ),  # deployment
-                                        ]
+                                            # Call sequence: postgres check (not found), add postgres,
+                                            # app service check, app service creation
+                                            # (deploy goes through deploy_railway_service)
+                                            mock_run.side_effect = [
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # postgres check (not found)
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # add postgres
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # app service check (not found)
+                                                Mock(
+                                                    returncode=0, stdout="", stderr=""
+                                                ),  # app service creation
+                                            ]
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
 
-                                        result = runner.invoke(railway)
+                                            result = runner.invoke(railway)
 
-                                        assert result.exit_code == 0
-                                        assert (
-                                            "PostgreSQL service added" in result.output
-                                        )
+                                            assert result.exit_code == 0
+                                            assert (
+                                                "PostgreSQL service added"
+                                                in result.output
+                                            )
 
     def test_railway_batch_variables_fallback_to_individual(self):
         """Test railway command falls back to individual variable setting when batch fails."""
@@ -886,35 +974,46 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                            ) as mock_batch_set:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                ) as mock_secret:
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                    ) as mock_domain:
-                                        mock_installed.return_value = True
-                                        mock_auth.return_value = True
-                                        mock_project_init.return_value = True
-                                        mock_run.return_value = Mock(
-                                            returncode=0,
-                                            stdout="postgres available",
-                                            stderr="",
-                                        )
-                                        # Batch setting fails with some variables
-                                        mock_batch_set.return_value = (False, ["DEBUG"])
-                                        mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            # Batch setting fails with some variables
+                                            mock_batch_set.return_value = (
+                                                False,
+                                                ["DEBUG"],
+                                            )
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                        result = runner.invoke(railway)
+                                            result = runner.invoke(railway)
 
-                                        assert result.exit_code == 0
-                                        assert (
-                                            "Some environment variables could not be set"
-                                            in result.output
-                                        )
-                                        assert "DEBUG" in result.output
+                                            assert result.exit_code == 0
+                                            assert (
+                                                "Some environment variables could not be set"
+                                                in result.output
+                                            )
+                                            assert "DEBUG" in result.output
 
     def test_railway_login_success(self):
         """Test railway command successfully authenticates when not logged in."""
@@ -937,35 +1036,45 @@ class TestRailwayCommand:
                                 "quickscale_cli.commands.deployment_commands.run_railway_command"
                             ) as mock_run:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                                ) as mock_batch_set:
+                                    "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                ) as mock_deploy:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                    ) as mock_secret:
+                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    ) as mock_batch_set:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                        ) as mock_domain:
-                                            mock_installed.return_value = True
-                                            mock_auth.return_value = False
-                                            mock_login.return_value = True
-                                            mock_project_init.return_value = True
-                                            mock_run.return_value = Mock(
-                                                returncode=0,
-                                                stdout="postgres available",
-                                                stderr="",
-                                            )
-                                            mock_batch_set.return_value = (True, [])
-                                            mock_secret.return_value = "test-secret-key"
-                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        ) as mock_secret:
+                                            with patch(
+                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            ) as mock_domain:
+                                                mock_installed.return_value = True
+                                                mock_auth.return_value = False
+                                                mock_login.return_value = True
+                                                mock_project_init.return_value = True
+                                                mock_run.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="postgres available",
+                                                    stderr="",
+                                                )
+                                                mock_deploy.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="Deployment started",
+                                                    stderr="",
+                                                )
+                                                mock_batch_set.return_value = (True, [])
+                                                mock_secret.return_value = (
+                                                    "test-secret-key"
+                                                )
+                                                mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                            result = runner.invoke(railway)
+                                                result = runner.invoke(railway)
 
-                                            assert result.exit_code == 0
-                                            assert (
-                                                "Successfully authenticated with Railway"
-                                                in result.output
-                                            )
-                                            mock_login.assert_called_once()
+                                                assert result.exit_code == 0
+                                                assert (
+                                                    "Successfully authenticated with Railway"
+                                                    in result.output
+                                                )
+                                                mock_login.assert_called_once()
 
     def test_railway_links_database_url(self):
         """Test railway command links DATABASE_URL to app service."""
@@ -985,45 +1094,57 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.link_database_to_service"
-                            ) as mock_link:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                                ) as mock_batch_set:
+                                    "quickscale_cli.commands.deployment_commands.link_database_to_service"
+                                ) as mock_link:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                    ) as mock_secret:
+                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    ) as mock_batch_set:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                        ) as mock_domain:
-                                            mock_installed.return_value = True
-                                            mock_auth.return_value = True
-                                            mock_project_init.return_value = True
-                                            mock_run.return_value = Mock(
-                                                returncode=0,
-                                                stdout="postgres available",
-                                                stderr="",
-                                            )
-                                            mock_link.return_value = (
-                                                True,
-                                                "DATABASE_URL reference linked successfully",
-                                            )
-                                            mock_batch_set.return_value = (True, [])
-                                            mock_secret.return_value = "test-secret-key"
-                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        ) as mock_secret:
+                                            with patch(
+                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            ) as mock_domain:
+                                                mock_installed.return_value = True
+                                                mock_auth.return_value = True
+                                                mock_project_init.return_value = True
+                                                mock_run.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="postgres available",
+                                                    stderr="",
+                                                )
+                                                mock_deploy.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="Deployment started",
+                                                    stderr="",
+                                                )
+                                                mock_link.return_value = (
+                                                    True,
+                                                    "DATABASE_URL reference linked successfully",
+                                                )
+                                                mock_batch_set.return_value = (True, [])
+                                                mock_secret.return_value = (
+                                                    "test-secret-key"
+                                                )
+                                                mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                            result = runner.invoke(
-                                                railway, ["--project-name", "myapp"]
-                                            )
+                                                result = runner.invoke(
+                                                    railway, ["--project-name", "myapp"]
+                                                )
 
-                                            assert result.exit_code == 0
-                                            assert (
-                                                "DATABASE_URL reference linked successfully"
-                                                in result.output
-                                            )
-                                            # Verify link_database_to_service was called with
-                                            # correct service name
-                                            mock_link.assert_called_once_with("myapp")
+                                                assert result.exit_code == 0
+                                                assert (
+                                                    "DATABASE_URL reference linked successfully"
+                                                    in result.output
+                                                )
+                                                # Verify link_database_to_service was called with
+                                                # correct service name
+                                                mock_link.assert_called_once_with(
+                                                    "myapp"
+                                                )
 
     def test_railway_database_link_failure_shows_warning(self):
         """Test railway command shows warning when DATABASE_URL linking fails."""
@@ -1043,41 +1164,51 @@ class TestRailwayCommand:
                             "quickscale_cli.commands.deployment_commands.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.link_database_to_service"
-                            ) as mock_link:
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
-                                ) as mock_batch_set:
+                                    "quickscale_cli.commands.deployment_commands.link_database_to_service"
+                                ) as mock_link:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
-                                    ) as mock_secret:
+                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    ) as mock_batch_set:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
-                                        ) as mock_domain:
-                                            mock_installed.return_value = True
-                                            mock_auth.return_value = True
-                                            mock_project_init.return_value = True
-                                            mock_run.return_value = Mock(
-                                                returncode=0,
-                                                stdout="postgres available",
-                                                stderr="",
-                                            )
-                                            mock_link.return_value = (
-                                                False,
-                                                "Failed to link DATABASE_URL",
-                                            )
-                                            mock_batch_set.return_value = (True, [])
-                                            mock_secret.return_value = "test-secret-key"
-                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        ) as mock_secret:
+                                            with patch(
+                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            ) as mock_domain:
+                                                mock_installed.return_value = True
+                                                mock_auth.return_value = True
+                                                mock_project_init.return_value = True
+                                                mock_run.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="postgres available",
+                                                    stderr="",
+                                                )
+                                                mock_deploy.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="Deployment started",
+                                                    stderr="",
+                                                )
+                                                mock_link.return_value = (
+                                                    False,
+                                                    "Failed to link DATABASE_URL",
+                                                )
+                                                mock_batch_set.return_value = (True, [])
+                                                mock_secret.return_value = (
+                                                    "test-secret-key"
+                                                )
+                                                mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                            result = runner.invoke(railway)
+                                                result = runner.invoke(railway)
 
-                                            assert result.exit_code == 0
-                                            assert (
-                                                "Failed to link DATABASE_URL"
-                                                in result.output
-                                            )
-                                            assert (
-                                                "link DATABASE_URL manually"
-                                                in result.output
-                                            )
+                                                assert result.exit_code == 0
+                                                assert (
+                                                    "Failed to link DATABASE_URL"
+                                                    in result.output
+                                                )
+                                                assert (
+                                                    "link DATABASE_URL manually"
+                                                    in result.output
+                                                )
