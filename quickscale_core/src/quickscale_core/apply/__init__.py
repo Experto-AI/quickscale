@@ -2,7 +2,7 @@
 
 This package exposes the :class:`~quickscale_core.apply.step.ApplyStep`
 dataclass and the ordered registry
-:data:`~quickscale_core.apply.step.APPLY_STEPS` that enumerate the 15
+:data:`~quickscale_core.apply.step.APPLY_STEPS` that enumerate the 16
 canonical steps of the ``quickscale apply`` command.
 
 The :func:`~quickscale_core.apply.step.step_by_id` helper provides

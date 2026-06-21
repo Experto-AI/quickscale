@@ -238,7 +238,10 @@ def get_railway_project_info() -> dict[str, Any] | None:
 
 
 def run_railway_command(
-    args: list[str], timeout: int = 60, interactive: bool = False
+    args: list[str],
+    timeout: int = 60,
+    interactive: bool = False,
+    cwd: str | Path | None = None,
 ) -> subprocess.CompletedProcess:
     """
     Execute Railway CLI command with error handling.
@@ -248,6 +251,7 @@ def run_railway_command(
         args: Command arguments to pass to railway CLI
         timeout: Command timeout in seconds
         interactive: If True, run command interactively without capturing output
+        cwd: Working directory for the command (if None, uses current directory)
 
     Returns:
     -------
@@ -263,6 +267,7 @@ def run_railway_command(
                 cmd,
                 text=True,
                 timeout=timeout,
+                cwd=cwd,
             )
         else:
             # Run non-interactively - capture output
@@ -271,6 +276,7 @@ def run_railway_command(
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                cwd=cwd,
             )
         return result
     except subprocess.TimeoutExpired as e:
@@ -281,6 +287,44 @@ def run_railway_command(
         raise FileNotFoundError(
             "Railway CLI not found. Install with: npm install -g @railway/cli"
         ) from e
+
+
+def deploy_railway_service(
+    project_path: str | Path,
+    service_name: str,
+    timeout: int = 60,
+) -> subprocess.CompletedProcess:
+    """Deploy the application at *project_path* to Railway as a detached trigger.
+
+    This is a **non-interactive** shared seam intended for use by the
+    apply step pipeline as well as the ``quickscale deploy railway`` CLI
+    command.  It does **not** call ``sys.exit`` or ``click`` — callers
+    are responsible for converting the return value into appropriate
+    user-facing behaviour.
+
+    Args:
+    ----
+        project_path: Absolute or relative path to the project root
+            (where ``railway.json`` lives).
+        service_name: The Railway service name to deploy.
+        timeout: Command timeout in seconds (default 60).
+
+    Returns:
+    -------
+        The :class:`subprocess.CompletedProcess` from the Railway CLI
+        ``up --detach`` invocation.  Callers should check ``returncode``.
+
+    Raises:
+    ----
+        FileNotFoundError: If the Railway CLI is not installed.
+        TimeoutError: If the command times out.
+
+    """
+    return run_railway_command(
+        ["up", "--service", service_name, "--detach"],
+        timeout=timeout,
+        cwd=project_path,
+    )
 
 
 def set_railway_variable(

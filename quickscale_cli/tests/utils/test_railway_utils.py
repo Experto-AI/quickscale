@@ -10,6 +10,7 @@ from quickscale_cli.utils.railway_utils import (
     check_poetry_lock_consistency,
     check_railway_cli_version,
     check_uncommitted_changes,
+    deploy_railway_service,
     fix_poetry_lock,
     generate_django_secret_key,
     get_app_service_name,
@@ -265,6 +266,109 @@ class TestRunRailwayCommand:
 
             assert result.returncode == 1
             assert result.stderr == "Error message"
+
+
+class TestDeployRailwayService:
+    """Tests for deploy_railway_service function.
+
+    deploy_railway_service is a non-interactive shared seam that runs
+    ``railway up --detach`` against an explicit project path.
+    It must NOT call sys.exit, click, or rely on CWD.
+    """
+
+    def test_successful_deploy(self, tmp_path):
+        """Test successful deployment via deploy_railway_service."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="Deployment started")
+            result = deploy_railway_service(
+                project_path=str(tmp_path),
+                service_name="myapp",
+            )
+
+            assert result.returncode == 0
+            mock_run.assert_called_once_with(
+                ["up", "--service", "myapp", "--detach"],
+                timeout=60,
+                cwd=str(tmp_path),
+            )
+
+    def test_custom_timeout(self, tmp_path):
+        """Test deploy_railway_service with custom timeout."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            deploy_railway_service(
+                project_path=str(tmp_path),
+                service_name="myapp",
+                timeout=120,
+            )
+
+            mock_run.assert_called_once_with(
+                ["up", "--service", "myapp", "--detach"],
+                timeout=120,
+                cwd=str(tmp_path),
+            )
+
+    def test_deploy_failure(self, tmp_path):
+        """Test deploy failure returns non-zero returncode."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=1, stdout="", stderr="Build failed")
+            result = deploy_railway_service(
+                project_path=str(tmp_path),
+                service_name="myapp",
+            )
+
+            assert result.returncode == 1
+            assert "Build failed" in result.stderr
+
+    def test_uses_explicit_project_path(self, tmp_path):
+        """Verify that cwd is passed as the explicit project path, not CWD."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            explicit_path = tmp_path / "some" / "nested" / "project"
+            deploy_railway_service(
+                project_path=str(explicit_path),
+                service_name="myapp",
+            )
+
+            mock_run.assert_called_once_with(
+                ["up", "--service", "myapp", "--detach"],
+                timeout=60,
+                cwd=str(explicit_path),
+            )
+
+    def test_timeout_propagates(self, tmp_path):
+        """Test that TimeoutError from run_railway_command propagates."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
+            mock_run.side_effect = TimeoutError("Railway command timed out")
+            with pytest.raises(TimeoutError, match="Railway command timed out"):
+                deploy_railway_service(
+                    project_path=str(tmp_path),
+                    service_name="myapp",
+                )
+
+    def test_cli_not_found_propagates(self, tmp_path):
+        """Test that FileNotFoundError from run_railway_command propagates."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
+            mock_run.side_effect = FileNotFoundError(
+                "Railway CLI not found. Install with: npm install -g @railway/cli"
+            )
+            with pytest.raises(FileNotFoundError, match="Railway CLI not found"):
+                deploy_railway_service(
+                    project_path=str(tmp_path),
+                    service_name="myapp",
+                )
 
 
 class TestSetRailwayVariable:

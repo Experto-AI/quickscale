@@ -182,7 +182,7 @@ class TestLedgerPresentValidWithStepProgress:
         assert second.status == "failed"
         assert second.detail == "disk full"
 
-    def test_all_15_step_ids_are_valid(self, tmp_path: Path) -> None:
+    def test_all_16_step_ids_are_valid(self, tmp_path: Path) -> None:
         """Every id in APPLY_STEPS is accepted in step_progress."""
         data = _minimal_ledger_dict()
         data["step_progress"] = [
@@ -195,7 +195,7 @@ class TestLedgerPresentValidWithStepProgress:
 
         assert result is not None
         assert result.step_progress is not None
-        assert len(result.step_progress) == 15
+        assert len(result.step_progress) == 16
 
 
 # ---------------------------------------------------------------------------
@@ -387,8 +387,8 @@ class TestLedgerRoundTrip:
         assert loaded is not None
         assert loaded.applied_state.version == "2"
 
-    def test_round_trip_all_15_steps(self, tmp_path: Path) -> None:
-        """All 15 step ids survive a save+load cycle."""
+    def test_round_trip_all_16_steps(self, tmp_path: Path) -> None:
+        """All 16 step ids survive a save+load cycle."""
         state = _minimal_state()
         sp = {
             s.step_id: StepProgress(step_id=s.step_id, status="completed")
