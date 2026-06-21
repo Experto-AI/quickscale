@@ -36,6 +36,7 @@ from quickscale_core.dr_engine.primitives import (
     BackupError,
     BackupConfigurationError,
     ShellCommandRunner,
+    _build_pg_dump_command,  # noqa: F401 - re-exported for helper parity/tests
     _build_pg_restore_command,
     _build_snapshot_child_descriptor,
     _compute_sha256,

@@ -43,6 +43,7 @@ _LEGACY_DEFAULTS: dict[str, Any] = {
     "posts_per_page": 10,
     "enable_rss": True,
     "api_rate_limit": "5/hour",
+    "org_routing_enabled": False,
 }
 
 
@@ -97,7 +98,7 @@ class TestConstantsParity:
 
     def test_module_option_keys_frozenset(self) -> None:
         assert BLOG_MODULE_OPTION_KEYS == frozenset(
-            {"posts_per_page", "enable_rss", "api_rate_limit"}
+            {"posts_per_page", "enable_rss", "api_rate_limit", "org_routing_enabled"}
         )
 
 

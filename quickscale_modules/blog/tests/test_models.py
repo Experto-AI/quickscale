@@ -104,24 +104,25 @@ class TestModelHelpers:
 class TestCategory:
     """Tests for Category model"""
 
-    def test_category_creation(self):
+    def test_category_creation(self, org):
         """Test creating a category"""
         category = Category.objects.create(
             name="Technology",
             description="Tech posts",
+            organization=org,
         )
         assert category.name == "Technology"
         assert category.slug == "technology"
         assert str(category) == "Technology"
 
-    def test_category_auto_slug(self):
+    def test_category_auto_slug(self, org):
         """Test automatic slug generation"""
-        category = Category.objects.create(name="Web Development")
+        category = Category.objects.create(name="Web Development", organization=org)
         assert category.slug == "web-development"
 
-    def test_category_get_absolute_url(self):
+    def test_category_get_absolute_url(self, org):
         """Test category URL generation"""
-        category = Category.objects.create(name="Python")
+        category = Category.objects.create(name="Python", organization=org)
         url = category.get_absolute_url()
         assert "/category/python/" in url
 
@@ -130,21 +131,21 @@ class TestCategory:
 class TestTag:
     """Tests for Tag model"""
 
-    def test_tag_creation(self):
+    def test_tag_creation(self, org):
         """Test creating a tag"""
-        tag = Tag.objects.create(name="Django")
+        tag = Tag.objects.create(name="Django", organization=org)
         assert tag.name == "Django"
         assert tag.slug == "django"
         assert str(tag) == "Django"
 
-    def test_tag_auto_slug(self):
+    def test_tag_auto_slug(self, org):
         """Test automatic slug generation"""
-        tag = Tag.objects.create(name="Machine Learning")
+        tag = Tag.objects.create(name="Machine Learning", organization=org)
         assert tag.slug == "machine-learning"
 
-    def test_tag_get_absolute_url(self):
+    def test_tag_get_absolute_url(self, org):
         """Test tag URL generation"""
-        tag = Tag.objects.create(name="Python")
+        tag = Tag.objects.create(name="Python", organization=org)
         url = tag.get_absolute_url()
         assert "/tag/python/" in url
 
@@ -192,13 +193,14 @@ class TestAuthorProfile:
 class TestPost:
     """Tests for Post model"""
 
-    def test_post_creation(self, author_user):
+    def test_post_creation(self, author_user, org):
         """Test creating a blog post"""
         post = Post.objects.create(
             title="Test Post",
             author=author_user,
             content="# Test Content\n\nThis is a test post.",
             status="draft",
+            organization=org,
         )
         assert post.title == "Test Post"
         assert post.slug == "test-post"
@@ -206,43 +208,47 @@ class TestPost:
         assert post.status == "draft"
         assert str(post) == "Test Post"
 
-    def test_post_auto_slug(self, author_user):
+    def test_post_auto_slug(self, author_user, org):
         """Test automatic slug generation"""
         post = Post.objects.create(
             title="My Awesome Blog Post",
             author=author_user,
             content="Content here",
+            organization=org,
         )
         assert post.slug == "my-awesome-blog-post"
 
-    def test_post_auto_excerpt(self, author_user):
+    def test_post_auto_excerpt(self, author_user, org):
         """Test automatic excerpt generation"""
         long_content = "A" * 500  # 500 characters
         post = Post.objects.create(
             title="Test",
             author=author_user,
             content=long_content,
+            organization=org,
         )
         assert len(post.excerpt) <= 303  # 300 + "..."
         assert post.excerpt.endswith("...")
 
-    def test_post_manual_excerpt(self, author_user):
+    def test_post_manual_excerpt(self, author_user, org):
         """Test manual excerpt"""
         post = Post.objects.create(
             title="Test",
             author=author_user,
             content="Long content here",
             excerpt="Custom excerpt",
+            organization=org,
         )
         assert post.excerpt == "Custom excerpt"
 
-    def test_post_published_date_auto_set(self, author_user):
+    def test_post_published_date_auto_set(self, author_user, org):
         """Test published_date is set when status changes to published"""
         post = Post.objects.create(
             title="Test",
             author=author_user,
             content="Content",
             status="draft",
+            organization=org,
         )
         assert post.published_date is None
 
@@ -250,17 +256,18 @@ class TestPost:
         post.save()
         assert post.published_date is not None
 
-    def test_post_with_category_and_tags(self, author_user):
+    def test_post_with_category_and_tags(self, author_user, org):
         """Test post with category and tags"""
-        category = Category.objects.create(name="Tech")
-        tag1 = Tag.objects.create(name="Python")
-        tag2 = Tag.objects.create(name="Django")
+        category = Category.objects.create(name="Tech", organization=org)
+        tag1 = Tag.objects.create(name="Python", organization=org)
+        tag2 = Tag.objects.create(name="Django", organization=org)
 
         post = Post.objects.create(
             title="Test",
             author=author_user,
             content="Content",
             category=category,
+            organization=org,
         )
         post.tags.add(tag1, tag2)
 
@@ -269,27 +276,29 @@ class TestPost:
         assert tag1 in post.tags.all()
         assert tag2 in post.tags.all()
 
-    def test_post_get_absolute_url(self, author_user):
+    def test_post_get_absolute_url(self, author_user, org):
         """Test post URL generation"""
         post = Post.objects.create(
             title="Test Post",
             author=author_user,
             content="Content",
+            organization=org,
         )
         url = post.get_absolute_url()
         assert "/post/test-post/" in url
 
-    def test_post_short_content_no_ellipsis(self, author_user):
+    def test_post_short_content_no_ellipsis(self, author_user, org):
         """Test excerpt for short content has no ellipsis"""
         post = Post.objects.create(
             title="Short",
             author=author_user,
             content="Short content",
+            organization=org,
         )
         assert post.excerpt == "Short content"
         assert not post.excerpt.endswith("...")
 
-    def test_post_save_with_featured_image(self, author_user, tmp_path, settings):
+    def test_post_save_with_featured_image(self, author_user, org, tmp_path, settings):
         """Test saving a post with a featured image triggers thumbnail generation"""
         settings.MEDIA_ROOT = str(tmp_path)
 
@@ -310,6 +319,7 @@ class TestPost:
             author=author_user,
             content="Content with image",
             featured_image=image_file,
+            organization=org,
         )
 
         # Verify thumbnails were generated
@@ -321,14 +331,14 @@ class TestPost:
         assert any("small" in f for f in os.listdir(thumb_dir))
         assert any("medium" in f for f in os.listdir(thumb_dir))
 
-    def test_get_thumbnail_url_with_image(self, author_user, tmp_path, settings):
+    def test_get_thumbnail_url_with_image(self, author_user, org, tmp_path, settings):
         """Test get_thumbnail_url returns correct URL when image exists"""
         settings.MEDIA_ROOT = str(tmp_path)
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
 
         img_dir = tmp_path / "blog" / "images"
         img_dir.mkdir(parents=True)
-        img_path = img_dir / "thumb_test.jpg"
+        img_path = tmp_path / "thumb_test.jpg"
         img = Image.new("RGB", (1200, 800), color="blue")
         img.save(str(img_path), format="JPEG")
 
@@ -341,6 +351,7 @@ class TestPost:
             author=author_user,
             content="Content",
             featured_image=image_file,
+            organization=org,
         )
 
         medium_url = post.get_thumbnail_url("medium")
@@ -353,12 +364,13 @@ class TestPost:
         assert "thumbnails" in small_url
         assert "small" in small_url
 
-    def test_get_thumbnail_url_without_image(self, author_user):
+    def test_get_thumbnail_url_without_image(self, author_user, org):
         """Test get_thumbnail_url returns empty string when no image"""
         post = Post.objects.create(
             title="No Image Post",
             author=author_user,
             content="Content",
+            organization=org,
         )
         assert post.get_thumbnail_url() == ""
         assert post.get_thumbnail_url("small") == ""
@@ -366,6 +378,7 @@ class TestPost:
     def test_get_thumbnail_url_falls_back_to_original_if_missing_variant(
         self,
         author_user,
+        org,
         tmp_path,
         settings,
     ):
@@ -387,6 +400,7 @@ class TestPost:
             author=author_user,
             content="Content",
             featured_image=image_file,
+            organization=org,
         )
 
         assert post.get_thumbnail_url("large") == post.featured_image.url
@@ -394,6 +408,7 @@ class TestPost:
     def test_get_featured_image_url_uses_public_base_url(
         self,
         author_user,
+        org,
         tmp_path,
         settings,
     ):
@@ -417,6 +432,7 @@ class TestPost:
             author=author_user,
             content="Content",
             featured_image=uploaded_file,
+            organization=org,
         )
 
         assert post.get_featured_image_url().startswith(
@@ -426,6 +442,7 @@ class TestPost:
     def test_generate_thumbnails_skips_non_filesystem_storage_path(
         self,
         author_user,
+        org,
         tmp_path,
         settings,
         monkeypatch,
@@ -446,6 +463,7 @@ class TestPost:
             author=author_user,
             content="Content",
             featured_image=image_file,
+            organization=org,
         )
 
         def _raise_not_implemented(*_args, **_kwargs):
@@ -457,6 +475,7 @@ class TestPost:
     def test_generate_thumbnails_with_storage_open_without_filesystem_path(
         self,
         author_user,
+        org,
         tmp_path,
         settings,
         monkeypatch,
@@ -481,6 +500,7 @@ class TestPost:
             author=author_user,
             content="Content",
             featured_image=image_file,
+            organization=org,
         )
 
         original_bytes = post.featured_image.read()
@@ -518,6 +538,7 @@ class TestPost:
     def test_generate_thumbnails_ignores_decompression_bomb_error(
         self,
         author_user,
+        org,
         tmp_path,
         settings,
     ):
@@ -544,6 +565,7 @@ class TestPost:
                 author=author_user,
                 content="Content",
                 featured_image=uploaded_file,
+                organization=org,
             )
 
         assert post.featured_image.name.endswith("bomb.jpg")
@@ -554,6 +576,7 @@ class TestPost:
     def test_generate_thumbnails_ignores_decompression_bomb_warning(
         self,
         author_user,
+        org,
         tmp_path,
         settings,
     ):
@@ -590,6 +613,7 @@ class TestPost:
                 author=author_user,
                 content="Content",
                 featured_image=uploaded_file,
+                organization=org,
             )
 
         assert post.featured_image.name.endswith("warning-bomb.jpg")
@@ -600,6 +624,7 @@ class TestPost:
     def test_helper_backed_urls_do_not_depend_on_storage_url(
         self,
         author_user,
+        org,
         tmp_path,
         settings,
     ):
@@ -623,6 +648,7 @@ class TestPost:
             author=author_user,
             content="Content",
             featured_image=uploaded_file,
+            organization=org,
         )
 
         with patch.object(
@@ -640,7 +666,7 @@ class TestPost:
 class TestBlogMediaAsset:
     """Tests for BlogMediaAsset model."""
 
-    def test_blog_media_asset_creation(self, author_user, tmp_path, settings):
+    def test_blog_media_asset_creation(self, author_user, org, tmp_path, settings):
         """Test creating a blog media asset stores metadata."""
         settings.MEDIA_ROOT = str(tmp_path)
 
@@ -663,6 +689,7 @@ class TestBlogMediaAsset:
             width=640,
             height=360,
             uploaded_by=author_user,
+            organization=org,
         )
 
         assert asset.alt == "Diagram"

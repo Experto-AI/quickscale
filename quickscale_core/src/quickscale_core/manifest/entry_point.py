@@ -442,8 +442,15 @@ def _blog_manifest_adapter(
     """Build a ModuleWiringSpec for the blog module via the manifest path.
 
     Apps: ``("markdownx", "quickscale_modules_blog")``.
-    URL includes: ``[("blog/", ...), ("markdownx/", ...)]``.
+    URL includes: ``[("", "quickscale_modules_blog.urls"), ("markdownx/", ...)]``.
+    The blog ``urls.py`` already carries its own ``blog/...`` and
+    ``orgs/<slug>/blog/...`` prefixes, so it is included at root level.
     Settings: BLOG_* + MARKDOWNX_* keys.
+
+    Phase 1 (F11.11): added ``BLOG_ORG_ROUTING_ENABLED`` as an additive
+    wiring prerequisite for org-scoped blog routing.  The setting defaults
+    to ``False`` and is flipped to ``True`` by Phase 2 wiring logic when
+    org-scoped viewsets and URL patterns are active.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -493,11 +500,11 @@ def _blog_manifest_adapter(
                 derivation_type="static",
                 expression={
                     "value": [
-                        ["blog/", "quickscale_modules_blog.urls"],
+                        ["", "quickscale_modules_blog.urls"],
                         ["markdownx/", "markdownx.urls"],
                     ]
                 },
-                description="Blog URL includes",
+                description="Blog URL includes (included at root; urls.py carries its own blog/ prefix)",
             ),
         ],
         option_derivations={
@@ -537,6 +544,20 @@ def _blog_manifest_adapter(
                     ),
                 ],
             ),
+            # Phase 1 (F11.11): org routing prerequisite — flipped to True
+            # by Phase 2 when org-scoped viewsets are active.
+            "org_routing_enabled": OptionDerivation(
+                option_key="org_routing_enabled",
+                derived_settings=[
+                    DerivedSetting(
+                        setting_key="BLOG_ORG_ROUTING_ENABLED",
+                        source_options=["org_routing_enabled"],
+                        derivation_type="direct",
+                        expression={"option": "org_routing_enabled"},
+                        default=False,
+                    ),
+                ],
+            ),
         },
     )
 
@@ -552,6 +573,9 @@ def _blog_manifest_adapter(
     )
     api_rate = str(derived_settings.get("BLOG_API_RATE_LIMIT", "")).strip()
     derived_settings["BLOG_API_RATE_LIMIT"] = api_rate or DEFAULT_BLOG_API_RATE_LIMIT
+    derived_settings["BLOG_ORG_ROUTING_ENABLED"] = bool(
+        derived_settings.get("BLOG_ORG_ROUTING_ENABLED", False)
+    )
 
     # Add static markdownx settings (identical to legacy).
     derived_settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = _MARKDOWNX_EXTENSIONS

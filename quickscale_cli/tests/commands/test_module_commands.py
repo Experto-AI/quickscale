@@ -711,6 +711,7 @@ class TestEmbedModule:
                 "posts_per_page": 10,
                 "enable_rss": True,
                 "api_rate_limit": "5/hour",
+                "org_routing_enabled": False,
             }
         }
 

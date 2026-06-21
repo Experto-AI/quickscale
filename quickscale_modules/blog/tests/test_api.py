@@ -64,14 +64,18 @@ def make_uploaded_test_image(
 
 @pytest.fixture
 def staff_user(db):
-    """Create a staff user"""
+    """Create a staff user with a personal org (SaaS mode)."""
+    from quickscale_modules_orgs.models import Organization
+
     user_model = get_user_model()
-    return user_model.objects.create_user(
+    staff_user = user_model.objects.create_user(
         username="staff",
         email="staff@example.com",
         password="staffpass123",
         is_staff=True,
     )
+    Organization.objects.create_personal_for(staff_user)
+    return staff_user
 
 
 @pytest.fixture(autouse=True)
@@ -1125,3 +1129,579 @@ class TestUploadMediaApi:
         assert second_response.status_code == 429
         assert second_response.json() == {"error": "Rate limit exceeded"}
         assert int(second_response["Retry-After"]) > 0
+
+
+@pytest.mark.django_db
+class TestOrgScopedPublishPostApi:
+    """Tests for org-scoped publish post API (Phase 2, F11.11)"""
+
+    def test_org_scoped_publish_stamps_organization(
+        self,
+        client,
+        org_a,
+        org_a_admin,
+    ):
+        """Test that an org-scoped publish creates a post stamped with the org."""
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            reverse(
+                "quickscale_blog:org-api_publish_post",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data=json.dumps({"title": "Org A Post", "content": "Content"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="org-a-post")
+        assert post.organization == org_a
+
+    def test_org_scoped_publish_category_must_be_same_org(
+        self,
+        client,
+        org_a,
+        org_b,
+        org_a_admin,
+    ):
+        """Test that referencing a category from another org fails."""
+        from quickscale_modules_blog.models import Category
+
+        cat_b = Category.objects.create(
+            name="Org B Cat", slug="org-b-cat", organization=org_b
+        )
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            reverse(
+                "quickscale_blog:org-api_publish_post",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data=json.dumps(
+                {
+                    "title": "Cross Org Post",
+                    "content": "Body",
+                    "category_slug": cat_b.slug,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {"category_slug": "Category not found"}
+
+    def test_org_scoped_publish_referenced_media_must_be_same_org(
+        self,
+        client,
+        org_a,
+        org_b,
+        org_a_admin,
+        tmp_path,
+        settings,
+    ):
+        """Test that referencing a media asset from another org fails."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        from quickscale_modules_blog.models import BlogMediaAsset
+
+        asset_b = BlogMediaAsset.objects.create(
+            file=make_uploaded_test_image(filename="featured-b.png"),
+            alt="Org B featured",
+            kind=BlogMediaAsset.Kind.FEATURED,
+            original_filename="featured-b.png",
+            width=800,
+            height=600,
+            uploaded_by=org_a_admin,
+            organization=org_b,
+        )
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            reverse(
+                "quickscale_blog:org-api_publish_post",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data=json.dumps(
+                {
+                    "title": "Cross Media Post",
+                    "content": "Body",
+                    "featured_image_id": asset_b.pk,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "featured_image_id": "Media asset not found"
+        }
+
+    def test_org_scoped_media_upload_stamps_org(
+        self,
+        client,
+        org_a,
+        org_a_admin,
+        tmp_path,
+        settings,
+    ):
+        """Test that an org-scoped media upload stamps the org."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            reverse(
+                "quickscale_blog:org-api_upload_media",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data={
+                "file": make_uploaded_test_image(),
+                "alt": "Org A image",
+                "kind": BlogMediaAsset.Kind.GENERAL,
+            },
+        )
+
+        assert response.status_code == 201
+        payload = response.json()
+        asset = BlogMediaAsset.objects.get(pk=payload["id"])
+        assert asset.organization == org_a
+
+
+@pytest.mark.django_db
+class TestOrgScopedCategoryTagValidation:
+    """Tests for org-scoped same-org validation on category and tag lookups.
+
+    Phase 2 (F11.11): when creating posts via org-scoped routes, referenced
+    categories and tags must belong to the same organization.
+    """
+
+    def test_org_scoped_publish_same_org_category_succeeds(
+        self,
+        client,
+        org_a,
+        org_a_admin,
+    ):
+        """Test that referencing a same-org category succeeds."""
+        from quickscale_modules_blog.models import Category
+
+        cat_a = Category.objects.create(
+            name="Org A Cat", slug="org-a-cat", organization=org_a
+        )
+
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            reverse(
+                "quickscale_blog:org-api_publish_post",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data=json.dumps(
+                {
+                    "title": "Same Org Post",
+                    "content": "Body",
+                    "category_slug": cat_a.slug,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="same-org-post")
+        assert post.category == cat_a
+        assert post.organization == org_a
+
+    def test_org_scoped_publish_same_org_tag_succeeds(
+        self,
+        client,
+        org_a,
+        org_a_admin,
+    ):
+        """Test that creating a tag within the same org via org-scoped publish works."""
+        client.force_login(org_a_admin)
+
+        response = client.post(
+            reverse(
+                "quickscale_blog:org-api_publish_post",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data=json.dumps(
+                {
+                    "title": "Tagged Org Post",
+                    "content": "Body",
+                    "tags": ["org-a-tag"],
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="tagged-org-post")
+        assert post.organization == org_a
+        tag_slugs = list(post.tags.values_list("slug", flat=True))
+        assert "org-a-tag" in tag_slugs
+        # Verify tag is org-scoped
+        from quickscale_modules_blog.models import Tag
+
+        tag = Tag.objects.get(slug="org-a-tag")
+        assert tag.organization == org_a
+
+    def test_flat_publish_does_not_stamp_org(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test that the flat (non-org-scoped) publish path does not stamp org."""
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Flat Post", "content": "Content"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="flat-post")
+        assert post.organization is None, (
+            "Flat publish should leave organization as None"
+        )
+
+    def test_flat_media_upload_does_not_stamp_org(
+        self,
+        client,
+        staff_user,
+        tmp_path,
+        settings,
+    ):
+        """Test that the flat media upload path does not stamp org."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={
+                "file": make_uploaded_test_image(),
+                "alt": "Flat image",
+                "kind": BlogMediaAsset.Kind.GENERAL,
+            },
+        )
+
+        assert response.status_code == 201
+        payload = response.json()
+        asset = BlogMediaAsset.objects.get(pk=payload["id"])
+        assert asset.organization is None, (
+            "Flat media upload should leave organization as None"
+        )
+
+
+# ---------------------------------------------------------------------------
+# CR-001 regression: solo-mode gate for token-authenticated blog APIs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestTokenAuthSoloModeGate:
+    """Token-authenticated org-scoped requests must be rejected in solo mode.
+
+    ``TenantMiddleware._handle_solo_request()`` returns 404 for
+    ``/orgs/...`` routes, but token-auth requests bypass the middleware
+    (``request.user`` is anonymous at middleware time so it passes through).
+    ``_resolve_org_for_token_auth()`` must independently enforce the same
+    solo-mode gate.
+    """
+
+    def test_token_publish_on_org_route_rejected_in_solo_mode(
+        self,
+        settings,
+        org_a,
+        org_a_admin,
+    ):
+        """Org-scoped token publish must be rejected in solo mode.
+
+        Uses ``org_a_admin`` (an org member) to prove the solo-mode gate
+        independently blocks token auth — the rejection is not coming
+        from a membership check.
+        """
+        settings.QUICKSCALE_MODE = "solo"
+        settings.BLOG_API_TOKENS = [
+            {"token": "publish-token", "username": org_a_admin.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse(
+                "quickscale_blog:org-api_publish_post",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data=json.dumps({"title": "Solo Token Post", "content": "Body"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer publish-token",
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {"error": "Organization not found or access denied"}
+
+    def test_token_publish_on_org_route_saas_mode_authorizes_org_member(
+        self,
+        settings,
+        org_a,
+        org_a_admin,
+    ):
+        """Org-scoped token publish in SaaS mode authorizes org members.
+
+        Uses the same ``org_a_admin`` fixture as the solo-mode rejection
+        test above.  This paired proof shows that the same token user IS
+        authorized in SaaS mode — the solo-mode rejection is from the
+        independent solo gate, not from a membership check.
+        """
+        settings.QUICKSCALE_MODE = "saas"
+        settings.BLOG_API_TOKENS = [
+            {"token": "publish-token", "username": org_a_admin.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse(
+                "quickscale_blog:org-api_publish_post",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data=json.dumps({"title": "Saas Token Post", "content": "Body"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer publish-token",
+        )
+
+        # org_a_admin is an admin member of org_a, so token auth
+        # succeeds in SaaS mode — proving membership validation works
+        # and the solo-mode rejection is the additive gate.
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["slug"] == "saas-token-post"
+
+    def test_token_upload_on_org_route_rejected_in_solo_mode(
+        self,
+        settings,
+        org_a,
+        org_a_admin,
+        tmp_path,
+    ):
+        """Org-scoped token media upload must be rejected in solo mode.
+
+        Uses ``org_a_admin`` (an org member) to prove the solo-mode gate
+        independently blocks token upload — the rejection is not coming
+        from a membership check.
+        """
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_MODE = "solo"
+        settings.BLOG_API_TOKENS = [
+            {"token": "upload-token", "username": org_a_admin.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse(
+                "quickscale_blog:org-api_upload_media",
+                kwargs={"org_slug": org_a.slug},
+            ),
+            data={"file": make_uploaded_test_image()},
+            HTTP_AUTHORIZATION="Bearer upload-token",
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {"error": "Organization not found or access denied"}
+
+
+# ---------------------------------------------------------------------------
+# CR-002 regression: flat publish must not cross-bind org-owned records
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestFlatPublishTenantIsolation:
+    """Flat (non-org-scoped) publish must remain tenant-agnostic.
+
+    ``create_published_post_from_payload`` with ``organization=None`` must
+    not resolve category, media, or tag rows that belong to an organization.
+    All lookups must restrict to ``organization__isnull=True``.
+    """
+
+    def test_flat_publish_org_owned_category_not_found(
+        self,
+        client,
+        staff_user,
+        org_a,
+    ):
+        """Flat publish must not find an org-owned category slug."""
+        Category.objects.create(name="Org Cat", slug="org-cat", organization=org_a)
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Flat Post",
+                    "content": "Body",
+                    "category_slug": "org-cat",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {"category_slug": "Category not found"}
+
+    def test_flat_publish_tenant_agnostic_category_found(
+        self,
+        client,
+        staff_user,
+        org_a,
+    ):
+        """Flat publish must still find a tenant-agnostic category."""
+        # An org-owned category with the same slug must not shadow the
+        # tenant-agnostic one.
+        Category.objects.create(name="Org Cat", slug="shared-slug", organization=org_a)
+        flat_cat = Category.objects.create(
+            name="Flat Cat", slug="shared-slug", organization=None
+        )
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Flat Post",
+                    "content": "Body",
+                    "category_slug": "shared-slug",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="flat-post")
+        assert post.category == flat_cat
+        assert post.organization is None
+
+    def test_flat_publish_org_owned_media_not_found(
+        self,
+        client,
+        staff_user,
+        org_a,
+        tmp_path,
+        settings,
+    ):
+        """Flat publish must not find an org-owned media asset."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        asset = BlogMediaAsset.objects.create(
+            file=make_uploaded_test_image(filename="org-featured.png"),
+            alt="Org featured",
+            kind=BlogMediaAsset.Kind.FEATURED,
+            original_filename="org-featured.png",
+            width=800,
+            height=600,
+            uploaded_by=staff_user,
+            organization=org_a,
+        )
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Flat Media Post",
+                    "content": "Body",
+                    "featured_image_id": asset.pk,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "featured_image_id": "Media asset not found"
+        }
+
+    def test_flat_publish_tenant_agnostic_media_found(
+        self,
+        client,
+        staff_user,
+        org_a,
+        tmp_path,
+        settings,
+    ):
+        """Flat publish must still find a tenant-agnostic media asset."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        # Create an org-owned asset with same pk context — just create a
+        # separate tenant-agnostic asset.
+        BlogMediaAsset.objects.create(
+            file=make_uploaded_test_image(filename="org-owned.png"),
+            alt="Org owned",
+            kind=BlogMediaAsset.Kind.FEATURED,
+            original_filename="org-owned.png",
+            width=800,
+            height=600,
+            uploaded_by=staff_user,
+            organization=org_a,
+        )
+        flat_asset = BlogMediaAsset.objects.create(
+            file=make_uploaded_test_image(filename="flat-featured.png"),
+            alt="Flat featured",
+            kind=BlogMediaAsset.Kind.FEATURED,
+            original_filename="flat-featured.png",
+            width=800,
+            height=600,
+            uploaded_by=staff_user,
+            organization=None,
+        )
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Flat Media Post",
+                    "content": "Body",
+                    "featured_image_id": flat_asset.pk,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="flat-media-post")
+        assert post.featured_image.name == flat_asset.file.name
+
+    def test_flat_publish_tag_does_not_cross_bind_org_owned(
+        self,
+        client,
+        staff_user,
+        org_a,
+    ):
+        """Flat publish must create a new tenant-agnostic tag instead of
+        cross-binding an org-owned tag with the same slug."""
+        Tag.objects.create(name="Launch", slug="launch", organization=org_a)
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Tag Isolation Post",
+                    "content": "Body",
+                    "tags": ["Launch"],
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="tag-isolation-post")
+        # Verify we created a separate tenant-agnostic tag, not re-used the
+        # org-owned one.
+        flat_tag = Tag.objects.filter(slug="launch", organization__isnull=True)
+        org_tag = Tag.objects.filter(slug="launch", organization=org_a)
+        assert flat_tag.exists(), "Flat publish should create a tenant-agnostic tag"
+        assert org_tag.exists(), "The original org-owned tag must still exist"
+        # The post should be linked to the tenant-agnostic tag.
+        post_tags = post.tags.all()
+        assert flat_tag.first() in post_tags
+        assert org_tag.first() not in post_tags
+        assert post.organization is None
