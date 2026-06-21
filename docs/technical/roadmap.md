@@ -68,7 +68,7 @@ git merge --no-ff wt-track{N}
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
-| M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
+| M7 | 1 | F11.11–F11.13b | 🟡 | F11.11 ✅. Org ownership on Category/Tag/Post/BlogMediaAsset; per-org uniqueness; org-scoped blog routes + flat compat preserved; isolation tests green; review-driven fixes applied; final re-review resolved CR-001 and CR-002. **Next:** F11.12a. |
 | M8 | 3 | F12.1–F12.3b | 🟡 | F12.1 ✅ F12.2 ✅ F12.3a ✅ (all merged to v87). **Next:** F12.3b. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
@@ -96,7 +96,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 next |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1 ✅ F12.2 ✅ F12.3a ✅; next `F12.3b` |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
@@ -107,7 +107,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** CRM isolation phases F11.1–F11.10e complete and in CHANGELOG — M3 merged/closed (see merge checkpoints table above). Module rollout to blog, forms, listings, and social (M7 / F11.11–F11.13b) remains. Non-CRM admin, shell, and async paths still need data-layer isolation per module in M7.
+**Why still open:** CRM isolation phases F11.1–F11.10e complete and in CHANGELOG — M3 merged/closed (see merge checkpoints table above). Blog isolation (F11.11) complete and merged to `v87`. Forms (F11.12a), listings (F11.12b), and social (F11.13a–F11.13b) rollout remain in M7. Non-CRM admin, shell, and async paths still need data-layer isolation per module in the remaining M7 phases.
 
 ---
 
@@ -193,8 +193,28 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** M3 merged.
 
-- [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `blog`.
-- [ ] Unskip and confirm `blog` isolation test green.
+**Status:** ✅ Complete and merged to `v87`. Org ownership for Category/Tag/Post/BlogMediaAsset with per-org uniqueness, migration 0003, orgs dependency wiring, and blog managers. Additive `/orgs/<slug>/blog/...` routes with org-scoped read filtering, org stamping on publish/upload APIs, same-org validation, and org-scoped feed behavior while preserving flat `/blog/...` compatibility. Org-aware blog test harness coverage completed with HTML view tests and unskipped isolation test. Post-completion review-driven fixes applied: token-auth org resolution + membership enforcement on org-scoped blog APIs; flat routes/feed scoped to tenant-agnostic rows while org-owned entities emit org-scoped URLs; generated-project blog wiring corrected to root include to prevent route double-prefix. Final targeted re-review resolved CR-001 and CR-002.
+
+**Groundwork committed to `wt-track1` (2026-06-21):**
+- ✅ Phase 1: Org ownership on Category/Tag/Post/BlogMediaAsset (TenantModel base + organization_id FK), per-org uniqueness, migration 0003, orgs dependency wiring, blog managers.
+- ✅ Phase 2: Additive `/orgs/<slug>/blog/...` routes, org-scoped read filtering, org stamping on publish/upload APIs, same-org validation, org-scoped feed behavior, flat `/blog/...` compatibility preserved.
+- ✅ Phase 3: Org-aware blog test harness coverage, additional HTML view tests, unskipped blog isolation test.
+- ✅ Phase 4: Review-driven fixes — token-auth org resolution/membership enforcement on org-scoped blog APIs; flat routes/feed scoped to tenant-agnostic rows (org-owned entities emit org-scoped URLs); generated-project blog wiring corrected to root include to prevent route double-prefix.
+
+**Findings / decisions status (all resolved):**
+- [x] **Org ownership applied** to Category, Tag, Post, and BlogMediaAsset via TenantModel base + organization_id FK.
+- [x] **Per-org uniqueness** enforced where applicable.
+- [x] **Dual-route compatibility**: `/orgs/<slug>/blog/...` additive routes coexist with flat `/blog/...` compatibility.
+- [x] **Same-org validation** applied on publish/upload APIs.
+- [x] **Blog managers** updated for org-scoped defaults.
+- [x] **Isolation test** unskipped and passing.
+- [x] **Token-auth org resolution** applied to org-scoped blog APIs with membership enforcement.
+- [x] **Flat-route compatibility restored**: flat `/blog/...` routes/feed scoped to tenant-agnostic rows; org-owned entities emit org-scoped `/orgs/<slug>/blog/...` URLs.
+- [x] **Generated-project blog wiring corrected** to root `include()` so routes do not double-prefix.
+
+**Validation evidence (F11.11 closeout):** `make test` completed across the full suite — 4,481 passed / 0 failed / 4 skipped (+ deselected as reported by the suite). In-scope F11.11 managers coverage gap fixed to 100% via `quickscale_modules/blog/tests/test_managers.py`; review-driven fixes validated with no regression. Final targeted re-review resolved CR-001 and CR-002 with no regression. Exit code non-zero solely from pre-existing per-file coverage gaps in **4 unrelated files** outside the blog slice: `quickscale_core/contracts/module_catalog.py` (74%), `quickscale_core/schema/delta.py` (77%), `quickscale_cli/backups_manifest.py` (76%), `quickscale_cli/crm_manifest.py` (76%). Those coverage gaps are pre-existing and do not block blog isolation work.
+
+**Next:** F11.12a — forms isolation.
 
 **Phase F11.12a — Forms isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 

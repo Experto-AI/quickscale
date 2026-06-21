@@ -9,6 +9,9 @@ Option set:
 * ``posts_per_page`` — integer, default ``10``
 * ``enable_rss``     — boolean, default ``True``
 * ``api_rate_limit`` — string, default ``"5/hour"``
+* ``org_routing_enabled`` — boolean, default ``False`` (Phase 1 / F11.11
+  additive wiring prerequisite; flipped by Phase 2 when org-scoped
+  viewsets are active)
 """
 
 from __future__ import annotations
@@ -36,12 +39,14 @@ from quickscale_core.manifest.resolver import resolve_module_config
 DEFAULT_BLOG_POSTS_PER_PAGE = 10
 DEFAULT_BLOG_ENABLE_RSS = True
 DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
+DEFAULT_BLOG_ORG_ROUTING_ENABLED = False
 
 BLOG_MODULE_OPTION_KEYS = frozenset(
     {
         "posts_per_page",
         "enable_rss",
         "api_rate_limit",
+        "org_routing_enabled",
     }
 )
 
@@ -109,6 +114,7 @@ def normalize_blog_module_options(
     * ``api_rate_limit`` — strip whitespace; fall back to default when blank.
     * ``posts_per_page`` — passed through (coercion happens in resolution).
     * ``enable_rss``     — passed through (coercion happens in resolution).
+    * ``org_routing_enabled`` — passed through (coercion happens in resolution).
     """
     normalized = dict(options or {})
 
@@ -133,6 +139,7 @@ def resolve_blog_module_options(
     * ``posts_per_page`` — ``int()``
     * ``enable_rss``     — ``bool()``
     * ``api_rate_limit`` — strip + fallback to default when blank
+    * ``org_routing_enabled`` — ``bool()`` with default ``False``
     """
     manifest = _load_blog_manifest()
     schema = _build_blog_derivation_schema()
@@ -146,6 +153,9 @@ def resolve_blog_module_options(
     stripped_rate = str(resolved.get("api_rate_limit", "")).strip()
     resolved["api_rate_limit"] = (
         stripped_rate if stripped_rate else DEFAULT_BLOG_API_RATE_LIMIT
+    )
+    resolved["org_routing_enabled"] = bool(
+        resolved.get("org_routing_enabled", DEFAULT_BLOG_ORG_ROUTING_ENABLED)
     )
 
     return resolved
@@ -177,6 +187,7 @@ __all__ = [
     "BLOG_MODULE_OPTION_KEYS",
     "DEFAULT_BLOG_API_RATE_LIMIT",
     "DEFAULT_BLOG_ENABLE_RSS",
+    "DEFAULT_BLOG_ORG_ROUTING_ENABLED",
     "DEFAULT_BLOG_POSTS_PER_PAGE",
     "default_blog_module_options",
     "normalize_blog_module_options",

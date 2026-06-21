@@ -25,7 +25,15 @@ config:
       django_setting: BLOG_ENABLE_RSS
       description: "Enable RSS routes at runtime"
 
-  immutable: {}
+  immutable:
+    org_routing_enabled:
+      type: boolean
+      default: false
+      django_setting: BLOG_ORG_ROUTING_ENABLED
+      description: "Enable org-scoped blog routing (Phase 2 of F11.11)"
+
+required_modules:
+  - orgs
 
 dependencies:
   - django-markdownx>=4.0
