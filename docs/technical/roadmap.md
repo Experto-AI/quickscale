@@ -72,7 +72,7 @@ git merge --no-ff wt-track{N}
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
 | M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. **In progress:** F5.2a extract snapshot/archive primitives. |
-| M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅ (inventory in implementation_contract.md). F7.2/F7.3 pending. |
+| M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
 
 ## In-Flight Milestones
 
@@ -86,7 +86,7 @@ git merge --no-ff wt-track{N}
 ### M11 — F7 Generator vs generated-project runtime pins
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F7.1 inventory complete and merged on `wt-track3`; F7.2/F7.3 pending.
+**Status:** 🟡 In progress — F7.1 ✅ (inventory complete); F7.2 ✅ (ownership split — runtime_pins.py SSOT, templates variableized); F7.3 pending — validation for diverged pin sets, operator-messaging alignment, variableize `ruff target-version` in `pyproject.toml.j2`, verify `railway.json.j2` pin alignment.
 
 ---
 
@@ -102,7 +102,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (Track 1 independent of Track 3) |
 | 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a–F5.4 pending |
-| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅ (inventory complete). F7.2/F7.3 pending. |
+| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
 
 ---
 
@@ -228,24 +228,25 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | Embedded modules (`quickscale_modules/*/pyproject.toml`) | `>=3.13,<3.15` | `>=6.0.5,<6.1.0` | None | None |
 | Generated project (template `.j2` files) | `>=3.13,<3.15` | `>=6.0.3,<6.1.0` | 18 (Docker + client) | Node 24, pnpm 11, React 19 |
 
-**Pending notes for F7.2/F7.3:**
-- Python constraint `>=3.13,<3.15` is currently identical across generator and generated-project — split ownership so each can drift independently.
-- Dockerfile hardcodes `python:3.13-slim-bookworm` — must be generated from the project-owned Python pin after split.
-- Generated-project CI matrix (`python-version: ["3.13"]`, `django-version: ["6.0"]`) mirrors template pins — ownership split must keep CI aligned.
-- PostgreSQL 18 version is coupled across `docker-compose.yml.j2`, `Dockerfile.j2`, and `ci.yml.j2` — treat as a single generated-project-owned configuration concern.
-- Embedded-module pin drift: All 12 modules carry Django `>=6.0.5,<6.1.0` while the generated-project template uses `>=6.0.3,<6.1.0`. These are independent manual-synchronization points with a verified lower-bound drift.
-- Frontend constraints (Node 24, pnpm 11, React 19) are already generated-project-owned via theme templates — no split needed.
-- Generator has **zero** Django or PostgreSQL runtime dependency — confirmed pure. Ownership split is a one-direction change (emit correct pins from generator; generator does not absorb generated-project deps).
+**Pending notes for F7.3 (post-F7.2):**
+- F7.2 resolved the core ownership split: Python/Django/PostgreSQL constraints are now variableized through `runtime_pins.py` and injected into template context. Generator and generated-project can now drift independently.
+- Embedded-module pin drift remains: All 12 modules carry Django `>=6.0.5,<6.1.0` while the generated-project template uses `>=6.0.3,<6.1.0`. These are independent manual-synchronization points with a verified lower-bound drift — validation coverage (F7.3) should detect unintended divergence.
+- `ruff target-version = "py313"` in `pyproject.toml.j2` remains a derived hardcode rather than a variableized pin — low-risk F7.3 item if validation infra makes it cheap.
+- `railway.json.j2` was not in F7.2 scope — verify pin alignment during F7.3 if already covered by the diverged-pin-set validation pass.
+- Frontend constraints (Node 24, pnpm 11, React 19) remain already decoupled (theme-owned); generator purity (zero Django/PostgreSQL runtime dep) remains confirmed.
 
-**Phase F7.2 — Split ownership** _(Adaptive tier: 2)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.2 — Split ownership** _(Adaptive tier: 2)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_ — ✅ **Complete.**
 
-- [ ] Split configuration ownership so generator and generated-project runtime pins are managed independently.
-- [ ] Update generation so emitted project templates use generated-project-owned runtime pins rather than carrying forward duplicated generator constraints.
+- [x] Split configuration ownership so generator and generated-project runtime pins are managed independently.
+- [x] Update generation so emitted project templates use generated-project-owned runtime pins rather than carrying forward duplicated generator constraints.
+
+**Implementation summary:** Added `quickscale_core/src/quickscale_core/generator/runtime_pins.py` as the generated-project-owned runtime-pin SSOT; `generator.py` now injects those variables into template context; `pyproject.toml.j2`, `Dockerfile.j2`, `docker-compose.yml.j2`, and `github/workflows/ci.yml.j2` now read values from template context rather than hardcoded literals. `make test` passed repo-wide.
 
 **Phase F7.3 — Validate and document** _(M11 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
 
-- [ ] Add validation coverage for intentionally diverged generator-vs-generated-project runtime pin sets.
-- [ ] Align documentation and operator messaging with the decoupled runtime-pin model.
+- [ ] Add validation coverage for intentionally diverged generator-vs-generated-project runtime pin sets (including embedded-module drift detection and `railway.json.j2` alignment check if feasible).
+- [ ] Align documentation and operator messaging with the decoupled runtime-pin model (`runtime_pins.py` is the new SSOT for generated-project constraints).
+- [ ] _(Low risk)_ Variableize `ruff target-version` in `pyproject.toml.j2` if validation infra makes it cheap.
 
 ---
 

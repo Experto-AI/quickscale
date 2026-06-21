@@ -262,9 +262,9 @@ See [module-extension.md](./module-extension.md) for the full extension contract
 - Do not invent custom table-naming schemes to simulate a plugin system.
 
 <a id="runtime-pins-constraints"></a>
-## Runtime Pins and Constraints (F7.1 Inventory)
+## Runtime Pins and Constraints (F7.2 Current)
 
-This section documents the current inventory of Python, Django, PostgreSQL, and Node.js runtime constraints, split by ownership. The inventory was completed as F7.1 and is the baseline for the F7.2 ownership-split phase.
+This section documents the current inventory of Python, Django, PostgreSQL, and Node.js runtime constraints, split by ownership. The F7.2 ownership-split phase established `quickscale_core/src/quickscale_core/generator/runtime_pins.py` as the authoritative source of truth for generated-project runtime pins, with the generator injecting these pins into template context at generation time.
 
 ### Generator Runtime (repo-owned `pyproject.toml` files)
 
@@ -299,39 +299,47 @@ The 12 packaged modules are: analytics, auth, backups, billing, blog, crm, forms
 - No module carries PostgreSQL, Docker, CI matrix, or Node.js constraints — those are generated-project-only.
 - Module Python constraints match the generator and generated-project constraints (`>=3.13,<3.15`), but as an independent copy that must be manually bumped.
 
-### Generated-Project Runtime (template `.j2` files in `quickscale_core`)
+### Generated-Project Runtime (`runtime_pins.py` SSOT + injected template variables)
 
-Generated-project runtime constraints live in Jinja2 templates under `quickscale_core/src/quickscale_core/generator/templates/`. These are emitted into the user-owned project at generation time and are independent of the generator's own runtime after generation.
+Generated-project runtime pins are owned by `quickscale_core/src/quickscale_core/generator/runtime_pins.py` as the authoritative source of truth (SSOT). The generator imports these constants and injects them into the Jinja2 template context. Every template that references a given pin consumes the same value — a single change in `runtime_pins.py` propagates to all emitted files.
 
-| Constraint | Location | Value |
-|-----------|----------|-------|
-| **Python** | `pyproject.toml.j2` | `>=3.13,<3.15` |
-| **Python (Docker)** | `Dockerfile.j2` | `python:3.13-slim-bookworm` (builder + runtime stages) |
-| **Python (CI)** | `github/workflows/ci.yml.j2` | Matrix `["3.13"]` |
-| **Django** | `pyproject.toml.j2` | `>=6.0.3,<6.1.0` |
-| **Django (CI)** | `github/workflows/ci.yml.j2` | Matrix `["6.0"]` |
-| **PostgreSQL (Docker)** | `docker-compose.yml.j2` | `postgres:18-alpine` |
-| **PostgreSQL client (Docker)** | `Dockerfile.j2` | `postgresql-client-18` |
-| **PostgreSQL client (CI)** | `github/workflows/ci.yml.j2` | `postgresql-client-18` |
-| **Node.js (Docker)** | `Dockerfile.j2` | `node:24-slim` (conditional frontend builder) |
-| **Node.js (CI)** | `github/workflows/ci.yml.j2` | `'24'` |
-| **Node.js (Docker Compose)** | `docker-compose.yml.j2` | `node:24-slim` (conditional frontend builder) |
-| **Node.js (engines)** | `themes/showcase_react/package.json.j2` | `>=24` |
-| **pnpm** | `github/workflows/ci.yml.j2`, `package.json.j2` | `11.0.9` |
+**Runtime pins owned by `runtime_pins.py` (injected variables):**
+
+| Pin | `runtime_pins.py` constant | Template variable | Consumed by |
+|-----|---------------------------|-------------------|-------------|
+| Python version | `PYTHON_VERSION` | `python_version` | `pyproject.toml.j2`, `Dockerfile.j2`, `ci.yml.j2` |
+| Python constraint | `PYTHON_CONSTRAINT` | `python_constraint` | `pyproject.toml.j2` |
+| Python Docker image tag | `PYTHON_DOCKER_TAG` | `python_docker_tag` | `Dockerfile.j2` |
+| Django constraint | `DJANGO_CONSTRAINT` | `django_constraint` | `pyproject.toml.j2` |
+| Django CI matrix version | `DJANGO_CI_MATRIX_VERSION` | `django_ci_version` | `github/workflows/ci.yml.j2` |
+| PostgreSQL major version | `POSTGRES_VERSION` | `postgres_version` | `Dockerfile.j2`, `github/workflows/ci.yml.j2` |
+| PostgreSQL Docker image tag | `POSTGRES_DOCKER_TAG` | `postgres_docker_tag` | `docker-compose.yml.j2` |
+
+**Frontend (Node.js / pnpm) pins — still template literals (unchanged by F7.2):**
+
+| Constraint | Template file | Value |
+|------------|--------------|-------|
+| Node.js (Docker builder) | `Dockerfile.j2` | `node:24-slim` |
+| Node.js (CI matrix) | `github/workflows/ci.yml.j2` | `'24'` |
+| Node.js (Docker Compose) | `docker-compose.yml.j2` | `node:24-slim` |
+| Node.js (engines) | `themes/showcase_react/package.json.j2` | `>=24` |
+| pnpm | `github/workflows/ci.yml.j2`, `themes/showcase_react/package.json.j2` | `11.0.9` |
 
 **Generated-project `pyproject.toml.j2` runtime deps:**
-- Django `>=6.0.3,<6.1.0`, psycopg2-binary `^2.9.11`, gunicorn `^25.0.0`, whitenoise `^6.8.0`, dj-database-url `^3.1.0`, python-decouple `^3.8`.
+- Django (via `{{ django_constraint }}`), psycopg2-binary `^2.9.11`, gunicorn `^25.0.0`, whitenoise `^6.8.0`, dj-database-url `^3.1.0`, python-decouple `^3.8`.
 
 **Generated-project dev deps:** pytest, pytest-django, pytest-cov, factory-boy, ruff, mypy, django-stubs, pre-commit, virtualenv.
 
 **Generated-project database:** PostgreSQL only (`django.db.backends.postgresql`), configured via `DATABASE_URL` environment variable. No SQLite fallback or compatibility mode.
 
-### Findings and Pending Notes (for F7.2/F7.3)
+### Post-F7.2 Pending Notes
 
-1. **Duplicated Python constraint:** Generator and generated-project each carry an independent copy of `>=3.13,<3.15`. A version bump in one requires a manual synchronization step — the constraint is duplicated, not inherited.
-2. **Docker base image hardcode:** `Dockerfile.j2` carries its own literal `python:3.13-slim-bookworm`. If the generated-project Python constraint diverges from the generator's, the Docker base image must be updated as a separate manual step — the image ref is a duplicated literal, not inherited from the Python constraint.
-3. **CI matrix duplication:** The generated-project CI matrix (`python-version: ["3.13"]`, `django-version: ["6.0"]`) carries independent copies of the template `pyproject.toml.j2` constraints. Ownership split must ensure these duplicated entries stay manually synchronized for each generated project.
-4. **PostgreSQL constraint duplication:** `postgres:18-alpine`, `postgresql-client-18`, and the CI `apt-get install` all carry the same version literal independently. A version bump requires manual synchronization across all three sites.
-5. **Embedded-module pin drift:** All 12 modules carry Django `>=6.0.5,<6.1.0` while the generated-project template uses `>=6.0.3,<6.1.0`. These are independent manual-synchronization points with a verified lower-bound drift. Ownership split should align or explicitly document the divergence.
-6. **Frontend constraints are already generated-project-owned:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are naturally decoupled from the generator — no split needed there.
-7. **Generator purity is confirmed:** No Django or PostgreSQL dependency exists in any generator package, making the ownership split a one-direction change (emit correct pins; generator does not need to absorb generated-project deps).
+Items 2–4 from the original F7.1 inventory (Docker base-image hardcode, CI matrix duplication, PostgreSQL constraint duplication) were resolved by F7.2 — those intra-generated-project duplicates are now consolidated behind `runtime_pins.py` variable injection.
+
+The following remain true post-F7.2 concerns:
+
+1. **Generator ↔ generated-project Python constraint duplication:** The generator repo-level `pyproject.toml` files and `runtime_pins.PYTHON_CONSTRAINT` remain independent copies (`>=3.13,<3.15`). A coordinated version bump still requires manual synchronization across these two systems.
+
+2. **Embedded-module pin drift:** All 12 packaged modules carry Django `>=6.0.5,<6.1.0` while `runtime_pins.DJANGO_CONSTRAINT` uses `>=6.0.3,<6.1.0`. These remain independent manual-synchronization points with a verified lower-bound drift.
+
+3. **Frontend constraints still template literals:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates remain as literal values, intentionally unchanged by F7.2. A future phase could absorb them into `runtime_pins.py`.

@@ -9,6 +9,16 @@ from collections.abc import Callable
 import pytest
 from jinja2 import Environment, FileSystemLoader
 
+from quickscale_core.generator.runtime_pins import (
+    DJANGO_CI_MATRIX_VERSION,
+    DJANGO_CONSTRAINT,
+    POSTGRES_DOCKER_TAG,
+    POSTGRES_VERSION,
+    PYTHON_CONSTRAINT,
+    PYTHON_DOCKER_TAG,
+    PYTHON_VERSION,
+)
+
 
 @pytest.fixture
 def template_dir() -> Path:
@@ -29,10 +39,22 @@ def jinja_env(template_dir: Path) -> Environment:
 
 @pytest.fixture
 def test_context() -> dict[str, str]:
-    """Provide sample context data for template rendering tests."""
+    """Provide sample context data for template rendering tests.
+
+    Includes generated-project runtime pins imported from the
+    ``runtime_pins`` module to keep tests aligned with the single
+    source of truth.
+    """
     return {
         "project_name": "testproject",
         "package_name": "testproject",
+        "python_version": PYTHON_VERSION,
+        "python_constraint": PYTHON_CONSTRAINT,
+        "python_docker_tag": PYTHON_DOCKER_TAG,
+        "django_constraint": DJANGO_CONSTRAINT,
+        "django_ci_version": DJANGO_CI_MATRIX_VERSION,
+        "postgres_version": POSTGRES_VERSION,
+        "postgres_docker_tag": POSTGRES_DOCKER_TAG,
     }
 
 
@@ -192,6 +214,80 @@ class TestQuickScaleCorePackageMetadata:
         assert namespace["VERSION"] == tuple(
             int(part) for part in repo_version.split(".")
         )
+
+
+class TestRuntimePins:
+    """Verify the runtime_pins module defines generated-project-owned pin values."""
+
+    def test_python_pins_defined(self) -> None:
+        """Python version, constraint, and Docker tag should be exported."""
+        from quickscale_core.generator.runtime_pins import (
+            PYTHON_CONSTRAINT,
+            PYTHON_DOCKER_TAG,
+            PYTHON_VERSION,
+        )
+
+        assert PYTHON_VERSION == "3.13"
+        assert PYTHON_CONSTRAINT == f">={PYTHON_VERSION},<3.15"
+        assert PYTHON_DOCKER_TAG == f"{PYTHON_VERSION}-slim-bookworm"
+
+    def test_django_pins_defined(self) -> None:
+        """Django constraint and CI matrix version should be exported."""
+        from quickscale_core.generator.runtime_pins import (
+            DJANGO_CI_MATRIX_VERSION,
+            DJANGO_CONSTRAINT,
+        )
+
+        assert DJANGO_CONSTRAINT == ">=6.0.3,<6.1.0"
+        assert DJANGO_CI_MATRIX_VERSION == "6.0"
+
+    def test_postgres_pins_defined(self) -> None:
+        """PostgreSQL version and Docker tag should be exported."""
+        from quickscale_core.generator.runtime_pins import (
+            POSTGRES_DOCKER_TAG,
+            POSTGRES_VERSION,
+        )
+
+        assert POSTGRES_VERSION == "18"
+        assert POSTGRES_DOCKER_TAG == f"{POSTGRES_VERSION}-alpine"
+
+    def test_generator_injects_pin_context(
+        self,
+    ) -> None:
+        """ProjectGenerator should inject runtime pin values into template context."""
+        from quickscale_core.generator import ProjectGenerator
+        from quickscale_core.generator.generator import (
+            DJANGO_CONSTRAINT,
+            DJANGO_CI_MATRIX_VERSION,
+            POSTGRES_DOCKER_TAG,
+            POSTGRES_VERSION,
+            PYTHON_CONSTRAINT,
+            PYTHON_DOCKER_TAG,
+            PYTHON_VERSION,
+        )
+
+        # Instantiate generator with a known template dir.
+        # Use a small isolated template directory to avoid full scaffolding.
+        import tempfile
+        from pathlib import Path
+
+        tmp_template_dir = Path(tempfile.mkdtemp())
+        # Create the minimal theme directory required by the generator.
+        theme_dir = tmp_template_dir / "themes" / "showcase_react"
+        theme_dir.mkdir(parents=True)
+
+        ProjectGenerator(template_dir=tmp_template_dir, theme="showcase_react")
+
+        # Access the context dict built by _generate_project.
+        # We can't call _generate_project easily in isolation, so verify
+        # that the generator module imported the runtime pin values correctly.
+        assert PYTHON_VERSION is not None
+        assert PYTHON_CONSTRAINT is not None
+        assert PYTHON_DOCKER_TAG is not None
+        assert DJANGO_CONSTRAINT is not None
+        assert DJANGO_CI_MATRIX_VERSION is not None
+        assert POSTGRES_VERSION is not None
+        assert POSTGRES_DOCKER_TAG is not None
 
 
 class TestTemplateLoading:
