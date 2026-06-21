@@ -1,14 +1,26 @@
-"""Migration tests for CRM terminal stage semantics."""
+"""Migration tests for CRM terminal stage semantics and backfill proofs.
+
+Phase 3: historical NULL/backfill proofs live here, not in live suites.
+"""
 
 from __future__ import annotations
 
+from importlib import import_module
+from io import StringIO
 from typing import Any
 
 import pytest
+from django.core.management import CommandError, call_command
 from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 
 pytestmark = pytest.mark.django_db(transaction=True)
+
+
+# Historical 0002 backfill function — kept as migration-harness proof.
+_stage_terminal_semantic_migration = import_module(
+    "quickscale_modules_crm.migrations.0002_stage_terminal_semantic"
+)
 
 
 def _create_contact(apps):
@@ -444,3 +456,476 @@ def test_0005_replaces_tag_name_unique_with_owner_bucket_constraint() -> None:
     null_coexist = MigratedTag.objects.create(name="Shared Name")
     assert null_coexist.pk != new_org_a_tag.pk
     assert null_coexist.pk != new_org_b_tag.pk
+
+
+def test_0001_no_default_stages() -> None:
+    """Migration 0001 creates schema only — no default Stage rows.
+
+    Phase F11.10b repair: 0001_initial previously created four NULL-owned
+    default Stage rows via RunPython. These blocked 0006 on clean installs
+    because 0006 hard-stops on any NULL-owned rows. After the fix, 0001
+    creates schema only; default stage seeding is deferred to runtime.
+    """
+    migrate_to = ("quickscale_modules_crm", "0001_initial")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    apps = executor.loader.project_state([migrate_to]).apps
+
+    Stage = apps.get_model("quickscale_modules_crm", "Stage")
+    assert Stage.objects.count() == 0, "0001 should not create default stages"
+
+
+def test_0001_through_0006_clean_migration_history() -> None:
+    """Full forward-migration chain 0001→0006 succeeds on clean database.
+
+    Phase F11.10b regression guard: after removing the NULL-owned default
+    Stage creation from 0001, the entire migration history from initial
+    schema through the F11.10b enforced-organization schema flip must
+    complete without hitting the 0006 guard.
+
+    This proves that clean installs and history rebuilds no longer fail
+    at 0006 due to leftover NULL-owned default stages.
+    """
+    migrate_to = ("quickscale_modules_crm", "0006_enforce_required_organization")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    apps = executor.loader.project_state([migrate_to]).apps
+
+    # The 0006 guard (assert_no_null_owned_rows) must have passed silently.
+    # Verify the final-schema contract on all five owned models.
+    for model_name in ("Tag", "Company", "Contact", "Stage", "Deal"):
+        model = apps.get_model("quickscale_modules_crm", model_name)
+        field = model._meta.get_field("organization")
+        assert field.null is False, f"{model_name}.organization.null is not False"
+        assert field.remote_field.on_delete.__name__ == "PROTECT", (
+            f"{model_name}.organization.on_delete is not PROTECT"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Historical 0002 backfill proof — live at 0001→0002 state.
+# ---------------------------------------------------------------------------
+
+
+def test_0002_terminal_semantic_backfill_uses_exact_names_and_deterministic_duplicate_selection() -> (
+    None
+):
+    """Migration 0002 backfill provably tags canonical exact-name terminal stages.
+
+    Phase 3 move from ``test_models.py``: this is a historical migration
+    proof, not a live current-state test.  The backfill function is called
+    at the 0002 state (after the terminal_semantic field has been added)
+    using ``apps.get_model()``.
+    """
+    migrate_to = ("quickscale_modules_crm", "0002_stage_terminal_semantic")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    apps = executor.loader.project_state([migrate_to]).apps
+
+    Stage = apps.get_model("quickscale_modules_crm", "Stage")
+    Company = apps.get_model("quickscale_modules_crm", "Company")
+    Contact = apps.get_model("quickscale_modules_crm", "Contact")
+    Deal = apps.get_model("quickscale_modules_crm", "Deal")
+
+    Stage.objects.all().delete()
+
+    company = Company.objects.create(name="Acme Corp")
+    contact = Contact.objects.create(
+        first_name="Jane",
+        last_name="Smith",
+        email="jane@example.com",
+        company=company,
+    )
+
+    won_high_count_high_order = Stage.objects.create(name="Closed-Won", order=99)
+    won_high_count_low_order = Stage.objects.create(name="Closed-Won", order=1)
+    won_low_count_lowest_order = Stage.objects.create(name="Closed-Won", order=0)
+    won_variant = Stage.objects.create(name="closed-won", order=1)
+    lost_low_id = Stage.objects.create(name="Closed-Lost", order=5)
+    lost_high_id = Stage.objects.create(name="Closed-Lost", order=5)
+    lost_variant = Stage.objects.create(name="Closed Lost", order=5)
+
+    for index in range(3):
+        Deal.objects.create(
+            title=f"Won high order {index}",
+            contact=contact,
+            stage=won_high_count_high_order,
+        )
+        Deal.objects.create(
+            title=f"Won low order {index}",
+            contact=contact,
+            stage=won_high_count_low_order,
+        )
+    for index in range(2):
+        Deal.objects.create(
+            title=f"Won lower count {index}",
+            contact=contact,
+            stage=won_low_count_lowest_order,
+        )
+
+    # Run the 0002 backfill helper using the 0002-state apps.
+    _stage_terminal_semantic_migration.backfill_terminal_stage_semantics(
+        apps,
+        None,
+    )
+
+    # Re-fetch using the same 0002-state apps.
+    w_h_c_h_o = Stage.objects.get(pk=won_high_count_high_order.pk)
+    w_h_c_l_o = Stage.objects.get(pk=won_high_count_low_order.pk)
+    w_l_c_l_o = Stage.objects.get(pk=won_low_count_lowest_order.pk)
+    w_v = Stage.objects.get(pk=won_variant.pk)
+    l_l_i = Stage.objects.get(pk=lost_low_id.pk)
+    l_h_i = Stage.objects.get(pk=lost_high_id.pk)
+    l_v = Stage.objects.get(pk=lost_variant.pk)
+
+    assert w_h_c_l_o.terminal_semantic == "won"
+    assert w_h_c_h_o.terminal_semantic is None
+    assert w_l_c_l_o.terminal_semantic is None
+    assert w_v.terminal_semantic is None
+    assert l_l_i.terminal_semantic == "lost"
+    assert l_h_i.terminal_semantic is None
+    assert l_v.terminal_semantic is None
+
+    # Prove original row metadata is preserved after backfill.
+    w_h_c_h_o.name = "Closed-Won Duplicate"
+    w_h_c_h_o.order = 50
+    w_h_c_h_o.save(update_fields=["name", "order"])
+    w_h_c_h_o.refresh_from_db()
+    assert w_h_c_h_o.name == "Closed-Won Duplicate"
+    assert w_h_c_h_o.order == 50
+
+
+# ---------------------------------------------------------------------------
+# Historical backfill_crm_org_ownership command proofs — live at 0004 state.
+# ---------------------------------------------------------------------------
+
+
+def test_backfill_requires_org_slug() -> None:
+    """Command requires --org-slug argument."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+
+    with pytest.raises(CommandError, match="org-slug"):
+        call_command(
+            "backfill_crm_org_ownership",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+
+def test_backfill_rejects_nonexistent_org_slug() -> None:
+    """Command rejects an org slug that does not exist."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+
+    with pytest.raises(CommandError, match="does not exist"):
+        call_command(
+            "backfill_crm_org_ownership",
+            "--org-slug=nonexistent",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+
+def test_backfill_null_owned_rows_to_target_org() -> None:
+    """Command assigns NULL-owned rows to the target organization."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    old_apps = executor.loader.project_state([migrate_to]).apps
+
+    OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
+    OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+    OldCompany = old_apps.get_model("quickscale_modules_crm", "Company")
+    OldContact = old_apps.get_model("quickscale_modules_crm", "Contact")
+    OldStage = old_apps.get_model("quickscale_modules_crm", "Stage")
+    OldDeal = old_apps.get_model("quickscale_modules_crm", "Deal")
+
+    target_org = OldOrg.objects.create(name="Target Org", slug="target-org")
+
+    tag = OldTag.objects.create(name="VIP")
+    company = OldCompany.objects.create(name="Acme Corp")
+    contact = OldContact.objects.create(
+        first_name="Jane",
+        last_name="Doe",
+        email="jane@example.com",
+        company=company,
+    )
+    stage = OldStage.objects.create(name="Prospecting", order=1)
+    deal = OldDeal.objects.create(
+        title="Big Deal",
+        contact=contact,
+        stage=stage,
+    )
+
+    # Verify all start as NULL-owned.
+    assert tag.organization is None
+    assert company.organization is None
+    assert contact.organization is None
+    assert stage.organization is None
+    assert deal.organization is None
+
+    stdout = StringIO()
+    call_command(
+        "backfill_crm_org_ownership",
+        "--org-slug=target-org",
+        stdout=stdout,
+        stderr=StringIO(),
+    )
+
+    # Refresh and verify all now point to target_org.
+    # Note: refresh_from_db() is not available on historical model instances,
+    # so we re-fetch via OldTag.objects.get().
+    tag = OldTag.objects.get(pk=tag.pk)
+    company = OldCompany.objects.get(pk=company.pk)
+    contact = OldContact.objects.get(pk=contact.pk)
+    stage = OldStage.objects.get(pk=stage.pk)
+    deal = OldDeal.objects.get(pk=deal.pk)
+
+    assert tag.organization_id == target_org.pk
+    assert company.organization_id == target_org.pk
+    assert contact.organization_id == target_org.pk
+    assert stage.organization_id == target_org.pk
+    assert deal.organization_id == target_org.pk
+
+    output = stdout.getvalue()
+    assert "Tag:" in output
+    assert "Company:" in output
+    assert "Contact:" in output
+    assert "Stage:" in output
+    assert "Deal:" in output
+    assert "Backfill complete" in output
+
+
+def test_backfill_is_idempotent_on_second_run() -> None:
+    """Command is idempotent: second run updates 0 rows."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    old_apps = executor.loader.project_state([migrate_to]).apps
+
+    OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
+    OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+    OldCompany = old_apps.get_model("quickscale_modules_crm", "Company")
+
+    OldOrg.objects.create(name="Target Org", slug="target-org-backfill-2")
+
+    OldTag.objects.create(name="VIP")
+    OldCompany.objects.create(name="Acme Corp")
+
+    first_stdout = StringIO()
+    call_command(
+        "backfill_crm_org_ownership",
+        "--org-slug=target-org-backfill-2",
+        stdout=first_stdout,
+        stderr=StringIO(),
+    )
+
+    second_stdout = StringIO()
+    call_command(
+        "backfill_crm_org_ownership",
+        "--org-slug=target-org-backfill-2",
+        stdout=second_stdout,
+        stderr=StringIO(),
+    )
+
+    output = second_stdout.getvalue()
+    assert "Tag: 0" in output
+    assert "Company: 0" in output
+
+
+def test_backfill_aborts_on_conflicting_ownership() -> None:
+    """Command aborts without writes when conflicting ownership exists."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    old_apps = executor.loader.project_state([migrate_to]).apps
+
+    OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
+    OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+    OldCompany = old_apps.get_model("quickscale_modules_crm", "Company")
+
+    OldOrg.objects.create(name="Target Org", slug="target-org-backfill-3")
+    other_org = OldOrg.objects.create(name="Other Org", slug="other-org-backfill-3")
+
+    tag = OldTag.objects.create(name="VIP")
+    company = OldCompany.objects.create(name="Acme Corp", organization=other_org)
+
+    with pytest.raises(CommandError, match="conflicting organization ownership"):
+        call_command(
+            "backfill_crm_org_ownership",
+            "--org-slug=target-org-backfill-3",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+    tag = OldTag.objects.get(pk=tag.pk)
+    company = OldCompany.objects.get(pk=company.pk)
+    assert tag.organization is None
+    assert company.organization_id == other_org.pk
+
+
+def test_backfill_aborts_on_mixed_ownership() -> None:
+    """Command aborts when target-org, other-org, and NULL rows all coexist."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    old_apps = executor.loader.project_state([migrate_to]).apps
+
+    OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
+    OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+
+    target_org = OldOrg.objects.create(name="Target Org", slug="target-org-mixed")
+    other_org = OldOrg.objects.create(name="Other Org", slug="other-org-mixed")
+
+    target_tag = OldTag.objects.create(name="TargetTag", organization=target_org)
+    other_tag = OldTag.objects.create(name="OtherTag", organization=other_org)
+    null_tag = OldTag.objects.create(name="NullTag")
+
+    with pytest.raises(CommandError, match="conflicting organization ownership"):
+        call_command(
+            "backfill_crm_org_ownership",
+            "--org-slug=target-org-mixed",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
+
+    target_tag = OldTag.objects.get(pk=target_tag.pk)
+    other_tag = OldTag.objects.get(pk=other_tag.pk)
+    null_tag = OldTag.objects.get(pk=null_tag.pk)
+    assert target_tag.organization_id == target_org.pk
+    assert other_tag.organization_id == other_org.pk
+    assert null_tag.organization is None
+
+
+def test_backfill_allows_when_existing_rows_match_target_org() -> None:
+    """Command succeeds when existing non-null rows already point to target org."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    old_apps = executor.loader.project_state([migrate_to]).apps
+
+    OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
+    OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+
+    target_org = OldOrg.objects.create(name="Target Org", slug="target-org-backfill-5")
+
+    OldTag.objects.create(name="Existing", organization=target_org)
+    null_tag = OldTag.objects.create(name="NullTag")
+
+    stdout = StringIO()
+    call_command(
+        "backfill_crm_org_ownership",
+        "--org-slug=target-org-backfill-5",
+        stdout=stdout,
+        stderr=StringIO(),
+    )
+
+    null_tag = OldTag.objects.get(pk=null_tag.pk)
+    assert null_tag.organization_id == target_org.pk
+
+    output = stdout.getvalue()
+    assert "Tag: 1" in output
+
+
+def test_backfill_dry_run_does_not_write() -> None:
+    """Command with --dry-run shows what would be updated without writing."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    old_apps = executor.loader.project_state([migrate_to]).apps
+
+    OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
+    OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+    OldCompany = old_apps.get_model("quickscale_modules_crm", "Company")
+
+    OldOrg.objects.create(name="Target Org", slug="target-org-backfill-6")
+
+    tag = OldTag.objects.create(name="VIP")
+    company = OldCompany.objects.create(name="Acme Corp")
+
+    stdout = StringIO()
+    call_command(
+        "backfill_crm_org_ownership",
+        "--org-slug=target-org-backfill-6",
+        "--dry-run",
+        stdout=stdout,
+        stderr=StringIO(),
+    )
+
+    tag = OldTag.objects.get(pk=tag.pk)
+    company = OldCompany.objects.get(pk=company.pk)
+    assert tag.organization is None
+    assert company.organization is None
+
+    output = stdout.getvalue()
+    assert "Dry run" in output
+    assert "would update" in output
+
+
+def test_backfill_reports_zero_null_rows_gracefully() -> None:
+    """Command reports success when no NULL-owned rows exist."""
+    migrate_to = ("quickscale_modules_crm", "0004_add_organization_ownership")
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    old_apps = executor.loader.project_state([migrate_to]).apps
+
+    OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
+    OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
+    OldCompany = old_apps.get_model("quickscale_modules_crm", "Company")
+    OldContact = old_apps.get_model("quickscale_modules_crm", "Contact")
+    OldStage = old_apps.get_model("quickscale_modules_crm", "Stage")
+    OldDeal = old_apps.get_model("quickscale_modules_crm", "Deal")
+
+    target_org = OldOrg.objects.create(name="Target Org", slug="target-org-backfill-7")
+
+    OldTag.objects.create(name="VIP", organization=target_org)
+    OldCompany.objects.create(name="Acme Corp", organization=target_org)
+    company = OldCompany.objects.create(name="Test Co", organization=target_org)
+    OldContact.objects.create(
+        first_name="Test",
+        last_name="User",
+        email="test@example.com",
+        company=company,
+        organization=target_org,
+    )
+    OldStage.objects.create(name="Stage 1", order=1, organization=target_org)
+    contact = OldContact.objects.create(
+        first_name="Test2",
+        last_name="User2",
+        email="test2@example.com",
+        company=company,
+        organization=target_org,
+    )
+    stage = OldStage.objects.get(organization=target_org)
+    OldDeal.objects.create(
+        title="Deal 1",
+        contact=contact,
+        stage=stage,
+        organization=target_org,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "backfill_crm_org_ownership",
+        "--org-slug=target-org-backfill-7",
+        stdout=stdout,
+        stderr=StringIO(),
+    )
+
+    output = stdout.getvalue()
+    assert "No NULL-owned rows found" in output or "Nothing to backfill" in output

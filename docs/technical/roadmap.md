@@ -66,28 +66,32 @@ git merge --no-ff wt-track{N}
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
-| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10b. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅. Still pending: F11.10b–F11.10e. |
+| M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
-| M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
-| M8 | 3 | F12.1–F12.3b | 🟡 | F12.1 ✅ F12.2 ✅ F12.3a ✅ (all merged to v87). F12.3b ✅ (validated in wt-track3; merge-back to v87 pending). |
+| M7 | 1 | F11.11–F11.13b | 🟡 | M3 merged. **In progress:** F11.11 blog isolation active on `wt-track1`. Merge when all module isolation tests unskipped and green. |
+| M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
-| M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 remaining — then DR engine in CLI; backups module slimmed |
+| M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 merged — next DR engine in CLI; backups module slimmed |
 | M11 | 3 | F7.1–F7.3 | ⬜ | M8 merged; generator vs project pin ownership split |
 
 ## In-Flight Milestones
 
+### M7 — F11 Module isolation rollout (blog/forms/listings/social)
+**Track:** 1 | **Worktree:** `quickscale-wt-track1`
+
+**Status:** 🟡 In progress — F11.11 blog isolation active on `wt-track1` (uncommitted). F11.12a/F11.12b/F11.13a/F11.13b pending.
+
+---
+
 ### M8 — F12 Recoverable `apply` (saga)
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 All F12 sub-phases (F12.1–F12.3b) complete. F12.3a and earlier merged to `v87`; F12.3b validated in wt-track3, merge-back pending. See CHANGELOG for individual entries.
+**Status:** 🟢 M8 merged/closed — F12.1–F12.3b all merged to `v87`. See CHANGELOG for individual entries.
 
 **Binding constraints for F12.3b:** D-F12.1-LEDGER Option A (enrich `apply-recovery.yml` in place, no second file); no backward compatibility, fail hard on malformed ledger; membership/presence-gated idempotent resume semantics (`recovery_state is not None`; step-progress is diagnostics-only, never resume-gating).
 
-Completed (in wt-track3, pending merge-back to v87):
-- **F12.3b** (Railway rollback/resume, Tier 2) — ✅ Inserts Railway deploy after DB migrations and before authoritative state persistence; Railway-linked checkouts only (`.railway/` present); immediate trigger failures save recovery state and abort for rerun; async downstream Railway failures remain manual/operator-owned. All assertions/tests passed — only pre-existing unrelated coverage gaps outside changed files. Merge-back to `v87` not yet executed.
-
-Next (after merge-back):
-- M8 closeout — Merge F12.3b back to `v87` and update M8 status to 🟢.
+Completed:
+- **F12.3b** (Railway rollback/resume, Tier 2) — ✅ Inserts Railway deploy after DB migrations and before authoritative state persistence; Railway-linked checkouts only (`.railway/` present); immediate trigger failures save recovery state and abort for rerun; async downstream Railway failures remain manual/operator-owned. All assertions/tests passed — only pre-existing unrelated coverage gaps outside changed files. Merged back to `v87` in Track 3 closeout.
 
 ---
 
@@ -99,69 +103,18 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged, M3 merged/closed; M7 in progress |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅; merge-back to v87 pending |
+| 3 | F12 — Recoverable `apply` (saga) | M8 | 🟢 F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅; M8 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
-| 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; waits for M8 |
-| 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Waits for M8 |
+| 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; ready now that M8 merged |
+| 6 | F7 — Generator vs generated-project runtime pins | M11 | ⬜ Ready now that M8 merged |
 
 ---
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** CRM isolation phases F11.1–F11.10a complete and in CHANGELOG (groundwork, org-scoped create/read isolation, backfill, bootstrap, serializer hardening, bulk-deal scope, historical nullable-contract harness). F11.10b–F11.10e remain open: no `0006` NOT NULL migration exists yet — model `organization` FKs remain nullable. The historical-test split, post-`0006` test-ownership assignments, and M3 merge closeout are still open. After M3, module rollout to blog, forms, listings, and social (M7) remains. Non-CRM admin, shell, and async paths still need data-layer isolation per module.
-
----
-
-**Phase F11.10 — CRM NOT NULL enforcement + isolation closeout handoff** _(M3 closeout)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.6 + F11.7 + F11.8 + F11.9 merged on `v87`.
-
-**Groundwork committed and synced (2026-06-20):**
-- ✅ Committed to `wt-track1`: admin organization add/change guardrails; manager-first CRM scoping (`objects` + `all_objects` operator escape hatch); dual-manager contract on all 5 owned models; org-scoped serializer/view/service/test hardening; CRM isolation `xfail` removal. 321 CRM tests green.
-- ✅ `wt-track1` synced from `v87` at that baseline. F11.10a completed afterward (historical nullable-contract preserved — 311 CRM tests green).
-
-**Findings / decisions status:**
-
-**Resolved:**
-- [x] **Delete policy** (2026-06-19): Once `organization` becomes required on Tag/Company/Contact/Stage/Deal, use `on_delete=PROTECT`. This is the sole owned-model delete policy for all five CRM models.
-- [x] **Post-`0006` solo-stage contract confirmed**: Seed and resolve solo CRM stages through the active personal org via `ensure_org_default_stages()` / same-org stage resolution, not legacy NULL-owned `0001` stage rows. (Already captured in F11.10c scope below.)
-- [x] **Historical `0004` nullable-contract preserved** (2026-06-20, F11.10a): Full `0004` nullable contract preserved in `quickscale_modules/crm/tests/test_migrations.py`; `TestOrganizationFieldNullable` removed from `test_models.py`. 311 CRM tests green.
-
-**Still open (need decision or assignment before or during next execution):**
-- [ ] Decide whether historical NULL-row / backfill-command coverage in `test_management_commands.py` stays alongside post-migration coverage (with conditional guards) or moves fully into `test_migrations.py`. This affects whether the split belongs in F11.10d or needs a separate phase.
-- [ ] **Post-`0006` test-ownership assignment** — Before F11.10b (schema flip) completes, confirm the named home for rewriting each of `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py` to the NOT NULL contract. F11.10d currently claims these rewrites (see below); this assignment must be confirmed or the phases re-scoped so no file is left with stale nullable-era assertions and no owner.
-
-**Summary for next handoff:** F11.10a ✅ (historical nullable-contract preserved — 311 CRM tests green). Before F11.10b (schema flip) starts, two open items remain: the `test_management_commands.py` split policy, and the post-`0006` test-ownership assignments for the four test files listed in F11.10d.
-
-**Phase F11.10b — Schema flip + owner contract** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.10a.
-
-- [ ] Add `0006` to hard-stop residual NULL-owned upgraded rows, tighten the five owned CRM `organization` FKs to the final NOT NULL contract, and apply the chosen delete policy.
-- [ ] Keep F11-deferred per-org `terminal_semantic` uniqueness out of scope for this slice.
-
-**Phase F11.10c — Solo/personal-org stage bootstrap closeout** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.10b.
-
-- [ ] Replace live solo `/crm/` and `/crm/api/stages/` dependence on legacy NULL-owned stage rows with personal-org-backed stage seeding via `ensure_org_default_stages()`.
-- [ ] Keep bulk stage mutation, `stage_id` validation, and terminal-stage actions same-org / personal-org only.
-
-**Phase F11.10d — Backfill + current-state regression split** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.10b + F11.10c.
-
-- [ ] Split historical NULL-row / backfill-command coverage (`test_management_commands.py`) from latest-schema current-state coverage; move historical material to `test_migrations.py` or keep with conditional guards per the split-policy decision (see open assignments above).
-- [ ] Rewrite current-state `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py` assertions to the post-`0006` contract; keep only historical NULL-era proofs in migration/history harnesses. (Ownership assignment must be confirmed — see open assignments above.)
-
-**Phase F11.10e — Isolation + M3 merge closeout** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.10d.
-
-- [ ] Run the narrow CRM closeout set before and after syncing from `v87`: migration/history proofs, stage/bootstrap/runtime slices, and `quickscale_modules/crm/tests/test_isolation.py`.
-- [ ] Update roadmap / changelog status from the validated post-merge evidence set, then merge the completed M3 slice back to `v87`.
+**Why still open:** CRM isolation phases F11.1–F11.10e complete and in CHANGELOG — M3 merged/closed (see merge checkpoints table above). Module rollout to blog, forms, listings, and social (M7 / F11.11–F11.13b) in progress on `wt-track1`. Non-CRM admin, shell, and async paths still need data-layer isolation per module in M7.
 
 ---
 
@@ -234,7 +187,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 12 — Make `apply` recoverable via a saga model
 
-**Why still open:** All F12 sub-phases (F12.1–F12.3b) complete and validated. Merge-back to `v87` pending — M8 will close once merged.
+**Status:** 🟢 M8 merged/closed — F12.1–F12.3b complete.
 
 **Track:** 3 | **Worktree:** `quickscale-wt-track3` | **Merges as:** M8
 **Dependencies:** M5 merged.
@@ -249,7 +202,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
   - Immediate trigger failures save recovery state and abort for rerun.
   - Async downstream Railway failures remain manual/operator-owned.
   - All assertions/tests passed; exit code impact only from 5 unrelated pre-existing per-file coverage gaps outside the changed-files set.
-  - Merge-back to `v87` not yet executed.
+  - Merged back to `v87` in Track 3 closeout.
 
 ---
 

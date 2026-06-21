@@ -86,7 +86,8 @@ def _resolve_active_org(request: Request | HttpRequest) -> Any:
     # Solo route: use the personal org attached by TenantMiddleware.
     org = getattr(request, "org", None)
     if org is not None:
-        # Solo routes do NOT seed default stages — preserve legacy stage surface.
+        # Phase 2: seed canonical stages on first solo CRM access.
+        ensure_org_default_stages(org)
         return org
 
     # Fallback: look up the user's personal org (for tests that bypass middleware).
@@ -101,7 +102,8 @@ def _resolve_active_org(request: Request | HttpRequest) -> Any:
         if personal_org is not None:
             # Attach the personal org to the request for subsequent access.
             request.org = personal_org  # type: ignore[union-attr]
-            # Solo routes do NOT seed default stages — preserve legacy stage surface.
+            # Phase 2: seed canonical stages on first solo CRM access.
+            ensure_org_default_stages(personal_org)
             return personal_org
 
     raise PermissionDenied("Organization context is required for this route.")
@@ -152,7 +154,7 @@ def _resolve_org_id_for_terminal_stage(request: Request | HttpRequest) -> int:
 
 
 def _resolve_terminal_stage(
-    terminal_semantic: str, organization_id: int, include_null_org: bool = False
+    terminal_semantic: str, organization_id: int
 ) -> Stage | None:
     """Return the terminal stage for a semantic, scoped to the active org.
 
@@ -161,17 +163,8 @@ def _resolve_terminal_stage(
     2. Fall back to a same-org row with the canonical stage name.
     3. Return ``None`` (safe no-op) when no same-org target exists.
     No NULL-owned or foreign-org fallback is used.
-
-    When ``include_null_org`` is ``True`` (solo routes), also consider
-    legacy NULL-organization stages as fallback targets.
     """
-    # Build the org filter — include NULL-org for solo routes.
-    if include_null_org:
-        org_filter = Q(organization_id=organization_id) | Q(
-            organization_id__isnull=True
-        )
-    else:
-        org_filter = Q(organization_id=organization_id)
+    org_filter = Q(organization_id=organization_id)
 
     # Step 1: same-org terminal stage by semantic.
     terminal_stage = (
@@ -493,6 +486,15 @@ class StageViewSet(OrgScopedReadMixin):
     ordering_fields = ["order", "name"]
     ordering = ["order"]
 
+    def get_queryset(self) -> QuerySet:  # type: ignore[override]
+        """Phase 2: always scope stages to the active org — same-org only.
+
+        Solo routes no longer include legacy NULL-org stages.  Personal
+        org seeding on first access provides the canonical stage set.
+        """
+        organization = _resolve_active_org(self.request)
+        return Stage.objects.for_org(organization.id)
+
 
 class DealViewSet(OrgScopedReadMixin):
     """ViewSet for Deal model with nested notes and bulk operations"""
@@ -570,10 +572,7 @@ class DealViewSet(OrgScopedReadMixin):
         deal_ids = serializer.validated_data["deal_ids"]
 
         org_id = _resolve_org_id_for_terminal_stage(request)
-        is_solo = not _is_org_scoped_route(request)
-        won_stage = _resolve_terminal_stage(
-            Stage.TERMINAL_SEMANTIC_WON, org_id, include_null_org=is_solo
-        )
+        won_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_WON, org_id)
         if won_stage is None:
             return Response({"updated": 0}, status=status.HTTP_200_OK)
 
@@ -596,10 +595,7 @@ class DealViewSet(OrgScopedReadMixin):
         deal_ids = serializer.validated_data["deal_ids"]
 
         org_id = _resolve_org_id_for_terminal_stage(request)
-        is_solo = not _is_org_scoped_route(request)
-        lost_stage = _resolve_terminal_stage(
-            Stage.TERMINAL_SEMANTIC_LOST, org_id, include_null_org=is_solo
-        )
+        lost_stage = _resolve_terminal_stage(Stage.TERMINAL_SEMANTIC_LOST, org_id)
         if lost_stage is None:
             return Response({"updated": 0}, status=status.HTTP_200_OK)
 
