@@ -46,6 +46,7 @@ from quickscale_cli.backups_manifest import (
     default_backups_module_options,
     has_legacy_backups_secret_values,
     normalize_backups_module_options,
+    resolve_backups_module_options,
     validate_backups_env_var_reference,
 )
 from quickscale_core.contracts.module_options import sanitize_module_options
@@ -368,3 +369,39 @@ class TestSanitizeModuleOptionsBackupsDispatch:
         via_dispatcher = sanitize_module_options("backups", options)
         via_normalize = normalize_backups_module_options(options)
         assert via_dispatcher == via_normalize
+
+
+# ===========================================================================
+# 6. resolve_backups_module_options
+# ===========================================================================
+
+
+class TestResolveBackupsModuleOptions:
+    """resolve_backups_module_options merges manifest defaults with caller overrides."""
+
+    def test_none_returns_manifest_defaults(self) -> None:
+        result = resolve_backups_module_options(None)
+        assert result == default_backups_module_options()
+
+    def test_empty_dict_returns_manifest_defaults(self) -> None:
+        result = resolve_backups_module_options({})
+        assert result == default_backups_module_options()
+
+    def test_caller_override_wins_over_default(self) -> None:
+        result = resolve_backups_module_options({"retention_days": 30})
+        assert result["retention_days"] == 30
+
+    def test_unspecified_keys_retain_manifest_defaults(self) -> None:
+        result = resolve_backups_module_options({"retention_days": 7})
+        defaults = default_backups_module_options()
+        assert result["target_mode"] == defaults["target_mode"]
+        assert result["naming_prefix"] == defaults["naming_prefix"]
+
+    def test_legacy_keys_are_normalized_before_merge(self) -> None:
+        options = {"remote_access_key_id": "AKIAFAKEACCESSKEYID123"}
+        result = resolve_backups_module_options(options)
+        assert "remote_access_key_id" not in result
+        assert (
+            result[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]
+            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+        )
