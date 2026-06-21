@@ -266,6 +266,96 @@ class TestPolicyValidation:
             in issues
         )
 
+    def test_retention_days_below_one_is_invalid(self) -> None:
+        snapshot = BackupPolicySnapshot(
+            retention_days=0,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        issues = validate_policy_snapshot(snapshot)
+        assert "retention_days must be at least 1 day" in issues
+
+    def test_blank_naming_prefix_is_invalid(self) -> None:
+        snapshot = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="   ",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        issues = validate_policy_snapshot(snapshot)
+        assert "naming_prefix cannot be blank" in issues
+
+    def test_invalid_target_mode_is_rejected(self) -> None:
+        snapshot = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode="ftp",
+            local_directory=".quickscale/backups",
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        issues = validate_policy_snapshot(snapshot)
+        assert "target_mode must be 'local' or 'private_remote'" in issues
+
+    def test_blank_local_directory_is_invalid(self) -> None:
+        snapshot = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory="   ",
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        issues = validate_policy_snapshot(snapshot)
+        assert "local_directory cannot be blank" in issues
+
+    def test_automation_enabled_without_schedule_is_invalid(self) -> None:
+        snapshot = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=True,
+            schedule="",
+        )
+        issues = validate_policy_snapshot(snapshot)
+        assert "schedule is required when automation_enabled is true" in issues
+
     def test_build_backup_filename_uses_prefix_slug_and_timestamp(self) -> None:
         snapshot = BackupPolicySnapshot.from_settings()
         filename = build_backup_filename(
