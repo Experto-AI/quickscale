@@ -71,7 +71,7 @@ git merge --no-ff wt-track{N}
 | M7 | 1 | F11.11–F11.13b | 🟡 | M3 merged. **In progress:** F11.11 blog isolation active on `wt-track1`. Merge when all module isolation tests unskipped and green. |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
-| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. **In progress:** F5.2a extract snapshot/archive primitives. |
+| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **Next:** F5.2b extract restore/orchestration. |
 | M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
 
 ## In-Flight Milestones
@@ -181,14 +181,14 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 5 — Split the DR engine out of the embeddable backups module
 
-**Why still open:** **F5.1 ✅** — boundary contract defined in `decisions.md`. All orchestration lives in `services.py` (~4200+ LOC) wrapped by 8 management commands (`backups_create/restore/report/validate/pin/prune/sync_media/record_verification`); CLI↔module protocol is subprocess + env vars + stdout JSON; no cross-module deps — boundary is well-bounded for extraction. Target: centrally owned engine for snapshot/archive/restore/verification; backups module reduced to thin Django-facing surfaces.
+**Why still open:** **F5.1 ✅** — boundary contract defined in `decisions.md`. **F5.2a ✅** — snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives` (Django-free pg_dump/restore command building, shell execution, checksum, snapshot structure helpers, version extraction, engine-family helpers, sidecar constants). `services.py` imports from the new module; all 178 passing tests green; 9 pre-existing failures in `backups` test suite unchanged. Target: centrally owned engine for restore/orchestration/verification (F5.2b) and protocol replacement (F5.3).
 
 **Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
 **Dependencies:** M6 ✅ + M8 ✅ merged.
 
-**Phase F5.2a — Extract snapshot and archive primitives** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.2a — Extract snapshot and archive primitives** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
 
-- [ ] Extract snapshot and archive primitives into a CLI/core-owned engine library while preserving current behavior.
+- [x] Extract snapshot and archive primitives into a CLI/core-owned engine library while preserving current behavior.
 
 **Phase F5.2b — Extract restore and orchestration** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
