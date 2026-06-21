@@ -933,6 +933,93 @@ The authoritative current CLI command surface now lives in [implementation_contr
 
 ---
 
+#### Disaster Recovery Engine Boundary Contract (F5 / M10)
+
+**Status:** Target boundary for the M10 DR engine split. This contract is the
+authoritative target that phases F5.2a–F5.4 implement against; the current code
+does **not** yet match this split (see "Current state" below). This entry defines
+the boundary only (roadmap phase F5.1); it ships no extraction.
+
+**Why (Finding 5):** The embeddable `backups` module currently carries
+platform-level backup/restore orchestration and communicates with the CLI through
+a hidden management-command + environment-variable protocol. The engine must move
+into centrally owned code, leaving only thin Django-facing surfaces in the
+embeddable module.
+
+**Current state (pre-split):**
+- All DR orchestration lives in the embeddable module
+  (`quickscale_modules/backups/src/quickscale_modules_backups/services.py`):
+  snapshot creation, database custom-dumps, restore validation/execution,
+  media-sync planning, rollback-pin lifecycle, sidecar payload generation, and
+  remote-storage orchestration.
+- Eight management commands wrap those services: `backups_create`,
+  `backups_restore`, `backups_report`, `backups_validate`, `backups_pin`,
+  `backups_prune`, `backups_sync_media`, `backups_record_verification`.
+- The CLI (`quickscale_cli/src/quickscale_cli/commands/dr_commands.py`) drives DR
+  by invoking those management commands via subprocess, passing context through
+  environment variables (`DJANGO_SETTINGS_MODULE`, `QUICKSCALE_ENVIRONMENT`,
+  `QUICKSCALE_BACKUPS_ALLOW_RESTORE`, `QUICKSCALE_DR_TARGET_*`, `ROUTE_KIND`) and
+  parsing stdout JSON for results.
+- `quickscale_core` owns only environment-variable portability classification
+  (`contracts/module_options.py`); no backup/restore execution logic lives in
+  core today.
+
+**Target ownership split:**
+
+1. **Centrally owned DR engine (CLI/core layer)** — owns all platform-level
+   orchestration:
+   - Snapshot and archive primitives (database custom-dump capture, archive
+     packaging).
+   - Restore and orchestration flow (validation, ordered execution sequencing,
+     destructive-operation gating).
+   - Verification logic and verification-record assembly.
+   - Rollback-pin lifecycle and pin handling.
+   - Sidecar payload assembly (environment-variable manifests, release metadata,
+     verification records).
+   - Remote-storage orchestration.
+   - Route/environment resolution and cross-route promotion sequencing.
+
+2. **Embeddable `backups` module (thin Django-facing surfaces)** — owns only what
+   genuinely requires Django/project context:
+   - ORM models `BackupArtifact` and `BackupPolicy` (project-local DR records) and
+     their migrations.
+   - Admin UI for those models, including the guarded local-file restore surface.
+   - A thin, explicitly documented Django adapter that exposes project-bound
+     capabilities the engine needs (database connection/settings, `MEDIA_ROOT`,
+     app/settings introspection).
+   - No platform-level orchestration logic.
+
+**Boundary interface (replaces the hidden protocol; implemented in F5.3):**
+- The engine MUST NOT be reached through implicit management-command +
+  environment-variable + stdout-JSON coupling. Replace it with an explicit
+  internal boundary:
+  - **Typed requests** (snapshot, restore — carrying an explicit destructive-op
+    flag —, media-sync, verification) instead of environment-variable passing.
+  - **Typed results** (snapshot descriptor, per-surface results, sidecar
+    payloads, rollback pin) instead of parsing stdout JSON.
+  - The embeddable module exposes a single documented adapter that the engine
+    calls for project-bound operations. Management commands, if retained, become
+    thin wrappers over this boundary rather than the protocol itself.
+- Destructive restore stays gated; the gate becomes an explicit parameter on the
+  restore request rather than the `QUICKSCALE_BACKUPS_ALLOW_RESTORE` env var.
+
+**Invariants preserved across the split:**
+- The Backups contract rule (above) remains authoritative: PostgreSQL 18 native
+  custom dumps as the real restore path, JSON artifacts export-only, private
+  operational artifacts, credentials referenced by environment-variable name only,
+  and guarded destructive restore across both supported surfaces.
+- No change to the user-facing `quickscale dr {capture,plan,execute,report}` CLI
+  surface.
+- The protocol replacement is a maintainer-internal boundary and needs no
+  backward-compatibility shim; generated-project migration guidance is documented
+  in F5.4.
+
+**Out of scope for F5.1:** the extraction itself (F5.2a snapshot/archive
+primitives, F5.2b restore/orchestration), the protocol-replacement implementation
+(F5.3), and migration documentation (F5.4).
+
+---
+
 ## Document Responsibilities
 
 - **decisions.md**: Repo-wide policy, tie-breakers, prohibitions, and document ownership map (authoritative)
