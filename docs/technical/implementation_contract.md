@@ -260,3 +260,78 @@ See [module-extension.md](./module-extension.md) for the full extension contract
 - Tables follow Django defaults (`{app_label}_{model_name}`).
 - Standard migrations handle dependencies.
 - Do not invent custom table-naming schemes to simulate a plugin system.
+
+<a id="runtime-pins-constraints"></a>
+## Runtime Pins and Constraints (F7.1 Inventory)
+
+This section documents the current inventory of Python, Django, PostgreSQL, and Node.js runtime constraints, split by ownership. The inventory was completed as F7.1 and is the baseline for the F7.2 ownership-split phase.
+
+### Generator Runtime (repo-owned `pyproject.toml` files)
+
+The generator is a standalone Python toolchain with no Django or PostgreSQL runtime dependency. All generator packages share a single Python constraint:
+
+| Package | File | Python Constraint |
+|---------|------|------------------|
+| `quickscale-monorepo` (root) | `pyproject.toml` | `>=3.13,<3.15` |
+| `quickscale` (meta-package) | `pyproject.toml` | `>=3.13,<3.15` |
+| `quickscale-core` | `pyproject.toml` | `>=3.13,<3.15` |
+| `quickscale-cli` | `pyproject.toml` | `>=3.13,<3.15` |
+
+**Generator runtime dependencies (no Django/PostgreSQL):**
+- `quickscale-core`: Jinja2, pyyaml.
+- `quickscale-cli`: click, quickscale-core.
+- `quickscale` (meta): quickscale-core, quickscale-cli only.
+
+**Key property:** The generator has zero runtime dependency on Django, `psycopg2-binary`, Gunicorn, or any PostgreSQL client. It is a non-Django-aware scaffolding tool.
+
+### Embedded-Module Runtime (`quickscale_modules/*/pyproject.toml`)
+
+Each first-party embedded module is independently packaged with its own Python and Django constraints. These constraints are duplicated literals — an intentional copy rather than automatic inheritance — and must be manually synchronized with the generated-project template pins when updated.
+
+| Package | Python Constraint | Django Constraint |
+|---------|------------------|-------------------|
+| All 12 `quickscale_modules/*` | `>=3.13,<3.15` | `>=6.0.5,<6.1.0` |
+
+The 12 packaged modules are: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage.
+
+**Key properties:**
+- Module Django pins (`>=6.0.5`) are slightly tighter than the generated-project template pin (`>=6.0.3`), reflecting a verified lower-bound drift between these two independently maintained constraint sets.
+- No module carries PostgreSQL, Docker, CI matrix, or Node.js constraints — those are generated-project-only.
+- Module Python constraints match the generator and generated-project constraints (`>=3.13,<3.15`), but as an independent copy that must be manually bumped.
+
+### Generated-Project Runtime (template `.j2` files in `quickscale_core`)
+
+Generated-project runtime constraints live in Jinja2 templates under `quickscale_core/src/quickscale_core/generator/templates/`. These are emitted into the user-owned project at generation time and are independent of the generator's own runtime after generation.
+
+| Constraint | Location | Value |
+|-----------|----------|-------|
+| **Python** | `pyproject.toml.j2` | `>=3.13,<3.15` |
+| **Python (Docker)** | `Dockerfile.j2` | `python:3.13-slim-bookworm` (builder + runtime stages) |
+| **Python (CI)** | `github/workflows/ci.yml.j2` | Matrix `["3.13"]` |
+| **Django** | `pyproject.toml.j2` | `>=6.0.3,<6.1.0` |
+| **Django (CI)** | `github/workflows/ci.yml.j2` | Matrix `["6.0"]` |
+| **PostgreSQL (Docker)** | `docker-compose.yml.j2` | `postgres:18-alpine` |
+| **PostgreSQL client (Docker)** | `Dockerfile.j2` | `postgresql-client-18` |
+| **PostgreSQL client (CI)** | `github/workflows/ci.yml.j2` | `postgresql-client-18` |
+| **Node.js (Docker)** | `Dockerfile.j2` | `node:24-slim` (conditional frontend builder) |
+| **Node.js (CI)** | `github/workflows/ci.yml.j2` | `'24'` |
+| **Node.js (Docker Compose)** | `docker-compose.yml.j2` | `node:24-slim` (conditional frontend builder) |
+| **Node.js (engines)** | `themes/showcase_react/package.json.j2` | `>=24` |
+| **pnpm** | `github/workflows/ci.yml.j2`, `package.json.j2` | `11.0.9` |
+
+**Generated-project `pyproject.toml.j2` runtime deps:**
+- Django `>=6.0.3,<6.1.0`, psycopg2-binary `^2.9.11`, gunicorn `^25.0.0`, whitenoise `^6.8.0`, dj-database-url `^3.1.0`, python-decouple `^3.8`.
+
+**Generated-project dev deps:** pytest, pytest-django, pytest-cov, factory-boy, ruff, mypy, django-stubs, pre-commit, virtualenv.
+
+**Generated-project database:** PostgreSQL only (`django.db.backends.postgresql`), configured via `DATABASE_URL` environment variable. No SQLite fallback or compatibility mode.
+
+### Findings and Pending Notes (for F7.2/F7.3)
+
+1. **Duplicated Python constraint:** Generator and generated-project each carry an independent copy of `>=3.13,<3.15`. A version bump in one requires a manual synchronization step — the constraint is duplicated, not inherited.
+2. **Docker base image hardcode:** `Dockerfile.j2` carries its own literal `python:3.13-slim-bookworm`. If the generated-project Python constraint diverges from the generator's, the Docker base image must be updated as a separate manual step — the image ref is a duplicated literal, not inherited from the Python constraint.
+3. **CI matrix duplication:** The generated-project CI matrix (`python-version: ["3.13"]`, `django-version: ["6.0"]`) carries independent copies of the template `pyproject.toml.j2` constraints. Ownership split must ensure these duplicated entries stay manually synchronized for each generated project.
+4. **PostgreSQL constraint duplication:** `postgres:18-alpine`, `postgresql-client-18`, and the CI `apt-get install` all carry the same version literal independently. A version bump requires manual synchronization across all three sites.
+5. **Embedded-module pin drift:** All 12 modules carry Django `>=6.0.5,<6.1.0` while the generated-project template uses `>=6.0.3,<6.1.0`. These are independent manual-synchronization points with a verified lower-bound drift. Ownership split should align or explicitly document the divergence.
+6. **Frontend constraints are already generated-project-owned:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are naturally decoupled from the generator — no split needed there.
+7. **Generator purity is confirmed:** No Django or PostgreSQL dependency exists in any generator package, making the ownership split a one-direction change (emit correct pins; generator does not need to absorb generated-project deps).
