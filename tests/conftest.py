@@ -38,21 +38,106 @@ def django_db_setup(django_db_blocker):
 
 @pytest.fixture
 def user(db):
-    """Create a test user"""
-    return User.objects.create_user(
+    """Create a test user with a personal org (SaaS mode)."""
+    from quickscale_modules_orgs.models import Organization
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
         username="testuser",
         email="test@example.com",
         password="testpass123",
     )
+    Organization.objects.create_personal_for(user)
+    return user
 
 
 @pytest.fixture
 def author_user(db):
-    """Create a test user for blog posts"""
-    return User.objects.create_user(
+    """Create a test user for blog posts with a personal org (SaaS mode)."""
+    from quickscale_modules_orgs.models import Organization
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
         username="author",
         email="author@example.com",
         password="authorpass123",
         first_name="Test",
         last_name="Author",
     )
+    Organization.objects.create_personal_for(user)
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Organization fixtures for Phase 1 (F11.11) tenant-scoped blog models
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def org(db):
+    """Create a default test organization for blog model tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Test Org", slug="test-org")
+
+
+@pytest.fixture
+def org_a(db):
+    """Organization A — first tenant in isolation tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Org A", slug="org-a")
+
+
+@pytest.fixture
+def org_b(db):
+    """Organization B — second tenant in isolation tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Org B", slug="org-b")
+
+
+@pytest.fixture
+def org_a_admin(db, org_a):
+    """Staff user who is an admin of Organization A."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-a-admin",
+        email="org-a-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_a,
+        role=OrgRole.ADMIN,
+    )
+    return user
+
+
+@pytest.fixture
+def org_b_admin(db, org_b):
+    """Staff user who is an admin of Organization B."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-b-admin",
+        email="org-b-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_b,
+        role=OrgRole.ADMIN,
+    )
+    return user
