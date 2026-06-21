@@ -29,30 +29,39 @@ def _assert_canonical_stage_set(organization: Organization) -> list[Stage]:
 
 @pytest.mark.django_db
 @override_settings(QUICKSCALE_MODE="solo")
-def test_solo_crm_route_preserves_legacy_stage_surface_after_personal_org_creation(
+def test_solo_crm_route_seeds_personal_org_stages_on_first_access(
     client, staff_user
 ) -> None:
-    """A real solo CRM route should create a personal org without local stage seeding."""
+    """First solo CRM access seeds canonical stages on the user's personal org."""
 
     client.force_login(staff_user)
+
+    organization = Organization.objects.get(
+        is_personal=True, memberships__user=staff_user
+    )
+    # No stages yet before first CRM access.
+    assert Stage.objects.filter(organization=organization).count() == 0
 
     response = client.get("/crm/api/stages/")
 
     assert response.status_code == 200
-    organization = Organization.objects.get(
-        is_personal=True, memberships__user=staff_user
-    )
-    assert Stage.objects.filter(organization=organization).count() == 0
-    assert [item["name"] for item in response.json()] == [
+    # Personal org should now have the 4 canonical stages.
+    assert Stage.objects.filter(organization=organization).count() == 4
+    stages_data = response.json()
+    assert [item["name"] for item in stages_data] == [
         "Prospecting",
         "Negotiation",
         "Closed-Won",
         "Closed-Lost",
     ]
+    # All returned stages belong to the personal org (no NULL-org stages).
+    for item in stages_data:
+        assert Stage.objects.get(pk=item["id"]).organization_id == organization.id
 
     dashboard_response = client.get("/crm/")
     assert dashboard_response.status_code == 200
-    assert Stage.objects.filter(organization=organization).count() == 0
+    # Dashboard should not have created extra stages beyond the seeded set.
+    assert Stage.objects.filter(organization=organization).count() == 4
 
 
 @pytest.mark.django_db
@@ -147,7 +156,12 @@ def test_api_org_create_flow_seeds_canonical_stages(client, staff_user) -> None:
 def test_migrated_zero_local_org_bootstraps_on_first_crm_access(
     client, staff_user
 ) -> None:
-    """A migrated org with zero local stages should self-bootstrap on first CRM read."""
+    """A migrated org with zero local stages should self-bootstrap on first CRM read.
+
+    Phase 3: removed legacy NULL-org stage setup (post-0006, NULL-owned
+    stages cannot be created).  The bootstrap behavior is the same: zero
+    org-local stages triggers seeding on first CRM access.
+    """
 
     organization = Organization.objects.create(name="Migrated Org", slug="migrated-org")
     OrganizationMembership.objects.create(
@@ -155,7 +169,6 @@ def test_migrated_zero_local_org_bootstraps_on_first_crm_access(
         organization=organization,
         role=OrgRole.OWNER,
     )
-    Stage.objects.create(name="Legacy Prospecting", order=1)
     client.force_login(staff_user)
 
     first_response = client.get(f"/orgs/{organization.slug}/crm/api/stages/")

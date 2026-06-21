@@ -81,25 +81,26 @@ class TestEnsureOrgDefaultStages:
         assert Stage.objects.filter(organization=org_a).count() == 4
         assert len(result) == 4
 
-    def test_null_org_legacy_stages_do_not_satisfy_bootstrap(self, org_a) -> None:
-        """(d) NULL-organization legacy stages must not prevent seeding.
+    def test_cross_org_stages_do_not_satisfy_bootstrap(self, org_a, org_b) -> None:
+        """(d) Another org's stages must not prevent seeding for org_a.
 
-        Migration 0001 already creates 4 NULL-org stages during test DB
-        setup.  The bootstrap helper must still seed org-local stages
-        because it only counts rows where ``organization=<org>``.
+        Post-0006 contract: NULL-org stages no longer exist.  This test
+        proves that org_b's stages do not satisfy org_a's bootstrap rule
+        (same isolation principle as the original null-org proof).
         """
-        # Legacy NULL-org stages exist from migration 0001.
-        legacy_null_count = Stage.objects.filter(organization=None).count()
-        assert legacy_null_count >= 4  # at least the migration's 4
+        # Seed org_b first.
+        ensure_org_default_stages(org_b)
+        assert Stage.objects.filter(organization=org_b).count() == 4
+        # Org_a should still have zero stages.
         assert Stage.objects.filter(organization=org_a).count() == 0
 
-        # Bootstrap should still seed org-local stages.
+        # Bootstrap should seed org_a's stages independently.
         result = ensure_org_default_stages(org_a)
 
         assert len(result) == 4
         assert Stage.objects.filter(organization=org_a).count() == 4
-        # Legacy NULL-org stages still exist untouched.
-        assert Stage.objects.filter(organization=None).count() == legacy_null_count
+        # Org_b's stages still exist untouched.
+        assert Stage.objects.filter(organization=org_b).count() == 4
 
     def test_cross_org_isolation(self, org_a, org_b) -> None:
         """(e) One org's stages do not satisfy another org's bootstrap."""

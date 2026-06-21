@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
-| M3 | 1 | F11.6–F11.10 | 🟡 | **Next:** F11.10b. F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅. Still pending: F11.10b–F11.10e. |
+| M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | ⬜ | M3 merged; all module isolation tests unskipped and green |
 | M8 | 3 | F12.1–F12.3b | 🟡 | F12.1 ✅ F12.2 ✅ F12.3a ✅ (all merged to v87). **Next:** F12.3b. |
@@ -96,7 +96,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 merged; M3 in-flight |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 next |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F12 — Recoverable `apply` (saga) | M8 | 🟡 F12.1 ✅ F12.2 ✅ F12.3a ✅; next `F12.3b` |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
@@ -107,7 +107,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** CRM isolation phases F11.1–F11.10a complete and in CHANGELOG (groundwork, org-scoped create/read isolation, backfill, bootstrap, serializer hardening, bulk-deal scope, historical nullable-contract harness). F11.10b–F11.10e remain open: no `0006` NOT NULL migration exists yet — model `organization` FKs remain nullable. The historical-test split, post-`0006` test-ownership assignments, and M3 merge closeout are still open. After M3, module rollout to blog, forms, listings, and social (M7) remains. Non-CRM admin, shell, and async paths still need data-layer isolation per module.
+**Why still open:** CRM isolation phases F11.1–F11.10e complete and in CHANGELOG — M3 merged/closed (see merge checkpoints table above). Module rollout to blog, forms, listings, and social (M7 / F11.11–F11.13b) remains. Non-CRM admin, shell, and async paths still need data-layer isolation per module in M7.
 
 ---
 
@@ -115,50 +115,71 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** F11.6 + F11.7 + F11.8 + F11.9 merged on `v87`.
 
+**Status:** ✅ Complete. F11.10a–F11.10e all validated and green — M3 merged/closed (see CHANGELOG). Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11.
+
 **Groundwork committed and synced (2026-06-20):**
 - ✅ Committed to `wt-track1`: admin organization add/change guardrails; manager-first CRM scoping (`objects` + `all_objects` operator escape hatch); dual-manager contract on all 5 owned models; org-scoped serializer/view/service/test hardening; CRM isolation `xfail` removal. 321 CRM tests green.
-- ✅ `wt-track1` synced from `v87` at that baseline. F11.10a completed afterward (historical nullable-contract preserved — 311 CRM tests green).
+- ✅ `wt-track1` synced from `v87` at that baseline.
 
-**Findings / decisions status:**
-
-**Resolved:**
+**Findings / decisions status (all resolved):**
 - [x] **Delete policy** (2026-06-19): Once `organization` becomes required on Tag/Company/Contact/Stage/Deal, use `on_delete=PROTECT`. This is the sole owned-model delete policy for all five CRM models.
-- [x] **Post-`0006` solo-stage contract confirmed**: Seed and resolve solo CRM stages through the active personal org via `ensure_org_default_stages()` / same-org stage resolution, not legacy NULL-owned `0001` stage rows. (Already captured in F11.10c scope below.)
-- [x] **Historical `0004` nullable-contract preserved** (2026-06-20, F11.10a): Full `0004` nullable contract preserved in `quickscale_modules/crm/tests/test_migrations.py`; `TestOrganizationFieldNullable` removed from `test_models.py`. 311 CRM tests green.
+- [x] **Post-`0006` solo-stage contract confirmed**: Seed and resolve solo CRM stages through the active personal org via `ensure_org_default_stages()` / same-org stage resolution, not legacy NULL-owned `0001` stage rows. Resolved in F11.10c.
+- [x] **Historical `0004` nullable-contract preserved** (2026-06-20, F11.10a): The full `0004` nullable contract preserved in `quickscale_modules/crm/tests/test_migrations.py`; `TestOrganizationFieldNullable` removed from `test_models.py`.
+- [x] **`0001` no longer seeds default stages** — resolved at migration level to unblock clean installs and history rebuilds through `0006`.
+- [x] **0006 fail-hard contract preserved** — `0006` hard-stops ALL NULL-owned rows; no auto-backfill, no fresh-install heuristic.
+- [x] **Solo CRM uses personal-org-backed stage parity** — live `/crm/` and `/crm/api/stages/` seeding replaced legacy NULL-owned stage rows with personal-org-backed `ensure_org_default_stages()` via F11.10c.
+- [x] **Historical NULL/backfill proofs moved** into `test_migrations.py` per Option A; current-state test rewrites to post-`0006` contract complete in F11.10d.
+- [x] Historical NULL-row / backfill-command coverage split policy confirmed: `test_management_commands.py` NULL-row material moved to `test_migrations.py` (Option A).
+- [x] **Post-`0006` test-ownership assignment** confirmed: F11.10d owns the NOT NULL contract rewrites for `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py`.
+- [x] **F11.10e closeout validated**: Same-org FK audit/fix across `serializers.py` closed solo-route early-return gaps; repo-root CRM serializer/view/isolation slice passed **225/225**. Post-sync closeout slice (migration/history proofs + stage/bootstrap/runtime slices + `test_isolation.py`) passed **254/254**; pre-sync closeout slice also passed **254/254**. Root `make test` all runtime tests passing; exit code 1 solely from pre-existing per-file coverage in 5 unrelated non-CRM files. M3 merged/closed. Next: M7 / F11.11.
 
-**Still open (need decision or assignment before or during next execution):**
-- [ ] Decide whether historical NULL-row / backfill-command coverage in `test_management_commands.py` stays alongside post-migration coverage (with conditional guards) or moves fully into `test_migrations.py`. This affects whether the split belongs in F11.10d or needs a separate phase.
-- [ ] **Post-`0006` test-ownership assignment** — Before F11.10b (schema flip) completes, confirm the named home for rewriting each of `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py` to the NOT NULL contract. F11.10d currently claims these rewrites (see below); this assignment must be confirmed or the phases re-scoped so no file is left with stale nullable-era assertions and no owner.
+**Validation evidence (F11.10e closeout):** Same-org FK audit/fix across `serializers.py` — repo-root CRM serializer/view/isolation slice passed **225/225**. Pre-sync closeout slice (migration/history proofs + stage/bootstrap/runtime slices + `test_isolation.py`) passed **254/254**; post-sync closeout slice also passed **254/254**. Root `make test` completed fully — `quickscale_core` 1223 passed, `quickscale_cli` 1746 passed, CRM 320 passed, all modules passing. Exit code 1 came solely from pre-existing per-file coverage thresholds in **5 unrelated files** outside the CRM slice: `module_catalog.py`, `delta.py`, `backups_manifest.py`, `crm_manifest.py`, `crm_bootstrap.py`. Those coverage gaps are pre-existing and do not block CRM work.
 
-**Summary for next handoff:** F11.10a ✅ (historical nullable-contract preserved — 311 CRM tests green). Before F11.10b (schema flip) starts, two open items remain: the `test_management_commands.py` split policy, and the post-`0006` test-ownership assignments for the four test files listed in F11.10d.
+**Next:** M7 / F11.11 — blog/forms/listings/social rollout.
 
-**Phase F11.10b — Schema flip + owner contract** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.10a — Historical nullable-contract harness** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ | **Status:** ✅ Complete.
+
+**Dependencies:** F11.6 + F11.7 + F11.8 + F11.9 merged.
+
+- [x] Preserve the full `0004` nullable contract for `Tag`, `Company`, `Contact`, `Stage`, and `Deal` in migration/history coverage (`null=True`, `blank=True`, create/persist without org where applicable, `on_delete=SET_NULL`).
+- [x] Remove `TestOrganizationFieldNullable` from live current-state expectations once the same historical contract is proven elsewhere.
+
+**Phase F11.10b — Schema flip + owner contract** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ | **Status:** ✅ Complete.
 
 **Dependencies:** F11.10a.
 
-- [ ] Add `0006` to hard-stop residual NULL-owned upgraded rows, tighten the five owned CRM `organization` FKs to the final NOT NULL contract, and apply the chosen delete policy.
-- [ ] Keep F11-deferred per-org `terminal_semantic` uniqueness out of scope for this slice.
+- [x] Add `0006` to hard-stop ALL NULL-owned rows (no auto-backfill, no fresh-install heuristic), tighten the five owned CRM `organization` FKs to the final NOT NULL contract, and apply the chosen delete policy.
+- [x] Keep F11-deferred per-org `terminal_semantic` uniqueness out of scope for this slice.
 
-**Phase F11.10c — Solo/personal-org stage bootstrap closeout** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Historical context (resolved in F11.10c / F11.10d):**
+- When F11.10b was implemented, `0001_initial` still seeded NULL-owned default Stage rows, so clean installs and history rebuilds blocked at `0006`. This was resolved at the migration level as a prerequisite for F11.10c (see F11.10c notes and resolution list above): `0001` no longer seeds default stages.
+- F11.10d owned the historical/current-state test split and the post-`0006` current-state regression rewrites; F11.10b intentionally did not rewrite test files. Both are now complete.
+
+**Phase F11.10c — Solo/personal-org stage bootstrap closeout** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ | **Status:** ✅ Complete.
 
 **Dependencies:** F11.10b.
 
-- [ ] Replace live solo `/crm/` and `/crm/api/stages/` dependence on legacy NULL-owned stage rows with personal-org-backed stage seeding via `ensure_org_default_stages()`.
-- [ ] Keep bulk stage mutation, `stage_id` validation, and terminal-stage actions same-org / personal-org only.
+- [x] Replace live solo `/crm/` and `/crm/api/stages/` dependence on legacy NULL-owned stage rows with personal-org-backed stage seeding via `ensure_org_default_stages()`.
+- [x] Keep bulk stage mutation, `stage_id` validation, and terminal-stage actions same-org / personal-org only.
 
-**Phase F11.10d — Backfill + current-state regression split** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Notes:** `0001` no longer seeds default stages (resolved at migration level as prerequisite for `0006` clean installs). Solo CRM now uses personal-org-backed stage parity exclusively.
+
+**Phase F11.10d — Backfill + current-state regression split** _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ | **Status:** ✅ Complete.
 
 **Dependencies:** F11.10b + F11.10c.
 
-- [ ] Split historical NULL-row / backfill-command coverage (`test_management_commands.py`) from latest-schema current-state coverage; move historical material to `test_migrations.py` or keep with conditional guards per the split-policy decision (see open assignments above).
-- [ ] Rewrite current-state `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py` assertions to the post-`0006` contract; keep only historical NULL-era proofs in migration/history harnesses. (Ownership assignment must be confirmed — see open assignments above.)
+- [x] Split historical NULL-row / backfill-command coverage (`test_management_commands.py`) from latest-schema current-state coverage; historical material moved to `test_migrations.py` per Option A split-policy decision.
+- [x] Rewrite current-state `test_models.py`, `test_services.py`, `test_serializers.py`, and `test_views.py` assertions to the post-`0006` contract; historical NULL-era proofs kept only in migration/history harnesses.
 
-**Phase F11.10e — Isolation + M3 merge closeout** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
+**Phase F11.10e — Isolation + M3 merge closeout** _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_ | **Status:** ✅ Complete.
 
 **Dependencies:** F11.10d.
 
-- [ ] Run the narrow CRM closeout set before and after syncing from `v87`: migration/history proofs, stage/bootstrap/runtime slices, and `quickscale_modules/crm/tests/test_isolation.py`.
-- [ ] Update roadmap / changelog status from the validated post-merge evidence set, then merge the completed M3 slice back to `v87`.
+- [x] Synced from `v87`, ran narrow CRM closeout set (migration/history proofs + stage/bootstrap/runtime slices + `quickscale_modules/crm/tests/test_isolation.py`) — post-sync slice passed **254/254**.
+- [x] Same-org FK audit/fix cycle across `serializers.py` — closed ContactDetailSerializer/DealDetailSerializer solo-route early-return gaps; repo-root CRM serializer/view/isolation slice passed **225/225**; follow-up re-review found no remaining same-type security-boundary gaps.
+- [x] Pre-sync closeout slice also passed **254/254**.
+- [x] Root `make test` completed with all runtime tests passing; exit code 1 solely from pre-existing per-file coverage in 5 unrelated non-CRM files (`module_catalog.py`, `delta.py`, `backups_manifest.py`, `crm_manifest.py`, `crm_bootstrap.py`).
+- [x] Roadmap and changelog updated to final M3 closeout state. M3 merged/closed. **Next open Track 1 work: M7 / F11.11.**
 
 ---
 

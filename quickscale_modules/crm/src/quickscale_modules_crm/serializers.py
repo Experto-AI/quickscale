@@ -216,20 +216,12 @@ class ContactNoteSerializer(serializers.ModelSerializer):
         return ""
 
     def validate(self, attrs: dict) -> dict:
-        """Reject foreign-org parent contact on org-scoped create.
+        """Reject foreign-org parent contact on all create routes.
 
-        When creating a ContactNote via an org-scoped route, the parent
-        contact must belong to the same organization (or have NULL
-        organization for legacy/solo compatibility).  Foreign-org parent
-        references are rejected.  Solo routes skip this validation.
+        When creating a ContactNote, the parent contact must belong to the
+        caller's active organization (or have NULL organization for legacy/
+        solo compatibility).  Foreign-org parent references are rejected.
         """
-        request = self.context.get("request")
-        if request is not None:
-            path = getattr(request, "path", "") or ""
-            if not path.startswith("/orgs/"):
-                # Solo route — skip foreign-org validation.
-                return attrs
-
         org_id = _request_org_id(self)
         if org_id is None:
             # No org context — skip foreign-org validation.
@@ -389,20 +381,14 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         return data
 
     def validate(self, attrs: dict) -> dict:
-        """Reject foreign-org related IDs on org-scoped create and update.
+        """Reject foreign-org related IDs on all create and update routes.
 
-        When creating or updating via an org-scoped route, the related
-        company and tags must belong to the same organization (or have
-        NULL organization for legacy/solo compatibility). Foreign-org
-        references are rejected.  Solo routes skip this validation.
+        When creating or updating, the related company and tags must belong
+        to the same organization (or have NULL organization for legacy/solo
+        compatibility). Foreign-org references are rejected.  The active
+        organization is resolved from ``request.org`` (set by middleware) or
+        the personal-org fallback for solo routes.
         """
-        request = self.context.get("request")
-        if request is not None:
-            path = getattr(request, "path", "") or ""
-            if not path.startswith("/orgs/"):
-                # Solo route — skip foreign-org validation.
-                return attrs
-
         org_id = _request_org_id(self)
         if org_id is None:
             # No org context — skip foreign-org validation.
@@ -459,9 +445,18 @@ class StageSerializer(serializers.ModelSerializer):
     def get_deal_count(self, obj: Stage) -> int:
         """Return the number of deals in this stage.
 
-        On org-scoped SaaS routes, only deals belonging to the active
-        organization are counted.  On solo routes, all deals are counted.
+        Phase 2: both org-scoped and solo routes count deals scoped to the
+        active organization.  On org-scoped routes, ``request.org`` is set
+        by ``TenantMiddleware``.  On solo routes, ``_resolve_active_org``
+        sets it during ``get_queryset()``.  The fallback preserves backward
+        compatibility for edge cases without request context.
         """
+        request = self.context.get("request")
+        if request is not None:
+            org = getattr(request, "org", None)
+            if org is not None:
+                return obj.deals.filter(organization_id=org.id).count()  # type: ignore[attr-defined]
+        # Fallback: _read_org_id behavior for unscoped reads.
         org_id = _read_org_id(self)
         deals = obj.deals  # type: ignore
         if org_id is not None:
@@ -498,20 +493,13 @@ class DealNoteSerializer(serializers.ModelSerializer):
         return ""
 
     def validate(self, attrs: dict) -> dict:
-        """Reject foreign-org parent deal on org-scoped create.
+        """Reject foreign-org parent deal on all create routes.
 
-        When creating a DealNote via an org-scoped route, the parent deal
-        must belong to the same organization (or have NULL organization
-        for legacy/solo compatibility).  Foreign-org parent references
-        are rejected.  Solo routes skip this validation.
+        When creating a DealNote, the parent deal must belong to the
+        caller's active organization (or have NULL organization for
+        legacy/solo compatibility).  Foreign-org parent references
+        are rejected.
         """
-        request = self.context.get("request")
-        if request is not None:
-            path = getattr(request, "path", "") or ""
-            if not path.startswith("/orgs/"):
-                # Solo route — skip foreign-org validation.
-                return attrs
-
         org_id = _request_org_id(self)
         if org_id is None:
             # No org context — skip foreign-org validation.
@@ -679,20 +667,14 @@ class DealDetailSerializer(serializers.ModelSerializer):
         return data
 
     def validate(self, attrs: dict) -> dict:
-        """Reject foreign-org related IDs on org-scoped create and update.
+        """Reject foreign-org related IDs on all create and update routes.
 
-        When creating or updating via an org-scoped route, the related
-        contact, stage, and tags must belong to the same organization (or
-        have NULL organization for legacy/solo compatibility). Foreign-org
-        references are rejected.  Solo routes skip this validation.
+        When creating or updating, the related contact, stage, and tags
+        must belong to the same organization (or have NULL organization for
+        legacy/solo compatibility). Foreign-org references are rejected.
+        The active organization is resolved from ``request.org`` (set by
+        middleware) or the personal-org fallback for solo routes.
         """
-        request = self.context.get("request")
-        if request is not None:
-            path = getattr(request, "path", "") or ""
-            if not path.startswith("/orgs/"):
-                # Solo route — skip foreign-org validation.
-                return attrs
-
         org_id = _request_org_id(self)
         if org_id is None:
             # No org context — skip foreign-org validation.
@@ -756,31 +738,51 @@ class BulkUpdateStageSerializer(serializers.Serializer):
     stage_id = serializers.PrimaryKeyRelatedField(queryset=Stage.objects.all())
 
     def validate_stage_id(self, value: Stage) -> Stage:
-        """Reject non-owned stages on org-scoped routes.
+        """Reject non-owned stages on all routes.
 
-        Phase 2: org-scoped routes require the target stage to belong to the
-        active organization.  Solo routes accept any stage (legacy unscoped
-        behavior).
+        Phase 2: both org-scoped and solo routes require the target stage
+        to belong to the active organization.  On solo routes, the org is
+        resolved from ``request.org`` (set by ``TenantMiddleware`` or the
+        ``_resolve_active_org`` fallback).  Org-scoped routes fail closed
+        when ``request.org`` is not set — no personal-org fallback.
         """
         request = self.context.get("request")
         if request is None:
             return value
 
+        # Check whether this is an org-scoped SaaS route so we can
+        # fail closed without personal-org fallback.
         path = getattr(request, "path", "") or ""
         is_org_scoped = path.startswith("/orgs/")
 
-        # Solo routes accept any stage — skip org validation.
-        if not is_org_scoped:
-            return value
-
-        # Org-scoped routes: require org context, no fallback.
+        # Resolve the active org — check request.org first, then fall back
+        # to personal-org lookup for test scenarios without middleware.
         org = getattr(request, "org", None)
+        if org is None:
+            # Org-scoped routes must fail closed — no personal-org fallback.
+            if is_org_scoped:
+                raise serializers.ValidationError(
+                    "Organization context is required for this route.",
+                    code="org_required",
+                )
+
+            user = getattr(request, "user", None)
+            if user is not None and getattr(user, "is_authenticated", False):
+                from quickscale_modules_orgs.models import Organization
+
+                personal_org = Organization.objects.filter(
+                    is_personal=True, memberships__user=user
+                ).first()
+                if personal_org is not None:
+                    org = personal_org
+                    request.org = personal_org  # type: ignore[union-attr]
+
         if org is None:
             raise serializers.ValidationError(
                 "Organization context is required for this route.",
                 code="org_required",
             )
-        # Org-scoped: reject both foreign-org and NULL-org stages.
+        # Reject both foreign-org and NULL-org stages.
         if value.organization_id != org.id:  # type: ignore[attr-defined]
             raise serializers.ValidationError(
                 "The specified stage does not belong to this organization.",
