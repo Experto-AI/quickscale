@@ -71,7 +71,7 @@ git merge --no-ff wt-track{N}
 | M7 | 1 | F11.11–F11.13b | 🟡 | M3 merged. **In progress:** F11.11 blog isolation active on `wt-track1`. Merge when all module isolation tests unskipped and green. |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
-| M10 | 2 | F5.1–F5.4 | ⬜ | M6 ✅ archived (see CHANGELOG); M8 merged — next DR engine in CLI; backups module slimmed |
+| M10 | 2 | F5.1–F5.4 | 🟡 | M6 ✅ archived (see CHANGELOG); M8 merged. **In progress:** F5.1 ✅ boundary contract defined (decisions.md). Next: F5.2a extract snapshot/archive primitives. |
 | M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅ (inventory in implementation_contract.md). F7.2/F7.3 pending. |
 
 ## In-Flight Milestones
@@ -107,7 +107,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 | F12 — Recoverable `apply` (saga) | M8 | 🟢 F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅; M8 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (parallel to F12; Track 1 independent of Track 3) |
-| 5 | F5 — DR engine split | M10 | ⬜ M6 archived ✅; ready now that M8 merged |
+| 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅ boundary contract defined; F5.2a–F5.4 pending |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅ (inventory complete). F7.2/F7.3 pending. |
 
 ---
@@ -215,7 +215,9 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Phase F5.1 — Define the boundary** _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
-- [ ] Define the DR boundary contract between embeddable Django surfaces and the centrally owned backup/restore engine.
+- [x] Define the DR boundary contract between embeddable Django surfaces and the centrally owned backup/restore engine.
+  - Contract authored in [decisions.md → Disaster Recovery Engine Boundary Contract (F5 / M10)](decisions.md#module-specific-architecture). Defines the target ownership split (centrally owned engine vs thin Django surfaces), the typed-request/result boundary that replaces the hidden management-command/env-var protocol, and the invariants preserved across the split.
+  - **Finding (de-risks F5.2a/b):** all DR orchestration currently lives in one file — `quickscale_modules/backups/src/quickscale_modules_backups/services.py` (~4200+ LOC) — wrapped by 8 management commands (`backups_create/restore/report/validate/pin/prune/sync_media/record_verification`). The CLI↔module protocol is subprocess + env vars (`DJANGO_SETTINGS_MODULE`, `QUICKSCALE_ENVIRONMENT`, `QUICKSCALE_BACKUPS_ALLOW_RESTORE`, `QUICKSCALE_DR_TARGET_*`, `ROUTE_KIND`) + stdout JSON. No cross-module dependencies and no engine logic in `quickscale_core` today (core owns only env-var portability classification), so the boundary is well-bounded for extraction.
 
 **Phase F5.2a — Extract snapshot and archive primitives** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 
