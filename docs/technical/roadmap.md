@@ -70,7 +70,7 @@ git merge --no-ff wt-track{N}
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
 | M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅. Org ownership on Category/Tag/Post/BlogMediaAsset; per-org uniqueness; org-scoped blog routes + flat compat preserved; isolation tests green; review-driven fixes applied; final re-review resolved CR-001 and CR-002. **Next:** F11.12a. |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
-| M9 | 1 | F13.1–F13.3 | ⬜ | M7 merged; billing org-authoritative; dual-FK rows reconciled |
+| M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
 | M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **Next:** F5.2b extract restore/orchestration. |
 | M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
 
@@ -100,7 +100,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 |----------|---------|-------------|--------|
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
-| 3 \| parallel | F13 — Single billing customer SSOT | M9 | ⬜ Waits for M7 (Track 1 independent of Track 3) |
+| 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
 | 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a–F5.4 pending |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
 
@@ -249,25 +249,24 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 13 — Establish a single billing customer source of truth
 
-**Why still open:** `Subscription` carries concurrent `organization` and `user` FKs; `_sync_subscription_authority()` (`billing/services.py:~2288`) can leave a row owned by both. The active-subscription invariant is ambiguous at the schema level. Must resolve before team/seat-scoped billing.
+**Status:** ✅ Complete — M9 merged to v87. `organization` is the authoritative billing subject; `_sync_subscription_authority()` enforces org-primary / user-provenance semantics; `quickscale_billing_unique_current_subscription_per_organization` constraint enforces one active subscription per org; dual-FK rows backfilled via `0003_org_authoritative_billing_contract.py`.
 
 **Track:** 1 | **Worktree:** `quickscale-wt-track1` | **Merges as:** M9
-**Dependencies:** M7 merged.
 
-**Phase F13.1 — Declare the authoritative billing subject** _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+**Phase F13.1 — Declare the authoritative billing subject** _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_ — ✅ **Complete.**
 
-- [ ] Declare organization as the authoritative billing subject; make `user` non-authoritative (derived/nullable) or remove it.
-- [ ] Fix `_sync_subscription_authority()` so it cannot leave a row owned by both FKs.
+- [x] Declare organization as the authoritative billing subject; make `user` non-authoritative (derived/nullable) or remove it.
+- [x] Fix `_sync_subscription_authority()` so it cannot leave a row owned by both FKs.
 
-**Phase F13.2 — Single "current subscription" invariant** _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+**Phase F13.2 — Single "current subscription" invariant** _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_ — ✅ **Complete.**
 
-- [ ] Define the "current subscription" status set once; share it between ORM queries and the unique constraint.
-- [ ] Enforce "one current subscription per organization" structurally.
+- [x] Define the "current subscription" status set once; share it between ORM queries and the unique constraint.
+- [x] Enforce "one current subscription per organization" structurally (`quickscale_billing_unique_current_subscription_per_organization` constraint in migration `0003`).
 
-**Phase F13.3 — Reconcile and gate** _(M9 closeout)_ _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_
+**Phase F13.3 — Reconcile and gate** _(M9 closeout)_ _(Adaptive tier: 2)_ _(why → [Finding 13](#finding-13--establish-a-single-billing-customer-source-of-truth))_ — ✅ **Complete.**
 
-- [ ] Reconcile existing dual-FK rows to the canonical owner via migration.
-- [ ] Confirm ownership-authority semantics are resolved before any team/seat-scoped billing work begins.
+- [x] Reconcile existing dual-FK rows to the canonical owner via migration (`0003_org_authoritative_billing_contract.py` backfill + mgmt command).
+- [x] Confirm ownership-authority semantics are resolved before any team/seat-scoped billing work begins.
 
 ---
 
