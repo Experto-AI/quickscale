@@ -31,9 +31,7 @@ class Tag(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="crm_tags",
     )
     name = models.CharField(max_length=50)
@@ -70,9 +68,7 @@ class Company(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="crm_companies",
     )
     name = models.CharField(max_length=200)
@@ -107,9 +103,7 @@ class Contact(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="crm_contacts",
     )
     first_name = models.CharField(max_length=100)
@@ -165,9 +159,7 @@ class Stage(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="crm_stages",
     )
     name = models.CharField(max_length=100)
@@ -198,9 +190,7 @@ class Deal(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="crm_deals",
     )
     title = models.CharField(max_length=200)

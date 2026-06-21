@@ -1,29 +1,8 @@
-"""Initial migration for CRM module with default pipeline stages"""
+"""Initial migration for CRM module"""
 
 import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
-
-
-def create_default_stages(apps, _schema_editor):
-    """Create default pipeline stages"""
-    Stage = apps.get_model("quickscale_modules_crm", "Stage")
-    stages = [
-        {"name": "Prospecting", "order": 1},
-        {"name": "Negotiation", "order": 2},
-        {"name": "Closed-Won", "order": 3},
-        {"name": "Closed-Lost", "order": 4},
-    ]
-    for stage_data in stages:
-        Stage.objects.create(**stage_data)
-
-
-def reverse_default_stages(apps, _schema_editor):
-    """Remove default pipeline stages"""
-    Stage = apps.get_model("quickscale_modules_crm", "Stage")
-    Stage.objects.filter(
-        name__in=["Prospecting", "Negotiation", "Closed-Won", "Closed-Lost"]
-    ).delete()
 
 
 class Migration(migrations.Migration):
@@ -308,6 +287,4 @@ class Migration(migrations.Migration):
                 "ordering": ["-created_at"],
             },
         ),
-        # Create default pipeline stages
-        migrations.RunPython(create_default_stages, reverse_default_stages),
     ]

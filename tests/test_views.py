@@ -477,12 +477,12 @@ class TestTagViewSet:
         assert "name" in response.data
 
     def test_update_tag_rename_to_duplicate_returns_4xx(
-        self, authenticated_client, tag
+        self, authenticated_client, tag, staff_personal_org
     ):
         """Renaming a tag to an existing duplicate name returns a controlled 4xx."""
         from quickscale_modules_crm.models import Tag
 
-        Tag.objects.create(name="Hot Lead")
+        Tag.objects.create(name="Hot Lead", organization=staff_personal_org)
         response = authenticated_client.patch(
             reverse("quickscale_crm:tag-detail", args=[tag.id]),
             {"name": "Hot Lead"},
@@ -1735,43 +1735,6 @@ class TestF114OrgScopedContactDealCreateStamping:
         assert created.organization_id == org_a.id
         assert set(created.tags.values_list("id", flat=True)) == {tag_a.id}
 
-    # -- Contact: NULL-org legacy related IDs accepted -------------------------
-
-    def test_org_member_create_contact_accepts_null_org_legacy_related_ids(
-        self, client, org_a, org_a_admin
-    ):
-        """A contact create with NULL-org (legacy) company and tags succeeds via org-scoped route.
-
-        Legacy rows with organization_id=NULL remain compatible with org-scoped
-        creates — the validator only rejects foreign-org references, not
-        NULL-owned rows.
-        """
-        from quickscale_modules_crm.models import Company, Contact, Tag
-
-        legacy_company = Company.objects.create(name="Legacy Corp")
-        assert legacy_company.organization_id is None
-        legacy_tag = Tag.objects.create(name="Legacy-Tag")
-        assert legacy_tag.organization_id is None
-
-        client.force_login(org_a_admin)
-
-        response = client.post(
-            f"/orgs/{org_a.slug}/crm/api/contacts/",
-            data={
-                "first_name": "Legacy",
-                "last_name": "Contact",
-                "email": "legacy-contact@example.com",
-                "company_id": legacy_company.id,
-                "tag_ids": [legacy_tag.id],
-            },
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        created = Contact.objects.get(pk=response.data["id"])
-        assert created.organization_id == org_a.id
-        assert set(created.tags.values_list("id", flat=True)) == {legacy_tag.id}
-
     # -- Deal: same-org related IDs accepted (positive acceptance) -------------
 
     def test_org_member_create_deal_accepts_same_org_contact_stage_and_tags(
@@ -1810,51 +1773,6 @@ class TestF114OrgScopedContactDealCreateStamping:
         created = Deal.objects.get(pk=response.data["id"])
         assert created.organization_id == org_a.id
         assert set(created.tags.values_list("id", flat=True)) == {tag_a.id}
-
-    # -- Deal: NULL-org legacy related IDs accepted ----------------------------
-
-    def test_org_member_create_deal_accepts_null_org_legacy_related_ids(
-        self, client, org_a, org_a_admin
-    ):
-        """A deal create with NULL-org (legacy) contact, stage, and tags succeeds.
-
-        Legacy rows with organization_id=NULL remain compatible with org-scoped
-        deal creates — the validator only rejects foreign-org references.
-        """
-        from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
-
-        legacy_company = Company.objects.create(name="Legacy Corp")
-        legacy_contact = Contact.objects.create(
-            first_name="Legacy",
-            last_name="Contact",
-            email="legacy-deal-contact@example.com",
-            company=legacy_company,
-        )
-        assert legacy_contact.organization_id is None
-        legacy_stage = Stage.objects.create(name="Legacy Stage", order=1)
-        assert legacy_stage.organization_id is None
-        legacy_tag = Tag.objects.create(name="Legacy-Deal-Tag")
-        assert legacy_tag.organization_id is None
-
-        client.force_login(org_a_admin)
-
-        response = client.post(
-            f"/orgs/{org_a.slug}/crm/api/deals/",
-            data={
-                "title": "Legacy Deal",
-                "contact_id": legacy_contact.id,
-                "stage_id": legacy_stage.id,
-                "amount": "8000.00",
-                "probability": 40,
-                "tag_ids": [legacy_tag.id],
-            },
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        created = Deal.objects.get(pk=response.data["id"])
-        assert created.organization_id == org_a.id
-        assert set(created.tags.values_list("id", flat=True)) == {legacy_tag.id}
 
     # -- Solo-route regression (personal-org stamping) -------------------------
 
@@ -1942,7 +1860,11 @@ class TestF115OrgScopedReadScoping:
 
         Tag.objects.create(name="Org-A Tag", organization=org_a)
         Tag.objects.create(name="Org-B Tag", organization=org_b)
-        Tag.objects.create(name="Legacy Tag")  # NULL org
+        # Create a tag in another org to prove isolation.
+        from quickscale_modules_orgs.models import Organization
+
+        other_org = Organization.objects.create(name="Other Org", slug="other-org-tags")
+        Tag.objects.create(name="Other Tag", organization=other_org)
 
         client.force_login(org_a_admin)
         response = client.get(f"/orgs/{org_a.slug}/crm/api/tags/")
@@ -1951,8 +1873,8 @@ class TestF115OrgScopedReadScoping:
         names = {item["name"] for item in response.data}
         assert "Org-A Tag" in names
         assert "Org-B Tag" not in names
-        # NULL-org tags are not returned for org-scoped reads.
-        assert "Legacy Tag" not in names
+        # Tags from other orgs are not returned for org-scoped reads.
+        assert "Other Tag" not in names
 
     # -- Company: org-scoped list isolates tenants ----------------------------
 
@@ -2513,14 +2435,13 @@ class TestF115Phase2DashboardOrgScoping:
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_dashboard_includes_legacy_null_owned_data(
+    def test_solo_dashboard_shows_only_personal_org_data(
         self, client, staff_user, org_a, org_b
     ):
-        """Solo dashboard includes personal-org and legacy NULL-owned data.
+        """Solo dashboard includes personal-org data and excludes other orgs.
 
-        CR-F11.10-DASH-003: Solo dashboard must include legacy NULL-owned
-        rows (contacts/companies/deals) on solo routes until the NOT NULL
-        migration (0006) lands.  Data from other organizations is excluded.
+        Phase 3 (post-0006): NULL-owned rows no longer exist.  The solo
+        dashboard scopes to the personal org, excluding other orgs' data.
         """
         from quickscale_modules_crm.models import Company
         from quickscale_modules_orgs.models import Organization
@@ -2531,8 +2452,6 @@ class TestF115Phase2DashboardOrgScoping:
 
         # Personal org data (should be included).
         Company.objects.create(name="Personal Corp", organization=personal_org)
-        # Legacy NULL-owned data (should be included per CR-F11.10-DASH-003).
-        Company.objects.create(name="Legacy Corp")  # NULL org
         # Other org data (should NOT be included on solo route).
         Company.objects.create(name="Org-A Corp", organization=org_a)
         Company.objects.create(name="Org-B Corp", organization=org_b)
@@ -2543,16 +2462,15 @@ class TestF115Phase2DashboardOrgScoping:
         assert response.status_code == status.HTTP_200_OK
         content = response.content.decode("utf-8")
 
-        # The dashboard renders stats in cards: contacts, companies, deals, value.
-        # total_companies stat should be 2 (personal + null), not 4.
+        # The dashboard renders stats in cards.
+        # total_companies stat should be 1 (personal only), not 3.
         assert "Total Companies" in content
-        # Count <h3> elements before "Total Companies" to find the stat value.
         companies_section = content.split("Total Companies")[0]
         companies_value = (
             companies_section.rsplit("<h3>", 1)[-1].split("</h3>")[0].strip()
         )
-        assert companies_value == "2", (
-            f"Expected total_companies=2, got {companies_value!r}"
+        assert companies_value == "1", (
+            f"Expected total_companies=1 (personal only), got {companies_value!r}"
         )
 
 
@@ -2631,10 +2549,11 @@ class TestF115Phase2NestedNoteFailClosed:
 
 @pytest.mark.django_db
 class TestF1110SoloDashboardNullOwnedCoverage:
-    """CR-F11.10-DASH-003 — Solo dashboard coverage for legacy NULL-owned data.
+    """Solo dashboard coverage for personal-org data (Phase 3, post-0006).
 
-    These tests verify that the solo CRM dashboard includes legacy NULL-owned
+    These tests verify that the solo CRM dashboard includes only personal-org
     data in its aggregates, stage breakdowns, and recent-item displays.
+    Legacy NULL-owned data can no longer exist post-0006.
     """
 
     @override_settings(
@@ -2642,10 +2561,10 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_dashboard_deals_by_stage_includes_null_owned_deals(
+    def test_solo_dashboard_deals_by_stage_shows_only_personal_org_deals(
         self, client, staff_user, org_a
     ):
-        """Solo dashboard deals_by_stage includes NULL-owned deals."""
+        """Solo dashboard deals_by_stage shows only personal-org deals."""
         from decimal import Decimal
 
         from quickscale_modules_crm.models import (
@@ -2684,58 +2603,34 @@ class TestF1110SoloDashboardNullOwnedCoverage:
             organization=personal_org,
         )
 
-        # Legacy NULL-owned deal on the same stage.
-        legacy_company = Company.objects.create(name="Legacy Corp")
-        legacy_contact = Contact.objects.create(
-            first_name="Legacy",
-            last_name="Contact",
-            email="legacy-deal@example.com",
-            company=legacy_company,
-        )
-        Deal.objects.create(
-            title="Legacy Deal",
-            contact=legacy_contact,
-            amount=Decimal("500.00"),
-            stage=stage,
-        )
-
         client.force_login(staff_user)
         response = client.get("/crm/")
 
         assert response.status_code == status.HTTP_200_OK
         content = response.content.decode("utf-8")
 
-        # total_deals should include both deals (personal + legacy).
+        # total_deals should include only the personal deal.
         deals_section = content.split("Total Deals")[0]
         deals_value = deals_section.rsplit("<h3>", 1)[-1].split("</h3>")[0].strip()
-        assert deals_value == "2", f"Expected total_deals=2, got {deals_value!r}"
+        assert deals_value == "1", f"Expected total_deals=1, got {deals_value!r}"
 
-        # total_deal_value should include both amounts.
-        assert "1,500" in content or "1500" in content
+        # total_deal_value should include the personal amount.
+        assert "1,000" in content or "1000" in content
 
     @override_settings(
         MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_dashboard_recent_contacts_shows_null_owned_company_name(
+    def test_solo_dashboard_recent_contacts_shows_personal_org_company_name(
         self, client, staff_user
     ):
-        """Solo dashboard recent_contacts shows company name for NULL-owned company."""
+        """Solo dashboard recent_contacts shows company name for personal-org company."""
         from quickscale_modules_crm.models import Company, Contact
         from quickscale_modules_orgs.models import Organization
 
         personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
-        )
-
-        # A personal-org contact with a NULL-owned company (legacy).
-        legacy_company = Company.objects.create(name="Legacy Corp")
-        Contact.objects.create(
-            first_name="Legacy",
-            last_name="Contact",
-            email="legacy-recent@example.com",
-            company=legacy_company,
         )
 
         # A personal-org contact with personal-org company.
@@ -2756,9 +2651,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         assert response.status_code == status.HTTP_200_OK
         content = response.content.decode("utf-8")
 
-        # NULL-owned company name should appear in the rendered content.
-        assert "Legacy Corp" in content
-        # Personal-org company name should also appear.
+        # Personal-org company name should appear in the rendered content.
         assert "Personal Corp" in content
 
 
@@ -3031,31 +2924,29 @@ class TestCRF115001OrgScopedPostFailClosed:
 
 
 @pytest.mark.django_db
-class TestCRF115002DashboardIncludesLegacyNullOrgStages:
-    """CR-F11.5-002 — Dashboard deals_by_stage includes legacy NULL-org stages.
+class TestCRF115002DashboardDealsByStageWithOrgStages:
+    """Dashboard deals_by_stage with org-scoped stages.
 
-    During the pre-backfill window, visible current-org deals may reference
-    legacy NULL-org stages.  The dashboard ``deals_by_stage`` breakdown must
-    include those stages so the deal counts are not silently dropped.
+    Phase 3 (post-0006): legacy NULL-org stages no longer exist.  The
+    dashboard deals_by_stage counts deals attached to current-org stages.
     """
 
     @override_settings(
         MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
-    def test_org_scoped_dashboard_includes_deals_on_legacy_null_org_stages(
+    def test_org_scoped_dashboard_deals_by_stage_counts_same_org_stages(
         self, client, org_a, org_a_admin
     ):
-        """Dashboard deals_by_stage counts deals on legacy NULL-org stages."""
+        """Dashboard deals_by_stage counts deals on same-org stages."""
         from decimal import Decimal
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
-        # Create a legacy NULL-org stage (pre-backfill).
-        legacy_stage = Stage.objects.create(name="Legacy Pipeline", order=1)
-        assert legacy_stage.organization_id is None
+        # Create an org-A stage.
+        stage = Stage.objects.create(name="Org-A Pipeline", order=1, organization=org_a)
 
-        # Create an org-A deal attached to the legacy NULL-org stage.
+        # Create an org-A deal attached to the org-A stage.
         company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
         contact_a = Contact.objects.create(
             first_name="Org-A",
@@ -3065,10 +2956,10 @@ class TestCRF115002DashboardIncludesLegacyNullOrgStages:
             organization=org_a,
         )
         Deal.objects.create(
-            title="Org-A Legacy Deal",
+            title="Org-A Deal",
             contact=contact_a,
             amount=Decimal("5000.00"),
-            stage=legacy_stage,
+            stage=stage,
             organization=org_a,
         )
 
@@ -3077,10 +2968,10 @@ class TestCRF115002DashboardIncludesLegacyNullOrgStages:
 
         assert response.status_code == status.HTTP_200_OK
         content = response.content.decode("utf-8")
-        # The legacy stage name should appear in the dashboard breakdown.
-        assert "Legacy Pipeline" in content
+        # The org-A stage name should appear in the dashboard breakdown.
+        assert "Org-A Pipeline" in content
         # The org-A deal should be counted (total_deals >= 1).
-        assert "Org-A Legacy Deal" in content or "5000" in content
+        assert "Org-A Deal" in content or "5000" in content
 
 
 @pytest.mark.django_db
@@ -3094,7 +2985,7 @@ class TestF119Phase1BulkDealMutationOrgScoping:
     Coverage matrix:
     - Same-org success: bulk action updates only same-org deals
     - Foreign-org denial: bulk action does not affect foreign-org deals
-    - Missing-org fail-closed: org-scoped route without org context returns 403
+    - Missing-org fail-closed: org-scoped route without org context returns 400 or 403
     - Solo-route parity: bulk actions work as before on solo routes
     - Foreign-org stage rejection: BulkUpdateStageSerializer rejects foreign-org stages
     """
@@ -3374,38 +3265,25 @@ class TestF119Phase1BulkDealMutationOrgScoping:
     # -- Missing-org fail-closed: bulk actions --------------------------------
 
     @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
-    def test_org_scoped_bulk_update_stage_returns_400_without_org_context(
+    def test_org_scoped_bulk_update_stage_fails_closed_without_org_context(
         self, client, staff_user, stage
     ):
-        """bulk_update_stage on org-scoped route without org context returns 400.
+        """bulk_update_stage on org-scoped route fails closed without org context.
 
-        The BulkUpdateStageSerializer validates stage_id against org context
-        before the view runs, returning 400 (Bad Request) rather than 403.
+        Org-scoped routes must NOT fall back to the caller's personal org.
+        When ``request.org`` is not set (e.g., no TenantMiddleware, or an
+        unrecognized org slug), the serializer rejects the request with 400.
         """
-        from quickscale_modules_crm.models import Company, Contact, Deal
-
-        company = Company.objects.create(name="Corp")
-        contact = Contact.objects.create(
-            first_name="Contact",
-            last_name="Test",
-            email="test@example.com",
-            company=company,
-        )
-        deal = Deal.objects.create(
-            title="Deal",
-            contact=contact,
-            amount="1000.00",
-            stage=stage,
-        )
-
         client.force_login(staff_user)
         response = client.post(
             "/orgs/nonexistent-org/crm/api/deals/bulk-update-stage/",
-            data={"deal_ids": [deal.id], "stage_id": stage.id},
+            data={"deal_ids": [1], "stage_id": stage.id},
             content_type="application/json",
         )
 
+        # Fail-closed: no personal-org fallback on org-scoped routes.
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "stage_id" in response.data or "non_field_errors" in response.data
 
     @override_settings(MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE)
     def test_org_scoped_mark_won_returns_403_without_org_context(
@@ -3456,8 +3334,22 @@ class TestF119Phase1BulkDealMutationOrgScoping:
 
     @override_settings(QUICKSCALE_MODE="solo")
     def test_solo_route_mark_won_updates_all_deals(self, client, staff_user, deal):
-        """Solo route mark_won updates deals regardless of org."""
+        """Solo route mark_won updates deals using personal-org terminal stage (Phase 2)."""
+        from quickscale_modules_orgs.models import Organization
+
         client.force_login(staff_user)
+
+        # Phase 2: create personal-org terminal won stage (no NULL-org fallback).
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
+        personal_won_stage = Stage.objects.create(
+            name="Closed-Won",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=personal_org,
+        )
+
         response = client.post(
             "/crm/api/deals/mark-won/",
             data={"deal_ids": [deal.id]},
@@ -3467,13 +3359,27 @@ class TestF119Phase1BulkDealMutationOrgScoping:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
         deal.refresh_from_db()
-        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_WON
+        assert deal.stage == personal_won_stage
         assert deal.probability == 100
 
     @override_settings(QUICKSCALE_MODE="solo")
     def test_solo_route_mark_lost_updates_all_deals(self, client, staff_user, deal):
-        """Solo route mark_lost updates deals regardless of org."""
+        """Solo route mark_lost updates deals using personal-org terminal stage (Phase 2)."""
+        from quickscale_modules_orgs.models import Organization
+
         client.force_login(staff_user)
+
+        # Phase 2: create personal-org terminal lost stage (no NULL-org fallback).
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
+        personal_lost_stage = Stage.objects.create(
+            name="Closed-Lost",
+            order=4,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
+            organization=personal_org,
+        )
+
         response = client.post(
             "/crm/api/deals/mark-lost/",
             data={"deal_ids": [deal.id]},
@@ -3483,7 +3389,7 @@ class TestF119Phase1BulkDealMutationOrgScoping:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
         deal.refresh_from_db()
-        assert deal.stage.terminal_semantic == Stage.TERMINAL_SEMANTIC_LOST
+        assert deal.stage == personal_lost_stage
         assert deal.probability == 0
 
     # -- Foreign-org stage rejection: BulkUpdateStageSerializer ---------------
@@ -3530,52 +3436,6 @@ class TestF119Phase1BulkDealMutationOrgScoping:
         deal.refresh_from_db()
         assert deal.stage == stage_a
 
-    def test_org_scoped_bulk_update_stage_rejects_null_org_legacy_stage(
-        self, client, org_a, org_a_admin
-    ):
-        """bulk_update_stage on org-scoped route rejects NULL-org legacy stage.
-
-        Phase 1 post-0006 contract: NULL-owned stages are no longer accepted
-        on org-scoped routes.
-        """
-        from decimal import Decimal
-
-        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
-
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-legacy-stage@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage_a,
-            organization=org_a,
-        )
-        # Legacy NULL-org stage.
-        legacy_stage = Stage.objects.create(name="Legacy Stage", order=2)
-        assert legacy_stage.organization_id is None
-
-        client.force_login(org_a_admin)
-        response = client.post(
-            f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/",
-            data={"deal_ids": [deal.id], "stage_id": legacy_stage.id},
-            content_type="application/json",
-        )
-
-        # Phase 1: NULL-org stage is rejected on org-scoped routes.
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "stage_id" in response.data
-        # Deal should not be updated.
-        deal.refresh_from_db()
-        assert deal.stage == stage_a
-
 
 @pytest.mark.django_db
 class TestF119Phase2OrgScopedTerminalStageResolution:
@@ -3584,134 +3444,22 @@ class TestF119Phase2OrgScopedTerminalStageResolution:
     These tests verify that ``mark_won`` and ``mark_lost`` on org-scoped SaaS
     routes use org-aware terminal-stage resolution:
     - Same-org terminal stages are preferred
-    - Legacy NULL-org terminal stages are accepted for backfill compatibility
+    - Same-org canonical name fallback when no terminal_semantic row exists
     - Foreign-org terminal stages are never used (security boundary)
     - When no valid terminal stage exists for the org, the action no-ops safely
 
-    Coverage matrix:
-    - Org-scoped mark_won accepts legacy NULL-org terminal stage
-    - Org-scoped mark_lost accepts legacy NULL-org terminal stage
-    - Org-scoped mark_won refuses foreign-org terminal stage (no-op)
-    - Org-scoped mark_lost refuses foreign-org terminal stage (no-op)
+    Phase 3 (post-0006): legacy NULL-org terminal stage tests removed.
+    NULL-org stages can no longer exist.
     """
 
     # -- Legacy NULL-org terminal stage accepted on org-scoped routes ---------
 
-    def test_org_scoped_mark_won_no_ops_when_only_null_org_terminal_stage_exists(
-        self, client, org_a, org_a_admin
-    ):
-        """mark_won on org-scoped route no-ops when only NULL-org terminal stage exists.
-
-        Phase 1 post-0006 contract: NULL-owned terminal stages are no longer
-        accepted on org-scoped routes.  The action returns updated=0.
-        """
-        from decimal import Decimal
-
-        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
-
-        # Clear any existing terminal_semantic stages from prior tests.
-        Stage.objects.filter(terminal_semantic__isnull=False).delete()
-
-        # Create a legacy NULL-org terminal won stage (pre-backfill).
-        legacy_won_stage = Stage.objects.create(
-            name="Legacy Closed-Won",
-            order=3,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
-        )
-        assert legacy_won_stage.organization_id is None
-
-        # Create an org-A deal on an org-A stage.
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-legacy-won@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage_a,
-            organization=org_a,
-        )
-        original_stage = deal.stage
-        original_probability = deal.probability
-
-        client.force_login(org_a_admin)
-        response = client.post(
-            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
-            data={"deal_ids": [deal.id]},
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        # Phase 1: NULL-org terminal stage is not accepted — safe no-op.
-        assert response.data["updated"] == 0
-        deal.refresh_from_db()
-        assert deal.stage == original_stage
-        assert deal.probability == original_probability
-
-    def test_org_scoped_mark_lost_no_ops_when_only_null_org_terminal_stage_exists(
-        self, client, org_a, org_a_admin
-    ):
-        """mark_lost on org-scoped route no-ops when only NULL-org terminal stage exists.
-
-        Phase 1 post-0006 contract: NULL-owned terminal stages are no longer
-        accepted on org-scoped routes.  The action returns updated=0.
-        """
-        from decimal import Decimal
-
-        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
-
-        # Clear any existing terminal_semantic stages from prior tests.
-        Stage.objects.filter(terminal_semantic__isnull=False).delete()
-
-        # Create a legacy NULL-org terminal lost stage (pre-backfill).
-        legacy_lost_stage = Stage.objects.create(
-            name="Legacy Closed-Lost",
-            order=4,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_LOST,
-        )
-        assert legacy_lost_stage.organization_id is None
-
-        # Create an org-A deal on an org-A stage.
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-legacy-lost@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage_a,
-            organization=org_a,
-        )
-        original_stage = deal.stage
-        original_probability = deal.probability
-
-        client.force_login(org_a_admin)
-        response = client.post(
-            f"/orgs/{org_a.slug}/crm/api/deals/mark-lost/",
-            data={"deal_ids": [deal.id]},
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        # Phase 1: NULL-org terminal stage is not accepted — safe no-op.
-        assert response.data["updated"] == 0
-        deal.refresh_from_db()
-        assert deal.stage == original_stage
-        assert deal.probability == original_probability
-
     # -- Foreign-org terminal stage refused on org-scoped routes --------------
+
+    # Note: legacy NULL-org terminal stage no-op tests removed in Phase 3.
+    # Post-0006, NULL-org stages cannot exist.  The same no-op behavior
+    # for missing same-org targets is already covered by
+    # TestF1110Phase1TerminalStageSameOrgCanonicalNameFallback.
 
     def test_org_scoped_mark_won_refuses_foreign_org_terminal_stage(
         self, client, org_a, org_b, org_a_admin
@@ -4104,36 +3852,6 @@ class TestF1110StandaloneNoteOrgScopedParentValidation:
 
     # -- ContactNote: NULL-org legacy contact accepted ------------------------
 
-    def test_org_scoped_contact_note_post_accepts_null_org_legacy_contact(
-        self, client, org_a, org_a_admin
-    ):
-        """A ContactNote POST with a NULL-org (legacy) contact succeeds."""
-        from quickscale_modules_crm.models import Company, Contact
-
-        # Create a legacy NULL-org contact.
-        legacy_company = Company.objects.create(name="Legacy Corp")
-        legacy_contact = Contact.objects.create(
-            first_name="Legacy",
-            last_name="Contact",
-            email="legacy-contact@example.com",
-            company=legacy_company,
-        )
-        assert legacy_contact.organization_id is None
-
-        client.force_login(org_a_admin)
-
-        response = client.post(
-            f"/orgs/{org_a.slug}/crm/api/contact-notes/",
-            data={
-                "contact": legacy_contact.id,
-                "text": "Legacy contact note",
-            },
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["text"] == "Legacy contact note"
-
     # -- DealNote: foreign-org deal rejected ----------------------------------
 
     def test_org_scoped_deal_note_post_rejects_foreign_deal(
@@ -4233,48 +3951,202 @@ class TestF1110StandaloneNoteOrgScopedParentValidation:
         created = DealNote.objects.get(pk=response.data["id"])
         assert created.deal_id == deal.id
 
-    # -- DealNote: NULL-org legacy deal accepted ------------------------------
 
-    def test_org_scoped_deal_note_post_accepts_null_org_legacy_deal(
-        self, client, org_a, org_a_admin
+@pytest.mark.django_db
+class TestF1110StandaloneNoteSoloParentValidation:
+    """CR-F11.10-002 — Solo standalone note POSTs enforce parent org ownership.
+
+    These tests verify that standalone ContactNote and DealNote POSTs on
+    solo routes (/crm/api/contact-notes/, /crm/api/deal-notes/) validate
+    the parent's organization membership using the caller's personal org:
+    - Foreign-org parents are rejected with 400.
+    - Same-org parents are accepted with 201.
+    """
+
+    # -- ContactNote: foreign-org contact rejected ----------------------------
+
+    def test_solo_contact_note_post_rejects_foreign_contact(
+        self, client, staff_user, user
     ):
-        """A DealNote POST with a NULL-org (legacy) deal succeeds."""
+        """Solo ContactNote POST with a foreign-org contact is rejected with 400."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+        from quickscale_modules_orgs.models import Organization
+
+        personal_org_user = Organization.objects.get(
+            is_personal=True, memberships__user=user
+        )
+
+        # Create a contact in the user's personal org (foreign to staff_user).
+        company = Company.objects.create(
+            name="User Corp", organization=personal_org_user
+        )
+        foreign_contact = Contact.objects.create(
+            first_name="Foreign",
+            last_name="SoloContact",
+            email="foreign-solo-contact@example.com",
+            company=company,
+            organization=personal_org_user,
+        )
+
+        before = ContactNote.objects.count()
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/crm/api/contact-notes/",
+            data={
+                "contact": foreign_contact.id,
+                "text": "Foreign contact note attempt on solo route",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "contact" in response.data
+        assert ContactNote.objects.count() == before
+
+    # -- ContactNote: same-org contact accepted -------------------------------
+
+    def test_solo_contact_note_post_accepts_same_org_contact(self, client, staff_user):
+        """Solo ContactNote POST with a same-org contact succeeds with 201."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+        from quickscale_modules_orgs.models import Organization
+
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
+
+        company = Company.objects.create(name="Staff Corp", organization=personal_org)
+        contact = Contact.objects.create(
+            first_name="Same",
+            last_name="SoloOrg",
+            email="same-org-solo@example.com",
+            company=company,
+            organization=personal_org,
+        )
+
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/crm/api/contact-notes/",
+            data={
+                "contact": contact.id,
+                "text": "Same-org solo note",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["text"] == "Same-org solo note"
+        created = ContactNote.objects.get(pk=response.data["id"])
+        assert created.contact_id == contact.id
+
+    # -- DealNote: foreign-org deal rejected ----------------------------------
+
+    def test_solo_deal_note_post_rejects_foreign_deal(self, client, staff_user, user):
+        """Solo DealNote POST with a foreign-org deal is rejected with 400."""
         from decimal import Decimal
 
         from quickscale_modules_crm.models import (
             Company,
             Contact,
             Deal,
+            DealNote,
             Stage,
         )
+        from quickscale_modules_orgs.models import Organization
 
-        # Create a legacy NULL-org deal.
-        legacy_company = Company.objects.create(name="Legacy Corp")
-        legacy_contact = Contact.objects.create(
-            first_name="Legacy",
-            last_name="DealNote",
-            email="legacy-deal-note@example.com",
-            company=legacy_company,
+        personal_org_user = Organization.objects.get(
+            is_personal=True, memberships__user=user
         )
-        legacy_stage = Stage.objects.create(name="Legacy Stage", order=1)
-        legacy_deal = Deal.objects.create(
-            title="Legacy Deal",
-            contact=legacy_contact,
-            amount=Decimal("3000.00"),
-            stage=legacy_stage,
-        )
-        assert legacy_deal.organization_id is None
 
-        client.force_login(org_a_admin)
+        # Create a deal in the user's personal org (foreign to staff_user).
+        company = Company.objects.create(
+            name="User Corp", organization=personal_org_user
+        )
+        contact = Contact.objects.create(
+            first_name="User",
+            last_name="DealContact",
+            email="user-deal-solo@example.com",
+            company=company,
+            organization=personal_org_user,
+        )
+        stage = Stage.objects.create(
+            name="User Stage", order=1, organization=personal_org_user
+        )
+        foreign_deal = Deal.objects.create(
+            title="User Deal",
+            contact=contact,
+            amount=Decimal("1000.00"),
+            stage=stage,
+            organization=personal_org_user,
+        )
+
+        before = DealNote.objects.count()
+        client.force_login(staff_user)
 
         response = client.post(
-            f"/orgs/{org_a.slug}/crm/api/deal-notes/",
+            "/crm/api/deal-notes/",
             data={
-                "deal": legacy_deal.id,
-                "text": "Legacy deal note",
+                "deal": foreign_deal.id,
+                "text": "Foreign deal note attempt on solo route",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "deal" in response.data
+        assert DealNote.objects.count() == before
+
+    # -- DealNote: same-org deal accepted -------------------------------------
+
+    def test_solo_deal_note_post_accepts_same_org_deal(self, client, staff_user):
+        """Solo DealNote POST with a same-org deal succeeds with 201."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            DealNote,
+            Stage,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
+
+        company = Company.objects.create(name="Staff Corp", organization=personal_org)
+        contact = Contact.objects.create(
+            first_name="Staff",
+            last_name="DealContact",
+            email="staff-deal-solo@example.com",
+            company=company,
+            organization=personal_org,
+        )
+        stage = Stage.objects.create(
+            name="Staff Stage", order=1, organization=personal_org
+        )
+        deal = Deal.objects.create(
+            title="Staff Deal",
+            contact=contact,
+            amount=Decimal("5000.00"),
+            stage=stage,
+            organization=personal_org,
+        )
+
+        client.force_login(staff_user)
+
+        response = client.post(
+            "/crm/api/deal-notes/",
+            data={
+                "deal": deal.id,
+                "text": "Same-org solo deal note",
             },
             content_type="application/json",
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["text"] == "Legacy deal note"
+        assert response.data["text"] == "Same-org solo deal note"
+        created = DealNote.objects.get(pk=response.data["id"])
+        assert created.deal_id == deal.id
