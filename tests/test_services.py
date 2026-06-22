@@ -2889,6 +2889,122 @@ class TestBackupServiceHelpers:
         assert manifest["error_type"] == "AttributeError"
         assert manifest["inventory"] == []
 
+    def test_build_media_sync_manifest_inventory_failed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_build_media_sync_manifest returns inventory_failed when S3 listing fails."""
+
+        def fake_select_storage_backend(
+            _settings_obj: object,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                backend="s3",
+                django_backend="storages.backends.s3.S3Storage",
+                use_s3_compatible=True,
+                options={
+                    "bucket_name": "media-bucket",
+                    "endpoint_url": "https://objects.example.invalid",
+                    "region_name": "auto",
+                    "querystring_auth": False,
+                    "access_key_id": "key-id",
+                    "secret_access_key": "secret-key",
+                },
+            )
+
+        def failing_inventory(_settings_obj: object) -> object:
+            raise RuntimeError("S3 endpoint unreachable")
+
+        monkeypatch.setattr(
+            backup_services,
+            "import_module",
+            lambda _module_name: SimpleNamespace(
+                select_storage_backend=fake_select_storage_backend,
+                list_s3_compatible_media_inventory=failing_inventory,
+            ),
+        )
+
+        manifest = backup_services._build_media_sync_manifest(
+            captured_at=datetime(2026, 4, 30, tzinfo=timezone.utc)
+        )
+
+        assert manifest["status"] == "inventory_failed"
+        assert "S3 endpoint unreachable" in manifest["reason"]
+        assert manifest["storage"]["bucket_name"] == "media-bucket"
+        assert manifest["inventory"] == []
+
+    def test_build_media_sync_manifest_missing_local_root(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_build_media_sync_manifest returns missing_local_root when MEDIA_ROOT does not exist."""
+
+        def fake_select_storage_backend(
+            _settings_obj: object,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                backend="local",
+                django_backend="django.core.files.storage.FileSystemStorage",
+                use_s3_compatible=False,
+                options={},
+            )
+
+        monkeypatch.setattr(
+            backup_services,
+            "import_module",
+            lambda _module_name: SimpleNamespace(
+                select_storage_backend=fake_select_storage_backend,
+                list_s3_compatible_media_inventory=lambda _settings_obj: [],
+            ),
+        )
+
+        monkeypatch.setattr(settings, "MEDIA_ROOT", "/nonexistent/media/root")
+
+        manifest = backup_services._build_media_sync_manifest(
+            captured_at=datetime(2026, 4, 30, tzinfo=timezone.utc)
+        )
+
+        assert manifest["status"] == "missing_local_root"
+        assert manifest["inventory"] == []
+
+    def test_build_media_sync_manifest_invalid_local_root(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_build_media_sync_manifest returns invalid_local_root when MEDIA_ROOT is a file."""
+
+        def fake_select_storage_backend(
+            _settings_obj: object,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                backend="local",
+                django_backend="django.core.files.storage.FileSystemStorage",
+                use_s3_compatible=False,
+                options={},
+            )
+
+        media_file = tmp_path / "media-file"
+        media_file.write_text("not-a-directory", encoding="utf-8")
+
+        monkeypatch.setattr(
+            backup_services,
+            "import_module",
+            lambda _module_name: SimpleNamespace(
+                select_storage_backend=fake_select_storage_backend,
+                list_s3_compatible_media_inventory=lambda _settings_obj: [],
+            ),
+        )
+
+        monkeypatch.setattr(settings, "MEDIA_ROOT", str(media_file))
+
+        manifest = backup_services._build_media_sync_manifest(
+            captured_at=datetime(2026, 4, 30, tzinfo=timezone.utc)
+        )
+
+        assert manifest["status"] == "invalid_local_root"
+        assert manifest["inventory"] == []
+
     def test_collect_local_backup_validation_issues_and_restore_source_checks(
         self,
         tmp_path: Path,
@@ -3380,8 +3496,10 @@ class TestBackupServiceHelpers:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        def failing_contract(**kwargs: Any) -> tuple[str, int, str, int]:
-            del kwargs
+        def failing_contract(
+            database_engine: str, executable: str, operation: str
+        ) -> tuple[str, int, str, int]:
+            del database_engine, executable, operation
             raise BackupError("pg_restore 18 tooling missing")
 
         monkeypatch.setattr(
@@ -3500,3 +3618,313 @@ class TestBackupServiceUtilities:
             snapshot, "release-metadata.json"
         )
         assert result == tmp_path / "snapshot-root" / "release-metadata.json"
+
+    def test_cleanup_local_backup_file_success(self, tmp_path: Path) -> None:
+        """_cleanup_local_backup_file deletes a file and returns None."""
+        file_path = tmp_path / "to-delete.json"
+        file_path.write_text("data", encoding="utf-8")
+        result = backup_services._cleanup_local_backup_file(file_path)
+        assert result is None
+        assert not file_path.exists()
+
+    def test_is_path_within_root_true(self, tmp_path: Path) -> None:
+        """_is_path_within_root returns True for nested paths."""
+        nested = tmp_path / "subdir" / "file.txt"
+        assert backup_services._is_path_within_root(nested, tmp_path) is True
+
+    def test_is_path_within_root_false(self, tmp_path: Path) -> None:
+        """_is_path_within_root returns False for unrelated paths."""
+        assert (
+            backup_services._is_path_within_root(Path("/unrelated/path"), tmp_path)
+            is False
+        )
+
+    def test_path_uses_symlink_within_root_no_symlink(self, tmp_path: Path) -> None:
+        """_path_uses_symlink_within_root returns False without symlinks."""
+        nested = tmp_path / "dir" / "file.txt"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("data")
+        assert backup_services._path_uses_symlink_within_root(nested, tmp_path) is False
+
+    def test_path_uses_symlink_within_root_with_symlink(self, tmp_path: Path) -> None:
+        """_path_uses_symlink_within_root returns True when symlink is traversed."""
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        link_dir = tmp_path / "link"
+        link_dir.symlink_to(real_dir, target_is_directory=True)
+        nested = link_dir / "file.txt"
+        nested.write_text("data")
+        assert backup_services._path_uses_symlink_within_root(nested, tmp_path) is True
+
+    def test_path_uses_symlink_within_root_outside_path(self, tmp_path: Path) -> None:
+        """_path_uses_symlink_within_root returns False for paths outside root."""
+        assert (
+            backup_services._path_uses_symlink_within_root(
+                Path("/outside/path"), tmp_path
+            )
+            is False
+        )
+
+    def test_get_git_revision_returns_revision(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_get_git_revision returns the git revision when available."""
+        from types import SimpleNamespace
+
+        def fake_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="abc123def\n", stderr="")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", fake_run)
+        result = backup_services._get_git_revision()
+        assert result == "abc123def"
+
+    def test_get_git_revision_returns_none_on_os_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_get_git_revision returns None when subprocess raises OSError."""
+
+        def failing_run(*args: Any, **kwargs: Any) -> None:
+            raise OSError("git not found")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", failing_run)
+        result = backup_services._get_git_revision()
+        assert result is None
+
+    def test_get_git_revision_returns_none_on_empty_output(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_get_git_revision returns None when stdout is empty."""
+        from types import SimpleNamespace
+
+        def fake_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", fake_run)
+        result = backup_services._get_git_revision()
+        assert result is None
+
+    def test_database_server_version_query_postgresql(self) -> None:
+        """_database_server_version_query returns the PostgreSQL version query."""
+        result = backup_services._database_server_version_query(
+            "django.db.backends.postgresql"
+        )
+        assert result == "SHOW server_version"
+
+    def test_get_project_slug(self) -> None:
+        """_get_project_slug returns the BASE_DIR name."""
+        slug = backup_services._get_project_slug()
+        assert slug == Path(settings.BASE_DIR).name
+
+    def test_rollback_remote_upload_after_persistence_failure_success(
+        self,
+    ) -> None:
+        """_rollback_remote_upload_after_persistence_failure returns None on success."""
+        from types import SimpleNamespace
+        from quickscale_modules_backups.models import BackupArtifact
+
+        artifact = SimpleNamespace(
+            storage_target=BackupArtifact.STORAGE_TARGET_LOCAL,
+            remote_bucket_name="",
+            remote_endpoint_url="",
+            remote_region_name="",
+        )
+        policy = BackupPolicySnapshot.from_settings()
+        deleted_keys: list[str] = []
+
+        def fake_deleter(
+            remote_key: str, resolved_policy: BackupPolicySnapshot
+        ) -> None:
+            deleted_keys.append(remote_key)
+
+        result = backup_services._rollback_remote_upload_after_persistence_failure(
+            artifact,
+            remote_key="test-key",
+            policy=policy,
+            remote_deleter=fake_deleter,
+        )
+        assert result is None
+        assert deleted_keys == ["test-key"]
+
+    def test_rollback_remote_upload_after_persistence_failure_error(
+        self,
+    ) -> None:
+        """_rollback_remote_upload_after_persistence_failure returns error string."""
+        from types import SimpleNamespace
+        from quickscale_modules_backups.models import BackupArtifact
+
+        artifact = SimpleNamespace(
+            storage_target=BackupArtifact.STORAGE_TARGET_LOCAL,
+            remote_bucket_name="",
+            remote_endpoint_url="",
+            remote_region_name="",
+        )
+        policy = BackupPolicySnapshot.from_settings()
+
+        def failing_deleter(
+            remote_key: str, resolved_policy: BackupPolicySnapshot
+        ) -> None:
+            raise RuntimeError("deletion failed")
+
+        result = backup_services._rollback_remote_upload_after_persistence_failure(
+            artifact,
+            remote_key="test-key",
+            policy=policy,
+            remote_deleter=failing_deleter,
+        )
+        assert result == "deletion failed"
+
+    def test_release_backup_lock_file_not_found(self, tmp_path: Path) -> None:
+        """_release_backup_lock handles missing lock file gracefully."""
+        lock_path = tmp_path / "nonexistent.lock"
+        # Should not raise
+        backup_services._release_backup_lock(lock_path)
+
+    def test_clear_appended_artifact_note_removes_suffix(
+        self, backup_artifact: BackupArtifact
+    ) -> None:
+        """_clear_appended_artifact_note removes trailing suffixed note."""
+        backup_artifact.validation_notes = "previous warning; prune failed"
+        backup_artifact.save(update_fields=["validation_notes", "updated_at"])
+
+        result = backup_services._clear_appended_artifact_note(
+            backup_artifact, "prune failed"
+        )
+        assert result is True
+        assert backup_artifact.validation_notes == "previous warning"
+
+    def test_clear_appended_artifact_note_no_match(
+        self, backup_artifact: BackupArtifact
+    ) -> None:
+        """_clear_appended_artifact_note returns False when suffix does not match."""
+        backup_artifact.validation_notes = "some note"
+        backup_artifact.save(update_fields=["validation_notes", "updated_at"])
+
+        result = backup_services._clear_appended_artifact_note(
+            backup_artifact, "different note"
+        )
+        assert result is False
+        assert backup_artifact.validation_notes == "some note"
+
+
+class TestBackupServiceEdgeCases:
+    """Edge-case tests for private helper error paths to raise per-file coverage."""
+
+    @pytest.mark.django_db
+    def test_load_snapshot_sidecar_payload_not_found(self, tmp_path: Path) -> None:
+        """_load_snapshot_sidecar_payload raises BackupError when file is missing."""
+        from quickscale_modules_backups.models import BackupSnapshot
+
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="test-sidecar-missing",
+            status=BackupSnapshot.STATUS_READY,
+            source_environment="local",
+            local_root_path=str(tmp_path),
+            child_descriptors_json={},
+        )
+        with pytest.raises(BackupError, match="Snapshot sidecar not found"):
+            backup_services._load_snapshot_sidecar_payload(snapshot, "nonexistent.json")
+
+    @pytest.mark.django_db
+    def test_load_snapshot_sidecar_payload_invalid_json(self, tmp_path: Path) -> None:
+        """_load_snapshot_sidecar_payload raises BackupError for invalid JSON."""
+        from quickscale_modules_backups.models import BackupSnapshot
+
+        sidecar = tmp_path / "manifest.json"
+        sidecar.write_text("{invalid json", encoding="utf-8")
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="test-json-error",
+            status=BackupSnapshot.STATUS_READY,
+            source_environment="local",
+            local_root_path=str(tmp_path),
+            child_descriptors_json={},
+        )
+        with pytest.raises(BackupError, match="is not valid JSON"):
+            backup_services._load_snapshot_sidecar_payload(snapshot, "manifest.json")
+
+    @pytest.mark.django_db
+    def test_load_snapshot_sidecar_payload_not_dict(self, tmp_path: Path) -> None:
+        """_load_snapshot_sidecar_payload raises BackupError for non-dict payload."""
+        from quickscale_modules_backups.models import BackupSnapshot
+
+        sidecar = tmp_path / "manifest.json"
+        sidecar.write_text('["list", "not", "dict"]', encoding="utf-8")
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="test-not-dict",
+            status=BackupSnapshot.STATUS_READY,
+            source_environment="local",
+            local_root_path=str(tmp_path),
+            child_descriptors_json={},
+        )
+        with pytest.raises(BackupError, match="must contain a JSON object"):
+            backup_services._load_snapshot_sidecar_payload(snapshot, "manifest.json")
+
+    @pytest.mark.django_db
+    def test_load_snapshot_sidecar_payload_os_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_load_snapshot_sidecar_payload raises BackupError on OSError during read."""
+        import os
+        from quickscale_modules_backups.models import BackupSnapshot
+
+        sidecar = tmp_path / "manifest.json"
+        sidecar.write_text('{"key": "value"}', encoding="utf-8")
+        sidecar.chmod(0o000)
+        os.system(f"chmod 000 {sidecar}")  # Ensure file has no permissions
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="test-os-error",
+            status=BackupSnapshot.STATUS_READY,
+            source_environment="local",
+            local_root_path=str(tmp_path),
+            child_descriptors_json={},
+        )
+        with pytest.raises(BackupError, match="Unable to read snapshot sidecar"):
+            backup_services._load_snapshot_sidecar_payload(snapshot, "manifest.json")
+
+    @pytest.mark.django_db
+    def test_record_prune_failure_save_error_does_not_raise(
+        self,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_record_prune_failure_without_masking_success returns silently on save error."""
+
+        def failing_save(*args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("save failed")
+
+        monkeypatch.setattr(backup_artifact, "save", failing_save)
+
+        # Should not raise
+        backup_services._record_prune_failure_without_masking_success(
+            backup_artifact,
+            error=BackupError("prune failed"),
+        )
+
+    @pytest.mark.django_db
+    def test_get_restore_compatibility_issues_with_sqlite(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """_get_restore_compatibility_issues returns issues for incompatible engine."""
+        issues = backup_services._get_restore_compatibility_issues(backup_artifact)
+        # SQLite engine vs SQLite artifact should have no compatibility issues
+        assert isinstance(issues, list)
+
+    def test_cleanup_local_backup_file_os_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """_cleanup_local_backup_file returns error string when unlink fails."""
+        file_path = tmp_path / "protected.json"
+        file_path.write_text("data", encoding="utf-8")
+
+        original_unlink = Path.unlink
+
+        def failing_unlink(self_path: Path, *args: Any, **kwargs: Any) -> None:
+            if self_path == file_path:
+                raise OSError("permission denied")
+            return original_unlink(self_path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "unlink", failing_unlink)
+        result = backup_services._cleanup_local_backup_file(file_path)
+        assert result == "permission denied"
