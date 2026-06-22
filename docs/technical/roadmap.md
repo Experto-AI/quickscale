@@ -62,7 +62,7 @@ git merge --no-ff wt-track{N}
 | M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅. Blog post isolation, forms isolation, and listings isolation all merged. Social isolation implemented — `organization` FK on `BaseSocialItem`, dual-manager contract, org-scoped service queries, relaxed `normalized_url` uniqueness. **Next:** F11.13b. |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
-| M10 | 2 | F5.2a–F5.4 | 🟢 | **Phase work complete on wt-track2 — pending merge-back to v87.** M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. F5.3 ✅ protocol replacement + module slimming. F5.4 ✅ migration docs added to `docs/technical/dr_engine_migration.md`. All Track 2 phases complete. |
+| M10 | 2 | F5.2a–F5.4 | 🟢 | **Merged to v87.** M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. F5.3 ✅ protocol replacement + module slimming. F5.4 ✅ migration docs added to `docs/technical/dr_engine_migration.md`. All Track 2 phases complete. |
 | M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
 
 ## In-Flight Milestones
@@ -84,7 +84,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅, F11.13b next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
-| 5 | F5 — DR engine split | M10 | 🟢 M10 implementation complete on wt-track2. All F5 phases complete. |
+| 5 | F5 — DR engine split | M10 | 🟢 M10 merged to v87. |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
 
 ---
