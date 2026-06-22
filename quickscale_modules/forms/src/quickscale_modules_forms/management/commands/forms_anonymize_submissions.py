@@ -20,7 +20,8 @@ class Command(BaseCommand):
         total_anonymized = 0
         now = timezone.now()
 
-        for form in Form.objects.all():
+        # Operator path: use all_objects for cross-tenant visibility.
+        for form in Form.all_objects.all():
             if form.data_retention_days == 0:
                 # 0 = keep forever
                 continue

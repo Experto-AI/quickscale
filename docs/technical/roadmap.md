@@ -59,7 +59,7 @@ git merge --no-ff wt-track{N}
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
-| M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅. Blog post isolation, forms isolation, and listings isolation all merged. Social isolation implemented — `organization` FK on `BaseSocialItem`, dual-manager contract, org-scoped service queries, relaxed `normalized_url` uniqueness. **Next:** F11.13b. |
+| M7 | 1 | F11.11–F11.13b | 🟡 | **Pending merge to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅, **F11.13b ✅**. Blog, forms, listings, and social isolation all implemented and reviewed. Structural isolation rollout complete — non-view paths verified (admin `get_queryset` uses explicit operator managers; `forms_anonymize_submissions` uses `Form.all_objects.all()`); adoption path documented in `organizations.md`. Pre-existing forms migration-ordering blocker (0002 vs 0004) fixed by rewriting `0002_seed_forms.py` to use historical models. Repo-root `make test` clean across all modules. Blog admin org-scoping/safeguards implemented via blog-local org-aware mixin plus same-org validation. F11 complete. M7 closeout (pending independent review and merge to v87). |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
 | M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. **Next:** F5.3 protocol replacement + module slimming. |
@@ -70,7 +70,7 @@ git merge --no-ff wt-track{N}
 ### M7 — F11 Module isolation rollout (blog/forms/listings/social)
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Status:** 🟡 In progress — F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅ merged to `v87`. F11.13b pending.
+**Status:** 🟡 Complete — all F11 phases (F11.11–F11.13b) implemented and validated; pending independent review and merge to `v87`. F11 complete. M7 closeout.
 
 ---
 ## Backlog
@@ -81,7 +81,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅, F11.13b next) |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed, **M7 closeout (pending independent review and merge)**; all F11 phases complete |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
 | 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a ✅; F5.2b ✅; F5.3–F5.4 pending |
@@ -91,7 +91,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** F11.13b (rollout closeout) remains. Completed work through F11.13a is archived in CHANGELOG.md.
+**Status:** ✅ Complete — all phases F11.2–F11.13b implemented and validated. M1/M3 merged to `v87`; M7 closeout pending independent review and merge. Completed work archived in CHANGELOG.md.
 
 ---
 
@@ -105,7 +105,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** M3 merged.
 
-**Status:** ✅ Complete and merged to `v87`. Added `organization` FK (nullable) to `AbstractListing` with per-org slug uniqueness constraint, dual-manager contract (`TenantScopedManager` + `OperatorManager`), and additive `orgs/<slug>/` org-scoped routes (under `listings/` prefix) alongside flat paths. Route-aware views scope queries via `_is_org_scoped_route()`/`_resolve_active_org_optional()`. All 96 listings module tests pass. Isolation test unskipped and green. **Next:** F11.13a.
+**Status:** ✅ Complete — implemented on `wt-track1`. Added `organization` FK (nullable) to `AbstractListing` with per-org slug uniqueness constraint, dual-manager contract (`TenantScopedManager` + `OperatorManager`), and additive `orgs/<slug>/` org-scoped routes (under `listings/` prefix) alongside flat paths. Route-aware views scope queries via `_is_org_scoped_route()`/`_resolve_active_org_optional()`. All 96 listings module tests pass. Isolation test unskipped and green. **Next:** F11.13a.
 
 **Groundwork committed to `wt-track1` (2026-06-22):**
 - ✅ `organization` FK on `AbstractListing` — per-org slug uniqueness via `UniqueConstraint` on `Listing`.
@@ -135,9 +135,19 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** F11.13a.
 
-- [ ] Keep `require_org_role`/`require_org_feature` as second-line defense; verify isolation fails closed for non-view paths (admin, shell, management commands, async jobs).
-- [ ] Document the migration path for already-generated projects adopting structural isolation.
-- [ ] Unskip all remaining module isolation tests and confirm all green.
+**Status:** ✅ Complete and validated; pending independent review and merge to `v87`. All closeout checklist items addressed:
+
+- **Non-view path verification:** `require_org_role`/`require_org_feature` confirmed as second-line defense. Blog/forms/listings/social admin `get_queryset` uses explicit operator managers (`all_objects`). `forms_anonymize_submissions` uses `Form.all_objects.all()`. Targeted admin/management tests added.
+- **Adoption path documented:** Structural isolation migration path for existing projects added to `organizations.md` (F11.13b — Structural Isolation Rollout: Adoption Path for Existing Projects section).
+- **Module isolation tests:** blog 219/219, forms 138/138, listings 111/111, social 52/52 — all unskipped and passing. Forms pre-existing migration-ordering blocker fixed by rewriting `0002_seed_forms.py` to use historical models.
+
+**Validation findings (quality-gate closeout):** Lint/format fixes applied to touched files. Changed-module admin/management tests pass. Forms migration-ordering blocker fixed by rewriting `0002_seed_forms.py` to use historical models. Repo-root `make test` clean across all modules — quickscale_core 1404 passed / 28 deselected, quickscale_cli 1798 passed / 28 deselected, blog 219 passed, forms 138 passed, listings 111 passed, social 52 passed; overall mean coverage 92.92%. Blog admin org-scoping/safeguards implemented via blog-local org-aware mixin plus same-org validation.
+
+**F11 complete. M7 closeout (pending independent review and merge to v87).**
+
+- [x] Keep `require_org_role`/`require_org_feature` as second-line defense; verify isolation fails closed for non-view paths (admin, shell, management commands, async jobs).
+- [x] Document the migration path for already-generated projects adopting structural isolation.
+- [x] Unskip all remaining module isolation tests and confirm all green.
 
 ---
 

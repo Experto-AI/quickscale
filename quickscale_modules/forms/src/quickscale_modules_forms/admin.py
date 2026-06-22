@@ -24,13 +24,20 @@ class FormFieldInline(admin.TabularInline):
 class FormAdmin(admin.ModelAdmin):
     """Admin interface for managing form definitions"""
 
-    list_display = ["title", "slug", "is_active", "submission_count", "created_at"]
-    list_filter = ["is_active", "created_at"]
+    list_display = [
+        "title",
+        "slug",
+        "organization",
+        "is_active",
+        "submission_count",
+        "created_at",
+    ]
+    list_filter = ["organization", "is_active", "created_at"]
     search_fields = ["title", "slug"]
     prepopulated_fields = {"slug": ("title",)}
     readonly_fields = ["created_at", "updated_at", "created_by"]
     fieldsets = [
-        ("General", {"fields": ["title", "slug", "description"]}),
+        ("General", {"fields": ["title", "slug", "organization", "description"]}),
         ("Behaviour", {"fields": ["is_active", "spam_protection_enabled"]}),
         ("Notifications", {"fields": ["notify_emails"]}),
         (
@@ -57,15 +64,14 @@ class FormAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
-        return (
-            super()
-            .get_queryset(request)
-            .annotate(_submission_count=Count("submissions"))
+        """Operator path: use all_objects for cross-tenant visibility."""
+        return self.model.all_objects.all().annotate(  # type: ignore[no-any-return]
+            _submission_count=Count("submissions")
         )
 
     @admin.display(description="Submissions", ordering="_submission_count")
     def submission_count(self, obj: Form) -> int:
-        return obj._submission_count  # type: ignore[attr-defined]
+        return obj._submission_count  # type: ignore[no-any-return]
 
     @admin.action(description="Mark selected forms as inactive")
     def mark_inactive(self, request: HttpRequest, queryset: QuerySet) -> None:

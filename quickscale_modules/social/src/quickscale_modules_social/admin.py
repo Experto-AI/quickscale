@@ -1,6 +1,9 @@
 """Admin configuration for the QuickScale social module."""
 
+from typing import Any
+
 from django.contrib import admin
+from django.db import models
 
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
@@ -21,6 +24,11 @@ class SocialLinkAdmin(admin.ModelAdmin):
     search_fields = ["title", "description", "url", "normalized_url"]
     readonly_fields = ["normalized_url", "created_at", "updated_at"]
     ordering = ["display_order", "title", "pk"]
+
+    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
+        """Operator path: use all_objects for cross-tenant visibility."""
+        return self.model.all_objects.all()
+
     fieldsets = [
         (
             "Link details",
@@ -85,6 +93,11 @@ class SocialEmbedAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     ordering = ["display_order", "title", "pk"]
+
+    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
+        """Operator path: use all_objects for cross-tenant visibility."""
+        return self.model.all_objects.all()
+
     fieldsets = [
         (
             "Embed details",
