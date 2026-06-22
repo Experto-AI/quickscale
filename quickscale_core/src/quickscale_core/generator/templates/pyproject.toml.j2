@@ -43,7 +43,7 @@ fail_under = 90
 
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py{{ python_version | replace('.', '') }}"
 exclude = [
     ".git",
     ".venv",

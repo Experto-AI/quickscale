@@ -72,7 +72,7 @@ git merge --no-ff wt-track{N}
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
 | M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **Next:** F5.2b extract restore/orchestration. |
-| M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
+| M11 | 3 | F7.1–F7.3 | 🟢 | **Merged to v87.** F7.1 ✅ F7.2 ✅ F7.3 ✅. Added constraint_validation.py drift checks including Poetry project.requires-python parity (12 tests), variableized ruff target-version in pyproject.toml.j2, aligned docs. `make test` passed: quickscale_core 1321/1321, quickscale_cli 1778/1778; module suites passed except orgs timeout (pre-existing unrelated). |
 
 ## In-Flight Milestones
 
@@ -86,7 +86,7 @@ git merge --no-ff wt-track{N}
 ### M11 — F7 Generator vs generated-project runtime pins
 **Track:** 3 | **Worktree:** `quickscale-wt-track3`
 
-**Status:** 🟡 In progress — F7.1 ✅ (inventory complete); F7.2 ✅ (ownership split — runtime_pins.py SSOT, templates variableized); F7.3 pending — validation for diverged pin sets, operator-messaging alignment, variableize `ruff target-version` in `pyproject.toml.j2`, verify `railway.json.j2` pin alignment.
+**Status:** 🟢 Complete — F7.1 ✅ (inventory complete); F7.2 ✅ (ownership split — runtime_pins.py SSOT, templates variableized); F7.3 ✅ (constraint_validation.py drift checks including Poetry python parity, 12 drift-detection tests, ruff target-version variableized, docs aligned). Full closeout: `make test` passed — quickscale_core 1321/1321, quickscale_cli 1778/1778; module suites passed except `quickscale_modules/orgs` timing out at 600s (pre-existing unrelated behavior).
 
 ---
 
@@ -102,7 +102,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
 | 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a–F5.4 pending |
-| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
+| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟢 M11 merged to v87 — F7.1 ✅ F7.2 ✅ F7.3 ✅ |
 
 ---
 
@@ -333,11 +333,20 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Implementation summary:** Added `quickscale_core/src/quickscale_core/generator/runtime_pins.py` as the generated-project-owned runtime-pin SSOT; `generator.py` now injects those variables into template context; `pyproject.toml.j2`, `Dockerfile.j2`, `docker-compose.yml.j2`, and `github/workflows/ci.yml.j2` now read values from template context rather than hardcoded literals. `make test` passed repo-wide.
 
-**Phase F7.3 — Validate and document** _(M11 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_
+**Phase F7.3 — Validate and document** _(M11 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 7](#finding-7--decouple-generator-runtime-pins-from-generated-project-pins))_ — ✅ **Complete.**
 
-- [ ] Add validation coverage for intentionally diverged generator-vs-generated-project runtime pin sets (including embedded-module drift detection and `railway.json.j2` alignment check if feasible).
-- [ ] Align documentation and operator messaging with the decoupled runtime-pin model (`runtime_pins.py` is the new SSOT for generated-project constraints).
-- [ ] _(Low risk)_ Variableize `ruff target-version` in `pyproject.toml.j2` if validation infra makes it cheap.
+**Dependencies:** F7.2.
+
+- [x] Add `quickscale_core.generator.constraint_validation` with drift-detection functions that verify generator Python constraints, module Python constraints, and module Django constraints against `runtime_pins.py` expectations. Includes 12 tests in `TestRuntimePinDriftDetection` in `test_templates.py` covering both `project.requires-python` and Poetry `tool.poetry.dependencies.python` parity surfaces.
+- [x] Variableize `ruff target-version` in `pyproject.toml.j2` to derive from `{{ python_version }}` template variable instead of hardcoded `py313`.
+- [x] Align `implementation_contract.md` to document the post-F7.3 state: drift-detection contract, resolved and remaining concerns.
+- [x] Update roadmap and changelog to final M11 closeout state.
+
+**Implementation summary:** Added `constraint_validation.py` as the drift-detection module for runtime-pin constraint parity across the repository. Added `TestRuntimePinDriftDetection` (12 tests) covering generator Python parity, module Python parity (both `project.requires-python` and Poetry `tool.poetry.dependencies.python` surfaces), module Django lower-bound drift, and negative-assertion coverage for each check. Variableized `ruff target-version` in `pyproject.toml.j2` to derive from the `python_version` template context variable instead of a hardcoded literal. Updated `implementation_contract.md` with the post-F7.3 contract state.
+
+**Validation evidence:** `make lint -- --core` passed; `make typecheck -- --core` passed; targeted `test_templates.py` 156/156 passed including 12 drift-detection tests; `make format` succeeded. Canonical repo-root `make test` passed — quickscale_core 1321/1321, quickscale_cli 1778/1778. All module suites passed except `quickscale_modules/orgs` timing out at 600s (pre-existing unrelated behavior). No new regression in this phase.
+
+**Next (post-M11):** No further F7 phases — Track 3 complete. Next open work: Track 2 / M10 (F5.2b — extract restore/orchestration); Track 1 / M7 (F11.12a — forms isolation).
 
 ---
 
