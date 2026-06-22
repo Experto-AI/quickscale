@@ -56,6 +56,7 @@ class TestFormsSeedPresets:
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
     def test_seed_presets_preserve_existing_form_data_retention_days(self):
         """Existing forms should keep their stored retention days when presets rerun."""
+        call_command("forms_seed_presets", verbosity=0)
         form = Form.objects.get(slug="contact")
         form.data_retention_days = 14
         form.save(update_fields=["data_retention_days"])

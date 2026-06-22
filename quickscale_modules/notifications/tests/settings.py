@@ -13,6 +13,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "django_filters",
+    "quickscale_modules_orgs",
     "quickscale_modules_forms",
     "quickscale_modules_notifications",
 ]
