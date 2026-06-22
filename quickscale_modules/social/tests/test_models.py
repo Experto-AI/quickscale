@@ -132,3 +132,118 @@ def test_social_embed_does_not_rerun_resolution_for_unrelated_updates() -> None:
 
     assert mock_resolve.call_count == 1
     assert embed.last_resolution_attempt_at == first_attempt_at
+
+
+@django_db
+def test_social_link_can_be_created_with_organization() -> None:
+    """Social links should accept an optional organization FK."""
+    from quickscale_modules_orgs.models import Organization
+
+    org = Organization.objects.create(name="Test Org", slug="test-org")
+    link = SocialLink.objects.create(
+        title="QuickScale on LinkedIn",
+        provider_name="",
+        url="https://www.linkedin.com/company/quickscale/",
+        display_order=10,
+        organization=org,
+    )
+
+    assert link.organization_id == org.id
+    assert link.organization == org
+
+
+@django_db
+def test_social_embed_can_be_created_with_organization() -> None:
+    """Social embeds should accept an optional organization FK."""
+    from quickscale_modules_orgs.models import Organization
+
+    org = Organization.objects.create(name="Test Org", slug="test-org")
+    embed = SocialEmbed.objects.create(
+        title="QuickScale launch video",
+        provider_name="",
+        url="https://www.youtube.com/shorts/abc123",
+        display_order=5,
+        organization=org,
+    )
+
+    assert embed.organization_id == org.id
+    assert embed.organization == org
+
+
+@django_db
+def test_social_item_for_org_returns_only_org_items() -> None:
+    """The ``.for_org()`` manager method should scope to the specified org."""
+    from quickscale_modules_orgs.models import Organization
+
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+    SocialLink.objects.create(
+        title="Org A Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/org-a/",
+        display_order=10,
+        organization=org_a,
+    )
+    SocialLink.objects.create(
+        title="Org B Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/org-b/",
+        display_order=20,
+        organization=org_b,
+    )
+
+    org_a_links = list(SocialLink.objects.for_org(org_a.id))
+    org_b_links = list(SocialLink.objects.for_org(org_b.id))
+    all_links = list(SocialLink.objects.all())
+
+    assert [link.title for link in org_a_links] == ["Org A Link"]
+    assert [link.title for link in org_b_links] == ["Org B Link"]
+    assert len(all_links) == 2
+
+
+@django_db
+def test_social_item_all_objects_returns_all_rows() -> None:
+    """The ``all_objects`` operator manager should return all rows."""
+    from quickscale_modules_orgs.models import Organization
+
+    org = Organization.objects.create(name="Test Org", slug="test-org")
+
+    SocialLink.objects.create(
+        title="Test Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/test/",
+        display_order=10,
+        organization=org,
+    )
+
+    assert SocialLink.all_objects.count() == 1
+    assert SocialEmbed.all_objects.count() == 0
+
+
+@django_db
+def test_social_link_normalized_url_no_longer_globally_unique() -> None:
+    """Multiple orgs may link to the same social URL without unique constraint violation."""
+    from quickscale_modules_orgs.models import Organization
+
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+    link_a = SocialLink.objects.create(
+        title="Org A Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/quickscale/",
+        display_order=10,
+        organization=org_a,
+    )
+    link_b = SocialLink.objects.create(
+        title="Org B Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/quickscale/",
+        display_order=20,
+        organization=org_b,
+    )
+
+    # Both should have the same normalized_url
+    assert link_a.normalized_url == link_b.normalized_url
+    assert link_a.normalized_url == "https://www.linkedin.com/company/quickscale"

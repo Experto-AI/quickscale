@@ -24,11 +24,19 @@ from quickscale_modules_social.contracts import (
     resolve_social_target,
     social_provider_supports_embeds,
 )
+from quickscale_modules_social.managers import OperatorManager, TenantScopedManager
 
 
 class BaseSocialItem(models.Model):
     """Shared curated social item fields and normalization behavior."""
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(app_label)s_%(class)s_set",
+    )
     title = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     provider_name = models.CharField(
@@ -43,7 +51,7 @@ class BaseSocialItem(models.Model):
         max_length=500,
         blank=True,
         editable=False,
-        unique=True,
+        # No longer globally unique — multiple orgs may link to the same URL.
     )
     display_order = models.PositiveIntegerField(
         default=0,
@@ -56,6 +64,10 @@ class BaseSocialItem(models.Model):
 
     cache_keys: ClassVar[tuple[str, ...]] = ()
     require_embed_support: ClassVar[bool] = False
+
+    # Phase F11.13a: dual-manager contract.
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
 
     class Meta:
         abstract = True

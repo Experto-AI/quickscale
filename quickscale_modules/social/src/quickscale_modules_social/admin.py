@@ -11,12 +11,13 @@ class SocialLinkAdmin(admin.ModelAdmin):
 
     list_display = [
         "title",
+        "organization",
         "provider_name",
         "is_published",
         "display_order",
         "updated_at",
     ]
-    list_filter = ["provider_name", "is_published"]
+    list_filter = ["organization", "provider_name", "is_published"]
     search_fields = ["title", "description", "url", "normalized_url"]
     readonly_fields = ["normalized_url", "created_at", "updated_at"]
     ordering = ["display_order", "title", "pk"]
@@ -27,6 +28,7 @@ class SocialLinkAdmin(admin.ModelAdmin):
                 "fields": [
                     "title",
                     "description",
+                    "organization",
                     "provider_name",
                     "url",
                     "is_published",
@@ -50,6 +52,7 @@ class SocialEmbedAdmin(admin.ModelAdmin):
 
     list_display = [
         "title",
+        "organization",
         "provider_name",
         "resolution_status",
         "is_published",
@@ -57,7 +60,7 @@ class SocialEmbedAdmin(admin.ModelAdmin):
         "last_resolution_attempt_at",
         "updated_at",
     ]
-    list_filter = ["provider_name", "resolution_status", "is_published"]
+    list_filter = ["organization", "provider_name", "resolution_status", "is_published"]
     search_fields = [
         "title",
         "description",
@@ -89,6 +92,7 @@ class SocialEmbedAdmin(admin.ModelAdmin):
                 "fields": [
                     "title",
                     "description",
+                    "organization",
                     "provider_name",
                     "url",
                     "is_published",
