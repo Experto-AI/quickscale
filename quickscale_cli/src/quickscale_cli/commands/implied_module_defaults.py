@@ -21,6 +21,10 @@ def get_implied_module_default_configs(
         implied_configs["orgs"] = {}
         names.add("orgs")
 
+    if "social" in names and "orgs" not in names:
+        implied_configs["orgs"] = {}
+        names.add("orgs")
+
     if "orgs" in names and "notifications" not in names:
         implied_configs["notifications"] = get_default_notifications_config()
 

@@ -623,3 +623,200 @@ def test_build_social_embeds_payload_uses_empty_state_for_missing_table(
     assert payload["total_embeds"] == 0
     assert payload["error"] is None
     assert cache.get(SOCIAL_EMBEDS_CACHE_KEY) is None
+
+
+# ---------------------------------------------------------------------------
+# Phase F11.13a: tenant-scoped service queries
+# ---------------------------------------------------------------------------
+
+
+@django_db
+def test_list_published_social_links_scoped_to_org() -> None:
+    """Org-scoped link queries should return only that org's published links."""
+    from quickscale_modules_orgs.models import Organization
+
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+    SocialLink.objects.create(
+        title="Org A Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/org-a/",
+        display_order=10,
+        is_published=True,
+        organization=org_a,
+    )
+    SocialLink.objects.create(
+        title="Org B Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/org-b/",
+        display_order=20,
+        is_published=True,
+        organization=org_b,
+    )
+
+    org_a_links = list_published_social_links(organization_id=org_a.id)
+    org_b_links = list_published_social_links(organization_id=org_b.id)
+    all_links = list_published_social_links()
+
+    assert [r.title for r in org_a_links] == ["Org A Link"]
+    assert [r.title for r in org_b_links] == ["Org B Link"]
+    assert {r.title for r in all_links} == {"Org A Link", "Org B Link"}
+
+
+@django_db
+def test_list_published_social_links_with_org_id_none_is_unscoped() -> None:
+    """Passing ``organization_id=None`` should return all links (unscoped, backward
+    compatible).  Fail-closed behavior for ``for_org(None)`` is tested at the
+    manager layer in ``test_models.py``."""
+    from quickscale_modules_orgs.models import Organization
+
+    org = Organization.objects.create(name="Test Org", slug="test-org")
+    SocialLink.objects.create(
+        title="Test Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/test/",
+        display_order=10,
+        is_published=True,
+        organization=org,
+    )
+
+    result = list_published_social_links(organization_id=None)
+    assert len(result) == 1
+    assert result[0].title == "Test Link"
+
+
+@django_db
+def test_list_published_social_embeds_scoped_to_org() -> None:
+    """Org-scoped embed queries should return only that org's published embeds."""
+    from quickscale_modules_orgs.models import Organization
+
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+    SocialEmbed.objects.create(
+        title="Org A Embed",
+        provider_name="",
+        url="https://www.youtube.com/shorts/aaa111",
+        display_order=10,
+        is_published=True,
+        organization=org_a,
+    )
+    SocialEmbed.objects.create(
+        title="Org B Embed",
+        provider_name="",
+        url="https://www.youtube.com/shorts/bbb222",
+        display_order=20,
+        is_published=True,
+        organization=org_b,
+    )
+
+    org_a_embeds = list_published_social_embeds(organization_id=org_a.id)
+    org_b_embeds = list_published_social_embeds(organization_id=org_b.id)
+    all_embeds = list_published_social_embeds()
+
+    assert [r.title for r in org_a_embeds] == ["Org A Embed"]
+    assert [r.title for r in org_b_embeds] == ["Org B Embed"]
+    assert {r.title for r in all_embeds} == {"Org A Embed", "Org B Embed"}
+
+
+@django_db
+def test_list_published_social_embeds_with_org_id_none_is_unscoped() -> None:
+    """Passing ``organization_id=None`` should return all embeds (unscoped, backward
+    compatible).  Fail-closed behavior for ``for_org(None)`` is tested at the
+    manager layer in ``test_models.py``."""
+    from quickscale_modules_orgs.models import Organization
+
+    org = Organization.objects.create(name="Test Org", slug="test-org")
+    SocialEmbed.objects.create(
+        title="Test Embed",
+        provider_name="",
+        url="https://www.youtube.com/shorts/test123",
+        display_order=10,
+        is_published=True,
+        organization=org,
+    )
+
+    result = list_published_social_embeds(organization_id=None)
+    assert len(result) == 1
+    assert result[0].title == "Test Embed"
+
+
+@django_db
+def test_build_social_link_tree_payload_scoped_to_org() -> None:
+    """Org-scoped build payload should return only that org's links."""
+    from quickscale_modules_orgs.models import Organization
+
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+    SocialLink.objects.create(
+        title="Org A Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/org-a/",
+        display_order=10,
+        is_published=True,
+        organization=org_a,
+    )
+    SocialLink.objects.create(
+        title="Org B Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/org-b/",
+        display_order=20,
+        is_published=True,
+        organization=org_b,
+    )
+
+    # Org-scoped: only Org A's links should appear in the payload.
+    payload_a = build_social_link_tree_payload(organization_id=org_a.id)
+    assert payload_a["status"] == SOCIAL_STATUS_ENABLED
+    assert payload_a["total_links"] == 1
+    assert payload_a["links"][0]["title"] == "Org A Link"
+
+    # Unscoped: all links should appear (backward-compatible).
+    payload_all = build_social_link_tree_payload()
+    assert payload_all["total_links"] == 2
+    assert {link["title"] for link in payload_all["links"]} == {
+        "Org A Link",
+        "Org B Link",
+    }
+
+
+@django_db
+def test_build_social_embeds_payload_scoped_to_org() -> None:
+    """Org-scoped build payload should return only that org's embeds."""
+    from quickscale_modules_orgs.models import Organization
+
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+    SocialEmbed.objects.create(
+        title="Org A Embed",
+        provider_name="",
+        url="https://www.youtube.com/shorts/aaa111",
+        display_order=10,
+        is_published=True,
+        organization=org_a,
+    )
+    SocialEmbed.objects.create(
+        title="Org B Embed",
+        provider_name="",
+        url="https://www.youtube.com/shorts/bbb222",
+        display_order=20,
+        is_published=True,
+        organization=org_b,
+    )
+
+    # Org-scoped: only Org A's embeds should appear in the payload.
+    payload_a = build_social_embeds_payload(organization_id=org_a.id)
+    assert payload_a["status"] == SOCIAL_STATUS_ENABLED
+    assert payload_a["total_embeds"] == 1
+    assert payload_a["embeds"][0]["title"] == "Org A Embed"
+
+    # Unscoped: all embeds should appear (backward-compatible).
+    payload_all = build_social_embeds_payload()
+    assert payload_all["total_embeds"] == 2
+    assert {embed["title"] for embed in payload_all["embeds"]} == {
+        "Org A Embed",
+        "Org B Embed",
+    }

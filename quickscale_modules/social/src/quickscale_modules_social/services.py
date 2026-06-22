@@ -321,21 +321,31 @@ def _embeds_payload(
 
 def list_published_social_links(
     runtime_settings: SocialRuntimeSettingsSnapshot | None = None,
+    *,
+    organization_id: int | str | None = None,
 ) -> tuple[SocialLinkRecord, ...]:
-    """Return published curated links filtered by the active runtime settings."""
+    """Return published curated links filtered by the active runtime settings.
+
+    When ``organization_id`` is provided, scope the query to that
+    organization's links (tenant-scoped).  When ``None`` (default),
+    return all published links — backward compatible with the pre-F11.13a
+    contract.
+    """
     runtime_settings = runtime_settings or get_social_runtime_settings()
     if not runtime_settings.link_tree_enabled:
         return ()
 
-    cached_payload = cache.get(SOCIAL_LINKS_CACHE_KEY, _CACHE_MISS)
-    records = (
-        None if cached_payload is _CACHE_MISS else _load_link_records(cached_payload)
-    )
-    if records is None:
+    records: tuple[SocialLinkRecord, ...] | None
+    if organization_id is not None:
+        # Org-scoped query: bypass global cache, scope directly.
         try:
             records = tuple(
                 SocialLinkRecord.from_model(link)
-                for link in SocialLink.objects.filter(is_published=True).order_by(
+                for link in SocialLink.objects.for_org(organization_id)
+                .filter(
+                    is_published=True,
+                )
+                .order_by(
                     "display_order",
                     "title",
                     "pk",
@@ -347,11 +357,34 @@ def list_published_social_links(
             ):
                 return ()
             raise
-        cache.set(
-            SOCIAL_LINKS_CACHE_KEY,
-            _serialize_records(records),
-            timeout=runtime_settings.cache_ttl_seconds,
+    else:
+        cached_payload = cache.get(SOCIAL_LINKS_CACHE_KEY, _CACHE_MISS)
+        records = (
+            None
+            if cached_payload is _CACHE_MISS
+            else _load_link_records(cached_payload)
         )
+        if records is None:
+            try:
+                records = tuple(
+                    SocialLinkRecord.from_model(link)
+                    for link in SocialLink.objects.filter(is_published=True).order_by(
+                        "display_order",
+                        "title",
+                        "pk",
+                    )
+                )
+            except (OperationalError, ProgrammingError) as exc:
+                if _is_missing_social_table_error(
+                    exc, table_name=SocialLink._meta.db_table
+                ):
+                    return ()
+                raise
+            cache.set(
+                SOCIAL_LINKS_CACHE_KEY,
+                _serialize_records(records),
+                timeout=runtime_settings.cache_ttl_seconds,
+            )
 
     filtered = [
         record
@@ -363,21 +396,30 @@ def list_published_social_links(
 
 def list_published_social_embeds(
     runtime_settings: SocialRuntimeSettingsSnapshot | None = None,
+    *,
+    organization_id: int | str | None = None,
 ) -> tuple[SocialEmbedRecord, ...]:
-    """Return published curated embeds filtered by the active runtime settings."""
+    """Return published curated embeds filtered by the active runtime settings.
+
+    When ``organization_id`` is provided, scope the query to that
+    organization's embeds (tenant-scoped).  When ``None`` (default),
+    return all published embeds.
+    """
     runtime_settings = runtime_settings or get_social_runtime_settings()
     if not runtime_settings.embeds_enabled:
         return ()
 
-    cached_payload = cache.get(SOCIAL_EMBEDS_CACHE_KEY, _CACHE_MISS)
-    records = (
-        None if cached_payload is _CACHE_MISS else _load_embed_records(cached_payload)
-    )
-    if records is None:
+    records: tuple[SocialEmbedRecord, ...] | None
+    if organization_id is not None:
+        # Org-scoped query: bypass global cache, scope directly.
         try:
             records = tuple(
                 SocialEmbedRecord.from_model(embed)
-                for embed in SocialEmbed.objects.filter(is_published=True).order_by(
+                for embed in SocialEmbed.objects.for_org(organization_id)
+                .filter(
+                    is_published=True,
+                )
+                .order_by(
                     "display_order",
                     "title",
                     "pk",
@@ -390,11 +432,35 @@ def list_published_social_embeds(
             ):
                 return ()
             raise
-        cache.set(
-            SOCIAL_EMBEDS_CACHE_KEY,
-            _serialize_records(records),
-            timeout=runtime_settings.cache_ttl_seconds,
+    else:
+        cached_payload = cache.get(SOCIAL_EMBEDS_CACHE_KEY, _CACHE_MISS)
+        records = (
+            None
+            if cached_payload is _CACHE_MISS
+            else _load_embed_records(cached_payload)
         )
+        if records is None:
+            try:
+                records = tuple(
+                    SocialEmbedRecord.from_model(embed)
+                    for embed in SocialEmbed.objects.filter(is_published=True).order_by(
+                        "display_order",
+                        "title",
+                        "pk",
+                    )
+                )
+            except (OperationalError, ProgrammingError) as exc:
+                if _is_missing_social_table_error(
+                    exc,
+                    table_name=SocialEmbed._meta.db_table,
+                ):
+                    return ()
+                raise
+            cache.set(
+                SOCIAL_EMBEDS_CACHE_KEY,
+                _serialize_records(records),
+                timeout=runtime_settings.cache_ttl_seconds,
+            )
 
     filtered = [
         record
@@ -405,8 +471,16 @@ def list_published_social_embeds(
     return tuple(filtered[: runtime_settings.embeds_per_page])
 
 
-def build_social_link_tree_payload() -> dict[str, object]:
-    """Return the managed link-tree JSON contract for React/backend consumers."""
+def build_social_link_tree_payload(
+    *,
+    organization_id: int | str | None = None,
+) -> dict[str, object]:
+    """Return the managed link-tree JSON contract for React/backend consumers.
+
+    When ``organization_id`` is provided, scope the payload to that
+    organization's published links.  When ``None`` (default), return all
+    published links — backward compatible with the pre-F11.13a contract.
+    """
     try:
         runtime_settings = get_social_runtime_settings()
     except SocialConfigurationError as exc:
@@ -424,7 +498,10 @@ def build_social_link_tree_payload() -> dict[str, object]:
             runtime_settings=runtime_settings,
         )
 
-    links = list_published_social_links(runtime_settings=runtime_settings)
+    links = list_published_social_links(
+        runtime_settings=runtime_settings,
+        organization_id=organization_id,
+    )
     return _link_tree_payload(
         status=SOCIAL_STATUS_ENABLED if links else SOCIAL_STATUS_EMPTY,
         enabled=True,
@@ -433,8 +510,16 @@ def build_social_link_tree_payload() -> dict[str, object]:
     )
 
 
-def build_social_embeds_payload() -> dict[str, object]:
-    """Return the managed embeds JSON contract for React/backend consumers."""
+def build_social_embeds_payload(
+    *,
+    organization_id: int | str | None = None,
+) -> dict[str, object]:
+    """Return the managed embeds JSON contract for React/backend consumers.
+
+    When ``organization_id`` is provided, scope the payload to that
+    organization's published embeds.  When ``None`` (default), return all
+    published embeds — backward compatible with the pre-F11.13a contract.
+    """
     try:
         runtime_settings = get_social_runtime_settings()
     except SocialConfigurationError as exc:
@@ -452,7 +537,10 @@ def build_social_embeds_payload() -> dict[str, object]:
             runtime_settings=runtime_settings,
         )
 
-    embeds = list_published_social_embeds(runtime_settings=runtime_settings)
+    embeds = list_published_social_embeds(
+        runtime_settings=runtime_settings,
+        organization_id=organization_id,
+    )
     return _embeds_payload(
         status=SOCIAL_STATUS_ENABLED if embeds else SOCIAL_STATUS_EMPTY,
         enabled=True,

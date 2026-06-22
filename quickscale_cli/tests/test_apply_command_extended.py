@@ -1053,7 +1053,11 @@ class TestLoadAndValidateConfig:
             _load_and_validate_config(config)
 
     def test_social_module_options_are_normalized_on_load(self, tmp_path):
-        """Social aliases and casing should be canonicalized during apply load."""
+        """Social aliases and casing should be canonicalized during apply load.
+
+        Social implies orgs, and orgs requires auth, so auth must be present
+        for social config to pass the prerequisite check.
+        """
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -1062,6 +1066,7 @@ class TestLoadAndValidateConfig:
             "  package: myapp\n"
             "  theme: showcase_html\n"
             "modules:\n"
+            "  auth:\n"
             "  social:\n"
             "    layout_variant: GRID\n"
             "    provider_allowlist:\n"
