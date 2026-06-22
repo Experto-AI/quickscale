@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django_filters",
     "markdownx",
+    "quickscale_modules_orgs",
     "quickscale_modules_listings",
     "tests",  # Required for ConcreteListing model
 ]
@@ -31,7 +32,11 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "quickscale_modules_orgs.middleware.TenantMiddleware",
 ]
+
+# SaaS mode for org-scoped route testing
+QUICKSCALE_MODE = "saas"
 
 ROOT_URLCONF = "tests.urls"
 

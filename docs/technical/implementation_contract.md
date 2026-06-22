@@ -262,9 +262,9 @@ See [module-extension.md](./module-extension.md) for the full extension contract
 - Do not invent custom table-naming schemes to simulate a plugin system.
 
 <a id="runtime-pins-constraints"></a>
-## Runtime Pins and Constraints (F7.2 Current)
+## Runtime Pins and Constraints (F7.3 Current)
 
-This section documents the current inventory of Python, Django, PostgreSQL, and Node.js runtime constraints, split by ownership. The F7.2 ownership-split phase established `quickscale_core/src/quickscale_core/generator/runtime_pins.py` as the authoritative source of truth for generated-project runtime pins, with the generator injecting these pins into template context at generation time.
+This section documents the current inventory of Python, Django, PostgreSQL, and Node.js runtime constraints, split by ownership. The F7.2 ownership-split phase established `quickscale_core/src/quickscale_core/generator/runtime_pins.py` as the authoritative source of truth for generated-project runtime pins, with the generator injecting these pins into template context at generation time. F7.3 added drift-detection validation (`quickscale_core.generator.constraint_validation`) that verifies generator and module constraint parity against the runtime pins SSOT on every test run.
 
 ### Generator Runtime (repo-owned `pyproject.toml` files)
 
@@ -332,14 +332,17 @@ Generated-project runtime pins are owned by `quickscale_core/src/quickscale_core
 
 **Generated-project database:** PostgreSQL only (`django.db.backends.postgresql`), configured via `DATABASE_URL` environment variable. No SQLite fallback or compatibility mode.
 
-### Post-F7.2 Pending Notes
+### Post-F7.3 Pending Notes
 
-Items 2–4 from the original F7.1 inventory (Docker base-image hardcode, CI matrix duplication, PostgreSQL constraint duplication) were resolved by F7.2 — those intra-generated-project duplicates are now consolidated behind `runtime_pins.py` variable injection.
+The following items are resolved by F7.3:
 
-The following remain true post-F7.2 concerns:
+- **Drift detection (constraint parity):** `quickscale_core.generator.constraint_validation` now provides functions to detect unintended drift between `runtime_pins.py` and generator/embedded-module `pyproject.toml` files. Tests in `TestRuntimePinDriftDetection` (`test_templates.py`) enforce parity on every test run. See the test class for the current contract encoding.
+- **Ruff target-version variableization:** The generated project `pyproject.toml.j2` now derives `[tool.ruff] target-version` from the `python_version` template variable instead of hardcoding `py313`. This ensures the ruff setting stays aligned when `PYTHON_VERSION` changes.
 
-1. **Generator ↔ generated-project Python constraint duplication:** The generator repo-level `pyproject.toml` files and `runtime_pins.PYTHON_CONSTRAINT` remain independent copies (`>=3.13,<3.15`). A coordinated version bump still requires manual synchronization across these two systems.
+The following remain true post-F7.3 concerns:
 
-2. **Embedded-module pin drift:** All 12 packaged modules carry Django `>=6.0.5,<6.1.0` while `runtime_pins.DJANGO_CONSTRAINT` uses `>=6.0.3,<6.1.0`. These remain independent manual-synchronization points with a verified lower-bound drift.
+1. **Generator ↔ generated-project Python constraint duplication:** The generator repo-level `pyproject.toml` files and `runtime_pins.PYTHON_CONSTRAINT` remain independent copies (`>=3.13,<3.15`). A coordinated version bump still requires manual synchronization across these two systems, but drift detection now alerts on any unnoticed mismatch.
 
-3. **Frontend constraints still template literals:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates remain as literal values, intentionally unchanged by F7.2. A future phase could absorb them into `runtime_pins.py`.
+2. **Embedded-module pin intentional drift:** All 12 packaged modules carry Django `>=6.0.5,<6.1.0` while `runtime_pins.DJANGO_CONSTRAINT` uses `>=6.0.3,<6.1.0`. This is the documented, intentional lower-bound drift. The drift detection tests (`test_module_django_lower_bound_drift`) enforce the exact expected module constraint and will fail if a version bump changes either side without an intentional update to both.
+
+3. **Frontend constraints still template literals:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates remain as literal values, intentionally unchanged by F7.2 or F7.3. A future phase could absorb them into `runtime_pins.py`.

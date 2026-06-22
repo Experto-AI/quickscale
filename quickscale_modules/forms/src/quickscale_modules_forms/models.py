@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.db import models
 
+from .managers import OperatorManager, TenantScopedManager
 
 DEFAULT_FORM_DATA_RETENTION_DAYS = 365
 HONEYPOT_FIELD_NAME = "_hp_name"
@@ -35,8 +36,14 @@ def is_form_spam_protection_enabled(form: "Form") -> bool:
 class Form(models.Model):
     """Top-level form definition — defines structure, metadata, and notification settings"""
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="forms",
+    )
     title = models.CharField(max_length=200)
-    slug = models.SlugField(unique=True)
+    slug = models.SlugField()
     description = models.TextField(blank=True)
     success_message = models.TextField(default="Thank you, we'll be in touch.")
     redirect_url = models.URLField(blank=True)
@@ -61,10 +68,20 @@ class Form(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Phase F11.12a: dual-manager contract.
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
+
     class Meta:
         app_label = "quickscale_modules_forms"
         db_table = "quickscale_modules_forms_form"
         ordering = ["title"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["slug", "organization"],
+                name="quickscale_modules_forms_form_slug_organization_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.title
