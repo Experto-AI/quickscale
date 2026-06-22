@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
-from enum import StrEnum
 import hashlib
 import json
 import os
@@ -16,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from io import StringIO
 from pathlib import Path
-from tempfile import TemporaryDirectory, mkdtemp
+from tempfile import mkdtemp
 from typing import TYPE_CHECKING, Any, Callable, Protocol, cast
 
 import django
@@ -37,22 +36,18 @@ from quickscale_core.dr_engine.primitives import (
     BackupConfigurationError,
     ShellCommandRunner,
     _build_pg_dump_command,  # noqa: F401 - re-exported for helper parity/tests
-    _build_pg_restore_command,
     _build_snapshot_child_descriptor,
     _compute_sha256,
     _database_engine_family,
     _dump_postgresql_database,
-    _expected_backup_format_for_engine,
     _extract_any_major_version,
     _extract_leading_major_version,
     _get_postgresql_tool_version,
     _mint_snapshot_id,
     _postgresql_18_client_tooling_guidance,
-    _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC,
     _relative_snapshot_child_path,
     _REQUIRED_POSTGRESQL_MAJOR,
     _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES,
-    _run_shell_command,
     _SNAPSHOTS_DIRECTORY_NAME,
     _SNAPSHOT_DATABASE_DIRECTORY_NAME,
     _ENV_VAR_MANIFEST_FILENAME,
@@ -60,6 +55,37 @@ from quickscale_core.dr_engine.primitives import (
     _PROMOTION_VERIFICATION_FILENAME,
     _RELEASE_METADATA_FILENAME,
     _write_json_file,
+    # Backward-compatible re-exports for helper parity / tests:
+    _build_pg_restore_command,  # noqa: F401
+    _expected_backup_format_for_engine,  # noqa: F401
+    _run_shell_command,  # noqa: F401
+)
+
+from quickscale_core.dr_engine.recovery import (
+    ArtifactLike,
+    BackupRestoreBlocked,
+    RemoteMaterializer,
+    ResolvedRestoreSource,
+    RestoreResult,
+    RestoreSourceResolutionMode,
+    RestoreWarning,
+    _collect_local_backup_validation_issues,
+    _detect_restore_file_format,
+    _ensure_postgresql_18_restore_runtime as _ensure_postgresql_18_restore_runtime_core,
+    _execute_restore_for_resolved_source as _execute_restore_for_resolved_source_core,
+    _get_restore_compatibility_issues as _get_restore_compatibility_issues_core,
+    _resolve_restore_source as _resolve_restore_source_core,
+    _restore_execution_allowed as _restore_execution_allowed_core,
+    # Backward-compatible re-exports for helper parity / tests:
+    _ensure_operator_supplied_custom_archive_valid,  # noqa: F401
+    _get_restore_source_validation_issues,  # noqa: F401
+)
+
+from quickscale_core.dr_engine.verification import (
+    _build_verification_payload as _build_verification_payload_core,
+    _build_clear_rollback_pin_fields as _build_clear_rollback_pin_fields_core,
+    _compute_rollback_pin_fields as _compute_rollback_pin_fields_core,
+    _validate_verification_inputs,
 )
 
 if TYPE_CHECKING:
@@ -79,10 +105,6 @@ class BackupLockError(BackupError):
     """Raised when a backup operation is already running."""
 
 
-class BackupRestoreBlocked(BackupError):
-    """Raised when destructive restore execution is intentionally blocked."""
-
-
 class RemoteUploader(Protocol):
     """Protocol used for optional private remote artifact offload."""
 
@@ -93,17 +115,6 @@ class RemoteDeleter(Protocol):
     """Protocol used for private remote artifact deletion."""
 
     def __call__(self, remote_key: str, policy: "BackupPolicySnapshot") -> None: ...
-
-
-class RemoteMaterializer(Protocol):
-    """Protocol used for temporary private remote restore materialization."""
-
-    def __call__(
-        self,
-        remote_key: str,
-        policy: "BackupPolicySnapshot",
-        destination: Path,
-    ) -> None: ...
 
 
 class StorageBackendSelectionLike(Protocol):
@@ -235,48 +246,6 @@ class BackupPolicySnapshot:
             or _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
         )
         return os.getenv(env_var_name, "").strip()
-
-
-@dataclass(frozen=True)
-class RestoreWarning:
-    """Structured non-fatal warning emitted after restore execution."""
-
-    code: str
-    message: str
-    details: dict[str, str] | None = None
-
-
-class RestoreSourceResolutionMode(StrEnum):
-    """How restore source resolution may use private remote artifacts."""
-
-    REMOTE_FALLBACK = "remote_fallback"
-    LOCAL_ONLY = "local_only"
-
-
-@dataclass(frozen=True)
-class RestoreResult:
-    """Return value for guarded restore execution."""
-
-    executed: bool
-    dry_run: bool
-    message: str
-    warnings: tuple[RestoreWarning, ...] = ()
-
-
-@dataclass(frozen=True)
-class ResolvedRestoreSource:
-    """Resolved local restore input used by the guarded restore pipeline."""
-
-    confirmation_value: str
-    local_path: Path
-    backup_format: str
-    artifact: BackupArtifact | None = None
-
-    def is_export_only(self) -> bool:
-        """Return whether this resolved source is blocked as export-only."""
-        if self.artifact is None:
-            return self.backup_format == "json"
-        return self.artifact.is_export_only()
 
 
 @dataclass(frozen=True)
@@ -2385,16 +2354,20 @@ def record_backup_snapshot_verification(
     policy: BackupPolicySnapshot | None = None,
     remote_uploader: RemoteUploader | None = None,
 ) -> dict[str, Any]:
-    """Append one route-specific report to the verification sidecar."""
+    """Append one route-specific report to the verification sidecar.
+
+    This is a thin Django-facing wrapper.  The verification payload is
+    assembled by the engine-owned ``_build_verification_payload`` in
+    ``quickscale_core.dr_engine.verification``.
+    """
     normalized_route = route.strip()
     normalized_phase = phase.strip()
     normalized_status = status.strip()
-    if not normalized_route:
-        raise BackupConfigurationError("route cannot be blank")
-    if not normalized_phase:
-        raise BackupConfigurationError("phase cannot be blank")
-    if not normalized_status:
-        raise BackupConfigurationError("status cannot be blank")
+    _validate_verification_inputs(
+        route=normalized_route,
+        phase=normalized_phase,
+        status=normalized_status,
+    )
 
     snapshot = get_backup_snapshot(snapshot_id)
     recorded_at = now or django_timezone.now()
@@ -2414,43 +2387,34 @@ def record_backup_snapshot_verification(
     if not isinstance(existing_reports, list):
         existing_reports = []
 
-    verification_payload = {
-        "manifest_version": 1,
-        "captured_at": verification_payload.get(
+    # Delegate verification payload assembly to the engine-owned core.
+    verification_payload = _build_verification_payload_core(
+        snapshot_id=snapshot.snapshot_id,
+        project_slug=_get_project_slug(),
+        source_environment=snapshot.source_environment,
+        captured_at=verification_payload.get(
             "captured_at",
             snapshot.created_at.astimezone(timezone.utc).isoformat(),
         ),
-        "snapshot_id": snapshot.snapshot_id,
-        "project_slug": _get_project_slug(),
-        "source_environment": snapshot.source_environment,
-        "status": normalized_status,
-        "updated_at": recorded_at.astimezone(timezone.utc).isoformat(),
-        "full_backup": full_backup_contract,
-        "reports": [
-            *existing_reports,
-            {
-                "route": normalized_route,
-                "phase": normalized_phase,
-                "status": normalized_status,
-                "recorded_at": recorded_at.astimezone(timezone.utc).isoformat(),
-                "full_backup": full_backup_contract,
-                "payload": payload,
-            },
-        ],
-        "notes": verification_payload.get(
+        status=normalized_status,
+        updated_at=recorded_at.astimezone(timezone.utc).isoformat(),
+        full_backup_contract=full_backup_contract,
+        existing_reports=existing_reports,
+        existing_notes=verification_payload.get(
             "notes",
             "Reserved for route-specific plan and execute reports.",
         ),
-        "rollback_pin": {
-            "active": snapshot.has_active_rollback_pin(now=recorded_at),
-            "expires_at": (
-                snapshot.rollback_pin_expires_at.astimezone(timezone.utc).isoformat()
-                if snapshot.rollback_pin_expires_at is not None
-                else None
-            ),
-            "reason": snapshot.rollback_pin_reason,
-        },
-    }
+        rollback_pin_active=snapshot.has_active_rollback_pin(now=recorded_at),
+        rollback_pin_expires_at=(
+            snapshot.rollback_pin_expires_at.astimezone(timezone.utc).isoformat()
+            if snapshot.rollback_pin_expires_at is not None
+            else None
+        ),
+        rollback_pin_reason=snapshot.rollback_pin_reason,
+        route=normalized_route,
+        phase=normalized_phase,
+        payload=payload,
+    )
     _persist_snapshot_sidecar_payload(
         snapshot,
         filename=_PROMOTION_VERIFICATION_FILENAME,
@@ -2679,14 +2643,13 @@ def set_backup_snapshot_rollback_pin(
     reason: str,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Set or refresh a time-bounded rollback pin on one stored snapshot."""
-    if ttl_hours < 1:
-        raise BackupConfigurationError("ttl_hours must be at least 1")
+    """Set or refresh a time-bounded rollback pin on one stored snapshot.
 
-    resolved_reason = reason.strip()
-    if not resolved_reason:
-        raise BackupConfigurationError("reason cannot be blank")
-
+    Input validation and field-value computation are delegated to the
+    engine-owned ``_compute_rollback_pin_fields`` in
+    ``quickscale_core.dr_engine.verification``.  This wrapper handles
+    model persistence and state checks only.
+    """
     snapshot = get_backup_snapshot(snapshot_id)
     if snapshot.status == BackupSnapshot.STATUS_DELETED:
         raise BackupError(
@@ -2698,8 +2661,13 @@ def set_backup_snapshot_rollback_pin(
         )
 
     pinned_at = now or django_timezone.now()
-    snapshot.rollback_pin_expires_at = pinned_at + timedelta(hours=ttl_hours)
-    snapshot.rollback_pin_reason = resolved_reason
+    fields = _compute_rollback_pin_fields_core(
+        ttl_hours=ttl_hours,
+        reason=reason,
+        now=pinned_at,
+    )
+    snapshot.rollback_pin_expires_at = fields["rollback_pin_expires_at"]
+    snapshot.rollback_pin_reason = fields["rollback_pin_reason"]
     snapshot.save(
         update_fields=[
             "rollback_pin_expires_at",
@@ -2715,7 +2683,13 @@ def clear_backup_snapshot_rollback_pin(
     *,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Clear any active rollback pin on one stored snapshot."""
+    """Clear any active rollback pin on one stored snapshot.
+
+    Field-value computation is delegated to the engine-owned
+    ``_build_clear_rollback_pin_fields`` in
+    ``quickscale_core.dr_engine.verification``.  This wrapper handles
+    model persistence and state checks only.
+    """
     snapshot = get_backup_snapshot(snapshot_id)
     if snapshot.status == BackupSnapshot.STATUS_DELETED:
         raise BackupError(
@@ -2723,8 +2697,9 @@ def clear_backup_snapshot_rollback_pin(
         )
 
     cleared_at = now or django_timezone.now()
-    snapshot.rollback_pin_expires_at = None
-    snapshot.rollback_pin_reason = ""
+    fields = _build_clear_rollback_pin_fields_core()
+    snapshot.rollback_pin_expires_at = fields["rollback_pin_expires_at"]
+    snapshot.rollback_pin_reason = fields["rollback_pin_reason"]
     snapshot.save(
         update_fields=[
             "rollback_pin_expires_at",
@@ -3067,101 +3042,33 @@ def _execute_restore_for_resolved_source(
     allow_production: bool,
     shell_runner: ShellCommandRunner | None,
 ) -> RestoreResult:
-    """Run the shared guarded restore pipeline for one resolved source."""
-    if confirmation.strip() != restore_source.confirmation_value:
-        raise BackupRestoreBlocked(
-            "Confirmation must exactly match the backup filename."
-        )
-
-    if restore_source.is_export_only():
-        if restore_source.artifact is None:
-            raise BackupRestoreBlocked(
-                "Restore blocked because JSON file inputs are not a supported "
-                "restore input."
-            )
-        raise BackupRestoreBlocked(
-            "Restore blocked because export_only artifacts are not a supported "
-            "restore input."
-        )
-
-    source_issues = _get_restore_source_validation_issues(restore_source)
-    if source_issues:
-        raise BackupRestoreBlocked(
-            "Restore blocked because backup validation failed: "
-            + "; ".join(source_issues)
-        )
-
+    """Run the guarded restore pipeline — Django-backed wrapper around the core."""
     current_engine = str(
         django.db.connections["default"].settings_dict.get("ENGINE") or ""
     ).strip()
-    compatibility_issues = _get_restore_source_compatibility_issues(
-        restore_source,
-        current_engine,
-    )
-    if compatibility_issues:
-        compatibility_prefix = (
-            "Restore blocked because artifact compatibility validation failed: "
-            if restore_source.artifact is not None
-            else "Restore blocked because restore compatibility validation failed: "
-        )
-        raise BackupRestoreBlocked(
-            compatibility_prefix + "; ".join(compatibility_issues)
-        )
-
-    if dry_run:
-        _ensure_postgresql_18_restore_runtime(current_engine)
-        _ensure_operator_supplied_custom_archive_valid(
-            restore_source,
-            shell_runner=shell_runner,
-        )
-        return RestoreResult(
-            executed=False,
-            dry_run=True,
-            message="Restore validation completed successfully (dry run).",
-        )
-
-    if not _restore_execution_allowed():
-        message = (
-            "Restore execution is blocked outside local development until "
-            "QUICKSCALE_BACKUPS_ALLOW_RESTORE=true is set."
-        )
-        if allow_production:
-            message += " --allow-production does not bypass this environment gate."
-        raise BackupRestoreBlocked(message)
-
-    if restore_source.backup_format != "pg_dump_custom":
-        raise BackupRestoreBlocked(
-            "Executable restore is only supported for PostgreSQL custom-format "
-            "artifacts. Use --dry-run for JSON fallback backups."
-        )
-
-    _ensure_postgresql_18_restore_runtime(current_engine)
-    _ensure_operator_supplied_custom_archive_valid(
-        restore_source,
-        shell_runner=shell_runner,
-    )
-
     connection_settings = django.db.connections["default"].settings_dict
-    command, env = _build_pg_restore_command(
-        restore_source.local_path,
-        connection_settings,
-    )
-    runner = shell_runner or _run_shell_command
-    runner(command, env=env)
 
-    restore_warnings: tuple[RestoreWarning, ...] = ()
-    if restore_source.artifact is not None:
+    result = _execute_restore_for_resolved_source_core(
+        restore_source,
+        confirmation=confirmation,
+        dry_run=dry_run,
+        allow_production=allow_production,
+        shell_runner=shell_runner,
+        current_engine=current_engine,
+        connection_settings=connection_settings,
+        is_debug=settings.DEBUG,
+        pg_contract_checker=_require_postgresql_18_contract,
+    )
+
+    if result.executed and restore_source.artifact is not None:
         restore_warnings = _persist_restore_artifact_metadata(
-            restore_source.artifact,
+            restore_source.artifact,  # type: ignore[arg-type]  # BackupArtifact satisfies ArtifactLike at runtime
             restored_at=django_timezone.now(),
         )
+        if restore_warnings:
+            result = replace(result, warnings=(*result.warnings, *restore_warnings))
 
-    return RestoreResult(
-        executed=True,
-        dry_run=False,
-        message=(f"Restore executed for {restore_source.confirmation_value}."),
-        warnings=restore_warnings,
-    )
+    return result
 
 
 def _stage_admin_restore_upload(
@@ -3480,7 +3387,6 @@ def _get_database_server_version(engine: str) -> str | None:
 
 
 def _require_postgresql_18_contract(
-    *,
     database_engine: str,
     executable: str,
     operation: str,
@@ -3544,260 +3450,44 @@ def _database_server_version_query(engine: str) -> str | None:
 
 
 def _get_restore_compatibility_issues(artifact: BackupArtifact) -> list[str]:
-    """Return restore guardrail issues for current database engine compatibility."""
-    issues: list[str] = []
-    connection_settings = django.db.connections["default"].settings_dict
-    current_engine = str(connection_settings.get("ENGINE") or "").strip()
-    current_engine_family = _database_engine_family(current_engine)
-    artifact_engine_family = _database_engine_family(artifact.database_engine)
-
-    if artifact_engine_family != current_engine_family:
-        issues.append(
-            "artifact database engine "
-            f"'{artifact.database_engine}' is incompatible with current database "
-            f"engine '{current_engine}'"
-        )
-
-    expected_format = _expected_backup_format_for_engine(current_engine)
-    if artifact.backup_format != expected_format:
-        issues.append(
-            "artifact backup format "
-            f"'{artifact.backup_format}' is incompatible with current database "
-            f"engine '{current_engine}' (expected '{expected_format}')"
-        )
-
-    if (
-        artifact_engine_family == "postgresql"
-        and artifact.backup_format == "pg_dump_custom"
-    ):
-        if (
-            artifact.database_server_major is not None
-            and artifact.database_server_major != _REQUIRED_POSTGRESQL_MAJOR
-        ):
-            issues.append(
-                "artifact database server major "
-                f"'{artifact.database_server_major}' is incompatible with the "
-                f"PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} restore contract"
-            )
-        if (
-            artifact.dump_client_major is not None
-            and artifact.dump_client_major != _REQUIRED_POSTGRESQL_MAJOR
-        ):
-            issues.append(
-                "artifact dump client major "
-                f"'{artifact.dump_client_major}' is incompatible with the "
-                f"PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} restore contract"
-            )
-
-    return issues
-
-
-def _collect_local_backup_validation_issues(
-    local_path: Path | None,
-    *,
-    backup_format: str,
-    expected_checksum: str | None = None,
-    expected_size: int | None = None,
-) -> list[str]:
-    """Validate one local backup file without mutating artifact state."""
-    issues: list[str] = []
-
-    if local_path is None or not local_path.exists():
-        issues.append("local backup artifact is missing")
-        return issues
-
-    if expected_checksum is not None:
-        calculated_checksum = _compute_sha256(local_path)
-        if calculated_checksum != expected_checksum:
-            issues.append("checksum mismatch detected")
-
-    if expected_size is not None:
-        actual_size = local_path.stat().st_size
-        if actual_size != expected_size:
-            issues.append("size mismatch detected")
-
-    if backup_format == "json":
-        try:
-            json.loads(local_path.read_text(encoding="utf-8"))
-        except UnicodeDecodeError:
-            issues.append("json backup payload is not valid JSON")
-        except json.JSONDecodeError:
-            issues.append("json backup payload is not valid JSON")
-
-    return issues
-
-
-def _get_restore_source_validation_issues(
-    restore_source: ResolvedRestoreSource,
-) -> list[str]:
-    """Return validation issues for the resolved restore source."""
-    if restore_source.artifact is not None:
-        return _collect_local_backup_validation_issues(
-            restore_source.local_path,
-            backup_format=restore_source.artifact.backup_format,
-            expected_checksum=restore_source.artifact.checksum_sha256,
-            expected_size=restore_source.artifact.size_bytes,
-        )
-
-    if not restore_source.local_path.exists():
-        return [f"restore file not found: {restore_source.local_path}"]
-    if not restore_source.local_path.is_file():
-        return [f"restore file is not a regular file: {restore_source.local_path}"]
-    return []
-
-
-def _get_restore_source_compatibility_issues(
-    restore_source: ResolvedRestoreSource,
-    current_engine: str,
-) -> list[str]:
-    """Return compatibility issues for artifact and operator-supplied sources."""
-    if restore_source.artifact is not None:
-        return _get_restore_compatibility_issues(restore_source.artifact)
-
-    if _database_engine_family(current_engine) != "postgresql":
-        return ["operator-supplied restore files require a PostgreSQL target database"]
-    return []
-
-
-def _ensure_operator_supplied_custom_archive_valid(
-    restore_source: ResolvedRestoreSource,
-    *,
-    shell_runner: ShellCommandRunner | None = None,
-) -> None:
-    """Require file-mode restore inputs to be real PostgreSQL custom archives."""
-    if (
-        restore_source.artifact is not None
-        or restore_source.backup_format != "pg_dump_custom"
-    ):
-        return
-
-    try:
-        with restore_source.local_path.open("rb") as handle:
-            archive_magic = handle.read(len(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC))
-    except OSError as exc:
-        raise BackupRestoreBlocked(
-            "Restore blocked because the operator-supplied file could not be "
-            f"inspected: {exc}"
-        ) from exc
-
-    if archive_magic != _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC:
-        raise BackupRestoreBlocked(
-            "Restore blocked because operator-supplied file is not a valid "
-            "PostgreSQL custom archive."
-        )
-
-    runner = shell_runner or _run_shell_command
-    try:
-        runner(["pg_restore", "--list", str(restore_source.local_path)], env=None)
-    except BackupError as exc:
-        raise BackupRestoreBlocked(
-            "Restore blocked because operator-supplied file is not a valid "
-            f"PostgreSQL custom archive: {exc}"
-        ) from exc
-
-
-def _normalize_restore_file_path(file_path: str | Path) -> Path:
-    """Resolve operator-supplied restore file paths relative to the current cwd."""
-    resolved_path = Path(file_path).expanduser()
-    if not resolved_path.is_absolute():
-        resolved_path = Path.cwd() / resolved_path
-    return resolved_path
-
-
-def _detect_restore_file_format(file_path: Path) -> str:
-    """Infer the operator-supplied restore input format from the file name."""
-    if file_path.suffix.lower() == ".json":
-        return "json"
-    return "pg_dump_custom"
+    """Return restore guardrail issues — delegates to the core implementation."""
+    current_engine = str(
+        django.db.connections["default"].settings_dict.get("ENGINE") or ""
+    ).strip()
+    return _get_restore_compatibility_issues_core(artifact, current_engine)
 
 
 @contextmanager
 def _resolve_restore_source(
     *,
-    artifact: BackupArtifact | None,
-    file_path: str | Path | None,
-    snapshot_id: str | None,
-    resolution_mode: RestoreSourceResolutionMode,
-    policy: BackupPolicySnapshot | None,
-    remote_materializer: RemoteMaterializer | None,
+    artifact: BackupArtifact | None = None,
+    file_path: str | Path | None = None,
+    snapshot_id: str | None = None,
+    resolution_mode: RestoreSourceResolutionMode = RestoreSourceResolutionMode.REMOTE_FALLBACK,
+    policy: BackupPolicySnapshot | None = None,
+    remote_materializer: RemoteMaterializer | None = None,
 ) -> Iterator[ResolvedRestoreSource]:
-    """Resolve one restore source into a local file path for the guarded pipeline."""
-    provided_source_count = sum(
-        source is not None for source in (artifact, file_path, snapshot_id)
-    )
-    if provided_source_count != 1:
-        raise BackupRestoreBlocked(
-            "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
+    """Resolve one restore source — Django-backed wrapper around core."""
+    resolved_policy: BackupPolicySnapshot | None = policy
+
+    def _policy_resolver(art: ArtifactLike) -> Any:
+        nonlocal resolved_policy
+        resolved_policy = _resolve_artifact_remote_policy(
+            art,  # type: ignore[arg-type]  # BackupArtifact satisfies ArtifactLike
+            resolved_policy or load_policy_snapshot(),
         )
+        return resolved_policy
 
-    if file_path is not None:
-        resolved_path = _normalize_restore_file_path(file_path)
-        yield ResolvedRestoreSource(
-            confirmation_value=resolved_path.name,
-            local_path=resolved_path,
-            backup_format=_detect_restore_file_format(resolved_path),
-        )
-        return
-
-    if snapshot_id is not None:
-        artifact = _resolve_authoritative_snapshot_dump(snapshot_id)
-
-    assert artifact is not None
-    local_path = Path(artifact.local_path) if artifact.local_path else None
-    if local_path is not None and local_path.exists():
-        yield ResolvedRestoreSource(
-            confirmation_value=artifact.filename,
-            local_path=local_path,
-            backup_format=artifact.backup_format,
-            artifact=artifact,
-        )
-        return
-
-    if resolution_mode == RestoreSourceResolutionMode.LOCAL_ONLY:
-        raise BackupRestoreBlocked(
-            "Restore blocked because the local backup artifact is missing and "
-            "this restore source resolution mode does not allow private remote "
-            "materialization."
-        )
-
-    if not artifact.remote_key:
-        raise BackupRestoreBlocked(
-            "Restore blocked because the local backup artifact is missing and no "
-            "private remote artifact is available."
-        )
-
-    resolved_policy = _resolve_artifact_remote_policy(
-        artifact,
-        policy or load_policy_snapshot(),
-    )
-    materializer = remote_materializer or _materialize_private_remote_key
-    with TemporaryDirectory(prefix="quickscale-backups-restore-") as temp_dir:
-        materialized_path = Path(temp_dir) / artifact.filename
-        try:
-            materializer(artifact.remote_key, resolved_policy, materialized_path)
-        except BackupError as exc:
-            raise BackupRestoreBlocked(
-                "Restore blocked because private remote materialization failed for "
-                f"{artifact.filename}: {exc}"
-            ) from exc
-        except Exception as exc:
-            raise BackupRestoreBlocked(
-                "Restore blocked because private remote materialization failed for "
-                f"{artifact.filename}: {exc}"
-            ) from exc
-
-        if not materialized_path.exists():
-            raise BackupRestoreBlocked(
-                "Restore blocked because private remote materialization did not "
-                f"produce a local file for {artifact.filename}."
-            )
-
-        yield ResolvedRestoreSource(
-            confirmation_value=artifact.filename,
-            local_path=materialized_path,
-            backup_format=artifact.backup_format,
-            artifact=artifact,
-        )
+    with _resolve_restore_source_core(
+        artifact=artifact,
+        file_path=file_path,
+        snapshot_id=snapshot_id,
+        resolution_mode=resolution_mode,
+        remote_materializer=remote_materializer or _materialize_private_remote_key,
+        snapshot_resolver=_resolve_authoritative_snapshot_dump,
+        policy_resolver=_policy_resolver,
+    ) as restore_source:
+        yield restore_source
 
 
 def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> BackupArtifact:
@@ -3819,18 +3509,11 @@ def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> BackupArtifact:
 
 
 def _ensure_postgresql_18_restore_runtime(current_engine: str) -> None:
-    """Require the current restore runtime to satisfy the PostgreSQL 18 contract."""
-    if _database_engine_family(current_engine) != "postgresql":
-        return
-
-    try:
-        _require_postgresql_18_contract(
-            database_engine=current_engine,
-            executable="pg_restore",
-            operation="restore",
-        )
-    except BackupError as exc:
-        raise BackupRestoreBlocked(str(exc)) from exc
+    """Require the current restore runtime — delegates to the core implementation."""
+    _ensure_postgresql_18_restore_runtime_core(
+        current_engine,
+        require_contract=_require_postgresql_18_contract,
+    )
 
 
 def _collect_module_versions() -> dict[str, str]:
@@ -3971,6 +3654,5 @@ def _delete_private_remote_key(remote_key: str, policy: BackupPolicySnapshot) ->
 
 
 def _restore_execution_allowed() -> bool:
-    if settings.DEBUG:
-        return True
-    return os.getenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "").strip().lower() == "true"
+    """Return whether destructive restore execution is permitted."""
+    return _restore_execution_allowed_core(is_debug=settings.DEBUG)

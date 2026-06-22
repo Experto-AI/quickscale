@@ -935,34 +935,44 @@ The authoritative current CLI command surface now lives in [implementation_contr
 
 #### Disaster Recovery Engine Boundary Contract (F5 / M10)
 
-**Status:** Target boundary for the M10 DR engine split. This contract is the
-authoritative target that phases F5.2a–F5.4 implement against; the current code
-does **not** yet match this split (see "Current state" below). This entry defines
-the boundary only (roadmap phase F5.1); it ships no extraction.
+**Status:** Target boundary for the M10 DR engine split. Phases F5.2a (snapshot/
+archive primitives) and F5.2b (restore/orchestration flow) are shipped. The
+hidden-protocol replacement (F5.3) and migration documentation (F5.4) remain
+as planned work. See "Current state" below for the post-F5.2b code layout.
+This entry originally defined the boundary only (roadmap phase F5.1); the
+extraction phases F5.2a/F5.2b now ship the core/module split described here.
 
-**Why (Finding 5):** The embeddable `backups` module currently carries
-platform-level backup/restore orchestration and communicates with the CLI through
+**Why (Finding 5):** The embeddable `backups` module originally carried
+platform-level backup/restore orchestration and communicated with the CLI through
 a hidden management-command + environment-variable protocol. The engine must move
 into centrally owned code, leaving only thin Django-facing surfaces in the
-embeddable module.
+embeddable module. F5.2a/F5.2b have shipped the core extraction; the hidden
+protocol (F5.3) and migration documentation (F5.4) remain.
 
-**Current state (pre-split):**
-- All DR orchestration lives in the embeddable module
-  (`quickscale_modules/backups/src/quickscale_modules_backups/services.py`):
-  snapshot creation, database custom-dumps, restore validation/execution,
-  media-sync planning, rollback-pin lifecycle, sidecar payload generation, and
-  remote-storage orchestration.
-- Eight management commands wrap those services: `backups_create`,
-  `backups_restore`, `backups_report`, `backups_validate`, `backups_pin`,
-  `backups_prune`, `backups_sync_media`, `backups_record_verification`.
-- The CLI (`quickscale_cli/src/quickscale_cli/commands/dr_commands.py`) drives DR
-  by invoking those management commands via subprocess, passing context through
+**Current state (post-F5.2b):**
+- **Centrally owned DR engine (`quickscale_core.dr_engine`):**
+  - `primitives` — snapshot creation, archive packaging, database custom-dump
+    capture.
+  - `recovery` — restore validation, ordered execution sequencing,
+    destructive-operation gating, orchestration flow.
+  - `verification` — verification-record assembly, rollback-pin lifecycle and
+    pin-field logic.
+- **Embeddable `backups` module (`quickscale_modules_backups.services`):**
+  retains Django-backed orchestration surfaces including snapshot capture,
+  archive upload, sidecar capture, media-sync orchestration, and report-assembly
+  logic that still reference the `quickscale_modules` Django app environment.
+  F5.2a/F5.2b shipped the Django-free primitives, recovery, and verification
+  into `quickscale_core.dr_engine`, while the module retains the higher-level
+  platform orchestration that depends on Django project context. F5.3 will
+  address the hidden-protocol replacement and further slimming of module
+  orchestration.
+- **CLI protocol (unchanged, F5.3):** The CLI
+  (`quickscale_cli/src/quickscale_cli/commands/dr_commands.py`) still drives DR
+  by invoking management commands via subprocess, passing context through
   environment variables (`DJANGO_SETTINGS_MODULE`, `QUICKSCALE_ENVIRONMENT`,
   `QUICKSCALE_BACKUPS_ALLOW_RESTORE`, `QUICKSCALE_DR_TARGET_*`, `ROUTE_KIND`) and
-  parsing stdout JSON for results.
-- `quickscale_core` owns only environment-variable portability classification
-  (`contracts/module_options.py`); no backup/restore execution logic lives in
-  core today.
+  parsing stdout JSON for results. Replacement of this hidden protocol is
+  planned for F5.3.
 
 **Target ownership split:**
 
@@ -1014,9 +1024,10 @@ embeddable module.
   backward-compatibility shim; generated-project migration guidance is documented
   in F5.4.
 
-**Out of scope for F5.1:** the extraction itself (F5.2a snapshot/archive
-primitives, F5.2b restore/orchestration), the protocol-replacement implementation
-(F5.3), and migration documentation (F5.4).
+**Out of scope for this section:** The hidden-protocol replacement (F5.3) and
+migration documentation (F5.4) remain planned work not covered by this boundary
+definition. F5.2a (snapshot/archive primitives) and F5.2b (restore/orchestration)
+are shipped and reflected in the current-state description above.
 
 ---
 
