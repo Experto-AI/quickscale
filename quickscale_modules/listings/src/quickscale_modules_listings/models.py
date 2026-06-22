@@ -5,6 +5,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
+from .managers import OperatorManager, TenantScopedManager
+
 
 class AbstractListing(models.Model):
     """Abstract base model for marketplace listings"""
@@ -16,8 +18,14 @@ class AbstractListing(models.Model):
         ("archived", "Archived"),
     ]
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="listings",
+    )
     title = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=200, unique=True, blank=True)
+    slug = models.SlugField(max_length=200, blank=True)
     description = models.TextField(
         blank=True,
         help_text="Listing description in Markdown format",
@@ -82,7 +90,20 @@ class AbstractListing(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:
-        """Return the URL for this listing"""
+        """Return the URL for this listing.
+
+        Org-stamped listings use the org-scoped route
+        (``/orgs/<org_slug>/listings/<slug>/``); tenant-agnostic listings
+        use the flat route (``/listings/<slug>/``).
+        """
+        if self.organization_id is not None:
+            return reverse(
+                "quickscale_listings:org-listing_detail",
+                kwargs={
+                    "org_slug": self.organization.slug,
+                    "slug": self.slug,
+                },
+            )
         return reverse("quickscale_listings:listing_detail", kwargs={"slug": self.slug})
 
     @property
@@ -106,9 +127,22 @@ class Listing(AbstractListing):
 
     This model can be used directly or extended for vertical-specific listings.
     For custom listings, extend AbstractListing instead.
+
+    Phase F11.12b: dual-manager contract.
+    - ``objects`` (TenantScopedManager): default manager.
+    - ``all_objects`` (OperatorManager): escape hatch for admin/operator paths.
     """
+
+    objects = TenantScopedManager()
+    all_objects = OperatorManager()
 
     class Meta(AbstractListing.Meta):
         abstract = False
         verbose_name = "Listing"
         verbose_name_plural = "Listings"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["slug", "organization"],
+                name="listings_listing_slug_organization_unique",
+            ),
+        ]

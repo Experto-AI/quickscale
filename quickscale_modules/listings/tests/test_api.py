@@ -15,26 +15,34 @@ from quickscale_modules_listings.models import Listing
 
 @pytest.fixture
 def staff_user(db):
-    """Create a staff user"""
+    """Create a staff user with a personal org (SaaS mode)."""
+    from quickscale_modules_orgs.models import Organization
+
     user_model = get_user_model()
-    return user_model.objects.create_user(
+    user = user_model.objects.create_user(
         username="staff",
         email="staff@example.com",
         password="staffpass123",
         is_staff=True,
     )
+    Organization.objects.create_personal_for(user)
+    return user
 
 
 @pytest.fixture
 def regular_user(db):
-    """Create a non-staff user"""
+    """Create a non-staff user with a personal org (SaaS mode)."""
+    from quickscale_modules_orgs.models import Organization
+
     user_model = get_user_model()
-    return user_model.objects.create_user(
+    user = user_model.objects.create_user(
         username="user",
         email="user@example.com",
         password="userpass123",
         is_staff=False,
     )
+    Organization.objects.create_personal_for(user)
+    return user
 
 
 @pytest.mark.django_db
