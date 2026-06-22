@@ -64,3 +64,22 @@ class TestListingUrls:
         """Test org-scoped publish API URL resolves correctly"""
         url = reverse("quickscale_listings:org-api_publish_listing", args=["test-org"])
         assert url == "/listings/orgs/test-org/api/publish/"
+
+    def test_flat_slug_named_orgs_resolves_as_flat_route(self):
+        """CR-004: Flat slug ``orgs`` must resolve to flat listing_detail.
+
+        A flat route ``/listings/orgs/`` must NOT be misidentified as an
+        org-scoped route.  The resolver should return ``listing_detail``
+        (with ``slug="orgs"``), not an org-scoped pattern.
+        """
+        resolver = resolve("/listings/orgs/")
+        assert resolver.url_name == "listing_detail", (
+            f"Expected listing_detail for /listings/orgs/, got {resolver.url_name}"
+        )
+        assert resolver.kwargs == {"slug": "orgs"}, (
+            f"Expected slug=orgs, got {resolver.kwargs}"
+        )
+        # Confirm no org_slug in kwargs — route detection relies on this
+        assert "org_slug" not in resolver.kwargs, (
+            "Flat route must not have org_slug in resolver kwargs"
+        )

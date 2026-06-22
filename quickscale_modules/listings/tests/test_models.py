@@ -154,18 +154,29 @@ class TestAbstractListingViaConcreteModel:
         )
         assert listing.featured_image_alt == ""
 
-    def test_slug_no_longer_globally_unique(self, listing_factory):
-        """Test slugs are no longer globally unique (per-org uniqueness on Listing).
+    def test_slug_no_longer_globally_unique(self, listing_factory, org):
+        """Test slugs are unique per-org but allowed across different orgs.
 
-        Phase F11.12b switches from global slug uniqueness to a per-org
-        ``UniqueConstraint`` on the ``Listing`` model.  ``AbstractListing``
-        subclasses (like ``ConcreteListing``) only have the field-level
-        definition without the concrete constraint, so duplicate slugs are
-        permitted at this level.
+        Phase F11.12b switches from global slug uniqueness to a combined
+        ``(slug, organization)`` constraint plus a partial ``(slug) WHERE
+        organization IS NULL`` constraint (CR-003).  Duplicate slugs are
+        permitted across different organizations but not within the same
+        org or for org=NULL rows.
         """
-        listing1 = listing_factory(title="Same Title")
-        listing2 = ConcreteListing.objects.create(title="Same Title")
+        listing1 = listing_factory(
+            title="Same Title",
+            organization=org,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        other_org = Organization.objects.create(name="Other Org", slug="other-org")
+        listing2 = ConcreteListing.objects.create(
+            title="Same Title",
+            organization=other_org,
+        )
         assert listing1.slug == listing2.slug == "same-title"
+        assert listing1.organization == org
+        assert listing2.organization == other_org
 
 
 @pytest.mark.django_db
@@ -198,3 +209,47 @@ class TestListingModel:
         )
         listing.refresh_from_db()
         assert listing.description == long_text
+
+    @pytest.mark.django_db
+    def test_multiple_abstract_subclasses_can_coexist(self, db):
+        """CR-001: Multiple AbstractListing subclasses must not collide.
+
+        Each subclass uses a per-subclass ``related_name``
+        (``%(class)s_listings``) so the reverse relation from Organization
+        is unique per model.
+        """
+        from tests.models import AlternateListing
+
+        ConcreteListing.objects.create(title="Concrete One", slug="concrete-one")
+        AlternateListing.objects.create(title="Alternate One", slug="alt-one")
+
+        assert ConcreteListing.objects.count() == 1, "ConcreteListing should have 1 row"
+        assert AlternateListing.objects.count() == 1, (
+            "AlternateListing should have 1 row"
+        )
+        assert (
+            ConcreteListing.objects.first() is not None
+            and AlternateListing.objects.first() is not None
+        ), "Both subclass instances should exist"
+
+    @pytest.mark.django_db
+    def test_org_null_slug_uniqueness_enforced(self, db):
+        """CR-003: Flat-route (org=NULL) slug uniqueness is enforced.
+
+        Creating two listings with the same slug and ``organization=None``
+        must raise ``IntegrityError``, preserving unambiguous flat-route
+        ``/listings/<slug>/`` detail lookups.
+        """
+        from django.db import IntegrityError
+
+        ConcreteListing.objects.create(
+            title="Flat Listing",
+            slug="flat-slug",
+            organization=None,
+        )
+        with pytest.raises(IntegrityError):
+            ConcreteListing.objects.create(
+                title="Duplicate Flat",
+                slug="flat-slug",
+                organization=None,
+            )
