@@ -22,7 +22,14 @@ class AbstractListing(models.Model):
         "quickscale_modules_orgs.Organization",
         on_delete=models.CASCADE,
         null=True,
-        related_name="listings",
+        related_name="%(class)s_listings",
+        help_text=(
+            "Per-subclass related_name avoids collisions when multiple "
+            "concrete models inherit AbstractListing. Subclasses must add a "
+            "UniqueConstraint on (slug, organization) for per-org uniqueness "
+            "and a partial UniqueConstraint on (slug) WHERE organization IS NULL "
+            "for flat-route slug safety."
+        ),
     )
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, blank=True)
@@ -144,5 +151,10 @@ class Listing(AbstractListing):
             models.UniqueConstraint(
                 fields=["slug", "organization"],
                 name="listings_listing_slug_organization_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["slug"],
+                name="listings_listing_slug_org_null_unique",
+                condition=models.Q(organization__isnull=True),
             ),
         ]

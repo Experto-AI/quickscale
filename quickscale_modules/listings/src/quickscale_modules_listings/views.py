@@ -36,10 +36,14 @@ DEFAULT_LISTINGS_PER_PAGE = 12
 def _is_org_scoped_route(request: HttpRequest) -> bool:
     """Return whether the request targets an org-scoped SaaS route.
 
-    The listings module is included at a prefix (e.g. ``listings/``), so
-    org-scoped paths are detected via ``/listings/orgs/`` rather than the
-    root-level ``/orgs/`` prefix used by modules included at root.
+    Detection uses resolver match kwargs (presence of ``org_slug``) instead
+    of raw path substring matching.  This avoids false positives when a flat
+    listing slug happens to contain ``orgs``.
     """
+    resolver_match = getattr(request, "resolver_match", None)
+    if resolver_match is not None:
+        return "org_slug" in resolver_match.kwargs
+    # Fallback for tests or contexts without middleware-driven resolution.
     path = getattr(request, "path", "") or ""
     return "/orgs/" in path
 
@@ -186,6 +190,8 @@ def create_published_listing_from_payload(
     slug_check = Listing.objects.filter
     if organization is not None:
         slug_check = slug_check(organization=organization).filter
+    else:
+        slug_check = slug_check(organization__isnull=True).filter
     if slug_check(slug=generated_slug).exists():
         raise ListingPublishConflictError("Listing already exists for generated slug")
 
@@ -203,6 +209,8 @@ def create_published_listing_from_payload(
         conflict_check = Listing.objects.filter
         if organization is not None:
             conflict_check = conflict_check(organization=organization).filter
+        else:
+            conflict_check = conflict_check(organization__isnull=True).filter
         if conflict_check(slug=generated_slug).exists():
             raise ListingPublishConflictError(
                 "Listing already exists for generated slug"
@@ -240,7 +248,18 @@ def publish_listing_api(request: HttpRequest) -> JsonResponse:
     if not isinstance(payload, dict):
         return JsonResponse({"error": "JSON object payload expected"}, status=400)
 
-    organization = _resolve_active_org_optional(request)
+    # Org-scoped routes must fail closed when org context is missing
+    # (CR-002: security boundary).  Flat routes keep optional org context.
+    try:
+        if _is_org_scoped_route(request):
+            organization = _resolve_active_org(request)
+        else:
+            organization = None
+    except PermissionDenied:
+        return JsonResponse(
+            {"error": "Organization context is required for this route."},
+            status=403,
+        )
 
     try:
         listing = create_published_listing_from_payload(
