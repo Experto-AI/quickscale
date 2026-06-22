@@ -662,6 +662,76 @@ This section records the current repository slice, not the eventual end-state de
 
 ---
 
+## F11.13b — Structural Isolation Rollout: Adoption Path for Existing Projects
+
+Already-generated QuickScale projects that add the organizations module (or upgrade to a release that includes structural multi-tenant isolation) must adopt the dual-manager queryset contract to maintain correct tenant scoping across all code paths.
+
+### Dual-Manager Contract Summary
+
+Every tenant-scoped model (one that inherits from `TenantModel` or carries an `organization` FK) ships two managers:
+
+| Manager | Class | Purpose | Use in |
+|---------|-------|---------|--------|
+| `objects` | `TenantScopedManager` | Default manager; returns a typed `QuerySet` with an explicit `.for_org(org_id)` method. Calling `.all()` without `.for_org()` returns all rows but signals the caller should review whether scoping is needed. | Views, services, tenant-facing code paths, manual shell work |
+| `all_objects` | `OperatorManager` | Operator escape hatch; returns an unfiltered `QuerySet` for cross-tenant visibility. | Admin `get_queryset()`, management commands, operator/superuser paths |
+
+`.for_org(None)` is fail-closed — it returns an empty queryset rather than exposing all rows.
+
+### Tenant-Scoped: `.for_org()`
+
+Use `Model.objects.for_org(organization_id)` in:
+
+- **Views and services** — every org-scoped view or service function resolves the org and chains `.for_org()`:
+  ```python
+  def blog_index(request, org_slug):
+      org = get_object_or_404(Organization, slug=org_slug)
+      posts = Post.objects.for_org(org.pk).filter(published=True)
+      ...
+  ```
+- **Manual shell / one-off queries** — always scope to an org when operating on behalf of a tenant:
+  ```python
+  from quickscale_modules_orgs.models import Organization
+  org = Organization.objects.get(slug="acme-corp")
+  posts = Post.objects.for_org(org.pk)
+  ```
+
+### Operator Path: `all_objects`
+
+Use `Model.all_objects.all()` in:
+
+- **Admin `get_queryset()`** — every `ModelAdmin` for a tenant-scoped model overrides `get_queryset()` to return `self.model.all_objects.all()`. This ensures the Django `/admin/` operator surface retains cross-tenant visibility. An `organization` column and list filter should be added so the operator can focus on a specific client when needed.
+- **Management commands** — commands that iterate across org boundaries must use `all_objects` to include rows without an organization or rows that span multiple tenants:
+  ```python
+  # forms_anonymize_submissions.py
+  for form in Form.all_objects.all():
+      ...
+  ```
+- **Operator/superuser shell work** — any ad-hoc query that legitimately needs cross-tenant visibility.
+
+### Adoption Steps
+
+For a generated project that already exists and is adding structural isolation:
+
+1. **Add `quickscale_modules_orgs` to `INSTALLED_APPS`** and run its migrations.
+2. **Add `TenantMiddleware`** to the middleware stack and configure `QUICKSCALE_MODE` (see [Deployment Mode](#deployment-mode-solo-vs-saas-organizations) above).
+3. **Wire URL routing** — load org-scoped or solo URL patterns conditionally based on `QUICKSCALE_MODE`.
+4. **Add the dual-manager contract** to every tenant-scoped model that does not already have it — a `TenantScopedManager` as `objects` and an `OperatorManager` as `all_objects`. Each module's `managers.py` defines the concrete queryset and manager classes for that module's models.
+5. **Backfill `organization_id`** on existing rows — the FK is required for new rows; existing rows may need a data migration to assign an org.
+6. **Switch views and services** — replace bare `.all()` or `.filter(...)` calls with `.for_org(org.pk)`.
+7. **Switch admin classes** — override `get_queryset()` to use `self.model.all_objects.all()`; add an `organization` column and list filter.
+8. **Switch management commands** — any command that iterates tenant-scoped models across orgs must use `all_objects`.
+
+### Async Jobs
+
+QuickScale does not currently ship async job infrastructure for generated projects. When async jobs (Celery, Django Q, or similar) are added later, they must follow the same rule:
+
+- **Tenant-scoped jobs** — use `Model.objects.for_org(org_id)` when the job operates on behalf of a specific org.
+- **Admin/operator jobs** — use `Model.all_objects.all()` when the job crosses org boundaries (e.g., a nightly maintenance task that touches every tenant's data).
+
+No async job path should call `.all()` on a tenant-scoped manager without an explicit `.for_org()` or `all_objects` designation.
+
+---
+
 ## References
 
 - [`docs/legacy/tenancy-isolation-strategies.md`](../legacy/tenancy-isolation-strategies.md) — full RLS code examples, cost matrix, and real-world company comparisons

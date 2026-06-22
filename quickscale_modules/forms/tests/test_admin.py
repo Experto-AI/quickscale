@@ -1,12 +1,17 @@
 """Tests for Forms module Django admin configuration"""
 
 import csv
+from unittest.mock import patch
+
 import pytest
 from django.contrib import admin
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.db.models import Count
 from django.test import RequestFactory
 from django.urls import reverse
 
+from quickscale_modules_forms.admin import FormAdmin
 from quickscale_modules_forms.models import (
     Form,
     FormField,
@@ -173,3 +178,57 @@ class TestAdminCsvExportCoverage:
         header = rows[0]
         assert header[:5] == ["id", "submitted_at", "status", "is_spam", "ip_address"]
         assert "full_name" in header
+
+
+@pytest.mark.django_db
+class TestFormAdminOperatorQueryset:
+    """Phase F11.12a: verify FormAdmin uses all_objects for cross-tenant visibility."""
+
+    def test_form_admin_uses_operator_queryset(self):
+        """FormAdmin.get_queryset uses self.model.all_objects."""
+        site = AdminSite()
+        admin_instance = FormAdmin(Form, site)
+        rf = RequestFactory()
+        request = rf.get("/admin/")
+        request.user = User.objects.create_superuser(
+            "op-admin", "op@example.com", "adminpass"
+        )
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == Form
+        # Verify the queryset originates from all_objects (no org filter applied).
+        assert str(qs.query) == str(
+            Form.all_objects.all()
+            .annotate(_submission_count=Count("submissions"))
+            .query
+        )
+
+    def test_form_admin_queryset_returns_cross_tenant_forms(self, org_a, org_b):
+        """Operator admin queryset returns forms from all organizations."""
+        Form.objects.create(title="Form A", slug="form-a", organization=org_a)
+        Form.objects.create(title="Form B", slug="form-b", organization=org_b)
+
+        site = AdminSite()
+        admin_instance = FormAdmin(Form, site)
+        rf = RequestFactory()
+        request = rf.get("/admin/")
+        request.user = User.objects.create_superuser(
+            "cross-admin", "cross@example.com", "adminpass"
+        )
+        qs = admin_instance.get_queryset(request)
+        slugs = list(qs.values_list("slug", flat=True))
+        assert "form-a" in slugs
+        assert "form-b" in slugs
+
+    def test_form_admin_get_queryset_calls_all_objects(self):
+        """FormAdmin.get_queryset actually calls Form.all_objects.all()."""
+        with patch.object(Form, "all_objects") as mock_mgr:
+            mock_mgr.all.return_value = Form.objects.none()
+            site = AdminSite()
+            admin_instance = FormAdmin(Form, site)
+            rf = RequestFactory()
+            request = rf.get("/admin/")
+            request.user = User.objects.create_superuser(
+                "op-spy", "op-spy@example.com", "adminpass"
+            )
+            admin_instance.get_queryset(request)
+            mock_mgr.all.assert_called_once()

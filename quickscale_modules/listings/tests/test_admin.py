@@ -1,5 +1,7 @@
 """Tests for admin configuration"""
 
+from unittest.mock import patch
+
 import pytest
 from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
@@ -8,7 +10,8 @@ from django.db import models
 from django.test import RequestFactory
 from markdownx.widgets import AdminMarkdownxWidget
 
-from quickscale_modules_listings.admin import AbstractListingAdmin
+from quickscale_modules_listings.admin import AbstractListingAdmin, ListingAdmin
+from quickscale_modules_listings.models import Listing
 from tests.models import ConcreteListing
 
 User = get_user_model()
@@ -33,6 +36,7 @@ class TestAbstractListingAdmin:
             "title",
             "price",
             "location",
+            "organization",
             "status",
             "published_date",
             "created_at",
@@ -41,7 +45,7 @@ class TestAbstractListingAdmin:
 
     def test_list_filter_fields(self):
         """Test admin list_filter contains expected fields"""
-        expected = ["status", "created_at", "published_date"]
+        expected = ["organization", "status", "created_at", "published_date"]
         assert AbstractListingAdmin.list_filter == expected
 
     def test_search_fields(self):
@@ -151,3 +155,90 @@ class TestConcreteListingAdmin:
         admin_instance = test_site._registry[ConcreteListing]
 
         assert admin_instance.list_display == ["title", "status"]
+
+
+@pytest.mark.django_db
+class TestListingAdminOperatorPath:
+    """Phase F11.12b: verify listing admin surfaces use all_objects for cross-tenant visibility."""
+
+    def test_abstract_listing_admin_uses_operator_or_default_queryset(self):
+        """AbstractListingAdmin.get_queryset uses all_objects when available, falls back to _default_manager."""
+        test_site = AdminSite()
+        admin_instance = AbstractListingAdmin(ConcreteListing, test_site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="listing-op", email="listing-op@example.com", password="pass123"
+        )
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == ConcreteListing
+        # ConcreteListing does not define all_objects (abstract base model),
+        # so the admin falls back to _default_manager.
+        assert str(qs.query) == str(ConcreteListing._default_manager.all().query)
+
+    def test_listing_admin_registered_uses_operator_queryset(self):
+        """ListingAdmin (concrete) inherits operator queryset from AbstractListingAdmin."""
+        test_site = AdminSite()
+        admin_instance = ListingAdmin(Listing, test_site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="listing-admin-op",
+            email="listing-admin-op@example.com",
+            password="pass123",
+        )
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == Listing
+        assert str(qs.query) == str(Listing.all_objects.all().query)
+
+    def test_admin_queryset_returns_cross_tenant_listings(
+        self, org_a, org_b, listing_factory
+    ):
+        """Operator admin queryset returns listings from all organizations."""
+        listing_factory(title="Listing A", organization=org_a)
+        listing_factory(title="Listing B", organization=org_b)
+
+        test_site = AdminSite()
+        admin_instance = AbstractListingAdmin(ConcreteListing, test_site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="cross-listing",
+            email="cross-listing@example.com",
+            password="pass123",
+        )
+        qs = admin_instance.get_queryset(request)
+        titles = list(qs.values_list("title", flat=True))
+        assert "Listing A" in titles
+        assert "Listing B" in titles
+
+    # ------------------------------------------------------------------
+    # Spy-based seam verification: prove all_objects is actually called
+    # ------------------------------------------------------------------
+
+    def test_listing_admin_get_queryset_calls_all_objects(self):
+        """ListingAdmin.get_queryset actually calls Listing.all_objects.all()."""
+        with patch.object(Listing, "all_objects") as mock_mgr:
+            mock_mgr.all.return_value = Listing.objects.none()
+            test_site = AdminSite()
+            admin_instance = ListingAdmin(Listing, test_site)
+            request = RequestFactory().get("/admin/")
+            request.user = User.objects.create_superuser(
+                username="listing-spy",
+                email="listing-spy@example.com",
+                password="pass123",
+            )
+            admin_instance.get_queryset(request)
+            mock_mgr.all.assert_called_once()
+
+    def test_abstract_listing_admin_calls_all_objects_when_present(self):
+        """AbstractListingAdmin.get_queryset calls all_objects when model has it."""
+        with patch.object(Listing, "all_objects") as mock_mgr:
+            mock_mgr.all.return_value = Listing.objects.none()
+            test_site = AdminSite()
+            admin_instance = AbstractListingAdmin(Listing, test_site)
+            request = RequestFactory().get("/admin/")
+            request.user = User.objects.create_superuser(
+                username="abstract-spy",
+                email="abstract-spy@example.com",
+                password="pass123",
+            )
+            admin_instance.get_queryset(request)
+            mock_mgr.all.assert_called_once()
