@@ -4,6 +4,8 @@ Steps:
 1. Add nullable ``organization`` FK to ``quickscale_modules_orgs.Organization``.
 2. Remove global ``unique=True`` from ``slug`` (moved to per-org constraint).
 3. Add ``UniqueConstraint`` on ``(slug, organization)`` for per-org slug uniqueness.
+4. Add partial ``UniqueConstraint`` on ``(slug) WHERE organization IS NULL``
+   to preserve flat-route slug uniqueness (CR-003).
 """
 
 import django.db.models.deletion
@@ -25,7 +27,7 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
-                related_name="listings",
+                related_name="%(class)s_listings",
                 to="quickscale_modules_orgs.Organization",
             ),
         ),
@@ -39,6 +41,14 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 fields=["slug", "organization"],
                 name="listings_listing_slug_organization_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="listing",
+            constraint=models.UniqueConstraint(
+                fields=["slug"],
+                name="listings_listing_slug_org_null_unique",
+                condition=models.Q(organization__isnull=True),
             ),
         ),
     ]
