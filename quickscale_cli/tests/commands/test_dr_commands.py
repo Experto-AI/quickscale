@@ -1065,151 +1065,14 @@ def test_build_context_fetches_source_and_target_runtime_variables_for_railway_r
     ]
 
 
-def test_manage_overrides_select_expected_settings_modules() -> None:
-    context = _context()
-
-    local_overrides = dr_commands._build_manage_overrides(
-        context.identity,
-        "local",
-        runtime_variables={"DEBUG": "1"},
-    )
-    source_overrides = dr_commands._source_manage_overrides(context)
-    target_overrides = dr_commands._target_manage_overrides(
-        context,
-        allow_restore=True,
-    )
-
-    assert local_overrides == {
-        "DEBUG": "1",
-        "DJANGO_SETTINGS_MODULE": "myapp.settings.local",
-        "QUICKSCALE_ENVIRONMENT": "local",
-    }
-    assert source_overrides["DJANGO_SETTINGS_MODULE"] == "myapp.settings.local"
-    assert target_overrides["DJANGO_SETTINGS_MODULE"] == "myapp.settings.production"
-    assert target_overrides["QUICKSCALE_BACKUPS_ALLOW_RESTORE"] == "true"
-
-
-def test_run_backend_container_command_handles_success_and_error_paths() -> None:
-    with (
-        patch(
-            "quickscale_cli.commands.dr_commands.get_backend_container_name",
-            return_value="backend",
-        ),
-        patch(
-            "quickscale_cli.commands.dr_commands.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="ok", stderr=""),
-        ) as mocked_run,
-    ):
-        output = dr_commands._run_backend_container_command(
-            ["python", "manage.py", "check"],
-            env_overrides={"B": "2", "A": "1"},
-        )
-
-    assert output == "ok"
-    mocked_run.assert_called_once_with(
-        [
-            "docker",
-            "exec",
-            "-e",
-            "A=1",
-            "-e",
-            "B=2",
-            "backend",
-            "python",
-            "manage.py",
-            "check",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    with (
-        patch(
-            "quickscale_cli.commands.dr_commands.get_backend_container_name",
-            return_value="backend",
-        ),
-        patch(
-            "quickscale_cli.commands.dr_commands.subprocess.run",
-            return_value=SimpleNamespace(
-                returncode=1,
-                stdout="",
-                stderr="Error response from daemon: No such container: backend",
-            ),
-        ),
-    ):
-        with pytest.raises(
-            click.ClickException, match="Backend container is not running"
-        ):
-            dr_commands._run_backend_container_command(["env"])
-
-    with (
-        patch(
-            "quickscale_cli.commands.dr_commands.get_backend_container_name",
-            return_value="backend",
-        ),
-        patch(
-            "quickscale_cli.commands.dr_commands.subprocess.run",
-            return_value=SimpleNamespace(
-                returncode=1,
-                stdout="",
-                stderr="permission denied",
-            ),
-        ),
-    ):
-        with pytest.raises(
-            click.ClickException,
-            match="Backend container command failed: python manage.py check :: permission denied",
-        ):
-            dr_commands._run_backend_container_command(["python", "manage.py", "check"])
-
-
-def test_run_manage_json_validates_json_payload_shape() -> None:
-    with patch(
-        "quickscale_cli.commands.dr_commands._run_backend_container_command",
-        return_value='{"status": "ready"}',
-    ):
-        assert dr_commands._run_manage_json(
-            ["backups_create", "--json"],
-            env_overrides={},
-        ) == {"status": "ready"}
-
-    with patch(
-        "quickscale_cli.commands.dr_commands._run_backend_container_command",
-        return_value="not-json",
-    ):
-        with pytest.raises(
-            click.ClickException,
-            match="Expected JSON output from manage.py backups_create --json",
-        ):
-            dr_commands._run_manage_json(["backups_create", "--json"], env_overrides={})
-
-    with patch(
-        "quickscale_cli.commands.dr_commands._run_backend_container_command",
-        return_value='["ready"]',
-    ):
-        with pytest.raises(
-            click.ClickException,
-            match="Expected JSON object output from manage.py backups_create --json",
-        ):
-            dr_commands._run_manage_json(["backups_create", "--json"], env_overrides={})
-
-
 def test_manage_wrappers_forward_expected_arguments() -> None:
     context = _context()
 
-    with (
-        patch.object(
-            dr_commands,
-            "_source_manage_overrides",
-            return_value={"SOURCE": "1"},
-        ),
-        patch.object(
-            dr_commands,
-            "_run_manage_json",
-            return_value={"status": "ready"},
-        ) as mocked_manage,
-    ):
+    with patch.object(
+        dr_commands,
+        "_call_adapter",
+        return_value={"status": "ready"},
+    ) as mocked_adapter:
         snapshot_report = dr_commands._fetch_snapshot_report(
             context,
             snapshot_id="snap-123",
@@ -1237,63 +1100,39 @@ def test_manage_wrappers_forward_expected_arguments() -> None:
     assert capture_report == {"status": "ready"}
     assert verification_report == {"status": "ready"}
     assert pin_report == {"status": "ready"}
-    assert mocked_manage.call_args_list[0] == call(
-        [
-            "backups_report",
-            "snap-123",
-            "--json",
-            "--sidecar-payload",
+    assert mocked_adapter.call_args_list[0] == call(
+        "fetch_snapshot_report",
+        snapshot_id="snap-123",
+        sidecar_payloads=[
             "promotion-verification.json",
-            "--sidecar-payload",
             "release-metadata.json",
         ],
-        env_overrides={"SOURCE": "1"},
     )
-    assert mocked_manage.call_args_list[1] == call(
-        ["backups_create", "--json"],
-        env_overrides={"SOURCE": "1"},
+    assert mocked_adapter.call_args_list[1] == call(
+        "capture_snapshot",
+        trigger="manual",
+        resume_snapshot_id=None,
     )
-    assert mocked_manage.call_args_list[2] == call(
-        [
-            "backups_record_verification",
-            "snap-123",
-            "--route",
-            "local-to-railway-develop",
-            "--phase",
-            "plan",
-            "--status",
-            "ready",
-            "--payload-json",
-            '{"database": {"status": "ready"}}',
-            "--json",
-        ],
-        env_overrides={"SOURCE": "1"},
+    assert mocked_adapter.call_args_list[2] == call(
+        "record_verification",
+        snapshot_id="snap-123",
+        route="local-to-railway-develop",
+        phase="plan",
+        status="ready",
+        payload={"database": {"status": "ready"}},
     )
-    assert mocked_manage.call_args_list[3] == call(
-        [
-            "backups_pin",
-            "snap-123",
-            "--hours",
-            "6",
-            "--reason",
-            "release window",
-            "--json",
-        ],
-        env_overrides={"SOURCE": "1"},
+    assert mocked_adapter.call_args_list[3] == call(
+        "set_rollback_pin",
+        snapshot_id="snap-123",
+        hours=6,
+        reason="release window",
     )
 
-    with (
-        patch.object(
-            dr_commands,
-            "_source_manage_overrides",
-            return_value={"DEBUG": "false"},
-        ),
-        patch.object(
-            dr_commands,
-            "_run_manage_json",
-            return_value={"status": "ready"},
-        ) as mocked_manage,
-    ):
+    with patch.object(
+        dr_commands,
+        "_call_adapter",
+        return_value={"status": "ready"},
+    ) as mocked_adapter:
         result = dr_commands._run_media_sync(
             replace(context, target_runtime_variables={"MEDIA_ROOT": "/tmp/media"}),
             snapshot_id="snap-123",
@@ -1301,15 +1140,13 @@ def test_manage_wrappers_forward_expected_arguments() -> None:
         )
 
     assert result == {"status": "ready"}
-    assert dr_commands._prefix_target_runtime_variables({"DEBUG": "true"}) == {
-        "QUICKSCALE_DR_TARGET_DEBUG": "true"
-    }
-    mocked_manage.assert_called_once_with(
-        ["backups_sync_media", "snap-123", "--json", "--dry-run"],
-        env_overrides={
-            "DEBUG": "false",
-            "QUICKSCALE_DR_TARGET_MEDIA_ROOT": "/tmp/media",
-            "QUICKSCALE_DR_TARGET_ROUTE_KIND": "railway",
+    mocked_adapter.assert_called_once_with(
+        "sync_media",
+        snapshot_id="snap-123",
+        dry_run=True,
+        target_runtime_settings={
+            "MEDIA_ROOT": "/tmp/media",
+            "ROUTE_KIND": "railway",
         },
     )
 
@@ -1318,31 +1155,29 @@ def test_build_database_plan_validates_restore_metadata_and_returns_restore_payl
     None
 ):
     context = _context()
+    snapshot_report = {
+        "snapshot_id": "snap-123",
+        "confirmation_value": "db.dump",
+        "authoritative_dump": {
+            "local_path": "/tmp/db.dump",
+            "restore_scope": "local_only",
+            "restore_scope_label": "Local only",
+        },
+    }
 
-    with (
-        patch.object(
-            dr_commands,
-            "_target_manage_overrides",
-            return_value={"DJANGO_SETTINGS_MODULE": "myapp.settings.production"},
-        ) as mocked_overrides,
-        patch.object(
-            dr_commands,
-            "_run_backend_container_command",
-            return_value="Restore validation completed successfully (dry run).\n",
-        ) as mocked_backend,
-    ):
-        plan = dr_commands._build_database_plan(
-            context,
-            {
-                "snapshot_id": "snap-123",
-                "confirmation_value": "db.dump",
-                "authoritative_dump": {
-                    "local_path": "/tmp/db.dump",
-                    "restore_scope": "local_only",
-                    "restore_scope_label": "Local only",
-                },
-            },
-        )
+    with patch.object(
+        dr_commands,
+        "_call_adapter",
+        return_value={
+            "status": "ready",
+            "message": "Restore validation completed successfully (dry run).",
+            "restore_file": "/tmp/db.dump",
+            "confirmation_value": "db.dump",
+            "restore_scope": "local_only",
+            "restore_scope_label": "Local only",
+        },
+    ) as mocked_adapter:
+        plan = dr_commands._build_database_plan(context, snapshot_report)
 
     assert plan == {
         "status": "ready",
@@ -1352,42 +1187,48 @@ def test_build_database_plan_validates_restore_metadata_and_returns_restore_payl
         "restore_scope": "local_only",
         "restore_scope_label": "Local only",
     }
-    mocked_overrides.assert_called_once_with(context)
-    mocked_backend.assert_called_once_with(
-        [
-            "python",
-            "manage.py",
-            "backups_restore",
-            "--file",
-            "/tmp/db.dump",
-            "--confirm",
-            "db.dump",
-            "--dry-run",
-        ],
-        env_overrides={"DJANGO_SETTINGS_MODULE": "myapp.settings.production"},
+    mocked_adapter.assert_called_once_with(
+        "build_database_plan",
+        snapshot_report=snapshot_report,
     )
 
-    with pytest.raises(
-        click.ClickException,
-        match="missing its authoritative restore file metadata",
+    with patch.object(
+        dr_commands,
+        "_call_adapter",
+        side_effect=click.ClickException(
+            "Snapshot 'snap-123' is missing its authoritative restore file metadata."
+        ),
     ):
-        dr_commands._build_database_plan(
-            context,
-            {
-                "snapshot_id": "snap-123",
-                "confirmation_value": "",
-                "authoritative_dump": {},
-            },
-        )
+        with pytest.raises(
+            click.ClickException,
+            match="missing its authoritative restore file metadata",
+        ):
+            dr_commands._build_database_plan(
+                context,
+                {
+                    "snapshot_id": "snap-123",
+                    "confirmation_value": "",
+                    "authoritative_dump": {},
+                },
+            )
 
 
 def test_load_source_live_variables_and_classify_env_var_cover_expected_cases() -> None:
     local_context = _context()
 
-    with patch.object(
-        dr_commands,
-        "_run_backend_container_command",
-        return_value="DEBUG=true\nINVALID\nBLOG_THEME=midnight\nDATABASE_URL=postgres://db\n",
+    with (
+        patch(
+            "quickscale_cli.commands.dr_commands.get_backend_container_name",
+            return_value="backend",
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands.subprocess.run",
+            return_value=SimpleNamespace(
+                returncode=0,
+                stdout="DEBUG=true\nINVALID\nBLOG_THEME=midnight\nDATABASE_URL=postgres://db\n",
+                stderr="",
+            ),
+        ),
     ):
         assert dr_commands._load_source_live_variables(local_context) == {
             "DEBUG": "true",
@@ -1644,34 +1485,27 @@ def test_execute_database_restore_runs_production_flow_and_missing_metadata_rais
         _context(route="railway-develop-to-railway-production"),
         target_service="myapp-production",
     )
+    snapshot_report = {
+        "snapshot_id": "snap-123",
+        "confirmation_value": "db.dump",
+        "authoritative_dump": {"local_path": "/tmp/db.dump"},
+    }
 
-    with (
-        patch.object(
-            dr_commands,
-            "_target_manage_overrides",
-            side_effect=[
-                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
-                {"QUICKSCALE_ENVIRONMENT": "railway-production"},
-                {"QUICKSCALE_ENVIRONMENT": "railway-production"},
-            ],
-        ) as mocked_overrides,
-        patch.object(
-            dr_commands,
-            "_run_backend_container_command",
-            side_effect=[
-                "restore complete\n",
-                "migrate complete\n",
-                "check complete\n",
-            ],
-        ) as mocked_backend,
-    ):
+    with patch.object(
+        dr_commands,
+        "_call_adapter",
+        return_value={
+            "status": "completed",
+            "restore_message": "restore complete",
+            "migrate_message": "migrate complete",
+            "check_message": "check complete",
+            "confirmation_value": "db.dump",
+            "restore_file": "/tmp/db.dump",
+        },
+    ) as mocked_adapter:
         restore_result = dr_commands._execute_database_restore(
             production_context,
-            {
-                "snapshot_id": "snap-123",
-                "confirmation_value": "db.dump",
-                "authoritative_dump": {"local_path": "/tmp/db.dump"},
-            },
+            snapshot_report,
         )
 
     assert restore_result == {
@@ -1682,37 +1516,31 @@ def test_execute_database_restore_runs_production_flow_and_missing_metadata_rais
         "confirmation_value": "db.dump",
         "restore_file": "/tmp/db.dump",
     }
-    assert mocked_overrides.call_args_list == [
-        call(production_context, allow_restore=True),
-        call(production_context),
-        call(production_context),
-    ]
-    assert mocked_backend.call_args_list[0] == call(
-        [
-            "python",
-            "manage.py",
-            "backups_restore",
-            "--file",
-            "/tmp/db.dump",
-            "--confirm",
-            "db.dump",
-            "--allow-production",
-        ],
-        env_overrides={"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+    mocked_adapter.assert_called_once_with(
+        "execute_database_restore",
+        snapshot_report=snapshot_report,
+        allow_production=True,
     )
 
-    with pytest.raises(
-        click.ClickException,
-        match="missing its authoritative restore file metadata",
+    with patch.object(
+        dr_commands,
+        "_call_adapter",
+        side_effect=click.ClickException(
+            "Snapshot 'snap-123' is missing its authoritative restore file metadata."
+        ),
     ):
-        dr_commands._execute_database_restore(
-            production_context,
-            {
-                "snapshot_id": "snap-123",
-                "confirmation_value": "",
-                "authoritative_dump": {},
-            },
-        )
+        with pytest.raises(
+            click.ClickException,
+            match="missing its authoritative restore file metadata",
+        ):
+            dr_commands._execute_database_restore(
+                production_context,
+                {
+                    "snapshot_id": "snap-123",
+                    "confirmation_value": "",
+                    "authoritative_dump": {},
+                },
+            )
 
 
 def test_build_route_report_and_echo_helpers_render_optional_fields(

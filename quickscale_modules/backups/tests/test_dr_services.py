@@ -162,6 +162,55 @@ def test_record_backup_snapshot_verification_reports_incomplete_full_backup_cont
     assert report["full_backup"]["status"] == "incomplete"
 
 
+def test_sync_backup_snapshot_media_rejects_railway_target_via_explicit_settings(
+    django_user_model: type[Any],
+    backup_policy: BackupPolicy,
+    local_backup_settings: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Regression test for CR-001: adapter path must preserve Railway-target guard.
+
+    When ``target_runtime_settings`` is passed explicitly (adapter path)
+    with ``ROUTE_KIND=railway`` but a local target backend, the service
+    must still fail closed.
+    """
+    backup_policy.local_directory = str(local_backup_settings)
+    backup_policy.save(update_fields=["local_directory", "updated_at"])
+
+    source_media_root = tmp_path / "source-media"
+    source_media_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "MEDIA_ROOT", str(source_media_root))
+    monkeypatch.setenv("QUICKSCALE_STORAGE_BACKEND", "local")
+
+    superuser = django_user_model.objects.create_superuser(
+        username="backup-media-adapter",
+        email="media-adapter@example.com",
+        password="password123",
+    )
+    artifact = create_backup(initiated_by=superuser, trigger="manual")
+    snapshot = _get_authoritative_snapshot(artifact)
+
+    target_media_root = tmp_path / "target-media-adapter"
+    target_media_root.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(
+        BackupConfigurationError,
+        match=(
+            "Railway-target media sync requires an s3-compatible target media backend"
+        ),
+    ):
+        sync_backup_snapshot_media(
+            snapshot.snapshot_id,
+            dry_run=True,
+            target_runtime_settings={
+                "ROUTE_KIND": "railway",
+                "QUICKSCALE_STORAGE_BACKEND": "local",
+                "MEDIA_ROOT": str(target_media_root),
+            },
+        )
+
+
 def test_sync_backup_snapshot_media_supports_local_to_local_dry_run_and_execute(
     django_user_model: type[Any],
     backup_policy: BackupPolicy,

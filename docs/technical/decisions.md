@@ -936,20 +936,22 @@ The authoritative current CLI command surface now lives in [implementation_contr
 #### Disaster Recovery Engine Boundary Contract (F5 / M10)
 
 **Status:** Target boundary for the M10 DR engine split. Phases F5.2a (snapshot/
-archive primitives) and F5.2b (restore/orchestration flow) are shipped. The
-hidden-protocol replacement (F5.3) and migration documentation (F5.4) remain
-as planned work. See "Current state" below for the post-F5.2b code layout.
-This entry originally defined the boundary only (roadmap phase F5.1); the
-extraction phases F5.2a/F5.2b now ship the core/module split described here.
+archive primitives), F5.2b (restore/orchestration flow), and F5.3 (hidden-
+protocol replacement with explicit typed adapter) are shipped. Migration
+documentation (F5.4) remains as planned work. See "Current state" below for
+the post-F5.3 code layout. This entry originally defined the boundary only
+(roadmap phase F5.1); the extraction phases F5.2a/F5.2b/F5.3 now ship the
+core/module split and explicit adapter described here.
 
 **Why (Finding 5):** The embeddable `backups` module originally carried
 platform-level backup/restore orchestration and communicated with the CLI through
 a hidden management-command + environment-variable protocol. The engine must move
 into centrally owned code, leaving only thin Django-facing surfaces in the
-embeddable module. F5.2a/F5.2b have shipped the core extraction; the hidden
-protocol (F5.3) and migration documentation (F5.4) remain.
+embeddable module. F5.2a/F5.2b shipped the core extraction; F5.3 replaced the
+hidden protocol with an explicit typed adapter. Migration documentation (F5.4)
+remains.
 
-**Current state (post-F5.2b):**
+**Current state (post-F5.3):**
 - **Centrally owned DR engine (`quickscale_core.dr_engine`):**
   - `primitives` — snapshot creation, archive packaging, database custom-dump
     capture.
@@ -957,22 +959,37 @@ protocol (F5.3) and migration documentation (F5.4) remain.
     destructive-operation gating, orchestration flow.
   - `verification` — verification-record assembly, rollback-pin lifecycle and
     pin-field logic.
+  - `adapter` — explicit typed adapter boundary (`capture_snapshot`,
+    `fetch_snapshot_report`, `record_verification`,
+    `set_rollback_pin`, `build_database_plan`, `execute_database_restore`,
+    `sync_media`) that the CLI calls through a single bridge management
+    command, replacing the hidden env-var protocol.
 - **Embeddable `backups` module (`quickscale_modules_backups.services`):**
   retains Django-backed orchestration surfaces including snapshot capture,
   archive upload, sidecar capture, media-sync orchestration, and report-assembly
   logic that still reference the `quickscale_modules` Django app environment.
   F5.2a/F5.2b shipped the Django-free primitives, recovery, and verification
   into `quickscale_core.dr_engine`, while the module retains the higher-level
-  platform orchestration that depends on Django project context. F5.3 will
-  address the hidden-protocol replacement and further slimming of module
-  orchestration.
-- **CLI protocol (unchanged, F5.3):** The CLI
-  (`quickscale_cli/src/quickscale_cli/commands/dr_commands.py`) still drives DR
-  by invoking management commands via subprocess, passing context through
-  environment variables (`DJANGO_SETTINGS_MODULE`, `QUICKSCALE_ENVIRONMENT`,
-  `QUICKSCALE_BACKUPS_ALLOW_RESTORE`, `QUICKSCALE_DR_TARGET_*`, `ROUTE_KIND`) and
-  parsing stdout JSON for results. Replacement of this hidden protocol is
-  planned for F5.3.
+  platform orchestration that depends on Django project context. F5.3 replaced
+  the hidden protocol with the explicit adapter; the module also gained an
+  explicit ``target_runtime_settings`` parameter on ``sync_backup_snapshot_media``
+  (replacing the ``QUICKSCALE_DR_TARGET_*`` env-var protocol) while preserving
+  the env-var fallback for admin/manual use through the preserved management
+  commands.
+- **CLI protocol (F5.3 shipped):** The CLI
+  (`quickscale_cli/src/quickscale_cli/commands/dr_commands.py`) now drives DR
+  through the explicit typed adapter (`quickscale_core.dr_engine.adapter`), called
+  via the single ``dr_adapter_call`` management command bridge (subprocess +
+  JSON stdout). All per-operation management commands have been replaced by
+  adapter dispatch. The env-var protocol (`_TARGET_ENV_PREFIX`,
+  `QUICKSCALE_DR_TARGET_*`, `ROUTE_KIND`) has been removed from CLI
+  orchestration; the route kind marker is carried explicitly via the
+  ``target_runtime_settings`` dict. Remaining management commands
+  (``backups_create``, ``backups_report``, etc.) are preserved as thin
+  Django/admin-facing surfaces for manual use, with backward-compatible env-var
+  fallback in the service layer (``_load_target_runtime_settings``). Railway-
+  target media sync fail-closed guard is preserved through the explicit
+  ``ROUTE_KIND`` marker in the adapter path.
 
 **Target ownership split:**
 
@@ -1024,9 +1041,9 @@ protocol (F5.3) and migration documentation (F5.4) remain.
   backward-compatibility shim; generated-project migration guidance is documented
   in F5.4.
 
-**Out of scope for this section:** The hidden-protocol replacement (F5.3) and
-migration documentation (F5.4) remain planned work not covered by this boundary
-definition. F5.2a (snapshot/archive primitives) and F5.2b (restore/orchestration)
+**Out of scope for this section:** Migration documentation (F5.4) remains planned
+work not covered by this boundary definition. F5.2a (snapshot/archive
+primitives), F5.2b (restore/orchestration), and F5.3 (explicit adapter boundary)
 are shipped and reflected in the current-state description above.
 
 ---
