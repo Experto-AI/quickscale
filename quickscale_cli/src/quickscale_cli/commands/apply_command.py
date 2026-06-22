@@ -36,6 +36,7 @@ from quickscale_cli.backups_manifest import (
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     normalize_backups_module_options,
 )
+from quickscale_cli.crm_manifest import validate_crm_module_options
 from quickscale_core.contracts.module_options import sanitize_module_options
 from quickscale_cli.notifications_manifest import (
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
@@ -1010,6 +1011,24 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
                 "managed backend transport, and the canonical public paths remain "
                 f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH} for fresh "
                 "showcase_react generations or manual theme adoption.",
+                err=True,
+            )
+            raise click.Abort()
+
+    crm_config = qs_config.modules.get("crm")
+    if crm_config is not None:
+        crm_issues = validate_crm_module_options(crm_config.options or {})
+        if crm_issues:
+            click.secho(
+                "\n❌ CRM module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in crm_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to correct the CRM option values.",
                 err=True,
             )
             raise click.Abort()

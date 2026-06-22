@@ -190,11 +190,19 @@ def validate_crm_module_options(
 ) -> list[str]:
     """Return validation issues for CRM module options.
 
-    Uses the manifest-driven resolver for core normalization, then adds
-    CRM-specific checks for integer ranges and boolean types.
+    Checks raw input types for boolean fields before resolution,
+    then uses the manifest-driven resolver for core normalization
+    and adds CRM-specific checks for integer ranges.
     """
-    resolved = resolve_crm_module_options(options)
     issues: list[str] = []
+
+    # Boolean type check for enable_api — validate raw input before
+    # resolve_crm_module_options coerces truthy strings to True.
+    if options is not None and "enable_api" in options:
+        if not isinstance(options["enable_api"], bool):
+            issues.append("modules.crm.enable_api must be boolean")
+
+    resolved = resolve_crm_module_options(options)
 
     # deals_per_page must be a positive integer.
     # resolve_crm_module_options already coerces this to int.
@@ -207,10 +215,6 @@ def validate_crm_module_options(
     contacts_per_page = int(resolved["contacts_per_page"])
     if contacts_per_page < 1:
         issues.append("modules.crm.contacts_per_page must be at least 1")
-
-    # Boolean type checks.
-    if not isinstance(resolved.get("enable_api"), bool):
-        issues.append("modules.crm.enable_api must be a boolean")
 
     return issues
 

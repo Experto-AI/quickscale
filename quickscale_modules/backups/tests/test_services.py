@@ -3408,3 +3408,95 @@ class TestBackupServiceHelpers:
             )
             == "json"
         )
+
+
+class TestBackupServiceUtilities:
+    """Targeted tests for private utility functions to raise per-file coverage."""
+
+    def test_get_source_environment(self) -> None:
+        """_get_source_environment returns 'local' without env override."""
+        result = backup_services._get_source_environment()
+        assert result == "local"
+
+    def test_get_source_environment_with_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_get_source_environment returns the env var when set."""
+        monkeypatch.setenv("QUICKSCALE_ENVIRONMENT", "production")
+        result = backup_services._get_source_environment()
+        assert result == "production"
+
+    def test_build_snapshot_local_root(self) -> None:
+        """_build_snapshot_local_root resolves snapshot local directory."""
+        policy = BackupPolicySnapshot.from_settings()
+        result = backup_services._build_snapshot_local_root(policy, "snap-123")
+        assert result.name == "snap-123"
+        assert result.parent.name == "snapshots"
+
+    def test_build_snapshot_remote_root_with_prefix(self) -> None:
+        """_build_snapshot_remote_root includes remote_prefix when set."""
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="bucket",
+            remote_prefix="ops/backups",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        result = backup_services._build_snapshot_remote_root(policy, "snap-abc")
+        assert result.startswith("ops/backups/snapshots/snap-abc")
+
+    def test_build_snapshot_remote_root_without_prefix(self) -> None:
+        """_build_snapshot_remote_root returns bare path when remote_prefix is empty."""
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="",
+            remote_prefix="",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        result = backup_services._build_snapshot_remote_root(policy, "snap-xyz")
+        assert result == "snapshots/snap-xyz"
+
+    def test_replace_policy_remote_prefix(self) -> None:
+        """_replace_policy_remote_prefix returns a copy with new prefix."""
+        policy = BackupPolicySnapshot.from_settings()
+        updated = backup_services._replace_policy_remote_prefix(policy, "new/prefix")
+        assert updated.remote_prefix == "new/prefix"
+        assert policy.remote_prefix != "new/prefix"
+
+    def test_read_setting_value_dict(self) -> None:
+        """_read_setting_value returns value from dict when settings_obj is a dict."""
+        result = backup_services._read_setting_value({"key": "val"}, "key", "default")
+        assert result == "val"
+
+    def test_read_setting_value_dict_default(self) -> None:
+        """_read_setting_value returns default when key is missing from dict."""
+        result = backup_services._read_setting_value({}, "missing", "fallback")
+        assert result == "fallback"
+
+    def test_snapshot_sidecar_path(self, tmp_path: Path) -> None:
+        """_snapshot_sidecar_path resolves sidecar file under snapshot root."""
+        from quickscale_modules_backups.models import BackupSnapshot
+
+        snapshot = BackupSnapshot(
+            local_root_path=str(tmp_path / "snapshot-root"),
+            status=BackupSnapshot.STATUS_READY,
+        )
+        result = backup_services._snapshot_sidecar_path(
+            snapshot, "release-metadata.json"
+        )
+        assert result == tmp_path / "snapshot-root" / "release-metadata.json"

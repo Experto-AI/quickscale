@@ -342,6 +342,22 @@ docker:
             in error_output
         )
 
+    def test_apply_crm_rejects_non_bool_enable_api(self, capsys):
+        """CRM apply should reject non-boolean enable_api via the ingress validator."""
+        qs_config = SimpleNamespace(
+            modules={
+                "crm": SimpleNamespace(options={"enable_api": "yes"}),
+            }
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "CRM module configuration is incomplete for apply" in error_output
+        assert "modules.crm.enable_api must be boolean" in error_output
+        assert "correct the CRM option values" in error_output
+
     def test_abort_for_not_ready_modules_reports_teams_reason(self, capsys):
         """Teams should remain blocked by the non-public-ready apply helper."""
         with pytest.raises(click.Abort):

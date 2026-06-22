@@ -548,3 +548,246 @@ class TestConfigDelta:
         assert "Mutable" in text
         assert "Immutable" in text
         assert "SETTING_OPT" in text
+
+    def test_format_delta_unchanged_modules_no_config_deltas(self) -> None:
+        """Format delta with unchanged modules but no config deltas hits line 340."""
+        from quickscale_core.schema.delta import ConfigDelta, format_delta
+
+        cd = ConfigDelta(
+            has_changes=False,
+            modules_unchanged=["mod1", "mod2"],
+            config_deltas={},
+        )
+        text = format_delta(cd)
+        assert "No changes" in text
+
+    def test_get_option_mutability_info_none_manifests(self) -> None:
+        """_get_option_mutability_info returns (False, None) when manifests is None."""
+        from quickscale_core.schema.delta import _get_option_mutability_info
+
+        result = _get_option_mutability_info("auth", "some_option", None)
+        assert result == (False, None)
+
+    def test_get_option_mutability_info_module_not_in_manifests(self) -> None:
+        """_get_option_mutability_info returns (False, None) when module not in manifests."""
+        from quickscale_core.schema.delta import _get_option_mutability_info
+
+        result = _get_option_mutability_info("unknown_module", "opt", {})
+        assert result == (False, None)
+
+    def test_get_option_mutability_info_immutable_option(self) -> None:
+        """_get_option_mutability_info returns (False, None) for immutable option."""
+        from quickscale_core.manifest import ConfigOption, ModuleManifest
+        from quickscale_core.schema.delta import _get_option_mutability_info
+
+        manifest = ModuleManifest(
+            name="auth",
+            version="1",
+            mutable_options={},
+            immutable_options={
+                "auth_method": ConfigOption(
+                    name="auth_method",
+                    option_type="string",
+                    default="email",
+                    mutability="immutable",
+                ),
+            },
+        )
+        result = _get_option_mutability_info("auth", "auth_method", {"auth": manifest})
+        assert result == (False, None)
+
+    def test_get_option_mutability_info_mutable_option_with_django_setting(
+        self,
+    ) -> None:
+        """_get_option_mutability_info returns (True, django_setting) for mutable option."""
+        from quickscale_core.manifest import ConfigOption, ModuleManifest
+        from quickscale_core.schema.delta import _get_option_mutability_info
+
+        manifest = ModuleManifest(
+            name="auth",
+            version="1",
+            mutable_options={
+                "reg_enabled": ConfigOption(
+                    name="reg_enabled",
+                    option_type="boolean",
+                    default=True,
+                    django_setting="ACCOUNT_ALLOW_REGISTRATION",
+                    mutability="mutable",
+                ),
+            },
+            immutable_options={},
+        )
+        result = _get_option_mutability_info("auth", "reg_enabled", {"auth": manifest})
+        assert result == (True, "ACCOUNT_ALLOW_REGISTRATION")
+
+    def test_get_option_mutability_info_mutable_option_no_django_setting(self) -> None:
+        """_get_option_mutability_info returns (True, None) when option has no django_setting."""
+        from quickscale_core.manifest import ConfigOption, ModuleManifest
+        from quickscale_core.schema.delta import _get_option_mutability_info
+
+        manifest = ModuleManifest(
+            name="test",
+            version="1",
+            mutable_options={
+                "custom_opt": ConfigOption(
+                    name="custom_opt",
+                    option_type="string",
+                    default="val",
+                    mutability="mutable",
+                ),
+            },
+            immutable_options={},
+        )
+        result = _get_option_mutability_info("test", "custom_opt", {"test": manifest})
+        assert result == (True, None)
+
+    def test_compute_option_changes_with_manifests(self) -> None:
+        """_compute_option_changes exercises the manifests branch."""
+        from quickscale_core.manifest import ConfigOption, ModuleManifest
+        from quickscale_core.schema.delta import _compute_option_changes
+
+        manifest = ModuleManifest(
+            name="auth",
+            version="1",
+            mutable_options={
+                "reg_enabled": ConfigOption(
+                    name="reg_enabled",
+                    option_type="boolean",
+                    default=True,
+                    django_setting="ACCOUNT_ALLOW_REGISTRATION",
+                    mutability="mutable",
+                ),
+            },
+            immutable_options={
+                "auth_method": ConfigOption(
+                    name="auth_method",
+                    option_type="string",
+                    default="email",
+                    mutability="immutable",
+                ),
+            },
+        )
+        desired = {"reg_enabled": False, "auth_method": "email"}
+        applied = {"reg_enabled": True, "auth_method": "email"}
+
+        mutable, immutable = _compute_option_changes(
+            desired, applied, "auth", {"auth": manifest}
+        )
+        assert len(mutable) == 1
+        assert mutable[0].option_name == "reg_enabled"
+        assert mutable[0].old_value is True
+        assert mutable[0].new_value is False
+        assert mutable[0].django_setting == "ACCOUNT_ALLOW_REGISTRATION"
+        assert mutable[0].is_mutable is True
+        assert len(immutable) == 0
+
+    def test_format_mutable_changes_empty(self) -> None:
+        """_format_mutable_changes returns empty list for no changes."""
+        from quickscale_core.schema.delta import _format_mutable_changes
+
+        assert _format_mutable_changes([]) == []
+
+    def test_format_immutable_changes_empty(self) -> None:
+        """_format_immutable_changes returns empty list for no changes."""
+        from quickscale_core.schema.delta import _format_immutable_changes
+
+        assert _format_immutable_changes([]) == []
+
+    def test_compute_option_changes_with_immutable_change(self) -> None:
+        """_compute_option_changes includes immutable change (covers line 162)."""
+        from quickscale_core.manifest import ConfigOption, ModuleManifest
+        from quickscale_core.schema.delta import _compute_option_changes
+
+        manifest = ModuleManifest(
+            name="auth",
+            version="1",
+            mutable_options={},
+            immutable_options={
+                "auth_method": ConfigOption(
+                    name="auth_method",
+                    option_type="string",
+                    default="email",
+                    mutability="immutable",
+                ),
+            },
+        )
+        desired = {"auth_method": "username_only"}
+        applied = {"auth_method": "email_username"}
+
+        mutable, immutable = _compute_option_changes(
+            desired, applied, "auth", {"auth": manifest}
+        )
+        assert len(mutable) == 0
+        assert len(immutable) == 1
+        assert immutable[0].option_name == "auth_method"
+        assert immutable[0].is_mutable is False
+
+    def test_compute_config_deltas_with_manifests(self) -> None:
+        """_compute_config_deltas exercises manifests path (covers lines 177-188)."""
+        from quickscale_core.schema.delta import _compute_config_deltas
+        from quickscale_core.schema.config_schema import (
+            QuickScaleConfig,
+            ProjectConfig,
+            ModuleConfig,
+            DockerConfig,
+        )
+        from quickscale_core.schema.state_schema import (
+            QuickScaleState,
+            ProjectState,
+            ModuleState,
+        )
+        from quickscale_core.manifest import ConfigOption, ModuleManifest
+
+        manifest = ModuleManifest(
+            name="auth",
+            version="1",
+            mutable_options={
+                "reg_enabled": ConfigOption(
+                    name="reg_enabled",
+                    option_type="boolean",
+                    default=True,
+                    django_setting="ACCOUNT_ALLOW_REGISTRATION",
+                    mutability="mutable",
+                ),
+            },
+            immutable_options={},
+        )
+        desired = QuickScaleConfig(
+            version="1",
+            project=ProjectConfig(slug="test", package="test", theme="html"),
+            modules={
+                "auth": ModuleConfig(name="auth", options={"reg_enabled": False}),
+            },
+            docker=DockerConfig(start=False, build=False),
+        )
+        applied = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="test", package="test", theme="html"),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    options={"reg_enabled": True},
+                ),
+            },
+        )
+        config_deltas = _compute_config_deltas(
+            ["auth"], desired, applied, {"auth": manifest}
+        )
+        assert "auth" in config_deltas
+        assert config_deltas["auth"].has_mutable_changes is True
+
+    def test_format_delta_unchanged_with_theme_change_no_config_deltas(self) -> None:
+        """format_delta with unchanged modules, theme change, no config deltas (line 340)."""
+        from quickscale_core.schema.delta import ConfigDelta, format_delta
+
+        delta = ConfigDelta(
+            has_changes=True,
+            modules_unchanged=["auth"],
+            theme_changed=True,
+            old_theme="showcase_html",
+            new_theme="showcase_react",
+            config_deltas={},
+        )
+        text = format_delta(delta)
+        assert "Theme" in text
+        assert "auth" in text
