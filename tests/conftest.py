@@ -133,3 +133,95 @@ def field_value(db, submission, form_field):
         field_label="Name",
         value="Alice",
     )
+
+
+# ---------------------------------------------------------------------------
+# Organization fixtures for Phase F11.12a tenant-scoped forms
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def org(db):
+    """Create a default test organization for forms model tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Test Org", slug="test-org")
+
+
+@pytest.fixture
+def org_form(db, org):
+    """Active form owned by an organization."""
+    form, _ = Form.objects.update_or_create(
+        slug="org-contact",
+        defaults={
+            "title": "Org Contact",
+            "description": "Org contact form.",
+            "success_message": "Thank you.",
+            "notify_emails": "org@example.com",
+            "spam_protection_enabled": True,
+            "organization": org,
+        },
+    )
+    return form
+
+
+@pytest.fixture
+def org_a(db):
+    """Organization A — first tenant in isolation tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Org A", slug="org-a")
+
+
+@pytest.fixture
+def org_b(db):
+    """Organization B — second tenant in isolation tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Org B", slug="org-b")
+
+
+@pytest.fixture
+def org_a_admin(db, org_a):
+    """Staff user who is an admin of Organization A."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-a-admin",
+        email="org-a-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_a,
+        role=OrgRole.ADMIN,
+    )
+    return user
+
+
+@pytest.fixture
+def org_b_admin(db, org_b):
+    """Staff user who is an admin of Organization B."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-b-admin",
+        email="org-b-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_b,
+        role=OrgRole.ADMIN,
+    )
+    return user

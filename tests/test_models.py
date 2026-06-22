@@ -16,11 +16,24 @@ class TestFormModel:
         form = Form.objects.create(title="Test Contact", slug="test-contact")
         assert str(form) == "Test Contact"
 
-    def test_form_slug_uniqueness_constraint(self):
-        """Form slug must be unique across forms"""
-        Form.objects.create(title="First", slug="unique-slug")
+    def test_form_slug_uniqueness_per_org(self):
+        """Form slug must be unique within an organization"""
+        from quickscale_modules_orgs.models import Organization
+
+        org = Organization.objects.create(name="Test Org", slug="test-org")
+        Form.objects.create(title="First", slug="unique-slug", organization=org)
         with pytest.raises(IntegrityError):
-            Form.objects.create(title="Second", slug="unique-slug")
+            Form.objects.create(title="Second", slug="unique-slug", organization=org)
+
+    def test_form_slug_can_duplicate_across_orgs(self):
+        """Same slug is allowed in different organizations"""
+        from quickscale_modules_orgs.models import Organization
+
+        org_a = Organization.objects.create(name="Org A", slug="org-a")
+        org_b = Organization.objects.create(name="Org B", slug="org-b")
+        Form.objects.create(title="First", slug="same-slug", organization=org_a)
+        # Should not raise — different orgs
+        Form.objects.create(title="Second", slug="same-slug", organization=org_b)
 
     def test_form_data_retention_days_default_is_365(self):
         """data_retention_days defaults to 365"""
