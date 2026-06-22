@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from django.contrib import admin
-from django.test import Client
+from django.contrib.admin.sites import AdminSite
+from django.test import Client, RequestFactory
 from django.urls import reverse
 
 from quickscale_modules_social.contracts import SOCIAL_EMBED_RESOLUTION_RESOLVED
@@ -111,3 +114,83 @@ class TestSocialAdmin:
         assert "Embeds support only TikTok and YouTube" in response.content.decode(
             "utf-8"
         )
+
+
+@pytest.mark.django_db
+class TestSocialAdminOperatorPaths:
+    """Phase F11.13a: verify social admin surfaces use all_objects for cross-tenant visibility."""
+
+    def test_social_link_admin_uses_operator_queryset(self) -> None:
+        """SocialLinkAdmin.get_queryset uses self.model.all_objects."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        site = AdminSite()
+        admin_instance = SocialLinkAdmin(SocialLink, site)
+        request = RequestFactory().get("/admin/")
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == SocialLink
+        assert str(qs.query) == str(SocialLink.all_objects.all().query)
+
+    def test_social_embed_admin_uses_operator_queryset(self) -> None:
+        """SocialEmbedAdmin.get_queryset uses self.model.all_objects."""
+        from quickscale_modules_social.admin import SocialEmbedAdmin
+
+        site = AdminSite()
+        admin_instance = SocialEmbedAdmin(SocialEmbed, site)
+        request = RequestFactory().get("/admin/")
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == SocialEmbed
+        assert str(qs.query) == str(SocialEmbed.all_objects.all().query)
+
+    def test_social_link_admin_queryset_returns_cross_tenant_links(
+        self, org_a, org_b
+    ) -> None:
+        """Operator admin queryset returns links from all organizations."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        SocialLink.objects.create(
+            title="Link A",
+            url="https://www.linkedin.com/company/org-a/",
+            organization=org_a,
+        )
+        SocialLink.objects.create(
+            title="Link B",
+            url="https://www.linkedin.com/company/org-b/",
+            organization=org_b,
+        )
+
+        site = AdminSite()
+        admin_instance = SocialLinkAdmin(SocialLink, site)
+        request = RequestFactory().get("/admin/")
+        qs = admin_instance.get_queryset(request)
+        titles = list(qs.values_list("title", flat=True))
+        assert "Link A" in titles
+        assert "Link B" in titles
+
+    # ------------------------------------------------------------------
+    # Spy-based seam verification: prove all_objects is actually called
+    # ------------------------------------------------------------------
+
+    def test_social_link_admin_get_queryset_calls_all_objects(self) -> None:
+        """SocialLinkAdmin.get_queryset actually calls SocialLink.all_objects.all()."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        with patch.object(SocialLink, "all_objects") as mock_mgr:
+            mock_mgr.all.return_value = SocialLink.objects.none()
+            site = AdminSite()
+            admin_instance = SocialLinkAdmin(SocialLink, site)
+            request = RequestFactory().get("/admin/")
+            admin_instance.get_queryset(request)
+            mock_mgr.all.assert_called_once()
+
+    def test_social_embed_admin_get_queryset_calls_all_objects(self) -> None:
+        """SocialEmbedAdmin.get_queryset actually calls SocialEmbed.all_objects.all()."""
+        from quickscale_modules_social.admin import SocialEmbedAdmin
+
+        with patch.object(SocialEmbed, "all_objects") as mock_mgr:
+            mock_mgr.all.return_value = SocialEmbed.objects.none()
+            site = AdminSite()
+            admin_instance = SocialEmbedAdmin(SocialEmbed, site)
+            request = RequestFactory().get("/admin/")
+            admin_instance.get_queryset(request)
+            mock_mgr.all.assert_called_once()
