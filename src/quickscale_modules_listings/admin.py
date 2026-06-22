@@ -4,6 +4,7 @@ from typing import Any
 
 from django import forms
 from django.contrib import admin
+from django.db import models
 from django.db.models import Model
 from django.http import HttpRequest
 from markdownx.widgets import AdminMarkdownxWidget
@@ -18,11 +19,12 @@ class AbstractListingAdmin(admin.ModelAdmin):
         "title",
         "price",
         "location",
+        "organization",
         "status",
         "published_date",
         "created_at",
     ]
-    list_filter = ["status", "created_at", "published_date"]
+    list_filter = ["organization", "status", "created_at", "published_date"]
     search_fields = ["title", "description", "location"]
     prepopulated_fields = {"slug": ("title",)}
     date_hierarchy = "published_date"
@@ -32,7 +34,7 @@ class AbstractListingAdmin(admin.ModelAdmin):
         (
             "Basic Information",
             {
-                "fields": ["title", "slug", "description"],
+                "fields": ["title", "slug", "organization", "description"],
             },
         ),
         (
@@ -56,6 +58,20 @@ class AbstractListingAdmin(admin.ModelAdmin):
     ]
 
     readonly_fields = ["created_at", "updated_at"]
+
+    def get_queryset(self, request: HttpRequest) -> models.QuerySet:  # type: ignore[override]
+        """Operator path: use all_objects for cross-tenant visibility when available.
+
+        Uses ``self.model`` rather than a hard-coded model so that concrete
+        subclasses (e.g. ``PropertyListingAdmin``) inherit the same operator-
+        path intent without additional overrides.  Falls back to the default
+        manager for subclasses that have not yet adopted the dual-manager
+        contract.
+        """
+        qs = getattr(self.model, "all_objects", None)
+        if qs is not None:
+            return qs.all()
+        return self.model._default_manager.all()
 
     def get_form(
         self,
