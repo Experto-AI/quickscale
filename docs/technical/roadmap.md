@@ -20,12 +20,11 @@ Work is split across 3 git worktrees that develop in parallel and merge back to 
 
 | Track | Worktree | Branch | Owns |
 |-------|---------|--------|------|
-| 1 | `quickscale-wt-track1` | `wt-track1` | M7 — F11 module isolation (F11.12b–F11.13b) |
-| 2 | `quickscale-wt-track2` | `wt-track2` | M10 — F5 DR engine split (F5.2b–F5.4) |
+| 1 | `quickscale-wt-track1` | `wt-track1` | M7 — F11 module isolation (F11.13b — rollout closeout) |
 
 ### Cross-track dependency
 
-Track 3 (M5/M8/M11) is complete. No remaining cross-track dependencies.
+Track 2 (M10/F5) and Track 3 (M5/M8/M11) are complete. No remaining cross-track dependencies.
 
 ### Start procedure
 
@@ -59,18 +58,18 @@ git merge --no-ff wt-track{N}
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
-| M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅. Blog post isolation, forms isolation, and listings isolation all merged. Social isolation implemented — `organization` FK on `BaseSocialItem`, dual-manager contract, org-scoped service queries, relaxed `normalized_url` uniqueness. **Next:** F11.13b. |
+| M7 | 1 | F11.11–F11.13b | 🟡 | F11.11 ✅ F11.12a ✅ F11.12b ✅ F11.13a ✅ SOCIAL-CR-002 ✅ — all merged to `v87`. **F11.13b pending** (rollout closeout — non-view path audit, migration docs, isolation test sweep). |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
 | M10 | 2 | F5.2a–F5.4 | 🟢 | **Merged to v87.** M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. F5.3 ✅ protocol replacement + module slimming. F5.4 ✅ migration docs added to `docs/technical/dr_engine_migration.md`. All Track 2 phases complete. |
-| M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
+| M11 | 3 | F7.1–F7.3 | 🟢 | **Merged to v87.** F7.1 ✅ F7.2 ✅ F7.3 ✅. All runtime-pin phases complete. |
 
 ## In-Flight Milestones
 
 ### M7 — F11 Module isolation rollout (blog/forms/listings/social)
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Status:** 🟡 In progress — F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅ merged to `v87`. F11.13b pending.
+**Status:** 🟡 In progress — F11.11 ✅ F11.12a ✅ F11.12b ✅ F11.13a ✅ SOCIAL-CR-002 ✅ all merged to `v87`. **Only F11.13b (rollout closeout) remains.**
 
 ---
 ## Backlog
@@ -81,55 +80,23 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅, F11.13b next) |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟡 M1 ✅ M3 ✅ M7 in progress — F11.11–F11.13a + SOCIAL-CR-002 merged; **F11.13b (rollout closeout) next** |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
 | 5 | F5 — DR engine split | M10 | 🟢 M10 merged to v87. |
-| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
+| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟢 M11 merged to v87. All phases complete. |
 
 ---
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** F11.13b (rollout closeout) remains. Completed work through F11.13a is archived in CHANGELOG.md.
+**Why still open:** F11.13b (rollout closeout) remains. Completed work through F11.13a + SOCIAL-CR-002 is archived in CHANGELOG.md.
 
 ---
 
 **F11-deferred — Stage `terminal_semantic` per-org uniqueness** _(Adaptive tier: 2)_ _(unlocked by F11.5)_
 
 - [ ] Split `Stage.terminal_semantic` uniqueness to per-bucket partial `UniqueConstraint`s; add migration + serializer + API regression coverage.
-
----
-
-**Phase F11.12b — Listings isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** M3 merged.
-
-**Status:** ✅ Complete and merged to `v87`. Added `organization` FK (nullable) to `AbstractListing` with per-org slug uniqueness constraint, dual-manager contract (`TenantScopedManager` + `OperatorManager`), and additive `orgs/<slug>/` org-scoped routes (under `listings/` prefix) alongside flat paths. Route-aware views scope queries via `_is_org_scoped_route()`/`_resolve_active_org_optional()`. All 96 listings module tests pass. Isolation test unskipped and green. **Next:** F11.13a.
-
-**Groundwork committed to `wt-track1` (2026-06-22):**
-- ✅ `organization` FK on `AbstractListing` — per-org slug uniqueness via `UniqueConstraint` on `Listing`.
-- ✅ Dual-manager contract: `TenantScopedManager` + `OperatorManager` with `Listing.for_org()`.
-- ✅ Additive org-scoped routes (`orgs/<slug>`) for list/detail/publish under `listings/` prefix.
-- ✅ Route-aware views via `OrgScopedViewMixin._scope_by_org()` — flat routes scope to `organization__isnull=True`, org routes scope to active org.
-- ✅ `create_published_listing_from_payload` accepts org context for stamping and per-org slug checks.
-- ✅ Test settings updated (`quickscale_modules_orgs`, `TenantMiddleware`, `QUICKSCALE_MODE=saas`).
-- ✅ Org fixtures and isolation test implemented and green.
-
-- [x] Apply `organization_id` FK + isolation policy to `listings`.
-- [x] Unskip and confirm `listings` isolation test green.
-
-**Phase F11.13a — Social isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
-
-**Dependencies:** F11.11 + F11.12a + F11.12b.
-
-**Status:** ✅ Complete and implemented on `wt-track1`. Added `organization` FK (nullable) to `BaseSocialItem` with dual-manager contract (`TenantScopedManager` + `OperatorManager`) and per-org service queries. Removed global `unique=True` on `normalized_url` so multiple orgs may link to the same social URL. `list_published_social_links()` and `list_published_social_embeds()` accept an optional `organization_id` parameter for tenant-scoped queries while preserving backward compatibility. Social module isolation tests unskipped and green. **Next:** F11.13b.
-
-- [x] Apply `organization_id` FK + isolation policy to `social`.
-- [x] Remove global `normalized_url` uniqueness to allow same-URL usage across orgs.
-- [x] Add `TenantScopedManager` + `OperatorManager` dual-manager contract.
-- [x] Add org-scoped parameter to `list_published_social_links()` and `list_published_social_embeds()`.
-- [x] Unskip and confirm social isolation tests green.
 
 **Phase F11.13b — Rollout closeout** _(M7 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
@@ -138,49 +105,6 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [ ] Keep `require_org_role`/`require_org_feature` as second-line defense; verify isolation fails closed for non-view paths (admin, shell, management commands, async jobs).
 - [ ] Document the migration path for already-generated projects adopting structural isolation.
 - [ ] Unskip all remaining module isolation tests and confirm all green.
-
----
-
-### Finding 5 — Split the DR engine out of the embeddable backups module
-
-**Status:** ✅ All phases complete. See CHANGELOG.md for per-phase implementation summaries and `docs/technical/dr_engine_migration.md` for the migration guide.
-
-**Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
-**Dependencies:** M6 ✅ + M8 ✅ merged.
-
-**Phase F5.2a — Extract snapshot and archive primitives** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
-
-- [x] Extract snapshot and archive primitives into a CLI/core-owned engine library while preserving current behavior.
-
-**Phase F5.2b — Extract restore and orchestration** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
-
-**Dependencies:** F5.2a.
-
-- [x] Extracted restore/orchestration flow into `quickscale_core.dr_engine.recovery`.
-- [x] Extracted verification recording and rollback-pin handling into `quickscale_core.dr_engine.verification`.
-- [x] Preserved thin Django-facing wrappers in `quickscale_modules_backups.services`.
-- [x] Added core recovery/verification tests and targeted backups service tests.
-
-**Validation evidence (F5.2b closeout):** Repo-root `make test` passed — quickscale_core 1392 passed / 28 deselected / 93.03% coverage; quickscale_cli 1778 passed / 28 deselected / 91.58% coverage; backups module 227 passed / 84.41% coverage; overall mean 93.33%; all modules green with only the expected existing skips (forms/listings/orgs/social isolation or PostgreSQL-dependent skip).
-
-**Phase F5.3 — Slim the module and protocol** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
-
-**Dependencies:** F5.2b.
-
-**Status:** ✅ Complete. See CHANGELOG.md for full implementation summary.
-
-- [x] Replaced hidden docker-exec/management-command/env-var/stdout-JSON protocol with explicit typed adapter (`quickscale_core.dr_engine.adapter`).
-- [x] Added single `dr_adapter_call` management command bridge in the backups module (thin dispatch surface only).
-- [x] Rewrote `dr_commands.py` to call the adapter through the bridge — removed `_run_backend_container_command`, `_run_manage_json`, `_build_manage_overrides`/`_source_manage_overrides`/`_target_manage_overrides`, `_prefix_target_runtime_variables`, `_target_media_sync_variables`, `_is_manual_only_restore_gate`, and the `_TARGET_ENV_PREFIX` env-var protocol.
-- [x] Slimmed `sync_backup_snapshot_media()` in services.py — added explicit `target_runtime_settings` parameter; the adapter path uses this parameter with an explicit `ROUTE_KIND` marker to preserve the Railway-target media fail-closed guard, while the env-var fallback (`_load_target_runtime_settings()`) is preserved for admin/manual use through the retained management commands.
-- [x] Remaining management commands kept as thin Django/admin-facing surfaces with backward-compatible env-var fallback (backups_create, backups_report, backups_restore, backups_record_verification, backups_pin, backups_sync_media, backups_validate, backups_prune).
-- [x] CLI `quickscale dr` surface unchanged — all capture/plan/execute/report workflow preserved. Env-sync planning and Railway API calls remain in CLI orchestration.
-
-**Phase F5.4 — Migration docs** _(M10 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
-
-**Status:** ✅ Complete. Authored `docs/technical/dr_engine_migration.md` — standalone migration guide covering the post-split architecture overview, migration path for existing generated projects (`quickscale apply` syncs the `quickscale-core` dependency entry automatically, but standalone projects may need to adjust the synced source for their layout), backward compatibility table, dependency changes, and verification checklist. Roadmap and CHANGELOG updated. **M10 closeout — all Track 2 phases complete.**
-
-- [x] Document the migration and compatibility contract for existing generated projects adopting the split DR architecture.
 
 ---
 
