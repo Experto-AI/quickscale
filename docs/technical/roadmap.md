@@ -79,7 +79,7 @@ git merge --no-ff wt-track{N}
 ### M7 — F11 Module isolation rollout (blog/forms/listings/social)
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Status:** 🟡 In progress — F11.11 ✅ merged to `v87`. F11.12a/F11.12b/F11.13a/F11.13b pending.
+**Status:** 🟡 In progress — F11.11 ✅, F11.12a ✅ merged to `v87`. F11.12b/F11.13a/F11.13b pending.
 
 ---
 
@@ -98,7 +98,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a next) |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
 | 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a–F5.4 pending |
@@ -108,7 +108,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** CRM isolation phases F11.1–F11.10e complete and in CHANGELOG — M3 merged/closed (see merge checkpoints table above). Blog isolation (F11.11) complete and merged to `v87`. Forms (F11.12a), listings (F11.12b), and social (F11.13a–F11.13b) rollout remain in M7. Non-CRM admin, shell, and async paths still need data-layer isolation per module in the remaining M7 phases.
+**Why still open:** CRM isolation phases F11.1–F11.10e complete and in CHANGELOG — M3 merged/closed (see merge checkpoints table above). Blog isolation (F11.11) complete and merged to `v87`. Forms isolation (F11.12a) complete and merged to `v87`. Listings (F11.12b) and social (F11.13a–F11.13b) rollout remain in M7. Non-CRM admin, shell, and async paths still need data-layer isolation per module in the remaining M7 phases.
 
 ---
 
@@ -221,8 +221,18 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** M3 merged.
 
-- [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `forms`.
-- [ ] Unskip and confirm `forms` isolation test green.
+**Status:** ✅ Complete and merged to `v87`. Added `organization` FK (nullable) to `Form` model with per-org slug uniqueness constraint, dual-manager contract (`TenantScopedManager` + `OperatorManager`), and additive `/orgs/<slug>/forms/...` org-scoped routes alongside flat `/forms/...` paths. Route-aware views scope queries via `_is_org_scoped_route()`/`_resolve_active_org_optional()`. All 123 forms module tests pass. Isolation test unskipped and green. **Next:** F11.12b.
+
+**Groundwork committed to `wt-track1` (2026-06-22):**
+- ✅ `organization` FK on `Form` with per-org slug uniqueness — migration `0004`.
+- ✅ Dual-manager contract: `TenantScopedManager` + `OperatorManager` with `Form.for_org()`.
+- ✅ Additive org-scoped routes (`/orgs/<slug>/forms/...`) for public schema/submit APIs and admin submission CRUD/export.
+- ✅ Route-aware views scoped to org via `_is_org_scoped_route()`/`_resolve_active_org_optional()`.
+- ✅ Test settings updated (`quickscale_modules_orgs`, `TenantMiddleware`, `QUICKSCALE_MODE=saas`).
+- ✅ Org fixtures and isolation test implemented and green.
+
+- [x] Apply `TenantModel` base + `organization_id` FK + isolation policy to `forms`.
+- [x] Unskip and confirm `forms` isolation test green.
 
 **Phase F11.12b — Listings isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 
