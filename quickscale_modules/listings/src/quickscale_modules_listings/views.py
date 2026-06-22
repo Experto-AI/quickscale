@@ -1,4 +1,9 @@
-"""Views for QuickScale listings module"""
+"""Views for QuickScale listings module
+
+Phase F11.12b adds additive org-scoped routes (``/orgs/<slug>/listings/...``)
+alongside existing flat paths.  Views detect the route type via URL kwargs
+and scope queries accordingly.
+"""
 
 import json
 import logging
@@ -6,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
 from django.db.models import QuerySet
 from django.http import HttpRequest, JsonResponse
@@ -20,6 +26,86 @@ from .models import Listing
 
 logger = logging.getLogger(__name__)
 DEFAULT_LISTINGS_PER_PAGE = 12
+
+
+# ---------------------------------------------------------------------------
+# Org-scoped routing helpers (Phase F11.12b)
+# ---------------------------------------------------------------------------
+
+
+def _is_org_scoped_route(request: HttpRequest) -> bool:
+    """Return whether the request targets an org-scoped SaaS route.
+
+    The listings module is included at a prefix (e.g. ``listings/``), so
+    org-scoped paths are detected via ``/listings/orgs/`` rather than the
+    root-level ``/orgs/`` prefix used by modules included at root.
+    """
+    path = getattr(request, "path", "") or ""
+    return "/orgs/" in path
+
+
+def _resolve_active_org(request: HttpRequest) -> Any:
+    """Return the active organization for the current request.
+
+    Org-scoped routes use ``require_current_org`` (fail-closed).
+    Flat routes return ``None`` since they have no org context.
+    """
+    if not _is_org_scoped_route(request):
+        return None
+
+    from quickscale_modules_orgs.current_org import (
+        CurrentOrgError,
+        require_current_org,
+    )
+
+    try:
+        return require_current_org(request)
+    except CurrentOrgError:
+        raise PermissionDenied("Organization context is required for this route.")
+
+
+def _resolve_active_org_optional(request: HttpRequest) -> Any | None:
+    """Return the active organization or ``None`` if not on an org-scoped route.
+
+    Flat routes always get ``None`` — no org stamping.
+    """
+    if not _is_org_scoped_route(request):
+        return None
+
+    from quickscale_modules_orgs.current_org import get_current_org
+
+    return get_current_org(request)
+
+
+class OrgScopedViewMixin:
+    """Mixin for listing list/detail views that applies org scoping on SaaS routes.
+
+    On org-scoped routes (``/orgs/<slug>/listings/...``), the queryset is
+    filtered to match ``request.org``.  Flat routes (``/listings/...``) are
+    unchanged.
+    """
+
+    request: HttpRequest
+
+    def _scope_by_org(self, qs):  # type: ignore[no-untyped-def]
+        """Filter *qs* by org context for route-aware scoping.
+
+        On flat routes (``/listings/...``), only tenant-agnostic records
+        (``organization=None``) are visible.  On org-scoped routes
+        (``/orgs/<slug>/listings/...``), only records belonging to the active
+        org are visible.
+        """
+        if not _is_org_scoped_route(self.request):
+            return qs.filter(organization__isnull=True)
+        organization = _resolve_active_org_optional(self.request)
+        if organization is None:
+            return qs.none()
+        return qs.filter(organization=organization)
+
+
+# ---------------------------------------------------------------------------
+# Publish API helpers
+# ---------------------------------------------------------------------------
 
 
 def _get_positive_int_setting(setting_name: str, default: int) -> int:
@@ -50,8 +136,15 @@ class ListingPublishConflictError(Exception):
     """Conflict error for listing publish API payload"""
 
 
-def create_published_listing_from_payload(payload: dict[str, Any]) -> Listing:
-    """Create and return a published listing from validated API payload"""
+def create_published_listing_from_payload(
+    payload: dict[str, Any],
+    organization: Any = None,
+) -> Listing:
+    """Create and return a published listing from validated API payload.
+
+    If *organization* is provided (org-scoped route), the listing is stamped
+    with that org and slug uniqueness is checked within the org.
+    """
     errors: dict[str, str] = {}
 
     title = payload.get("title")
@@ -90,7 +183,10 @@ def create_published_listing_from_payload(payload: dict[str, Any]) -> Listing:
     description_text = str(description).strip()
     generated_slug = slugify(title_text)
 
-    if Listing.objects.filter(slug=generated_slug).exists():
+    slug_check = Listing.objects.filter
+    if organization is not None:
+        slug_check = slug_check(organization=organization).filter
+    if slug_check(slug=generated_slug).exists():
         raise ListingPublishConflictError("Listing already exists for generated slug")
 
     try:
@@ -101,9 +197,13 @@ def create_published_listing_from_payload(payload: dict[str, Any]) -> Listing:
             location=location.strip() if isinstance(location, str) else "",
             price=parsed_price,
             status="published",
+            organization=organization,
         )
     except IntegrityError as exc:
-        if Listing.objects.filter(slug=generated_slug).exists():
+        conflict_check = Listing.objects.filter
+        if organization is not None:
+            conflict_check = conflict_check(organization=organization).filter
+        if conflict_check(slug=generated_slug).exists():
             raise ListingPublishConflictError(
                 "Listing already exists for generated slug"
             ) from exc
@@ -113,7 +213,11 @@ def create_published_listing_from_payload(payload: dict[str, Any]) -> Listing:
 
 
 def publish_listing_api(request: HttpRequest) -> JsonResponse:
-    """Create and publish a listing from JSON payload for authenticated staff users"""
+    """Create and publish a listing from JSON payload for authenticated staff users.
+
+    On org-scoped routes, the listing is stamped with the active organization
+    and slug uniqueness is checked within the org.
+    """
     if request.method != "POST":
         return JsonResponse(
             {"error": "Method not allowed", "allowed_methods": ["POST"]},
@@ -136,8 +240,12 @@ def publish_listing_api(request: HttpRequest) -> JsonResponse:
     if not isinstance(payload, dict):
         return JsonResponse({"error": "JSON object payload expected"}, status=400)
 
+    organization = _resolve_active_org_optional(request)
+
     try:
-        listing = create_published_listing_from_payload(payload)
+        listing = create_published_listing_from_payload(
+            payload, organization=organization
+        )
     except ListingPublishValidationError as exc:
         return JsonResponse({"errors": exc.errors}, status=400)
     except ListingPublishConflictError as exc:
@@ -160,7 +268,7 @@ def publish_listing_api(request: HttpRequest) -> JsonResponse:
     )
 
 
-class ListingListView(ListView):
+class ListingListView(OrgScopedViewMixin, ListView):
     """Display paginated list of published listings with filtering"""
 
     model = Listing
@@ -184,8 +292,9 @@ class ListingListView(ListView):
         return get_listing_filter(self.model)
 
     def get_queryset(self) -> QuerySet:
-        """Return published listings, optionally filtered"""
+        """Return published listings, optionally filtered, scoped by org context"""
         queryset = super().get_queryset().filter(status="published")
+        queryset = self._scope_by_org(queryset)
         filterset_class = self.get_filterset_class()
         self.filterset = filterset_class(
             data=self.request.GET or None,
@@ -205,7 +314,7 @@ class ListingListView(ListView):
         return context
 
 
-class ListingDetailView(DetailView):
+class ListingDetailView(OrgScopedViewMixin, DetailView):
     """Display single listing detail"""
 
     model = Listing
@@ -214,8 +323,9 @@ class ListingDetailView(DetailView):
     slug_url_kwarg = "slug"
 
     def get_queryset(self) -> QuerySet:
-        """Return published listings only"""
-        return super().get_queryset().filter(status="published")
+        """Return published listings only, scoped by org context"""
+        queryset = super().get_queryset().filter(status="published")
+        return self._scope_by_org(queryset)
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         """Add rendered markdown description to context"""

@@ -56,15 +56,21 @@ git merge --no-ff wt-track{N}
 
 | # | Track | Phases | Status | Condition |
 |---|-------|--------|--------|-----------|
-| M7 | 1 | F11.11–F11.13b | 🟡 | **M7 in progress.** F11.11 ✅ merged; F11.12a ✅ merged. **Next:** F11.12b (listings isolation). |
-| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ (see decisions.md); F5.2a ✅ (archived — see CHANGELOG.md for detail). Target: centrally owned engine for restore/orchestration/verification (F5.2b) and protocol replacement (F5.3). |
+| M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
+| M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
+| M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
+| M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅. Blog post isolation, forms isolation, and listings isolation all merged. **Next:** F11.13a. |
+| M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
+| M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
+| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **Next:** F5.2b extract restore/orchestration. |
+| M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
 
 ## In-Flight Milestones
 
 ### M7 — F11 Module isolation rollout (blog/forms/listings/social)
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Status:** 🟡 In progress — F11.11 ✅, F11.12a ✅ merged to `v87`. F11.12b/F11.13a/F11.13b pending.
+**Status:** 🟡 In progress — F11.11 ✅, F11.12a ✅, F11.12b ✅ merged to `v87`. F11.13a/F11.13b pending.
 
 ---
 ## Backlog
@@ -75,8 +81,11 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M7 | 🟡 M7 in progress — F11.11 ✅, F11.12a ✅, F11.12b next |
-| 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅, F5.2a ✅; F5.2b–F5.4 pending |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a next) |
+| 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
+| 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
+| 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a–F5.4 pending |
+| 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
 
 ---
 
@@ -96,8 +105,19 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** M3 merged.
 
-- [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `listings`.
-- [ ] Unskip and confirm `listings` isolation test green.
+**Status:** ✅ Complete and merged to `v87`. Added `organization` FK (nullable) to `AbstractListing` with per-org slug uniqueness constraint, dual-manager contract (`TenantScopedManager` + `OperatorManager`), and additive `orgs/<slug>/` org-scoped routes (under `listings/` prefix) alongside flat paths. Route-aware views scope queries via `_is_org_scoped_route()`/`_resolve_active_org_optional()`. All 96 listings module tests pass. Isolation test unskipped and green. **Next:** F11.13a.
+
+**Groundwork committed to `wt-track1` (2026-06-22):**
+- ✅ `organization` FK on `AbstractListing` — per-org slug uniqueness via `UniqueConstraint` on `Listing`.
+- ✅ Dual-manager contract: `TenantScopedManager` + `OperatorManager` with `Listing.for_org()`.
+- ✅ Additive org-scoped routes (`orgs/<slug>`) for list/detail/publish under `listings/` prefix.
+- ✅ Route-aware views via `OrgScopedViewMixin._scope_by_org()` — flat routes scope to `organization__isnull=True`, org routes scope to active org.
+- ✅ `create_published_listing_from_payload` accepts org context for stamping and per-org slug checks.
+- ✅ Test settings updated (`quickscale_modules_orgs`, `TenantMiddleware`, `QUICKSCALE_MODE=saas`).
+- ✅ Org fixtures and isolation test implemented and green.
+
+- [x] Apply `organization_id` FK + isolation policy to `listings`.
+- [x] Unskip and confirm `listings` isolation test green.
 
 **Phase F11.13a — Social isolation** _(M7)_ _(Adaptive tier: 2)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 

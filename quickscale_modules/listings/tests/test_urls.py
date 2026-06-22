@@ -47,3 +47,20 @@ class TestListingUrls:
         """Test concrete listing detail URL"""
         url = reverse("concrete_listing_detail", args=["test-slug"])
         assert url == "/concrete/test-slug/"
+
+    def test_org_listing_list_url_resolves(self):
+        """Test org-scoped listing list URL resolves correctly"""
+        url = reverse("quickscale_listings:org-listing_list", args=["test-org"])
+        assert url == "/listings/orgs/test-org/"
+
+    def test_org_listing_detail_url_resolves(self):
+        """Test org-scoped listing detail URL resolves correctly"""
+        url = reverse(
+            "quickscale_listings:org-listing_detail", args=["test-org", "test-slug"]
+        )
+        assert url == "/listings/orgs/test-org/test-slug/"
+
+    def test_org_publish_api_url_resolves(self):
+        """Test org-scoped publish API URL resolves correctly"""
+        url = reverse("quickscale_listings:org-api_publish_listing", args=["test-org"])
+        assert url == "/listings/orgs/test-org/api/publish/"
