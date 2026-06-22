@@ -1,5 +1,7 @@
 """Tests for Forms module management commands"""
 
+from unittest.mock import patch
+
 import pytest
 from django.core.management import call_command
 from django.test import override_settings
@@ -143,3 +145,41 @@ class TestFormsAnonymizeSubmissions:
         call_command("forms_anonymize_submissions", verbosity=0)
         sub.refresh_from_db()
         assert sub.ip_address is None
+
+
+@pytest.mark.django_db
+class TestFormsAnonymizeSubmissionsOperatorPath:
+    """Phase F11.12a: verify management command uses the operator manager."""
+
+    def test_command_iterates_all_forms_including_unowned(self):
+        """Command uses all_objects so it visits forms without an organization."""
+        from datetime import timedelta
+
+        # Create a form that has no org (None) — not visible via the default
+        # tenant-scoped manager's for_org() path, but should be processed by
+        # the operator command.
+        form = Form.objects.create(
+            title="No-Org Form",
+            slug="no-org-form",
+            data_retention_days=30,
+            organization=None,
+        )
+        sub = FormSubmission.objects.create(
+            form=form,
+            ip_address="10.0.0.1",
+            user_agent="OldBrowser/1.0",
+        )
+        cutoff = timezone.now() - timedelta(days=31)
+        FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
+
+        call_command("forms_anonymize_submissions", verbosity=0)
+        sub.refresh_from_db()
+        assert sub.ip_address is None
+        assert sub.user_agent == ""
+
+    def test_command_iterates_via_all_objects(self):
+        """Command iterates Form.all_objects.all() (operator manager)."""
+        with patch.object(Form, "all_objects") as mock_mgr:
+            mock_mgr.all.return_value = Form.objects.none()
+            call_command("forms_anonymize_submissions", verbosity=0)
+            mock_mgr.all.assert_called_once()
