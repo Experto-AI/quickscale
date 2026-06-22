@@ -2,6 +2,8 @@
 
 SECRET_KEY = "test-secret-key-for-forms-module"
 
+QUICKSCALE_MODE = "saas"
+
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
@@ -10,7 +12,19 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "rest_framework",
     "django_filters",
+    "quickscale_modules_orgs",
     "quickscale_modules_forms",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "quickscale_modules_orgs.middleware.TenantMiddleware",
 ]
 
 DATABASES = {

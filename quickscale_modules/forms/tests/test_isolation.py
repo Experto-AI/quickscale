@@ -1,45 +1,70 @@
 """Cross-tenant isolation tests for the forms module.
 
-Phase 14.2 of the roadmap introduces isolation-marker stubs for every tenant
-module so that the isolation gap is enumerated per module and wired into
-default CI.
-
-The forms module has no ``organization`` FK on its models and exposes only
-public non-org-scoped URLs today, so the "Org A cannot read Org B form
-submissions" request-path assertion is not expressible yet.  These tests are
-placed under ``@pytest.mark.skip`` until Finding 11 structural isolation lands
-(Phase 11.2) and this module receives an ``organization`` FK plus org-scoped
-request paths.
-
-Removing the ``skip`` marker is an explicit step of the forms module's F11
-rollout slice.
+Phase F11.12a adds an ``organization`` FK to the ``Form`` model and
+org-scoped URL patterns.  The ``test_org_a_cannot_see_org_b_form_submissions``
+test is now active (skip marker removed).  It validates that the org-scoped
+admin submission list returns only the requesting org's submissions.
 """
 
 import pytest
 
 
 @pytest.mark.isolation
-@pytest.mark.skip(
-    reason=(
-        "forms has no organization FK on its models and no org-scoped request "
-        "path today.  The 'Org A cannot see Org B form submissions' assertion "
-        "is not expressible until Finding 11 structural isolation lands "
-        "(Phase 11.2).  Removing this skip is an explicit step of the forms "
-        "F11 rollout slice."
-    )
-)
 @pytest.mark.django_db
-def test_org_a_cannot_see_org_b_form_submissions():
+def test_org_a_cannot_see_org_b_form_submissions(
+    org_a,
+    org_b,
+    org_a_admin,
+    client,
+):
     """Org A must not be able to read Org B's form submissions via an org-scoped path.
 
-    Intent (once Finding 11 / Phase 11.2 lands):
-    1. Create an organization for Org A and an organization for Org B.
-    2. Create a form submission owned by Org B (via an ``organization`` FK).
-    3. Authenticate as an Org A admin.
-    4. Issue a GET request to the org-scoped form submission list endpoint for Org A.
-    5. Assert that the response contains no Org B submissions (only Org A's rows).
-
-    This test is skipped until the forms module has an ``organization`` FK and
-    an org-scoped viewset/URL pattern.
+    Phase F11.12a:
+    1. Create a ``Form`` owned by Org A and a ``Form`` owned by Org B.
+    2. Create a submission on each form.
+    3. Authenticate as an Org A admin (member of Org A).
+    4. Issue a GET to the org-scoped admin submission list for Org A's form.
+    5. Assert that only Org A's submission is visible.
     """
-    raise AssertionError("Not yet implemented — see skip reason.")
+    from quickscale_modules_forms.models import Form, FormSubmission
+
+    form_a = Form.objects.create(
+        title="Org A Form",
+        slug="org-a-form",
+        organization=org_a,
+    )
+    form_b = Form.objects.create(
+        title="Org B Form",
+        slug="org-b-form",
+        organization=org_b,
+    )
+
+    submission_a = FormSubmission.objects.create(
+        form=form_a,
+        ip_address="192.168.1.1",
+        user_agent="TestAgent/1.0",
+    )
+    FormSubmission.objects.create(
+        form=form_b,
+        ip_address="10.0.0.1",
+        user_agent="TestAgent/2.0",
+    )
+
+    client.force_login(org_a_admin)
+    response = client.get(
+        f"/orgs/{org_a.slug}/forms/api/admin/forms/{form_a.pk}/submissions/"
+    )
+
+    assert response.status_code == 200, (
+        f"Expected 200 OK, got {response.status_code}. "
+        f"Response: {response.content.decode()[:500]}"
+    )
+
+    body = response.json()
+    submission_ids = [s["id"] for s in body]
+    assert submission_a.pk in submission_ids, "Org A's own submission should be visible"
+    # Org B's submissions should not be in Org A's org-scoped list
+    assert all(
+        FormSubmission.objects.get(pk=sid).form.organization_id == org_a.pk
+        for sid in submission_ids
+    ), "All returned submissions must belong to Org A"
