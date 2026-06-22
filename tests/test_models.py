@@ -154,12 +154,18 @@ class TestAbstractListingViaConcreteModel:
         )
         assert listing.featured_image_alt == ""
 
-    def test_slug_uniqueness(self, listing_factory):
-        """Test that slugs are unique"""
-        listing_factory(title="Same Title")
-        with pytest.raises(Exception):  # IntegrityError
-            # Second listing with same title will generate same slug
-            ConcreteListing.objects.create(title="Same Title")
+    def test_slug_no_longer_globally_unique(self, listing_factory):
+        """Test slugs are no longer globally unique (per-org uniqueness on Listing).
+
+        Phase F11.12b switches from global slug uniqueness to a per-org
+        ``UniqueConstraint`` on the ``Listing`` model.  ``AbstractListing``
+        subclasses (like ``ConcreteListing``) only have the field-level
+        definition without the concrete constraint, so duplicate slugs are
+        permitted at this level.
+        """
+        listing1 = listing_factory(title="Same Title")
+        listing2 = ConcreteListing.objects.create(title="Same Title")
+        assert listing1.slug == listing2.slug == "same-title"
 
 
 @pytest.mark.django_db

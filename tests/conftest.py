@@ -88,3 +88,82 @@ def sold_listing(listing_factory):
         price=Decimal("500.00"),
         location="Chicago",
     )
+
+
+# ---------------------------------------------------------------------------
+# Organization fixtures for Phase F11.12b tenant-scoped listings
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def org(db):
+    """Create a default test organization for listings model tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Test Org", slug="test-org")
+
+
+@pytest.fixture
+def org_a(db):
+    """Organization A — first tenant in isolation tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Org A", slug="org-a")
+
+
+@pytest.fixture
+def org_b(db):
+    """Organization B — second tenant in isolation tests."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.create(name="Org B", slug="org-b")
+
+
+@pytest.fixture
+def org_a_admin(db, org_a):
+    """Staff user who is an admin of Organization A."""
+    from django.contrib.auth import get_user_model
+
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-a-admin",
+        email="org-a-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_a,
+        role=OrgRole.ADMIN,
+    )
+    return user
+
+
+@pytest.fixture
+def org_b_admin(db, org_b):
+    """Staff user who is an admin of Organization B."""
+    from django.contrib.auth import get_user_model
+
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="org-b-admin",
+        email="org-b-admin@example.com",
+        password="TestPass123!",
+        is_staff=True,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org_b,
+        role=OrgRole.ADMIN,
+    )
+    return user
