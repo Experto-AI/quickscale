@@ -59,7 +59,7 @@ git merge --no-ff wt-track{N}
 | M1 | 1 | F11.2–F11.5 | 🟢 | **Merged to v87.** F11.2 ✅ F11.3 ✅ F11.4 ✅ F11.5 ✅. |
 | M3 | 1 | F11.6–F11.10 | 🟢 | **Merged to v87.** F11.6 ✅ F11.7 ✅ F11.8 ✅ F11.9 ✅ F11.10a ✅ F11.10b ✅ F11.10c ✅ F11.10d ✅ F11.10e ✅. Full closeout: same-org FK audit/fix (225/225), pre-sync and post-sync closeout slices each 254/254, all runtime tests passing. **Next:** M7 / F11.11. |
 | M5 | 3 | F2.5–F2.9b | 🟢 | **Merged to v87.** F2.5 ✅ F2.6 ✅ F2.7 ✅ F2.8 ✅ F2.9a ✅ F2.9b ✅. |
-| M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅. Blog post isolation, forms isolation, and listings isolation all merged. **Next:** F11.13a. |
+| M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅. Blog post isolation, forms isolation, and listings isolation all merged. Social isolation implemented — `organization` FK on `BaseSocialItem`, dual-manager contract, org-scoped service queries, relaxed `normalized_url` uniqueness. **Next:** F11.13b. |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
 | M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. F5.3 ✅ protocol replacement + module slimming. **Next:** F5.4 migration docs. |
@@ -70,7 +70,7 @@ git merge --no-ff wt-track{N}
 ### M7 — F11 Module isolation rollout (blog/forms/listings/social)
 **Track:** 1 | **Worktree:** `quickscale-wt-track1`
 
-**Status:** 🟡 In progress — F11.11 ✅, F11.12a ✅, F11.12b ✅ merged to `v87`. F11.13a/F11.13b pending.
+**Status:** 🟡 In progress — F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅ merged to `v87`. F11.13b pending.
 
 ---
 ## Backlog
@@ -81,7 +81,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 | Priority | Finding | Milestone(s) | Status |
 |----------|---------|-------------|--------|
-| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a next) |
+| 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅, F11.13b next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
 | 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a ✅; F5.2b ✅; F5.3 ✅; F5.4 pending |
@@ -91,7 +91,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 11 — Enforce structural multi-tenant isolation
 
-**Why still open:** F11.12b (listings), F11.13a (social), and F11.13b (rollout closeout) remain. Completed work through F11.12a is archived in CHANGELOG.md.
+**Why still open:** F11.13b (rollout closeout) remains. Completed work through F11.13a is archived in CHANGELOG.md.
 
 ---
 
@@ -123,7 +123,13 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Dependencies:** F11.11 + F11.12a + F11.12b.
 
-- [ ] Apply `TenantModel` base + `organization_id` FK + isolation policy to `social` (and any other tenant tables discovered during rollout).
+**Status:** ✅ Complete and implemented on `wt-track1`. Added `organization` FK (nullable) to `BaseSocialItem` with dual-manager contract (`TenantScopedManager` + `OperatorManager`) and per-org service queries. Removed global `unique=True` on `normalized_url` so multiple orgs may link to the same social URL. `list_published_social_links()` and `list_published_social_embeds()` accept an optional `organization_id` parameter for tenant-scoped queries while preserving backward compatibility. Social module isolation tests unskipped and green. **Next:** F11.13b.
+
+- [x] Apply `organization_id` FK + isolation policy to `social`.
+- [x] Remove global `normalized_url` uniqueness to allow same-URL usage across orgs.
+- [x] Add `TenantScopedManager` + `OperatorManager` dual-manager contract.
+- [x] Add org-scoped parameter to `list_published_social_links()` and `list_published_social_embeds()`.
+- [x] Unskip and confirm social isolation tests green.
 
 **Phase F11.13b — Rollout closeout** _(M7 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 11](#finding-11--enforce-structural-multi-tenant-isolation))_
 

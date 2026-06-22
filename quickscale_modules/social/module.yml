@@ -46,6 +46,9 @@ config:
       django_setting: QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE
       description: "Optional maximum number of curated embeds exposed through the fixed /social/embeds surface."
 
+required_modules:
+  - orgs
+
 managed_files:
   social_init:
     renderer: social.managed_init

@@ -11,8 +11,11 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "quickscale_modules_orgs",
     "quickscale_modules_social",
 ]
+
+QUICKSCALE_MODE = "saas"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -22,6 +25,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "quickscale_modules_orgs.middleware.TenantMiddleware",
 ]
 
 ROOT_URLCONF = "tests.urls"
