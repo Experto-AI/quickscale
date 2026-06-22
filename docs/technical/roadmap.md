@@ -62,7 +62,7 @@ git merge --no-ff wt-track{N}
 | M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅. Blog post isolation, forms isolation, and listings isolation all merged. Social isolation implemented — `organization` FK on `BaseSocialItem`, dual-manager contract, org-scoped service queries, relaxed `normalized_url` uniqueness. **Next:** F11.13b. |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
-| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. F5.3 ✅ protocol replacement + module slimming. **Next:** F5.4 migration docs. |
+| M10 | 2 | F5.2a–F5.4 | 🟢 | **Phase work complete on wt-track2 — pending merge-back to v87.** M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. F5.3 ✅ protocol replacement + module slimming. F5.4 ✅ migration docs added to `docs/technical/dr_engine_migration.md`. All Track 2 phases complete. |
 | M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
 
 ## In-Flight Milestones
@@ -84,7 +84,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a ✅, F11.13b next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
-| 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a ✅; F5.2b ✅; F5.3 ✅; F5.4 pending |
+| 5 | F5 — DR engine split | M10 | 🟢 M10 implementation complete on wt-track2. All F5 phases complete. |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
 
 ---
@@ -143,7 +143,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 5 — Split the DR engine out of the embeddable backups module
 
-**Why still open:** **F5.1 ✅** — boundary contract defined in `decisions.md`. **F5.2a ✅** — snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **F5.2b ✅** — restore/orchestration flow extracted to `quickscale_core.dr_engine.recovery`; verification recording and rollback-pin handling extracted to `quickscale_core.dr_engine.verification`; thin Django-facing wrappers preserved in `quickscale_modules_backups.services`. Repo-root `make test` passed — 1392/28 core, 1778/28 CLI, 227 backups, 93.33% overall mean coverage; all modules green (only expected existing skips: forms/listings/orgs/social isolation or PostgreSQL-dependent). **F5.3 ✅** — protocol replacement and module slimming complete. **Next:** F5.4 — migration documentation.
+**Status:** ✅ All phases complete. See CHANGELOG.md for per-phase implementation summaries and `docs/technical/dr_engine_migration.md` for the migration guide.
 
 **Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
 **Dependencies:** M6 ✅ + M8 ✅ merged.
@@ -163,8 +163,6 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Validation evidence (F5.2b closeout):** Repo-root `make test` passed — quickscale_core 1392 passed / 28 deselected / 93.03% coverage; quickscale_cli 1778 passed / 28 deselected / 91.58% coverage; backups module 227 passed / 84.41% coverage; overall mean 93.33%; all modules green with only the expected existing skips (forms/listings/orgs/social isolation or PostgreSQL-dependent skip).
 
-**Next:** F5.4 — migration docs.
-
 **Phase F5.3 — Slim the module and protocol** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
 
 **Dependencies:** F5.2b.
@@ -178,9 +176,11 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 - [x] Remaining management commands kept as thin Django/admin-facing surfaces with backward-compatible env-var fallback (backups_create, backups_report, backups_restore, backups_record_verification, backups_pin, backups_sync_media, backups_validate, backups_prune).
 - [x] CLI `quickscale dr` surface unchanged — all capture/plan/execute/report workflow preserved. Env-sync planning and Railway API calls remain in CLI orchestration.
 
-**Phase F5.4 — Migration docs** _(M10 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.4 — Migration docs** _(M10 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
 
-- [ ] Document the migration and compatibility contract for existing generated projects adopting the split DR architecture.
+**Status:** ✅ Complete. Authored `docs/technical/dr_engine_migration.md` — standalone migration guide covering the post-split architecture overview, migration path for existing generated projects (`quickscale apply` syncs the `quickscale-core` dependency entry automatically, but standalone projects may need to adjust the synced source for their layout), backward compatibility table, dependency changes, and verification checklist. Roadmap and CHANGELOG updated. **M10 closeout — all Track 2 phases complete.**
+
+- [x] Document the migration and compatibility contract for existing generated projects adopting the split DR architecture.
 
 ---
 

@@ -935,21 +935,20 @@ The authoritative current CLI command surface now lives in [implementation_contr
 
 #### Disaster Recovery Engine Boundary Contract (F5 / M10)
 
-**Status:** Target boundary for the M10 DR engine split. Phases F5.2a (snapshot/
-archive primitives), F5.2b (restore/orchestration flow), and F5.3 (hidden-
-protocol replacement with explicit typed adapter) are shipped. Migration
-documentation (F5.4) remains as planned work. See "Current state" below for
-the post-F5.3 code layout. This entry originally defined the boundary only
-(roadmap phase F5.1); the extraction phases F5.2a/F5.2b/F5.3 now ship the
-core/module split and explicit adapter described here.
+**Status:** Target boundary for the M10 DR engine split, now shipped across
+all four phases (F5.2a/F5.2b/F5.3/F5.4). See "Current state" below for the
+post-F5.3 code layout. This entry originally defined the boundary only
+(roadmap phase F5.1); the extraction phases F5.2a/F5.2b/F5.3 shipped the
+core/module split and explicit adapter described here, and F5.4 added the
+migration documentation at `docs/technical/dr_engine_migration.md`.
 
 **Why (Finding 5):** The embeddable `backups` module originally carried
 platform-level backup/restore orchestration and communicated with the CLI through
 a hidden management-command + environment-variable protocol. The engine must move
 into centrally owned code, leaving only thin Django-facing surfaces in the
 embeddable module. F5.2a/F5.2b shipped the core extraction; F5.3 replaced the
-hidden protocol with an explicit typed adapter. Migration documentation (F5.4)
-remains.
+hidden protocol with an explicit typed adapter. F5.4 ships the migration
+documentation at `docs/technical/dr_engine_migration.md`.
 
 **Current state (post-F5.3):**
 - **Centrally owned DR engine (`quickscale_core.dr_engine`):**
@@ -1041,10 +1040,11 @@ remains.
   backward-compatibility shim; generated-project migration guidance is documented
   in F5.4.
 
-**Out of scope for this section:** Migration documentation (F5.4) remains planned
-work not covered by this boundary definition. F5.2a (snapshot/archive
-primitives), F5.2b (restore/orchestration), and F5.3 (explicit adapter boundary)
-are shipped and reflected in the current-state description above.
+**Out of scope for this section:** Migration documentation (F5.4) is shipped at
+`docs/technical/dr_engine_migration.md`. F5.2a (snapshot/archive primitives),
+F5.2b (restore/orchestration), F5.3 (explicit adapter boundary), and F5.4
+(migration docs) are all shipped and reflected in the current-state description
+above.
 
 ---
 
