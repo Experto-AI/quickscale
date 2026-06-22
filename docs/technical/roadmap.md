@@ -62,7 +62,7 @@ git merge --no-ff wt-track{N}
 | M7 | 1 | F11.11–F11.13b | 🟢 | **Merged to v87.** F11.11 ✅, F11.12a ✅, F11.12b ✅. Blog post isolation, forms isolation, and listings isolation all merged. **Next:** F11.13a. |
 | M8 | 3 | F12.1–F12.3b | 🟢 | **Merged to v87.** F12.1 ✅ F12.2 ✅ F12.3a ✅ F12.3b ✅. Railway rollback/resume closeout complete. |
 | M9 | 1 | F13.1–F13.3 | 🟢 | **Merged to v87.** F13.1 ✅ F13.2 ✅ F13.3 ✅. Org-authoritative billing contract; `quickscale_billing_unique_current_subscription_per_organization` constraint; dual-FK rows backfilled via migration; mgmt command provided. |
-| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. **Next:** F5.3 protocol replacement + module slimming. |
+| M10 | 2 | F5.2a–F5.4 | 🟡 | M6 ✅ + M8 ✅ merged; F5.1 ✅ boundary contract in decisions.md. F5.2a ✅ snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. F5.2b ✅ restore/orchestration/verification extracted to `dr_engine.recovery` and `dr_engine.verification`. F5.3 ✅ protocol replacement + module slimming. **Next:** F5.4 migration docs. |
 | M11 | 3 | F7.1–F7.3 | 🟡 | M8 merged; F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT, templates variableized). F7.3 pending — validation and doc alignment. |
 
 ## In-Flight Milestones
@@ -84,7 +84,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 | 1 | F11 — Structural multi-tenant isolation | M1 → M3 → M7 | 🟢 M1 merged, M3 merged/closed; M7 in progress (F11.11 ✅, F11.12a ✅, F11.12b ✅, F11.13a next) |
 | 2 | F2 — Project state + module provenance | M5 | 🟢 M5 merged to v87 |
 | 3 \| parallel | F13 — Single billing customer SSOT | M9 | 🟢 M9 merged to v87 |
-| 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a ✅; F5.2b ✅; F5.3–F5.4 pending |
+| 5 | F5 — DR engine split | M10 | 🟡 F5.1 ✅; F5.2a ✅; F5.2b ✅; F5.3 ✅; F5.4 pending |
 | 6 | F7 — Generator vs generated-project runtime pins | M11 | 🟡 F7.1 ✅, F7.2 ✅ (ownership split, runtime_pins.py SSOT). F7.3 pending — validation, doc alignment. |
 
 ---
@@ -137,7 +137,7 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 ### Finding 5 — Split the DR engine out of the embeddable backups module
 
-**Why still open:** **F5.1 ✅** — boundary contract defined in `decisions.md`. **F5.2a ✅** — snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **F5.2b ✅** — restore/orchestration flow extracted to `quickscale_core.dr_engine.recovery`; verification recording and rollback-pin handling extracted to `quickscale_core.dr_engine.verification`; thin Django-facing wrappers preserved in `quickscale_modules_backups.services`. Repo-root `make test` passed — 1392/28 core, 1778/28 CLI, 227 backups, 93.33% overall mean coverage; all modules green (only expected existing skips: forms/listings/orgs/social isolation or PostgreSQL-dependent). **Next:** F5.3 — replace hidden CLI↔management-command/env-var/stdout-JSON protocol and further slim backups module; report/inspection helpers and other thin Django-facing surfaces remain in `services.py` for that phase. F5.4 — migration documentation.
+**Why still open:** **F5.1 ✅** — boundary contract defined in `decisions.md`. **F5.2a ✅** — snapshot/archive primitives extracted to `quickscale_core.dr_engine.primitives`. **F5.2b ✅** — restore/orchestration flow extracted to `quickscale_core.dr_engine.recovery`; verification recording and rollback-pin handling extracted to `quickscale_core.dr_engine.verification`; thin Django-facing wrappers preserved in `quickscale_modules_backups.services`. Repo-root `make test` passed — 1392/28 core, 1778/28 CLI, 227 backups, 93.33% overall mean coverage; all modules green (only expected existing skips: forms/listings/orgs/social isolation or PostgreSQL-dependent). **F5.3 ✅** — protocol replacement and module slimming complete. **Next:** F5.4 — migration documentation.
 
 **Track:** 2 | **Worktree:** `quickscale-wt-track2` | **Merges as:** M10
 **Dependencies:** M6 ✅ + M8 ✅ merged.
@@ -157,18 +157,20 @@ Execute top-down. Earlier items are prerequisites for or de-risk later items.
 
 **Validation evidence (F5.2b closeout):** Repo-root `make test` passed — quickscale_core 1392 passed / 28 deselected / 93.03% coverage; quickscale_cli 1778 passed / 28 deselected / 91.58% coverage; backups module 227 passed / 84.41% coverage; overall mean 93.33%; all modules green with only the expected existing skips (forms/listings/orgs/social isolation or PostgreSQL-dependent skip).
 
-**Next:** F5.3 — protocol replacement + module slimming.
+**Next:** F5.4 — migration docs.
 
-**Phase F5.3 — Slim the module and protocol** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
+**Phase F5.3 — Slim the module and protocol** _(Adaptive tier: 2)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_ — ✅ **Complete.**
 
 **Dependencies:** F5.2b.
 
-- [ ] Replace the hidden CLI↔module management-command/env-var protocol with a smaller explicit internal boundary or adapter.
-- [ ] Shrink the embeddable backups module to thin Django-facing surfaces only.
+**Status:** ✅ Complete. See CHANGELOG.md for full implementation summary.
 
-**Remaining findings (carried forward from F5.2b):**
-- Report/inspection helpers and other thin Django-facing surfaces remain in `services.py` for this phase.
-- CLI surface (`quickscale dr`) is unchanged by F5.2b — protocol decoupling deferred to F5.3.
+- [x] Replaced hidden docker-exec/management-command/env-var/stdout-JSON protocol with explicit typed adapter (`quickscale_core.dr_engine.adapter`).
+- [x] Added single `dr_adapter_call` management command bridge in the backups module (thin dispatch surface only).
+- [x] Rewrote `dr_commands.py` to call the adapter through the bridge — removed `_run_backend_container_command`, `_run_manage_json`, `_build_manage_overrides`/`_source_manage_overrides`/`_target_manage_overrides`, `_prefix_target_runtime_variables`, `_target_media_sync_variables`, `_is_manual_only_restore_gate`, and the `_TARGET_ENV_PREFIX` env-var protocol.
+- [x] Slimmed `sync_backup_snapshot_media()` in services.py — added explicit `target_runtime_settings` parameter; the adapter path uses this parameter with an explicit `ROUTE_KIND` marker to preserve the Railway-target media fail-closed guard, while the env-var fallback (`_load_target_runtime_settings()`) is preserved for admin/manual use through the retained management commands.
+- [x] Remaining management commands kept as thin Django/admin-facing surfaces with backward-compatible env-var fallback (backups_create, backups_report, backups_restore, backups_record_verification, backups_pin, backups_sync_media, backups_validate, backups_prune).
+- [x] CLI `quickscale dr` surface unchanged — all capture/plan/execute/report workflow preserved. Env-sync planning and Railway API calls remain in CLI orchestration.
 
 **Phase F5.4 — Migration docs** _(M10 closeout)_ _(Adaptive tier: 1)_ _(why → [Finding 5](#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module))_
 

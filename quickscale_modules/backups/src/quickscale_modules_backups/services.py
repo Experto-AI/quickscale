@@ -2563,8 +2563,23 @@ def sync_backup_snapshot_media(
     snapshot_id: str,
     *,
     dry_run: bool = False,
+    target_runtime_settings: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Dry-run or execute media sync for one snapshot using target env overrides."""
+    """Dry-run or execute media sync for one snapshot using target env overrides.
+
+    Parameters
+    ----------
+    snapshot_id:
+        Public stored snapshot locator.
+    dry_run:
+        When True, validate inputs without copying objects.
+    target_runtime_settings:
+        Explicit target runtime settings (replaces the
+        ``QUICKSCALE_DR_TARGET_*`` env-var protocol from the CLI layer).
+        When *None*, falls back to reading from environment variables
+        (``_load_target_runtime_settings``) for backward compatibility
+        with admin/manual usage.
+    """
     snapshot = get_backup_snapshot(snapshot_id)
     media_manifest = _load_snapshot_sidecar_payload(
         snapshot, _MEDIA_SYNC_MANIFEST_FILENAME
@@ -2581,7 +2596,11 @@ def sync_backup_snapshot_media(
         raise BackupError("Media manifest inventory must be a list")
 
     source_runtime = _resolve_media_runtime(settings)
-    target_settings = _load_target_runtime_settings()
+    target_settings = (
+        target_runtime_settings
+        if target_runtime_settings is not None
+        else _load_target_runtime_settings()
+    )
     target_runtime = _resolve_media_runtime(
         target_settings,
         require_s3_compatible=(

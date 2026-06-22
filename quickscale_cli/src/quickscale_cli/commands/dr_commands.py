@@ -1,4 +1,10 @@
-"""Disaster-recovery and environment-migration command surface."""
+"""Disaster-recovery and environment-migration command surface.
+
+F5.3: All DR operations now call the explicit typed adapter
+(``quickscale_core.dr_engine.adapter``) through the thin
+``dr_adapter_call`` management command bridge, replacing the previous
+docker-exec/management-command/env-var/stdout-JSON protocol.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +19,11 @@ import click
 
 from quickscale_cli.commands.development_commands import _validate_project_and_docker
 from quickscale_core.contracts.module_options import get_env_var_portability
+from quickscale_core.dr_engine.primitives import (
+    _ENV_VAR_MANIFEST_FILENAME,
+    _PROMOTION_VERIFICATION_FILENAME,
+    _RELEASE_METADATA_FILENAME,
+)
 from quickscale_core.utils.project_identity import (
     ProjectIdentity,
     resolve_project_identity,
@@ -23,10 +34,9 @@ from quickscale_cli.utils.railway_utils import (
     set_railway_variables_batch,
 )
 
-_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"
-_ENV_MANIFEST_FILENAME = "env-var-manifest.json"
-_PROMOTION_VERIFICATION_FILENAME = "promotion-verification.json"
-_RELEASE_METADATA_FILENAME = "release-metadata.json"
+# Sidecar filename constant used by env-sync planning (maps to
+# _ENV_VAR_MANIFEST_FILENAME in primitives.py).
+_ENV_MANIFEST_FILENAME = _ENV_VAR_MANIFEST_FILENAME
 
 
 @dataclass(frozen=True)
@@ -201,62 +211,28 @@ def _build_context(
     )
 
 
-def _settings_module(identity: ProjectIdentity, environment_label: str) -> str:
-    if environment_label == "local":
-        return f"{identity.package}.settings.local"
-    return f"{identity.package}.settings.production"
+def _call_adapter(
+    function_name: str,
+    /,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Call a DR adapter function inside the backend container.
 
-
-def _build_manage_overrides(
-    identity: ProjectIdentity,
-    environment_label: str,
-    *,
-    runtime_variables: dict[str, str] | None = None,
-    allow_restore: bool = False,
-) -> dict[str, str]:
-    overrides = dict(runtime_variables or {})
-    overrides["DJANGO_SETTINGS_MODULE"] = _settings_module(identity, environment_label)
-    overrides["QUICKSCALE_ENVIRONMENT"] = environment_label
-    if allow_restore:
-        overrides["QUICKSCALE_BACKUPS_ALLOW_RESTORE"] = "true"
-    return overrides
-
-
-def _source_manage_overrides(
-    context: DisasterRecoveryContext,
-    *,
-    allow_restore: bool = False,
-) -> dict[str, str]:
-    return _build_manage_overrides(
-        context.identity,
-        context.route.source_environment,
-        runtime_variables=context.source_runtime_variables,
-        allow_restore=allow_restore,
-    )
-
-
-def _target_manage_overrides(
-    context: DisasterRecoveryContext,
-    *,
-    allow_restore: bool = False,
-) -> dict[str, str]:
-    return _build_manage_overrides(
-        context.identity,
-        context.route.target_environment,
-        runtime_variables=context.target_runtime_variables,
-        allow_restore=allow_restore,
-    )
-
-
-def _run_backend_container_command(
-    command_args: list[str],
-    *,
-    env_overrides: dict[str, str] | None = None,
-) -> str:
-    docker_command = ["docker", "exec"]
-    for key, value in sorted((env_overrides or {}).items()):
-        docker_command.extend(["-e", f"{key}={value}"])
-    docker_command.extend([get_backend_container_name(), *command_args])
+    Uses the thin ``dr_adapter_call`` management command as the transport
+    bridge — no env-var protocol, no per-operation management commands.
+    """
+    args_json = json.dumps(kwargs, default=str)
+    docker_command = [
+        "docker",
+        "exec",
+        get_backend_container_name(),
+        "python",
+        "manage.py",
+        "dr_adapter_call",
+        function_name,
+        "--args-json",
+        args_json,
+    ]
 
     result = subprocess.run(
         docker_command,
@@ -264,39 +240,21 @@ def _run_backend_container_command(
         text=True,
         check=False,
     )
+
     if result.returncode == 0:
-        return result.stdout
+        try:
+            return json.loads(result.stdout)  # type: ignore[no-any-return]
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(
+                f"DR adapter '{function_name}' returned invalid JSON."
+            ) from exc
 
     error_output = (result.stderr or result.stdout or "unknown error").strip()
     if "No such container" in error_output or "is not running" in error_output:
         raise click.ClickException(
             "Backend container is not running. Start services with 'quickscale up' first."
         )
-    raise click.ClickException(
-        f"Backend container command failed: {' '.join(command_args)} :: {error_output}"
-    )
-
-
-def _run_manage_json(
-    manage_args: list[str],
-    *,
-    env_overrides: dict[str, str],
-) -> dict[str, Any]:
-    output = _run_backend_container_command(
-        ["python", "manage.py", *manage_args],
-        env_overrides=env_overrides,
-    )
-    try:
-        payload = json.loads(output)
-    except json.JSONDecodeError as exc:
-        raise click.ClickException(
-            f"Expected JSON output from manage.py {' '.join(manage_args)}."
-        ) from exc
-    if not isinstance(payload, dict):
-        raise click.ClickException(
-            f"Expected JSON object output from manage.py {' '.join(manage_args)}."
-        )
-    return payload
+    raise click.ClickException(f"DR adapter '{function_name}' failed: {error_output}")
 
 
 def _fetch_snapshot_report(
@@ -305,12 +263,10 @@ def _fetch_snapshot_report(
     snapshot_id: str,
     sidecar_payloads: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    manage_args = ["backups_report", snapshot_id, "--json"]
-    for filename in sidecar_payloads:
-        manage_args.extend(["--sidecar-payload", filename])
-    return _run_manage_json(
-        manage_args,
-        env_overrides=_source_manage_overrides(context),
+    return _call_adapter(
+        "fetch_snapshot_report",
+        snapshot_id=snapshot_id,
+        sidecar_payloads=list(sidecar_payloads),
     )
 
 
@@ -319,12 +275,10 @@ def _capture_snapshot_report(
     *,
     resume_snapshot_id: str | None = None,
 ) -> dict[str, Any]:
-    manage_args = ["backups_create", "--json"]
-    if resume_snapshot_id:
-        manage_args.extend(["--resume", resume_snapshot_id])
-    return _run_manage_json(
-        manage_args,
-        env_overrides=_source_manage_overrides(context),
+    return _call_adapter(
+        "capture_snapshot",
+        trigger="manual",
+        resume_snapshot_id=resume_snapshot_id,
     )
 
 
@@ -336,21 +290,13 @@ def _record_verification(
     status: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    return _run_manage_json(
-        [
-            "backups_record_verification",
-            snapshot_id,
-            "--route",
-            context.route.label,
-            "--phase",
-            phase,
-            "--status",
-            status,
-            "--payload-json",
-            json.dumps(payload, sort_keys=True),
-            "--json",
-        ],
-        env_overrides=_source_manage_overrides(context),
+    return _call_adapter(
+        "record_verification",
+        snapshot_id=snapshot_id,
+        route=context.route.label,
+        phase=phase,
+        status=status,
+        payload=payload,
     )
 
 
@@ -361,36 +307,12 @@ def _set_rollback_pin(
     hours: int,
     reason: str,
 ) -> dict[str, Any]:
-    return _run_manage_json(
-        [
-            "backups_pin",
-            snapshot_id,
-            "--hours",
-            str(hours),
-            "--reason",
-            reason,
-            "--json",
-        ],
-        env_overrides=_source_manage_overrides(context),
+    return _call_adapter(
+        "set_rollback_pin",
+        snapshot_id=snapshot_id,
+        hours=hours,
+        reason=reason,
     )
-
-
-def _prefix_target_runtime_variables(
-    target_runtime_variables: dict[str, str],
-) -> dict[str, str]:
-    return {
-        f"{_TARGET_ENV_PREFIX}{key}": value
-        for key, value in target_runtime_variables.items()
-    }
-
-
-def _target_media_sync_variables(
-    context: DisasterRecoveryContext,
-) -> dict[str, str]:
-    return {
-        **context.target_runtime_variables,
-        "ROUTE_KIND": context.route.target_kind,
-    }
 
 
 def _run_media_sync(
@@ -399,77 +321,55 @@ def _run_media_sync(
     snapshot_id: str,
     dry_run: bool,
 ) -> dict[str, Any]:
-    manage_args = ["backups_sync_media", snapshot_id, "--json"]
-    if dry_run:
-        manage_args.append("--dry-run")
-    env_overrides = _source_manage_overrides(context)
-    env_overrides.update(
-        _prefix_target_runtime_variables(_target_media_sync_variables(context))
+    """Run media sync via the adapter, carrying route kind for Railway-target guard."""
+    target_settings = dict(context.target_runtime_variables)
+    target_settings["ROUTE_KIND"] = context.route.target_kind
+    return _call_adapter(
+        "sync_media",
+        snapshot_id=snapshot_id,
+        dry_run=dry_run,
+        target_runtime_settings=target_settings,
     )
-    return _run_manage_json(manage_args, env_overrides=env_overrides)
 
 
 def _build_database_plan(
     context: DisasterRecoveryContext,
     snapshot_report: dict[str, Any],
 ) -> dict[str, Any]:
-    authoritative_dump = snapshot_report.get("authoritative_dump") or {}
-    restore_file = str(authoritative_dump.get("local_path") or "").strip()
-    confirmation_value = str(snapshot_report.get("confirmation_value") or "").strip()
-    if not restore_file or not confirmation_value:
-        raise click.ClickException(
-            f"Snapshot '{snapshot_report['snapshot_id']}' is missing its authoritative restore file metadata."
-        )
-
-    output = _run_backend_container_command(
-        [
-            "python",
-            "manage.py",
-            "backups_restore",
-            "--file",
-            restore_file,
-            "--confirm",
-            confirmation_value,
-            "--dry-run",
-        ],
-        env_overrides=_target_manage_overrides(context),
+    return _call_adapter(
+        "build_database_plan",
+        snapshot_report=snapshot_report,
     )
-    return {
-        "status": "ready",
-        "message": output.strip(),
-        "restore_file": restore_file,
-        "confirmation_value": confirmation_value,
-        "restore_scope": authoritative_dump.get("restore_scope"),
-        "restore_scope_label": authoritative_dump.get("restore_scope_label"),
-    }
 
 
 def _load_source_live_variables(context: DisasterRecoveryContext) -> dict[str, str]:
     if context.route.source_kind == "railway":
         return context.source_runtime_variables
 
-    output = _run_backend_container_command(["env"])
+    docker_command = [
+        "docker",
+        "exec",
+        get_backend_container_name(),
+        "env",
+    ]
+    result = subprocess.run(
+        docker_command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "unknown error").strip()
+        raise click.ClickException(
+            f"Unable to read source environment variables: {error}"
+        )
     environment: dict[str, str] = {}
-    for line in output.splitlines():
+    for line in result.stdout.splitlines():
         if "=" not in line:
             continue
         key, value = line.split("=", 1)
         environment[key] = value
     return environment
-
-
-def _is_manual_only_restore_gate(normalized_name: str) -> bool:
-    # Backward-compatible shim: the destructive-restore-gate rule now
-    # lives inside :func:`quickscale_core.contracts.module_options.
-    # get_env_var_portability`, but a few existing tests and any future
-    # internal callers may still want to ask the same question directly.
-    # We rebuild the rule inline so the shim has zero runtime cost and
-    # stays trivially in lockstep with the centralized classification.
-    return normalized_name == "QUICKSCALE_BACKUPS_ALLOW_RESTORE" or (
-        normalized_name.startswith("QUICKSCALE_")
-        and "ALLOW" in normalized_name
-        and "RESTORE" in normalized_name
-    )
 
 
 def _classify_env_var(name: str) -> tuple[str, str]:
@@ -657,46 +557,12 @@ def _execute_database_restore(
     context: DisasterRecoveryContext,
     snapshot_report: dict[str, Any],
 ) -> dict[str, Any]:
-    authoritative_dump = snapshot_report.get("authoritative_dump") or {}
-    restore_file = str(authoritative_dump.get("local_path") or "").strip()
-    confirmation_value = str(snapshot_report.get("confirmation_value") or "").strip()
-    if not restore_file or not confirmation_value:
-        raise click.ClickException(
-            f"Snapshot '{snapshot_report['snapshot_id']}' is missing its authoritative restore file metadata."
-        )
-
-    restore_args = [
-        "python",
-        "manage.py",
-        "backups_restore",
-        "--file",
-        restore_file,
-        "--confirm",
-        confirmation_value,
-    ]
-    if context.route.target_environment == "railway-production":
-        restore_args.append("--allow-production")
-
-    restore_message = _run_backend_container_command(
-        restore_args,
-        env_overrides=_target_manage_overrides(context, allow_restore=True),
+    allow_production = context.route.target_environment == "railway-production"
+    return _call_adapter(
+        "execute_database_restore",
+        snapshot_report=snapshot_report,
+        allow_production=allow_production,
     )
-    migrate_message = _run_backend_container_command(
-        ["python", "manage.py", "migrate", "--noinput"],
-        env_overrides=_target_manage_overrides(context),
-    )
-    check_message = _run_backend_container_command(
-        ["python", "manage.py", "check"],
-        env_overrides=_target_manage_overrides(context),
-    )
-    return {
-        "status": "completed",
-        "restore_message": restore_message.strip(),
-        "migrate_message": migrate_message.strip(),
-        "check_message": check_message.strip(),
-        "confirmation_value": confirmation_value,
-        "restore_file": restore_file,
-    }
 
 
 def _latest_route_phase_record(

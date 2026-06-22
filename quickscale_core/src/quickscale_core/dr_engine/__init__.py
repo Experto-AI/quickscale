@@ -12,4 +12,10 @@ recovery
     Restore/orchestration contracts and helpers (F5.2b) — Django-free.
 verification
     Snapshot verification and rollback-pin lifecycle (F5.2b) — Django-free.
+adapter
+    Explicit typed boundary (F5.3) between CLI orchestration and the
+    Django-backed DR services.  Replaces the hidden docker-exec /
+    management-command / env-var / stdout-JSON protocol with a
+    registered-function API called through the ``dr_adapter_call``
+    management command bridge.
 """
