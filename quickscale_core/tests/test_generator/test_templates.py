@@ -290,6 +290,287 @@ class TestRuntimePins:
         assert POSTGRES_DOCKER_TAG is not None
 
 
+# ── Expected constraint values for drift detection ────────────────────
+# These are the F7.3-contract values that all packaged modules and
+# generator packages must carry.  They are duplicated here only for test
+# self-containment; the authoritative values live in runtime_pins.py.
+_EXPECTED_PYTHON_CONSTRAINT = ">=3.13,<3.15"
+_EXPECTED_MODULE_DJANGO_CONSTRAINT = ">=6.0.5,<6.1.0"
+
+
+@pytest.fixture(scope="module")
+def repo_root() -> Path:
+    """Return the repository root by navigating up from quickscale_core."""
+    import quickscale_core
+
+    core_init = Path(quickscale_core.__file__).resolve()
+    # quickscale_core/src/quickscale_core/__init__.py -> parents[3] = repo root
+    return core_init.parents[3]
+
+
+class TestRuntimePinDriftDetection:
+    """Detect unintended drift between runtime_pins.py and the broader repo.
+
+    These tests encode the F7.3 contract: generator Python constraints
+    and module Python constraints must match
+    ``runtime_pins.PYTHON_CONSTRAINT``, while module Django constraints
+    preserve the intentionally tighter lower bound (``>=6.0.5``) with
+    the same upper bound as ``runtime_pins.DJANGO_CONSTRAINT``.
+    """
+
+    def test_generator_python_parity(self, repo_root: Path) -> None:
+        """Generator pyproject.toml files must match PYTHON_CONSTRAINT."""
+        from quickscale_core.generator.constraint_validation import (
+            check_generator_python_constraints,
+        )
+        from quickscale_core.generator.runtime_pins import PYTHON_CONSTRAINT
+
+        messages = check_generator_python_constraints(
+            repo_root, expected_python=PYTHON_CONSTRAINT
+        )
+        assert not messages, (
+            "Generator Python constraint drift detected:\n"
+            + "\n".join(f"  • {m}" for m in messages)
+        )
+
+    def test_module_python_parity(self, repo_root: Path) -> None:
+        """All packaged modules must match PYTHON_CONSTRAINT."""
+        from quickscale_core.generator.constraint_validation import (
+            check_module_python_constraints,
+        )
+        from quickscale_core.generator.runtime_pins import PYTHON_CONSTRAINT
+
+        messages = check_module_python_constraints(
+            repo_root, expected_python=PYTHON_CONSTRAINT
+        )
+        assert not messages, "Module Python constraint drift detected:\n" + "\n".join(
+            f"  • {m}" for m in messages
+        )
+
+    def test_module_django_lower_bound_drift(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Module Django constraints must match the tighter expected value.
+
+        The documented intentional drift is:
+          - Template: ``>=6.0.3,<6.1.0`` (runtime_pins.DJANGO_CONSTRAINT)
+          - Modules: ``>=6.0.5,<6.1.0`` (tighter lower bound)
+
+        This test verifies every packaged module carries the tighter
+        ``>=6.0.5,<6.1.0`` constraint.  If a version bump changes either
+        side, this test will fail and the maintainer must update both
+        values intentionally.
+        """
+        from quickscale_core.generator.constraint_validation import (
+            check_module_django_constraints,
+        )
+
+        messages = check_module_django_constraints(
+            repo_root, expected_django=_EXPECTED_MODULE_DJANGO_CONSTRAINT
+        )
+        assert not messages, "Module Django constraint drift detected:\n" + "\n".join(
+            f"  • {m}" for m in messages
+        )
+
+    def test_generator_python_parity_fails_on_mismatch(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Drift detection should report a mismatched expected_python."""
+        from quickscale_core.generator.constraint_validation import (
+            check_generator_python_constraints,
+        )
+
+        wrong = ">=9.9,<9.10"
+        messages = check_generator_python_constraints(repo_root, expected_python=wrong)
+        assert len(messages) >= 1, "Should detect at least one mismatch"
+        assert all(wrong in m for m in messages), (
+            "All drift messages should reference the wrong value"
+        )
+
+    def test_module_python_parity_fails_on_mismatch(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Drift detection should report a mismatched expected_python."""
+        from quickscale_core.generator.constraint_validation import (
+            check_module_python_constraints,
+        )
+
+        wrong = ">=9.9,<9.10"
+        messages = check_module_python_constraints(repo_root, expected_python=wrong)
+        assert len(messages) >= 1, "Should detect at least one mismatch"
+        assert all(wrong in m for m in messages)
+
+    def test_module_django_parity_fails_on_mismatch(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Drift detection should report a mismatched expected_django."""
+        from quickscale_core.generator.constraint_validation import (
+            check_module_django_constraints,
+        )
+
+        wrong = ">=9.9,<9.10"
+        messages = check_module_django_constraints(repo_root, expected_django=wrong)
+        assert len(messages) >= 1, "Should detect at least one mismatch"
+        assert all(wrong in m for m in messages)
+
+    # ── Poetry python constraint parity (CR-002) ─────────────────────
+
+    def test_generator_poetry_python_parity(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Generator pyproject ``[tool.poetry.dependencies] python`` must match PYTHON_CONSTRAINT."""
+        from quickscale_core.generator.constraint_validation import (
+            check_generator_poetry_python_constraints,
+        )
+        from quickscale_core.generator.runtime_pins import PYTHON_CONSTRAINT
+
+        messages = check_generator_poetry_python_constraints(
+            repo_root, expected_python=PYTHON_CONSTRAINT
+        )
+        assert not messages, (
+            "Generator Poetry python constraint drift detected:\n"
+            + "\n".join(f"  • {m}" for m in messages)
+        )
+
+    def test_module_poetry_python_parity(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Module pyproject ``[tool.poetry.dependencies] python`` must match PYTHON_CONSTRAINT."""
+        from quickscale_core.generator.constraint_validation import (
+            check_module_poetry_python_constraints,
+        )
+        from quickscale_core.generator.runtime_pins import PYTHON_CONSTRAINT
+
+        messages = check_module_poetry_python_constraints(
+            repo_root, expected_python=PYTHON_CONSTRAINT
+        )
+        assert not messages, (
+            "Module Poetry python constraint drift detected:\n"
+            + "\n".join(f"  • {m}" for m in messages)
+        )
+
+    def test_generator_poetry_python_parity_fails_on_mismatch(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Poetry python drift detection should report a mismatched expected_python."""
+        from quickscale_core.generator.constraint_validation import (
+            check_generator_poetry_python_constraints,
+        )
+
+        wrong = ">=9.9,<9.10"
+        messages = check_generator_poetry_python_constraints(
+            repo_root, expected_python=wrong
+        )
+        assert len(messages) >= 1, "Should detect at least one mismatch"
+        assert all(wrong in m for m in messages)
+
+    def test_module_poetry_python_parity_fails_on_mismatch(
+        self,
+        repo_root: Path,
+    ) -> None:
+        """Poetry python drift detection should report a mismatched expected_python."""
+        from quickscale_core.generator.constraint_validation import (
+            check_module_poetry_python_constraints,
+        )
+
+        wrong = ">=9.9,<9.10"
+        messages = check_module_poetry_python_constraints(
+            repo_root, expected_python=wrong
+        )
+        assert len(messages) >= 1, "Should detect at least one mismatch"
+        assert all(wrong in m for m in messages)
+
+    def test_generator_poetry_python_one_surface_drift(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """When only Poetry python drifts, only the new Poetry check should fail.
+
+        ``requires-python`` matches the expected constraint but
+        ``[tool.poetry.dependencies] python`` does not.  The existing
+        PEP 621 check must pass while the new Poetry check reports drift
+        (one-surface regression coverage).
+        """
+        from quickscale_core.generator.constraint_validation import (
+            check_generator_poetry_python_constraints,
+            check_generator_python_constraints,
+        )
+
+        expected = ">=3.13,<3.15"
+        # Create the full generator package tree so the existing
+        # check_generator_python_constraints can find every expected
+        # pyproject.toml.  Each file has correct requires-python but the
+        # root pyproject.toml carries a drunk Poetry python constraint.
+        pyproject_content_correct = (
+            "[project]\n"
+            f'requires-python = "{expected}"\n'
+            "\n"
+            "[tool.poetry.dependencies]\n"
+            f'python = "{expected}"\n'
+        )
+        # Root file: correct requires-python, WRONG Poetry python.
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\n"
+            f'requires-python = "{expected}"\n'
+            "\n"
+            "[tool.poetry.dependencies]\n"
+            'python = ">=3.12,<3.15"\n'
+        )
+        # Remaining generator packages: both surfaces correct.
+        for sub in ("quickscale", "quickscale_core", "quickscale_cli"):
+            p = tmp_path / sub
+            p.mkdir(parents=True)
+            (p / "pyproject.toml").write_text(pyproject_content_correct)
+
+        pep621_msgs = check_generator_python_constraints(tmp_path, expected)
+        assert not pep621_msgs, f"PEP 621 surface should still pass: {pep621_msgs}"
+
+        poetry_msgs = check_generator_poetry_python_constraints(tmp_path, expected)
+        assert len(poetry_msgs) >= 1, "Poetry surface drift should be detected"
+        assert any(">=3.12,<3.15" in m for m in poetry_msgs)
+
+    def test_module_poetry_python_one_surface_drift(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """When only Poetry python drifts in a module, only the new Poetry check should fail.
+
+        Same one-surface drift scenario as
+        :meth:`test_generator_poetry_python_one_surface_drift` but for
+        the module check path.
+        """
+        from quickscale_core.generator.constraint_validation import (
+            check_module_poetry_python_constraints,
+            check_module_python_constraints,
+        )
+
+        expected = ">=3.13,<3.15"
+        modules_dir = tmp_path / "quickscale_modules" / "testmod"
+        modules_dir.mkdir(parents=True)
+        pyproject = modules_dir / "pyproject.toml"
+        pyproject.write_text(
+            "[project]\n"
+            f'requires-python = "{expected}"\n'
+            "\n"
+            "[tool.poetry.dependencies]\n"
+            'python = ">=3.12,<3.15"\n'
+        )
+
+        pep621_msgs = check_module_python_constraints(tmp_path, expected)
+        assert not pep621_msgs, "PEP 621 surface should still pass"
+
+        poetry_msgs = check_module_poetry_python_constraints(tmp_path, expected)
+        assert len(poetry_msgs) >= 1, "Poetry surface drift should be detected"
+        assert any(">=3.12,<3.15" in m for m in poetry_msgs)
+
+
 class TestTemplateLoading:
     """Verify all project templates can be loaded by Jinja2."""
 
@@ -1124,18 +1405,24 @@ class TestDevOpsTemplateRendering:
     def test_pyproject_toml_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Test pyproject.toml renders with project name."""
+        """Test pyproject.toml renders with project name.
+
+        All Python-version-dependent assertions derive their expected
+        values from the SSOT (``runtime_pins``) through the Jinja2
+        render path so that a version bump propagates automatically.
+        """
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
         assert "[tool.poetry]" in output
-        assert 'python = ">=3.13,<3.15"' in output
+        assert f'python = "{PYTHON_CONSTRAINT}"' in output
         assert 'Django = ">=6.0.3,<6.1.0"' in output
         assert 'django-stubs = "^6.0.2"' in output
-        assert 'target-version = "py313"' in output
-        assert 'python_version = "3.13"' in output
+        _ruff_target = f"py{PYTHON_VERSION.replace('.', '')}"
+        assert f'target-version = "{_ruff_target}"' in output
+        assert f'python_version = "{PYTHON_VERSION}"' in output
 
     def test_precommit_config_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
