@@ -376,18 +376,18 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 Independent seam — CLI/generator/manifest registry, no overlap with Track 1 runtime code. **Starts day 1.**
 
 ### Track 2 progress
-- [ ] T2.1 — Manifest schema: `implies` + config-expression fields
+- [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
 - [ ] T2.2 — Generic implication resolver
 - [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
 - [ ] T2.4 — Delete dead ladder/shims
 
 ---
 
-#### - [ ] T2.1 — Manifest schema: `implies` + config-expression fields
+#### - [x] T2.1 — Manifest schema: `implies` support
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **OBJECTIVE:** Extend `module.yml` and the core manifest schema to declare dependency implications and all config rules currently in per-module Python adapters.
+- **OBJECTIVE:** Extend `module.yml` and the core manifest schema to declare dependency implications. Config-expression fields (validation_rules, derivation_rules) deferred to T2.3.
 - **SCOPE:**
   - `quickscale_core/src/quickscale_core/manifest/schema.py` — add `implies: list[ImpliesEntry]`; `ImpliesEntry(name: str, default_config: dict)`.
   - `quickscale_core/src/quickscale_core/manifest/loader.py` — parse and validate new fields.

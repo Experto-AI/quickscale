@@ -12,6 +12,7 @@ import yaml
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
+    ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
 )
@@ -205,6 +206,53 @@ def _parse_managed_files(
     return declarations
 
 
+def _parse_implies(data: dict[str, Any], module_name: str | None) -> list[ImpliesEntry]:
+    """Parse and validate the top-level ``implies`` section.
+
+    Each entry must be a mapping with at least ``name`` (non-empty string).
+    An optional ``default_config`` mapping provides configuration defaults
+    for the implied module.  Returns an empty list when the section is absent.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        module_name: Optional module name for error messages.
+
+    Returns:
+        A list of :class:`ImpliesEntry` instances.  Returns an empty list
+        when the section is absent.
+
+    Raises:
+        ManifestError: If the section is malformed.
+    """
+    raw_section = data.get("implies")
+    if raw_section is None:
+        return []
+
+    if not isinstance(raw_section, list):
+        raise ManifestError("'implies' must be a list", module_name)
+
+    entries: list[ImpliesEntry] = []
+    for i, entry in enumerate(raw_section):
+        if not isinstance(entry, dict):
+            raise ManifestError(f"implies[{i}] must be a mapping", module_name)
+
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            raise ManifestError(
+                f"implies[{i}].name must be a non-empty string", module_name
+            )
+
+        default_config = entry.get("default_config", {})
+        if not isinstance(default_config, dict):
+            raise ManifestError(
+                f"implies[{i}].default_config must be a mapping", module_name
+            )
+
+        entries.append(ImpliesEntry(name=name, default_config=dict(default_config)))
+
+    return entries
+
+
 def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleManifest:
     """Load and validate a module manifest from YAML content
 
@@ -242,6 +290,9 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     # Parse managed-files declarations (additive; empty when absent)
     managed_files = _parse_managed_files(data, module_name)
 
+    # Parse implies declarations (additive; empty when absent)
+    implies = _parse_implies(data, module_name)
+
     return ModuleManifest(
         name=name,
         version=version,
@@ -252,6 +303,7 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         dependencies=dependencies,
         django_apps=django_apps,
         managed_files=managed_files,
+        implies=implies,
     )
 
 
