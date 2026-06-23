@@ -19,6 +19,29 @@ dependencies:
 django_apps:
   - quickscale_modules_orgs
 
+implies:
+  - name: notifications
+    default_config:
+      enabled: true
+      sender_name: "QuickScale"
+      sender_email: "noreply@example.com"
+      reply_to_email: ""
+      resend_domain: ""
+      resend_api_key_env_var: "RESEND_API_KEY"
+      webhook_secret_env_var: "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+      default_tags:
+        - quickscale
+        - transactional
+      allowed_tags:
+        - quickscale
+        - transactional
+        - notifications
+        - auth
+        - forms
+        - ops
+        - testing
+      webhook_ttl_seconds: 300
+
 middleware:
   - quickscale_modules_orgs.middleware.TenantMiddleware
 
