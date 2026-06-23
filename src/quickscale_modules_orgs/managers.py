@@ -12,6 +12,42 @@ if TYPE_CHECKING:
     from .models import Organization
 
 
+class TenantManager(models.Manager):
+    """Manager that auto-scopes querysets to the current organization.
+
+    This is the default manager for :class:`~.models.TenantModel` subclasses.
+    It reads the current org ID from the ``ContextVar`` maintained by
+    :mod:`~.current_org` and filters all queries to that organization.
+
+    Behaviour
+    ---------
+    * **Org set** — every ``get_queryset()`` call appends
+      ``WHERE organization_id = <current_org_id>``.
+    * **No org** — ``get_queryset()`` returns ``.none()`` (fail-closed).
+    * **``super_scope=True``** — the manager returns the full unfiltered
+      queryset.  Assign this to ``all_objects`` for operator bypass.
+
+    The manager is intentionally model-agnostic and works with any model
+    that has an ``organization_id`` foreign-key column.
+    """
+
+    def __init__(self, super_scope: bool = False) -> None:
+        super().__init__()
+        self._super_scope = super_scope
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self._super_scope:
+            return qs
+        # Lazy import to avoid circular dependencies at module level.
+        from .current_org import get_current_org_id
+
+        org_id = get_current_org_id()
+        if org_id is None:
+            return qs.none()
+        return qs.filter(organization_id=org_id)
+
+
 class OrganizationManager(models.Manager["Organization"]):
     """Manager helpers for organization creation workflows."""
 

@@ -646,4 +646,151 @@ def test_tenant_model_declares_org_foreign_key() -> None:
 
     assert TenantModel._meta.abstract is True
     assert organization_field.db_index is True
-    assert organization_field.related_model is Organization
+    # tenant_org_fk uses a lazy string reference; abstract models
+    # do not resolve it until a concrete subclass is prepared.
+    assert organization_field.related_model in (
+        Organization,
+        "quickscale_modules_orgs.Organization",
+    )
+    assert organization_field.remote_field.on_delete == models.PROTECT
+
+
+# ---------------------------------------------------------------------------
+# T1.2 — Concrete test model for TenantManager behaviour tests
+# ---------------------------------------------------------------------------
+
+
+class ConcreteTenantResource(TenantModel):
+    """Concrete tenant model used exclusively for manager behaviour tests."""
+
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        app_label = "quickscale_modules_orgs"
+
+
+def test_concrete_tenant_model_has_scoped_default_manager() -> None:
+    """Concrete TenantModel subclass should inherit a TenantManager as objects."""
+    from quickscale_modules_orgs.managers import TenantManager
+
+    assert isinstance(ConcreteTenantResource.objects, TenantManager)
+    assert ConcreteTenantResource.objects._super_scope is False
+
+
+def test_concrete_tenant_model_has_unfiltered_all_objects_manager() -> None:
+    """Concrete TenantModel subclass should have all_objects (super-scope bypass)."""
+    from quickscale_modules_orgs.managers import TenantManager
+
+    assert isinstance(ConcreteTenantResource.all_objects, TenantManager)
+    assert ConcreteTenantResource.all_objects._super_scope is True
+
+
+@pytest.fixture
+def _tenant_resource_db() -> None:
+    """Create/drop the ConcreteTenantResource table for the duration of the test."""
+    from django.db import connection
+
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(ConcreteTenantResource)
+    yield
+    with connection.schema_editor() as schema_editor:
+        schema_editor.delete_model(ConcreteTenantResource)
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_auto_scopes_to_current_org() -> None:
+    """Default manager querysets should filter by the current org when set."""
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    org_a = Organization.objects.create(name="OrgA", slug="org-a")
+    org_b = Organization.objects.create(name="OrgB", slug="org-b")
+
+    # Create one resource in each org.
+    reset_current_org_id()
+    resource_a = ConcreteTenantResource.objects.create(
+        organization=org_a, name="A's item"
+    )
+    ConcreteTenantResource.objects.create(organization=org_b, name="B's item")
+
+    # Scope to org_a — only resource_a should be visible.
+    set_current_org_id(org_a.pk)
+    try:
+        results = list(ConcreteTenantResource.objects.all())
+        assert len(results) == 1
+        assert results[0].pk == resource_a.pk
+    finally:
+        reset_current_org_id()
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_fail_closed_when_unset() -> None:
+    """Default manager should return .none() when no org is set."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    org = Organization.objects.create(name="FailClosed", slug="fail-closed")
+    ConcreteTenantResource.objects.create(organization=org, name="hidden")
+
+    # Ensure no org is set.
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+    # Fail-closed: should always be empty.
+    assert ConcreteTenantResource.objects.count() == 0
+    assert list(ConcreteTenantResource.objects.all()) == []
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_all_objects_bypasses_scope() -> None:
+    """all_objects should bypass auto-scoping and return all rows."""
+    from quickscale_modules_orgs.current_org import reset_current_org_id
+
+    org_a = Organization.objects.create(name="BypassA", slug="bypass-a")
+    org_b = Organization.objects.create(name="BypassB", slug="bypass-b")
+
+    reset_current_org_id()
+    r1 = ConcreteTenantResource.objects.create(organization=org_a, name="item1")
+    r2 = ConcreteTenantResource.objects.create(organization=org_b, name="item2")
+
+    # all_objects should see all rows regardless of contextvar state.
+    results = list(ConcreteTenantResource.all_objects.all())
+    pks = {r.pk for r in results}
+    assert r1.pk in pks
+    assert r2.pk in pks
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_cross_org_isolation() -> None:
+    """Resources from different orgs should be isolated under scoped manager."""
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    org_a = Organization.objects.create(name="IsolationA", slug="iso-a")
+    org_b = Organization.objects.create(name="IsolationB", slug="iso-b")
+    org_c = Organization.objects.create(name="IsolationC", slug="iso-c")
+
+    reset_current_org_id()
+    ConcreteTenantResource.objects.create(organization=org_a, name="a1")
+    ConcreteTenantResource.objects.create(organization=org_b, name="b1")
+    ConcreteTenantResource.objects.create(organization=org_c, name="c1")
+
+    for org, expected_count in [(org_a, 1), (org_b, 1), (org_c, 1)]:
+        set_current_org_id(org.pk)
+        try:
+            assert ConcreteTenantResource.objects.count() == expected_count
+        finally:
+            reset_current_org_id()
+
+    # With no org set, nothing is visible.
+    assert ConcreteTenantResource.objects.count() == 0
