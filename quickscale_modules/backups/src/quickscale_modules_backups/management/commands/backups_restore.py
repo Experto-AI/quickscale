@@ -2,8 +2,8 @@
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_modules_backups.models import BackupArtifact
-from quickscale_modules_backups.services import BackupError, restore_backup_source
+from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 class Command(BaseCommand):
@@ -70,18 +70,11 @@ class Command(BaseCommand):
                 "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
             )
 
-        artifact = None
-        if artifact_id is not None:
-            try:
-                artifact = BackupArtifact.objects.get(pk=artifact_id)
-            except BackupArtifact.DoesNotExist as exc:
-                raise CommandError("Backup artifact not found") from exc
-
         try:
-            result = restore_backup_source(
-                artifact=artifact,
-                file_path=file_path,
+            result = ADAPTER_FUNCTIONS["restore_backup"](
+                artifact_id=artifact_id,
                 snapshot_id=snapshot_id,
+                file_path=file_path,
                 confirmation=options["confirm"],
                 dry_run=bool(options["dry_run"]),
                 allow_production=bool(options["allow_production"]),
@@ -89,8 +82,8 @@ class Command(BaseCommand):
         except BackupError as exc:
             raise CommandError(str(exc)) from exc
 
-        self.stdout.write(self.style.SUCCESS(result.message))
-        for warning in result.warnings:
+        self.stdout.write(self.style.SUCCESS(result["message"]))
+        for warning in result.get("warnings", []):
             self.stdout.write(
-                self.style.WARNING(f"Warning [{warning.code}]: {warning.message}")
+                self.style.WARNING(f"Warning [{warning['code']}]: {warning['message']}")
             )

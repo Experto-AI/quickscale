@@ -4,10 +4,8 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_modules_backups.services import (
-    BackupError,
-    record_backup_snapshot_verification,
-)
+from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 class Command(BaseCommand):
@@ -50,8 +48,8 @@ class Command(BaseCommand):
             raise CommandError("--payload-json must be a JSON object.")
 
         try:
-            report = record_backup_snapshot_verification(
-                options["snapshot_id"],
+            report = ADAPTER_FUNCTIONS["record_verification"](
+                snapshot_id=options["snapshot_id"],
                 route=options["route"],
                 phase=options["phase"],
                 status=options["status"],
