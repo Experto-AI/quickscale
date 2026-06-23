@@ -4,11 +4,8 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_modules_backups.services import (
-    BackupError,
-    build_backup_snapshot_report,
-    create_backup,
-)
+from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 class Command(BaseCommand):
@@ -39,35 +36,31 @@ class Command(BaseCommand):
         resume_snapshot_id = (
             str(options.get("resume_snapshot_id") or "").strip() or None
         )
+        kwargs: dict[str, str | None] = {"trigger": trigger}
+        if resume_snapshot_id:
+            kwargs["resume_snapshot_id"] = resume_snapshot_id
+
         try:
-            if resume_snapshot_id is None:
-                artifact = create_backup(trigger=trigger)
-            else:
-                artifact = create_backup(
-                    trigger=trigger,
-                    resume_snapshot_id=resume_snapshot_id,
-                )
+            report = ADAPTER_FUNCTIONS["capture_snapshot"](**kwargs)
         except BackupError as exc:
             raise CommandError(str(exc)) from exc
 
-        snapshot = getattr(artifact, "authoritative_snapshot", None)
-        if snapshot is None:
-            raise CommandError("Created backup is missing its stored snapshot record.")
-
-        report = build_backup_snapshot_report(snapshot)
         if options["as_json"]:
             self.stdout.write(json.dumps(report, indent=2, sort_keys=True))
             return
 
+        auth_dump = report.get("authoritative_dump") or {}
         action_label = "Resumed backup" if resume_snapshot_id else "Created backup"
-        self.stdout.write(self.style.SUCCESS(f"{action_label} {artifact.filename}"))
-        self.stdout.write(f"Artifact id: {artifact.pk}")
+        self.stdout.write(
+            self.style.SUCCESS(f"{action_label} {auth_dump.get('filename', '')}")
+        )
+        self.stdout.write(f"Artifact id: {auth_dump.get('artifact_id', '')}")
         self.stdout.write(f"Snapshot id: {report['snapshot_id']}")
         self.stdout.write(f"Snapshot status: {report['status']}")
         self.stdout.write(f"Snapshot root: {report['local_root_path']}")
-        self.stdout.write(f"Local path: {artifact.local_path}")
-        if artifact.remote_key:
-            self.stdout.write(f"Remote key: {artifact.remote_key}")
+        self.stdout.write(f"Local path: {auth_dump.get('local_path', '')}")
+        if auth_dump.get("remote_key"):
+            self.stdout.write(f"Remote key: {auth_dump['remote_key']}")
         if report["failure_note"]:
             self.stdout.write(
                 self.style.WARNING(f"Snapshot warning: {report['failure_note']}")

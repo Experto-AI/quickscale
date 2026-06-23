@@ -445,7 +445,7 @@ Mechanical but pre-specified; split into two batches (modules 1–6, then 7–13
 Fully independent — backups has no org FK; lives in `backups/services.py`, `dr_engine/`, and the `dr` CLI. **Starts day 1.**
 
 ### Track 3 progress
-- [ ] T3.1 — Single adapter path (route all commands through dr_engine)
+- [x] T3.1 — Single adapter path (route all commands through dr_engine)
 - [ ] T3.2 — Shrink `services.py`
 - [ ] T3.3 — Cleanup
 

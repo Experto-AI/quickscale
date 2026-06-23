@@ -97,8 +97,7 @@ _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID
 _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
     "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
 )
-_DR_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"
-_DR_TARGET_ROUTE_KIND_KEY = "ROUTE_KIND"
+_ROUTE_KIND_KEY = "ROUTE_KIND"
 
 
 class BackupLockError(BackupError):
@@ -2430,20 +2429,6 @@ def record_backup_snapshot_verification(
     )
 
 
-def _load_target_runtime_settings() -> dict[str, str]:
-    """Load DR target runtime settings passed in through the env prefix."""
-    target_settings = {
-        key.removeprefix(_DR_TARGET_ENV_PREFIX): value
-        for key, value in os.environ.items()
-        if key.startswith(_DR_TARGET_ENV_PREFIX)
-    }
-    if not target_settings:
-        raise BackupConfigurationError(
-            "Target runtime variables were not provided. Supply QUICKSCALE_DR_TARGET_* env vars before syncing media."
-        )
-    return target_settings
-
-
 def _build_s3_storage_from_selection(selection: Any) -> Any:
     """Construct an s3-compatible storage object from one backend selection."""
     from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
@@ -2563,7 +2548,7 @@ def sync_backup_snapshot_media(
     snapshot_id: str,
     *,
     dry_run: bool = False,
-    target_runtime_settings: dict[str, str] | None = None,
+    target_runtime_settings: dict[str, str],
 ) -> dict[str, Any]:
     """Dry-run or execute media sync for one snapshot using target env overrides.
 
@@ -2574,11 +2559,8 @@ def sync_backup_snapshot_media(
     dry_run:
         When True, validate inputs without copying objects.
     target_runtime_settings:
-        Explicit target runtime settings (replaces the
-        ``QUICKSCALE_DR_TARGET_*`` env-var protocol from the CLI layer).
-        When *None*, falls back to reading from environment variables
-        (``_load_target_runtime_settings``) for backward compatibility
-        with admin/manual usage.
+        Explicit target runtime settings (replaces the legacy
+        ``QUICKSCALE_DR_TARGET_*`` env-var protocol).
     """
     snapshot = get_backup_snapshot(snapshot_id)
     media_manifest = _load_snapshot_sidecar_payload(
@@ -2596,15 +2578,10 @@ def sync_backup_snapshot_media(
         raise BackupError("Media manifest inventory must be a list")
 
     source_runtime = _resolve_media_runtime(settings)
-    target_settings = (
-        target_runtime_settings
-        if target_runtime_settings is not None
-        else _load_target_runtime_settings()
-    )
     target_runtime = _resolve_media_runtime(
-        target_settings,
+        target_runtime_settings,
         require_s3_compatible=(
-            str(target_settings.get(_DR_TARGET_ROUTE_KIND_KEY, "")).strip() == "railway"
+            str(target_runtime_settings.get(_ROUTE_KIND_KEY, "")).strip() == "railway"
         ),
     )
     strategy = f"{source_runtime['backend']}_to_{target_runtime['backend']}"

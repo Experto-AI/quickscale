@@ -266,13 +266,13 @@ def sync_media(
     snapshot_id: str,
     *,
     dry_run: bool = False,
-    target_runtime_settings: dict[str, str] | None = None,
+    target_runtime_settings: dict[str, str],
 ) -> dict[str, Any]:
     """Dry-run or execute media sync for one snapshot.
 
-    *target_runtime_settings* replaces the ``QUICKSCALE_DR_TARGET_*``
-    env-var protocol.  When *None* the service falls back to the legacy
-    env-var approach (for admin/manual use).
+    *target_runtime_settings* replaces the legacy
+    ``QUICKSCALE_DR_TARGET_*`` env-var protocol.  Required — no
+    env-var fallback.
     """
     from quickscale_modules_backups.services import sync_backup_snapshot_media
 
@@ -281,3 +281,115 @@ def sync_media(
         dry_run=dry_run,
         target_runtime_settings=target_runtime_settings,
     )
+
+
+# ---------------------------------------------------------------------------
+# Prune expired backups
+# ---------------------------------------------------------------------------
+
+
+@_register
+def prune_backups() -> dict[str, Any]:
+    """Prune expired backup artifacts per the active retention policy.
+
+    Adapter replacement for the ``backups_prune`` management command.
+    """
+    from quickscale_modules_backups.services import prune_expired_backups
+
+    deleted_count = prune_expired_backups()
+    return {"deleted_count": deleted_count}
+
+
+# ---------------------------------------------------------------------------
+# Artifact validation
+# ---------------------------------------------------------------------------
+
+
+@_register
+def validate_artifact(
+    artifact_id: int,
+) -> dict[str, Any]:
+    """Validate one backup artifact checksum and local availability.
+
+    Adapter replacement for the ``backups_validate`` management command.
+    """
+    from quickscale_modules_backups.models import BackupArtifact
+    from quickscale_modules_backups.services import validate_backup_artifact
+
+    try:
+        artifact = BackupArtifact.objects.get(pk=artifact_id)
+    except BackupArtifact.DoesNotExist as exc:
+        raise BackupError(f"Backup artifact not found: {artifact_id}") from exc
+
+    issues = validate_backup_artifact(artifact)
+    return {
+        "artifact_id": artifact_id,
+        "issues": issues,
+        "valid": len(issues) == 0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Rollback pin clear
+# ---------------------------------------------------------------------------
+
+
+@_register
+def clear_rollback_pin(
+    *,
+    snapshot_id: str,
+) -> dict[str, Any]:
+    """Clear any active rollback pin on one stored snapshot.
+
+    Adapter replacement for the ``backups_pin`` (clear path) management
+    command.
+    """
+    from quickscale_modules_backups.services import (
+        clear_backup_snapshot_rollback_pin,
+    )
+
+    return clear_backup_snapshot_rollback_pin(snapshot_id)
+
+
+# ---------------------------------------------------------------------------
+# Admin restore (artifact / snapshot-id / file-path)
+# ---------------------------------------------------------------------------
+
+
+@_register
+def restore_backup(
+    *,
+    artifact_id: int | None = None,
+    snapshot_id: str | None = None,
+    file_path: str | None = None,
+    confirmation: str,
+    dry_run: bool = False,
+    allow_production: bool = False,
+) -> dict[str, Any]:
+    """Validate or execute a guarded restore from one of three source types.
+
+    Adapter replacement for the ``backups_restore`` management command.
+    """
+    from quickscale_modules_backups.models import BackupArtifact
+    from quickscale_modules_backups.services import restore_backup_source
+
+    artifact = None
+    if artifact_id is not None:
+        try:
+            artifact = BackupArtifact.objects.get(pk=artifact_id)
+        except BackupArtifact.DoesNotExist as exc:
+            raise BackupError(f"Backup artifact not found: {artifact_id}") from exc
+
+    result = restore_backup_source(
+        artifact=artifact,
+        file_path=file_path,
+        snapshot_id=snapshot_id,
+        confirmation=confirmation,
+        dry_run=dry_run,
+        allow_production=allow_production,
+    )
+
+    return {
+        "message": result.message,
+        "warnings": [{"code": w.code, "message": w.message} for w in result.warnings],
+    }

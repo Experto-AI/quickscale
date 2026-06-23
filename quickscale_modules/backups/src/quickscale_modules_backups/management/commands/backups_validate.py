@@ -2,8 +2,8 @@
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_modules_backups.models import BackupArtifact
-from quickscale_modules_backups.services import validate_backup_artifact
+from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 class Command(BaseCommand):
@@ -16,12 +16,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
         try:
-            artifact = BackupArtifact.objects.get(pk=options["artifact_id"])
-        except BackupArtifact.DoesNotExist as exc:
-            raise CommandError("Backup artifact not found") from exc
+            result = ADAPTER_FUNCTIONS["validate_artifact"](
+                artifact_id=options["artifact_id"],
+            )
+        except BackupError as exc:
+            raise CommandError(str(exc)) from exc
 
-        issues = validate_backup_artifact(artifact)
-        if issues:
-            raise CommandError("; ".join(issues))
+        if not result["valid"]:
+            raise CommandError("; ".join(result["issues"]))
 
-        self.stdout.write(self.style.SUCCESS(f"Validated {artifact.filename}"))
+        self.stdout.write(
+            self.style.SUCCESS(f"Validated artifact {result['artifact_id']}")
+        )

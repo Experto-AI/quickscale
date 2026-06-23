@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import json
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from quickscale_modules_backups.services import BackupError
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 def test_backups_report_command_requests_sidecar_payloads() -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_report.report_backup_snapshot",
+    mock_report = MagicMock(
         return_value={
             "snapshot_id": "snap-report",
             "status": "ready",
@@ -31,8 +29,13 @@ def test_backups_report_command_requests_sidecar_payloads() -> None:
             "sidecar_summary": {},
             "sidecar_payloads": {"promotion-verification.json": {"reports": []}},
             "sidecar_payload_errors": {},
-        },
-    ) as mocked_report:
+        }
+    )
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"fetch_snapshot_report": mock_report},
+    ):
         call_command(
             "backups_report",
             "snap-report",
@@ -43,7 +46,7 @@ def test_backups_report_command_requests_sidecar_payloads() -> None:
             stderr=StringIO(),
         )
 
-    mocked_report.assert_called_once_with(
+    mock_report.assert_called_once_with(
         "snap-report",
         sidecar_payloads=["promotion-verification.json"],
     )
@@ -54,11 +57,12 @@ def test_backups_report_command_requests_sidecar_payloads() -> None:
 
 def test_backups_record_verification_command_records_route_report() -> None:
     stdout = StringIO()
+    mock_record = MagicMock(return_value={"snapshot_id": "snap-verify"})
 
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_record_verification.record_backup_snapshot_verification",
-        return_value={"snapshot_id": "snap-verify"},
-    ) as mocked_record:
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"record_verification": mock_record},
+    ):
         call_command(
             "backups_record_verification",
             "snap-verify",
@@ -74,8 +78,8 @@ def test_backups_record_verification_command_records_route_report() -> None:
             stderr=StringIO(),
         )
 
-    mocked_record.assert_called_once_with(
-        "snap-verify",
+    mock_record.assert_called_once_with(
+        snapshot_id="snap-verify",
         route="local-to-railway-develop",
         phase="plan",
         status="ready",
@@ -90,9 +94,7 @@ def test_backups_record_verification_command_records_route_report() -> None:
 
 def test_backups_sync_media_command_outputs_json_result() -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_sync_media.sync_backup_snapshot_media",
+    mock_sync = MagicMock(
         return_value={
             "snapshot_id": "snap-media",
             "status": "ready",
@@ -100,8 +102,13 @@ def test_backups_sync_media_command_outputs_json_result() -> None:
             "planned_count": 3,
             "copied_count": 0,
             "missing_paths": [],
-        },
-    ) as mocked_sync:
+        }
+    )
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"sync_media": mock_sync},
+    ):
         call_command(
             "backups_sync_media",
             "snap-media",
@@ -111,7 +118,9 @@ def test_backups_sync_media_command_outputs_json_result() -> None:
             stderr=StringIO(),
         )
 
-    mocked_sync.assert_called_once_with("snap-media", dry_run=True)
+    mock_sync.assert_called_once_with(
+        "snap-media", dry_run=True, target_runtime_settings={}
+    )
     assert json.loads(stdout.getvalue())["strategy"] == "local_to_s3"
 
 
@@ -144,9 +153,7 @@ def test_backups_pin_command_validates_arguments(
 
 def test_backups_pin_command_outputs_json_report() -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_pin.set_backup_snapshot_rollback_pin",
+    mock_pin = MagicMock(
         return_value={
             "snapshot_id": "snap-pin",
             "rollback_pin": {
@@ -154,8 +161,13 @@ def test_backups_pin_command_outputs_json_report() -> None:
                 "expires_at": "2026-04-06T18:00:00+00:00",
                 "reason": "production rollback window",
             },
-        },
-    ) as mocked_pin:
+        }
+    )
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"set_rollback_pin": mock_pin},
+    ):
         call_command(
             "backups_pin",
             "snap-pin",
@@ -168,9 +180,9 @@ def test_backups_pin_command_outputs_json_report() -> None:
             stderr=StringIO(),
         )
 
-    mocked_pin.assert_called_once_with(
-        "snap-pin",
-        ttl_hours=6,
+    mock_pin.assert_called_once_with(
+        snapshot_id="snap-pin",
+        hours=6,
         reason="production rollback window",
     )
     assert json.loads(stdout.getvalue()) == {
@@ -184,9 +196,10 @@ def test_backups_pin_command_outputs_json_report() -> None:
 
 
 def test_backups_pin_command_wraps_service_errors() -> None:
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_pin.clear_backup_snapshot_rollback_pin",
-        side_effect=BackupError("clear exploded"),
+    mock_clear = MagicMock(side_effect=BackupError("clear exploded"))
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"clear_rollback_pin": mock_clear},
     ):
         with pytest.raises(CommandError, match="clear exploded"):
             call_command(
@@ -197,9 +210,10 @@ def test_backups_pin_command_wraps_service_errors() -> None:
                 stderr=StringIO(),
             )
 
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_pin.set_backup_snapshot_rollback_pin",
-        side_effect=BackupError("set exploded"),
+    mock_set = MagicMock(side_effect=BackupError("set exploded"))
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"set_rollback_pin": mock_set},
     ):
         with pytest.raises(CommandError, match="set exploded"):
             call_command(
@@ -237,15 +251,18 @@ def test_backups_record_verification_command_rejects_non_object_payload(
 
 def test_backups_record_verification_command_outputs_json_report() -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_record_verification.record_backup_snapshot_verification",
+    mock_record = MagicMock(
         return_value={
             "snapshot_id": "snap-verify",
             "status": "ready",
             "sidecar_payloads": {"promotion-verification.json": {"reports": []}},
-        },
-    ) as mocked_record:
+        }
+    )
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"record_verification": mock_record},
+    ):
         call_command(
             "backups_record_verification",
             "snap-verify",
@@ -262,8 +279,8 @@ def test_backups_record_verification_command_outputs_json_report() -> None:
             stderr=StringIO(),
         )
 
-    mocked_record.assert_called_once_with(
-        "snap-verify",
+    mock_record.assert_called_once_with(
+        snapshot_id="snap-verify",
         route="local-to-railway-develop",
         phase="execute",
         status="completed",
@@ -277,9 +294,10 @@ def test_backups_record_verification_command_outputs_json_report() -> None:
 
 
 def test_backups_record_verification_command_wraps_service_errors() -> None:
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_record_verification.record_backup_snapshot_verification",
-        side_effect=BackupError("verification exploded"),
+    mock_record = MagicMock(side_effect=BackupError("verification exploded"))
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"record_verification": mock_record},
     ):
         with pytest.raises(CommandError, match="verification exploded"):
             call_command(
@@ -347,11 +365,12 @@ def test_backups_sync_media_command_renders_summary(
     expected_output: str,
 ) -> None:
     stdout = StringIO()
+    mock_sync = MagicMock(return_value=result_payload)
 
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_sync_media.sync_backup_snapshot_media",
-        return_value=result_payload,
-    ) as mocked_sync:
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"sync_media": mock_sync},
+    ):
         call_command(
             "backups_sync_media",
             "snap-media",
@@ -360,17 +379,19 @@ def test_backups_sync_media_command_renders_summary(
             stderr=StringIO(),
         )
 
-    mocked_sync.assert_called_once_with(
+    mock_sync.assert_called_once_with(
         "snap-media",
         dry_run="--dry-run" in command_args,
+        target_runtime_settings={},
     )
     assert stdout.getvalue() == expected_output
 
 
 def test_backups_sync_media_command_wraps_service_errors() -> None:
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_sync_media.sync_backup_snapshot_media",
-        side_effect=BackupError("media sync exploded"),
+    mock_sync = MagicMock(side_effect=BackupError("media sync exploded"))
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"sync_media": mock_sync},
     ):
         with pytest.raises(CommandError, match="media sync exploded"):
             call_command(
