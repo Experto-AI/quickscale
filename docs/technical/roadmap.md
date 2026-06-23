@@ -491,8 +491,8 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 
 ## Deferred / Monitor
 
-- [ ] **F11-deferred — Stage `terminal_semantic` per-org uniqueness** *(Adaptive tier: 2)* — split `Stage.terminal_semantic` uniqueness to per-bucket partial `UniqueConstraint`s; add migration + serializer + API regression coverage. *(unlocked by F11.5)*
 - [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
+- [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
 - [ ] **Broader compatibility-window widening** *(Adaptive tier: 2)* — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
 - [ ] **Emitted-project operability & API-contract substrate** *(deferred)* — no structured logging/correlation IDs, no versioned public API, no webhook payload boundary validation. Promote when a second external provider lands or the first public-API consumer appears.
   - [ ] *(Tier 1)* Add structured logging and correlation-ID baseline to generated modules.

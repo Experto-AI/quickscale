@@ -170,7 +170,6 @@ class Stage(models.Model):
         null=True,
         blank=True,
         editable=False,
-        unique=True,
     )
 
     # Phase 2: dual-manager contract.
@@ -180,6 +179,20 @@ class Stage(models.Model):
     class Meta:
         app_label = "quickscale_modules_crm"
         ordering = ["order", "name"]
+        constraints = [
+            # Block duplicate terminal semantics within the NULL-owned bucket.
+            models.UniqueConstraint(
+                fields=["terminal_semantic"],
+                name="crm_stage_terminal_semantic_unique_null_org",
+                condition=Q(organization__isnull=True),
+            ),
+            # Block duplicate terminal semantics within the same non-null org bucket.
+            models.UniqueConstraint(
+                fields=["terminal_semantic", "organization"],
+                name="crm_stage_terminal_semantic_organization_unique",
+                condition=Q(organization__isnull=False),
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

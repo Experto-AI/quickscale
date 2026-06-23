@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from django.db import IntegrityError
 
-from quickscale_modules_crm.models import (  # type: ignore[import-untyped]
+from quickscale_modules_crm.models import (
     Company,
     Contact,
     ContactNote,
@@ -143,11 +143,11 @@ class TestStageModel:
         assert field.null is True
         assert field.blank is True
         assert field.editable is False
-        assert field.unique is True
+        assert field.unique is False
         assert list(field.choices) == Stage.TERMINAL_SEMANTIC_CHOICES
 
     def test_stage_terminal_semantic_must_be_unique_when_present(self, org_a):
-        """Only one stage per terminal semantic should be allowed."""
+        """Only one stage per terminal semantic should be allowed per org."""
         Stage.objects.filter(organization=org_a).delete()
 
         Stage.objects.create(
@@ -165,6 +165,31 @@ class TestStageModel:
                 terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
                 organization=org_a,
             )
+
+    def test_stage_terminal_semantic_constraints_exist(self):
+        """Stage has two partial UniqueConstraints for owner-bucket uniqueness."""
+        constraint_names = [c.name for c in Stage._meta.constraints]
+        assert "crm_stage_terminal_semantic_unique_null_org" in constraint_names
+        assert "crm_stage_terminal_semantic_organization_unique" in constraint_names
+
+    def test_stage_same_terminal_semantic_different_orgs_allowed(self, org_a, org_b):
+        """Same terminal semantic is allowed across different organizations."""
+        Stage.objects.filter(organization=org_a).delete()
+        Stage.objects.filter(organization=org_b).delete()
+
+        stage_a = Stage.objects.create(
+            name="Closed-Won",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_a,
+        )
+        stage_b = Stage.objects.create(
+            name="Deal Signed",
+            order=9,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_b,
+        )
+        assert stage_a.pk != stage_b.pk
 
 
 @pytest.mark.django_db

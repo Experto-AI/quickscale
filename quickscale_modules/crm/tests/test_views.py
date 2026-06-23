@@ -929,6 +929,70 @@ class TestDealViewSet:
         assert deal.stage == canonical_stage
         assert deal.probability == 0
 
+    def test_org_scoped_mark_won_resolves_active_org_terminal_stage(
+        self, client, org_a, org_b, org_a_admin
+    ):
+        """Mark-won via org-scoped route resolves the active org's terminal stage.
+
+        Regression: the per-bucket UniqueConstraint change means two orgs
+        can each have a stage with terminal_semantic='won'.  An org-scoped
+        mark-won must resolve to the requesting org's own won stage, not
+        a foreign-org stage with the same semantic.
+        """
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+
+        # Create terminal stages in both orgs with the same semantic.
+        stage_a_won = Stage.objects.create(
+            name="Org-A Signed",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_a,
+        )
+        Stage.objects.create(
+            name="Org-B Closed-Won",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_b,
+        )
+        open_stage = Stage.objects.create(
+            name="Prospecting", order=1, organization=org_a
+        )
+
+        # Create org-A deal.
+        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact = Contact.objects.create(
+            first_name="Org-A",
+            last_name="Contact",
+            email="orga-mark-won@example.com",
+            company=company,
+            organization=org_a,
+        )
+        deal = Deal.objects.create(
+            title="Org-A Deal",
+            contact=contact,
+            amount=Decimal("50000.00"),
+            stage=open_stage,
+            probability=75,
+            owner=org_a_admin,
+            organization=org_a,
+        )
+
+        client.force_login(org_a_admin)
+        response = client.post(
+            f"/orgs/{org_a.slug}/crm/api/deals/mark-won/",
+            {"deal_ids": [deal.id]},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["updated"] == 1
+
+        deal.refresh_from_db()
+        assert deal.stage == stage_a_won
+        assert deal.probability == 100
+
 
 @pytest.mark.django_db
 class TestCRMPageSizeSettings:
