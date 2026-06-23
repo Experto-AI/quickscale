@@ -383,42 +383,6 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 
 ---
 
-#### - [x] T2.1 — Manifest schema: `implies` support
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Extend `module.yml` and the core manifest schema to declare dependency implications. Config-expression fields (validation_rules, derivation_rules) deferred to T2.3.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/manifest/schema.py` — add `implies: list[ImpliesEntry]`; `ImpliesEntry(name: str, default_config: dict)`.
-  - `quickscale_core/src/quickscale_core/manifest/loader.py` — parse and validate new fields.
-  - `quickscale_modules/{billing,crm,social,orgs}/module.yml` — add `implies` blocks: billing→orgs, crm→orgs, social→orgs, orgs→notifications (with default config from `get_default_notifications_config()`).
-- **ACCEPTANCE CRITERIA:** schema round-trips; `implies` loads from YAML; existing modules without the field continue to load.
-- **VALIDATION PATH:** `make test -- --core`; manifest schema unit tests.
-- **DEPENDS:** none.
-
----
-
-#### - [x] T2.2 — Generic implication resolver
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Replace `get_implied_module_default_configs()` with a generic resolver that reads `implies` from each `module.yml` and computes the transitive closure.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/manifest/implications.py` (new) — `resolve_module_implications(names: Collection[str], modules_base_path: Path | None = None) -> dict[str, dict]`: load manifests, walk `implies`, build transitive closure, return implied modules not already in `names`. Defaults to repo-root `quickscale_modules/` when no explicit path given.
-  - `quickscale_core/src/quickscale_core/manifest/__init__.py` — export `resolve_module_implications`.
-  - `quickscale_cli/src/quickscale_cli/commands/implied_module_defaults.py` — `get_implied_module_default_configs` becomes a one-line shim over `resolve_module_implications` (deletion deferred to T2.4).
-  - `quickscale_core/tests/test_manifest_implications.py` (new) — 27 unit tests covering edge cases, each implication chain, multi-implicator deduplication, transitive closure, default-paths, and error conditions.
-- **ACCEPTANCE CRITERIA:** billing → `{orgs: {}, notifications: <default>}`; crm → same; social → same; orgs alone → `{notifications: <default>}`; matches existing ladder behavior exactly.
-- **VALIDATION PATH:** `make test -- --core`; implications unit tests. All 27 new + 20 existing implication tests pass.
-- **DEPENDS:** T2.1.
-- **FINDINGS / NOTES:**
-  - The `modules_base_path` parameter was added (beyond the minimal roadmap signature) so callers can point the resolver at generated-project `modules/` in T2.3 without changing the API.
-  - The default path computation (`Path(__file__).resolve().parents[4] / "quickscale_modules"`) mirrors the existing `_REPO_ROOT` pattern used by CLI manifests.
-  - All 20 existing CLI shim tests continue to pass unchanged — behavior parity confirmed.
-  - 27 new core resolver tests at 100% coverage on the new module.
-
----
-
 #### - [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
@@ -455,22 +419,6 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 - [x] T3.1 — Single adapter path (route all commands through dr_engine)
 - [ ] T3.2 — Shrink `services.py`
 - [ ] T3.3 — Cleanup
-
----
-
-#### - [ ] T3.1 — Single adapter path
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Eliminate the legacy env-var/stdout-JSON protocol; route all 8 backups management commands through `quickscale_core.dr_engine.adapter`.
-- **SCOPE:**
-  - `services.py:100` — delete `_DR_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"`.
-  - `services.py:2433–2438` — delete `_load_target_runtime_settings()`.
-  - `services.py:2580–2602` — delete the backward-compat fork; keep only the adapter path.
-  - `management/commands/{backups_create,backups_restore,backups_prune,backups_report,backups_pin,backups_validate,backups_record_verification,backups_sync_media}.py` — each `handle()` dispatches through `dr_engine.adapter.ADAPTER_FUNCTIONS[<name>](...)` (same pattern as `dr_adapter_call.py`).
-- **ACCEPTANCE CRITERIA:** no command uses `_DR_TARGET_ENV_PREFIX` or `_load_target_runtime_settings`; `make MODULE=backups test -- --modules` green; `quickscale dr` smoke test passes.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`; `grep -n "_DR_TARGET_ENV_PREFIX\|_load_target_runtime_settings" services.py` returns zero.
-- **DEPENDS:** none.
 
 ---
 
