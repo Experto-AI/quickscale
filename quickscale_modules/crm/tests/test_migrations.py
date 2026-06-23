@@ -16,6 +16,11 @@ from django.db.migrations.executor import MigrationExecutor
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
+# The latest orgs migration is included in project_state for tests that
+# create Organization rows through historical apps registries. This ensures
+# the historical model includes is_system (default=False) so that inserts
+# through the historical model match the NOT NULL column at the DB level.
+LATEST_ORGS_MIGRATION = ("quickscale_modules_orgs", "0003_alter_organization_is_system")
 
 # Historical 0002 backfill function — kept as migration-harness proof.
 _stage_terminal_semantic_migration = import_module(
@@ -389,7 +394,7 @@ def test_0005_replaces_tag_name_unique_with_owner_bucket_constraint() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_from])
-    old_apps = executor.loader.project_state([migrate_from]).apps
+    old_apps = executor.loader.project_state([migrate_from, LATEST_ORGS_MIGRATION]).apps
 
     LegacyTag = old_apps.get_model("quickscale_modules_crm", "Tag")
     Organization = old_apps.get_model("quickscale_modules_orgs", "Organization")
@@ -478,7 +483,7 @@ def test_0007_replaces_stage_terminal_semantic_unique_with_bucket_constraint() -
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_from])
-    old_apps = executor.loader.project_state([migrate_from]).apps
+    old_apps = executor.loader.project_state([migrate_from, LATEST_ORGS_MIGRATION]).apps
 
     OldStage = old_apps.get_model("quickscale_modules_crm", "Stage")
     OldOrganization = old_apps.get_model("quickscale_modules_orgs", "Organization")
@@ -740,7 +745,7 @@ def test_backfill_null_owned_rows_to_target_org() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_to])
-    old_apps = executor.loader.project_state([migrate_to]).apps
+    old_apps = executor.loader.project_state([migrate_to, LATEST_ORGS_MIGRATION]).apps
 
     OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
     OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
@@ -811,7 +816,7 @@ def test_backfill_is_idempotent_on_second_run() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_to])
-    old_apps = executor.loader.project_state([migrate_to]).apps
+    old_apps = executor.loader.project_state([migrate_to, LATEST_ORGS_MIGRATION]).apps
 
     OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
     OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
@@ -849,7 +854,7 @@ def test_backfill_aborts_on_conflicting_ownership() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_to])
-    old_apps = executor.loader.project_state([migrate_to]).apps
+    old_apps = executor.loader.project_state([migrate_to, LATEST_ORGS_MIGRATION]).apps
 
     OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
     OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
@@ -881,7 +886,7 @@ def test_backfill_aborts_on_mixed_ownership() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_to])
-    old_apps = executor.loader.project_state([migrate_to]).apps
+    old_apps = executor.loader.project_state([migrate_to, LATEST_ORGS_MIGRATION]).apps
 
     OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
     OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
@@ -915,7 +920,7 @@ def test_backfill_allows_when_existing_rows_match_target_org() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_to])
-    old_apps = executor.loader.project_state([migrate_to]).apps
+    old_apps = executor.loader.project_state([migrate_to, LATEST_ORGS_MIGRATION]).apps
 
     OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
     OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
@@ -946,7 +951,7 @@ def test_backfill_dry_run_does_not_write() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_to])
-    old_apps = executor.loader.project_state([migrate_to]).apps
+    old_apps = executor.loader.project_state([migrate_to, LATEST_ORGS_MIGRATION]).apps
 
     OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
     OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")
@@ -982,7 +987,7 @@ def test_backfill_reports_zero_null_rows_gracefully() -> None:
 
     executor = MigrationExecutor(connection)
     executor.migrate([migrate_to])
-    old_apps = executor.loader.project_state([migrate_to]).apps
+    old_apps = executor.loader.project_state([migrate_to, LATEST_ORGS_MIGRATION]).apps
 
     OldOrg = old_apps.get_model("quickscale_modules_orgs", "Organization")
     OldTag = old_apps.get_model("quickscale_modules_crm", "Tag")

@@ -15,6 +15,84 @@ if TYPE_CHECKING:
 class OrganizationManager(models.Manager["Organization"]):
     """Manager helpers for organization creation workflows."""
 
+    def _validate_system_org(self, row: "Organization") -> None:
+        """Assert the row meets System org invariants, or raise RuntimeError."""
+        from .constants import SYSTEM_ORG_SLUG
+
+        if not row.is_system:
+            raise RuntimeError(
+                f"Corrupt System org pk={row.pk}: slug='{row.slug}' "
+                f"has is_system={row.is_system}. The System org must "
+                "have is_system=True."
+            )
+        if row.is_personal:
+            raise RuntimeError(
+                f"Corrupt System org pk={row.pk}: slug='{row.slug}' "
+                f"has is_personal=True. The System org must have "
+                "is_personal=False."
+            )
+        if row.slug != SYSTEM_ORG_SLUG:
+            raise RuntimeError(
+                f"Corrupt System org pk={row.pk}: slug='{row.slug}' "
+                f"instead of '{SYSTEM_ORG_SLUG}'. The System org "
+                "singleton is blocked by a corrupt row."
+            )
+
+    def get_system_org(self) -> "Organization":
+        """Return the singleton System organization, creating it idempotently.
+
+        The System org is a reserved singleton (slug ``__system__``) that owns
+        published-public content (D2).  This method is idempotent — repeated
+        calls return the same row.
+
+        The lookup resolves the reserved slug ``__system__`` rather than
+        trusting any ``is_system=True`` row.  Model-level ``clean()`` and
+        the database partial unique constraint enforce that only the reserved
+        slug may carry ``is_system=True``.
+
+        Returns:
+            The ``Organization`` instance with ``is_system=True`` and
+            slug ``__system__``.
+        """
+        from .constants import SYSTEM_ORG_NAME, SYSTEM_ORG_SLUG
+
+        # Fast path — the system org already exists.
+        try:
+            row = self.get(is_system=True, slug=SYSTEM_ORG_SLUG)
+            self._validate_system_org(row)
+            return row
+        except self.model.DoesNotExist:
+            pass
+
+        # Creation path — try to create the system org.
+        try:
+            with transaction.atomic():
+                return self.create(
+                    name=SYSTEM_ORG_NAME,
+                    slug=SYSTEM_ORG_SLUG,
+                    is_system=True,
+                    is_personal=False,
+                )
+        except IntegrityError:
+            # Another concurrent transaction created the system org, or a
+            # corrupt row blocks creation.  Resolve below.
+            pass
+
+        # Resolve after a concurrent create or corrupt state.
+        # First, check for a row with the reserved slug but wrong flags.
+        try:
+            row = self.get(slug=SYSTEM_ORG_SLUG)
+            self._validate_system_org(row)
+            return row
+        except self.model.DoesNotExist:
+            pass
+
+        # No reserved-slug row exists.  A wrong-slug is_system=True row
+        # must have blocked creation via the partial unique constraint.
+        row = self.get(is_system=True)
+        self._validate_system_org(row)
+        return row
+
     def create_personal_for(self, user: Any) -> "Organization":
         """Return the user's personal organization, creating it if needed."""
         from .models import OrgRole, OrganizationMembership
