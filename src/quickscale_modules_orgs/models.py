@@ -34,6 +34,7 @@ class Organization(models.Model):
     slug = models.SlugField(max_length=150, unique=True)
     stripe_customer_id = models.CharField(max_length=255, blank=True)
     is_personal = models.BooleanField(default=False)
+    is_system = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = OrganizationManager()
@@ -41,6 +42,49 @@ class Organization(models.Model):
     class Meta:
         app_label = "quickscale_modules_orgs"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_system"],
+                condition=models.Q(is_system=True),
+                name="unique_system_org",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Validate reserved singleton invariants for the System org."""
+        super().clean()
+        from .constants import SYSTEM_ORG_SLUG
+
+        errors: dict[str, str] = {}
+
+        # is_system must not be null.
+        if self.is_system is None:
+            errors["is_system"] = "is_system must not be null."
+
+        # slug="__system__" implies is_system=True.
+        if self.slug == SYSTEM_ORG_SLUG and self.is_system is not True:
+            errors["slug"] = (
+                f"The slug '{SYSTEM_ORG_SLUG}' is reserved for the System org."
+            )
+
+        # is_system=True implies slug="__system__".
+        if self.is_system is True and self.slug != SYSTEM_ORG_SLUG:
+            errors["is_system"] = (
+                f"A system organization must use the reserved slug '{SYSTEM_ORG_SLUG}'."
+            )
+
+        # is_system=True implies is_personal=False.
+        if self.is_system is True and self.is_personal is True:
+            errors["is_personal"] = (
+                "The System org must not be a personal organization."
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.name
