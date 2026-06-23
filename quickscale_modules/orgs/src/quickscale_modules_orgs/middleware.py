@@ -17,7 +17,12 @@ from django.shortcuts import redirect
 from django.urls import Resolver404, resolve
 
 from .constants import ORG_INVITATION_ACCEPT_URL_NAME
-from .current_org import clear_current_org, set_current_org
+from .current_org import (
+    clear_current_org,
+    reset_current_org_id,
+    set_current_org,
+    set_current_org_id,
+)
 from .models import Organization, OrganizationMembership
 
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
@@ -43,6 +48,7 @@ class TenantMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         org_request = cast(OrganizationRequest, request)
         clear_current_org(org_request)
+        reset_current_org_id()
 
         if self._is_exempt_path(org_request.path_info):
             return self.get_response(org_request)
@@ -119,9 +125,14 @@ class TenantMiddleware:
         organization: Organization,
     ) -> HttpResponse:
         set_current_org(request, organization)
-        with transaction.atomic():
-            self._set_current_org_id(organization.id)
-            return self.get_response(request)
+        set_current_org_id(organization.id)
+        try:
+            with transaction.atomic():
+                self._set_current_org_id(organization.id)
+                return self.get_response(request)
+        finally:
+            clear_current_org(request)
+            reset_current_org_id()
 
     def _set_current_org_id(self, organization_id: int | str) -> None:
         if connection.vendor != "postgresql":

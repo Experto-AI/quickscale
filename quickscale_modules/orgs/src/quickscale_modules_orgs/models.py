@@ -9,7 +9,8 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from .managers import OrganizationManager
+from .managers import OrganizationManager, TenantManager
+from .tenancy import tenant_org_fk
 
 
 class OrgRole(models.TextChoices):
@@ -342,14 +343,18 @@ class OrganizationInvitation(models.Model):
 
 
 class TenantModel(models.Model):
-    """Abstract base for tenant-scoped models."""
+    """Abstract base for tenant-scoped models.
 
-    organization = models.ForeignKey(
-        Organization,
-        on_delete=models.CASCADE,
-        db_index=True,
+    Default manager (``objects``) auto-filters by the current organization
+    context.  Use ``all_objects`` for unfiltered operator-style access.
+    """
+
+    organization = tenant_org_fk(
         related_name="%(app_label)s_%(class)s_set",
     )
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         abstract = True

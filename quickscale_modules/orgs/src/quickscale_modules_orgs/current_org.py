@@ -8,20 +8,31 @@ continue to work unchanged.
 The ``require_current_org`` accessor is the strict fail-closed entry point:
 it raises :class:`CurrentOrgError` when no organization context is available
 instead of silently returning ``None``.
+
+T1.2 adds ``ContextVar``-backed helpers (``set_current_org_id``,
+``get_current_org_id``, ``reset_current_org_id``) so that tenant-scoped
+managers can auto-filter without a ``request`` reference.
 """
 
 from __future__ import annotations
 
+import uuid
+from contextvars import ContextVar
 from typing import Any
+
+
+_current_org_id_var: ContextVar[uuid.UUID | None] = ContextVar(
+    "_current_org_id", default=None
+)
 
 
 class CurrentOrgError(Exception):
     """Raised when strict org access is required but no org context is set."""
 
 
-def set_current_org(request: Any, organization: Any) -> None:
-    """Attach *organization* to *request* as the active org for this cycle."""
-    request.org = organization
+def set_current_org(request: Any, org: Any) -> None:
+    """Attach *org* to *request* as the active org for this cycle."""
+    request.org = org
 
 
 def get_current_org(request: Any) -> Any | None:
@@ -48,3 +59,38 @@ def require_current_org(request: Any) -> Any:
             "No current organization context available for this request."
         )
     return organization
+
+
+# ---------------------------------------------------------------------------
+# T1.2 — ContextVar-backed current org id seam for tenant-scoped managers
+# ---------------------------------------------------------------------------
+
+
+def set_current_org_id(org_id: uuid.UUID | None) -> None:
+    """Set the current organization ID for the active execution context.
+
+    This is used by :class:`~.middleware.TenantMiddleware` to propagate the
+    resolved org into the ``ContextVar`` so that :class:`~.managers.TenantManager`
+    can auto-filter querysets without a ``request`` reference.
+    """
+    _current_org_id_var.set(org_id)
+
+
+def get_current_org_id() -> uuid.UUID | None:
+    """Return the current organization ID for the active execution context.
+
+    Returns ``None`` when no org context is set (e.g. on exempt paths or
+    before middleware has resolved the tenant).  Callers that require strict
+    fail-closed behavior should check for ``None`` explicitly.
+    """
+    return _current_org_id_var.get()
+
+
+def reset_current_org_id() -> None:
+    """Reset the current organization ID to ``None`` for this context.
+
+    Called at the start of each new request in
+    :class:`~.middleware.TenantMiddleware` to ensure stale context from a
+    prior request is not leaked.
+    """
+    _current_org_id_var.set(None)
