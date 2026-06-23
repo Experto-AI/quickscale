@@ -377,7 +377,7 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 
 ### Track 2 progress
 - [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
-- [ ] T2.2 — Generic implication resolver
+- [x] T2.2 — Generic implication resolver
 - [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
 - [ ] T2.4 — Delete dead ladder/shims
 
@@ -398,17 +398,24 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 
 ---
 
-#### - [ ] T2.2 — Generic implication resolver
+#### - [x] T2.2 — Generic implication resolver
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **OBJECTIVE:** Replace `get_implied_module_default_configs()` with a generic resolver that reads `implies` from each `module.yml` and computes the transitive closure.
 - **SCOPE:**
-  - `quickscale_core/src/quickscale_core/manifest/implications.py` (new) — `resolve_module_implications(names: Collection[str]) -> dict[str, dict]`: load manifests, walk `implies`, build transitive closure, return implied modules not already in `names`.
+  - `quickscale_core/src/quickscale_core/manifest/implications.py` (new) — `resolve_module_implications(names: Collection[str], modules_base_path: Path | None = None) -> dict[str, dict]`: load manifests, walk `implies`, build transitive closure, return implied modules not already in `names`. Defaults to repo-root `quickscale_modules/` when no explicit path given.
+  - `quickscale_core/src/quickscale_core/manifest/__init__.py` — export `resolve_module_implications`.
   - `quickscale_cli/src/quickscale_cli/commands/implied_module_defaults.py` — `get_implied_module_default_configs` becomes a one-line shim over `resolve_module_implications` (deletion deferred to T2.4).
+  - `quickscale_core/tests/test_manifest_implications.py` (new) — 27 unit tests covering edge cases, each implication chain, multi-implicator deduplication, transitive closure, default-paths, and error conditions.
 - **ACCEPTANCE CRITERIA:** billing → `{orgs: {}, notifications: <default>}`; crm → same; social → same; orgs alone → `{notifications: <default>}`; matches existing ladder behavior exactly.
-- **VALIDATION PATH:** `make test -- --core`; implications unit tests.
+- **VALIDATION PATH:** `make test -- --core`; implications unit tests. All 27 new + 20 existing implication tests pass.
 - **DEPENDS:** T2.1.
+- **FINDINGS / NOTES:**
+  - The `modules_base_path` parameter was added (beyond the minimal roadmap signature) so callers can point the resolver at generated-project `modules/` in T2.3 without changing the API.
+  - The default path computation (`Path(__file__).resolve().parents[4] / "quickscale_modules"`) mirrors the existing `_REPO_ROOT` pattern used by CLI manifests.
+  - All 20 existing CLI shim tests continue to pass unchanged — behavior parity confirmed.
+  - 27 new core resolver tests at 100% coverage on the new module.
 
 ---
 
