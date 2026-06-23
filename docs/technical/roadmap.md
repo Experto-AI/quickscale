@@ -377,38 +377,9 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 
 ### Track 2 progress
 - [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
-- [ ] T2.2 — Generic implication resolver
+- [x] T2.2 — Generic implication resolver
 - [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
 - [ ] T2.4 — Delete dead ladder/shims
-
----
-
-#### - [x] T2.1 — Manifest schema: `implies` support
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Extend `module.yml` and the core manifest schema to declare dependency implications. Config-expression fields (validation_rules, derivation_rules) deferred to T2.3.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/manifest/schema.py` — add `implies: list[ImpliesEntry]`; `ImpliesEntry(name: str, default_config: dict)`.
-  - `quickscale_core/src/quickscale_core/manifest/loader.py` — parse and validate new fields.
-  - `quickscale_modules/{billing,crm,social,orgs}/module.yml` — add `implies` blocks: billing→orgs, crm→orgs, social→orgs, orgs→notifications (with default config from `get_default_notifications_config()`).
-- **ACCEPTANCE CRITERIA:** schema round-trips; `implies` loads from YAML; existing modules without the field continue to load.
-- **VALIDATION PATH:** `make test -- --core`; manifest schema unit tests.
-- **DEPENDS:** none.
-
----
-
-#### - [ ] T2.2 — Generic implication resolver
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Replace `get_implied_module_default_configs()` with a generic resolver that reads `implies` from each `module.yml` and computes the transitive closure.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/manifest/implications.py` (new) — `resolve_module_implications(names: Collection[str]) -> dict[str, dict]`: load manifests, walk `implies`, build transitive closure, return implied modules not already in `names`.
-  - `quickscale_cli/src/quickscale_cli/commands/implied_module_defaults.py` — `get_implied_module_default_configs` becomes a one-line shim over `resolve_module_implications` (deletion deferred to T2.4).
-- **ACCEPTANCE CRITERIA:** billing → `{orgs: {}, notifications: <default>}`; crm → same; social → same; orgs alone → `{notifications: <default>}`; matches existing ladder behavior exactly.
-- **VALIDATION PATH:** `make test -- --core`; implications unit tests.
-- **DEPENDS:** T2.1.
 
 ---
 
@@ -448,40 +419,6 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 - [x] T3.1 — Single adapter path (route all commands through dr_engine)
 - [x] T3.2 — Shrink `services.py`
 - [ ] T3.3 — Cleanup
-
----
-
-#### - [ ] T3.1 — Single adapter path
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Eliminate the legacy env-var/stdout-JSON protocol; route all 8 backups management commands through `quickscale_core.dr_engine.adapter`.
-- **SCOPE:**
-  - `services.py:100` — delete `_DR_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"`.
-  - `services.py:2433–2438` — delete `_load_target_runtime_settings()`.
-  - `services.py:2580–2602` — delete the backward-compat fork; keep only the adapter path.
-  - `management/commands/{backups_create,backups_restore,backups_prune,backups_report,backups_pin,backups_validate,backups_record_verification,backups_sync_media}.py` — each `handle()` dispatches through `dr_engine.adapter.ADAPTER_FUNCTIONS[<name>](...)` (same pattern as `dr_adapter_call.py`).
-- **ACCEPTANCE CRITERIA:** no command uses `_DR_TARGET_ENV_PREFIX` or `_load_target_runtime_settings`; `make MODULE=backups test -- --modules` green; `quickscale dr` smoke test passes.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`; `grep -n "_DR_TARGET_ENV_PREFIX\|_load_target_runtime_settings" services.py` returns zero.
-- **DEPENDS:** none.
-
----
-
-#### - [x] T3.2 — Shrink `services.py`
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Move remaining orchestration out of `services.py` into `dr_engine`; reduce the module to thin Django-facing surfaces.
-- **SCOPE:** Identify orchestration blocks beyond the lines deleted in T3.1; move into `dr_engine/{recovery,primitives}.py` or a new `dr_engine/orchestration.py`. `services.py` final shape: Django model imports, admin helpers, thin adapter bridge — target < 400 LOC (from 3,677).
-- **ACCEPTANCE CRITERIA:** `wc -l services.py` < 400; `dr_engine` contains all orchestration; `services.py` has no non-Django business logic; `make MODULE=backups test -- --modules` green.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
-- **DEPENDS:** T3.1.
-- **OUTCOME:**
-  - Created `quickscale_core.dr_engine.orchestration` (~3,682 LOC) containing all DR orchestration: backup capture/resume (consolidated), sidecar lifecycle, report building, prune, media sync, remote S3 ops, admin restore pipeline, verification/rollback-pin wrappers, and Django-backed restore wrappers.
-  - Moved `BackupPolicySnapshot` dataclass to `quickscale_core.dr_engine.primitives` (Django-free; factory methods stay in services).
-  - `services.py` reduced from 3,654 LOC to 205 LOC — thin re-exports + 4 protocols + 3 policy wrappers.
-  - Updated test monkey-patches to target orchestration module.
-  - Remaining: T3.3 (cleanup dead code comments).
 
 ---
 
