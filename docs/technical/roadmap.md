@@ -115,7 +115,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 **Phase 1 — Foundation**
 - [x] T1.1 — System org + NOT NULL ownership contract
-- [ ] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
+- [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
 - [ ] T1.3 — Middleware for the single-URL world
 - [ ] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
 
@@ -161,18 +161,19 @@ Plan-review recommended.
 
 ---
 
-#### - [ ] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
+#### - [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 Plan-review recommended. Core security seam; all per-module tasks depend on it.
 
 - **OBJECTIVE:** Provide one shared, contextvar-driven scoping seam — auto-filtering default manager + operator escape hatch — for all modules.
 - **SCOPE:**
-  - `orgs/.../current_org.py` — add `current_org_id: ContextVar[int | None]`; `set_current_org_id()`, `get_current_org_id()`, `reset_current_org_id()`; keep `request.org` as the request-cycle mirror.
-  - `orgs/.../tenancy.py` — `TenantScopedManager.get_queryset()` filters `organization_id=get_current_org_id()`, **fail-closed** (returns `.none()`) when unset; `OperatorManager` = unfiltered escape hatch.
+  - `orgs/.../current_org.py` — add `current_org_id: ContextVar[uuid.UUID | None]`; `set_current_org_id()`, `get_current_org_id()`, `reset_current_org_id()`; keep `request.org` as the request-cycle mirror.
+  - `orgs/.../managers.py` — `TenantManager.get_queryset()` filters `organization_id=get_current_org_id()`, **fail-closed** (returns `.none()`) when unset; `TenantManager(super_scope=True)` provides the unfiltered escape hatch.
 - **ACCEPTANCE CRITERIA:** default manager auto-scopes to contextvar org; unset context → `.none()` (fail-closed); `all_objects` bypasses; cross-request contextvar isolation leak-free.
 - **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; unit tests: auto-scope, fail-closed, operator bypass, cross-request isolation.
 - **DEPENDS:** T1.1. **DECISIONS:** D1, D4.
+- **FINDING:** Contextvar seam (`current_org_id`), fail-closed `TenantManager` (`.none()` when unset), `TenantManager(super_scope=True)` escape hatch, and middleware propagation implemented and validated. Repo-root `make test` reconfirmed all changed suites passing; final exit code non-zero solely because of the pre-existing unrelated per-file coverage gap in `dr_adapter_call.py` (0%, already tracked in Deferred / Monitor). No remaining blocker.
 
 ---
 
@@ -208,7 +209,7 @@ Plan-review recommended. Parallel to T1.2/T1.3. Must land before any Phase-3 RLS
 
 ### Phase 2 — Per-module contract adoption (parallel after T1.1–T1.3)
 
-**Shared shape (T1.5–T1.9):** delete the module's `managers.py` and import `TenantScopedManager`/`OperatorManager` from `orgs.tenancy`; models use `tenant_org_fk()` (NOT NULL/PROTECT, drop `null=True`); delete `_is_org_scoped_route`, all `| Q(organization_id__isnull=True)` unions, and redundant `.for_org()` calls; collapse URLs to a single flat tree (delete `/orgs/<slug:org_slug>/...`); route anonymous/public reads to `get_system_org()` (D2); update tests to single-route contract; squash migration to NOT NULL schema (D5, no backfill).
+**Shared shape (T1.5–T1.9):** drop any module-local `TenantScopedManager`/`OperatorManager` classes and import `TenantManager` from `orgs.managers` instead (`TenantManager(super_scope=True)` for the operator bypass); models use `tenant_org_fk()` (NOT NULL/PROTECT, drop `null=True`); delete `_is_org_scoped_route`, all `| Q(organization_id__isnull=True)` unions, and redundant `.for_org()` calls; collapse URLs to a single flat tree (delete `/orgs/<slug:org_slug>/...`); route anonymous/public reads to `get_system_org()` (D2); update tests to single-route contract; squash migration to NOT NULL schema (D5, no backfill).
 
 ---
 
