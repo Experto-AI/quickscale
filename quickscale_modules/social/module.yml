@@ -49,6 +49,9 @@ config:
 required_modules:
   - orgs
 
+implies:
+  - name: orgs
+
 managed_files:
   social_init:
     renderer: social.managed_init
