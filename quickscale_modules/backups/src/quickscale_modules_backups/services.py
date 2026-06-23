@@ -1,18 +1,17 @@
 """Thin Django-facing service layer for the QuickScale backups module.
 
 All DR orchestration logic lives in ``quickscale_core.dr_engine.orchestration``.
-This module provides backward-compatible re-exports and thin Django-facing
-wrappers (policy helpers, protocols referencing ``BackupPolicySnapshot``,
-admin-upload staging).
+This module keeps the small set of Django-facing wrappers and shared protocol
+types that the backups app still owns locally.
 
-``services.py`` is intentionally under 400 LOC.  Every new orchestration
+``services.py`` is intentionally under 400 LOC. Every new orchestration
 feature should go in ``dr_engine/``, not here.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 from quickscale_modules_backups.models import BackupPolicy
 
@@ -123,9 +122,6 @@ from quickscale_core.dr_engine.verification import (  # noqa: F401
     _compute_rollback_pin_fields,
     _validate_verification_inputs,
 )
-
-if TYPE_CHECKING:
-    pass
 
 # ---------------------------------------------------------------------------
 # Protocols (reference BackupPolicySnapshot — defined here to avoid circular

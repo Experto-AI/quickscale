@@ -418,23 +418,18 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 ### Track 3 progress
 - [x] T3.1 — Single adapter path (route all commands through dr_engine)
 - [x] T3.2 — Shrink `services.py`
-- [ ] T3.3 — Cleanup
+- [x] T3.3 — Cleanup
 
 ---
 
-#### - [ ] T3.3 — Cleanup
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **SCOPE:** Grep `services.py` and `dr_engine/` for `# legacy`, `# backward`, `# fallback` comments; delete the dead code they annotate. Add one-paragraph module docstring to `dr_engine/adapter.py` documenting the canonical single path.
-- **ACCEPTANCE CRITERIA:** `grep -rn "legacy\|fallback\|backward" quickscale_modules/backups/` returns zero; `make MODULE=backups test -- --modules` green.
-- **DEPENDS:** T3.1, T3.2.
+Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
 ## Deferred / Monitor
 
 - [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
+- [ ] **Backups terminology sweep outside T3.3 scope** *(Adaptive tier: 1)* — broad `legacy|fallback|backward` grep still hits historical migration/test fixtures plus Django's `FallbackStorage` import in `quickscale_modules/backups/`; T3.3 only cleared stale single-path wording from the active DR service/adapter surfaces.
 - [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
 - [ ] **Broader compatibility-window widening** *(Adaptive tier: 2)* — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
 - [ ] **Emitted-project operability & API-contract substrate** *(deferred)* — no structured logging/correlation IDs, no versioned public API, no webhook payload boundary validation. Promote when a second external provider lands or the first public-API consumer appears.
@@ -465,6 +460,7 @@ Single-PR items that do not change the design:
 | M9 | 1 | F13.1–F13.3 | Merged to v87. Org-authoritative billing contract; unique subscription constraint; dual-FK backfill. |
 | M10 | 2 | F5.2a–F5.4 | Merged to v87. DR engine extracted to `quickscale_core.dr_engine`; `dr_engine_migration.md` added. |
 | M11 | 3 | F7.1–F7.3 | Merged to v87. Generator vs generated-project runtime-pin decoupling complete. |
+| M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
 
 ## References
 
