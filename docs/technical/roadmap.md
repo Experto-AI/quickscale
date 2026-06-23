@@ -114,7 +114,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 ### Track 1 progress
 
 **Phase 1 — Foundation**
-- [ ] T1.1 — System org + NOT NULL ownership contract
+- [x] T1.1 — System org + NOT NULL ownership contract
 - [ ] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
 - [ ] T1.3 — Middleware for the single-URL world
 - [ ] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
@@ -142,7 +142,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 ### Phase 1 — Foundation (serial; blocks all of Phase 2)
 
-#### - [ ] T1.1 — System org + NOT NULL ownership contract
+#### - [x] T1.1 — System org + NOT NULL ownership contract
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 Plan-review recommended.
@@ -157,6 +157,7 @@ Plan-review recommended.
 - **ACCEPTANCE CRITERIA:** `get_system_org()` is idempotent and returns a singleton; DB rejects a second `is_system=True` row; `tenant_org_fk()` produces a NOT NULL/PROTECT FK.
 - **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; tests: system-org singleton, idempotency, constraint violation on duplicate.
 - **DEPENDS:** none. **DECISIONS:** D2, D3.
+- **FINDING:** Cross-module migration fixtures that restore orgs schema must target the latest orgs migration. Billing `test_migrations.py` `LATEST_ORGS_MIGRATION` updated from `0001_initial` to `0003_alter_organization_is_system` during T1.1 closeout. No remaining blocker.
 
 ---
 
