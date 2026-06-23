@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
@@ -67,6 +68,50 @@ class ShellCommandRunner(Protocol):
         *,
         env: dict[str, str] | None = None,
     ) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# Shared dataclasses
+# ---------------------------------------------------------------------------
+
+_DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
+_DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
+    "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+)
+
+
+@dataclass(frozen=True)
+class BackupPolicySnapshot:
+    """Immutable view of the active backup policy."""
+
+    retention_days: int
+    naming_prefix: str
+    target_mode: str
+    local_directory: str
+    remote_bucket_name: str
+    remote_prefix: str
+    remote_endpoint_url: str
+    remote_region_name: str
+    remote_access_key_id_env_var: str
+    remote_secret_access_key_env_var: str
+    automation_enabled: bool
+    schedule: str
+
+    def resolve_remote_access_key_id(self) -> str:
+        """Return the runtime private-remote access key id from the environment."""
+        env_var_name = (
+            self.remote_access_key_id_env_var.strip()
+            or _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR
+        )
+        return os.getenv(env_var_name, "").strip()
+
+    def resolve_remote_secret_access_key(self) -> str:
+        """Return the runtime private-remote secret access key from the environment."""
+        env_var_name = (
+            self.remote_secret_access_key_env_var.strip()
+            or _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+        )
+        return os.getenv(env_var_name, "").strip()
 
 
 # ---------------------------------------------------------------------------

@@ -446,7 +446,7 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 
 ### Track 3 progress
 - [x] T3.1 — Single adapter path (route all commands through dr_engine)
-- [ ] T3.2 — Shrink `services.py`
+- [x] T3.2 — Shrink `services.py`
 - [ ] T3.3 — Cleanup
 
 ---
@@ -467,7 +467,7 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 
 ---
 
-#### - [ ] T3.2 — Shrink `services.py`
+#### - [x] T3.2 — Shrink `services.py`
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -476,6 +476,12 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 - **ACCEPTANCE CRITERIA:** `wc -l services.py` < 400; `dr_engine` contains all orchestration; `services.py` has no non-Django business logic; `make MODULE=backups test -- --modules` green.
 - **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
 - **DEPENDS:** T3.1.
+- **OUTCOME:**
+  - Created `quickscale_core.dr_engine.orchestration` (~3,682 LOC) containing all DR orchestration: backup capture/resume (consolidated), sidecar lifecycle, report building, prune, media sync, remote S3 ops, admin restore pipeline, verification/rollback-pin wrappers, and Django-backed restore wrappers.
+  - Moved `BackupPolicySnapshot` dataclass to `quickscale_core.dr_engine.primitives` (Django-free; factory methods stay in services).
+  - `services.py` reduced from 3,654 LOC to 205 LOC — thin re-exports + 4 protocols + 3 policy wrappers.
+  - Updated test monkey-patches to target orchestration module.
+  - Remaining: T3.3 (cleanup dead code comments).
 
 ---
 
