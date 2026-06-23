@@ -4,7 +4,8 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_modules_backups.services import BackupError, sync_backup_snapshot_media
+from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 class Command(BaseCommand):
@@ -20,6 +21,15 @@ class Command(BaseCommand):
             help="Validate media sync inputs without copying objects.",
         )
         parser.add_argument(
+            "--target-runtime-json",
+            default="{}",
+            help=(
+                "JSON object of target runtime settings (replaces the legacy "
+                "QUICKSCALE_DR_TARGET_* env-var protocol). "
+                'Example: \'{"MEDIA_ROOT": "/path/to/target"}\'.'
+            ),
+        )
+        parser.add_argument(
             "--json",
             action="store_true",
             dest="as_json",
@@ -28,9 +38,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
         try:
-            result = sync_backup_snapshot_media(
+            target_runtime_settings = json.loads(options["target_runtime_json"])
+        except json.JSONDecodeError as exc:
+            raise CommandError(
+                "--target-runtime-json must be a valid JSON object."
+            ) from exc
+        if not isinstance(target_runtime_settings, dict):
+            raise CommandError("--target-runtime-json must be a JSON object.")
+
+        try:
+            result = ADAPTER_FUNCTIONS["sync_media"](
                 options["snapshot_id"],
                 dry_run=bool(options["dry_run"]),
+                target_runtime_settings=target_runtime_settings,
             )
         except BackupError as exc:
             raise CommandError(str(exc)) from exc

@@ -4,46 +4,39 @@ from __future__ import annotations
 
 import json
 from io import StringIO
-from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from quickscale_modules_backups.services import BackupError
+from quickscale_modules_backups.models import BackupArtifact
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 def test_backups_create_command_reports_created_artifact() -> None:
     stdout = StringIO()
-    snapshot_token = object()
     report = {
         "snapshot_id": "snap-123",
         "status": "ready",
         "local_root_path": "/tmp/backups/snap-123",
         "failure_note": "",
+        "authoritative_dump": {
+            "artifact_id": 42,
+            "filename": "db-20260402.dump",
+            "local_path": "/tmp/db-20260402.dump",
+            "remote_key": "ops/backups/db-20260402.dump",
+        },
     }
+    mock_capture = MagicMock(return_value=report)
 
-    with (
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.create_backup",
-            return_value=SimpleNamespace(
-                filename="db-20260402.dump",
-                pk=42,
-                local_path="/tmp/db-20260402.dump",
-                remote_key="ops/backups/db-20260402.dump",
-                authoritative_snapshot=snapshot_token,
-            ),
-        ) as mocked_create,
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.build_backup_snapshot_report",
-            return_value=report,
-        ) as mocked_report,
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"capture_snapshot": mock_capture},
     ):
         call_command("backups_create", stdout=stdout, stderr=StringIO())
 
-    mocked_create.assert_called_once_with(trigger="manual")
-    mocked_report.assert_called_once_with(snapshot_token)
+    mock_capture.assert_called_once_with(trigger="manual")
     assert stdout.getvalue() == (
         "Created backup db-20260402.dump\n"
         "Artifact id: 42\n"
@@ -57,29 +50,23 @@ def test_backups_create_command_reports_created_artifact() -> None:
 
 def test_backups_create_command_routes_scheduled_trigger() -> None:
     stdout = StringIO()
-    snapshot_token = object()
     report = {
         "snapshot_id": "snap-777",
         "status": "ready",
         "local_root_path": "/tmp/backups/snap-777",
         "failure_note": "",
+        "authoritative_dump": {
+            "artifact_id": 7,
+            "filename": "db-20260402.dump",
+            "local_path": "/tmp/db-20260402.dump",
+            "remote_key": "",
+        },
     }
+    mock_capture = MagicMock(return_value=report)
 
-    with (
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.create_backup",
-            return_value=SimpleNamespace(
-                filename="db-20260402.dump",
-                pk=7,
-                local_path="/tmp/db-20260402.dump",
-                remote_key="",
-                authoritative_snapshot=snapshot_token,
-            ),
-        ) as mocked_create,
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.build_backup_snapshot_report",
-            return_value=report,
-        ) as mocked_report,
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"capture_snapshot": mock_capture},
     ):
         call_command(
             "backups_create",
@@ -88,8 +75,7 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
             stderr=StringIO(),
         )
 
-    mocked_create.assert_called_once_with(trigger="scheduled")
-    mocked_report.assert_called_once_with(snapshot_token)
+    mock_capture.assert_called_once_with(trigger="scheduled")
     assert stdout.getvalue() == (
         "Created backup db-20260402.dump\n"
         "Artifact id: 7\n"
@@ -102,29 +88,23 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
 
 def test_backups_create_command_routes_resume_snapshot_id() -> None:
     stdout = StringIO()
-    snapshot_token = object()
     report = {
         "snapshot_id": "snap-resume",
         "status": "ready",
         "local_root_path": "/tmp/backups/snap-resume",
         "failure_note": "",
+        "authoritative_dump": {
+            "artifact_id": 17,
+            "filename": "db-20260402.dump",
+            "local_path": "/tmp/db-20260402.dump",
+            "remote_key": "",
+        },
     }
+    mock_capture = MagicMock(return_value=report)
 
-    with (
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.create_backup",
-            return_value=SimpleNamespace(
-                filename="db-20260402.dump",
-                pk=17,
-                local_path="/tmp/db-20260402.dump",
-                remote_key="",
-                authoritative_snapshot=snapshot_token,
-            ),
-        ) as mocked_create,
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.build_backup_snapshot_report",
-            return_value=report,
-        ) as mocked_report,
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"capture_snapshot": mock_capture},
     ):
         call_command(
             "backups_create",
@@ -134,11 +114,10 @@ def test_backups_create_command_routes_resume_snapshot_id() -> None:
             stderr=StringIO(),
         )
 
-    mocked_create.assert_called_once_with(
+    mock_capture.assert_called_once_with(
         trigger="manual",
         resume_snapshot_id="snap-resume",
     )
-    mocked_report.assert_called_once_with(snapshot_token)
     assert stdout.getvalue() == (
         "Resumed backup db-20260402.dump\n"
         "Artifact id: 17\n"
@@ -151,7 +130,6 @@ def test_backups_create_command_routes_resume_snapshot_id() -> None:
 
 def test_backups_create_command_outputs_json_report() -> None:
     stdout = StringIO()
-    snapshot_token = object()
     report = {
         "snapshot_id": "snap-json",
         "status": "ready",
@@ -159,22 +137,11 @@ def test_backups_create_command_outputs_json_report() -> None:
         "failure_note": "",
         "authoritative_dump": {"artifact_id": 9, "filename": "db.dump"},
     }
+    mock_capture = MagicMock(return_value=report)
 
-    with (
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.create_backup",
-            return_value=SimpleNamespace(
-                filename="db.dump",
-                pk=9,
-                local_path="/tmp/db.dump",
-                remote_key="",
-                authoritative_snapshot=snapshot_token,
-            ),
-        ),
-        patch(
-            "quickscale_modules_backups.management.commands.backups_create.build_backup_snapshot_report",
-            return_value=report,
-        ),
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"capture_snapshot": mock_capture},
     ):
         call_command("backups_create", "--json", stdout=stdout, stderr=StringIO())
 
@@ -182,9 +149,11 @@ def test_backups_create_command_outputs_json_report() -> None:
 
 
 def test_backups_create_command_wraps_backup_errors() -> None:
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_create.create_backup",
-        side_effect=BackupError("pg_dump exploded"),
+    mock_capture = MagicMock(side_effect=BackupError("pg_dump exploded"))
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"capture_snapshot": mock_capture},
     ):
         with pytest.raises(CommandError, match="pg_dump exploded"):
             call_command("backups_create", stdout=StringIO(), stderr=StringIO())
@@ -192,31 +161,59 @@ def test_backups_create_command_wraps_backup_errors() -> None:
 
 def test_backups_prune_command_reports_deleted_count() -> None:
     stdout = StringIO()
+    mock_prune = MagicMock(return_value={"deleted_count": 3})
 
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_prune.prune_expired_backups",
-        return_value=3,
-    ) as mocked_prune:
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"prune_backups": mock_prune},
+    ):
         call_command("backups_prune", stdout=stdout, stderr=StringIO())
 
-    mocked_prune.assert_called_once_with()
+    mock_prune.assert_called_once_with()
     assert stdout.getvalue() == "Pruned 3 expired backup artifact(s)\n"
+
+
+def test_backups_prune_command_wraps_backup_errors() -> None:
+    mock_prune = MagicMock(side_effect=BackupError("prune backend unavailable"))
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"prune_backups": mock_prune},
+    ):
+        with pytest.raises(CommandError, match="prune backend unavailable"):
+            call_command("backups_prune", stdout=StringIO(), stderr=StringIO())
 
 
 @pytest.mark.django_db
 def test_backups_validate_command_requires_existing_artifact() -> None:
-    with pytest.raises(CommandError, match="Backup artifact not found"):
-        call_command("backups_validate", "999999", stdout=StringIO(), stderr=StringIO())
+    mock_validate = MagicMock(
+        side_effect=BackupError("Backup artifact not found: 999999")
+    )
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"validate_artifact": mock_validate},
+    ):
+        with pytest.raises(CommandError, match="Backup artifact not found"):
+            call_command(
+                "backups_validate", "999999", stdout=StringIO(), stderr=StringIO()
+            )
 
 
 @pytest.mark.django_db
 def test_backups_validate_command_reports_validation_issues(
-    backup_artifact,
+    backup_artifact: BackupArtifact,
 ) -> None:
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_validate.validate_backup_artifact",
-        return_value=["checksum mismatch detected", "size mismatch detected"],
-    ) as mocked_validate:
+    mock_validate = MagicMock(
+        return_value={
+            "artifact_id": backup_artifact.pk,
+            "issues": ["checksum mismatch detected", "size mismatch detected"],
+            "valid": False,
+        }
+    )
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"validate_artifact": mock_validate},
+    ):
         with pytest.raises(
             CommandError,
             match="checksum mismatch detected; size mismatch detected",
@@ -228,17 +225,25 @@ def test_backups_validate_command_reports_validation_issues(
                 stderr=StringIO(),
             )
 
-    mocked_validate.assert_called_once_with(backup_artifact)
+    mock_validate.assert_called_once_with(artifact_id=backup_artifact.pk)
 
 
 @pytest.mark.django_db
-def test_backups_validate_command_reports_success(backup_artifact) -> None:
+def test_backups_validate_command_reports_success(
+    backup_artifact: BackupArtifact,
+) -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_validate.validate_backup_artifact",
-        return_value=[],
-    ) as mocked_validate:
+    mock_validate = MagicMock(
+        return_value={
+            "artifact_id": backup_artifact.pk,
+            "issues": [],
+            "valid": True,
+        }
+    )
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"validate_artifact": mock_validate},
+    ):
         call_command(
             "backups_validate",
             str(backup_artifact.pk),
@@ -246,15 +251,13 @@ def test_backups_validate_command_reports_success(backup_artifact) -> None:
             stderr=StringIO(),
         )
 
-    mocked_validate.assert_called_once_with(backup_artifact)
-    assert stdout.getvalue() == f"Validated {backup_artifact.filename}\n"
+    mock_validate.assert_called_once_with(artifact_id=backup_artifact.pk)
+    assert stdout.getvalue() == f"Validated artifact {backup_artifact.pk}\n"
 
 
 def test_backups_report_command_renders_snapshot_summary() -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_report.report_backup_snapshot",
+    mock_report = MagicMock(
         return_value={
             "snapshot_id": "snap-report",
             "status": "ready",
@@ -279,11 +282,16 @@ def test_backups_report_command_renders_snapshot_summary() -> None:
                     "manifest_status": "ready",
                 }
             },
-        },
-    ) as mocked_report:
+        }
+    )
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"fetch_snapshot_report": mock_report},
+    ):
         call_command("backups_report", "snap-report", stdout=stdout, stderr=StringIO())
 
-    mocked_report.assert_called_once_with("snap-report")
+    mock_report.assert_called_once_with("snap-report", sidecar_payloads=[])
     assert stdout.getvalue() == (
         "Snapshot id: snap-report\n"
         "Status: ready\n"
@@ -302,9 +310,7 @@ def test_backups_report_command_renders_snapshot_summary() -> None:
 
 def test_backups_pin_command_sets_rollback_pin() -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_pin.set_backup_snapshot_rollback_pin",
+    mock_pin = MagicMock(
         return_value={
             "snapshot_id": "snap-pin",
             "rollback_pin": {
@@ -312,8 +318,13 @@ def test_backups_pin_command_sets_rollback_pin() -> None:
                 "expires_at": "2026-04-06T18:00:00+00:00",
                 "reason": "production rollback window",
             },
-        },
-    ) as mocked_pin:
+        }
+    )
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"set_rollback_pin": mock_pin},
+    ):
         call_command(
             "backups_pin",
             "snap-pin",
@@ -325,9 +336,9 @@ def test_backups_pin_command_sets_rollback_pin() -> None:
             stderr=StringIO(),
         )
 
-    mocked_pin.assert_called_once_with(
-        "snap-pin",
-        ttl_hours=6,
+    mock_pin.assert_called_once_with(
+        snapshot_id="snap-pin",
+        hours=6,
         reason="production rollback window",
     )
     assert stdout.getvalue() == (
@@ -340,9 +351,7 @@ def test_backups_pin_command_sets_rollback_pin() -> None:
 
 def test_backups_pin_command_clears_rollback_pin() -> None:
     stdout = StringIO()
-
-    with patch(
-        "quickscale_modules_backups.management.commands.backups_pin.clear_backup_snapshot_rollback_pin",
+    mock_clear = MagicMock(
         return_value={
             "snapshot_id": "snap-pin",
             "rollback_pin": {
@@ -350,8 +359,13 @@ def test_backups_pin_command_clears_rollback_pin() -> None:
                 "expires_at": None,
                 "reason": "",
             },
-        },
-    ) as mocked_clear:
+        }
+    )
+
+    with patch.dict(
+        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        {"clear_rollback_pin": mock_clear},
+    ):
         call_command(
             "backups_pin",
             "snap-pin",
@@ -360,7 +374,7 @@ def test_backups_pin_command_clears_rollback_pin() -> None:
             stderr=StringIO(),
         )
 
-    mocked_clear.assert_called_once_with("snap-pin")
+    mock_clear.assert_called_once_with(snapshot_id="snap-pin")
     assert stdout.getvalue() == (
         "Cleared rollback pin for snapshot snap-pin\n"
         "Rollback pin active: false\n"

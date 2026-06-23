@@ -240,11 +240,17 @@ def test_sync_backup_snapshot_media_supports_local_to_local_dry_run_and_execute(
     snapshot = _get_authoritative_snapshot(artifact)
 
     target_media_root = tmp_path / "target-media"
-    monkeypatch.setenv("QUICKSCALE_DR_TARGET_QUICKSCALE_STORAGE_BACKEND", "local")
-    monkeypatch.setenv("QUICKSCALE_DR_TARGET_MEDIA_ROOT", str(target_media_root))
+    target_settings = {
+        "QUICKSCALE_STORAGE_BACKEND": "local",
+        "MEDIA_ROOT": str(target_media_root),
+    }
 
-    dry_run_result = sync_backup_snapshot_media(snapshot.snapshot_id, dry_run=True)
-    execute_result = sync_backup_snapshot_media(snapshot.snapshot_id, dry_run=False)
+    dry_run_result = sync_backup_snapshot_media(
+        snapshot.snapshot_id, dry_run=True, target_runtime_settings=target_settings
+    )
+    execute_result = sync_backup_snapshot_media(
+        snapshot.snapshot_id, dry_run=False, target_runtime_settings=target_settings
+    )
 
     assert dry_run_result["status"] == "ready"
     assert dry_run_result["planned_count"] == 1
@@ -286,9 +292,11 @@ def test_sync_backup_snapshot_media_rejects_railway_target_local_backend(
 
     target_media_root = tmp_path / f"target-media-{int(dry_run)}"
     target_media_root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("QUICKSCALE_DR_TARGET_ROUTE_KIND", "railway")
-    monkeypatch.setenv("QUICKSCALE_DR_TARGET_QUICKSCALE_STORAGE_BACKEND", "local")
-    monkeypatch.setenv("QUICKSCALE_DR_TARGET_MEDIA_ROOT", str(target_media_root))
+    target_settings = {
+        "ROUTE_KIND": "railway",
+        "QUICKSCALE_STORAGE_BACKEND": "local",
+        "MEDIA_ROOT": str(target_media_root),
+    }
 
     with pytest.raises(
         BackupConfigurationError,
@@ -296,4 +304,8 @@ def test_sync_backup_snapshot_media_rejects_railway_target_local_backend(
             "Railway-target media sync requires an s3-compatible target media backend"
         ),
     ):
-        sync_backup_snapshot_media(snapshot.snapshot_id, dry_run=dry_run)
+        sync_backup_snapshot_media(
+            snapshot.snapshot_id,
+            dry_run=dry_run,
+            target_runtime_settings=target_settings,
+        )

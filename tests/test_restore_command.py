@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from quickscale_modules_backups.models import BackupArtifact
-from quickscale_modules_backups.services import RestoreResult, RestoreWarning
 
 
 @pytest.mark.django_db
@@ -56,15 +55,17 @@ class TestBackupsRestoreCommand:
         postgresql_artifact_file: Path,
     ) -> None:
         stdout = StringIO()
+        mock_restore = MagicMock(
+            return_value={
+                "message": "Restore validation completed successfully (dry run).",
+                "warnings": [],
+            }
+        )
 
-        with patch(
-            "quickscale_modules_backups.management.commands.backups_restore.restore_backup_source",
-            return_value=RestoreResult(
-                executed=False,
-                dry_run=True,
-                message="Restore validation completed successfully (dry run).",
-            ),
-        ) as mocked_restore:
+        with patch.dict(
+            "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+            {"restore_backup": mock_restore},
+        ):
             call_command(
                 "backups_restore",
                 "--file",
@@ -76,10 +77,10 @@ class TestBackupsRestoreCommand:
                 stderr=StringIO(),
             )
 
-        mocked_restore.assert_called_once_with(
-            artifact=None,
-            file_path=str(postgresql_artifact_file),
+        mock_restore.assert_called_once_with(
+            artifact_id=None,
             snapshot_id=None,
+            file_path=str(postgresql_artifact_file),
             confirmation=postgresql_artifact_file.name,
             dry_run=True,
             allow_production=False,
@@ -88,15 +89,17 @@ class TestBackupsRestoreCommand:
 
     def test_command_routes_snapshot_id_through_shared_restore_service(self) -> None:
         stdout = StringIO()
+        mock_restore = MagicMock(
+            return_value={
+                "message": "Restore validation completed successfully (dry run).",
+                "warnings": [],
+            }
+        )
 
-        with patch(
-            "quickscale_modules_backups.management.commands.backups_restore.restore_backup_source",
-            return_value=RestoreResult(
-                executed=False,
-                dry_run=True,
-                message="Restore validation completed successfully (dry run).",
-            ),
-        ) as mocked_restore:
+        with patch.dict(
+            "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+            {"restore_backup": mock_restore},
+        ):
             call_command(
                 "backups_restore",
                 "--snapshot-id",
@@ -108,10 +111,10 @@ class TestBackupsRestoreCommand:
                 stderr=StringIO(),
             )
 
-        mocked_restore.assert_called_once_with(
-            artifact=None,
-            file_path=None,
+        mock_restore.assert_called_once_with(
+            artifact_id=None,
             snapshot_id="snap-restore-123",
+            file_path=None,
             confirmation="sample-backup.dump",
             dry_run=True,
             allow_production=False,
@@ -124,25 +127,28 @@ class TestBackupsRestoreCommand:
     ) -> None:
         stdout = StringIO()
         stderr = StringIO()
-
-        with patch(
-            "quickscale_modules_backups.management.commands.backups_restore.restore_backup_source",
-            return_value=RestoreResult(
-                executed=True,
-                dry_run=False,
-                message=f"Restore executed for {postgresql_backup_artifact.filename}.",
-                warnings=(
-                    RestoreWarning(
-                        code="artifact_row_missing_after_restore",
-                        message=(
+        mock_restore = MagicMock(
+            return_value={
+                "message": (
+                    f"Restore executed for {postgresql_backup_artifact.filename}."
+                ),
+                "warnings": [
+                    {
+                        "code": "artifact_row_missing_after_restore",
+                        "message": (
                             "Restore executed, but the original backup artifact row "
                             "no longer exists in the restored database."
                         ),
-                    ),
-                ),
-            ),
-        ) as mocked_restore:
-            result = call_command(
+                    },
+                ],
+            }
+        )
+
+        with patch.dict(
+            "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+            {"restore_backup": mock_restore},
+        ):
+            call_command(
                 "backups_restore",
                 str(postgresql_backup_artifact.pk),
                 "--confirm",
@@ -151,11 +157,10 @@ class TestBackupsRestoreCommand:
                 stderr=stderr,
             )
 
-        assert result is None
-        mocked_restore.assert_called_once_with(
-            artifact=postgresql_backup_artifact,
-            file_path=None,
+        mock_restore.assert_called_once_with(
+            artifact_id=postgresql_backup_artifact.pk,
             snapshot_id=None,
+            file_path=None,
             confirmation=postgresql_backup_artifact.filename,
             dry_run=False,
             allow_production=False,

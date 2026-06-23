@@ -4,7 +4,8 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_modules_backups.services import BackupError, report_backup_snapshot
+from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 class Command(BaseCommand):
@@ -34,13 +35,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
         try:
             sidecar_payloads = options["sidecar_payloads"]
-            if sidecar_payloads:
-                report = report_backup_snapshot(
-                    options["snapshot_id"],
-                    sidecar_payloads=sidecar_payloads,
-                )
-            else:
-                report = report_backup_snapshot(options["snapshot_id"])
+            report = ADAPTER_FUNCTIONS["fetch_snapshot_report"](
+                options["snapshot_id"],
+                sidecar_payloads=sidecar_payloads,
+            )
         except BackupError as exc:
             raise CommandError(str(exc)) from exc
 

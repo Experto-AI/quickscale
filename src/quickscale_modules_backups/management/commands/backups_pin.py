@@ -4,11 +4,8 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_modules_backups.services import (
-    BackupError,
-    clear_backup_snapshot_rollback_pin,
-    set_backup_snapshot_rollback_pin,
-)
+from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.dr_engine.primitives import BackupError
 
 
 class Command(BaseCommand):
@@ -51,7 +48,9 @@ class Command(BaseCommand):
                     "--clear cannot be combined with --hours or --reason."
                 )
             try:
-                report = clear_backup_snapshot_rollback_pin(snapshot_id)
+                report = ADAPTER_FUNCTIONS["clear_rollback_pin"](
+                    snapshot_id=snapshot_id,
+                )
             except BackupError as exc:
                 raise CommandError(str(exc)) from exc
             action_label = f"Cleared rollback pin for snapshot {report['snapshot_id']}"
@@ -61,9 +60,9 @@ class Command(BaseCommand):
             if not reason.strip():
                 raise CommandError("--reason is required when setting a rollback pin.")
             try:
-                report = set_backup_snapshot_rollback_pin(
-                    snapshot_id,
-                    ttl_hours=hours,
+                report = ADAPTER_FUNCTIONS["set_rollback_pin"](
+                    snapshot_id=snapshot_id,
+                    hours=hours,
                     reason=reason,
                 )
             except BackupError as exc:
