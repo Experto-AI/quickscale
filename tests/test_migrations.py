@@ -11,7 +11,7 @@ from django.db.migrations.executor import MigrationExecutor
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
-LATEST_ORGS_MIGRATION = ("quickscale_modules_orgs", "0001_initial")
+LATEST_ORGS_MIGRATION = ("quickscale_modules_orgs", "0003_alter_organization_is_system")
 LATEST_BILLING_MIGRATION = (
     "quickscale_modules_billing",
     "0004_credit_transaction_nullable_user_provenance",
