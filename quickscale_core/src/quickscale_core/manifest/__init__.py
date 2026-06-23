@@ -53,6 +53,7 @@ from quickscale_core.manifest.resolver import (
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
+    ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
 )
@@ -60,6 +61,7 @@ from quickscale_core.manifest.schema import (
 __all__ = [
     "ConfigOption",
     "DerivedSetting",
+    "ImpliesEntry",
     "LegacyKeyAlias",
     "MANIFEST_ADAPTER_REGISTRY",
     "MANAGED_FILE_ROOT_PREFIX",
