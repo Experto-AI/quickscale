@@ -417,20 +417,8 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 
 ### Track 3 progress
 - [x] T3.1 — Single adapter path (route all commands through dr_engine)
-- [ ] T3.2 — Shrink `services.py`
+- [x] T3.2 — Shrink `services.py`
 - [ ] T3.3 — Cleanup
-
----
-
-#### - [ ] T3.2 — Shrink `services.py`
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Move remaining orchestration out of `services.py` into `dr_engine`; reduce the module to thin Django-facing surfaces.
-- **SCOPE:** Identify orchestration blocks beyond the lines deleted in T3.1; move into `dr_engine/{recovery,primitives}.py` or a new `dr_engine/orchestration.py`. `services.py` final shape: Django model imports, admin helpers, thin adapter bridge — target < 400 LOC (from 3,677).
-- **ACCEPTANCE CRITERIA:** `wc -l services.py` < 400; `dr_engine` contains all orchestration; `services.py` has no non-Django business logic; `make MODULE=backups test -- --modules` green.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
-- **DEPENDS:** T3.1.
 
 ---
 
