@@ -458,6 +458,106 @@ def test_0005_replaces_tag_name_unique_with_owner_bucket_constraint() -> None:
     assert null_coexist.pk != new_org_b_tag.pk
 
 
+def test_0007_replaces_stage_terminal_semantic_unique_with_bucket_constraint() -> None:
+    """Migration 0007 removes field-level unique and adds owner-bucket constraint.
+
+    Phase F11-deferred: Stage.terminal_semantic unique=True is replaced by two
+    partial UniqueConstraints that together implement per-org uniqueness:
+      - NULL-owned bucket: unique on (terminal_semantic,) where organization IS NULL
+      - Org-owned bucket: unique on (terminal_semantic, organization) where
+        organization IS NOT NULL
+
+    Legacy same-org duplicates stay blocked; same terminal semantic across
+    different orgs is allowed after migration.
+    """
+    migrate_from = ("quickscale_modules_crm", "0006_enforce_required_organization")
+    migrate_to = (
+        "quickscale_modules_crm",
+        "0007_stage_terminal_semantic_bucket_unique",
+    )
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_from])
+    old_apps = executor.loader.project_state([migrate_from]).apps
+
+    OldStage = old_apps.get_model("quickscale_modules_crm", "Stage")
+    OldOrganization = old_apps.get_model("quickscale_modules_orgs", "Organization")
+
+    OldStage.objects.all().delete()
+
+    # Create orgs (valid at 0006 where organization is NOT NULL / PROTECT).
+    org_a = OldOrganization.objects.create(name="Org A", slug="org-a-mig7")
+    org_b = OldOrganization.objects.create(name="Org B", slug="org-b-mig7")
+
+    # At 0006 state, terminal_semantic is still field-level unique globally,
+    # so we can only create one stage per distinct terminal semantic value.
+    won_stage_a = OldStage.objects.create(
+        name="Closed-Won",
+        order=3,
+        terminal_semantic="won",
+        organization=org_a,
+    )
+    lost_stage_a = OldStage.objects.create(
+        name="Closed-Lost",
+        order=4,
+        terminal_semantic="lost",
+        organization=org_a,
+    )
+
+    # Migrate forward to 0007.
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    new_apps = executor.loader.project_state([migrate_to]).apps
+
+    MigratedStage = new_apps.get_model("quickscale_modules_crm", "Stage")
+    MigratedOrganization = new_apps.get_model("quickscale_modules_orgs", "Organization")
+
+    # Re-fetch org references through the migrated apps registry.
+    org_a = MigratedOrganization.objects.get(pk=org_a.pk)
+    org_b = MigratedOrganization.objects.get(pk=org_b.pk)
+
+    # Verify legacy rows survive.
+    won_stage = MigratedStage.objects.get(pk=won_stage_a.pk)
+    assert won_stage.name == "Closed-Won"
+    assert won_stage.terminal_semantic == "won"
+    assert won_stage.organization_id == org_a.pk
+
+    lost_stage = MigratedStage.objects.get(pk=lost_stage_a.pk)
+    assert lost_stage.name == "Closed-Lost"
+    assert lost_stage.terminal_semantic == "lost"
+    assert lost_stage.organization_id == org_a.pk
+
+    # Verify terminal_semantic field is no longer field-level unique.
+    ts_field = MigratedStage._meta.get_field("terminal_semantic")
+    assert ts_field.unique is False
+
+    # Now that the constraint has changed, test the new uniqueness rules.
+
+    # Verify duplicate same-org terminal_semantic is blocked.
+    with pytest.raises(IntegrityError), transaction.atomic():
+        MigratedStage.objects.create(
+            name="Deal Signed",
+            order=9,
+            terminal_semantic="won",
+            organization=org_a,
+        )
+
+    # Verify cross-org same terminal semantic is allowed.
+    # The old global unique=True would have blocked this, but post-0007 the
+    # per-org constraint (terminal_semantic, organization) allows it.
+    new_org_b_won = MigratedStage.objects.create(
+        name="Org-B Won",
+        order=1,
+        terminal_semantic="won",
+        organization=org_b,
+    )
+    assert new_org_b_won.pk != won_stage.pk
+    assert new_org_b_won.organization_id == org_b.pk
+
+    # Verify NULL-owned + org-owned coexistence is not possible post-0006
+    # (organization is NOT NULL), so we only test the org-owned path.
+
+
 def test_0001_no_default_stages() -> None:
     """Migration 0001 creates schema only — no default Stage rows.
 

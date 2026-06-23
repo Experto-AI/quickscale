@@ -206,6 +206,37 @@ class TestStageSerializer:
 
         assert stage.terminal_semantic is None
 
+    def test_per_org_terminal_semantic_cross_org_serialization(self, org_a, org_b):
+        """Stages with same terminal_semantic in different orgs serialize correctly.
+
+        Regression: the per-bucket UniqueConstraint change must not break
+        serialization when two orgs independently assign the same terminal
+        semantic (e.g. both have a 'won' stage).  terminal_semantic must
+        stay hidden in both outputs.
+        """
+        stage_a = Stage.objects.create(
+            name="Closed-Won-A",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_a,
+        )
+        stage_b = Stage.objects.create(
+            name="Closed-Won-B",
+            order=3,
+            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+            organization=org_b,
+        )
+
+        serializer_a = StageSerializer(stage_a)
+        serializer_b = StageSerializer(stage_b)
+
+        assert serializer_a.data["name"] == "Closed-Won-A"
+        assert serializer_b.data["name"] == "Closed-Won-B"
+        assert "terminal_semantic" not in serializer_a.data
+        assert "terminal_semantic" not in serializer_b.data
+        assert serializer_a.data["order"] == 3
+        assert serializer_b.data["order"] == 3
+
 
 @pytest.mark.django_db
 class TestDealSerializer:
