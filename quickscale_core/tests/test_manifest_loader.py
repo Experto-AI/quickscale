@@ -9,6 +9,7 @@ from quickscale_core.manifest.loader import (
     load_manifest_from_path,
     get_manifest_for_module,
 )
+from quickscale_core.manifest.schema import ImpliesEntry
 
 
 class TestLoadManifest:
@@ -485,3 +486,181 @@ managed_files:
         # Should raise because renderer is required
         with pytest.raises(ManifestError, match="renderer"):
             load_manifest(yaml_content, "mymod")
+
+
+# ---------------------------------------------------------------------------
+# Implies parsing
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestImplies:
+    """Tests for the implies section in load_manifest."""
+
+    def test_no_implies_section(self) -> None:
+        """Manifests without implies produce an empty list."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.implies == []
+
+    def test_empty_implies_section(self) -> None:
+        """An empty implies list is accepted."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies: []\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.implies == []
+
+    def test_single_implied_module(self) -> None:
+        """A single implies entry is parsed correctly."""
+        yaml_content = """
+name: billing
+version: "1.0.0"
+implies:
+  - name: orgs
+"""
+        manifest = load_manifest(yaml_content, "billing")
+        assert len(manifest.implies) == 1
+        entry = manifest.implies[0]
+        assert isinstance(entry, ImpliesEntry)
+        assert entry.name == "orgs"
+        assert entry.default_config == {}
+
+    def test_multiple_implied_modules(self) -> None:
+        """Multiple implies entries are parsed correctly."""
+        yaml_content = """
+name: billing
+version: "1.0.0"
+implies:
+  - name: orgs
+  - name: notifications
+    default_config:
+      enabled: true
+      sender_name: "QuickScale"
+"""
+        manifest = load_manifest(yaml_content, "billing")
+        assert len(manifest.implies) == 2
+        assert manifest.implies[0].name == "orgs"
+        assert manifest.implies[1].name == "notifications"
+        assert manifest.implies[1].default_config == {
+            "enabled": True,
+            "sender_name": "QuickScale",
+        }
+
+    def test_implies_with_default_config(self) -> None:
+        """Implies entry with default_config is parsed correctly."""
+        yaml_content = """
+name: orgs
+version: "1.0.0"
+implies:
+  - name: notifications
+    default_config:
+      enabled: true
+      sender_name: "QuickScale"
+      sender_email: "noreply@example.com"
+      resend_api_key_env_var: "RESEND_API_KEY"
+      webhook_secret_env_var: "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+      default_tags:
+        - quickscale
+        - transactional
+      allowed_tags:
+        - quickscale
+        - transactional
+        - notifications
+        - auth
+      webhook_ttl_seconds: 300
+"""
+        manifest = load_manifest(yaml_content, "orgs")
+        assert len(manifest.implies) == 1
+        entry = manifest.implies[0]
+        assert entry.name == "notifications"
+        assert entry.default_config["enabled"] is True
+        assert entry.default_config["sender_name"] == "QuickScale"
+        assert entry.default_config["default_tags"] == ["quickscale", "transactional"]
+        assert entry.default_config["webhook_ttl_seconds"] == 300
+
+    def test_implies_not_list_raises(self) -> None:
+        """implies that is not a list raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies: not_a_list\n"
+        with pytest.raises(ManifestError, match="implies"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_implies_entry_not_mapping_raises(self) -> None:
+        """An implies entry that is not a mapping raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies:\n  - not_a_mapping\n"
+        with pytest.raises(ManifestError, match="implies"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_implies_entry_missing_name_raises(self) -> None:
+        """An implies entry without name raises ManifestError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\nimplies:\n  - default_config: {}\n"
+        )
+        with pytest.raises(ManifestError, match="name"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_implies_entry_empty_name_raises(self) -> None:
+        """An implies entry with empty name raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies:\n  - name: ''\n"
+        with pytest.raises(ManifestError, match="name"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_implies_entry_default_config_not_mapping_raises(self) -> None:
+        """An implies entry with non-mapping default_config raises ManifestError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\nimplies:\n"
+            "  - name: orgs\n    default_config: not_a_mapping\n"
+        )
+        with pytest.raises(ManifestError, match="default_config"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_implies_coexists_with_required_modules(self) -> None:
+        """implies and required_modules parse independently."""
+        yaml_content = """
+name: billing
+version: "1.0.0"
+required_modules:
+  - orgs
+implies:
+  - name: notifications
+"""
+        manifest = load_manifest(yaml_content, "billing")
+        assert manifest.required_modules == ["orgs"]
+        assert len(manifest.implies) == 1
+        assert manifest.implies[0].name == "notifications"
+
+    def test_implies_does_not_break_backward_compat(self) -> None:
+        """A manifest without implies still loads and has empty implies."""
+        yaml_content = "name: auth\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "auth")
+        assert manifest.implies == []
+        assert manifest.name == "auth"
+        assert manifest.version == "1.0.0"
+
+    def test_orgs_implies_notifications_default_config_parity(self) -> None:
+        """The orgs module's implied default_config for notifications
+        matches the canonical notifications module.yml config defaults.
+
+        This prevents silent drift between the inlined defaults in the
+        orgs implies block and the authoritative notifications defaults.
+        """
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        orgs_manifest = load_manifest_from_path(
+            repo_root / "quickscale_modules" / "orgs" / "module.yml"
+        )
+        notifications_manifest = load_manifest_from_path(
+            repo_root / "quickscale_modules" / "notifications" / "module.yml"
+        )
+
+        # Find the implies entry for notifications
+        notifications_implies = [
+            e for e in orgs_manifest.implies if e.name == "notifications"
+        ]
+        assert len(notifications_implies) == 1
+        implied_config = notifications_implies[0].default_config
+
+        # Compare against canonical notifications defaults
+        canonical_defaults = notifications_manifest.get_defaults()
+        assert implied_config == canonical_defaults, (
+            f"orgs implies notifications default_config has drifted from "
+            f"notifications/module.yml canonical defaults.\n"
+            f"Implied: {implied_config}\n"
+            f"Canonical: {canonical_defaults}"
+        )
