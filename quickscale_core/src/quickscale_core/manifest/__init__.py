@@ -41,6 +41,9 @@ from quickscale_core.manifest.entry_point import (
     ManifestAdapterNotFound,
     build_manifest_wiring_spec,
 )
+from quickscale_core.manifest.implications import (
+    resolve_module_implications,
+)
 from quickscale_core.manifest.loader import (
     ManifestError,
     load_manifest,
@@ -81,4 +84,5 @@ __all__ = [
     "load_manifest",
     "load_manifest_from_path",
     "resolve_module_config",
+    "resolve_module_implications",
 ]

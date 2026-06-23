@@ -24,8 +24,7 @@ class Command(BaseCommand):
             "--target-runtime-json",
             default="{}",
             help=(
-                "JSON object of target runtime settings (replaces the legacy "
-                "QUICKSCALE_DR_TARGET_* env-var protocol). "
+                "JSON object of target runtime settings for the adapter call. "
                 'Example: \'{"MEDIA_ROOT": "/path/to/target"}\'.'
             ),
         )

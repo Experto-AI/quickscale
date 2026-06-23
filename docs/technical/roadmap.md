@@ -378,38 +378,9 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 
 ### Track 2 progress
 - [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
-- [ ] T2.2 — Generic implication resolver
+- [x] T2.2 — Generic implication resolver
 - [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
 - [ ] T2.4 — Delete dead ladder/shims
-
----
-
-#### - [x] T2.1 — Manifest schema: `implies` support
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Extend `module.yml` and the core manifest schema to declare dependency implications. Config-expression fields (validation_rules, derivation_rules) deferred to T2.3.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/manifest/schema.py` — add `implies: list[ImpliesEntry]`; `ImpliesEntry(name: str, default_config: dict)`.
-  - `quickscale_core/src/quickscale_core/manifest/loader.py` — parse and validate new fields.
-  - `quickscale_modules/{billing,crm,social,orgs}/module.yml` — add `implies` blocks: billing→orgs, crm→orgs, social→orgs, orgs→notifications (with default config from `get_default_notifications_config()`).
-- **ACCEPTANCE CRITERIA:** schema round-trips; `implies` loads from YAML; existing modules without the field continue to load.
-- **VALIDATION PATH:** `make test -- --core`; manifest schema unit tests.
-- **DEPENDS:** none.
-
----
-
-#### - [ ] T2.2 — Generic implication resolver
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Replace `get_implied_module_default_configs()` with a generic resolver that reads `implies` from each `module.yml` and computes the transitive closure.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/manifest/implications.py` (new) — `resolve_module_implications(names: Collection[str]) -> dict[str, dict]`: load manifests, walk `implies`, build transitive closure, return implied modules not already in `names`.
-  - `quickscale_cli/src/quickscale_cli/commands/implied_module_defaults.py` — `get_implied_module_default_configs` becomes a one-line shim over `resolve_module_implications` (deletion deferred to T2.4).
-- **ACCEPTANCE CRITERIA:** billing → `{orgs: {}, notifications: <default>}`; crm → same; social → same; orgs alone → `{notifications: <default>}`; matches existing ladder behavior exactly.
-- **VALIDATION PATH:** `make test -- --core`; implications unit tests.
-- **DEPENDS:** T2.1.
 
 ---
 
@@ -447,52 +418,19 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 
 ### Track 3 progress
 - [x] T3.1 — Single adapter path (route all commands through dr_engine)
-- [ ] T3.2 — Shrink `services.py`
-- [ ] T3.3 — Cleanup
+- [x] T3.2 — Shrink `services.py`
+- [x] T3.3 — Cleanup
 
 ---
 
-#### - [ ] T3.1 — Single adapter path
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Eliminate the legacy env-var/stdout-JSON protocol; route all 8 backups management commands through `quickscale_core.dr_engine.adapter`.
-- **SCOPE:**
-  - `services.py:100` — delete `_DR_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"`.
-  - `services.py:2433–2438` — delete `_load_target_runtime_settings()`.
-  - `services.py:2580–2602` — delete the backward-compat fork; keep only the adapter path.
-  - `management/commands/{backups_create,backups_restore,backups_prune,backups_report,backups_pin,backups_validate,backups_record_verification,backups_sync_media}.py` — each `handle()` dispatches through `dr_engine.adapter.ADAPTER_FUNCTIONS[<name>](...)` (same pattern as `dr_adapter_call.py`).
-- **ACCEPTANCE CRITERIA:** no command uses `_DR_TARGET_ENV_PREFIX` or `_load_target_runtime_settings`; `make MODULE=backups test -- --modules` green; `quickscale dr` smoke test passes.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`; `grep -n "_DR_TARGET_ENV_PREFIX\|_load_target_runtime_settings" services.py` returns zero.
-- **DEPENDS:** none.
-
----
-
-#### - [ ] T3.2 — Shrink `services.py`
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Move remaining orchestration out of `services.py` into `dr_engine`; reduce the module to thin Django-facing surfaces.
-- **SCOPE:** Identify orchestration blocks beyond the lines deleted in T3.1; move into `dr_engine/{recovery,primitives}.py` or a new `dr_engine/orchestration.py`. `services.py` final shape: Django model imports, admin helpers, thin adapter bridge — target < 400 LOC (from 3,677).
-- **ACCEPTANCE CRITERIA:** `wc -l services.py` < 400; `dr_engine` contains all orchestration; `services.py` has no non-Django business logic; `make MODULE=backups test -- --modules` green.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
-- **DEPENDS:** T3.1.
-
----
-
-#### - [ ] T3.3 — Cleanup
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **SCOPE:** Grep `services.py` and `dr_engine/` for `# legacy`, `# backward`, `# fallback` comments; delete the dead code they annotate. Add one-paragraph module docstring to `dr_engine/adapter.py` documenting the canonical single path.
-- **ACCEPTANCE CRITERIA:** `grep -rn "legacy\|fallback\|backward" quickscale_modules/backups/` returns zero; `make MODULE=backups test -- --modules` green.
-- **DEPENDS:** T3.1, T3.2.
+Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
 ## Deferred / Monitor
 
 - [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
+- [ ] **Backups terminology sweep outside T3.3 scope** *(Adaptive tier: 1)* — broad `legacy|fallback|backward` grep still hits historical migration/test fixtures plus Django's `FallbackStorage` import in `quickscale_modules/backups/`; T3.3 only cleared stale single-path wording from the active DR service/adapter surfaces.
 - [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
 - [ ] **Broader compatibility-window widening** *(Adaptive tier: 2)* — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
 - [ ] **Emitted-project operability & API-contract substrate** *(deferred)* — no structured logging/correlation IDs, no versioned public API, no webhook payload boundary validation. Promote when a second external provider lands or the first public-API consumer appears.
@@ -523,6 +461,7 @@ Single-PR items that do not change the design:
 | M9 | 1 | F13.1–F13.3 | Merged to v87. Org-authoritative billing contract; unique subscription constraint; dual-FK backfill. |
 | M10 | 2 | F5.2a–F5.4 | Merged to v87. DR engine extracted to `quickscale_core.dr_engine`; `dr_engine_migration.md` added. |
 | M11 | 3 | F7.1–F7.3 | Merged to v87. Generator vs generated-project runtime-pin decoupling complete. |
+| M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
 
 ## References
 

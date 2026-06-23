@@ -1,31 +1,29 @@
-"""Helpers for materializing implicit module configs in CLI flows."""
+"""Shim for materializing implicit module configs in CLI flows.
+
+This module is a transitional shim that forwards to the canonical
+:func:`quickscale_core.manifest.implications.resolve_module_implications`.
+The shim will be removed in T2.4 when all callers have been migrated to
+call the core resolver directly.
+"""
 
 from collections.abc import Collection
 from typing import Any
 
-from quickscale_cli.commands.module_config import get_default_notifications_config
+from quickscale_core.manifest.implications import resolve_module_implications
 
 
 def get_implied_module_default_configs(
     module_names: Collection[str],
 ) -> dict[str, dict[str, Any]]:
-    """Return module config blocks that should be made explicit automatically."""
-    names = set(module_names)
-    implied_configs: dict[str, dict[str, Any]] = {}
+    """Return module config blocks that should be made explicit automatically.
 
-    if "billing" in names and "orgs" not in names:
-        implied_configs["orgs"] = {}
-        names.add("orgs")
+    Delegates to :func:`quickscale_core.manifest.implications.resolve_module_implications`
+    which reads ``implies`` blocks from each ``module.yml`` manifest.
 
-    if "crm" in names and "orgs" not in names:
-        implied_configs["orgs"] = {}
-        names.add("orgs")
+    Args:
+        module_names: Collection of module names already selected.
 
-    if "social" in names and "orgs" not in names:
-        implied_configs["orgs"] = {}
-        names.add("orgs")
-
-    if "orgs" in names and "notifications" not in names:
-        implied_configs["notifications"] = get_default_notifications_config()
-
-    return implied_configs
+    Returns:
+        Dict mapping newly implied module names to their default config dicts.
+    """
+    return resolve_module_implications(module_names)
