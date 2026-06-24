@@ -620,3 +620,188 @@ def test_current_org_helper_round_trip() -> None:
 
     clear_current_org(request)
     assert get_current_org(request) is None
+
+
+# ---------------------------------------------------------------------------
+# T1.2 — ContextVar lifecycle tests
+# ---------------------------------------------------------------------------
+
+
+def test_current_org_id_contextvar_round_trip() -> None:
+    """set_current_org_id / get_current_org_id / reset_current_org_id round-trip."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    import uuid
+
+    assert get_current_org_id() is None
+
+    org_id = uuid.uuid4()
+    set_current_org_id(org_id)
+    assert get_current_org_id() == org_id
+
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+
+def test_current_org_id_defaults_to_none() -> None:
+    """get_current_org_id() should return None when no id has been set."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+
+def test_current_org_id_context_isolation() -> None:
+    """Consecutive sets should not bleed; each set replaces the prior."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    import uuid
+
+    id_a = uuid.uuid4()
+    id_b = uuid.uuid4()
+
+    set_current_org_id(id_a)
+    assert get_current_org_id() == id_a
+
+    set_current_org_id(id_b)
+    assert get_current_org_id() == id_b
+    assert get_current_org_id() != id_a
+
+    reset_current_org_id()
+
+
+# ---------------------------------------------------------------------------
+# T1.2 — Middleware contextvar propagation tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_middleware_resets_contextvar_at_request_start(settings) -> None:
+    """Middleware should reset the contextvar before processing each request."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        set_current_org_id,
+    )
+
+    import uuid
+
+    # Pre-set a stale org id — middleware should clear it.
+    stale_id = uuid.uuid4()
+    set_current_org_id(stale_id)
+
+    settings.QUICKSCALE_MODE = "saas"
+    request = RequestFactory().get("/healthcheck/")
+    request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
+
+    captured_ids = []
+
+    def capture_view(req):
+        captured_ids.append(get_current_org_id())
+        from django.http import HttpResponse
+
+        return HttpResponse("ok")
+
+    TenantMiddleware(capture_view)(request)
+
+    # The contextvar should have been reset at __call__ start.
+    assert len(captured_ids) == 1
+    assert captured_ids[0] is None
+    assert get_current_org_id() is None
+
+
+@pytest.mark.django_db
+def test_middleware_sets_contextvar_for_org_scoped_request(client, settings) -> None:
+    """_call_with_org should set the contextvar to the resolved org's id."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="ctxvar-user",
+        email="ctxvar-user@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="CtxVar", slug="ctxvar")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(user)
+
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+    response = client.get(f"/orgs/{organization.slug}/")
+
+    assert response.status_code == 200
+    # After the middleware + view chain, the contextvar must be cleaned up.
+    assert get_current_org_id() is None
+
+
+@pytest.mark.django_db
+def test_middleware_contextvar_stays_none_on_exempt_path(client, settings) -> None:
+    """Exempt paths should leave the contextvar as None."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="exempt-user",
+        email="exempt-user@example.com",
+        password="secret123",
+    )
+    Organization.objects.create(name="Exempt", slug="exempt")
+    client.force_login(user)
+
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+    response = client.get("/healthcheck/")
+
+    assert response.status_code == 200
+    assert get_current_org_id() is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_middleware_sets_contextvar_in_solo_mode(settings) -> None:
+    """Solo mode should also propagate the contextvar."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    settings.QUICKSCALE_MODE = "solo"
+    user = get_user_model().objects.create_user(
+        username="solo-ctxvar",
+        email="solo-ctxvar@example.com",
+        password="secret123",
+    )
+    request = RequestFactory().get("/")
+    request.user = user
+
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+    response = TenantMiddleware(home_view)(request)
+
+    assert response.status_code == 200
+    # Confirm the personal org was created.
+    Organization.objects.get(is_personal=True, memberships__user=user)
+    # After the middleware + view chain, the contextvar must be cleaned up.
+    assert get_current_org_id() is None

@@ -10,7 +10,7 @@ The single most important structural fact: **the multi-tenant isolation that the
 
 **Implementation notes:** no backward compatibility, no migration path, no existing users — every change is a clean break. Squash/rewrite migrations; drop dead paths outright.
 
-**Findings 1, 2, and 4 are three faces of one decision** — tenant isolation was added as an application-layer convention layered onto a single-user scaffold, rather than as a data-layer invariant. Findings 3 and 5 are independent.
+**Findings 1, 2, and 4 are three faces of one decision** — tenant isolation was added as an application-layer convention layered onto a single-user scaffold, rather than as a data-layer invariant. Finding 3 is independent. Finding 5 (DR) is resolved — implemented as M12 (T3.1–T3.3, 2026-06-23); see CHANGELOG.
 
 ---
 
@@ -113,25 +113,6 @@ The `/orgs/<slug:org_slug>/...` content trees are deleted from every module. The
 
 ---
 
-## Finding 5 — The backups/DR module has a 3,677-line god-file and two parallel operation protocols
+## Finding 5 — ~~The backups/DR module has a 3,677-line god-file and two parallel operation protocols~~
 
-**Time horizon: 2+ years**
-
-**Problem.** The `F5` extraction created a Django-free DR engine in `quickscale_core.dr_engine` but left `services.py` at 3,677 lines and deliberately kept the old env-var protocol as a "backward-compatible fallback" alongside the new typed adapter — two mechanisms for the same operation.
-
-**Why it compounds.** Two protocols means every future DR change must be implemented (and tested) twice or risks divergence. The env-var path (`_DR_TARGET_ENV_PREFIX` at `services.py:100`, `_load_target_runtime_settings()` at `services.py:2433`, the backward-compat fork at `services.py:2580-2602`) has no schema and breaks silently when one side evolves. The god-file concentrates snapshot/restore/verification/rollback/media-sync so that any one change risks the others.
-
-**Evidence.**
-- `quickscale_modules/backups/src/quickscale_modules_backups/services.py` — 3,677 lines.
-- `quickscale_core/src/quickscale_core/dr_engine/` — correct boundary (adapter 283, recovery 641, primitives 349, verification 147 LOC), already built by F5.
-- `dr_adapter_call.py` — the new bridge management command that correctly dispatches through `dr_engine.adapter.ADAPTER_FUNCTIONS`. The 8 other commands (`backups_create`, `backups_restore`, etc.) still call `services.*` directly.
-- ~22 `# legacy`/`# backward`/`# fallback` markers remain in the backups source.
-
-**Correct shape.** One typed adapter boundary. `services.py` shrinks to thin Django-facing surfaces (models, admin, adapter bridge). All 8 management commands dispatch through `dr_engine.adapter` — same pattern as `dr_adapter_call.py`. The env-var path is deleted.
-
-**Selected: Option A — hard cutover.**
-Delete `_DR_TARGET_ENV_PREFIX`, `_load_target_runtime_settings()`, and the compat fork. Route all 8 management commands through `dr_engine.adapter.ADAPTER_FUNCTIONS[<name>](...)`. Then move residual orchestration from `services.py` into `dr_engine/` and reduce `services.py` to < 400 LOC.
-
-**Trigger for urgency.** A DR change that must touch both protocols, or a production restore that silently takes the legacy path — discovered during an actual recovery.
-
-**Detection signal.** Log which protocol each DR operation takes. Any production traffic still on the env-var path is remaining debt, quantified. Post-T3.1: `grep -n "_DR_TARGET_ENV_PREFIX\|_load_target_runtime_settings" services.py` must return zero.
+**Resolved 2026-06-23 (M12 / T3.1–T3.3).** Legacy env-var protocol deleted; all 8 management commands route through `dr_engine.adapter`; `services.py` reduced to 205 LOC thin re-exports; `dr_engine/orchestration.py` owns all DR logic. See CHANGELOG for implementation history.

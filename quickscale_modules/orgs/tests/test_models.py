@@ -5,10 +5,11 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from quickscale_modules_orgs.admin import OrganizationInvitationAdminForm
+from quickscale_modules_orgs.constants import SYSTEM_ORG_NAME, SYSTEM_ORG_SLUG
 from quickscale_modules_orgs.models import (
     OrgRole,
     Organization,
@@ -16,6 +17,7 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     TenantModel,
 )
+from quickscale_modules_orgs.tenancy import tenant_org_fk
 
 
 def test_org_role_preserves_expected_hierarchy_order() -> None:
@@ -404,10 +406,391 @@ def test_organization_invitation_admin_form_excludes_owner_role() -> None:
     assert "valid choice" in form.errors["role"][0]
 
 
+# ---------------------------------------------------------------------------
+# T1.1 — System org + NOT NULL ownership contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_get_system_org_creates_singleton_on_first_call() -> None:
+    """get_system_org() should create the System org on first invocation."""
+    org = Organization.objects.get_system_org()
+
+    assert org.is_system is True
+    assert org.is_personal is False
+    assert org.slug == SYSTEM_ORG_SLUG
+    assert org.name == SYSTEM_ORG_NAME
+
+
+@pytest.mark.django_db
+def test_get_system_org_is_idempotent() -> None:
+    """get_system_org() should return the same instance on repeated calls."""
+    org1 = Organization.objects.get_system_org()
+    org2 = Organization.objects.get_system_org()
+
+    assert org2.pk == org1.pk
+    assert org2.is_system is True
+    assert Organization.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_get_system_org_returns_existing_row_when_already_present() -> None:
+    """get_system_org() should find and return an existing System org."""
+    existing = Organization.objects.create(
+        name=SYSTEM_ORG_NAME,
+        slug=SYSTEM_ORG_SLUG,
+        is_system=True,
+    )
+    found = Organization.objects.get_system_org()
+
+    assert found.pk == existing.pk
+    assert found.is_system is True
+
+
+@pytest.mark.django_db
+def test_second_is_system_row_with_wrong_slug_rejected_by_validation() -> None:
+    """Model validation should reject a second is_system=True row with a non-reserved slug."""
+    Organization.objects.get_system_org()
+
+    with pytest.raises(ValidationError) as exc_info:
+        Organization.objects.create(
+            name="Duplicate System",
+            slug="duplicate-system",
+            is_system=True,
+        )
+
+    assert "must use the reserved slug" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_second_is_system_row_with_reserved_slug_rejected_by_db_constraint() -> None:
+    """The DB partial unique constraint should reject a second is_system=True row
+    even when the slug is correct (backstop for raw-SQL bypass)."""
+    Organization.objects.get_system_org()
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            Organization.objects.create(
+                name="Duplicate System",
+                slug=SYSTEM_ORG_SLUG,
+                is_system=True,
+            )
+
+
+@pytest.mark.django_db
+def test_is_system_field_defaults_to_false() -> None:
+    """New organizations should have is_system=False by default."""
+    org = Organization.objects.create(name="Normal", slug="normal")
+
+    assert org.is_system is False
+
+
+@pytest.mark.django_db
+def test_system_slug_reserved_rejects_non_system_org() -> None:
+    """Using slug=__system__ with is_system=False should raise ValidationError."""
+    with pytest.raises(ValidationError) as exc_info:
+        Organization.objects.create(
+            name="Impersonator",
+            slug=SYSTEM_ORG_SLUG,
+            is_system=False,
+        )
+
+    assert SYSTEM_ORG_SLUG in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_system_slug_reserved_rejects_is_system_none() -> None:
+    """Using slug=__system__ with is_system=None should raise ValidationError."""
+    with pytest.raises(ValidationError) as exc_info:
+        Organization.objects.create(
+            name="Impersonator",
+            slug=SYSTEM_ORG_SLUG,
+            is_system=None,
+        )
+
+    assert "must not be null" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_system_org_rejects_is_personal_true() -> None:
+    """Creating an org with is_system=True and is_personal=True should raise ValidationError."""
+    with pytest.raises(ValidationError) as exc_info:
+        Organization.objects.create(
+            name="Bad System",
+            slug="__system__",
+            is_system=True,
+            is_personal=True,
+        )
+
+    assert "must not be a personal organization" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+def test_get_system_org_raises_on_wrong_slug_system_row() -> None:
+    """get_system_org() should raise RuntimeError when a corrupt row with
+    is_system=True but the wrong slug blocks the singleton.
+
+    Uses bulk_create to bypass model validation, simulating a corrupt row
+    that predates the invariant enforcement (e.g. from an older schema or
+    raw SQL bypass).
+    """
+    Organization.objects.bulk_create(
+        [
+            Organization(
+                name="Wrong Slug",
+                slug="wrong-slug",
+                is_system=True,
+            ),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="Corrupt System org"):
+        Organization.objects.get_system_org()
+
+
+@pytest.mark.django_db
+def test_get_system_org_raises_on_reserved_slug_non_system() -> None:
+    """get_system_org() should raise RuntimeError when a corrupt row with
+    slug=__system__ but is_system=False blocks creation.
+
+    Uses bulk_create to bypass model validation, simulating a corrupt row
+    that predates the invariant enforcement (e.g. from an older schema or
+    raw SQL bypass).
+    """
+    Organization.objects.bulk_create(
+        [
+            Organization(
+                name="Impersonator",
+                slug=SYSTEM_ORG_SLUG,
+                is_system=False,
+            ),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="is_system=False"):
+        Organization.objects.get_system_org()
+
+
+@pytest.mark.django_db
+def test_get_system_org_raises_on_personal_system_org() -> None:
+    """get_system_org() should raise RuntimeError when a corrupt row with
+    slug=__system__, is_system=True, and is_personal=True is returned by
+    the fast path.
+
+    Uses bulk_create to bypass model validation, simulating a corrupt row
+    that predates the invariant enforcement (e.g. from an older schema or
+    raw SQL bypass).
+    """
+    Organization.objects.bulk_create(
+        [
+            Organization(
+                name="Personal System",
+                slug=SYSTEM_ORG_SLUG,
+                is_system=True,
+                is_personal=True,
+            ),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="is_personal=True"):
+        Organization.objects.get_system_org()
+
+
+@pytest.mark.django_db
+def test_is_system_none_rejected_by_model_validation() -> None:
+    """Persisting an organization with is_system=None should raise ValidationError."""
+    with pytest.raises(ValidationError) as exc_info:
+        Organization.objects.create(
+            name="Null Is System",
+            slug="null-is-system",
+            is_system=None,
+        )
+
+    assert "must not be null" in str(exc_info.value)
+
+
+def test_tenant_org_fk_produces_protect_contract() -> None:
+    """tenant_org_fk() should return a NOT NULL FK with on_delete=PROTECT."""
+    fk = tenant_org_fk(related_name="test_related")
+
+    assert isinstance(fk, models.ForeignKey)
+    assert fk.remote_field.on_delete == models.PROTECT
+    assert fk.null is False
+    # The FK is not yet contributed to a concrete model, so remote_field.model
+    # is stored as the lazy string reference.
+    assert fk.remote_field.model == "quickscale_modules_orgs.Organization"
+
+
+def test_tenant_org_fk_defaults_db_index_to_true() -> None:
+    """tenant_org_fk() should default to indexed for query performance."""
+    fk = tenant_org_fk(related_name="test_indexed")
+
+    assert fk.db_index is True
+
+
+def test_tenant_org_fk_supports_custom_related_name() -> None:
+    """tenant_org_fk() should propagate the supplied related_name."""
+    fk = tenant_org_fk(related_name="custom_workspace")
+
+    assert fk.remote_field.related_name == "custom_workspace"
+
+
+# ---------------------------------------------------------------------------
+# Existing — TenantModel contract
+# ---------------------------------------------------------------------------
+
+
 def test_tenant_model_declares_org_foreign_key() -> None:
     """TenantModel should expose the org foreign key expected by later phases."""
     organization_field = TenantModel._meta.get_field("organization")
 
     assert TenantModel._meta.abstract is True
     assert organization_field.db_index is True
-    assert organization_field.related_model is Organization
+    # tenant_org_fk uses a lazy string reference; abstract models
+    # do not resolve it until a concrete subclass is prepared.
+    assert organization_field.related_model in (
+        Organization,
+        "quickscale_modules_orgs.Organization",
+    )
+    assert organization_field.remote_field.on_delete == models.PROTECT
+
+
+# ---------------------------------------------------------------------------
+# T1.2 — Concrete test model for TenantManager behaviour tests
+# ---------------------------------------------------------------------------
+
+
+class ConcreteTenantResource(TenantModel):
+    """Concrete tenant model used exclusively for manager behaviour tests."""
+
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        app_label = "quickscale_modules_orgs"
+
+
+def test_concrete_tenant_model_has_scoped_default_manager() -> None:
+    """Concrete TenantModel subclass should inherit a TenantManager as objects."""
+    from quickscale_modules_orgs.managers import TenantManager
+
+    assert isinstance(ConcreteTenantResource.objects, TenantManager)
+    assert ConcreteTenantResource.objects._super_scope is False
+
+
+def test_concrete_tenant_model_has_unfiltered_all_objects_manager() -> None:
+    """Concrete TenantModel subclass should have all_objects (super-scope bypass)."""
+    from quickscale_modules_orgs.managers import TenantManager
+
+    assert isinstance(ConcreteTenantResource.all_objects, TenantManager)
+    assert ConcreteTenantResource.all_objects._super_scope is True
+
+
+@pytest.fixture
+def _tenant_resource_db() -> None:
+    """Create/drop the ConcreteTenantResource table for the duration of the test."""
+    from django.db import connection
+
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(ConcreteTenantResource)
+    yield
+    with connection.schema_editor() as schema_editor:
+        schema_editor.delete_model(ConcreteTenantResource)
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_auto_scopes_to_current_org() -> None:
+    """Default manager querysets should filter by the current org when set."""
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    org_a = Organization.objects.create(name="OrgA", slug="org-a")
+    org_b = Organization.objects.create(name="OrgB", slug="org-b")
+
+    # Create one resource in each org.
+    reset_current_org_id()
+    resource_a = ConcreteTenantResource.objects.create(
+        organization=org_a, name="A's item"
+    )
+    ConcreteTenantResource.objects.create(organization=org_b, name="B's item")
+
+    # Scope to org_a — only resource_a should be visible.
+    set_current_org_id(org_a.pk)
+    try:
+        results = list(ConcreteTenantResource.objects.all())
+        assert len(results) == 1
+        assert results[0].pk == resource_a.pk
+    finally:
+        reset_current_org_id()
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_fail_closed_when_unset() -> None:
+    """Default manager should return .none() when no org is set."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    org = Organization.objects.create(name="FailClosed", slug="fail-closed")
+    ConcreteTenantResource.objects.create(organization=org, name="hidden")
+
+    # Ensure no org is set.
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+    # Fail-closed: should always be empty.
+    assert ConcreteTenantResource.objects.count() == 0
+    assert list(ConcreteTenantResource.objects.all()) == []
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_all_objects_bypasses_scope() -> None:
+    """all_objects should bypass auto-scoping and return all rows."""
+    from quickscale_modules_orgs.current_org import reset_current_org_id
+
+    org_a = Organization.objects.create(name="BypassA", slug="bypass-a")
+    org_b = Organization.objects.create(name="BypassB", slug="bypass-b")
+
+    reset_current_org_id()
+    r1 = ConcreteTenantResource.objects.create(organization=org_a, name="item1")
+    r2 = ConcreteTenantResource.objects.create(organization=org_b, name="item2")
+
+    # all_objects should see all rows regardless of contextvar state.
+    results = list(ConcreteTenantResource.all_objects.all())
+    pks = {r.pk for r in results}
+    assert r1.pk in pks
+    assert r2.pk in pks
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_tenant_manager_cross_org_isolation() -> None:
+    """Resources from different orgs should be isolated under scoped manager."""
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    org_a = Organization.objects.create(name="IsolationA", slug="iso-a")
+    org_b = Organization.objects.create(name="IsolationB", slug="iso-b")
+    org_c = Organization.objects.create(name="IsolationC", slug="iso-c")
+
+    reset_current_org_id()
+    ConcreteTenantResource.objects.create(organization=org_a, name="a1")
+    ConcreteTenantResource.objects.create(organization=org_b, name="b1")
+    ConcreteTenantResource.objects.create(organization=org_c, name="c1")
+
+    for org, expected_count in [(org_a, 1), (org_b, 1), (org_c, 1)]:
+        set_current_org_id(org.pk)
+        try:
+            assert ConcreteTenantResource.objects.count() == expected_count
+        finally:
+            reset_current_org_id()
+
+    # With no org set, nothing is visible.
+    assert ConcreteTenantResource.objects.count() == 0

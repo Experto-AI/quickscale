@@ -1,23 +1,4 @@
-"""Explicit typed adapter/boundary between CLI orchestration and DR services.
-
-This module defines the F5.3 explicit adapter boundary that replaces the
-hidden docker-exec/management-command/env-var/stdout-JSON protocol.  The
-CLI layer imports these functions and calls them through a thin bridge
-(see ``dr_adapter_call`` management command in the backups module).
-
-Architecture
-------------
-Each adapter function:
-
-* Accepts only the typed parameters it needs — no env-var protocol.
-* Lazy-imports the Django-backed service implementation so the module
-  itself can be imported without Django.
-* Returns a plain ``dict[str, Any]`` (serializable to JSON for the
-  bridge transport), matching the shapes the CLI already expects.
-
-``ADAPTER_FUNCTIONS`` is a registry dict that the bridge management
-command uses to dispatch calls by name.
-"""
+"""Typed DR adapter entrypoints for the single supported CLI-to-Django path: the CLI calls a function from ``ADAPTER_FUNCTIONS``, the backups app's ``dr_adapter_call`` bridge dispatches it inside Django, and each adapter lazily imports the service implementation then returns a JSON-serializable ``dict[str, Any]`` response with no hidden env-var transport layer."""
 
 from __future__ import annotations
 
@@ -270,9 +251,7 @@ def sync_media(
 ) -> dict[str, Any]:
     """Dry-run or execute media sync for one snapshot.
 
-    *target_runtime_settings* replaces the legacy
-    ``QUICKSCALE_DR_TARGET_*`` env-var protocol.  Required — no
-    env-var fallback.
+    ``target_runtime_settings`` is the required explicit runtime payload.
     """
     from quickscale_modules_backups.services import sync_backup_snapshot_media
 

@@ -114,8 +114,8 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 ### Track 1 progress
 
 **Phase 1 — Foundation**
-- [ ] T1.1 — System org + NOT NULL ownership contract
-- [ ] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
+- [x] T1.1 — System org + NOT NULL ownership contract
+- [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
 - [ ] T1.3 — Middleware for the single-URL world
 - [ ] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
 
@@ -141,37 +141,6 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 ---
 
 ### Phase 1 — Foundation (serial; blocks all of Phase 2)
-
-#### - [ ] T1.1 — System org + NOT NULL ownership contract
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Plan-review recommended.
-
-- **OBJECTIVE:** Add a reserved System organization and codify the canonical owned-model contract (NOT NULL FK + `on_delete=PROTECT`).
-- **SCOPE:**
-  - `orgs/.../models.py` — `Organization`: add `is_system = BooleanField(default=False)` + `UniqueConstraint(condition=Q(is_system=True))`.
-  - `orgs/.../managers.py` — `OrganizationManager.get_system_org()` (idempotent get-or-create, reserved slug `__system__`).
-  - `orgs/.../constants.py` — `SYSTEM_ORG_SLUG`.
-  - `orgs/.../tenancy.py` (new) — `tenant_org_fk(related_name)` helper returning `ForeignKey(Organization, null=False, on_delete=PROTECT)`.
-  - migration `0002_system_org`.
-- **ACCEPTANCE CRITERIA:** `get_system_org()` is idempotent and returns a singleton; DB rejects a second `is_system=True` row; `tenant_org_fk()` produces a NOT NULL/PROTECT FK.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; tests: system-org singleton, idempotency, constraint violation on duplicate.
-- **DEPENDS:** none. **DECISIONS:** D2, D3.
-
----
-
-#### - [ ] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Plan-review recommended. Core security seam; all per-module tasks depend on it.
-
-- **OBJECTIVE:** Provide one shared, contextvar-driven scoping seam — auto-filtering default manager + operator escape hatch — for all modules.
-- **SCOPE:**
-  - `orgs/.../current_org.py` — add `current_org_id: ContextVar[int | None]`; `set_current_org_id()`, `get_current_org_id()`, `reset_current_org_id()`; keep `request.org` as the request-cycle mirror.
-  - `orgs/.../tenancy.py` — `TenantScopedManager.get_queryset()` filters `organization_id=get_current_org_id()`, **fail-closed** (returns `.none()`) when unset; `OperatorManager` = unfiltered escape hatch.
-- **ACCEPTANCE CRITERIA:** default manager auto-scopes to contextvar org; unset context → `.none()` (fail-closed); `all_objects` bypasses; cross-request contextvar isolation leak-free.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; unit tests: auto-scope, fail-closed, operator bypass, cross-request isolation.
-- **DEPENDS:** T1.1. **DECISIONS:** D1, D4.
 
 ---
 
@@ -207,7 +176,7 @@ Plan-review recommended. Parallel to T1.2/T1.3. Must land before any Phase-3 RLS
 
 ### Phase 2 — Per-module contract adoption (parallel after T1.1–T1.3)
 
-**Shared shape (T1.5–T1.9):** delete the module's `managers.py` and import `TenantScopedManager`/`OperatorManager` from `orgs.tenancy`; models use `tenant_org_fk()` (NOT NULL/PROTECT, drop `null=True`); delete `_is_org_scoped_route`, all `| Q(organization_id__isnull=True)` unions, and redundant `.for_org()` calls; collapse URLs to a single flat tree (delete `/orgs/<slug:org_slug>/...`); route anonymous/public reads to `get_system_org()` (D2); update tests to single-route contract; squash migration to NOT NULL schema (D5, no backfill).
+**Shared shape (T1.5–T1.9):** drop any module-local `TenantScopedManager`/`OperatorManager` classes and import `TenantManager` from `orgs.managers` instead (`TenantManager(super_scope=True)` for the operator bypass); models use `tenant_org_fk()` (NOT NULL/PROTECT, drop `null=True`); delete `_is_org_scoped_route`, all `| Q(organization_id__isnull=True)` unions, and redundant `.for_org()` calls; collapse URLs to a single flat tree (delete `/orgs/<slug:org_slug>/...`); route anonymous/public reads to `get_system_org()` (D2); update tests to single-route contract; squash migration to NOT NULL schema (D5, no backfill).
 
 ---
 
@@ -399,36 +368,19 @@ Fully independent — backups has no org FK; lives in `backups/services.py`, `dr
 
 ### Track 3 progress
 - [x] T3.1 — Single adapter path (route all commands through dr_engine)
-- [ ] T3.2 — Shrink `services.py`
-- [ ] T3.3 — Cleanup
+- [x] T3.2 — Shrink `services.py`
+- [x] T3.3 — Cleanup
 
 ---
 
-#### - [ ] T3.2 — Shrink `services.py`
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Move remaining orchestration out of `services.py` into `dr_engine`; reduce the module to thin Django-facing surfaces.
-- **SCOPE:** Identify orchestration blocks beyond the lines deleted in T3.1; move into `dr_engine/{recovery,primitives}.py` or a new `dr_engine/orchestration.py`. `services.py` final shape: Django model imports, admin helpers, thin adapter bridge — target < 400 LOC (from 3,677).
-- **ACCEPTANCE CRITERIA:** `wc -l services.py` < 400; `dr_engine` contains all orchestration; `services.py` has no non-Django business logic; `make MODULE=backups test -- --modules` green.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
-- **DEPENDS:** T3.1.
-
----
-
-#### - [ ] T3.3 — Cleanup
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **SCOPE:** Grep `services.py` and `dr_engine/` for `# legacy`, `# backward`, `# fallback` comments; delete the dead code they annotate. Add one-paragraph module docstring to `dr_engine/adapter.py` documenting the canonical single path.
-- **ACCEPTANCE CRITERIA:** `grep -rn "legacy\|fallback\|backward" quickscale_modules/backups/` returns zero; `make MODULE=backups test -- --modules` green.
-- **DEPENDS:** T3.1, T3.2.
+Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
 ## Deferred / Monitor
 
 - [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
+- [ ] **Backups terminology sweep outside T3.3 scope** *(Adaptive tier: 1)* — broad `legacy|fallback|backward` grep still hits historical migration/test fixtures plus Django's `FallbackStorage` import in `quickscale_modules/backups/`; T3.3 only cleared stale single-path wording from the active DR service/adapter surfaces.
 - [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
 - [ ] **Broader compatibility-window widening** *(Adaptive tier: 2)* — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
 - [ ] **Emitted-project operability & API-contract substrate** *(deferred)* — no structured logging/correlation IDs, no versioned public API, no webhook payload boundary validation. Promote when a second external provider lands or the first public-API consumer appears.
@@ -459,6 +411,8 @@ Single-PR items that do not change the design:
 | M9 | 1 | F13.1–F13.3 | Merged to v87. Org-authoritative billing contract; unique subscription constraint; dual-FK backfill. |
 | M10 | 2 | F5.2a–F5.4 | Merged to v87. DR engine extracted to `quickscale_core.dr_engine`; `dr_engine_migration.md` added. |
 | M11 | 3 | F7.1–F7.3 | Merged to v87. Generator vs generated-project runtime-pin decoupling complete. |
+| M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
+| M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
 
 ## References
 
