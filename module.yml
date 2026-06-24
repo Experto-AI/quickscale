@@ -57,3 +57,97 @@ dependencies:
 
 django_apps:
   - quickscale_modules_analytics
+
+# ---------------------------------------------------------------------------
+# Manifest derivation rules (T2.3 Phase 3)
+# ---------------------------------------------------------------------------
+derivation:
+  # Module-level wiring projections — always contributed regardless of options.
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - quickscale_modules_analytics
+      description: "Analytics Django app label"
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - analytics/
+            - quickscale_modules_analytics.urls
+      description: "Analytics URL include"
+
+  # Per-option derivation metadata.
+  option_derivations:
+    enabled:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_ENABLED
+          source_options: [enabled]
+          derivation_type: direct
+          expression:
+            option: enabled
+          description: "Whether analytics is enabled"
+
+    provider:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_PROVIDER
+          source_options: [provider]
+          derivation_type: direct
+          expression:
+            option: provider
+          description: "Analytics provider name"
+
+    posthog_api_key_env_var:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
+          source_options: [posthog_api_key_env_var]
+          derivation_type: direct
+          expression:
+            option: posthog_api_key_env_var
+          description: "Env-var name for PostHog API key"
+
+    posthog_host_env_var:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR
+          source_options: [posthog_host_env_var]
+          derivation_type: direct
+          expression:
+            option: posthog_host_env_var
+          description: "Env-var name for PostHog host"
+
+    posthog_host:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_POSTHOG_HOST
+          source_options: [posthog_host]
+          derivation_type: direct
+          expression:
+            option: posthog_host
+          description: "PostHog ingestion host URL"
+
+    exclude_debug:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG
+          source_options: [exclude_debug]
+          derivation_type: direct
+          expression:
+            option: exclude_debug
+          description: "Skip analytics when DEBUG is true"
+
+    exclude_staff:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_EXCLUDE_STAFF
+          source_options: [exclude_staff]
+          derivation_type: direct
+          expression:
+            option: exclude_staff
+          description: "Skip analytics for staff users"
+
+    anonymous_by_default:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT
+          source_options: [anonymous_by_default]
+          derivation_type: direct
+          expression:
+            option: anonymous_by_default
+          description: "Use anonymous distinct IDs by default"
