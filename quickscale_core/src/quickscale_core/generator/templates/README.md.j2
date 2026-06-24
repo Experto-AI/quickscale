@@ -29,7 +29,9 @@ cp .env.example .env
 # Generate a real SECRET_KEY before deploying to production.
 
 # 3. Run migrations
-poetry run python manage.py migrate
+# Unset RUNTIME_DATABASE_URL so migrations use the superuser DATABASE_URL
+# (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+RUNTIME_DATABASE_URL= poetry run python manage.py migrate
 
 # 4. Create a superuser (optional)
 poetry run python manage.py createsuperuser
@@ -59,7 +61,9 @@ cp .env.example .env
 docker compose up --build
 
 # 3. Run migrations (in another terminal)
-docker compose exec backend python manage.py migrate
+# Unset RUNTIME_DATABASE_URL so migrations use the superuser DATABASE_URL
+# (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+docker compose exec -e RUNTIME_DATABASE_URL= backend python manage.py migrate
 
 # 4. Create a superuser (optional)
 docker compose exec backend python manage.py createsuperuser
@@ -189,7 +193,9 @@ pnpm test:coverage
 poetry run python manage.py makemigrations
 
 # Apply migrations
-poetry run python manage.py migrate
+# Unset RUNTIME_DATABASE_URL so migrations use the superuser DATABASE_URL
+# (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+RUNTIME_DATABASE_URL= poetry run python manage.py migrate
 
 # Open Django shell
 poetry run python manage.py shell
@@ -287,7 +293,7 @@ Before deploying to production:
 - [ ] Review security settings in `settings/production.py`
 - [ ] Configure email backend for production
 - [ ] Set up error monitoring (e.g., Sentry)
-- [ ] Run migrations: `python manage.py migrate`
+- [ ] Run migrations: `RUNTIME_DATABASE_URL= python manage.py migrate` (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL)
 - [ ] Collect static files: `python manage.py collectstatic`
 
 ### Docker Deployment

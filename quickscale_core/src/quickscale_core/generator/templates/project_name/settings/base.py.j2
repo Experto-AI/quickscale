@@ -94,6 +94,28 @@ DATABASES = {
     }
 }
 
+# Runtime database role for RLS enforcement
+# ------------------------------------------
+# The app can connect with a restricted role (NOSUPERUSER, NOBYPASSRLS) so that
+# per-table Row-Level Security policies are enforced at the database level.
+#
+# - DATABASE_URL: Superuser connection used for migrations (the startup script
+#   temporarily unsets RUNTIME_DATABASE_URL during migrate so schema changes use
+#   the superuser role).
+# - RUNTIME_DATABASE_URL: Restricted role URL for normal app queries.
+#
+# When RUNTIME_DATABASE_URL is set (runtime role), the app uses it for the
+# default database connection. When unset, DATABASE_URL is used instead
+# (backward compatible). See local.py and production.py for the implementation.
+#
+# The init SQL template (db/init.sql) creates the runtime role automatically
+# in Docker Compose environments. For production deployments, the operator
+# creates the role manually and sets RUNTIME_DATABASE_URL in the environment.
+# See OPERATIONS.md for the operator setup guide.
+RUNTIME_DB_ROLE = config("RUNTIME_DB_ROLE", default="{{ runtime_db_role }}")
+# RUNTIME_DATABASE_URL is consumed directly in local.py and production.py
+# rather than stored as a setting — it overrides DATABASES.default when set.
+
 
 # Password validation
 # https://docs.djangoproject.com/en/stable/ref/settings/#auth-password-validators

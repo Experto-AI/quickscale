@@ -24,10 +24,14 @@ DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "*"]
 
 # Database - PostgreSQL required for local development
-database_url = config("DATABASE_URL", default=None)
+# RUNTIME_DATABASE_URL takes precedence when set (Docker Compose provides it
+# for the restricted runtime role). Falls back to DATABASE_URL.
+database_url = config("RUNTIME_DATABASE_URL", default=None) or config(
+    "DATABASE_URL", default=None
+)
 if not database_url:
     raise ValueError(
-        "DATABASE_URL is required in local settings. "
+        "DATABASE_URL (or RUNTIME_DATABASE_URL) is required in local settings. "
         "Set DATABASE_URL in your .env file before running manage.py commands."
     )
 

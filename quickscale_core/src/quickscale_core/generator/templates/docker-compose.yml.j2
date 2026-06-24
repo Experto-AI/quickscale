@@ -8,6 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - postgres_data:/var/lib/postgresql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     # Port mapping removed to avoid conflicts with system PostgreSQL
     # The backend service can still access the database via the internal Docker network
     # If you need to access PostgreSQL from your host, uncomment the next 2 lines:
@@ -54,6 +55,7 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE={{ package_name }}.settings.local
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ package_name }}
+      - RUNTIME_DATABASE_URL=postgresql://{{ runtime_db_role }}:{{ runtime_db_password }}@db:5432/{{ package_name }}
       - PORT=${PORT:-8000}
     depends_on:
       db:
