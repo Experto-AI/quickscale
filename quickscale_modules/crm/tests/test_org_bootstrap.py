@@ -8,12 +8,20 @@ import pytest
 from django.test import override_settings
 
 from quickscale_modules_crm.models import Company, Contact, Deal, Stage
+from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
+
+
+def _activate_org_in_session(client, organization):
+    """Set the active org in the client session for TenantMiddleware."""
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.id)
+    session.save()
 
 
 def _assert_canonical_stage_set(organization: Organization) -> list[Stage]:
     stages = list(
-        Stage.objects.filter(organization=organization).order_by("order", "id")
+        Stage.all_objects.filter(organization=organization).order_by("order", "id")
     )
 
     assert [stage.name for stage in stages] == [
@@ -40,13 +48,13 @@ def test_solo_crm_route_seeds_personal_org_stages_on_first_access(
         is_personal=True, memberships__user=staff_user
     )
     # No stages yet before first CRM access.
-    assert Stage.objects.filter(organization=organization).count() == 0
+    assert Stage.all_objects.filter(organization=organization).count() == 0
 
     response = client.get("/crm/api/stages/")
 
     assert response.status_code == 200
     # Personal org should now have the 4 canonical stages.
-    assert Stage.objects.filter(organization=organization).count() == 4
+    assert Stage.all_objects.filter(organization=organization).count() == 4
     stages_data = response.json()
     assert [item["name"] for item in stages_data] == [
         "Prospecting",
@@ -56,12 +64,12 @@ def test_solo_crm_route_seeds_personal_org_stages_on_first_access(
     ]
     # All returned stages belong to the personal org (no NULL-org stages).
     for item in stages_data:
-        assert Stage.objects.get(pk=item["id"]).organization_id == organization.id
+        assert Stage.all_objects.get(pk=item["id"]).organization_id == organization.id
 
     dashboard_response = client.get("/crm/")
     assert dashboard_response.status_code == 200
     # Dashboard should not have created extra stages beyond the seeded set.
-    assert Stage.objects.filter(organization=organization).count() == 4
+    assert Stage.all_objects.filter(organization=organization).count() == 4
 
 
 @pytest.mark.django_db
@@ -81,14 +89,15 @@ def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
         organization=organization,
     )
     assert membership.role == OrgRole.OWNER
+    _activate_org_in_session(client, organization)
 
-    stage_list = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+    stage_list = client.get("/crm/api/stages/")
     assert stage_list.status_code == 200
     seeded_stages = _assert_canonical_stage_set(organization)
     seeded_stage_id = seeded_stages[0].id
 
     company_response = client.post(
-        f"/orgs/{organization.slug}/crm/api/companies/",
+        "/crm/api/companies/",
         data={
             "name": "Fresh Org Corp",
             "industry": "Tech",
@@ -97,11 +106,11 @@ def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
         content_type="application/json",
     )
     assert company_response.status_code == 201
-    company = Company.objects.get(pk=company_response.json()["id"])
+    company = Company.all_objects.get(pk=company_response.json()["id"])
     assert company.organization_id == organization.id
 
     contact_response = client.post(
-        f"/orgs/{organization.slug}/crm/api/contacts/",
+        "/crm/api/contacts/",
         data={
             "first_name": "Fresh",
             "last_name": "Contact",
@@ -111,11 +120,11 @@ def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
         content_type="application/json",
     )
     assert contact_response.status_code == 201
-    contact = Contact.objects.get(pk=contact_response.json()["id"])
+    contact = Contact.all_objects.get(pk=contact_response.json()["id"])
     assert contact.organization_id == organization.id
 
     deal_response = client.post(
-        f"/orgs/{organization.slug}/crm/api/deals/",
+        "/crm/api/deals/",
         data={
             "title": "Fresh Org Deal",
             "contact_id": contact.id,
@@ -126,7 +135,7 @@ def test_org_new_flow_can_use_crm_without_manual_stage_seeding(
         content_type="application/json",
     )
     assert deal_response.status_code == 201
-    deal = Deal.objects.get(pk=deal_response.json()["id"])
+    deal = Deal.all_objects.get(pk=deal_response.json()["id"])
     assert deal.organization_id == organization.id
 
 
@@ -144,8 +153,9 @@ def test_api_org_create_flow_seeds_canonical_stages(client, staff_user) -> None:
 
     assert create_response.status_code == 201
     organization = Organization.objects.get(slug="api-org")
+    _activate_org_in_session(client, organization)
 
-    stage_list = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+    stage_list = client.get("/crm/api/stages/")
     assert stage_list.status_code == 200
     seeded_stages = _assert_canonical_stage_set(organization)
     stage_ids = {item["id"] for item in stage_list.json()}
@@ -170,9 +180,10 @@ def test_migrated_zero_local_org_bootstraps_on_first_crm_access(
         role=OrgRole.OWNER,
     )
     client.force_login(staff_user)
+    _activate_org_in_session(client, organization)
 
-    first_response = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
-    second_response = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+    first_response = client.get("/crm/api/stages/")
+    second_response = client.get("/crm/api/stages/")
 
     assert first_response.status_code == 200
     assert second_response.status_code == 200
@@ -193,17 +204,20 @@ def test_migrated_partial_preseed_org_is_left_unchanged(client, staff_user) -> N
         organization=organization,
         role=OrgRole.OWNER,
     )
-    existing_stage = Stage.objects.create(
+    existing_stage = Stage.all_objects.create(
         name="Custom Existing",
         order=99,
         organization=organization,
     )
     client.force_login(staff_user)
+    _activate_org_in_session(client, organization)
 
-    response = client.get(f"/orgs/{organization.slug}/crm/api/stages/")
+    response = client.get("/crm/api/stages/")
 
     assert response.status_code == 200
-    local_stages = list(Stage.objects.filter(organization=organization).order_by("id"))
+    local_stages = list(
+        Stage.all_objects.filter(organization=organization).order_by("id")
+    )
     assert [(stage.id, stage.name, stage.order) for stage in local_stages] == [
         (existing_stage.id, "Custom Existing", 99)
     ]

@@ -15,11 +15,21 @@ from quickscale_modules_crm.models import (
     Stage,
     Tag,
 )
+from quickscale_modules_orgs.current_org import (
+    reset_current_org_id,
+    set_current_org_id,
+)
 from quickscale_modules_orgs.models import (
     OrgRole,
     Organization,
     OrganizationMembership,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_crm_org_contextvar() -> None:
+    """Reset the org contextvar before each test to prevent cross-test leakage."""
+    reset_current_org_id()
 
 
 @pytest.fixture
@@ -40,7 +50,11 @@ def user(db):
 
 @pytest.fixture
 def staff_user(db):
-    """Create a staff test user with a personal org (Phase 2: solo routes require org context)."""
+    """Create a staff test user with a personal org.
+
+    T1.5: sets the org contextvar to the personal org so that TenantManager
+    auto-scoping works for model-level tests and serializer queries.
+    """
     user_model = get_user_model()
     staff_user = user_model.objects.create_user(
         username="staffuser",
@@ -49,8 +63,12 @@ def staff_user(db):
     )
     staff_user.is_staff = True
     staff_user.save(update_fields=["is_staff"])
-    # Phase 2: create personal org for solo route org context.
     Organization.objects.create_personal_for(staff_user)
+    # Set contextvar to personal org for TenantManager auto-scoping.
+    personal_org = Organization.objects.get(
+        is_personal=True, memberships__user=staff_user
+    )
+    set_current_org_id(personal_org.id)
     return staff_user
 
 
@@ -91,34 +109,28 @@ def api_client():
 def authenticated_client(staff_user):
     """Create a staff-authenticated API client with personal org context.
 
-    Phase 2: solo routes require org context. This fixture creates a custom
-    APIClient that enriches requests with the staff user's personal org,
-    simulating what TenantMiddleware does in production.
+    T1.5: sets the org contextvar before each request so that TenantManager
+    auto-scoping works correctly even without middleware.
     """
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
         is_personal=True, memberships__user=staff_user
     )
+    personal_org_id = personal_org.id
 
     class OrgEnrichedAPIClient(APIClient):
-        """APIClient that enriches requests with personal org context."""
+        """APIClient that sets contextvar for TenantManager auto-scoping."""
 
         def request(self, **kwargs):
-            # Store the org on the client so it can be accessed by views.
-            # In production, TenantMiddleware sets request.org.
-            # For tests, we simulate this by setting it on the request object.
-            response = super().request(**kwargs)
-            return response
-
-        def get(self, path, data=None, **kwargs):
-            # Enrich the request with org context via a custom header.
-            # The view layer will read this and set request.org.
-            return super().get(path, data, **kwargs)
+            set_current_org_id(personal_org_id)
+            try:
+                return super().request(**kwargs)
+            finally:
+                reset_current_org_id()
 
     client = OrgEnrichedAPIClient()
     client.force_authenticate(user=staff_user)
-    # Store the personal org on the client for test access.
     client._personal_org = personal_org
     return client
 

@@ -32,7 +32,12 @@ def django_db_setup(django_db_blocker):
 
 @pytest.fixture
 def listing_factory(db):
-    """Factory for creating test listings"""
+    """Factory for creating test listings.
+
+    All listings require an ``organization`` (NOT NULL contract).
+    If omitted, the System org is used as the default (D2).
+    """
+    from quickscale_modules_orgs.models import Organization
 
     def create_listing(
         title="Test Listing",
@@ -43,6 +48,8 @@ def listing_factory(db):
         status="draft",
         **kwargs,
     ):
+        if "organization" not in kwargs:
+            kwargs["organization"] = Organization.objects.get_system_org()
         listing = ConcreteListing.objects.create(
             title=title,
             slug=slug,
@@ -91,7 +98,7 @@ def sold_listing(listing_factory):
 
 
 # ---------------------------------------------------------------------------
-# Organization fixtures for Phase F11.12b tenant-scoped listings
+# Organization fixtures for tenant-scoped listings
 # ---------------------------------------------------------------------------
 
 

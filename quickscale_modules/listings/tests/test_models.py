@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
+from quickscale_modules_orgs.models import Organization
 from tests.models import ConcreteListing
 
 
@@ -38,9 +39,11 @@ class TestAbstractListingViaConcreteModel:
 
     def test_manual_slug_preserved(self, db):
         """Test that manually set slug is preserved"""
+        system_org = Organization.objects.get_system_org()
         listing = ConcreteListing.objects.create(
             title="Test Property",
             slug="custom-slug",
+            organization=system_org,
         )
         assert listing.slug == "custom-slug"
 
@@ -64,11 +67,10 @@ class TestAbstractListingViaConcreteModel:
         assert listing.published_date == original_date
 
     def test_get_absolute_url(self, listing_factory):
-        """Test get_absolute_url returns correct pattern"""
+        """Test get_absolute_url returns flat route pattern (D1)"""
         listing = listing_factory(title="Test Property")
         url = listing.get_absolute_url()
-        assert "/test-property/" in url
-        assert listing.slug in url
+        assert url == "/listings/test-property/"
 
     def test_is_published_property(self, listing_factory):
         """Test is_published property"""
@@ -116,18 +118,22 @@ class TestAbstractListingViaConcreteModel:
 
     def test_nullable_price(self, db):
         """Test price can be null for 'Contact for price'"""
+        system_org = Organization.objects.get_system_org()
         listing = ConcreteListing.objects.create(
             title="Contact for Price",
             price=None,
+            organization=system_org,
         )
         assert listing.price is None
         assert listing.has_price is False
 
     def test_blank_location(self, db):
         """Test location can be blank"""
+        system_org = Organization.objects.get_system_org()
         listing = ConcreteListing.objects.create(
             title="No Location",
             location="",
+            organization=system_org,
         )
         assert listing.location == ""
 
@@ -148,27 +154,25 @@ class TestAbstractListingViaConcreteModel:
 
     def test_featured_image_alt_optional(self, db):
         """Test featured_image_alt can be blank"""
+        system_org = Organization.objects.get_system_org()
         listing = ConcreteListing.objects.create(
             title="No Alt Text",
             featured_image_alt="",
+            organization=system_org,
         )
         assert listing.featured_image_alt == ""
 
     def test_slug_no_longer_globally_unique(self, listing_factory, org):
         """Test slugs are unique per-org but allowed across different orgs.
 
-        Phase F11.12b switches from global slug uniqueness to a combined
-        ``(slug, organization)`` constraint plus a partial ``(slug) WHERE
-        organization IS NULL`` constraint (CR-003).  Duplicate slugs are
-        permitted across different organizations but not within the same
-        org or for org=NULL rows.
+        T1.8 retains the per-org ``(slug, organization)`` constraint.
+        Duplicate slugs are permitted across different organizations but
+        not within the same org.
         """
         listing1 = listing_factory(
             title="Same Title",
             organization=org,
         )
-        from quickscale_modules_orgs.models import Organization
-
         other_org = Organization.objects.create(name="Other Org", slug="other-org")
         listing2 = ConcreteListing.objects.create(
             title="Same Title",
@@ -185,27 +189,33 @@ class TestListingModel:
 
     def test_decimal_price_precision(self, db):
         """Test price field handles decimal precision correctly"""
+        system_org = Organization.objects.get_system_org()
         listing = ConcreteListing.objects.create(
             title="Precise Price",
             price=Decimal("999999999.99"),
+            organization=system_org,
         )
         listing.refresh_from_db()
         assert listing.price == Decimal("999999999.99")
 
     def test_description_blank(self, db):
         """Test description can be blank"""
+        system_org = Organization.objects.get_system_org()
         listing = ConcreteListing.objects.create(
             title="No Description",
             description="",
+            organization=system_org,
         )
         assert listing.description == ""
 
     def test_long_description(self, db):
         """Test description can handle long text"""
+        system_org = Organization.objects.get_system_org()
         long_text = "A" * 10000
         listing = ConcreteListing.objects.create(
             title="Long Description",
             description=long_text,
+            organization=system_org,
         )
         listing.refresh_from_db()
         assert listing.description == long_text
@@ -220,8 +230,13 @@ class TestListingModel:
         """
         from tests.models import AlternateListing
 
-        ConcreteListing.objects.create(title="Concrete One", slug="concrete-one")
-        AlternateListing.objects.create(title="Alternate One", slug="alt-one")
+        system_org = Organization.objects.get_system_org()
+        ConcreteListing.objects.create(
+            title="Concrete One", slug="concrete-one", organization=system_org
+        )
+        AlternateListing.objects.create(
+            title="Alternate One", slug="alt-one", organization=system_org
+        )
 
         assert ConcreteListing.objects.count() == 1, "ConcreteListing should have 1 row"
         assert AlternateListing.objects.count() == 1, (
@@ -231,25 +246,3 @@ class TestListingModel:
             ConcreteListing.objects.first() is not None
             and AlternateListing.objects.first() is not None
         ), "Both subclass instances should exist"
-
-    @pytest.mark.django_db
-    def test_org_null_slug_uniqueness_enforced(self, db):
-        """CR-003: Flat-route (org=NULL) slug uniqueness is enforced.
-
-        Creating two listings with the same slug and ``organization=None``
-        must raise ``IntegrityError``, preserving unambiguous flat-route
-        ``/listings/<slug>/`` detail lookups.
-        """
-        from django.db import IntegrityError
-
-        ConcreteListing.objects.create(
-            title="Flat Listing",
-            slug="flat-slug",
-            organization=None,
-        )
-        with pytest.raises(IntegrityError):
-            ConcreteListing.objects.create(
-                title="Duplicate Flat",
-                slug="flat-slug",
-                organization=None,
-            )
