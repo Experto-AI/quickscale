@@ -20,15 +20,19 @@ Work is split across 3 git worktrees that develop in parallel and merge back to 
 
 ### Track assignment
 
-| Track | Worktree | Branch | Owns |
-|-------|---------|--------|------|
-| 1 | `quickscale-wt-track1` | `wt-track1` | Tenant isolation, ownership contract & single URL tree (Findings 1C, 2A+2C, 4A) |
-| 2 | `quickscale-wt-track2` | `wt-track2` | Module wiring manifests — self-describing `module.yml`, delete `if`-ladder (Finding 3A) |
-| 3 | `quickscale-wt-track3` | `wt-track3` | DR hard cutover — delete legacy env-var protocol, single typed adapter (Finding 5A) |
+Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed for the Track 1 Phase 2–3 fan-out. Each worktree owns a module pair end-to-end (Phase 2 contract adoption → Phase 3 RLS backstop).
+
+| Worktree | Branch | Phase 2 owns | Phase 3 owns |
+|---------|--------|-------------|-------------|
+| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS |
+| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS |
+| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS |
+
+Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
 
 ### Cross-track dependency
 
-Tracks 2 and 3 are fully independent (CLI/manifest and backups/dr respectively — no org FK, no runtime overlap). Track 1 has internal phase dependencies; see [Track 1 sequencing](#track-1-sequencing) below.
+All Phase 2 tasks (T1.5–T1.10) are mutually independent — no inter-worktree coordination needed. Phase 3 RLS tasks each require their Phase 2 counterpart **and** T1.4 (completed). T1.17 waits for all Phase 2. See [Track 1 sequencing](#track-1-sequencing) below.
 
 ### Start procedure
 
@@ -119,21 +123,21 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [x] T1.3 — Middleware for the single-URL world
 - [x] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
 
-**Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3)*
-- [ ] T1.5 — CRM adopt contract
-- [ ] T1.6 — Blog adopt contract
-- [ ] T1.7 — Forms adopt contract
-- [ ] T1.8 — Listings adopt contract
-- [ ] T1.9 — Social adopt contract
-- [ ] T1.10 — Billing: org-only subject *(plan-review mandatory)*
+**Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3 · fan out across all 3 worktrees)*
+- [ ] T1.5 — CRM adopt contract *(wt-track1)*
+- [ ] T1.6 — Blog adopt contract *(wt-track1)*
+- [ ] T1.7 — Forms adopt contract *(wt-track2)*
+- [ ] T1.8 — Listings adopt contract *(wt-track2)*
+- [ ] T1.9 — Social adopt contract *(wt-track3)*
+- [ ] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
 
 **Phase 3 — RLS backstop** *(parallel; each after its Phase-2 task + T1.4)*
-- [ ] T1.11 — CRM RLS policies *(plan-review mandatory)*
-- [ ] T1.12 — Blog RLS policies *(plan-review mandatory)*
-- [ ] T1.13 — Forms RLS policies *(plan-review mandatory)*
-- [ ] T1.14 — Listings RLS policies *(plan-review mandatory)*
-- [ ] T1.15 — Social RLS policies *(plan-review mandatory)*
-- [ ] T1.16 — Billing RLS policies *(plan-review mandatory)*
+- [ ] T1.11 — CRM RLS policies *(wt-track1 · plan-review mandatory)*
+- [ ] T1.12 — Blog RLS policies *(wt-track1 · plan-review mandatory)*
+- [ ] T1.13 — Forms RLS policies *(wt-track2 · plan-review mandatory)*
+- [ ] T1.14 — Listings RLS policies *(wt-track2 · plan-review mandatory)*
+- [ ] T1.15 — Social RLS policies *(wt-track3 · plan-review mandatory)*
+- [ ] T1.16 — Billing RLS policies *(wt-track3 · plan-review mandatory)*
 
 **Phase 4 — Teardown**
 - [ ] T1.17 — `purge_organization` command
