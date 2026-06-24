@@ -23,7 +23,7 @@ django_db = cast(Callable[[TestFunction], TestFunction], pytest.mark.django_db)
 
 
 @django_db
-def test_social_link_save_detects_provider_and_normalizes_url() -> None:
+def test_social_link_save_detects_provider_and_normalizes_url(org) -> None:
     """Curated links should persist canonical provider and URL data."""
     link = SocialLink.objects.create(
         title="QuickScale on Instagram",
@@ -31,6 +31,7 @@ def test_social_link_save_detects_provider_and_normalizes_url() -> None:
         url="https://www.instagram.com/quickscale/?igshid=abc&utm_source=share",
         description="Photo updates.",
         display_order=3,
+        organization=org,
     )
 
     assert link.provider_name == "instagram"
@@ -39,7 +40,7 @@ def test_social_link_save_detects_provider_and_normalizes_url() -> None:
 
 
 @django_db
-def test_social_link_rejects_provider_outside_runtime_allowlist() -> None:
+def test_social_link_rejects_provider_outside_runtime_allowlist(org) -> None:
     """Stored social links must obey the current settings-managed provider allowlist."""
     with override_settings(QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"]):
         with pytest.raises(ValidationError) as exc_info:
@@ -47,32 +48,35 @@ def test_social_link_rejects_provider_outside_runtime_allowlist() -> None:
                 title="QuickScale on LinkedIn",
                 provider_name="",
                 url="https://www.linkedin.com/company/quickscale/",
+                organization=org,
             )
 
     assert "allowlisted" in str(exc_info.value)
 
 
 @django_db
-def test_social_embed_requires_embed_capable_provider() -> None:
+def test_social_embed_requires_embed_capable_provider(org) -> None:
     """Only TikTok and YouTube should be accepted for stored social embeds."""
     with pytest.raises(ValidationError) as exc_info:
         SocialEmbed.objects.create(
             title="QuickScale on Instagram",
             provider_name="",
             url="https://www.instagram.com/quickscale/",
+            organization=org,
         )
 
     assert "TikTok and YouTube" in str(exc_info.value)
 
 
 @django_db
-def test_social_embed_save_persists_backend_resolution_metadata() -> None:
+def test_social_embed_save_persists_backend_resolution_metadata(org) -> None:
     """Curated embeds should persist backend-owned preview metadata on save."""
     embed = SocialEmbed.objects.create(
         title="QuickScale launch short",
         provider_name="",
         url="https://www.youtube.com/shorts/abc123",
         description="Short-form launch clip.",
+        organization=org,
     )
 
     assert embed.provider_name == "youtube"
@@ -89,12 +93,13 @@ def test_social_embed_save_persists_backend_resolution_metadata() -> None:
 
 
 @django_db
-def test_social_embed_records_operator_visible_resolution_error() -> None:
+def test_social_embed_records_operator_visible_resolution_error(org) -> None:
     """Unresolvable share links should persist an explicit operator-facing error state."""
     embed = SocialEmbed.objects.create(
         title="QuickScale teaser",
         provider_name="",
         url="https://vm.tiktok.com/ZM1234567/",
+        organization=org,
     )
 
     assert embed.provider_name == "tiktok"
@@ -106,7 +111,7 @@ def test_social_embed_records_operator_visible_resolution_error() -> None:
 
 
 @django_db
-def test_social_embed_does_not_rerun_resolution_for_unrelated_updates() -> None:
+def test_social_embed_does_not_rerun_resolution_for_unrelated_updates(org) -> None:
     """Editing non-URL fields should not re-run embed resolution for stable records."""
     with patch(
         "quickscale_modules_social.models.resolve_social_embed_metadata",
@@ -123,6 +128,7 @@ def test_social_embed_does_not_rerun_resolution_for_unrelated_updates() -> None:
             title="QuickScale launch short",
             provider_name="",
             url="https://www.youtube.com/shorts/abc123",
+            organization=org,
         )
         first_attempt_at = embed.last_resolution_attempt_at
 
@@ -136,7 +142,7 @@ def test_social_embed_does_not_rerun_resolution_for_unrelated_updates() -> None:
 
 @django_db
 def test_social_link_can_be_created_with_organization() -> None:
-    """Social links should accept an optional organization FK."""
+    """Social links should accept an organization FK."""
     from quickscale_modules_orgs.models import Organization
 
     org = Organization.objects.create(name="Test Org", slug="test-org")
@@ -154,7 +160,7 @@ def test_social_link_can_be_created_with_organization() -> None:
 
 @django_db
 def test_social_embed_can_be_created_with_organization() -> None:
-    """Social embeds should accept an optional organization FK."""
+    """Social embeds should accept an organization FK."""
     from quickscale_modules_orgs.models import Organization
 
     org = Organization.objects.create(name="Test Org", slug="test-org")
@@ -171,8 +177,9 @@ def test_social_embed_can_be_created_with_organization() -> None:
 
 
 @django_db
-def test_social_item_for_org_returns_only_org_items() -> None:
-    """The ``.for_org()`` manager method should scope to the specified org."""
+def test_social_item_tenant_manager_auto_scopes_to_org_context() -> None:
+    """The TenantManager should auto-scope queries to the current org context."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
     from quickscale_modules_orgs.models import Organization
 
     org_a = Organization.objects.create(name="Org A", slug="org-a")
@@ -193,13 +200,27 @@ def test_social_item_for_org_returns_only_org_items() -> None:
         organization=org_b,
     )
 
-    org_a_links = list(SocialLink.objects.for_org(org_a.id))
-    org_b_links = list(SocialLink.objects.for_org(org_b.id))
-    all_links = list(SocialLink.objects.all())
-
+    # Scope to Org A — only Org A's link should be visible.
+    set_current_org_id(org_a.id)
+    org_a_links = list(SocialLink.objects.filter(is_published=True))
     assert [link.title for link in org_a_links] == ["Org A Link"]
+
+    # Scope to Org B — only Org B's link should be visible.
+    set_current_org_id(org_b.id)
+    org_b_links = list(SocialLink.objects.filter(is_published=True))
     assert [link.title for link in org_b_links] == ["Org B Link"]
+
+    # Reset context — TenantManager returns .none() (fail-closed).
+    set_current_org_id(None)
+    no_context_links = list(SocialLink.objects.filter(is_published=True))
+    assert no_context_links == []
+
+    # all_objects escape hatch returns all rows regardless of context.
+    all_links = list(SocialLink.all_objects.filter(is_published=True))
     assert len(all_links) == 2
+
+    # Clean up context for other tests.
+    set_current_org_id(None)
 
 
 @django_db

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Generator
 import os
 from pathlib import Path
 import sys
@@ -15,6 +15,7 @@ from django.core.cache import cache
 from django.test import Client
 
 if TYPE_CHECKING:
+    from quickscale_modules_orgs.models import Organization
     from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 MODULE_ROOT = Path(__file__).resolve().parents[1]
@@ -155,3 +156,36 @@ def org_b_admin(db, org_b):
         role=OrgRole.ADMIN,
     )
     return user
+
+
+# ---------------------------------------------------------------------------
+# T1.9 — contextvar-based org scoping helpers
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def system_org(db) -> Organization:
+    """Return the singleton System organization."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.get_system_org()
+
+
+@pytest.fixture
+def org_context(request: Any, db: None) -> Generator[Organization, None, None]:
+    """Set the current org context (via ContextVar) for the test duration.
+
+    Usage::
+
+        def test_something(org_context: Organization) -> None:
+            # org_context is the org fixture (default Test Org)
+            ...
+
+    The context is reset after the test so other tests are not polluted.
+    """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    org = request.getfixturevalue("org")
+    set_current_org_id(org.id)
+    yield org
+    set_current_org_id(None)

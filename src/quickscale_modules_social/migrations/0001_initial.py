@@ -1,13 +1,36 @@
-"""Initial migration for the QuickScale social module."""
+"""Initial migration for the QuickScale social module.
+
+T1.9 squashed migration — clean NOT NULL/PROTECT contract per D5.
+
+- ``organization`` is a NOT NULL PROTECT-guarded FK to Organization
+  (``tenant_org_fk()``).
+- ``normalized_url`` has no global unique constraint (multiple orgs may
+  link to the same URL).
+- Resolution metadata fields live in the initial schema (no backfill
+  needed — no existing users per D5).
+"""
 
 import django.core.validators
+import django.db.models.deletion
 from django.db import migrations, models
+
+
+SOCIAL_EMBED_RESOLUTION_PENDING = "pending"
+SOCIAL_EMBED_RESOLUTION_RESOLVED = "resolved"
+SOCIAL_EMBED_RESOLUTION_ERROR = "error"
+SOCIAL_EMBED_RESOLUTION_CHOICES = (
+    (SOCIAL_EMBED_RESOLUTION_PENDING, "Pending"),
+    (SOCIAL_EMBED_RESOLUTION_RESOLVED, "Resolved"),
+    (SOCIAL_EMBED_RESOLUTION_ERROR, "Error"),
+)
 
 
 class Migration(migrations.Migration):
     initial = True
 
-    dependencies = []
+    dependencies = [
+        ("quickscale_modules_orgs", "0003_alter_organization_is_system"),
+    ]
 
     operations = [
         migrations.CreateModel(
@@ -37,9 +60,7 @@ class Migration(migrations.Migration):
                             ("youtube", "YouTube"),
                         ],
                         db_index=True,
-                        help_text=(
-                            "Optional canonical provider name. Leave blank to detect it from the URL."
-                        ),
+                        help_text="Optional canonical provider name. Leave blank to detect it from the URL.",
                         max_length=32,
                     ),
                 ),
@@ -50,7 +71,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         editable=False,
                         max_length=500,
-                        unique=True,
+                        # No longer globally unique — multiple orgs may link to the same URL.
                     ),
                 ),
                 (
@@ -64,6 +85,15 @@ class Migration(migrations.Migration):
                 ("is_published", models.BooleanField(default=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        db_index=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
             ],
             options={
                 "verbose_name": "Social link",
@@ -98,9 +128,7 @@ class Migration(migrations.Migration):
                             ("youtube", "YouTube"),
                         ],
                         db_index=True,
-                        help_text=(
-                            "Optional canonical provider name. Leave blank to detect it from the URL."
-                        ),
+                        help_text="Optional canonical provider name. Leave blank to detect it from the URL.",
                         max_length=32,
                     ),
                 ),
@@ -111,7 +139,6 @@ class Migration(migrations.Migration):
                         blank=True,
                         editable=False,
                         max_length=500,
-                        unique=True,
                     ),
                 ),
                 (
@@ -125,6 +152,65 @@ class Migration(migrations.Migration):
                 ("is_published", models.BooleanField(default=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        db_index=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+                (
+                    "resolution_status",
+                    models.CharField(
+                        choices=SOCIAL_EMBED_RESOLUTION_CHOICES,
+                        db_index=True,
+                        default=SOCIAL_EMBED_RESOLUTION_PENDING,
+                        editable=False,
+                        max_length=16,
+                    ),
+                ),
+                (
+                    "resolution_error",
+                    models.TextField(blank=True, default="", editable=False),
+                ),
+                (
+                    "last_resolution_attempt_at",
+                    models.DateTimeField(blank=True, null=True, editable=False),
+                ),
+                (
+                    "last_resolved_at",
+                    models.DateTimeField(blank=True, null=True, editable=False),
+                ),
+                (
+                    "resolved_embed_url",
+                    models.URLField(
+                        blank=True, default="", editable=False, max_length=500
+                    ),
+                ),
+                (
+                    "resolved_thumbnail_url",
+                    models.URLField(
+                        blank=True, default="", editable=False, max_length=500
+                    ),
+                ),
+                (
+                    "resolved_width",
+                    models.PositiveIntegerField(blank=True, null=True, editable=False),
+                ),
+                (
+                    "resolved_height",
+                    models.PositiveIntegerField(blank=True, null=True, editable=False),
+                ),
+                (
+                    "resolved_thumbnail_width",
+                    models.PositiveIntegerField(blank=True, null=True, editable=False),
+                ),
+                (
+                    "resolved_thumbnail_height",
+                    models.PositiveIntegerField(blank=True, null=True, editable=False),
+                ),
             ],
             options={
                 "verbose_name": "Social embed",
