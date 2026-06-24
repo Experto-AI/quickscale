@@ -17,7 +17,7 @@ class TestFormsSeedPresets:
     def test_seed_presets_creates_four_forms(self):
         """Command creates all four preset forms"""
         call_command("forms_seed_presets", verbosity=0)
-        slugs = list(Form.objects.values_list("slug", flat=True))
+        slugs = list(Form.all_objects.values_list("slug", flat=True))
         assert "contact" in slugs
         assert "newsletter" in slugs
         assert "feedback" in slugs
@@ -26,7 +26,7 @@ class TestFormsSeedPresets:
     def test_contact_preset_has_correct_fields(self):
         """Contact preset has the five standard fields"""
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.objects.get(slug="contact")
+        form = Form.all_objects.get(slug="contact")
         field_names = list(form.fields.values_list("name", flat=True))
         assert "full_name" in field_names
         assert "email" in field_names
@@ -37,40 +37,42 @@ class TestFormsSeedPresets:
     def test_newsletter_preset_has_two_fields(self):
         """Newsletter preset has exactly two fields"""
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.objects.get(slug="newsletter")
+        form = Form.all_objects.get(slug="newsletter")
         assert form.fields.count() == 2
 
     def test_seed_presets_is_idempotent(self):
         """Running the command twice does not create duplicate forms"""
         call_command("forms_seed_presets", verbosity=0)
         call_command("forms_seed_presets", verbosity=0)
-        assert Form.objects.filter(slug="contact").count() == 1
+        assert Form.all_objects.filter(slug="contact").count() == 1
 
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
     def test_seed_presets_use_settings_backed_data_retention_default(self):
         """Preset-created forms should inherit the configured retention default."""
-        Form.objects.all().delete()
+        Form.all_objects.all().delete()
 
         call_command("forms_seed_presets", verbosity=0)
 
-        assert set(Form.objects.values_list("data_retention_days", flat=True)) == {730}
+        assert set(Form.all_objects.values_list("data_retention_days", flat=True)) == {
+            730
+        }
 
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
     def test_seed_presets_preserve_existing_form_data_retention_days(self):
         """Existing forms should keep their stored retention days when presets rerun."""
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.objects.get(slug="contact")
+        form = Form.all_objects.get(slug="contact")
         form.data_retention_days = 14
         form.save(update_fields=["data_retention_days"])
 
         call_command("forms_seed_presets", verbosity=0)
 
-        assert Form.objects.get(slug="contact").data_retention_days == 14
+        assert Form.all_objects.get(slug="contact").data_retention_days == 14
 
     def test_feedback_preset_has_select_field(self):
         """Feedback preset includes a select (rating) field"""
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.objects.get(slug="feedback")
+        form = Form.all_objects.get(slug="feedback")
         assert form.fields.filter(field_type=FormField.FIELD_TYPE_SELECT).exists()
 
     def test_support_preset_has_priority_select(self):
@@ -79,6 +81,69 @@ class TestFormsSeedPresets:
         priority_field = FormField.objects.get(form__slug="support", name="priority")
         assert priority_field.field_type == FormField.FIELD_TYPE_SELECT
         assert len(priority_field.options) == 3
+
+    def test_seed_scoped_to_system_org_under_per_org_slug_uniqueness(self):
+        """Seed command must not reuse tenant-owned rows with the same slug.
+
+        CR-T17-002: With per-org slug uniqueness, a tenant may have a form
+        with the same slug as a preset. The seed command must scope its
+        lookup to the System org and create the preset there.
+        """
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        tenant_org = Organization.objects.create(
+            name="Tenant", slug="tenant-org", is_personal=False
+        )
+
+        # Tenant creates a form with slug="contact" (conflicts with preset).
+        tenant_form = Form.objects.create(
+            title="Tenant Contact",
+            slug="contact",
+            organization=tenant_org,
+        )
+
+        # Run seed — should NOT reuse the tenant row.
+        call_command("forms_seed_presets", verbosity=0)
+
+        # The System org should now have a "contact" preset.
+        system_contact = Form.all_objects.get(slug="contact", organization=system_org)
+        assert system_contact.title == "Contact"
+        assert system_contact.pk != tenant_form.pk
+
+        # The tenant's form must remain unchanged.
+        tenant_form.refresh_from_db()
+        assert tenant_form.title == "Tenant Contact"
+
+    def test_seed_idempotent_with_conflicting_tenant_slug(self):
+        """Seed must stay idempotent after a tenant-owned same-slug row exists."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        tenant_org = Organization.objects.create(
+            name="Tenant", slug="tenant-org-2", is_personal=False
+        )
+
+        Form.objects.create(
+            title="Tenant Contact",
+            slug="contact",
+            organization=tenant_org,
+        )
+
+        # Run seed twice.
+        call_command("forms_seed_presets", verbosity=0)
+        call_command("forms_seed_presets", verbosity=0)
+
+        # System-org presets must exist exactly once.
+        assert (
+            Form.all_objects.filter(slug="contact", organization=system_org).count()
+            == 1
+        )
+        # Tenant's form still exists independently.
+        assert (
+            Form.all_objects.filter(slug="contact", organization=tenant_org).count()
+            == 1
+        )
 
 
 @pytest.mark.django_db
@@ -115,10 +180,14 @@ class TestFormsAnonymizeSubmissions:
 
     def test_anonymize_skips_forms_with_zero_retention_days(self):
         """Forms with data_retention_days=0 (keep forever) are skipped"""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
         form = Form.objects.create(
             title="Zero Retention",
             slug="zero-retention",
             data_retention_days=0,
+            organization=system_org,
         )
         sub = FormSubmission.objects.create(
             form=form,
@@ -151,18 +220,19 @@ class TestFormsAnonymizeSubmissions:
 class TestFormsAnonymizeSubmissionsOperatorPath:
     """Phase F11.12a: verify management command uses the operator manager."""
 
-    def test_command_iterates_all_forms_including_unowned(self):
-        """Command uses all_objects so it visits forms without an organization."""
+    def test_command_iterates_all_forms_including_system_org(self):
+        """Command uses all_objects so it visits all forms including System-org."""
         from datetime import timedelta
 
-        # Create a form that has no org (None) — not visible via the default
-        # tenant-scoped manager's for_org() path, but should be processed by
-        # the operator command.
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+
         form = Form.objects.create(
-            title="No-Org Form",
-            slug="no-org-form",
+            title="System Org Form",
+            slug="system-org-form",
             data_retention_days=30,
-            organization=None,
+            organization=system_org,
         )
         sub = FormSubmission.objects.create(
             form=form,

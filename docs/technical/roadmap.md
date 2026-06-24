@@ -127,7 +127,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 **Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3 · fan out across all 3 worktrees)*
 - [ ] T1.5 — CRM adopt contract *(wt-track1)*
 - [ ] T1.6 — Blog adopt contract *(wt-track1)*
-- [ ] T1.7 — Forms adopt contract *(wt-track2)*
+- [x] T1.7 — Forms adopt contract *(wt-track2)*
 - [ ] T1.8 — Listings adopt contract *(wt-track2)*
 - [x] T1.9 — Social adopt contract *(wt-track3)*
 - [ ] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*

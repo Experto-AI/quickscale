@@ -73,7 +73,7 @@ class TestFormAdminActions:
         request.user = User.objects.create_superuser(
             "admin", "admin@example.com", "adminpass"
         )
-        queryset = Form.objects.filter(pk=form.pk)
+        queryset = Form.all_objects.filter(pk=form.pk)
         form_admin_instance.mark_inactive(request, queryset)
         form.refresh_from_db()
         assert form.is_active is False
@@ -88,7 +88,7 @@ class TestFormAdminActions:
         request.user = User.objects.create_superuser(
             "superadmin", "super@example.com", "adminpass"
         )
-        queryset = Form.objects.filter(pk=form.pk)
+        queryset = Form.all_objects.filter(pk=form.pk)
         form_admin_instance.mark_active(request, queryset)
         form.refresh_from_db()
         assert form.is_active is True
@@ -108,7 +108,10 @@ class TestFormAdminSaveModel:
         request = rf.get("/admin/")
         request.user = user
 
-        new_form = Form(title="New Form", slug="new-form-test")
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        new_form = Form(title="New Form", slug="new-form-test", organization=system_org)
         # Simulate Django admin save on a new object
         form_admin_instance.save_model(request, new_form, form=None, change=False)
         assert new_form.created_by == user

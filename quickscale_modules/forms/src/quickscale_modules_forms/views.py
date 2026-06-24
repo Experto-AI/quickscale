@@ -1,8 +1,9 @@
 """Views for QuickScale Forms module
 
-Phase F11.12a adds additive org-scoped routes (``/orgs/<slug>/forms/...``)
-alongside existing flat paths.  Views detect the route type via URL kwargs
-and scope queries accordingly.
+T1.7: single flat route tree (D1/D5).  Route-sniffing and per-org scoping
+via URL kwargs are removed.  Public schema/submit endpoints resolve the
+System org (D2) for anonymous requests; staff admin views use the operator
+path (``all_objects``) for cross-tenant visibility.
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ from django.apps import apps
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Count
-from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpResponse
 from django.views.generic import TemplateView
 from rest_framework import status
@@ -55,52 +55,20 @@ logger = logging.getLogger(__name__)
 _SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
-def _is_org_scoped_route(request: Request) -> bool:
-    """Return whether the request targets an org-scoped SaaS route."""
-    path = getattr(request, "path", "") or ""
-    return path.startswith("/orgs/")
+def _resolve_subject_org(request: Request) -> Any:
+    """Return the org to scope public form queries to.
 
-
-def _resolve_org_slug(request: Request) -> str | None:
-    """Extract org_slug from the URL path for org-scoped routes."""
-    if not _is_org_scoped_route(request):
-        return None
-    from django.urls import Resolver404, resolve
-
-    try:
-        match = resolve(request.path_info)
-    except Resolver404:
-        return None
-    return match.kwargs.get("org_slug")
-
-
-def _resolve_active_org(request: Request) -> Any:
-    """Return the active organization for org-scoped routes.
-
-    Uses ``require_current_org`` (fail-closed). Flat routes return ``None``.
+    Uses the request's active org (set by ``TenantMiddleware``).  Falls back
+    to the System org (D2) when no org context is available — anonymous
+    visitors and solo-mode authenticated users see System-org public content.
     """
-    if not _is_org_scoped_route(request):
-        return None
-
-    from quickscale_modules_orgs.current_org import (
-        CurrentOrgError,
-        require_current_org,
-    )
-
-    try:
-        return require_current_org(request)
-    except CurrentOrgError:
-        raise PermissionDenied("Organization context is required for this route.")
-
-
-def _resolve_active_org_optional(request: Request) -> Any | None:
-    """Return the active organization or ``None`` if not on an org-scoped route."""
-    if not _is_org_scoped_route(request):
-        return None
-
     from quickscale_modules_orgs.current_org import get_current_org
+    from quickscale_modules_orgs.models import Organization
 
-    return get_current_org(request)
+    org = get_current_org(request)
+    if org is not None:
+        return org
+    return Organization.objects.get_system_org()
 
 
 def _neutralize_csv_cell(value: Any) -> str:
@@ -180,11 +148,10 @@ class FormsSubmissionPagination(PageNumberPagination):
 
 
 class FormSchemaAPIView(RetrieveAPIView):
-    """Return the public schema for an active form by slug
+    """Return the public schema for an active form by slug.
 
-    On org-scoped routes (``/orgs/<slug>/forms/api/forms/<slug>/``), the form
-    is looked up within the active organization.  Flat routes (``/forms/...``)
-    look up by slug globally.
+    Anonymous requests resolve the System org (D2).  Authenticated requests
+    with an active org scope to that org.
     """
 
     authentication_classes = []
@@ -193,12 +160,10 @@ class FormSchemaAPIView(RetrieveAPIView):
 
     def get_object(self) -> Form:
         slug = self.kwargs.get("slug")
-        organization = _resolve_active_org_optional(self.request)
-        if organization is not None:
-            qs = Form.objects.for_org(organization.pk)
-        else:
-            qs = Form.objects.all()
-        form = qs.filter(slug=slug, is_active=True).first()
+        org = _resolve_subject_org(self.request)
+        form = Form.all_objects.filter(
+            organization=org, slug=slug, is_active=True
+        ).first()
         if form is None:
             raise Http404
         return form
@@ -207,7 +172,7 @@ class FormSchemaAPIView(RetrieveAPIView):
 class FormSubmitAPIView(CreateAPIView):
     """Accept and persist a form submission; honeypot spam check; send notification
 
-    On org-scoped routes, the form is looked up within the active organization.
+    Anonymous requests resolve the System org (D2).
     """
 
     authentication_classes = []
@@ -225,12 +190,10 @@ class FormSubmitAPIView(CreateAPIView):
 
     def _get_form(self) -> Form:
         slug = self.kwargs.get("slug")
-        organization = _resolve_active_org_optional(self.request)
-        if organization is not None:
-            qs = Form.objects.for_org(organization.pk)
-        else:
-            qs = Form.objects.all()
-        form = qs.filter(slug=slug, is_active=True).first()
+        org = _resolve_subject_org(self.request)
+        form = Form.all_objects.filter(
+            organization=org, slug=slug, is_active=True
+        ).first()
         if form is None:
             raise Http404
         return form
@@ -305,40 +268,26 @@ class FormSubmitAPIView(CreateAPIView):
 
 
 class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
-    """Staff-only: list all forms with submission counts
-
-    On org-scoped routes, only forms belonging to the active organization
-    are returned.  Flat routes return all forms (operator access).
-    """
+    """Staff-only: list all forms with submission counts (operator path)."""
 
     serializer_class = AdminFormListSerializer
 
     def get_queryset(self):
-        organization = _resolve_active_org_optional(self.request)
-        if organization is not None:
-            qs = Form.objects.for_org(organization.pk)
-        else:
-            qs = Form.objects.all()
-        return qs.annotate(submission_count=Count("submissions")).order_by("title")
+        return (
+            Form.all_objects.all()
+            .annotate(submission_count=Count("submissions"))
+            .order_by("title")
+        )
 
 
 class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
-    """Staff-only: paginated list of submissions for a given form
-
-    On org-scoped routes, only submissions for forms belonging to the
-    active organization are returned.
-    """
+    """Staff-only: paginated list of submissions for a given form (operator path)."""
 
     pagination_class = FormsSubmissionPagination
     serializer_class = FormSubmissionAdminSerializer
 
     def get_queryset(self):
         form_pk = self.kwargs.get("pk")
-        organization = _resolve_active_org_optional(self.request)
-        if organization is not None:
-            form = Form.objects.for_org(organization.pk).filter(pk=form_pk).first()
-            if form is None:
-                return FormSubmission.objects.none()
         qs = (
             FormSubmission.objects.filter(form_id=form_pk)
             .select_related("form")
@@ -365,22 +314,15 @@ class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
 
 
 class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
-    """Staff-only: retrieve or patch a single submission (status / is_spam only)
-
-    On org-scoped routes, the submission must belong to the active organization.
-    """
+    """Staff-only: retrieve or patch a single submission (status / is_spam only)."""
 
     serializer_class = FormSubmissionAdminSerializer
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        form_pk = self.kwargs.get("pk")
-        organization = _resolve_active_org_optional(self.request)
-        if organization is not None:
-            form = Form.objects.for_org(organization.pk).filter(pk=form_pk).first()
-            if form is None:
-                return FormSubmission.objects.none()
-        return FormSubmission.objects.filter(form_id=form_pk).prefetch_related("values")
+        return FormSubmission.objects.filter(
+            form_id=self.kwargs.get("pk")
+        ).prefetch_related("values")
 
     def get_object(self):
         qs = self.get_queryset()
@@ -401,18 +343,10 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
 
 
 class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
-    """Staff-only: stream all submissions for a form as a CSV file
-
-    On org-scoped routes, only submissions for forms belonging to the
-    active organization are exported.
-    """
+    """Staff-only: stream all submissions for a form as a CSV file (operator path)."""
 
     def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
-        organization = _resolve_active_org_optional(self.request)
-        if organization is not None:
-            form = Form.objects.for_org(organization.pk).filter(pk=pk).first()
-        else:
-            form = Form.objects.filter(pk=pk).first()
+        form = Form.all_objects.filter(pk=pk).first()
         if form is None:
             raise Http404
 

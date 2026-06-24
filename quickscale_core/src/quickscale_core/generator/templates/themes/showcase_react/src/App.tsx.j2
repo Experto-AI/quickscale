@@ -43,12 +43,6 @@ function LegacySaasRedirect({ path = '' }: { path?: string }) {
   return <Navigate to={currentOrgSlug ? buildOrgPath(currentOrgSlug, path) : '/orgs'} replace />
 }
 
-function LegacyFormsRedirect() {
-  const { slug } = useParams<{ slug: string }>()
-
-  return <LegacySaasRedirect path={slug ? `forms/${slug}` : 'forms/contact'} />
-}
-
 function App() {
   const ownerMode = useOwnerMode()
   const currentOrgSlug = useCurrentOrgSlug()
@@ -80,12 +74,6 @@ function App() {
             <Route path="crm" element={<CrmPage />} />
 {%- endraw %}
 {%- endif %}
-{%- if selected_modules is none or 'forms' in selected_modules %}
-{%- raw %}
-            <Route path="forms" element={<Navigate to="contact" replace />} />
-            <Route path="forms/:slug" element={<FormsPage />} />
-{%- endraw %}
-{%- endif %}
 {%- raw %}
             <Route path="members" element={<OrgMembersPage />} />
             <Route path="settings" element={<OrgSettingsPage />} />
@@ -109,8 +97,8 @@ function App() {
 {%- endif %}
 {%- if selected_modules is none or 'forms' in selected_modules %}
 {%- raw %}
-          <Route path="/forms" element={<LegacySaasRedirect path="forms/contact" />} />
-          <Route path="/forms/:slug" element={<LegacyFormsRedirect />} />
+          <Route path="/forms" element={<FormsPage />} />
+          <Route path="/forms/:slug" element={<FormsPage />} />
 {%- endraw %}
 {%- endif %}
 {%- raw %}
