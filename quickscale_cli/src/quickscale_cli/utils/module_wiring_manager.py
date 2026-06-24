@@ -5,10 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
+from quickscale_core.contracts.module_discovery import (
+    get_modules_base_path,
+    set_modules_base_path,
+)
 from quickscale_core.manifest.entry_point import (
     ManifestAdapterNotFound,
     build_manifest_wiring_spec,
 )
+from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_cli.schema.config_schema import validate_config
 from quickscale_cli.schema.state_schema import StateManager
@@ -118,38 +123,65 @@ def regenerate_managed_wiring(
             }
         )
 
-    selected_options = {
-        module_name: module_options.get(module_name, {})
-        for module_name in selected_modules
-    }
-
-    specs: dict[str, ModuleWiringSpec] = {}
-    for module_name, options in selected_options.items():
-        try:
-            specs[module_name] = build_manifest_wiring_spec(
-                module_name,
-                dict(options),
-                project_package=package_name,
-            )
-        except ManifestAdapterNotFound:
-            # Skip discovered/forwarded modules that have no manifest adapter
-            # registered yet.  This preserves the legacy skip-unknown behaviour
-            # for non-registered module names (e.g. a modules/ directory that
-            # contains a module without a manifest adapter).
-            continue
-        except ValueError as error:
-            return False, f"Unable to build managed wiring specs: {error}"
-
-    package_dir = project_path / package_name
-    if not package_dir.exists():
-        return (
-            False,
-            f"Python package directory not found: {package_dir}",
-        )
-
+    # Point manifest loading at the embedded modules directory when this
+    # context has a project with at least one real embedded manifest
+    # (``modules/<name>/module.yml``).  Empty ``modules/`` directories
+    # (e.g. in test fixtures) leave the default path active so that
+    # shipped-module manifests from the bundled/installed fallback remain
+    # available.
+    # Save/restore the global base path so the override does not leak
+    # across callers running in the same process.
+    _prior_base_path = get_modules_base_path()
+    modules_dir = project_path / "modules"
+    _has_real_manifests = modules_dir.is_dir() and any(
+        (modules_dir / entry.name / "module.yml").exists()
+        for entry in modules_dir.iterdir()
+    )
     try:
-        write_managed_wiring(package_dir, specs)
-    except Exception as error:
-        return False, f"Failed to write managed wiring files: {error}"
+        if _has_real_manifests:
+            set_modules_base_path(modules_dir)
 
-    return True, "Managed wiring files regenerated"
+        selected_options = {
+            module_name: module_options.get(module_name, {})
+            for module_name in selected_modules
+        }
+
+        specs: dict[str, ModuleWiringSpec] = {}
+        for module_name, options in selected_options.items():
+            try:
+                specs[module_name] = build_manifest_wiring_spec(
+                    module_name,
+                    dict(options),
+                    project_package=package_name,
+                )
+            except ManifestAdapterNotFound:
+                # Skip discovered/forwarded modules that have no manifest adapter
+                # registered yet.  This preserves the legacy skip-unknown behaviour
+                # for non-registered module names (e.g. a modules/ directory that
+                # contains a module without a manifest adapter).
+                continue
+            except ManifestError:
+                # When the embedded project's modules directory is set as the
+                # base path (via set_modules_base_path below), a module name
+                # may appear in selected_modules but not exist in the embedded
+                # directory.  Silently skip it, matching the skip-unknown
+                # contract for non-embedded modules.
+                continue
+            except ValueError as error:
+                return False, f"Unable to build managed wiring specs: {error}"
+
+        package_dir = project_path / package_name
+        if not package_dir.exists():
+            return (
+                False,
+                f"Python package directory not found: {package_dir}",
+            )
+
+        try:
+            write_managed_wiring(package_dir, specs)
+        except Exception as error:
+            return False, f"Failed to write managed wiring files: {error}"
+
+        return True, "Managed wiring files regenerated"
+    finally:
+        set_modules_base_path(_prior_base_path)

@@ -14,54 +14,47 @@ from typing import Any, cast
 import click
 import yaml
 
-from quickscale_cli.analytics_manifest import (
+from quickscale_core.contracts.module_options import (
     ANALYTICS_POSTHOG_DEFAULT_HOST,
     DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
     DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
-    resolve_analytics_module_options,
-    validate_analytics_module_options,
-)
-from quickscale_cli.billing_manifest import (
     DEFAULT_BILLING_CURRENCY,
     DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
     DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
     DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-    resolve_billing_module_options,
-    validate_billing_module_options,
-)
-from quickscale_cli.backups_manifest import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     normalize_backups_module_options,
-)
-from quickscale_cli.crm_manifest import validate_crm_module_options
-from quickscale_core.contracts.module_options import sanitize_module_options
-from quickscale_cli.notifications_manifest import (
     DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
     DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
-    notifications_live_delivery_configured,
-    notifications_production_targeted,
-    resolve_notifications_module_options,
-    validate_notifications_module_options,
-)
-from quickscale_cli.commands.implied_module_defaults import (
-    get_implied_module_default_configs,
-)
-from quickscale_cli.module_catalog import (
-    find_not_ready_modules,
-    get_module_readiness_reason,
-)
-from quickscale_cli.social_manifest import (
+    sanitize_module_options,
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINK_TREE_PATH,
+)
+from quickscale_core.contracts.resolvers import (
+    resolve_analytics_module_options,
+    validate_analytics_module_options,
+    resolve_billing_module_options,
+    validate_billing_module_options,
+    validate_crm_module_options,
+    notifications_live_delivery_configured,
+    notifications_production_targeted,
+    resolve_notifications_module_options,
+    validate_notifications_module_options,
     validate_social_module_options,
 )
+from quickscale_core.contracts.module_catalog import (
+    find_not_ready_modules,
+    get_module_readiness_reason,
+)
+from quickscale_core.manifest.implications import resolve_module_implications
+
 from quickscale_cli.commands.module_commands import embed_module, ModuleEmbedProvenance
 from quickscale_cli.commands.module_config import (
     APPLY_MODULE_EXECUTION_MODE,
@@ -832,7 +825,7 @@ def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
 
 def _materialize_implied_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     """Add explicit module config blocks required by selected modules."""
-    implied_configs = get_implied_module_default_configs(qs_config.modules.keys())
+    implied_configs = resolve_module_implications(qs_config.modules.keys())
     if not implied_configs:
         return []
 

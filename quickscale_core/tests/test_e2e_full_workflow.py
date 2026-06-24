@@ -338,7 +338,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
             _run_poetry_install,
             _run_poetry_lock,
         )
-        from quickscale_cli.module_catalog import get_module_entries
+        from quickscale_core.contracts.module_catalog import get_module_entries
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
         )

@@ -20,7 +20,7 @@ result and the final resolved options dict, and must return a
 ``ModuleWiringSpec`` instance (either the original or a new one).
 
 The precedent for this pattern is
-``quickscale_cli.analytics_manifest._apply_analytics_post_normalization``,
+the per-module post-resolution hooks in ``quickscale_core.contracts.resolvers``,
 which applies analytics-specific domain logic after the generic resolver
 pipeline.
 """

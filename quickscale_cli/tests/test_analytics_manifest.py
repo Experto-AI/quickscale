@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.analytics_manifest import (
+from quickscale_core.contracts.module_options import (
     ANALYTICS_EVENT_FORM_SUBMIT,
     ANALYTICS_EVENT_PAGEVIEW,
     ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
@@ -23,6 +23,8 @@ from quickscale_cli.analytics_manifest import (
     ANALYTICS_PROVIDERS,
     DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
     DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
+)
+from quickscale_core.contracts.resolvers import (
     analytics_production_targeted,
     default_analytics_module_options,
     normalize_analytics_module_options,

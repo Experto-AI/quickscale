@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_cli.auth_manifest import (  # type: ignore[import-untyped]
+from quickscale_core.contracts.module_options import (
     AUTH_AUTHENTICATION_METHOD_OPTION,
     AUTH_AUTHENTICATION_METHOD_VALUES,
     AUTH_EMAIL_VERIFICATION_OPTION,
@@ -33,9 +33,11 @@ from quickscale_cli.auth_manifest import (  # type: ignore[import-untyped]
     CANONICAL_AUTH_MODULE_OPTION_KEYS,
     LEGACY_AUTH_ALLOW_REGISTRATION_OPTION,
     LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION,
-    default_auth_module_options,
     format_auth_desired_config_contract,
     normalize_auth_module_options,
+)
+from quickscale_core.contracts.resolvers import (
+    default_auth_module_options,
     resolve_auth_module_options,
 )
 

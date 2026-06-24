@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 import yaml
 
-from quickscale_cli.module_catalog import (
+from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
 )
@@ -147,11 +147,6 @@ def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> Non
         "\n💡 Resolve the non-public-ready module state above before running "
         "'quickscale status' again."
     )
-    if "teams" in not_ready:
-        guidance += (
-            " Teams remains placeholder inventory and cannot participate in "
-            "public QuickScale workflows yet."
-        )
 
     click.echo(guidance, err=True)
     raise click.Abort()

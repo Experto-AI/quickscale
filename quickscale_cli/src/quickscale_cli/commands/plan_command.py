@@ -11,21 +11,19 @@ from typing import Any
 
 import click
 
-from quickscale_cli.auth_manifest import format_auth_desired_config_contract
 from quickscale_core.contracts.module_options import sanitize_module_options
-from quickscale_cli.commands.implied_module_defaults import (
-    get_implied_module_default_configs,
-)
-from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
-from quickscale_cli.module_catalog import (
-    ModuleCatalogEntry,
-    get_module_entries,
-    get_module_readiness_reason,
-)
-from quickscale_cli.notifications_manifest import (
+from quickscale_core.contracts.resolvers import (
+    format_auth_desired_config_contract,
     notifications_production_targeted,
     validate_notifications_module_options,
 )
+from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
+from quickscale_core.contracts.module_catalog import (
+    ModuleCatalogEntry,
+    get_discovered_module_entries,
+    get_module_readiness_reason,
+)
+from quickscale_core.manifest.implications import resolve_module_implications
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     DockerConfig,
@@ -48,8 +46,14 @@ AVAILABLE_THEMES = [
 def _get_module_choices(
     *, include_experimental: bool = False
 ) -> list[ModuleCatalogEntry]:
-    """Return module choices with experimental marker."""
-    return get_module_entries(include_experimental=include_experimental)
+    """Return shipped module choices discovered via manifest scanning.
+
+    The authoritative source is manifest-backed discovery
+    (:func:`get_discovered_module_entries`).  The *include_experimental*
+    parameter is accepted for backward compatibility but has no effect
+    — a discovered module is a shipped module.
+    """
+    return get_discovered_module_entries()
 
 
 def _format_module_choice(entry: ModuleCatalogEntry) -> str:
@@ -247,7 +251,7 @@ def _materialize_implied_module_configs(
     present_module_names = _merge_module_names(
         module_names, list(module_options.keys())
     )
-    implied_configs = get_implied_module_default_configs(present_module_names)
+    implied_configs = resolve_module_implications(present_module_names)
     if not implied_configs:
         return present_module_names, module_options, []
 
@@ -1124,7 +1128,7 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
 @click.option(
     "--include-experimental",
     is_flag=True,
-    help="Show non-public module inventory entries (currently teams) in the picker",
+    help="Show non-public module inventory entries in the picker",
 )
 @click.option(
     "--configure-modules",

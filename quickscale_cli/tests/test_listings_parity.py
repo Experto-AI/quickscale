@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.listings_manifest import (  # type: ignore[import-untyped]
+from quickscale_core.contracts.resolvers import (
     DEFAULT_LISTINGS_PER_PAGE,
     LISTINGS_MODULE_OPTION_KEYS,
     default_listings_module_options,

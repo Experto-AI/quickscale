@@ -10,7 +10,10 @@ from typing import Any
 
 import click
 
-from quickscale_cli.module_catalog import get_module_names, get_module_readiness_reason
+from quickscale_core.contracts.module_catalog import (
+    get_discovered_module_names,
+    get_module_readiness_reason,
+)
 from quickscale_cli.schema.config_schema import validate_config
 from quickscale_cli.schema.state_schema import StateError, StateManager
 from quickscale_cli.utils.module_dependency_sync import (
@@ -56,8 +59,10 @@ from .module_config import (
     format_auth_migration_remediation,
 )
 
-# Available modules (including experimental for explicit CLI usage).
-AVAILABLE_MODULES = get_module_names(include_experimental=True)
+# Available modules discovered via manifest scanning.
+# The authoritative source is manifest-backed discovery; all discovered
+# modules are shipped modules.
+AVAILABLE_MODULES = get_discovered_module_names()
 
 
 @dataclass(frozen=True)
@@ -506,7 +511,7 @@ def embed_module(
     It handles git subtree operations, module configuration, and dependency installation.
 
     Args:
-        module: Module name to embed (auth, billing, teams, blog, listings)
+        module: Module name to embed (auth, billing, blog, listings)
         project_path: Path to the project directory. If None, uses current directory.
         remote: Git remote URL (default: QuickScale repository)
         non_interactive: Use default configuration without prompts

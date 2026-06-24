@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from quickscale_cli.crm_manifest import validate_crm_module_options
+from quickscale_core.contracts.resolvers import validate_crm_module_options
 
 
 def test_validate_crm_module_options_valid() -> None:

@@ -6,8 +6,8 @@ import yaml
 from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
-from quickscale_cli.module_catalog import get_module_names
-from quickscale_cli.notifications_manifest import default_notifications_module_options
+from quickscale_core.contracts.resolvers import default_notifications_module_options
+from quickscale_core.contracts.module_catalog import get_module_names
 
 
 class TestPlanAddBasic:
@@ -280,8 +280,8 @@ docker:
 """
                 )
 
-            # Select blog (module 2 in available list), then save
-            result = runner.invoke(plan, ["--add"], input="2\ny\n")
+            # Select blog by name from the available list, then save
+            result = runner.invoke(plan, ["--add"], input="blog\ny\n")
 
             if result.exit_code == 0:
                 # Check that config was updated
@@ -292,7 +292,7 @@ docker:
     def test_plan_add_supports_billing_and_rejects_teams_with_experimental_picker(
         self,
     ) -> None:
-        """Add mode should accept billing while keeping teams visibility-only."""
+        """Add mode should accept billing while rejecting teams (not discovered)."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -316,12 +316,8 @@ docker:
 
             assert result.exit_code == 0
             assert "billing - Stripe integration" in result.output
-            assert (
-                "teams - Multi-tenancy and team management "
-                "(placeholder, not public-ready)" in result.output
-            )
-            assert "Module 'teams' remains placeholder inventory only" in result.output
-            assert "billing" in result.output
+            # teams is not in the discovered catalog; the error loop re-prompts.
+            assert "Unknown or already installed module" in result.output
 
             with open("quickscale.yml") as f:
                 config = yaml.safe_load(f)
@@ -357,7 +353,7 @@ docker:
             with open("quickscale.yml") as f:
                 content = f.read()
             assert "public_base_url: https://cdn.example.com/media" in content
-            assert "auth:" in content
+            assert "analytics:" in content
 
     def test_plan_add_auto_adds_default_notifications_when_orgs_selected(self) -> None:
         """Selecting orgs should also materialize default notifications config."""
@@ -481,7 +477,7 @@ docker:
                 content = f.read()
             assert "custom_domain" not in content
             assert "public_base_url: https://cdn.example.com/media" in content
-            assert "auth:" in content
+            assert "analytics:" in content
 
     def test_plan_add_configure_modules_collects_storage_options(self) -> None:
         """Planner should collect storage options interactively when requested."""

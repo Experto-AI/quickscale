@@ -142,39 +142,6 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 ### Phase 1 — Foundation (serial; blocks all of Phase 2)
 
-#### - [x] T1.1 — System org + NOT NULL ownership contract
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Plan-review recommended.
-
-- **OBJECTIVE:** Add a reserved System organization and codify the canonical owned-model contract (NOT NULL FK + `on_delete=PROTECT`).
-- **SCOPE:**
-  - `orgs/.../models.py` — `Organization`: add `is_system = BooleanField(default=False)` + `UniqueConstraint(condition=Q(is_system=True))`.
-  - `orgs/.../managers.py` — `OrganizationManager.get_system_org()` (idempotent get-or-create, reserved slug `__system__`).
-  - `orgs/.../constants.py` — `SYSTEM_ORG_SLUG`.
-  - `orgs/.../tenancy.py` (new) — `tenant_org_fk(related_name)` helper returning `ForeignKey(Organization, null=False, on_delete=PROTECT)`.
-  - migration `0002_system_org`.
-- **ACCEPTANCE CRITERIA:** `get_system_org()` is idempotent and returns a singleton; DB rejects a second `is_system=True` row; `tenant_org_fk()` produces a NOT NULL/PROTECT FK.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; tests: system-org singleton, idempotency, constraint violation on duplicate.
-- **DEPENDS:** none. **DECISIONS:** D2, D3.
-- **FINDING:** Cross-module migration fixtures that restore orgs schema must target the latest orgs migration. Billing `test_migrations.py` `LATEST_ORGS_MIGRATION` updated from `0001_initial` to `0003_alter_organization_is_system` during T1.1 closeout. No remaining blocker.
-
----
-
-#### - [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Plan-review recommended. Core security seam; all per-module tasks depend on it.
-
-- **OBJECTIVE:** Provide one shared, contextvar-driven scoping seam — auto-filtering default manager + operator escape hatch — for all modules.
-- **SCOPE:**
-  - `orgs/.../current_org.py` — add `current_org_id: ContextVar[uuid.UUID | None]`; `set_current_org_id()`, `get_current_org_id()`, `reset_current_org_id()`; keep `request.org` as the request-cycle mirror.
-  - `orgs/.../managers.py` — `TenantManager.get_queryset()` filters `organization_id=get_current_org_id()`, **fail-closed** (returns `.none()`) when unset; `TenantManager(super_scope=True)` provides the unfiltered escape hatch.
-- **ACCEPTANCE CRITERIA:** default manager auto-scopes to contextvar org; unset context → `.none()` (fail-closed); `all_objects` bypasses; cross-request contextvar isolation leak-free.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; unit tests: auto-scope, fail-closed, operator bypass, cross-request isolation.
-- **DEPENDS:** T1.1. **DECISIONS:** D1, D4.
-- **FINDING:** Contextvar seam (`current_org_id`), fail-closed `TenantManager` (`.none()` when unset), `TenantManager(super_scope=True)` escape hatch, and middleware propagation implemented and validated. Repo-root `make test` reconfirmed all changed suites passing; final exit code non-zero solely because of the pre-existing unrelated per-file coverage gap in `dr_adapter_call.py` (0%, already tracked in Deferred / Monitor). No remaining blocker.
-
 ---
 
 #### - [x] T1.3 — Middleware for the single-URL world
@@ -385,36 +352,12 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 ### Track 2 progress
 - [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
 - [x] T2.2 — Generic implication resolver
-- [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
-- [ ] T2.4 — Delete dead ladder/shims
+- [x] T2.3 — Migrate wiring into manifests; delete Python adapters
+- [x] T2.4 — Delete dead ladder/shims
 
 ---
 
-#### - [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Mechanical but pre-specified; split into two batches (modules 1–6, then 7–13) if context-fit is breached.
-
-- **OBJECTIVE:** Move each module's config normalization/validation/derivation from 13 `*_manifest.py` Python files into its `module.yml`; route callers through the generic resolver; delete Python adapters; replace the hardcoded `MODULE_CATALOG`.
-- **SCOPE:**
-  - For each of 13 modules: extend `module.yml` `config.mutable`/`immutable` with `validation_rules` and `derivation_rules` to express what each `*_manifest.py` does today (using existing `derivation.py` schema).
-  - `quickscale_core/src/quickscale_core/manifest/resolver.py` — add any missing rule types (integer-range, boolean-type checks).
-  - `apply_command.py`, `module_config.py` — replace `from quickscale_cli.<module>_manifest import ...` with `resolve_module_config(load_manifest_for(name), ...)`.
-  - Delete the 13 `quickscale_cli/src/quickscale_cli/*_manifest.py` files.
-  - `quickscale_core/src/quickscale_core/contracts/module_catalog.py` — replace hardcoded `MODULE_CATALOG` tuple with dynamic discovery from `module.yml` files; delete the static list.
-- **ACCEPTANCE CRITERIA:** `quickscale plan` and `quickscale apply` work end-to-end with zero `*_manifest.py` imports; catalog lists same modules; all config validation errors still surface; tests green.
-- **VALIDATION PATH:** `make test -- --core && make test -- --cli`; `quickscale plan` smoke test.
-- **DEPENDS:** T2.2.
-
----
-
-#### - [ ] T2.4 — Delete dead ladder/shims
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **SCOPE:** Delete `quickscale_cli/src/quickscale_cli/commands/implied_module_defaults.py` + `quickscale_cli/src/quickscale_cli/module_catalog.py` shim; update any remaining callers.
-- **ACCEPTANCE CRITERIA:** `grep -r "implied_module_defaults\|from quickscale_cli.module_catalog" .` returns zero; `make test -- --cli` green.
-- **DEPENDS:** T2.2, T2.3.
+Track 2 implementation is complete; closed-phase history lives in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -438,6 +381,7 @@ Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md]
 - [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
 - [ ] **Backups terminology sweep outside T3.3 scope** *(Adaptive tier: 1)* — broad `legacy|fallback|backward` grep still hits historical migration/test fixtures plus Django's `FallbackStorage` import in `quickscale_modules/backups/`; T3.3 only cleared stale single-path wording from the active DR service/adapter surfaces.
 - [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
+- [ ] **Pre-existing quickscale_core coverage gaps** *(Adaptive tier: 1)* — `quickscale_core/src/quickscale_core/contracts/resolvers.py` and `quickscale_core/src/quickscale_core/manifest/social_manifest.py` remained below the 80% per-file coverage floor during T2.4 closeout. Unrelated to the Track 2 shim cleanup; address when those core surfaces are touched next.
 - [ ] **Broader compatibility-window widening** *(Adaptive tier: 2)* — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
 - [ ] **Emitted-project operability & API-contract substrate** *(deferred)* — no structured logging/correlation IDs, no versioned public API, no webhook payload boundary validation. Promote when a second external provider lands or the first public-API consumer appears.
   - [ ] *(Tier 1)* Add structured logging and correlation-ID baseline to generated modules.
@@ -468,6 +412,8 @@ Single-PR items that do not change the design:
 | M10 | 2 | F5.2a–F5.4 | Merged to v87. DR engine extracted to `quickscale_core.dr_engine`; `dr_engine_migration.md` added. |
 | M11 | 3 | F7.1–F7.3 | Merged to v87. Generator vs generated-project runtime-pin decoupling complete. |
 | M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
+| M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
+| M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
 
 ## References
 

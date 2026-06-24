@@ -3,10 +3,18 @@
 from quickscale_core.contracts.module_catalog import (
     MODULE_CATALOG,
     find_not_ready_modules,
+    get_discovered_module_entries,
+    get_discovered_module_names,
     get_module_entries,
     get_module_entry,
     get_module_names,
     get_module_readiness_reason,
+)
+from quickscale_core.contracts.module_discovery import (
+    PLACEHOLDER_MODULE_NAMES,
+    discover_shipped_module_names,
+    get_placeholder_rejection_reason,
+    is_placeholder_module,
 )
 
 
@@ -96,4 +104,100 @@ class TestGetModuleReadinessReason:
         reason = get_module_readiness_reason("teams")
         assert reason is not None
         assert "teams" in reason
+        assert "placeholder inventory only" in reason
+
+
+# ---------------------------------------------------------------------------
+# Manifest-backed discovery
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoverShippedModuleNames:
+    """Tests for manifest-backed module name discovery."""
+
+    def test_discovery_returns_expected_modules(self) -> None:
+        """Discovery should return all shipped module names."""
+        names = discover_shipped_module_names()
+        assert "auth" in names
+        assert "analytics" in names
+        assert "billing" in names
+        assert "crm" in names
+        assert "teams" not in names
+
+    def test_discovery_returns_sorted(self) -> None:
+        """Discovery should return names in alphabetical order."""
+        names = discover_shipped_module_names()
+        assert names == sorted(names)
+
+    def test_discovery_via_module_catalog(self) -> None:
+        """get_discovered_module_names delegates to discovery."""
+        names = get_discovered_module_names()
+        assert "auth" in names
+        assert "teams" not in names
+
+    def test_discovery_entries_are_all_ready(self) -> None:
+        """Discovered module entries should all be marked ready=True."""
+        entries = get_discovered_module_entries()
+        for entry in entries:
+            assert entry.ready, f"Discovered module {entry.name} is not ready"
+        assert "teams" not in [e.name for e in entries]
+
+    def test_discovery_entries_are_sorted(self) -> None:
+        """Discovered entries should be in alphabetical order."""
+        entries = get_discovered_module_entries()
+        names = [e.name for e in entries]
+        assert names == sorted(names)
+
+    def test_discovery_entries_have_descriptions(self) -> None:
+        """Discovered entries should carry descriptions from the static catalog."""
+        entries = get_discovered_module_entries()
+        entry_map = {e.name: e for e in entries}
+        auth_entry = entry_map.get("auth")
+        assert auth_entry is not None
+        assert auth_entry.description  # non-empty
+
+
+# ---------------------------------------------------------------------------
+# Placeholder module rejection
+# ---------------------------------------------------------------------------
+
+
+class TestPlaceholderModuleRejection:
+    """Tests for the fail-closed placeholder module rejection path."""
+
+    def test_teams_is_placeholder(self) -> None:
+        """Teams should be a known placeholder."""
+        assert is_placeholder_module("teams")
+
+    def test_shipped_module_not_placeholder(self) -> None:
+        """Shipped modules should not be placeholders."""
+        assert not is_placeholder_module("auth")
+
+    def test_unknown_not_placeholder(self) -> None:
+        """Unknown modules should not be placeholders."""
+        assert not is_placeholder_module("nonexistent")
+
+    def test_placeholder_in_set(self) -> None:
+        """PLACEHOLDER_MODULE_NAMES should contain teams."""
+        assert "teams" in PLACEHOLDER_MODULE_NAMES
+
+    def test_placeholder_rejection_reason(self) -> None:
+        """get_placeholder_rejection_reason should return a reason for teams."""
+        reason = get_placeholder_rejection_reason("teams")
+        assert reason is not None
+        assert "placeholder inventory only" in reason
+
+    def test_placeholder_rejection_none_for_shipped(self) -> None:
+        """get_placeholder_rejection_reason should return None for shipped modules."""
+        assert get_placeholder_rejection_reason("auth") is None
+
+    def test_find_not_ready_includes_placeholder(self) -> None:
+        """find_not_ready_modules should include placeholder module names."""
+        result = find_not_ready_modules(["teams", "auth"])
+        assert "teams" in result
+
+    def test_readiness_reason_via_placeholder(self) -> None:
+        """get_module_readiness_reason should route to placeholder check."""
+        reason = get_module_readiness_reason("teams")
+        assert reason is not None
         assert "placeholder inventory only" in reason
