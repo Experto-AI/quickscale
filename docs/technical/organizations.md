@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, and the current org-billing bridge (authoritative org billing ownership fields, canonical org-scoped billing pages/APIs with flat compatibility shims, migration/promote commands, and ORM-backed plan feature gating). Ordinary requests are still isolated in the application layer. PostgreSQL RLS activation, downstream tenant-table adoption, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, and the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes after T1.10, migration/promote commands, and ORM-backed plan feature gating). Ordinary requests are still isolated in the application layer. PostgreSQL RLS activation, downstream tenant-table adoption, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
 
 ---
 
@@ -460,18 +460,12 @@ Path routing (not subdomain). The org slug appears in every URL so the active or
 /orgs/<slug>/members/                      # Member list, role management, invite send/revoke
 /orgs/invitations/<token>/accept/          # Public invitation accept / continuation
 /orgs/<slug>/settings/                     # Org settings (name, slug)
-/orgs/<slug>/billing/dashboard/            # Canonical authenticated billing dashboard
-/orgs/<slug>/billing/pricing/              # Canonical org-scoped pricing page
-
 # All module routes are nested under the org slug:
 /orgs/<slug>/blog/                         # Blog for this org
 /orgs/<slug>/forms/                        # Forms for this org
 /orgs/<slug>/listings/                     # Listings for this org
 
-# API equivalents:
-/orgs/<slug>/api/billing/...               # Canonical org-scoped billing API surface
-
-Flat authenticated billing routes (`/billing/dashboard/`, `/api/billing/...`) remain compatibility shims for Solo mode and for older non-org callers while SaaS callers move to the canonical org-scoped paths above.
+**Note (T1.10)**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/api/billing/...`). No org-scoped billing URL tree exists after T1.10 — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
 
 **Note (T1.5)**: The CRM module no longer uses org-scoped URLs. After T1.5, all CRM routes are flat (``/crm/``, ``/crm/api/...``) regardless of deployment mode. The active organization is resolved from ``request.org`` (set by ``TenantMiddleware`` from the session or the personal-org fallback), not from a URL slug. Other modules (blog, forms, listings) may still use org-scoped routes until their own T1.6–T1.8 contract-adoption tasks land.
 ```
@@ -501,7 +495,8 @@ No org management pages are exposed in solo mode.
 /orgs/:slug             → OrgDashboardPage  (rendered inside OrgLayout)
 /orgs/:slug/members     → OrgMembersPage (member list, role changes, invite send/revoke)
 /orgs/:slug/settings    → OrgSettingsPage
-/orgs/:slug/billing/dashboard → BillingPage (reuses existing billing components)
+/billing/dashboard                → BillingPage (flat route in both modes after T1.10)
+/billing/pricing                  → PricingPage (flat route in both modes after T1.10)
 /orgs/:slug/blog        → BlogPage
 /orgs/:slug/forms       → FormsPage
 /orgs/:slug/listings    → ListingsPage
