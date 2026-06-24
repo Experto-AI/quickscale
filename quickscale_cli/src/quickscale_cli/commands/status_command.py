@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 import yaml
 
-from quickscale_cli.module_catalog import (
+from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
 )

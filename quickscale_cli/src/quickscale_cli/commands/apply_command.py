@@ -49,13 +49,11 @@ from quickscale_core.contracts.resolvers import (
     validate_notifications_module_options,
     validate_social_module_options,
 )
-from quickscale_cli.commands.implied_module_defaults import (
-    get_implied_module_default_configs,
-)
-from quickscale_cli.module_catalog import (
+from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
 )
+from quickscale_core.manifest.implications import resolve_module_implications
 
 from quickscale_cli.commands.module_commands import embed_module, ModuleEmbedProvenance
 from quickscale_cli.commands.module_config import (
@@ -827,7 +825,7 @@ def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
 
 def _materialize_implied_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     """Add explicit module config blocks required by selected modules."""
-    implied_configs = get_implied_module_default_configs(qs_config.modules.keys())
+    implied_configs = resolve_module_implications(qs_config.modules.keys())
     if not implied_configs:
         return []
 

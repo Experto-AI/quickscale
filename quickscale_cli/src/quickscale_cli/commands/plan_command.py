@@ -17,15 +17,13 @@ from quickscale_core.contracts.resolvers import (
     notifications_production_targeted,
     validate_notifications_module_options,
 )
-from quickscale_cli.commands.implied_module_defaults import (
-    get_implied_module_default_configs,
-)
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
-from quickscale_cli.module_catalog import (
+from quickscale_core.contracts.module_catalog import (
     ModuleCatalogEntry,
     get_discovered_module_entries,
     get_module_readiness_reason,
 )
+from quickscale_core.manifest.implications import resolve_module_implications
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     DockerConfig,
@@ -253,7 +251,7 @@ def _materialize_implied_module_configs(
     present_module_names = _merge_module_names(
         module_names, list(module_options.keys())
     )
-    implied_configs = get_implied_module_default_configs(present_module_names)
+    implied_configs = resolve_module_implications(present_module_names)
     if not implied_configs:
         return present_module_names, module_options, []
 
