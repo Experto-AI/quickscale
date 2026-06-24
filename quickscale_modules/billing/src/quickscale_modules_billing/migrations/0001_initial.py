@@ -1,5 +1,3 @@
-"""Initial migration for the QuickScale billing module."""
-
 import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
@@ -9,6 +7,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
+        ("quickscale_modules_orgs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -43,6 +42,7 @@ class Migration(migrations.Migration):
                         max_length=20,
                     ),
                 ),
+                ("features", models.JSONField(blank=True, default=list)),
                 ("is_active", models.BooleanField(default=True)),
             ],
             options={
@@ -64,9 +64,19 @@ class Migration(migrations.Migration):
                 ("balance", models.IntegerField(default=0)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
-                    "user",
+                    "organization",
                     models.OneToOneField(
-                        on_delete=django.db.models.deletion.CASCADE,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="credit_balance",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
                         related_name="credit_balance",
                         to=settings.AUTH_USER_MODEL,
                     ),
@@ -114,9 +124,20 @@ class Migration(migrations.Migration):
                 (
                     "user",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
                         related_name="credit_transactions",
                         to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        db_index=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="credit_transactions",
+                        to="quickscale_modules_orgs.organization",
                     ),
                 ),
             ],
@@ -138,39 +159,63 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "stripe_subscription_id",
-                    models.CharField(max_length=255, unique=True),
+                    models.CharField(blank=True, max_length=255, null=True),
                 ),
-                ("stripe_customer_id", models.CharField(db_index=True, max_length=255)),
+                (
+                    "stripe_customer_id",
+                    models.CharField(
+                        blank=True, db_index=True, max_length=255, null=True
+                    ),
+                ),
+                (
+                    "stripe_checkout_session_id",
+                    models.CharField(blank=True, max_length=255, null=True),
+                ),
                 (
                     "status",
                     models.CharField(
                         choices=[
                             ("incomplete", "Incomplete"),
+                            ("incomplete_expired", "Incomplete expired"),
+                            ("trialing", "Trialing"),
                             ("active", "Active"),
                             ("past_due", "Past due"),
                             ("canceled", "Canceled"),
                             ("unpaid", "Unpaid"),
+                            ("paused", "Paused"),
                         ],
                         default="incomplete",
                         max_length=32,
                     ),
                 ),
+                ("checkout_expires_at", models.DateTimeField(blank=True, null=True)),
                 ("current_period_start", models.DateTimeField(blank=True, null=True)),
                 ("current_period_end", models.DateTimeField(blank=True, null=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        db_index=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="subscriptions",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="billing_subscriptions",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
                 (
                     "plan",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="subscriptions",
                         to="quickscale_modules_billing.plan",
-                    ),
-                ),
-                (
-                    "user",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="billing_subscriptions",
-                        to=settings.AUTH_USER_MODEL,
                     ),
                 ),
             ],
@@ -200,6 +245,50 @@ class Migration(migrations.Migration):
             options={
                 "ordering": ["-created_at"],
             },
+        ),
+        migrations.AddConstraint(
+            model_name="subscription",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(
+                    ("stripe_subscription_id__isnull", False),
+                    models.Q(("stripe_subscription_id", ""), _negated=True),
+                ),
+                fields=("stripe_subscription_id",),
+                name="quickscale_billing_unique_stripe_subscription_id_when_populated",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="subscription",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(
+                    ("stripe_checkout_session_id__isnull", False),
+                    models.Q(("stripe_checkout_session_id", ""), _negated=True),
+                ),
+                fields=("stripe_checkout_session_id",),
+                name="quickscale_billing_unique_stripe_checkout_session_id_present",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="subscription",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(
+                    models.Q(
+                        (
+                            "status__in",
+                            [
+                                "incomplete",
+                                "trialing",
+                                "active",
+                                "past_due",
+                                "unpaid",
+                                "paused",
+                            ],
+                        )
+                    ),
+                ),
+                fields=("organization",),
+                name="quickscale_billing_unique_current_subscription_per_organization",
+            ),
         ),
         migrations.AddConstraint(
             model_name="webhookevent",

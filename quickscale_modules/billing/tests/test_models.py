@@ -22,39 +22,43 @@ def test_package_version_is_exposed() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_credit_balance_get_or_create_for_user_is_transaction_ready(user) -> None:
+def test_credit_balance_get_or_create_for_org_is_transaction_ready(
+    user, organization, org_context
+) -> None:
     with transaction.atomic():
-        balance, created = CreditBalance.get_or_create_for_user(user)
+        balance, created = CreditBalance.get_or_create_for_org(organization)
 
     assert created is True
-    assert balance.user == user
+    assert balance.organization == organization
     assert balance.balance == 0
 
     with transaction.atomic():
-        same_balance, created = CreditBalance.get_or_create_for_user(user)
+        same_balance, created = CreditBalance.get_or_create_for_org(organization)
 
     assert created is False
     assert same_balance.pk == balance.pk
 
 
 @pytest.mark.django_db(transaction=True)
-def test_credit_balance_get_or_create_for_user_without_atomic_transaction(user) -> None:
+def test_credit_balance_get_or_create_for_org_without_atomic_transaction(
+    user, organization, org_context
+) -> None:
     assert transaction.get_connection().in_atomic_block is False
 
-    balance, created = CreditBalance.get_or_create_for_user(user)
+    balance, created = CreditBalance.get_or_create_for_org(organization)
 
     assert created is True
-    assert balance.user == user
+    assert balance.organization == organization
     assert balance.balance == 0
 
-    same_balance, created = CreditBalance.get_or_create_for_user(user)
+    same_balance, created = CreditBalance.get_or_create_for_org(organization)
 
     assert created is False
     assert same_balance.pk == balance.pk
 
 
 @pytest.mark.django_db
-def test_model_string_representations(user) -> None:
+def test_model_string_representations(user, organization) -> None:
     plan = Plan.objects.create(
         name="Starter",
         slug="starter",
@@ -64,9 +68,12 @@ def test_model_string_representations(user) -> None:
         currency="usd",
         billing_interval=Plan.BillingInterval.MONTHLY,
     )
-    balance = CreditBalance.objects.create(user=user, balance=100)
-    credit_transaction = CreditTransaction.objects.create(
+    balance = CreditBalance.all_objects.create(
+        organization=organization, user=user, balance=100
+    )
+    credit_transaction = CreditTransaction.all_objects.create(
         user=user,
+        organization=organization,
         amount=100,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         stripe_event_id="evt_123",
@@ -75,8 +82,9 @@ def test_model_string_representations(user) -> None:
         description="Monthly credits",
         balance_after=100,
     )
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_123",
         stripe_customer_id="cus_123",
@@ -89,9 +97,9 @@ def test_model_string_representations(user) -> None:
     )
 
     assert str(plan) == "Starter"
-    assert str(balance) == f"{user} (100 credits)"
+    assert str(balance) == f"{organization} (100 credits)"
     assert str(credit_transaction) == f"{user} plan 100"
-    assert str(subscription) == f"{user} / starter (active)"
+    assert str(subscription) == f"{organization} / starter (active)"
     assert str(webhook_event) == "invoice.paid (evt_123)"
 
 
@@ -100,7 +108,7 @@ def test_credit_transaction_preserves_org_ledger_history_when_actor_is_deleted(
     user,
 ) -> None:
     organization = Organization.objects.create(name="Atlas", slug="atlas")
-    transaction_row = CreditTransaction.objects.create(
+    transaction_row = CreditTransaction.all_objects.create(
         user=user,
         organization=organization,
         amount=25,
@@ -112,7 +120,7 @@ def test_credit_transaction_preserves_org_ledger_history_when_actor_is_deleted(
     transaction_pk = transaction_row.pk
     user.delete()
 
-    preserved_row = CreditTransaction.objects.get(pk=transaction_pk)
+    preserved_row = CreditTransaction.all_objects.get(pk=transaction_pk)
 
     assert preserved_row.user is None
     assert preserved_row.organization == organization
@@ -152,13 +160,14 @@ def test_plan_features_default_to_empty_list() -> None:
 
 
 @pytest.mark.django_db
-def test_subscription_current_status_helpers_and_queryset(user) -> None:
+def test_subscription_current_status_helpers_and_queryset(user, organization) -> None:
     user_model = get_user_model()
     other_user = user_model.objects.create_user(
         username="billing-current-other",
         email="billing-current-other@example.com",
         password="billingpass123",
     )
+    other_org = Organization.objects.create(name="OtherOrg", slug="other-org")
     plan = Plan.objects.create(
         name="Growth",
         slug="growth",
@@ -168,29 +177,33 @@ def test_subscription_current_status_helpers_and_queryset(user) -> None:
         currency="usd",
         billing_interval=Plan.BillingInterval.MONTHLY,
     )
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_old_canceled",
         stripe_customer_id="cus_old_canceled",
         status=Subscription.Status.CANCELED,
     )
-    current_subscription = Subscription.objects.create(
+    current_subscription = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_current_active",
         stripe_customer_id="cus_current_active",
         status=Subscription.Status.ACTIVE,
     )
-    current_trial = Subscription.objects.create(
+    current_trial = Subscription.all_objects.create(
         user=other_user,
+        organization=other_org,
         plan=plan,
         stripe_subscription_id="sub_current_trial",
         stripe_customer_id="cus_current_trial",
         status=Subscription.Status.TRIALING,
     )
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=other_user,
+        organization=other_org,
         plan=plan,
         stripe_subscription_id="sub_expired",
         stripe_customer_id="cus_expired",
@@ -209,8 +222,11 @@ def test_subscription_current_status_helpers_and_queryset(user) -> None:
     assert Subscription.is_current_status(Subscription.Status.PAUSED) is True
     assert Subscription.is_current_status(Subscription.Status.CANCELED) is False
     assert Subscription.is_current_status(None) is False
-    assert list(Subscription.objects.current()) == [current_trial, current_subscription]
-    assert Subscription.objects.filter(Subscription.current_status_q()).count() == 2
+    assert list(Subscription.all_objects.filter(Subscription.current_status_q())) == [
+        current_trial,
+        current_subscription,
+    ]
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 2
 
 
 @pytest.mark.django_db(transaction=True)
@@ -233,6 +249,11 @@ def test_subscription_partial_unique_constraints_ignore_unset_external_ids(
         email="billing-constraint-session-duplicate@example.com",
         password="billingpass123",
     )
+    org_a = Organization.objects.create(name="OrgA", slug="org-a")
+    org_b = Organization.objects.create(name="OrgB", slug="org-b")
+    org_c = Organization.objects.create(name="OrgC", slug="org-c")
+    org_d = Organization.objects.create(name="OrgD", slug="org-d")
+    org_e = Organization.objects.create(name="OrgE", slug="org-e")
     plan = Plan.objects.create(
         name="Scale",
         slug="scale",
@@ -243,24 +264,27 @@ def test_subscription_partial_unique_constraints_ignore_unset_external_ids(
         billing_interval=Plan.BillingInterval.MONTHLY,
     )
 
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=org_a,
         plan=plan,
         stripe_subscription_id=None,
         stripe_customer_id=None,
         stripe_checkout_session_id=None,
         status=Subscription.Status.CANCELED,
     )
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=other_user,
+        organization=org_b,
         plan=plan,
         stripe_subscription_id=None,
         stripe_customer_id=None,
         stripe_checkout_session_id=None,
         status=Subscription.Status.INCOMPLETE_EXPIRED,
     )
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=other_user,
+        organization=org_c,
         plan=plan,
         stripe_subscription_id="sub_populated_unique",
         stripe_customer_id="cus_populated_unique",
@@ -269,8 +293,9 @@ def test_subscription_partial_unique_constraints_ignore_unset_external_ids(
     )
 
     with pytest.raises(IntegrityError), transaction.atomic():
-        Subscription.objects.create(
+        Subscription.all_objects.create(
             user=duplicate_subscription_user,
+            organization=org_d,
             plan=plan,
             stripe_subscription_id="sub_populated_unique",
             stripe_customer_id="cus_duplicate_subscription",
@@ -278,8 +303,9 @@ def test_subscription_partial_unique_constraints_ignore_unset_external_ids(
         )
 
     with pytest.raises(IntegrityError), transaction.atomic():
-        Subscription.objects.create(
+        Subscription.all_objects.create(
             user=duplicate_session_user,
+            organization=org_e,
             plan=plan,
             stripe_subscription_id="sub_session_unique",
             stripe_customer_id="cus_duplicate_session",
@@ -299,14 +325,14 @@ def test_credit_balance_enforces_single_authoritative_row_per_organization(
         password="billingpass123",
     )
 
-    CreditBalance.objects.create(
+    CreditBalance.all_objects.create(
         organization=organization,
         user=user,
         balance=100,
     )
 
     with pytest.raises(IntegrityError), transaction.atomic():
-        CreditBalance.objects.create(
+        CreditBalance.all_objects.create(
             organization=organization,
             user=other_user,
             balance=50,
@@ -317,7 +343,7 @@ def test_credit_balance_enforces_single_authoritative_row_per_organization(
 def test_credit_balance_supports_org_authority_with_nullable_user_provenance() -> None:
     organization = Organization.objects.create(name="Beacon", slug="beacon")
 
-    balance = CreditBalance.objects.create(
+    balance = CreditBalance.all_objects.create(
         organization=organization,
         user=None,
         balance=25,
@@ -346,7 +372,7 @@ def test_subscription_enforces_single_current_row_per_organization(user) -> None
         password="billingpass123",
     )
 
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
         organization=organization,
         plan=plan,
@@ -356,7 +382,7 @@ def test_subscription_enforces_single_current_row_per_organization(user) -> None
         status=Subscription.Status.INCOMPLETE,
     )
 
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
         organization=other_organization,
         plan=plan,
@@ -366,7 +392,7 @@ def test_subscription_enforces_single_current_row_per_organization(user) -> None
     )
 
     with pytest.raises(IntegrityError), transaction.atomic():
-        Subscription.objects.create(
+        Subscription.all_objects.create(
             user=other_user,
             organization=organization,
             plan=plan,
@@ -375,7 +401,7 @@ def test_subscription_enforces_single_current_row_per_organization(user) -> None
             status=Subscription.Status.ACTIVE,
         )
 
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
         organization=organization,
         plan=plan,
