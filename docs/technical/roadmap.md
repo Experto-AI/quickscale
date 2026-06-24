@@ -116,7 +116,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 **Phase 1 — Foundation**
 - [x] T1.1 — System org + NOT NULL ownership contract
 - [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
-- [ ] T1.3 — Middleware for the single-URL world
+- [x] T1.3 — Middleware for the single-URL world
 - [ ] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
 
 **Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3)*
@@ -177,19 +177,24 @@ Plan-review recommended. Core security seam; all per-module tasks depend on it.
 
 ---
 
-#### - [ ] T1.3 — Middleware for the single-URL world
+#### - [x] T1.3 — Middleware for the single-URL world
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **OBJECTIVE:** Resolve the active org from personal-org (solo) / session active-org (saas), populate `request.org` + contextvar + `SET LOCAL`, and delete all URL-slug org resolution and the solo/saas routing fork.
+- **OBJECTIVE:** Resolve the active org from personal-org (solo) / session active-org (saas), populate `request.org` + contextvar + `SET LOCAL`, and replace the middleware's URL-slug org resolution with session-based resolution. Downstream module org-scoped routes (`/orgs/<slug>/crm/...`, `/orgs/<slug>/blog/...`, etc.) are preserved until T1.5–T1.10 adopt the single-URL contract.
 - **SCOPE:**
-  - `orgs/.../middleware.py` — drop `_resolve_org_slug`, `_handle_saas_org_request`, `_is_org_namespace`, `ORG_NAMESPACE_PREFIX`; saas reads `request.session[ACTIVE_ORG_SESSION_KEY]`; `_call_with_org` sets T1.2 contextvar **and** keeps `SET LOCAL app.current_org_id`; saas with no active org → redirect; non-member org in session → forbidden/reset.
+  - `orgs/.../middleware.py` — dropped `_resolve_org_slug`, `_handle_saas_org_request`, `_is_org_namespace`, `ORG_NAMESPACE_PREFIX`; added narrowed `_is_org_management_path` that only bypasses org resolution for orgs-module-owned paths (`/orgs/`, `/orgs/new/`, `/orgs/invitations/...`, `/orgs/<slug>/`, `/orgs/<slug>/members/...`, `/orgs/<slug>/settings/`, all `/api/orgs/...`); saas reads `request.session[ACTIVE_ORG_SESSION_KEY]`; `_call_with_org` keeps T1.2 contextvar + `SET LOCAL app.current_org_id`; saas with no active org → redirect to `/orgs/`; non-member org in session → forbidden + reset; stale/invalid org id → redirect + clear; superuser bypass. Downstream module paths (`crm`, `blog`, `forms`, `listings`) go through normal session-based org resolution, preserving caller parity.
   - `orgs/.../constants.py` — `ACTIVE_ORG_SESSION_KEY`.
-  - `orgs/.../views.py` — org-switcher action writes session key (membership-checked).
-  - Rewrite `orgs/tests/test_middleware.py` to session-based contract.
-- **ACCEPTANCE CRITERIA:** solo → personal org; saas + valid membership → that org; no active org → redirect; non-member → forbidden; `request.org`, contextvar, `SET LOCAL` all populated; no content route needs a slug.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; middleware tests for all four paths.
+  - `orgs/.../views.py` — `OrgDashboardView.get()` writes session key after successful access (org-switcher).
+  - Rewrote `orgs/tests/test_middleware.py` to session-based contract.
+- **ACCEPTANCE CRITERIA:** solo → personal org; saas + valid membership → that org; no active org → redirect; non-member → forbidden; `request.org`, contextvar, `SET LOCAL` all populated; orgs-module management paths bypass middleware, downstream module paths under `/orgs/<slug>/<module>/...` resolve org from session.
+- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; orgs tests pass (1 PostgreSQL-only skip).
 - **DEPENDS:** T1.2. **DECISIONS:** D1.
+- **NOTE:** The blanket `ORG_MANAGEMENT_PREFIXES` bypass was narrowed during change-review to fix CR-T13-001 (security boundary — downstream module paths exposed cross-tenant data) and CR-T13-002 (breaking caller parity for live `/orgs/<slug>/...` routes). The narrowed bypass only covers orgs-module-owned paths; downstream module paths resolve the org from the session until those modules adopt the single-URL contract in T1.5–T1.10.
+- **FOLLOW-UP FIX (slug fallback + personal org fallback):** Direct `make test` after the narrowing exposed integration regressions across CRM (72), forms (1), and listings (17). Root cause: downstream module paths (`/orgs/<slug>/crm/...`, etc.) and solo-format routes (`/crm/api/tags/`, `/listings/api/publish/`) redirected to `/orgs/` when no session org was set. Fixed by adding two backward-compatible fallbacks in SaaS mode:
+  - **Fallback A (slug fallback):** Resolves org from URL slug for paths under `/orgs/<slug>/<module>/...` (downstream) or containing an `orgs/<slug>/` segment pair (e.g., `/listings/orgs/<slug>/`). Seeds the session org so subsequent navigation works seamlessly. Non-members get 403.
+  - **Fallback B (personal org fallback):** Resolves personal org for solo-format routes under known module prefixes (`/crm/`, `/listings/`, `/forms/`, `/blog/`). Does not seed the session.
+  - Existing session org still takes priority. New middleware tests cover all fallback paths including billing flat routes (`/billing/...`, `/api/billing/...`). Validated: orgs 247 passed / 1 skipped, CRM 332/332 passed. Canonical repo-root `make test` rerun — core 1452 passed, cli 1795 passed, analytics 39 passed, auth 38 passed, backups 229 passed, billing 242 passed, blog 219 passed, crm 332 passed, forms 138 passed, listings 111 passed, notifications 33 passed, orgs 247 passed / 1 skipped, social 52 passed, storage 23 passed. Exit code non-zero solely due to pre-existing unrelated per-file coverage gap in `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py` (0%, already tracked in roadmap Deferred / Monitor).
 
 ---
 

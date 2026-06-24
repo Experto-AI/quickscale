@@ -3772,20 +3772,16 @@ class TestF1110Phase1SoloRoutePersonalOrgTerminalStageResolution:
             Stage,
         )
         from quickscale_modules_orgs.models import (
-            OrgRole,
             Organization,
-            OrganizationMembership,
         )
 
         # Clear any terminal_semantic stages.
         Stage.objects.filter(terminal_semantic__isnull=False).delete()
 
-        # Create a personal org for the staff user.
-        personal_org = Organization.objects.create(
-            name="Personal Org", slug="personal-org", is_personal=True
-        )
-        OrganizationMembership.objects.create(
-            user=staff_user, organization=personal_org, role=OrgRole.OWNER
+        # Use the personal org that the staff_user fixture already created
+        # (the fixture calls create_personal_for, so there is exactly one).
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
         )
 
         # Create a personal-org terminal won stage.
