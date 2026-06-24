@@ -348,17 +348,11 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 - [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
 - [x] T2.2 — Generic implication resolver
 - [x] T2.3 — Migrate wiring into manifests; delete Python adapters
-- [ ] T2.4 — Delete dead ladder/shims
+- [x] T2.4 — Delete dead ladder/shims
 
 ---
 
-#### - [ ] T2.4 — Delete dead ladder/shims
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **SCOPE:** Delete `quickscale_cli/src/quickscale_cli/commands/implied_module_defaults.py` + `quickscale_cli/src/quickscale_cli/module_catalog.py` shim; update any remaining callers.
-- **ACCEPTANCE CRITERIA:** `grep -r "implied_module_defaults\|from quickscale_cli.module_catalog" .` returns zero; `make test -- --cli` green.
-- **DEPENDS:** T2.2, T2.3.
+Track 2 implementation is complete; closed-phase history lives in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -382,6 +376,7 @@ Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md]
 - [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
 - [ ] **Backups terminology sweep outside T3.3 scope** *(Adaptive tier: 1)* — broad `legacy|fallback|backward` grep still hits historical migration/test fixtures plus Django's `FallbackStorage` import in `quickscale_modules/backups/`; T3.3 only cleared stale single-path wording from the active DR service/adapter surfaces.
 - [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
+- [ ] **Pre-existing quickscale_core coverage gaps** *(Adaptive tier: 1)* — `quickscale_core/src/quickscale_core/contracts/resolvers.py` and `quickscale_core/src/quickscale_core/manifest/social_manifest.py` remained below the 80% per-file coverage floor during T2.4 closeout. Unrelated to the Track 2 shim cleanup; address when those core surfaces are touched next.
 - [ ] **Broader compatibility-window widening** *(Adaptive tier: 2)* — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
 - [ ] **Emitted-project operability & API-contract substrate** *(deferred)* — no structured logging/correlation IDs, no versioned public API, no webhook payload boundary validation. Promote when a second external provider lands or the first public-API consumer appears.
   - [ ] *(Tier 1)* Add structured logging and correlation-ID baseline to generated modules.
@@ -413,6 +408,7 @@ Single-PR items that do not change the design:
 | M11 | 3 | F7.1–F7.3 | Merged to v87. Generator vs generated-project runtime-pin decoupling complete. |
 | M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
 | M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
+| M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
 
 ## References
 

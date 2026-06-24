@@ -10,7 +10,7 @@ from typing import Any
 
 import click
 
-from quickscale_cli.module_catalog import (
+from quickscale_core.contracts.module_catalog import (
     get_discovered_module_names,
     get_module_readiness_reason,
 )

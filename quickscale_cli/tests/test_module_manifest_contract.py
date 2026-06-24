@@ -17,8 +17,8 @@ from quickscale_cli.commands.module_config import (
     get_default_social_config,
     get_default_storage_config,
 )
+from quickscale_core.contracts.module_catalog import get_module_entries
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
-from quickscale_cli.module_catalog import get_module_entries
 from quickscale_core.manifest.loader import load_manifest_from_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -64,28 +64,27 @@ NULL stops being a security-relevant value. Flat routes disappear (every row has
 
 ---
 
-## Finding 3 — Adding a module requires coordinated edits across ~8 sites; the CLI hardcodes every module by name
+## Finding 3 — Adding a module requires coordinated edits across ~8 sites; T2.3/T2.4 resolved the CLI wiring bottleneck, but the module-catalog tuple remains hardcoded
 
-**Time horizon: 6–18 months**
+**Time horizon: <6 months**
 
-**Problem.** Module identity is not owned in one place — it's spread between the module's own source and the generator/CLI, which carries hand-maintained per-module knowledge (a manifest file each, a catalog, and a hardcoded dependency-implication function).
+**Problem.** Module identity is not owned in one place — it's spread between the module's own source, the core catalog tuple, and the generator. T2.3/T2.4 eliminated the CLI's per-module Python adapters, the implication-defaults ladder, and the CLI catalog re-export shim, but the core module-catalog tuple still requires per-module edits.
 
-**Why it compounds.** Each new module is a coordination tax: (1) `models.py` org FK + migration, (2) `managers.py` dual-manager, (3) dual-route `views.py`, (4) isolation tests, (5) a `<name>_manifest.py` in `quickscale_cli`, (6) a `MODULE_CATALOG` entry, (7) a hardcoded branch in `get_implied_module_default_configs`, (8) a `pyproject.toml` dep. Miss one and the module is silently mis-wired. The CLI must be edited for every module it claims to merely "compose."
+**Why it compounds.** Each new module is a coordination tax: (1) `models.py` org FK + migration, (2) `managers.py` dual-manager, (3) dual-route `views.py`, (4) isolation tests, (5) a `pyproject.toml` dep, and (6) a hardcoded entry in the core `MODULE_CATALOG` tuple. The per-module CLI adapters, the implication-defaults ladder, and the CLI catalog shim have all been deleted — the CLI now resolves modules generically — but the core catalog still must be hand-edited.
 
 **Evidence.**
-- 13 separate `*_manifest.py` files in `quickscale_cli/src/quickscale_cli/` (one per module, each a ~200-line Python config adapter).
-- `quickscale_cli/src/quickscale_cli/commands/implied_module_defaults.py:16-29` — dependency implications are a literal `if "billing"…`, `if "crm"…`, `if "social"…`, `if "orgs"…` ladder. The `SOCIAL-CR-002` changelog entry is exactly this edit made by hand.
-- `module_catalog.py` is a re-export shim pointing at `quickscale_core.contracts.module_catalog` — the catalog already had to be relocated ("Phase 0 moved the catalog out of the CLI"), evidence the ownership seam is unsettled.
-- `quickscale_core/src/quickscale_core/contracts/module_catalog.py` — hardcoded `MODULE_CATALOG` tuple listing all 13 modules by name.
+- T2.3 deleted all 12 `quickscale_cli/src/quickscale_cli/*_manifest.py` adapter files; all callers now route through `quickscale_core.manifest.resolver`.
+- T2.4 deleted the implication-defaults helper (`get_implied_module_default_configs`) and the `quickscale_cli.module_catalog` re-export shim.
+- `quickscale_core/src/quickscale_core/contracts/module_catalog.py` still contains a hardcoded `MODULE_CATALOG` tuple listing all 13 modules by name, though it is now supplemented by manifest-backed dynamic discovery (`module_discovery.py`).
 
-**Correct shape.** Each module declares its own contract in one `module.yml` (name, `implies`, config rules, isolation policy). The CLI resolves them generically — zero per-module branches. The manifest schema (`quickscale_core/manifest/`) already exists and is half-built; this finishes it.
+**Correct shape.** The CLI already resolves modules generically with zero per-module branches. The remaining gap is the hardcoded `MODULE_CATALOG` tuple in core — it should be retired in favor of the already-existing manifest-backed discovery as the sole authoritative inventory.
 
-**Selected: Option A — self-describing manifests + generic resolver.**
-Add an `implies` field to `module.yml`; write a `resolve_module_implications()` function that reads it and computes the transitive closure (replaces the `if`-ladder). Move config normalization/validation/derivation rules from the 13 Python adapters into `module.yml` config sections. Delete the `*_manifest.py` files, the `if`-ladder, the catalog shim, and the hardcoded `MODULE_CATALOG` tuple (replaced by dynamic discovery from `module.yml` files).
+**Selected: T2.3/T2.4 completed the CLI-wiring half; the residual debt is the static catalog tuple.**
+The per-module CLI Python adapters, the implication-defaults ladder, and the CLI catalog shim have been deleted. The `resolve_module_implications()` function and generic resolver are operational. What remains: `quickscale_core.contracts.module_catalog.MODULE_CATALOG` is still a hardcoded tuple — retire it and rely on dynamic discovery from `module.yml` files exclusively.
 
-**Trigger for urgency.** The next wave of `AbstractListing` verticals — the moment a new module is added and the CLI silently doesn't know about it.
+**Trigger for urgency.** The next module addition that requires both a new `module.yml` **and** a hand-edit to the static catalog tuple — a sign the catalog still acts as a manual registry.
 
-**Detection signal.** Count diffs that touch ≥4 of the 8 wiring sites for a single logical "add module" change. That fan-out is the tax made visible.
+**Detection signal.** A diff that touches both a new `module.yml` and `contracts/module_catalog.py` for the same logical module addition. That redundant edit is the residual tax.
 
 ---
 
