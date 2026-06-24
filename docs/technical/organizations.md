@@ -26,7 +26,7 @@ QuickScale supports two first-class deployment modes, switchable at runtime with
 | Org management UI | Hidden | Full (create, invite, settings, billing) |
 | Org switcher | Not shown | Shown in sidebar |
 | Invitations | Disabled | Enabled |
-| URL structure | `/blog/`, `/crm/` (no slug) | `/orgs/<slug>/blog/`, `/orgs/<slug>/crm/` |
+| URL structure | `/blog/`, `/crm/` (no slug) | `/orgs/<slug>/blog/` (CRM uses flat `/crm/` per T1.5) |
 | Billing scope | Per-user (org has one member) | Per-org (team billing contact) |
 | Isolation today | App-layer guards + middleware org context | App-layer guards + middleware org context |
 | PostgreSQL RLS | Deferred until downstream tenant tables carry concrete `organization_id` columns | Deferred until downstream tenant tables carry concrete `organization_id` columns |
@@ -52,7 +52,7 @@ QUICKSCALE_MODE = 'solo'   # or 'saas'
 
 `TenantMiddleware` reads this setting and changes two behaviours:
 
-- **URL resolution**: In solo mode, no `org_slug` appears in URLs; middleware auto-resolves the org from `request.user.personal_organization`. In SaaS mode, the slug is extracted from the URL.
+- **URL resolution**: In solo mode, no `org_slug` appears in URLs; middleware auto-resolves the org from the user's personal org via ``request.org`` (set by session or fallback). In SaaS mode, the org is resolved from the **session** (``ACTIVE_ORG_SESSION_KEY``) set by the org-switcher, not from URL kwargs. Prior to T1.3/T1.5 the CRM module used slug-based resolution for org-scoped routes (``/orgs/<slug>/crm/``); after T1.5 CRM uses a single flat route tree (``/crm/``) with session/request-based org resolution.
 - **Guard behaviour**: In solo mode, the post-signup guard auto-creates a personal org silently. In SaaS mode, it redirects the user to `/orgs/new/` to name their organization.
 
 URL patterns are loaded conditionally:
@@ -65,7 +65,7 @@ else:
     urlpatterns += [path('', include('quickscale_modules_orgs.urls.solo'))]
 ```
 
-Views are identical in both modes. Only the URL kwargs differ (`org_slug` present or absent).
+Views are identical in both modes. Only the URL kwargs differ (`org_slug` present or absent). After T1.5, the CRM module no longer uses org-scoped URL kwargs — the active org is always resolved from ``request.org`` (set by middleware from session or personal-org fallback).
 
 ### Upgrade Path: Solo → SaaS
 
@@ -464,16 +464,16 @@ Path routing (not subdomain). The org slug appears in every URL so the active or
 /orgs/<slug>/billing/pricing/              # Canonical org-scoped pricing page
 
 # All module routes are nested under the org slug:
-/orgs/<slug>/crm/                          # CRM for this org
 /orgs/<slug>/blog/                         # Blog for this org
 /orgs/<slug>/forms/                        # Forms for this org
 /orgs/<slug>/listings/                     # Listings for this org
 
 # API equivalents:
-/orgs/<slug>/crm/api/                    # CRM API for this org
 /orgs/<slug>/api/billing/...               # Canonical org-scoped billing API surface
 
 Flat authenticated billing routes (`/billing/dashboard/`, `/api/billing/...`) remain compatibility shims for Solo mode and for older non-org callers while SaaS callers move to the canonical org-scoped paths above.
+
+**Note (T1.5)**: The CRM module no longer uses org-scoped URLs. After T1.5, all CRM routes are flat (``/crm/``, ``/crm/api/...``) regardless of deployment mode. The active organization is resolved from ``request.org`` (set by ``TenantMiddleware`` from the session or the personal-org fallback), not from a URL slug. Other modules (blog, forms, listings) may still use org-scoped routes until their own T1.6–T1.8 contract-adoption tasks land.
 ```
 
 ### Solo Mode
@@ -502,13 +502,14 @@ No org management pages are exposed in solo mode.
 /orgs/:slug/members     → OrgMembersPage (member list, role changes, invite send/revoke)
 /orgs/:slug/settings    → OrgSettingsPage
 /orgs/:slug/billing/dashboard → BillingPage (reuses existing billing components)
-/orgs/:slug/crm         → CrmPage (reuses existing CRM components)
 /orgs/:slug/blog        → BlogPage
 /orgs/:slug/forms       → FormsPage
 /orgs/:slug/listings    → ListingsPage
 ```
 
-`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into all nested pages. An org switcher in the sidebar shows the active organization and lets the user navigate to another by changing the slug in the URL.
+**Note (T1.5)**: The CRM module no longer uses org-scoped React routes. CRM pages are served at flat `/crm` paths in both modes, with the org resolved from `request.org` (session or personal-org fallback) rather than a URL slug.
+
+`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into all nested pages. An org switcher in the sidebar shows the active organization and lets the user navigate to another by changing the slug in the URL. Modules that have not yet adopted the flat-route contract (blog, forms, listings) continue to use org-scoped React routes handled by `OrgLayout`.
 
 #### Solo mode
 
@@ -528,15 +529,18 @@ No `OrgLayout` or org switcher is rendered.
 
 Subdomain routing (`acme.myapp.com`) is not in v0.86.0 scope, but the architecture is designed to support it with no changes to views or models.
 
-`TenantMiddleware` currently extracts the org slug from the URL. To support subdomains, only the slug-extraction logic changes:
+`TenantMiddleware` currently resolves the org from the session (``ACTIVE_ORG_SESSION_KEY``) or from fallback patterns (URL slug for non-CRM modules, personal-org for solo-format routes). To support subdomains, only the initial resolution step changes — instead of reading the session or URL slug, the middleware would read the subdomain from ``request.get_host()``:
 
 ```python
-# Current (path-based):
-org_slug = match.kwargs.get('org_slug')
+# Current (session-based):
+org_id = request.session.get(ACTIVE_ORG_SESSION_KEY)
 
 # Future (subdomain-based):
 host = request.get_host()
-org_slug = host.split('.')[0] if host.count('.') >= 2 else None
+slug = host.split('.')[0] if host.count('.') >= 2 else None
+if slug:
+    org = Organization.objects.get(slug=slug)
+    # then set request.org, contextvar, SET LOCAL as today
 ```
 
 Everything downstream (RLS context, `request.org`, permission checks) is identical. DNS wildcard and NGINX configuration changes are documented in `docs/deployment/railway.md` when the feature is implemented.
@@ -545,59 +549,19 @@ Everything downstream (RLS context, `request.org`, permission checks) is identic
 
 ## TenantMiddleware
 
-```python
-class TenantMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
+The current middleware implementation (shipped in T1.3/T1.5) uses **session-based org resolution**. It reads the active org from ``request.session[ACTIVE_ORG_SESSION_KEY]`` (set by the org-switcher), applies fallback resolution for legacy downstream module paths and solo-format routes, and populates ``request.org`` and the ``app.current_org_id`` contextvar/``SET LOCAL``.
 
-    def __call__(self, request):
-        saas_mode = settings.QUICKSCALE_MODE == 'saas'
+The pre-T1.3 middleware extracted the org slug from URL kwargs (e.g. ``/orgs/<slug>/crm/``). That slug-based approach is no longer used for CRM, which now uses flat routes with session-based org resolution per Track 1 decisions D1/D4. Other modules may still carry slug-based URL patterns until their own T1.6+ contract-adoption tasks land.
 
-        # Guard: authenticated non-staff user with no org membership
-        if request.user.is_authenticated and not request.user.is_staff:
-            has_membership = OrganizationMembership.objects.filter(user=request.user).exists()
-            if not has_membership:
-                exempt = request.path.startswith('/accounts') or \
-                         request.path.startswith('/orgs/new') or \
-                         (request.path.startswith('/orgs/invitations/') and request.path.endswith('/accept/'))
-                if saas_mode and not exempt:
-                    return redirect('/orgs/new/')
-                elif not saas_mode:
-                    Organization.objects.create_personal_for(request.user)
+Key behaviours (current):
+- **Saas mode + active session org** → resolves the org from the session key, validates membership, sets ``request.org`` + contextvar + ``SET LOCAL app.current_org_id``.
+- **Saas mode + no active session org** → redirects to ``/orgs/`` for non-exempt paths.
+- **Solo mode** → resolves the personal org from the authenticated user's membership.
+- **Superuser bypass** → superusers skip membership validation on org-scoped paths.
+- **Fallback A (slug fallback)** → resolves org from URL slug for remaining ``/orgs/<slug>/<module>/...`` paths, seeds the session so subsequent navigation works.
+- **Fallback B (personal org fallback)** → resolves personal org for solo-format routes under known module prefixes (``/crm/``, ``/listings/``, ``/forms/``, ``/blog/``). Does not seed the session.
 
-        # Extract org and set RLS context
-        request.org = None
-        org_slug = self._resolve_org_slug(request, saas_mode)
-
-        if org_slug and request.user.is_authenticated:
-            org = get_object_or_404(Organization, slug=org_slug)
-            if not request.user.is_staff:
-                if not OrganizationMembership.objects.filter(user=request.user, organization=org).exists():
-                    return HttpResponseForbidden()
-            request.org = org
-            with connection.cursor() as cursor:
-                cursor.execute("SET LOCAL app.current_org_id = %s", [str(org.id)])
-
-        return self.get_response(request)
-
-    def _resolve_org_slug(self, request, saas_mode):
-        if saas_mode:
-            try:
-                match = resolve(request.path)
-                return match.kwargs.get('org_slug')
-            except Resolver404:
-                return None
-        else:
-            # Solo mode: resolve from user's personal org
-            if request.user.is_authenticated:
-                personal = OrganizationMembership.objects.filter(
-                    user=request.user, organization__is_personal=True
-                ).select_related('organization').first()
-                return personal.organization.slug if personal else None
-            return None
-```
-
-**Connection pooling note**: `SET LOCAL` scopes the value to the current transaction. With PgBouncer in transaction-pooling mode, use `SET` (session-level) instead, combined with connection checkout/return hooks that reset the value. Document the chosen approach in `docs/deployment/railway.md`.
+**Connection pooling note**: ``SET LOCAL`` scopes the value to the current transaction. With PgBouncer in transaction-pooling mode, use ``SET`` (session-level) instead, combined with connection checkout/return hooks that reset the value. Document the chosen approach in ``docs/deployment/railway.md``.
 
 ---
 
@@ -624,11 +588,11 @@ All open questions from the original design were resolved before implementation 
 | Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
 | Billing migration path? | **Auto-create personal org per user** | Management command `migrate_billing_to_orgs`; idempotent; zero manual operator work |
 | Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | The current slice is app-layer guarded, and any future RLS-era operator access must be designed explicitly rather than inferred from Django flags |
-| Active org routing? | **URL-based in SaaS; transparent in Solo** | SaaS: bookmarkable, shareable, no hidden state. Solo: no slug needed, org resolved from user |
+| Active org routing? | **Session-based in SaaS (mid-2026+); legacy slug compatibility for non-CRM modules** | T1.3/T1.5: CRM uses flat routes with session/request-based org resolution. Other modules still use slug-based URL routing until their T1.6+ adoption tasks. Solo: transparent, org resolved from user's personal org |
 | Post-signup flow? | **SaaS: force `/orgs/new/`. Solo: auto-create personal org** | SaaS users must name their workspace; solo users should not see org concepts |
 | Module access per plan? | **Feature gates + credits** | Credits for consumption metering; feature gates for upsell leverage; no per-org custom flags |
 | Seat pricing? | **Optional, designed in** | Operator-configurable; enforced at UI/API layer in v0.86.0; hard DB enforcement deferred |
-| Subdomain routing? | **Future-ready** | Middleware decoupled from slug source; only `_resolve_org_slug` changes |
+| Subdomain routing? | **Future-ready** | Middleware decoupled from org source (session today); subdomain support swaps the session read for a host-based lookup, everything downstream unchanged |
 | Org provisioning? | **Self-service** | Customer signs up, creates org, pays Stripe — no manual platform owner action required |
 
 ---

@@ -32,12 +32,8 @@ DEFAULT_STAGE_BLUEPRINT: tuple[tuple[str, int], ...] = (
 
 
 def _has_org_stages(organization: Organization) -> bool:
-    """Return True when *organization* has at least one org-local Stage row.
-
-    Only rows with ``organization=<organization>`` satisfy this check;
-    NULL-organization legacy stages do not.
-    """
-    return Stage.objects.for_org(organization.id).exists()
+    """Return True when *organization* has at least one org-local Stage row."""
+    return Stage.all_objects.filter(organization=organization).exists()
 
 
 def ensure_org_default_stages(organization: Organization) -> list[Stage]:
@@ -55,7 +51,7 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
     """
     # --- Optimistic precheck (no lock) ------------------------------------
     if _has_org_stages(organization):
-        return list(Stage.objects.for_org(organization.id))
+        return list(Stage.all_objects.filter(organization=organization))
 
     # --- Serialized critical section --------------------------------------
     with transaction.atomic():
@@ -65,12 +61,12 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
         # Under-lock recheck — another thread may have seeded between the
         # optimistic precheck and the lock acquisition.
         if _has_org_stages(organization):
-            return list(Stage.objects.for_org(organization.id))
+            return list(Stage.all_objects.filter(organization=organization))
 
         # Seed the canonical default stages.
         _seed_default_stages(organization)
 
-    return list(Stage.objects.for_org(organization.id))
+    return list(Stage.all_objects.filter(organization=organization))
 
 
 def _seed_default_stages(organization: Organization) -> Sequence[Stage]:

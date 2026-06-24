@@ -1,4 +1,4 @@
-"""Focused seam tests for F11.7 CRM bootstrap wiring on org-scoped reads."""
+"""Focused seam tests for T1.5 CRM bootstrap wiring on flat-route reads."""
 
 from __future__ import annotations
 
@@ -6,15 +6,25 @@ from unittest.mock import patch
 
 import pytest
 
+from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+
+
+def _activate_org_in_session(client, organization):
+    """Set the active org in the client session for TenantMiddleware."""
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.id)
+    session.save()
+
 
 @pytest.mark.django_db
-def test_org_scoped_api_read_calls_bootstrap_helper(client, org_a, org_a_admin) -> None:
-    """Org-scoped CRM API reads should pass through the shared bootstrap seam."""
+def test_crm_api_read_calls_bootstrap_helper(client, org_a, org_a_admin) -> None:
+    """Flat-route CRM API reads should pass through the shared bootstrap seam."""
 
     client.force_login(org_a_admin)
+    _activate_org_in_session(client, org_a)
 
     with patch("quickscale_modules_crm.views.ensure_org_default_stages") as mock_seed:
-        response = client.get(f"/orgs/{org_a.slug}/crm/api/tags/")
+        response = client.get("/crm/api/tags/")
 
     assert response.status_code == 200
     mock_seed.assert_called_once()
@@ -22,15 +32,14 @@ def test_org_scoped_api_read_calls_bootstrap_helper(client, org_a, org_a_admin) 
 
 
 @pytest.mark.django_db
-def test_org_scoped_dashboard_read_calls_bootstrap_helper(
-    client, org_a, org_a_admin
-) -> None:
-    """Org-scoped CRM dashboard reads should pass through the shared bootstrap seam."""
+def test_crm_dashboard_read_calls_bootstrap_helper(client, org_a, org_a_admin) -> None:
+    """Flat-route CRM dashboard reads should pass through the shared bootstrap seam."""
 
     client.force_login(org_a_admin)
+    _activate_org_in_session(client, org_a)
 
     with patch("quickscale_modules_crm.views.ensure_org_default_stages") as mock_seed:
-        response = client.get(f"/orgs/{org_a.slug}/crm/")
+        response = client.get("/crm/")
 
     assert response.status_code == 200
     mock_seed.assert_called_once()
