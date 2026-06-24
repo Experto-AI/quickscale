@@ -1,12 +1,26 @@
-# Generated migration for Listing model
+"""T1.8: Squashed initial migration — NOT NULL organization contract.
 
+Replaces the Phase F11.12b additive approach (0001 + 0002_org_ownership)
+with a single clean migration matching the D5 NOT NULL contract.
+
+Changes from the additive schema:
+- ``organization`` is NOT NULL / PROTECT (via ``tenant_org_fk()``)
+- No partial ``UniqueConstraint`` for ``(slug) WHERE organization IS NULL``
+  (unreachable when organization is NOT NULL)
+- ``slug`` has no global ``unique=True`` (per-org unique via constraint below)
+- Per-org slug uniqueness via ``(slug, organization)`` constraint
+"""
+
+import django.db.models.deletion
 from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
     initial = True
 
-    dependencies = []
+    dependencies = [
+        ("quickscale_modules_orgs", "0001_initial"),
+    ]
 
     operations = [
         migrations.CreateModel(
@@ -21,12 +35,22 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        db_index=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(class)s_listings",
+                        to="quickscale_modules_orgs.Organization",
+                    ),
+                ),
                 ("title", models.CharField(max_length=200)),
-                ("slug", models.SlugField(blank=True, max_length=200, unique=True)),
+                ("slug", models.SlugField(blank=True, max_length=200)),
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Plain text description of the listing"
+                        blank=True,
+                        help_text="Listing description in Markdown format",
                     ),
                 ),
                 (
@@ -107,5 +131,12 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="listing",
             index=models.Index(fields=["slug"], name="quickscale__slug_e91f04_idx"),
+        ),
+        migrations.AddConstraint(
+            model_name="listing",
+            constraint=models.UniqueConstraint(
+                fields=["slug", "organization"],
+                name="listings_listing_slug_organization_unique",
+            ),
         ),
     ]

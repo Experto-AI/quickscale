@@ -1,65 +1,90 @@
-"""Tests for listings module managers (Phase F11.12b dual-manager contract).
+"""Tests for listings module managers (T1.8 TenantManager contract).
 
-Covers the ``ListingQuerySet`` and ``TenantScopedManager`` implementations to
-close the managers.py coverage gap reported by the F11.12b quality-gate pass.
+T1.8: Replaced module-local ``TenantScopedManager``/``OperatorManager`` with
+the shared ``TenantManager`` from ``quickscale_modules_orgs.managers``.
+Scoping is ambient via the ContextVar set by ``TenantMiddleware``.
 """
 
 import pytest
 
+from quickscale_modules_listings.managers import (
+    OperatorManager,
+    TenantScopedManager,
+)
 from quickscale_modules_listings.models import Listing
+from quickscale_modules_orgs.current_org import set_current_org_id
+from quickscale_modules_orgs.managers import TenantManager
+from quickscale_modules_orgs.models import Organization
 
 
-class TestListingQuerySet:
-    """Tests for ``ListingQuerySet`` direct behavior."""
+class TestBackwardCompatibilityAliases:
+    """Regression tests for backward-compatible manager aliases (CR-T18-001)."""
+
+    def test_tenant_scoped_manager_is_default_scope(self):
+        """``TenantScopedManager()`` must produce an auto-scoping manager."""
+        manager = TenantScopedManager()
+        assert manager._super_scope is False
+
+    def test_tenant_scoped_manager_is_tenant_manager(self):
+        """``TenantScopedManager`` must be the same class as ``TenantManager``."""
+        assert TenantScopedManager is TenantManager
+
+    def test_operator_manager_is_super_scope(self):
+        """``OperatorManager()`` must produce a super-scope (bypass) manager."""
+        manager = OperatorManager()
+        assert manager._super_scope is True
+
+    def test_operator_manager_is_tenant_manager_subclass(self):
+        """``OperatorManager`` must be a subclass of ``TenantManager``."""
+        assert issubclass(OperatorManager, TenantManager)
+        assert OperatorManager is not TenantManager
+
+
+class TestTenantManagerScoping:
+    """Tests for ``TenantManager`` auto-scoping via ContextVar."""
 
     @pytest.mark.django_db
-    def test_for_org_filters_by_organization(self, org, org_a):
-        """``for_org(org_id)`` must return only rows for that organization.
-
-        Covers line 28 of managers.py (the ``self.filter()`` branch).
-        """
+    def test_objects_scopes_to_current_org(self, org, org_a):
+        """``Listing.objects.all()`` must scope to the org set in the ContextVar."""
         Listing.objects.create(title="Org A Listing", organization=org_a)
         Listing.objects.create(title="Default Listing", organization=org)
 
-        qs = Listing.objects.all()
-        result = qs.for_org(org_a.pk)
+        set_current_org_id(org_a.pk)
+        results = list(Listing.objects.all().values_list("title", flat=True))
 
-        names = list(result.values_list("title", flat=True))
-        assert names == ["Org A Listing"], f"Expected only Org A Listing, got {names}"
+        assert results == ["Org A Listing"], (
+            f"Expected only Org A Listing, got {results}"
+        )
 
     @pytest.mark.django_db
-    def test_for_org_with_none_returns_empty_queryset(self, org):
-        """``for_org(None)`` must return an empty queryset (fail-closed).
-
-        Covers lines 26-27 of managers.py (the ``if organization_id is None``
-        and ``return self.none()`` branches).
-        """
+    def test_objects_returns_none_without_org_context(self, org):
+        """``Listing.objects.all()`` returns empty when ContextVar is unset."""
         Listing.objects.create(title="Some Listing", organization=org)
 
-        qs = Listing.objects.all()
-        result = qs.for_org(None)
+        # Reset ContextVar to unset state
+        from quickscale_modules_orgs.current_org import reset_current_org_id
 
-        assert result.count() == 0, "Expected empty queryset for None org_id"
-        assert list(result) == [], "Expected no rows for None org_id"
+        reset_current_org_id()
+        count = Listing.objects.all().count()
 
-
-class TestTenantScopedManager:
-    """Tests for ``TenantScopedManager`` convenience methods."""
+        assert count == 0, "Expected empty queryset without org context"
 
     @pytest.mark.django_db
-    def test_for_org_on_manager(self, org, org_a):
-        """``TenantScopedManager.for_org()`` must scope to the given org.
+    def test_all_objects_returns_all_rows(self, org, org_a):
+        """``Listing.all_objects.all()`` must return all rows (operator bypass)."""
+        Listing.objects.create(title="Listing A", organization=org)
+        Listing.objects.create(title="Listing B", organization=org_a)
 
-        Covers line 42 of managers.py.
-        """
-        Listing.objects.create(title="Visible Listing", organization=org)
-        # Create a second listing owned by a different org to make sure
-        # the filter actually restricts results.
-        Listing.objects.create(title="Other Listing", organization=org_a)
+        results = list(Listing.all_objects.all().values_list("title", flat=True))
 
-        result = Listing.objects.for_org(org.pk)
+        assert "Listing A" in results
+        assert "Listing B" in results
+        assert len(results) == 2
 
-        names = list(result.values_list("title", flat=True))
-        assert names == ["Visible Listing"], (
-            f"Expected only Visible Listing, got {names}"
-        )
+    @pytest.mark.django_db
+    def test_create_stamps_correct_org(self, org):
+        """Creating a listing via ``objects.create`` requires explicit org."""
+        system_org = Organization.objects.get_system_org()
+        listing = Listing.objects.create(title="New Listing", organization=system_org)
+        assert listing.organization == system_org
+        assert listing.pk is not None

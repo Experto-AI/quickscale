@@ -156,6 +156,29 @@ class TestListingListView:
         assert response.context["filter_params"]["price_min"] == "100"
         assert response.context["filter_params"]["location"] == "NYC"
 
+    def test_anonymous_list_shows_system_org_listings_only(
+        self, client, db, listing_factory, org
+    ):
+        """Anonymous list must show System-org published listings,
+        but hide non-System org published listings (D2)."""
+        from quickscale_modules_orgs.current_org import reset_current_org_id
+
+        reset_current_org_id()
+
+        # Create listings — the factory persists them; we only need them to
+        # exist in the DB to verify the view's scoping behavior.
+        listing_factory(title="System Listing", status="published")
+        listing_factory(
+            title="Other Org Listing",
+            status="published",
+            organization=org,
+        )
+
+        response = client.get(reverse("concrete_listing_list"))
+        assert response.status_code == 200
+        assert "System Listing" in str(response.content)
+        assert "Other Org Listing" not in str(response.content)
+
     def test_listing_list_uses_shared_filterset_factory(
         self, client, listing_factory, monkeypatch
     ):
@@ -250,6 +273,36 @@ class TestListingDetailView:
         html = response.content.decode()
         assert 'class="listing-markdown-content"' in html
         assert "quickscale_modules_listings/listings.css" in html
+
+    def test_anonymous_detail_shows_system_org_listing(self, client, published_listing):
+        """Anonymous detail must show System-org published listings."""
+        from quickscale_modules_orgs.current_org import reset_current_org_id
+
+        reset_current_org_id()
+
+        response = client.get(
+            reverse("concrete_listing_detail", args=[published_listing.slug])
+        )
+        assert response.status_code == 200
+
+    def test_anonymous_detail_returns_404_for_non_system_org_listing(
+        self, client, db, listing_factory, org
+    ):
+        """Anonymous detail must return 404 for non-System org listings."""
+        from quickscale_modules_orgs.current_org import reset_current_org_id
+
+        reset_current_org_id()
+
+        other_listing = listing_factory(
+            title="Other Org Listing",
+            status="published",
+            organization=org,
+        )
+
+        response = client.get(
+            reverse("concrete_listing_detail", args=[other_listing.slug])
+        )
+        assert response.status_code == 404
 
     def test_listing_detail_escapes_inline_html_in_markdown(
         self, client, listing_factory

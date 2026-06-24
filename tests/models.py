@@ -18,11 +18,6 @@ class ConcreteListing(AbstractListing):
                 fields=["slug", "organization"],
                 name="tests_concretelisting_slug_org_unique",
             ),
-            models.UniqueConstraint(
-                fields=["slug"],
-                name="tests_concretelisting_slug_org_null_unique",
-                condition=models.Q(organization__isnull=True),
-            ),
         ]
 
 
@@ -39,3 +34,9 @@ class AlternateListing(AbstractListing):
         app_label = "tests"
         verbose_name = "Alternate Listing"
         verbose_name_plural = "Alternate Listings"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["slug", "organization"],
+                name="tests_alternatelisting_slug_org_unique",
+            ),
+        ]
