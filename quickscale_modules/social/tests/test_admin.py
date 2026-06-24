@@ -22,7 +22,7 @@ class TestSocialAdmin:
         assert admin.site.is_registered(SocialEmbed)
 
     def test_social_link_add_view_creates_normalized_record(
-        self, admin_client: Client
+        self, admin_client: Client, org
     ) -> None:
         """Admin link creation should normalize provider and URL values on save."""
         response = admin_client.post(
@@ -34,11 +34,12 @@ class TestSocialAdmin:
                 "url": "https://youtu.be/abc123?si=share",
                 "is_published": "on",
                 "display_order": "4",
+                "organization": str(org.pk),
                 "_save": "Save",
             },
         )
 
-        link = SocialLink.objects.get()
+        link = SocialLink.all_objects.get()
 
         assert response.status_code == 302
         assert link.provider_name == "youtube"
@@ -69,7 +70,7 @@ class TestSocialAdmin:
         )
 
     def test_social_embed_add_view_records_resolution_metadata(
-        self, admin_client: Client
+        self, admin_client: Client, org
     ) -> None:
         """Admin embed creation should persist backend-owned resolution metadata."""
         response = admin_client.post(
@@ -81,11 +82,12 @@ class TestSocialAdmin:
                 "url": "https://www.youtube.com/shorts/abc123",
                 "is_published": "on",
                 "display_order": "2",
+                "organization": str(org.pk),
                 "_save": "Save",
             },
         )
 
-        embed = SocialEmbed.objects.get()
+        embed = SocialEmbed.all_objects.get()
 
         assert response.status_code == 302
         assert embed.resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
@@ -93,7 +95,7 @@ class TestSocialAdmin:
         assert embed.last_resolution_attempt_at is not None
 
     def test_social_embed_add_view_rejects_non_embed_provider(
-        self, admin_client: Client
+        self, admin_client: Client, org
     ) -> None:
         """Admin embed creation should reject providers without approved embed support."""
         response = admin_client.post(
@@ -105,6 +107,7 @@ class TestSocialAdmin:
                 "url": "https://www.instagram.com/quickscale/",
                 "is_published": "on",
                 "display_order": "2",
+                "organization": str(org.pk),
                 "_save": "Save",
             },
         )

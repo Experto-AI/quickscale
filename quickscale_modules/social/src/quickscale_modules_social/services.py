@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 
+from quickscale_modules_orgs.current_org import get_current_org_id
+
 from quickscale_modules_social.contracts import (
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
@@ -30,6 +32,21 @@ from quickscale_modules_social.contracts import (
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 _CACHE_MISS = object()
+
+
+def _social_cache_key(base_key: str) -> str:
+    """Return an org-aware cache key when a tenant context is active.
+
+    Keys are partitioned by org identity so that one org's cached payload
+    is never served to another org.  When no tenant context is set (e.g.
+    before middleware resolves the org), the bare key is used — this
+    is the expected path for the System org public singleton after the
+    manifest layer has set the context.
+    """
+    org_id = get_current_org_id()
+    if org_id is None:
+        return base_key
+    return f"{base_key}:org:{org_id}"
 
 
 def _database_error_messages(exc: BaseException) -> tuple[str, ...]:
@@ -321,31 +338,27 @@ def _embeds_payload(
 
 def list_published_social_links(
     runtime_settings: SocialRuntimeSettingsSnapshot | None = None,
-    *,
-    organization_id: int | str | None = None,
 ) -> tuple[SocialLinkRecord, ...]:
-    """Return published curated links filtered by the active runtime settings.
+    """Return published curated links for the current tenant context.
 
-    When ``organization_id`` is provided, scope the query to that
-    organization's links (tenant-scoped).  When ``None`` (default),
-    return all published links — backward compatible with the pre-F11.13a
-    contract.
+    The query is auto-scoped by TenantManager to the current organization
+    via the ContextVar (set by TenantMiddleware).  For public/anonymous
+    access, the caller (manifest layer) must resolve the System org before
+    calling this function per D2.
     """
     runtime_settings = runtime_settings or get_social_runtime_settings()
     if not runtime_settings.link_tree_enabled:
         return ()
-
-    records: tuple[SocialLinkRecord, ...] | None
-    if organization_id is not None:
-        # Org-scoped query: bypass global cache, scope directly.
+    cache_key = _social_cache_key(SOCIAL_LINKS_CACHE_KEY)
+    cached_payload = cache.get(cache_key, _CACHE_MISS)
+    records: tuple[SocialLinkRecord, ...] | None = (
+        None if cached_payload is _CACHE_MISS else _load_link_records(cached_payload)
+    )
+    if records is None:
         try:
             records = tuple(
                 SocialLinkRecord.from_model(link)
-                for link in SocialLink.objects.for_org(organization_id)
-                .filter(
-                    is_published=True,
-                )
-                .order_by(
+                for link in SocialLink.objects.filter(is_published=True).order_by(
                     "display_order",
                     "title",
                     "pk",
@@ -357,35 +370,11 @@ def list_published_social_links(
             ):
                 return ()
             raise
-    else:
-        cached_payload = cache.get(SOCIAL_LINKS_CACHE_KEY, _CACHE_MISS)
-        records = (
-            None
-            if cached_payload is _CACHE_MISS
-            else _load_link_records(cached_payload)
+        cache.set(
+            cache_key,
+            _serialize_records(records),
+            timeout=runtime_settings.cache_ttl_seconds,
         )
-        if records is None:
-            try:
-                records = tuple(
-                    SocialLinkRecord.from_model(link)
-                    for link in SocialLink.objects.filter(is_published=True).order_by(
-                        "display_order",
-                        "title",
-                        "pk",
-                    )
-                )
-            except (OperationalError, ProgrammingError) as exc:
-                if _is_missing_social_table_error(
-                    exc, table_name=SocialLink._meta.db_table
-                ):
-                    return ()
-                raise
-            cache.set(
-                SOCIAL_LINKS_CACHE_KEY,
-                _serialize_records(records),
-                timeout=runtime_settings.cache_ttl_seconds,
-            )
-
     filtered = [
         record
         for record in records
@@ -396,30 +385,27 @@ def list_published_social_links(
 
 def list_published_social_embeds(
     runtime_settings: SocialRuntimeSettingsSnapshot | None = None,
-    *,
-    organization_id: int | str | None = None,
 ) -> tuple[SocialEmbedRecord, ...]:
-    """Return published curated embeds filtered by the active runtime settings.
+    """Return published curated embeds for the current tenant context.
 
-    When ``organization_id`` is provided, scope the query to that
-    organization's embeds (tenant-scoped).  When ``None`` (default),
-    return all published embeds.
+    The query is auto-scoped by TenantManager to the current organization
+    via the ContextVar (set by TenantMiddleware).  For public/anonymous
+    access, the caller (manifest layer) must resolve the System org before
+    calling this function per D2.
     """
     runtime_settings = runtime_settings or get_social_runtime_settings()
     if not runtime_settings.embeds_enabled:
         return ()
-
-    records: tuple[SocialEmbedRecord, ...] | None
-    if organization_id is not None:
-        # Org-scoped query: bypass global cache, scope directly.
+    cache_key = _social_cache_key(SOCIAL_EMBEDS_CACHE_KEY)
+    cached_payload = cache.get(cache_key, _CACHE_MISS)
+    records: tuple[SocialEmbedRecord, ...] | None = (
+        None if cached_payload is _CACHE_MISS else _load_embed_records(cached_payload)
+    )
+    if records is None:
         try:
             records = tuple(
                 SocialEmbedRecord.from_model(embed)
-                for embed in SocialEmbed.objects.for_org(organization_id)
-                .filter(
-                    is_published=True,
-                )
-                .order_by(
+                for embed in SocialEmbed.objects.filter(is_published=True).order_by(
                     "display_order",
                     "title",
                     "pk",
@@ -432,36 +418,11 @@ def list_published_social_embeds(
             ):
                 return ()
             raise
-    else:
-        cached_payload = cache.get(SOCIAL_EMBEDS_CACHE_KEY, _CACHE_MISS)
-        records = (
-            None
-            if cached_payload is _CACHE_MISS
-            else _load_embed_records(cached_payload)
+        cache.set(
+            cache_key,
+            _serialize_records(records),
+            timeout=runtime_settings.cache_ttl_seconds,
         )
-        if records is None:
-            try:
-                records = tuple(
-                    SocialEmbedRecord.from_model(embed)
-                    for embed in SocialEmbed.objects.filter(is_published=True).order_by(
-                        "display_order",
-                        "title",
-                        "pk",
-                    )
-                )
-            except (OperationalError, ProgrammingError) as exc:
-                if _is_missing_social_table_error(
-                    exc,
-                    table_name=SocialEmbed._meta.db_table,
-                ):
-                    return ()
-                raise
-            cache.set(
-                SOCIAL_EMBEDS_CACHE_KEY,
-                _serialize_records(records),
-                timeout=runtime_settings.cache_ttl_seconds,
-            )
-
     filtered = [
         record
         for record in records
@@ -471,15 +432,13 @@ def list_published_social_embeds(
     return tuple(filtered[: runtime_settings.embeds_per_page])
 
 
-def build_social_link_tree_payload(
-    *,
-    organization_id: int | str | None = None,
-) -> dict[str, object]:
+def build_social_link_tree_payload() -> dict[str, object]:
     """Return the managed link-tree JSON contract for React/backend consumers.
 
-    When ``organization_id`` is provided, scope the payload to that
-    organization's published links.  When ``None`` (default), return all
-    published links — backward compatible with the pre-F11.13a contract.
+    Tenant scoping is ambient via the TenantManager (ContextVar).  The
+    caller (manifest layer) is responsible for setting the org context:
+    System org for public/anonymous access per D2, the active org for
+    authenticated access.
     """
     try:
         runtime_settings = get_social_runtime_settings()
@@ -500,7 +459,6 @@ def build_social_link_tree_payload(
 
     links = list_published_social_links(
         runtime_settings=runtime_settings,
-        organization_id=organization_id,
     )
     return _link_tree_payload(
         status=SOCIAL_STATUS_ENABLED if links else SOCIAL_STATUS_EMPTY,
@@ -510,15 +468,13 @@ def build_social_link_tree_payload(
     )
 
 
-def build_social_embeds_payload(
-    *,
-    organization_id: int | str | None = None,
-) -> dict[str, object]:
+def build_social_embeds_payload() -> dict[str, object]:
     """Return the managed embeds JSON contract for React/backend consumers.
 
-    When ``organization_id`` is provided, scope the payload to that
-    organization's published embeds.  When ``None`` (default), return all
-    published embeds — backward compatible with the pre-F11.13a contract.
+    Tenant scoping is ambient via the TenantManager (ContextVar).  The
+    caller (manifest layer) is responsible for setting the org context:
+    System org for public/anonymous access per D2, the active org for
+    authenticated access.
     """
     try:
         runtime_settings = get_social_runtime_settings()
@@ -539,7 +495,6 @@ def build_social_embeds_payload(
 
     embeds = list_published_social_embeds(
         runtime_settings=runtime_settings,
-        organization_id=organization_id,
     )
     return _embeds_payload(
         status=SOCIAL_STATUS_ENABLED if embeds else SOCIAL_STATUS_EMPTY,
