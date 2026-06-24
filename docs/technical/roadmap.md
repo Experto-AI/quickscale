@@ -22,11 +22,11 @@ Work is split across 3 git worktrees that develop in parallel and merge back to 
 
 Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed for the Track 1 Phase 2–3 fan-out. Each worktree owns a module pair end-to-end (Phase 2 contract adoption → Phase 3 RLS backstop).
 
-| Worktree | Branch | Phase 2 owns | Phase 3 owns |
-|---------|--------|-------------|-------------|
-| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS |
-| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS |
-| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS |
+| Worktree | Branch | Phase 2 owns | Phase 3 owns | Next task |
+|---------|--------|-------------|-------------|-----------|
+| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.5** |
+| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.7** |
+| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.9** |
 
 Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
 
@@ -111,6 +111,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
                   T1.17  (after all Phase-2 tasks)
 ```
 
+
 **Hard dependency edges:** T1.1–T1.3 block all of T1.5–T1.10 · T1.4 blocks every RLS task · each module's Phase-2 blocks its Phase-3 RLS · T1.17 after all Phase-2.
 
 **T1.1 is the lynchpin** — removes the NULL bucket, which is what makes single-URL routing (4A) and RLS policies clean.
@@ -128,7 +129,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [ ] T1.6 — Blog adopt contract *(wt-track1)*
 - [x] T1.7 — Forms adopt contract *(wt-track2)*
 - [ ] T1.8 — Listings adopt contract *(wt-track2)*
-- [ ] T1.9 — Social adopt contract *(wt-track3)*
+- [x] T1.9 — Social adopt contract *(wt-track3)*
 - [ ] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
 
 **Phase 3 — RLS backstop** *(parallel; each after its Phase-2 task + T1.4)*
@@ -195,6 +196,7 @@ Implementation completed 2026-06-24.
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 
+- **TRACK:** `wt-track1` (branch: `wt-track1`) — **next task for this worktree**
 - **SCOPE:** `crm/views.py` ~43, ~72, ~131–134, ~234–255, ~386–423 (remove route-sniffing + `isnull` unions); `crm/urls.py` delete org-scoped pair ~41–47; `crm/managers.py` delete (import shared); `crm/models.py` use `tenant_org_fk()`; `crm/serializers.py` drop redundant same-org validation; `crm/admin.py` keep `all_objects`.
 - **ACCEPTANCE CRITERIA:** only `/crm/...` routes resolve; cross-org read → empty/404; no `isnull` union remains; isolation tests (Org A ⊄ Org B) green.
 - **VALIDATION PATH:** `make MODULE=crm test -- --modules`.
@@ -206,6 +208,7 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.5
 - **SCOPE (on top of shared shape):** `blog/models.py:118+` NOT NULL migration (Category/Tag/Post/BlogMediaAsset); `blog/views.py:64–183` drop `_is_org_scoped_route`; anonymous/token-auth reads resolve `get_system_org()`; `blog/feeds.py` RSS feed scopes to System org; delete org-scoped URL pair; squash migration (D5).
 - **ACCEPTANCE CRITERIA:** public feed returns System-org posts; authed org reads return that org's posts only; no `isnull` union; blog isolation tests green.
 - **VALIDATION PATH:** `make MODULE=blog test -- --modules`; feed + cross-org isolation tests green.
@@ -217,6 +220,7 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track2` (branch: `wt-track2`) — **next task for this worktree**
 - **SCOPE (on top of shared shape):** `forms/models.py:39` NOT NULL migration for `Form`; `forms/views.py:101+` public schema/submit endpoints resolve `get_system_org()` for anonymous submissions; delete org-scoped URL pair; squash migration (D5).
 - **ACCEPTANCE CRITERIA:** public submit functional; cross-org read → empty/404; forms isolation tests green.
 - **VALIDATION PATH:** `make MODULE=forms test -- --modules`.
@@ -228,6 +232,7 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track2` (branch: `wt-track2`) — after T1.7
 - **SCOPE (on top of shared shape):** `listings/models.py:21` NOT NULL migration for `AbstractListing`; remove `OrgScopedViewMixin`/`_scope_by_org`; public listing pages + `get_absolute_url` use `get_system_org()`; per-org slug uniqueness retained; squash migration (D5).
 - **ACCEPTANCE CRITERIA:** public listing pages functional; cross-org read → empty/404; `get_absolute_url` → flat route; listings isolation tests green.
 - **VALIDATION PATH:** `make MODULE=listings test -- --modules`.
@@ -235,14 +240,26 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 
 ---
 
-#### - [ ] T1.9 — Social adopt contract
+#### - [x] T1.9 — Social adopt contract *(wt-track3)*
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implementation completed 2026-06-24.
 
 - **SCOPE (on top of shared shape):** `social/models.py:33` NOT NULL migration for `BaseSocialItem`; `list_published_social_*`/`build_social_*_payload` drop the optional `organization_id` kwarg (now ambient via contextvar); public link tree resolves `get_system_org()`; squash migration (D5).
 - **ACCEPTANCE CRITERIA:** public link tree functional; cross-org read → empty/404; social isolation tests green.
 - **VALIDATION PATH:** `make MODULE=social test -- --modules`.
 - **DEPENDS:** T1.1–T1.3.
+- **IMPLEMENTATION NOTES:**
+  - Replaced module-local `TenantScopedManager`/`OperatorManager` with `orgs.managers.TenantManager` (auto-scopes via ContextVar; `super_scope=True` for operator bypass).
+  - Replaced nullable `CASCADE` FK on `BaseSocialItem.organization` with `tenant_org_fk()` (NOT NULL/PROTECT per D3).
+  - Dropped `SocialItemQuerySet.for_org()` and the `organization_id` kwarg from all four service functions (`list_published_social_links`, `list_published_social_embeds`, `build_social_link_tree_payload`, `build_social_embeds_payload`). Tenant scoping is now ambient.
+  - Added `_social_cache_key()` helper — org-aware cache keys so each org's payload is cached independently.
+  - Squashed migrations to clean NOT NULL/PROTECT contract (D5 — no backfill). Single `0001_initial.py` with all fields and `on_delete=PROTECT`.
+  - Updated tests to use `set_current_org_id()` for contextvar-based scoping rather than explicit `organization_id` parameter.
+  - **Follow-up CR-T1-9-001 (cache partitioning):** Replaced global cache keys with org-aware keys (`{base_key}:org:{org_id}`) partitioned by org identity. Final fix captures `previous_org_id` before save and clears both old and new org partitions (plus the base key) when ownership changes. Added cross-org and reassignment regression tests (`test_social_link_cache_is_partitioned_by_org`, `test_social_cache_invalidates_old_org_partition_on_reassignment`).
+  - **Follow-up CR-T1-9-002 (managed views contract):** Updated `render_social_managed_views_module()` in `quickscale_core` to generate views that (a) drop the removed `organization_id` kwarg, (b) resolve System org for anonymous/public requests via `Organization.objects.get_system_org()`, and (c) establish ambient org context before calling the social service layer.
+  - **Follow-up CR-T1-9-003 (context restoration):** The generated managed views now preserve and restore the prior ambient org context with exception-safe `try/finally` handling instead of blindly clearing to `None`. Added template regression coverage for the restoration pattern.
+  - **Follow-on check for T1.15:** The `_SOLO_ROUTE_PREFIXES` in `orgs/middleware.py` still does not include `/social/`, which is correct because social has no module-owned views/URLs. The managed views renderer (`social_manifest.py`) remains the seam that must satisfy the public/System-org contract when RLS lands.
 
 ---
 
@@ -251,6 +268,7 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 **Plan-review mandatory** (financial).
 
+- **TRACK:** `wt-track3` (branch: `wt-track3`) — after T1.9
 - **OBJECTIVE:** Make org the sole billing subject — NOT NULL/PROTECT org FK — and delete the user-subject duality and sync convention.
 - **SCOPE:** `billing/models.py:121` `CreditTransaction.organization`: `SET_NULL`→`PROTECT`, `null=True`→NOT NULL; `billing/models.py:170` `Subscription.organization`: same; `billing/models.py:66/73` `Customer` collapse to org-keyed (user retained as actor/provenance only); retain `quickscale_billing_unique_current_subscription_per_organization`; **delete `_sync_subscription_authority()`** and all callsites; update billing services/views/serializers; squash migration (D5).
 - **ACCEPTANCE CRITERIA:** every billing row org-owned NOT NULL; one active subscription per org enforced; no user-subject code path; org delete blocked by PROTECT (purge via T1.17); billing tests green.
@@ -279,6 +297,7 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.5
 - **SCOPE:** CRM migration `RunSQL` for all owned tables (Contact, Company, Deal, Activity, pipeline) + operator carve-out (D4).
 - **ACCEPTANCE CRITERIA:** app role + `app.current_org_id` set → only that org's rows visible; unset → fail-closed; zero rows whose `organization_id` ≠ session var; CRM suite green under the RLS role.
 - **VALIDATION PATH:** `make MODULE=crm test -- --modules` including Postgres-backed RLS integration test (skips on SQLite).
@@ -290,6 +309,7 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.6
 - **SCOPE:** Blog migration `RunSQL` for Post, Category, Tag, BlogMediaAsset + operator carve-out.
 - **VALIDATION PATH:** `make MODULE=blog test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.6 + T1.4.
@@ -300,6 +320,7 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track2` (branch: `wt-track2`) — after T1.7
 - **SCOPE:** Forms migration `RunSQL` for Form (+ submission/response tables) + operator carve-out.
 - **VALIDATION PATH:** `make MODULE=forms test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.7 + T1.4.
@@ -310,6 +331,7 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track2` (branch: `wt-track2`) — after T1.8
 - **SCOPE:** Listings migration `RunSQL` for AbstractListing and concrete listing tables + operator carve-out.
 - **VALIDATION PATH:** `make MODULE=listings test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.8 + T1.4.
@@ -320,6 +342,7 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track3` (branch: `wt-track3`) — after T1.9
 - **SCOPE:** Social migration `RunSQL` for BaseSocialItem and concrete social tables + operator carve-out.
 - **VALIDATION PATH:** `make MODULE=social test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.9 + T1.4.
@@ -330,6 +353,7 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `wt-track3` (branch: `wt-track3`) — after T1.10
 - **SCOPE:** Billing migration `RunSQL` for Subscription, CreditTransaction, Customer + operator carve-out. Confirm `app.current_org_id` is set in Celery tasks / webhook handlers before enabling `FORCE ROW LEVEL SECURITY`.
 - **VALIDATION PATH:** `make MODULE=billing test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.10 + T1.4.
@@ -342,6 +366,7 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+- **TRACK:** `v87` (main integration branch) — after all T1.5–T1.10 merged
 - **OBJECTIVE:** Ordered, GDPR-capable org purge across all owned tables despite PROTECT FKs.
 - **SCOPE:** `orgs/.../management/commands/purge_organization.py` — FK-safe deletion order (social → forms → listings → blog → crm → billing → memberships); transactional; `--dry-run`; refuses System/personal org without `--force`; cross-module fixture tests.
 - **ACCEPTANCE CRITERIA:** purges all org-owned rows in FK-safe order; transactional; idempotent; refuses reserved orgs by default; dry-run shows counts; full `make test` green.
