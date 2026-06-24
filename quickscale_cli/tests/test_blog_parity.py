@@ -24,7 +24,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.blog_manifest import (  # type: ignore[import-untyped]
+from quickscale_core.contracts.resolvers import (
     BLOG_MODULE_OPTION_KEYS,
     DEFAULT_BLOG_API_RATE_LIMIT,
     DEFAULT_BLOG_ENABLE_RSS,

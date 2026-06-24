@@ -251,6 +251,7 @@ class ModuleDerivationSchema:
     option_derivations: dict[str, OptionDerivation] = field(default_factory=dict)
     shared_normalization_rules: list[NormalizationRule] = field(default_factory=list)
     shared_validation_rules: list[ValidationRule] = field(default_factory=list)
+    shared_legacy_aliases: list[LegacyKeyAlias] = field(default_factory=list)
     module_wiring_projections: list[WiringProjection] = field(default_factory=list)
     description: str = ""
 
@@ -305,3 +306,215 @@ class ModuleDerivationSchema:
         for derivation in self.option_derivations.values():
             projections.extend(derivation.wiring_projections)
         return projections
+
+
+# ---------------------------------------------------------------------------
+# Manifest-to-schema builder (T2.3 Phase 3+)
+# ---------------------------------------------------------------------------
+
+
+def _parse_wiring_projection(raw: dict[str, Any]) -> WiringProjection:
+    """Convert a raw ``wiring_projections`` dict entry into a typed
+    :class:`WiringProjection`.
+
+    Args:
+        raw: The raw dict from the manifest ``derivation`` section.
+
+    Returns:
+        A :class:`WiringProjection` instance.
+    """
+    return WiringProjection(
+        wiring_field=str(raw.get("wiring_field", "")),
+        source_options=list(raw.get("source_options", [])),
+        derivation_type=str(raw.get("derivation_type", "static")),
+        expression=dict(raw.get("expression", {})),
+        default=list(raw.get("default", [])),
+        description=str(raw.get("description", "")),
+    )
+
+
+def _parse_normalization_rule(raw: dict[str, Any]) -> NormalizationRule:
+    """Convert a raw ``normalization_rules`` dict entry into a typed
+    :class:`NormalizationRule`.
+
+    Args:
+        raw: The raw dict from the manifest ``derivation`` section.
+
+    Returns:
+        A :class:`NormalizationRule` instance.
+    """
+    return NormalizationRule(
+        source_key=str(raw.get("source_key", "")),
+        target_key=str(raw.get("target_key", "")),
+        rule_type=str(raw.get("rule_type", "identity")),
+        mapping=dict(raw.get("mapping", {})),
+        description=str(raw.get("description", "")),
+    )
+
+
+def _parse_validation_rule(raw: dict[str, Any]) -> ValidationRule:
+    """Convert a raw ``validation_rules`` dict entry into a typed
+    :class:`ValidationRule`.
+
+    Args:
+        raw: The raw dict from the manifest ``derivation`` section.
+
+    Returns:
+        A :class:`ValidationRule` instance.
+    """
+    return ValidationRule(
+        option_key=str(raw.get("option_key", "")),
+        rule_type=str(raw.get("rule_type", "")),
+        allowed_values=list(raw.get("allowed_values", [])),
+        min_value=raw.get("min_value"),
+        max_value=raw.get("max_value"),
+        pattern=raw.get("pattern"),
+        description=str(raw.get("description", "")),
+    )
+
+
+def _parse_legacy_key_alias(raw: dict[str, Any]) -> LegacyKeyAlias:
+    """Convert a raw ``legacy_aliases`` dict entry into a typed
+    :class:`LegacyKeyAlias`.
+
+    Args:
+        raw: The raw dict from the manifest ``derivation`` section.
+
+    Returns:
+        A :class:`LegacyKeyAlias` instance.
+    """
+    return LegacyKeyAlias(
+        legacy_key=str(raw.get("legacy_key", "")),
+        current_key=str(raw.get("current_key", "")),
+        transform=str(raw.get("transform", "identity")),
+        transform_params=dict(raw.get("transform_params", {})),
+        description=str(raw.get("description", "")),
+    )
+
+
+def _parse_derived_setting(raw: dict[str, Any]) -> DerivedSetting:
+    """Convert a raw ``derived_settings`` dict entry into a typed
+    :class:`DerivedSetting`.
+
+    Args:
+        raw: The raw dict from the manifest ``derivation`` section.
+
+    Returns:
+        A :class:`DerivedSetting` instance.
+    """
+    return DerivedSetting(
+        setting_key=str(raw.get("setting_key", "")),
+        source_options=list(raw.get("source_options", [])),
+        derivation_type=str(raw.get("derivation_type", "direct")),
+        expression=dict(raw.get("expression", {})),
+        default=raw.get("default"),
+        description=str(raw.get("description", "")),
+    )
+
+
+def _parse_option_derivation(
+    option_key: str,
+    raw: dict[str, Any],
+) -> OptionDerivation:
+    """Convert a raw per-option derivation dict entry into a typed
+    :class:`OptionDerivation`.
+
+    Args:
+        option_key: The option key name.
+        raw: The raw dict from the manifest ``derivation`` section.
+
+    Returns:
+        An :class:`OptionDerivation` instance.
+    """
+    return OptionDerivation(
+        option_key=option_key,
+        normalization_rules=[
+            _parse_normalization_rule(r) for r in raw.get("normalization_rules", [])
+        ],
+        validation_rules=[
+            _parse_validation_rule(r) for r in raw.get("validation_rules", [])
+        ],
+        legacy_aliases=[
+            _parse_legacy_key_alias(a) for a in raw.get("legacy_aliases", [])
+        ],
+        derived_settings=[
+            _parse_derived_setting(s) for s in raw.get("derived_settings", [])
+        ],
+        wiring_projections=[
+            _parse_wiring_projection(w) for w in raw.get("wiring_projections", [])
+        ],
+    )
+
+
+def build_schema_from_manifest(
+    manifest_name: str,
+    *,
+    derivation_rules: list[dict[str, Any]] | None = None,
+    validation_rules: list[dict[str, Any]] | None = None,
+    legacy_aliases: list[dict[str, Any]] | None = None,
+    derived_settings: list[dict[str, Any]] | None = None,
+    wiring_projections: list[dict[str, Any]] | None = None,
+    option_derivations: dict[str, dict[str, Any]] | None = None,
+    version: str = "1",
+    description: str = "",
+) -> ModuleDerivationSchema:
+    """Build a :class:`ModuleDerivationSchema` from raw manifest derivation data.
+
+    Accepts either:
+    * Individual field lists (``wiring_projections``, ``derived_settings``,
+      ``normalization_rules``, etc.) for module-level wiring, OR
+    * A per-option ``option_derivations`` dict for option-level metadata.
+
+    When both module-level lists and per-option derivations are provided,
+    the module-level lists define the shared structural base and the
+    per-option derivations define option-specific rules.
+
+    Args:
+        manifest_name: The module name.
+        derivation_rules: Module-level normalisation rules (raw dicts).
+        validation_rules: Module-level validation rules (raw dicts).
+        legacy_aliases: Module-level legacy key aliases (raw dicts).
+        derived_settings: Module-level derived settings (raw dicts).
+        wiring_projections: Module-level wiring projections (raw dicts).
+        option_derivations: Per-option derivation metadata keyed by option
+            name, each value being a raw dict with optional ``normalization_rules``,
+            ``validation_rules``, ``legacy_aliases``, ``derived_settings``,
+            and ``wiring_projections`` sub-lists.
+        version: Schema version string.
+        description: Schema description.
+
+    Returns:
+        A fully typed :class:`ModuleDerivationSchema`.
+    """
+    parsed_wiring = [_parse_wiring_projection(w) for w in (wiring_projections or [])]
+
+    parsed_option_derivations: dict[str, OptionDerivation] = {}
+    for opt_key, opt_raw in (option_derivations or {}).items():
+        parsed_option_derivations[opt_key] = _parse_option_derivation(opt_key, opt_raw)
+
+    return ModuleDerivationSchema(
+        module_name=manifest_name,
+        version=version,
+        description=description,
+        module_wiring_projections=parsed_wiring,
+        option_derivations=parsed_option_derivations,
+        shared_normalization_rules=[
+            _parse_normalization_rule(r) for r in (derivation_rules or [])
+        ],
+        shared_validation_rules=[
+            _parse_validation_rule(r) for r in (validation_rules or [])
+        ],
+    )
+
+
+__all__ = [
+    "DerivedSetting",
+    "LegacyKeyAlias",
+    "ModuleDerivationSchema",
+    "NormalizationRule",
+    "OptionDerivation",
+    "ValidationRule",
+    "WiringProjection",
+    # Schema builder
+    "build_schema_from_manifest",
+]

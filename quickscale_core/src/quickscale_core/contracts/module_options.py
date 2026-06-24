@@ -152,6 +152,101 @@ NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION: Final[str] = "webhook_secret_env_va
 
 
 # ---------------------------------------------------------------------------
+# Constants: analytics (additional)
+# ---------------------------------------------------------------------------
+
+ANALYTICS_POSTHOG_DEFAULT_HOST: Final[str] = "https://us.i.posthog.com"
+ANALYTICS_POSTHOG_EU_HOST: Final[str] = "https://eu.i.posthog.com"
+
+ANALYTICS_EVENT_PAGEVIEW: Final[str] = "$pageview"
+ANALYTICS_EVENT_FORM_SUBMIT: Final[str] = "form_submit"
+ANALYTICS_EVENT_SOCIAL_LINK_CLICK: Final[str] = "social_link_click"
+
+
+# ---------------------------------------------------------------------------
+# Constants: notifications (additional)
+# ---------------------------------------------------------------------------
+
+DEFAULT_NOTIFICATIONS_DEFAULT_TAGS: Final[tuple[str, ...]] = (
+    "quickscale",
+    "transactional",
+)
+DEFAULT_NOTIFICATIONS_ALLOWED_TAGS: Final[tuple[str, ...]] = (
+    "quickscale",
+    "transactional",
+    "notifications",
+    "auth",
+    "forms",
+    "ops",
+    "testing",
+)
+
+NOTIFICATIONS_LIVE_EMAIL_BACKEND: Final[str] = "anymail.backends.resend.EmailBackend"
+NOTIFICATIONS_CONSOLE_EMAIL_BACKEND: Final[str] = (
+    "django.core.mail.backends.console.EmailBackend"
+)
+
+
+# ---------------------------------------------------------------------------
+# Constants: orgs
+# ---------------------------------------------------------------------------
+
+ORGS_MODE_SOLO: Final[str] = "solo"
+ORGS_MODE_SAAS: Final[str] = "saas"
+ORGS_MODES: Final[tuple[str, ...]] = (ORGS_MODE_SOLO, ORGS_MODE_SAAS)
+
+DEFAULT_ORGS_MODE: Final[str] = "solo"
+
+ORGS_MODULE_OPTION_KEYS: Final[frozenset[str]] = frozenset({"mode"})
+
+
+# ---------------------------------------------------------------------------
+# Constants: storage
+# ---------------------------------------------------------------------------
+
+STORAGE_BACKEND_LOCAL: Final[str] = "local"
+STORAGE_BACKEND_S3: Final[str] = "s3"
+STORAGE_BACKEND_R2: Final[str] = "r2"
+STORAGE_BACKENDS: Final[tuple[str, ...]] = (
+    STORAGE_BACKEND_LOCAL,
+    STORAGE_BACKEND_S3,
+    STORAGE_BACKEND_R2,
+)
+
+DEFAULT_STORAGE_BACKEND: Final[str] = "local"
+DEFAULT_STORAGE_MEDIA_URL: Final[str] = "/media/"
+DEFAULT_STORAGE_PUBLIC_BASE_URL: Final[str] = ""
+DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED: Final[bool] = False
+
+STORAGE_MODULE_OPTION_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "backend",
+        "media_url",
+        "public_base_url",
+        "bucket_name",
+        "endpoint_url",
+        "region_name",
+        "access_key_id",
+        "secret_access_key",
+        "default_acl",
+        "querystring_auth",
+        "private_media_enabled",
+    }
+)
+
+
+# ---------------------------------------------------------------------------
+# Constants: social
+# ---------------------------------------------------------------------------
+
+SOCIAL_LINK_TREE_PATH: Final[str] = "/social"
+SOCIAL_EMBEDS_PATH: Final[str] = "/social/embeds"
+SOCIAL_INTEGRATION_BASE_PATH: Final[str] = "/_quickscale/social/"
+SOCIAL_INTEGRATION_EMBEDS_PATH: Final[str] = "/_quickscale/social/embeds/"
+SOCIAL_LAYOUT_VARIANTS: Final[tuple[str, ...]] = ("list", "cards", "grid")
+
+
+# ---------------------------------------------------------------------------
 # Constants: DR env-var portability classification
 # ---------------------------------------------------------------------------
 #
@@ -838,6 +933,11 @@ def sanitize_module_options(
 
 __all__ = [
     # Analytics constants
+    "ANALYTICS_EVENT_FORM_SUBMIT",
+    "ANALYTICS_EVENT_PAGEVIEW",
+    "ANALYTICS_EVENT_SOCIAL_LINK_CLICK",
+    "ANALYTICS_POSTHOG_DEFAULT_HOST",
+    "ANALYTICS_POSTHOG_EU_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
     "ANALYTICS_PROVIDERS",
     "DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
@@ -879,8 +979,12 @@ __all__ = [
     # DR env-var portability function
     "get_env_var_portability",
     # Notifications constants
+    "DEFAULT_NOTIFICATIONS_ALLOWED_TAGS",
+    "DEFAULT_NOTIFICATIONS_DEFAULT_TAGS",
     "DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR",
     "DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
+    "NOTIFICATIONS_CONSOLE_EMAIL_BACKEND",
+    "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
     "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
     "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
     # Normalize functions
@@ -902,6 +1006,28 @@ __all__ = [
     "validate_notifications_env_var_reference",
     "validate_notifications_module_options",
     "validate_social_module_options",
+    # Orgs constants
+    "DEFAULT_ORGS_MODE",
+    "ORGS_MODE_SAAS",
+    "ORGS_MODE_SOLO",
+    "ORGS_MODES",
+    "ORGS_MODULE_OPTION_KEYS",
+    # Storage constants
+    "DEFAULT_STORAGE_BACKEND",
+    "DEFAULT_STORAGE_MEDIA_URL",
+    "DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED",
+    "DEFAULT_STORAGE_PUBLIC_BASE_URL",
+    "STORAGE_BACKEND_LOCAL",
+    "STORAGE_BACKEND_R2",
+    "STORAGE_BACKEND_S3",
+    "STORAGE_BACKENDS",
+    "STORAGE_MODULE_OPTION_KEYS",
+    # Social path constants
+    "SOCIAL_EMBEDS_PATH",
+    "SOCIAL_INTEGRATION_BASE_PATH",
+    "SOCIAL_INTEGRATION_EMBEDS_PATH",
+    "SOCIAL_LAYOUT_VARIANTS",
+    "SOCIAL_LINK_TREE_PATH",
     # Helpers
     "format_auth_desired_config_contract",
     "has_legacy_backups_secret_values",

@@ -1,10 +1,13 @@
 """Module Manifest Loader
 
 Loads and validates module.yml manifest files.
+Supports optional ``derivation`` section for T2.3+ derivation/validation rules.
 """
 
-from pathlib import Path
+from __future__ import annotations
+
 import posixpath
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -206,6 +209,115 @@ def _parse_managed_files(
     return declarations
 
 
+# ---------------------------------------------------------------------------
+# Derivation section parsing (T2.3+)
+# ---------------------------------------------------------------------------
+
+_DERIVATION_LIST_FIELDS = frozenset(
+    {
+        "normalization_rules",
+        "validation_rules",
+        "legacy_aliases",
+        "derived_settings",
+        "wiring_projections",
+    }
+)
+
+
+def _assert_is_mapping(
+    value: Any,
+    path: str,
+    module_name: str | None,
+) -> dict[str, Any]:
+    """Assert *value* is a mapping and return it; raise otherwise."""
+    if not isinstance(value, dict):
+        raise ManifestError(f"'{path}' must be a mapping", module_name)
+    return value
+
+
+def _assert_is_list(
+    value: Any,
+    path: str,
+    module_name: str | None,
+) -> list[Any]:
+    """Assert *value* is a list and return it; raise otherwise."""
+    if not isinstance(value, list):
+        raise ManifestError(f"'{path}' must be a list", module_name)
+    return value
+
+
+def _parse_derivation_section(
+    data: dict[str, Any],
+    module_name: str | None,
+) -> dict[str, Any]:
+    """Parse the optional ``derivation`` section from manifest data.
+
+    Returns a dict with keys matching ``ModuleManifest`` derivation fields:
+    ``derivation_rules``, ``validation_rules``, ``legacy_aliases``,
+    ``derived_settings``, ``wiring_projections``, and ``option_derivations``.
+    List fields default to empty lists; ``option_derivations`` defaults to
+    an empty dict.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        module_name: Optional module name for error messages.
+
+    Returns:
+        Dict of parsed derivation sub-sections.
+
+    Raises:
+        ManifestError: If a section is malformed.
+    """
+    raw = data.get("derivation")
+    if raw is None:
+        result: dict[str, Any] = {field: [] for field in _DERIVATION_LIST_FIELDS}
+        result["option_derivations"] = {}
+        return result
+
+    derivation = _assert_is_mapping(raw, "derivation", module_name)
+
+    result = {}
+    for field in _DERIVATION_LIST_FIELDS:
+        section = derivation.get(field, [])
+        if section is None:
+            result[field] = []
+            continue
+        result[field] = _assert_is_list(
+            section,
+            f"derivation.{field}",
+            module_name,
+        )
+
+    # Parse per-option derivations (a mapping of option_key -> raw dict).
+    opt_raw = derivation.get("option_derivations", {})
+    if opt_raw is None:
+        result["option_derivations"] = {}
+    elif isinstance(opt_raw, dict):
+        result["option_derivations"] = {}
+        for opt_key, opt_value in opt_raw.items():
+            if opt_value is None:
+                result["option_derivations"][opt_key] = {}
+            elif isinstance(opt_value, dict):
+                result["option_derivations"][opt_key] = opt_value
+            else:
+                raise ManifestError(
+                    f"derivation.option_derivations.{opt_key} must be a mapping",
+                    module_name,
+                )
+    else:
+        raise ManifestError(
+            "derivation.option_derivations must be a mapping",
+            module_name,
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Implies section parsing
+# ---------------------------------------------------------------------------
+
+
 def _parse_implies(data: dict[str, Any], module_name: str | None) -> list[ImpliesEntry]:
     """Parse and validate the top-level ``implies`` section.
 
@@ -293,6 +405,9 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     # Parse implies declarations (additive; empty when absent)
     implies = _parse_implies(data, module_name)
 
+    # Parse derivation section (T2.3+; additive; every field defaults to [])
+    derivation = _parse_derivation_section(data, module_name)
+
     return ModuleManifest(
         name=name,
         version=version,
@@ -304,6 +419,12 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         django_apps=django_apps,
         managed_files=managed_files,
         implies=implies,
+        derivation_rules=derivation.get("normalization_rules", []),
+        validation_rules=derivation.get("validation_rules", []),
+        legacy_aliases=derivation.get("legacy_aliases", []),
+        derived_settings=derivation.get("derived_settings", []),
+        wiring_projections=derivation.get("wiring_projections", []),
+        option_derivations=derivation.get("option_derivations", {}),
     )
 
 

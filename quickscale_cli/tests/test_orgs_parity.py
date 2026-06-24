@@ -27,12 +27,14 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.orgs_manifest import (  # type: ignore[import-untyped]
+from quickscale_core.contracts.module_options import (
     DEFAULT_ORGS_MODE,
     ORGS_MODE_SAAS,
     ORGS_MODE_SOLO,
     ORGS_MODES,
     ORGS_MODULE_OPTION_KEYS,
+)
+from quickscale_core.contracts.resolvers import (
     default_orgs_module_options,
     normalize_orgs_module_options,
     resolve_orgs_module_options,

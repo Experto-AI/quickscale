@@ -10,7 +10,7 @@ from unittest.mock import patch
 import click
 import pytest
 
-from quickscale_cli.backups_manifest import (
+from quickscale_core.contracts.module_options import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
 )
@@ -54,7 +54,7 @@ from quickscale_cli.commands.module_config import (
     validate_backups_module_options,
 )
 from quickscale_core.manifest.entry_point import build_manifest_wiring_spec
-from quickscale_cli.social_manifest import (
+from quickscale_core.contracts.module_options import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,

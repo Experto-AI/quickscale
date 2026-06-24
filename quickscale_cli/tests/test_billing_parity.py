@@ -29,7 +29,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.billing_manifest import (  # type: ignore[import-untyped]
+from quickscale_core.contracts.module_options import (
     BILLING_ENV_VAR_OPTION_NAMES,
     BILLING_MODULE_OPTION_KEYS,
     BILLING_SUPPORTED_CURRENCIES,
@@ -37,12 +37,14 @@ from quickscale_cli.billing_manifest import (  # type: ignore[import-untyped]
     DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
     DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
     DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-    billing_production_targeted,
-    default_billing_module_options,
     normalize_billing_module_options,
-    resolve_billing_module_options,
     validate_billing_currency,
     validate_billing_env_var_reference,
+)
+from quickscale_core.contracts.resolvers import (
+    billing_production_targeted,
+    default_billing_module_options,
+    resolve_billing_module_options,
     validate_billing_module_options,
 )
 

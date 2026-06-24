@@ -664,3 +664,274 @@ implies:
             f"Implied: {implied_config}\n"
             f"Canonical: {canonical_defaults}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Derivation section parsing (T2.3+)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestDerivation:
+    """Tests for the optional derivation section in load_manifest."""
+
+    def test_no_derivation_section(self) -> None:
+        """Manifests without a derivation section produce empty lists."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.derivation_rules == []
+        assert manifest.validation_rules == []
+        assert manifest.legacy_aliases == []
+        assert manifest.derived_settings == []
+        assert manifest.wiring_projections == []
+
+    def test_empty_derivation_section(self) -> None:
+        """An empty derivation section produces empty lists."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nderivation: {}\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.derivation_rules == []
+        assert manifest.validation_rules == []
+        assert manifest.legacy_aliases == []
+        assert manifest.derived_settings == []
+        assert manifest.wiring_projections == []
+
+    def test_derivation_normalization_rules(self) -> None:
+        """Normalization rules in the derivation section are parsed."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  normalization_rules:
+    - source_key: provider
+      target_key: provider
+      rule_type: lowercase
+    - source_key: mode
+      target_key: mode
+      rule_type: choice_map
+      mapping:
+        basic: simple
+        full: detailed
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert len(manifest.derivation_rules) == 2
+        assert manifest.derivation_rules[0]["source_key"] == "provider"
+        assert manifest.derivation_rules[0]["rule_type"] == "lowercase"
+        assert manifest.derivation_rules[1]["source_key"] == "mode"
+        assert manifest.derivation_rules[1]["rule_type"] == "choice_map"
+
+    def test_derivation_validation_rules(self) -> None:
+        """Validation rules in the derivation section are parsed."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  validation_rules:
+    - option_key: provider
+      rule_type: choices
+      allowed_values:
+        - posthog
+        - segment
+    - option_key: enabled
+      rule_type: required
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert len(manifest.validation_rules) == 2
+        assert manifest.validation_rules[0]["option_key"] == "provider"
+        assert manifest.validation_rules[0]["rule_type"] == "choices"
+        assert manifest.validation_rules[1]["option_key"] == "enabled"
+
+    def test_derivation_legacy_aliases(self) -> None:
+        """Legacy aliases in the derivation section are parsed."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  legacy_aliases:
+    - legacy_key: old_api_key
+      current_key: api_key
+      transform: identity
+    - legacy_key: old_provider
+      current_key: provider
+      transform: rename_value
+      transform_params:
+        basic: posthog
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert len(manifest.legacy_aliases) == 2
+        assert manifest.legacy_aliases[0]["legacy_key"] == "old_api_key"
+        assert manifest.legacy_aliases[1]["transform"] == "rename_value"
+
+    def test_derivation_derived_settings(self) -> None:
+        """Derived settings in the derivation section are parsed."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  derived_settings:
+    - setting_key: MY_APP_ENABLED
+      source_options:
+        - enabled
+      derivation_type: direct
+      expression:
+        option: enabled
+    - setting_key: MY_APP_MODE
+      derivation_type: static
+      expression:
+        value: production
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert len(manifest.derived_settings) == 2
+        assert manifest.derived_settings[0]["setting_key"] == "MY_APP_ENABLED"
+        assert manifest.derived_settings[1]["setting_key"] == "MY_APP_MODE"
+
+    def test_derivation_wiring_projections(self) -> None:
+        """Wiring projections in the derivation section are parsed."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - my_app
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - ["", "my_app.urls"]
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert len(manifest.wiring_projections) == 2
+        assert manifest.wiring_projections[0]["wiring_field"] == "apps"
+        assert manifest.wiring_projections[1]["wiring_field"] == "url_includes"
+
+    def test_derivation_not_list_raises(self) -> None:
+        """A derivation sub-section that is not a list raises ManifestError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  validation_rules: not_a_list\n"
+        )
+        with pytest.raises(ManifestError, match="validation_rules"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_not_mapping_raises(self) -> None:
+        """derivation that is not a mapping raises ManifestError."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nderivation: not_a_mapping\n"
+        with pytest.raises(ManifestError, match="derivation"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_derivation_coexists_with_implies(self) -> None:
+        """derivation and implies parse independently."""
+        yaml_content = """
+name: billing
+version: '1.0.0'
+implies:
+  - name: orgs
+derivation:
+  normalization_rules:
+    - source_key: provider
+      target_key: provider
+      rule_type: lowercase
+"""
+        manifest = load_manifest(yaml_content, "billing")
+        assert len(manifest.implies) == 1
+        assert manifest.implies[0].name == "orgs"
+        assert len(manifest.derivation_rules) == 1
+
+    def test_derivation_does_not_break_backward_compat(self) -> None:
+        """A manifest without derivation loads cleanly with empty derivation fields."""
+        yaml_content = "name: auth\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "auth")
+        assert manifest.derivation_rules == []
+        assert manifest.validation_rules == []
+        assert manifest.legacy_aliases == []
+        assert manifest.derived_settings == []
+        assert manifest.wiring_projections == []
+        assert manifest.option_derivations == {}
+        assert manifest.name == "auth"
+
+    def test_option_derivations_parsed(self) -> None:
+        """option_derivations are parsed from the derivation section."""
+        yaml_content = """
+name: analytics
+version: '1.0.0'
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value: [quickscale_modules_analytics]
+  option_derivations:
+    enabled:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_ENABLED
+          source_options: [enabled]
+          derivation_type: direct
+          expression:
+            option: enabled
+    provider:
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_PROVIDER
+          source_options: [provider]
+          derivation_type: direct
+          expression:
+            option: provider
+      normalization_rules:
+        - source_key: provider
+          target_key: provider
+          rule_type: lowercase
+      validation_rules:
+        - option_key: provider
+          rule_type: choices
+          allowed_values: [posthog]
+"""
+        manifest = load_manifest(yaml_content, "analytics")
+        assert "enabled" in manifest.option_derivations
+        assert "provider" in manifest.option_derivations
+        assert len(manifest.option_derivations["enabled"]["derived_settings"]) == 1
+        assert (
+            manifest.option_derivations["enabled"]["derived_settings"][0]["setting_key"]
+            == "QUICKSCALE_ANALYTICS_ENABLED"
+        )
+        assert len(manifest.option_derivations["provider"]["normalization_rules"]) == 1
+        assert len(manifest.option_derivations["provider"]["validation_rules"]) == 1
+        assert (
+            manifest.option_derivations["provider"]["validation_rules"][0]["rule_type"]
+            == "choices"
+        )
+        assert len(manifest.wiring_projections) == 1
+
+    def test_option_derivations_empty_when_absent(self) -> None:
+        """option_derivations defaults to empty dict when the derivation section
+        does not contain it."""
+        yaml_content = """
+name: auth
+version: '1.0.0'
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value: [my_app]
+"""
+        manifest = load_manifest(yaml_content, "auth")
+        assert manifest.option_derivations == {}
+
+    def test_option_derivations_not_mapping_raises(self) -> None:
+        """option_derivations that is not a mapping raises ManifestError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  option_derivations: not_a_mapping\n"
+        )
+        with pytest.raises(ManifestError, match="option_derivations"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_option_derivation_entry_not_mapping_raises(self) -> None:
+        """An individual option_derivation entry that is not a mapping raises."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "derivation:\n  option_derivations:\n    enabled: not_a_mapping\n"
+        )
+        with pytest.raises(ManifestError, match="option_derivations.enabled"):
+            load_manifest(yaml_content, "mymod")

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_cli.forms_manifest import (  # type: ignore[import-untyped]
+from quickscale_core.contracts.resolvers import (
     DEFAULT_FORMS_DATA_RETENTION_DAYS,
     DEFAULT_FORMS_PER_PAGE,
     DEFAULT_FORMS_RATE_LIMIT,
