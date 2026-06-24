@@ -47,6 +47,24 @@ TestFunction = TypeVar("TestFunction", bound=Callable[..., object])
 django_db = cast(Callable[[TestFunction], TestFunction], pytest.mark.django_db)
 
 
+def _activate_org_context(org_id: object) -> None:
+    """Set the current org context for TenantManager auto-scoping.
+
+    Must be paired with ``_reset_org_context()`` in a ``try/finally`` or
+    ``yield`` fixture.
+    """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    set_current_org_id(org_id)
+
+
+def _reset_org_context() -> None:
+    """Reset the current org context to ``None`` (fail-closed)."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    set_current_org_id(None)
+
+
 def test_get_social_runtime_settings_normalizes_provider_allowlist() -> None:
     """Runtime settings should normalize provider aliases and preserve order."""
     with override_settings(
@@ -72,73 +90,91 @@ def test_get_social_runtime_settings_rejects_disabling_all_public_surfaces() -> 
 
 
 @django_db
-def test_list_published_social_links_uses_canonical_urls_and_invalidates_cache() -> (
-    None
-):
+def test_list_published_social_links_uses_canonical_urls_and_invalidates_cache(
+    org,
+) -> None:
     """Published link payloads should normalize URLs and refresh after admin writes."""
-    SocialLink.objects.create(
-        title="QuickScale on LinkedIn",
-        provider_name="",
-        url="https://www.linkedin.com/company/quickscale/?utm_source=share",
-        display_order=20,
-    )
+    _activate_org_context(org.id)
+    try:
+        SocialLink.objects.create(
+            title="QuickScale on LinkedIn",
+            provider_name="",
+            url="https://www.linkedin.com/company/quickscale/?utm_source=share",
+            display_order=20,
+            organization=org,
+        )
 
-    initial_records = list_published_social_links()
+        initial_records = list_published_social_links()
 
-    assert [record.title for record in initial_records] == ["QuickScale on LinkedIn"]
-    assert initial_records[0].url == "https://www.linkedin.com/company/quickscale"
+        assert [record.title for record in initial_records] == [
+            "QuickScale on LinkedIn"
+        ]
+        assert initial_records[0].url == "https://www.linkedin.com/company/quickscale"
 
-    SocialLink.objects.create(
-        title="QuickScale on YouTube",
-        provider_name="youtube",
-        url="https://youtu.be/abc123?si=share",
-        display_order=10,
-    )
+        SocialLink.objects.create(
+            title="QuickScale on YouTube",
+            provider_name="youtube",
+            url="https://youtu.be/abc123?si=share",
+            display_order=10,
+            organization=org,
+        )
 
-    refreshed_records = list_published_social_links()
+        refreshed_records = list_published_social_links()
 
-    assert [record.title for record in refreshed_records] == [
-        "QuickScale on YouTube",
-        "QuickScale on LinkedIn",
-    ]
-    assert refreshed_records[0].url == "https://www.youtube.com/watch?v=abc123"
+        assert [record.title for record in refreshed_records] == [
+            "QuickScale on YouTube",
+            "QuickScale on LinkedIn",
+        ]
+        assert refreshed_records[0].url == "https://www.youtube.com/watch?v=abc123"
 
-    with override_settings(
-        QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"],
-        QUICKSCALE_SOCIAL_LINKS_PER_PAGE=1,
-    ):
-        filtered_records = list_published_social_links()
+        with override_settings(
+            QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"],
+            QUICKSCALE_SOCIAL_LINKS_PER_PAGE=1,
+        ):
+            filtered_records = list_published_social_links()
 
-    assert [record.title for record in filtered_records] == ["QuickScale on YouTube"]
+        assert [record.title for record in filtered_records] == [
+            "QuickScale on YouTube"
+        ]
+    finally:
+        _reset_org_context()
 
 
 @django_db
-def test_list_published_social_links_recovers_from_corrupt_cache_payload() -> None:
+def test_list_published_social_links_recovers_from_corrupt_cache_payload(org) -> None:
     """Corrupt cached link payloads should be ignored and refreshed from the DB."""
     SocialLink.objects.create(
         title="QuickScale on LinkedIn",
         provider_name="",
         url="https://www.linkedin.com/company/quickscale/",
         display_order=10,
+        organization=org,
     )
-    cache.set(SOCIAL_LINKS_CACHE_KEY, [{"broken": True}], timeout=300)
 
-    records = list_published_social_links()
-    cached_payload = cache.get(SOCIAL_LINKS_CACHE_KEY)
+    # Set a corrupt payload on this org's cache partition, then query.
+    org_cache_key = f"{SOCIAL_LINKS_CACHE_KEY}:org:{org.id}"
+    cache.set(org_cache_key, [{"broken": True}], timeout=300)
 
-    assert [record.provider_name for record in records] == ["linkedin"]
-    assert cached_payload == [
-        {
-            "id": records[0].id,
-            "title": "QuickScale on LinkedIn",
-            "description": "",
-            "provider_name": "linkedin",
-            "provider_display_name": "LinkedIn",
-            "url": "https://www.linkedin.com/company/quickscale",
-            "source_url": "https://www.linkedin.com/company/quickscale/",
-            "display_order": 10,
-        }
-    ]
+    _activate_org_context(org.id)
+    try:
+        records = list_published_social_links()
+        cached_payload = cache.get(org_cache_key)
+
+        assert [record.provider_name for record in records] == ["linkedin"]
+        assert cached_payload == [
+            {
+                "id": records[0].id,
+                "title": "QuickScale on LinkedIn",
+                "description": "",
+                "provider_name": "linkedin",
+                "provider_display_name": "LinkedIn",
+                "url": "https://www.linkedin.com/company/quickscale",
+                "source_url": "https://www.linkedin.com/company/quickscale/",
+                "display_order": 10,
+            }
+        ]
+    finally:
+        _reset_org_context()
 
 
 def test_build_social_link_tree_payload_uses_empty_state_for_missing_table(
@@ -179,74 +215,100 @@ def test_list_published_social_links_reraises_unrelated_database_faults(
 
 
 @django_db
-def test_list_published_social_embeds_honors_runtime_toggle_and_filtering() -> None:
+def test_list_published_social_embeds_honors_runtime_toggle_and_filtering(
+    org,
+) -> None:
     """Published embed payloads should respect embed toggles and provider filtering."""
-    SocialEmbed.objects.create(
-        title="QuickScale on YouTube",
-        provider_name="",
-        url="https://www.youtube.com/shorts/alpha123",
-        display_order=20,
-    )
-    SocialEmbed.objects.create(
-        title="QuickScale on TikTok",
-        provider_name="",
-        url="https://vm.tiktok.com/ZM1234567/",
-        display_order=10,
-    )
+    _activate_org_context(org.id)
+    try:
+        SocialEmbed.objects.create(
+            title="QuickScale on YouTube",
+            provider_name="",
+            url="https://www.youtube.com/shorts/alpha123",
+            display_order=20,
+            organization=org,
+        )
+        SocialEmbed.objects.create(
+            title="QuickScale on TikTok",
+            provider_name="",
+            url="https://vm.tiktok.com/ZM1234567/",
+            display_order=10,
+            organization=org,
+        )
 
-    initial_records = list_published_social_embeds()
+        initial_records = list_published_social_embeds()
 
-    assert [record.provider_name for record in initial_records] == ["tiktok", "youtube"]
-    assert initial_records[0].resolution_status == SOCIAL_EMBED_RESOLUTION_ERROR
-    assert initial_records[0].embed_url is None
-    assert "canonical TikTok video URL" in (initial_records[0].resolution_error or "")
-    assert initial_records[1].resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
-    assert (
-        initial_records[1].embed_url == "https://www.youtube.com/embed/alpha123?rel=0"
-    )
+        assert [record.provider_name for record in initial_records] == [
+            "tiktok",
+            "youtube",
+        ]
+        assert initial_records[0].resolution_status == SOCIAL_EMBED_RESOLUTION_ERROR
+        assert initial_records[0].embed_url is None
+        assert "canonical TikTok video URL" in (
+            initial_records[0].resolution_error or ""
+        )
+        assert initial_records[1].resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
+        assert (
+            initial_records[1].embed_url
+            == "https://www.youtube.com/embed/alpha123?rel=0"
+        )
 
-    with override_settings(
-        QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"],
-        QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE=1,
-    ):
-        filtered_records = list_published_social_embeds()
+        with override_settings(
+            QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"],
+            QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE=1,
+        ):
+            filtered_records = list_published_social_embeds()
 
-    assert len(filtered_records) == 1
-    assert filtered_records[0].provider_name == "youtube"
-    assert (
-        filtered_records[0].embed_url == "https://www.youtube.com/embed/alpha123?rel=0"
-    )
+        assert len(filtered_records) == 1
+        assert filtered_records[0].provider_name == "youtube"
+        assert (
+            filtered_records[0].embed_url
+            == "https://www.youtube.com/embed/alpha123?rel=0"
+        )
 
-    with override_settings(QUICKSCALE_SOCIAL_EMBEDS_ENABLED=False):
-        disabled_records = list_published_social_embeds()
+        with override_settings(QUICKSCALE_SOCIAL_EMBEDS_ENABLED=False):
+            disabled_records = list_published_social_embeds()
 
-    assert disabled_records == ()
+        assert disabled_records == ()
+    finally:
+        _reset_org_context()
 
 
 @django_db
-def test_list_published_social_embeds_recovers_from_non_list_cache_payload() -> None:
+def test_list_published_social_embeds_recovers_from_non_list_cache_payload(
+    org,
+) -> None:
     """Non-list embed cache payloads should be ignored and refreshed from the DB."""
     SocialEmbed.objects.create(
         title="QuickScale on YouTube",
         provider_name="",
         url="https://www.youtube.com/shorts/alpha123",
         display_order=10,
+        organization=org,
     )
-    cache.set(SOCIAL_EMBEDS_CACHE_KEY, {"broken": True}, timeout=300)
+    org_cache_key = f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{org.id}"
+    cache.set(org_cache_key, {"broken": True}, timeout=300)
 
-    records = list_published_social_embeds()
-    cached_payload = cast(list[dict[str, object]], cache.get(SOCIAL_EMBEDS_CACHE_KEY))
+    _activate_org_context(org.id)
+    try:
+        records = list_published_social_embeds()
+        cached_payload = cast(list[dict[str, object]], cache.get(org_cache_key))
 
-    assert [record.provider_name for record in records] == ["youtube"]
-    assert cached_payload[0]["id"] == records[0].id
-    assert cached_payload[0]["provider_name"] == "youtube"
-    assert (
-        cached_payload[0]["embed_url"] == "https://www.youtube.com/embed/alpha123?rel=0"
-    )
+        assert [record.provider_name for record in records] == ["youtube"]
+        assert cached_payload[0]["id"] == records[0].id
+        assert cached_payload[0]["provider_name"] == "youtube"
+        assert (
+            cached_payload[0]["embed_url"]
+            == "https://www.youtube.com/embed/alpha123?rel=0"
+        )
+    finally:
+        _reset_org_context()
 
 
 @django_db
-def test_build_social_link_tree_payload_freezes_enabled_and_empty_semantics() -> None:
+def test_build_social_link_tree_payload_freezes_enabled_and_empty_semantics(
+    org,
+) -> None:
     """Managed link-tree payloads should expose deterministic empty and enabled states."""
     empty_payload = build_social_link_tree_payload()
 
@@ -268,50 +330,56 @@ def test_build_social_link_tree_payload_freezes_enabled_and_empty_semantics() ->
     }
     assert social_payload_status_code(empty_payload["status"]) == 200
 
-    SocialLink.objects.create(
-        title="QuickScale on YouTube",
-        provider_name="youtube",
-        url="https://youtu.be/abc123?si=share",
-        description="Launch clips and demos.",
-        display_order=10,
-    )
-    SocialLink.objects.create(
-        title="QuickScale on LinkedIn",
-        provider_name="",
-        url="https://www.linkedin.com/company/quickscale/?utm_source=share",
-        description="Company updates.",
-        display_order=20,
-    )
+    _activate_org_context(org.id)
+    try:
+        SocialLink.objects.create(
+            title="QuickScale on YouTube",
+            provider_name="youtube",
+            url="https://youtu.be/abc123?si=share",
+            description="Launch clips and demos.",
+            display_order=10,
+            organization=org,
+        )
+        SocialLink.objects.create(
+            title="QuickScale on LinkedIn",
+            provider_name="",
+            url="https://www.linkedin.com/company/quickscale/?utm_source=share",
+            description="Company updates.",
+            display_order=20,
+            organization=org,
+        )
 
-    enabled_payload = build_social_link_tree_payload()
-    links = cast(list[dict[str, object]], enabled_payload["links"])
+        enabled_payload = build_social_link_tree_payload()
+        links = cast(list[dict[str, object]], enabled_payload["links"])
 
-    assert enabled_payload["status"] == SOCIAL_STATUS_ENABLED
-    assert enabled_payload["enabled"] is True
-    assert enabled_payload["total_links"] == 2
-    assert enabled_payload["links"] == [
-        {
-            "id": links[0]["id"],
-            "title": "QuickScale on YouTube",
-            "description": "Launch clips and demos.",
-            "provider_name": "youtube",
-            "provider_display_name": "YouTube",
-            "url": "https://www.youtube.com/watch?v=abc123",
-            "source_url": "https://youtu.be/abc123?si=share",
-            "display_order": 10,
-        },
-        {
-            "id": links[1]["id"],
-            "title": "QuickScale on LinkedIn",
-            "description": "Company updates.",
-            "provider_name": "linkedin",
-            "provider_display_name": "LinkedIn",
-            "url": "https://www.linkedin.com/company/quickscale",
-            "source_url": "https://www.linkedin.com/company/quickscale/?utm_source=share",
-            "display_order": 20,
-        },
-    ]
-    assert social_payload_status_code(enabled_payload["status"]) == 200
+        assert enabled_payload["status"] == SOCIAL_STATUS_ENABLED
+        assert enabled_payload["enabled"] is True
+        assert enabled_payload["total_links"] == 2
+        assert enabled_payload["links"] == [
+            {
+                "id": links[0]["id"],
+                "title": "QuickScale on YouTube",
+                "description": "Launch clips and demos.",
+                "provider_name": "youtube",
+                "provider_display_name": "YouTube",
+                "url": "https://www.youtube.com/watch?v=abc123",
+                "source_url": "https://youtu.be/abc123?si=share",
+                "display_order": 10,
+            },
+            {
+                "id": links[1]["id"],
+                "title": "QuickScale on LinkedIn",
+                "description": "Company updates.",
+                "provider_name": "linkedin",
+                "provider_display_name": "LinkedIn",
+                "url": "https://www.linkedin.com/company/quickscale",
+                "source_url": "https://www.linkedin.com/company/quickscale/?utm_source=share",
+                "display_order": 20,
+            },
+        ]
+        assert social_payload_status_code(enabled_payload["status"]) == 200
+    finally:
+        _reset_org_context()
 
 
 def test_contract_helpers_normalize_urls_and_raise_specific_errors() -> None:
@@ -408,7 +476,7 @@ def test_get_social_runtime_settings_rejects_additional_invalid_values(
 
 
 @django_db
-def test_social_models_enforce_guardrails_and_invalidate_cache() -> None:
+def test_social_models_enforce_guardrails_and_invalidate_cache(org) -> None:
     """Social models should validate runtime guardrails and clear their cache keys."""
     cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
     link = SocialLink.objects.create(
@@ -416,6 +484,7 @@ def test_social_models_enforce_guardrails_and_invalidate_cache() -> None:
         provider_name="youtube",
         url="https://youtu.be/abc123?si=share",
         display_order=10,
+        organization=org,
     )
 
     assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
@@ -431,6 +500,7 @@ def test_social_models_enforce_guardrails_and_invalidate_cache() -> None:
             provider_name="",
             url="https://www.linkedin.com/company/quickscale/",
             display_order=10,
+            organization=org,
         )
         with pytest.raises(ValidationError) as exc_info:
             invalid_link.full_clean()
@@ -447,6 +517,7 @@ def test_social_models_enforce_guardrails_and_invalidate_cache() -> None:
             provider_name="",
             url="https://www.linkedin.com/company/quickscale/",
             display_order=10,
+            organization=org,
         )
         with pytest.raises(ValidationError) as exc_info:
             invalid_embed.full_clean()
@@ -498,9 +569,9 @@ def test_build_social_link_tree_payload_freezes_disabled_and_error_semantics() -
 
 
 @django_db
-def test_build_social_embeds_payload_freezes_enabled_disabled_and_error_semantics() -> (
-    None
-):
+def test_build_social_embeds_payload_freezes_enabled_disabled_and_error_semantics(
+    org,
+) -> None:
     """Managed embed payloads should expose deterministic state and filtered items."""
     empty_payload = build_social_embeds_payload()
 
@@ -521,87 +592,95 @@ def test_build_social_embeds_payload_freezes_enabled_disabled_and_error_semantic
         "error": None,
     }
 
-    SocialEmbed.objects.create(
-        title="QuickScale on YouTube",
-        provider_name="",
-        url="https://www.youtube.com/shorts/alpha123",
-        description="Launch announcement clip.",
-        display_order=20,
-    )
-    SocialEmbed.objects.create(
-        title="QuickScale on TikTok",
-        provider_name="",
-        url="https://vm.tiktok.com/ZM1234567/",
-        description="Short product teaser.",
-        display_order=10,
-    )
+    _activate_org_context(org.id)
+    try:
+        SocialEmbed.objects.create(
+            title="QuickScale on YouTube",
+            provider_name="",
+            url="https://www.youtube.com/shorts/alpha123",
+            description="Launch announcement clip.",
+            display_order=20,
+            organization=org,
+        )
+        SocialEmbed.objects.create(
+            title="QuickScale on TikTok",
+            provider_name="",
+            url="https://vm.tiktok.com/ZM1234567/",
+            description="Short product teaser.",
+            display_order=10,
+            organization=org,
+        )
 
-    with override_settings(
-        QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"],
-        QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE=1,
-        QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS=600,
-    ):
-        enabled_payload = build_social_embeds_payload()
-    embeds = cast(list[dict[str, object]], enabled_payload["embeds"])
+        with override_settings(
+            QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"],
+            QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE=1,
+            QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS=600,
+        ):
+            enabled_payload = build_social_embeds_payload()
+        embeds = cast(list[dict[str, object]], enabled_payload["embeds"])
 
-    assert enabled_payload["module"] == "social"
-    assert enabled_payload["surface"] == "embeds"
-    assert enabled_payload["status"] == SOCIAL_STATUS_ENABLED
-    assert enabled_payload["enabled"] is True
-    assert enabled_payload["public_path"] == SOCIAL_EMBEDS_PATH
-    assert enabled_payload["integration_base_path"] == SOCIAL_INTEGRATION_BASE_PATH
-    assert enabled_payload["integration_embeds_path"] == SOCIAL_INTEGRATION_EMBEDS_PATH
-    assert enabled_payload["provider_allowlist"] == ["youtube"]
-    assert enabled_payload["embed_provider_allowlist"] == ["youtube"]
-    assert enabled_payload["cache_ttl_seconds"] == 600
-    assert enabled_payload["embeds_per_page"] == 1
-    assert enabled_payload["total_embeds"] == 1
-    assert enabled_payload["error"] is None
-    assert enabled_payload["embeds"] == [
-        {
-            "id": embeds[0]["id"],
-            "title": "QuickScale on YouTube",
-            "description": "Launch announcement clip.",
-            "provider_name": "youtube",
-            "provider_display_name": "YouTube",
-            "url": "https://www.youtube.com/shorts/alpha123",
-            "source_url": "https://www.youtube.com/shorts/alpha123",
-            "display_order": 20,
-            "resolution_status": SOCIAL_EMBED_RESOLUTION_RESOLVED,
-            "resolution_error": None,
-            "embed_url": "https://www.youtube.com/embed/alpha123?rel=0",
-            "thumbnail_url": "https://i.ytimg.com/vi/alpha123/hqdefault.jpg",
-            "embed_width": 560,
-            "embed_height": 315,
-            "thumbnail_width": 480,
-            "thumbnail_height": 360,
-            "last_resolution_attempt_at": embeds[0]["last_resolution_attempt_at"],
-            "last_resolved_at": embeds[0]["last_resolved_at"],
-        }
-    ]
-    assert embeds[0]["last_resolution_attempt_at"] is not None
-    assert embeds[0]["last_resolved_at"] == embeds[0]["last_resolution_attempt_at"]
-    assert social_payload_status_code(enabled_payload["status"]) == 200
+        assert enabled_payload["module"] == "social"
+        assert enabled_payload["surface"] == "embeds"
+        assert enabled_payload["status"] == SOCIAL_STATUS_ENABLED
+        assert enabled_payload["enabled"] is True
+        assert enabled_payload["public_path"] == SOCIAL_EMBEDS_PATH
+        assert enabled_payload["integration_base_path"] == SOCIAL_INTEGRATION_BASE_PATH
+        assert (
+            enabled_payload["integration_embeds_path"] == SOCIAL_INTEGRATION_EMBEDS_PATH
+        )
+        assert enabled_payload["provider_allowlist"] == ["youtube"]
+        assert enabled_payload["embed_provider_allowlist"] == ["youtube"]
+        assert enabled_payload["cache_ttl_seconds"] == 600
+        assert enabled_payload["embeds_per_page"] == 1
+        assert enabled_payload["total_embeds"] == 1
+        assert enabled_payload["error"] is None
+        assert enabled_payload["embeds"] == [
+            {
+                "id": embeds[0]["id"],
+                "title": "QuickScale on YouTube",
+                "description": "Launch announcement clip.",
+                "provider_name": "youtube",
+                "provider_display_name": "YouTube",
+                "url": "https://www.youtube.com/shorts/alpha123",
+                "source_url": "https://www.youtube.com/shorts/alpha123",
+                "display_order": 20,
+                "resolution_status": SOCIAL_EMBED_RESOLUTION_RESOLVED,
+                "resolution_error": None,
+                "embed_url": "https://www.youtube.com/embed/alpha123?rel=0",
+                "thumbnail_url": "https://i.ytimg.com/vi/alpha123/hqdefault.jpg",
+                "embed_width": 560,
+                "embed_height": 315,
+                "thumbnail_width": 480,
+                "thumbnail_height": 360,
+                "last_resolution_attempt_at": embeds[0]["last_resolution_attempt_at"],
+                "last_resolved_at": embeds[0]["last_resolved_at"],
+            }
+        ]
+        assert embeds[0]["last_resolution_attempt_at"] is not None
+        assert embeds[0]["last_resolved_at"] == embeds[0]["last_resolution_attempt_at"]
+        assert social_payload_status_code(enabled_payload["status"]) == 200
 
-    with override_settings(QUICKSCALE_SOCIAL_EMBEDS_ENABLED=False):
-        disabled_payload = build_social_embeds_payload()
+        with override_settings(QUICKSCALE_SOCIAL_EMBEDS_ENABLED=False):
+            disabled_payload = build_social_embeds_payload()
 
-    assert disabled_payload["status"] == SOCIAL_STATUS_DISABLED
-    assert disabled_payload["enabled"] is False
-    assert disabled_payload["embeds"] == []
-    assert disabled_payload["total_embeds"] == 0
-    assert disabled_payload["error"] is None
+        assert disabled_payload["status"] == SOCIAL_STATUS_DISABLED
+        assert disabled_payload["enabled"] is False
+        assert disabled_payload["embeds"] == []
+        assert disabled_payload["total_embeds"] == 0
+        assert disabled_payload["error"] is None
 
-    with override_settings(QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["facebook"]):
-        error_payload = build_social_embeds_payload()
-    error_message = cast(str, error_payload["error"])
+        with override_settings(QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["facebook"]):
+            error_payload = build_social_embeds_payload()
+        error_message = cast(str, error_payload["error"])
 
-    assert error_payload["status"] == SOCIAL_STATUS_ERROR
-    assert error_payload["enabled"] is False
-    assert error_payload["embeds"] == []
-    assert error_payload["total_embeds"] == 0
-    assert "must include TikTok or YouTube" in error_message
-    assert social_payload_status_code(error_payload["status"]) == 503
+        assert error_payload["status"] == SOCIAL_STATUS_ERROR
+        assert error_payload["enabled"] is False
+        assert error_payload["embeds"] == []
+        assert error_payload["total_embeds"] == 0
+        assert "must include TikTok or YouTube" in error_message
+        assert social_payload_status_code(error_payload["status"]) == 503
+    finally:
+        _reset_org_context()
 
 
 def test_build_social_embeds_payload_uses_empty_state_for_missing_table(
@@ -626,13 +705,14 @@ def test_build_social_embeds_payload_uses_empty_state_for_missing_table(
 
 
 # ---------------------------------------------------------------------------
-# Phase F11.13a: tenant-scoped service queries
+# T1.9 — contextvar-based tenant-scoped service queries
 # ---------------------------------------------------------------------------
 
 
 @django_db
 def test_list_published_social_links_scoped_to_org() -> None:
     """Org-scoped link queries should return only that org's published links."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
     from quickscale_modules_orgs.models import Organization
 
     org_a = Organization.objects.create(name="Org A", slug="org-a")
@@ -655,40 +735,123 @@ def test_list_published_social_links_scoped_to_org() -> None:
         organization=org_b,
     )
 
-    org_a_links = list_published_social_links(organization_id=org_a.id)
-    org_b_links = list_published_social_links(organization_id=org_b.id)
-    all_links = list_published_social_links()
+    try:
+        set_current_org_id(org_a.id)
+        org_a_links = list_published_social_links()
+        assert [r.title for r in org_a_links] == ["Org A Link"]
 
-    assert [r.title for r in org_a_links] == ["Org A Link"]
-    assert [r.title for r in org_b_links] == ["Org B Link"]
-    assert {r.title for r in all_links} == {"Org A Link", "Org B Link"}
+        set_current_org_id(org_b.id)
+        org_b_links = list_published_social_links()
+        assert [r.title for r in org_b_links] == ["Org B Link"]
+
+        set_current_org_id(None)
+        no_context_links = list_published_social_links()
+        assert no_context_links == ()
+    finally:
+        set_current_org_id(None)
 
 
 @django_db
-def test_list_published_social_links_with_org_id_none_is_unscoped() -> None:
-    """Passing ``organization_id=None`` should return all links (unscoped, backward
-    compatible).  Fail-closed behavior for ``for_org(None)`` is tested at the
-    manager layer in ``test_models.py``."""
+def test_social_link_cache_is_partitioned_by_org() -> None:
+    """Cross-org cache partition test: org A and org B must not share cache entries.
+
+    Regression for CR-T1-9-001: global cache keys previously let one org's
+    payload poison reads for another org.  Org-aware keys partition the cache
+    so that a query from org A does not affect the cached result for org B.
+    """
+    from quickscale_modules_orgs.current_org import set_current_org_id
     from quickscale_modules_orgs.models import Organization
 
-    org = Organization.objects.create(name="Test Org", slug="test-org")
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
     SocialLink.objects.create(
-        title="Test Link",
+        title="Org A Link",
         provider_name="",
-        url="https://www.linkedin.com/company/test/",
+        url="https://www.linkedin.com/company/org-a/",
         display_order=10,
         is_published=True,
-        organization=org,
+        organization=org_a,
+    )
+    SocialLink.objects.create(
+        title="Org B Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/org-b/",
+        display_order=20,
+        is_published=True,
+        organization=org_b,
     )
 
-    result = list_published_social_links(organization_id=None)
-    assert len(result) == 1
-    assert result[0].title == "Test Link"
+    try:
+        # Query from Org A — populates org A's cache partition.
+        set_current_org_id(org_a.id)
+        org_a_links = list_published_social_links()
+
+        # Query from Org B  —  MUST NOT read org A's cache entry.
+        # No cache.clear() between calls — this is the regression check.
+        set_current_org_id(org_b.id)
+        org_b_links = list_published_social_links()
+
+        assert [r.title for r in org_a_links] == ["Org A Link"]
+        assert [r.title for r in org_b_links] == ["Org B Link"]
+    finally:
+        set_current_org_id(None)
+
+
+@django_db
+def test_social_cache_invalidates_old_org_partition_on_reassignment() -> None:
+    """When a social item moves from org A to org B, org A's stale cache is cleared.
+
+    Regression for CR-T1-9-001: _keys_to_clear() only cleared the current
+    (new) org's partition.  The old org's cached entry for the moved item
+    would continue to be served until TTL expiry.
+    """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+    from quickscale_modules_orgs.models import Organization
+
+    org_a = Organization.objects.create(name="Org A", slug="org-a")
+    org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+    # Create a link owned by Org A.
+    link = SocialLink.objects.create(
+        title="Shared Link",
+        provider_name="",
+        url="https://www.linkedin.com/company/quickscale/",
+        display_order=10,
+        is_published=True,
+        organization=org_a,
+    )
+
+    try:
+        # Query from Org A — populates org A's cache partition.
+        set_current_org_id(org_a.id)
+        org_a_links_before = list_published_social_links()
+        assert [r.title for r in org_a_links_before] == ["Shared Link"]
+
+        # Move the link to Org B.
+        link.organization = org_b
+        link.save()
+
+        # Query from Org A — must no longer see the moved link.
+        # No cache.clear() between steps — this is the regression check.
+        set_current_org_id(org_a.id)
+        org_a_links_after = list_published_social_links()
+        assert org_a_links_after == (), (
+            "Org A must not see the link after it was reassigned to Org B."
+        )
+
+        # Query from Org B — must see the moved link.
+        set_current_org_id(org_b.id)
+        org_b_links = list_published_social_links()
+        assert [r.title for r in org_b_links] == ["Shared Link"]
+    finally:
+        set_current_org_id(None)
 
 
 @django_db
 def test_list_published_social_embeds_scoped_to_org() -> None:
     """Org-scoped embed queries should return only that org's published embeds."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
     from quickscale_modules_orgs.models import Organization
 
     org_a = Organization.objects.create(name="Org A", slug="org-a")
@@ -711,40 +874,26 @@ def test_list_published_social_embeds_scoped_to_org() -> None:
         organization=org_b,
     )
 
-    org_a_embeds = list_published_social_embeds(organization_id=org_a.id)
-    org_b_embeds = list_published_social_embeds(organization_id=org_b.id)
-    all_embeds = list_published_social_embeds()
+    try:
+        set_current_org_id(org_a.id)
+        org_a_embeds = list_published_social_embeds()
+        assert [r.title for r in org_a_embeds] == ["Org A Embed"]
 
-    assert [r.title for r in org_a_embeds] == ["Org A Embed"]
-    assert [r.title for r in org_b_embeds] == ["Org B Embed"]
-    assert {r.title for r in all_embeds} == {"Org A Embed", "Org B Embed"}
+        set_current_org_id(org_b.id)
+        org_b_embeds = list_published_social_embeds()
+        assert [r.title for r in org_b_embeds] == ["Org B Embed"]
 
-
-@django_db
-def test_list_published_social_embeds_with_org_id_none_is_unscoped() -> None:
-    """Passing ``organization_id=None`` should return all embeds (unscoped, backward
-    compatible).  Fail-closed behavior for ``for_org(None)`` is tested at the
-    manager layer in ``test_models.py``."""
-    from quickscale_modules_orgs.models import Organization
-
-    org = Organization.objects.create(name="Test Org", slug="test-org")
-    SocialEmbed.objects.create(
-        title="Test Embed",
-        provider_name="",
-        url="https://www.youtube.com/shorts/test123",
-        display_order=10,
-        is_published=True,
-        organization=org,
-    )
-
-    result = list_published_social_embeds(organization_id=None)
-    assert len(result) == 1
-    assert result[0].title == "Test Embed"
+        set_current_org_id(None)
+        no_context_embeds = list_published_social_embeds()
+        assert no_context_embeds == ()
+    finally:
+        set_current_org_id(None)
 
 
 @django_db
 def test_build_social_link_tree_payload_scoped_to_org() -> None:
     """Org-scoped build payload should return only that org's links."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
     from quickscale_modules_orgs.models import Organization
 
     org_a = Organization.objects.create(name="Org A", slug="org-a")
@@ -767,24 +916,28 @@ def test_build_social_link_tree_payload_scoped_to_org() -> None:
         organization=org_b,
     )
 
-    # Org-scoped: only Org A's links should appear in the payload.
-    payload_a = build_social_link_tree_payload(organization_id=org_a.id)
-    assert payload_a["status"] == SOCIAL_STATUS_ENABLED
-    assert payload_a["total_links"] == 1
-    assert payload_a["links"][0]["title"] == "Org A Link"
+    try:
+        # Scope to Org A — only Org A's links should appear in the payload.
+        set_current_org_id(org_a.id)
+        payload_a = build_social_link_tree_payload()
+        assert payload_a["status"] == SOCIAL_STATUS_ENABLED
+        assert payload_a["total_links"] == 1
+        assert payload_a["links"][0]["title"] == "Org A Link"
 
-    # Unscoped: all links should appear (backward-compatible).
-    payload_all = build_social_link_tree_payload()
-    assert payload_all["total_links"] == 2
-    assert {link["title"] for link in payload_all["links"]} == {
-        "Org A Link",
-        "Org B Link",
-    }
+        # Scope to Org B — only Org B's links should appear.
+        set_current_org_id(org_b.id)
+        payload_b = build_social_link_tree_payload()
+        assert payload_b["status"] == SOCIAL_STATUS_ENABLED
+        assert payload_b["total_links"] == 1
+        assert payload_b["links"][0]["title"] == "Org B Link"
+    finally:
+        set_current_org_id(None)
 
 
 @django_db
 def test_build_social_embeds_payload_scoped_to_org() -> None:
     """Org-scoped build payload should return only that org's embeds."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
     from quickscale_modules_orgs.models import Organization
 
     org_a = Organization.objects.create(name="Org A", slug="org-a")
@@ -807,16 +960,19 @@ def test_build_social_embeds_payload_scoped_to_org() -> None:
         organization=org_b,
     )
 
-    # Org-scoped: only Org A's embeds should appear in the payload.
-    payload_a = build_social_embeds_payload(organization_id=org_a.id)
-    assert payload_a["status"] == SOCIAL_STATUS_ENABLED
-    assert payload_a["total_embeds"] == 1
-    assert payload_a["embeds"][0]["title"] == "Org A Embed"
+    try:
+        # Scope to Org A — only Org A's embeds should appear in the payload.
+        set_current_org_id(org_a.id)
+        payload_a = build_social_embeds_payload()
+        assert payload_a["status"] == SOCIAL_STATUS_ENABLED
+        assert payload_a["total_embeds"] == 1
+        assert payload_a["embeds"][0]["title"] == "Org A Embed"
 
-    # Unscoped: all embeds should appear (backward-compatible).
-    payload_all = build_social_embeds_payload()
-    assert payload_all["total_embeds"] == 2
-    assert {embed["title"] for embed in payload_all["embeds"]} == {
-        "Org A Embed",
-        "Org B Embed",
-    }
+        # Scope to Org B — only Org B's embeds should appear.
+        set_current_org_id(org_b.id)
+        payload_b = build_social_embeds_payload()
+        assert payload_b["status"] == SOCIAL_STATUS_ENABLED
+        assert payload_b["total_embeds"] == 1
+        assert payload_b["embeds"][0]["title"] == "Org B Embed"
+    finally:
+        set_current_org_id(None)

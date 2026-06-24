@@ -466,10 +466,11 @@ class TestReactThemeGeneration:
             'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"'
             in react_shell_prelude
         )
-        assert 'r"^orgs/[^/]+/forms/?$"' in react_shell_prelude
-        assert 'r"^orgs/[^/]+/forms/[^/]+/?$"' in react_shell_prelude
         assert 'r"^(profile|blog|listings|crm|settings)/?$"' in react_shell_prelude
         assert 'r"^forms/[^/]+/?$"' in react_shell_prelude
+        # T1.7: forms routes are flat — no org-scoped forms patterns.
+        assert 'r"^orgs/[^/]+/forms/?$"' not in react_shell_prelude
+        assert 'r"^orgs/[^/]+/forms/[^/]+/?$"' not in react_shell_prelude
         assert 'r"^orgs/[^/]+/billing/"' not in react_shell_prelude
         assert 'r"^orgs/invitations/"' not in react_shell_prelude
         assert 'r"^social/?$"' not in react_shell_prelude

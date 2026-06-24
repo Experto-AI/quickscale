@@ -10,7 +10,7 @@ The single most important structural fact: **the multi-tenant isolation that the
 
 **Implementation notes:** no backward compatibility, no migration path, no existing users — every change is a clean break. Squash/rewrite migrations; drop dead paths outright.
 
-**Findings 1, 2, and 4 are three faces of one decision** — tenant isolation was added as an application-layer convention layered onto a single-user scaffold, rather than as a data-layer invariant. Finding 3 is independent. Finding 5 (DR) is resolved — implemented as M12 (T3.1–T3.3, 2026-06-23); see CHANGELOG.
+**Findings 1, 2, and 4 are three faces of one decision** — tenant isolation was added as an application-layer convention layered onto a single-user scaffold, rather than as a data-layer invariant. Finding 3 is independent. Finding 5 (DR) is resolved and archived to CHANGELOG (M12 / T3.1–T3.3).
 
 ---
 
@@ -109,9 +109,3 @@ The `/orgs/<slug:org_slug>/...` content trees are deleted from every module. The
 **Trigger for urgency.** When solo→saas promotion (`promote_to_saas`) becomes a routine customer operation — the two routing worlds must reconcile live data and live URLs, and the NULL-org rows need a home.
 
 **Detection signal.** After collapsing to a single tree, any 404 on a previously flat URL is a stranded row that wasn't assigned to a real org.
-
----
-
-## Finding 5 — ~~The backups/DR module has a 3,677-line god-file and two parallel operation protocols~~
-
-**Resolved 2026-06-23 (M12 / T3.1–T3.3).** Legacy env-var protocol deleted; all 8 management commands route through `dr_engine.adapter`; `services.py` reduced to 205 LOC thin re-exports; `dr_engine/orchestration.py` owns all DR logic. See CHANGELOG for implementation history.

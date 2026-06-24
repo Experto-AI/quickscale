@@ -35,7 +35,7 @@ def clear_rate_limit_cache():
 def seeded_contact_form(db):
     """Seed the contact preset and return the resulting Form instance."""
     call_command("forms_seed_presets", verbosity=0)
-    return Form.objects.get(slug="contact")
+    return Form.all_objects.get(slug="contact")
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ class TestContactFormE2EWorkflow:
         """Running forms_seed_presets twice does not create duplicate forms."""
         call_command("forms_seed_presets", verbosity=0)
         call_command("forms_seed_presets", verbosity=0)
-        assert Form.objects.filter(slug="contact").count() == 1
+        assert Form.all_objects.filter(slug="contact").count() == 1
 
     # ------------------------------------------------------------------
     # 2. Schema endpoint

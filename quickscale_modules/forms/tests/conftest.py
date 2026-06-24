@@ -51,7 +51,10 @@ def staff_client(api_client, staff_user):
 @pytest.fixture
 def form(db):
     """Active form with notify email set"""
-    form, _ = Form.objects.update_or_create(
+    from quickscale_modules_orgs.models import Organization
+
+    system_org = Organization.objects.get_system_org()
+    form, _ = Form.all_objects.update_or_create(
         slug="test-contact",
         defaults={
             "title": "Test Contact",
@@ -59,6 +62,7 @@ def form(db):
             "success_message": "Thank you, we will be in touch.",
             "notify_emails": "admin@example.com",
             "spam_protection_enabled": True,
+            "organization": system_org,
         },
     )
     return form
@@ -67,10 +71,14 @@ def form(db):
 @pytest.fixture
 def inactive_form(db):
     """Inactive form that should not be accessible via public API"""
-    return Form.objects.create(
+    from quickscale_modules_orgs.models import Organization
+
+    system_org = Organization.objects.get_system_org()
+    return Form.all_objects.create(
         title="Inactive Form",
         slug="inactive",
         is_active=False,
+        organization=system_org,
     )
 
 
@@ -151,7 +159,7 @@ def org(db):
 @pytest.fixture
 def org_form(db, org):
     """Active form owned by an organization."""
-    form, _ = Form.objects.update_or_create(
+    form, _ = Form.all_objects.update_or_create(
         slug="org-contact",
         defaults={
             "title": "Org Contact",
