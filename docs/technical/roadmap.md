@@ -142,39 +142,6 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 ### Phase 1 — Foundation (serial; blocks all of Phase 2)
 
-#### - [x] T1.1 — System org + NOT NULL ownership contract
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Plan-review recommended.
-
-- **OBJECTIVE:** Add a reserved System organization and codify the canonical owned-model contract (NOT NULL FK + `on_delete=PROTECT`).
-- **SCOPE:**
-  - `orgs/.../models.py` — `Organization`: add `is_system = BooleanField(default=False)` + `UniqueConstraint(condition=Q(is_system=True))`.
-  - `orgs/.../managers.py` — `OrganizationManager.get_system_org()` (idempotent get-or-create, reserved slug `__system__`).
-  - `orgs/.../constants.py` — `SYSTEM_ORG_SLUG`.
-  - `orgs/.../tenancy.py` (new) — `tenant_org_fk(related_name)` helper returning `ForeignKey(Organization, null=False, on_delete=PROTECT)`.
-  - migration `0002_system_org`.
-- **ACCEPTANCE CRITERIA:** `get_system_org()` is idempotent and returns a singleton; DB rejects a second `is_system=True` row; `tenant_org_fk()` produces a NOT NULL/PROTECT FK.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; tests: system-org singleton, idempotency, constraint violation on duplicate.
-- **DEPENDS:** none. **DECISIONS:** D2, D3.
-- **FINDING:** Cross-module migration fixtures that restore orgs schema must target the latest orgs migration. Billing `test_migrations.py` `LATEST_ORGS_MIGRATION` updated from `0001_initial` to `0003_alter_organization_is_system` during T1.1 closeout. No remaining blocker.
-
----
-
-#### - [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Plan-review recommended. Core security seam; all per-module tasks depend on it.
-
-- **OBJECTIVE:** Provide one shared, contextvar-driven scoping seam — auto-filtering default manager + operator escape hatch — for all modules.
-- **SCOPE:**
-  - `orgs/.../current_org.py` — add `current_org_id: ContextVar[uuid.UUID | None]`; `set_current_org_id()`, `get_current_org_id()`, `reset_current_org_id()`; keep `request.org` as the request-cycle mirror.
-  - `orgs/.../managers.py` — `TenantManager.get_queryset()` filters `organization_id=get_current_org_id()`, **fail-closed** (returns `.none()`) when unset; `TenantManager(super_scope=True)` provides the unfiltered escape hatch.
-- **ACCEPTANCE CRITERIA:** default manager auto-scopes to contextvar org; unset context → `.none()` (fail-closed); `all_objects` bypasses; cross-request contextvar isolation leak-free.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; unit tests: auto-scope, fail-closed, operator bypass, cross-request isolation.
-- **DEPENDS:** T1.1. **DECISIONS:** D1, D4.
-- **FINDING:** Contextvar seam (`current_org_id`), fail-closed `TenantManager` (`.none()` when unset), `TenantManager(super_scope=True)` escape hatch, and middleware propagation implemented and validated. Repo-root `make test` reconfirmed all changed suites passing; final exit code non-zero solely because of the pre-existing unrelated per-file coverage gap in `dr_adapter_call.py` (0%, already tracked in Deferred / Monitor). No remaining blocker.
-
 ---
 
 #### - [ ] T1.3 — Middleware for the single-URL world
@@ -463,6 +430,7 @@ Single-PR items that do not change the design:
 | M10 | 2 | F5.2a–F5.4 | Merged to v87. DR engine extracted to `quickscale_core.dr_engine`; `dr_engine_migration.md` added. |
 | M11 | 3 | F7.1–F7.3 | Merged to v87. Generator vs generated-project runtime-pin decoupling complete. |
 | M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
+| M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
 
 ## References
 
