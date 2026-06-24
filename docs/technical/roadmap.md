@@ -26,7 +26,7 @@ Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed
 |---------|--------|-------------|-------------|-----------|
 | `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.5** |
 | `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.13** |
-| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.9** |
+| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.10** |
 
 Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
 
@@ -145,46 +145,6 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 ---
 
-### Phase 1 — Foundation (serial; blocks all of Phase 2)
-
----
-
-#### - [x] T1.3 — Middleware for the single-URL world
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **OBJECTIVE:** Resolve the active org from personal-org (solo) / session active-org (saas), populate `request.org` + contextvar + `SET LOCAL`, and replace the middleware's URL-slug org resolution with session-based resolution. Downstream module org-scoped routes (`/orgs/<slug>/crm/...`, `/orgs/<slug>/blog/...`, etc.) are preserved until T1.5–T1.10 adopt the single-URL contract.
-- **SCOPE:**
-  - `orgs/.../middleware.py` — dropped `_resolve_org_slug`, `_handle_saas_org_request`, `_is_org_namespace`, `ORG_NAMESPACE_PREFIX`; added narrowed `_is_org_management_path` that only bypasses org resolution for orgs-module-owned paths (`/orgs/`, `/orgs/new/`, `/orgs/invitations/...`, `/orgs/<slug>/`, `/orgs/<slug>/members/...`, `/orgs/<slug>/settings/`, all `/api/orgs/...`); saas reads `request.session[ACTIVE_ORG_SESSION_KEY]`; `_call_with_org` keeps T1.2 contextvar + `SET LOCAL app.current_org_id`; saas with no active org → redirect to `/orgs/`; non-member org in session → forbidden + reset; stale/invalid org id → redirect + clear; superuser bypass. Downstream module paths (`crm`, `blog`, `forms`, `listings`) go through normal session-based org resolution, preserving caller parity.
-  - `orgs/.../constants.py` — `ACTIVE_ORG_SESSION_KEY`.
-  - `orgs/.../views.py` — `OrgDashboardView.get()` writes session key after successful access (org-switcher).
-  - Rewrote `orgs/tests/test_middleware.py` to session-based contract.
-- **ACCEPTANCE CRITERIA:** solo → personal org; saas + valid membership → that org; no active org → redirect; non-member → forbidden; `request.org`, contextvar, `SET LOCAL` all populated; orgs-module management paths bypass middleware, downstream module paths under `/orgs/<slug>/<module>/...` resolve org from session.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules`; orgs tests pass (1 PostgreSQL-only skip).
-- **DEPENDS:** T1.2. **DECISIONS:** D1.
-- **NOTE:** The blanket `ORG_MANAGEMENT_PREFIXES` bypass was narrowed during change-review to fix CR-T13-001 (security boundary — downstream module paths exposed cross-tenant data) and CR-T13-002 (breaking caller parity for live `/orgs/<slug>/...` routes). The narrowed bypass only covers orgs-module-owned paths; downstream module paths resolve the org from the session until those modules adopt the single-URL contract in T1.5–T1.10.
-- **FOLLOW-UP FIX (slug fallback + personal org fallback):** Direct `make test` after the narrowing exposed integration regressions across CRM (72), forms (1), and listings (17). Root cause: downstream module paths (`/orgs/<slug>/crm/...`, etc.) and solo-format routes (`/crm/api/tags/`, `/listings/api/publish/`) redirected to `/orgs/` when no session org was set. Fixed by adding two backward-compatible fallbacks in SaaS mode:
-  - **Fallback A (slug fallback):** Resolves org from URL slug for paths under `/orgs/<slug>/<module>/...` (downstream) or containing an `orgs/<slug>/` segment pair (e.g., `/listings/orgs/<slug>/`). Seeds the session org so subsequent navigation works seamlessly. Non-members get 403.
-  - **Fallback B (personal org fallback):** Resolves personal org for solo-format routes under known module prefixes (`/crm/`, `/listings/`, `/forms/`, `/blog/`). Does not seed the session.
-  - Existing session org still takes priority. New middleware tests cover all fallback paths including billing flat routes (`/billing/...`, `/api/billing/...`). Validated: orgs 247 passed / 1 skipped, CRM 332/332 passed. Canonical repo-root `make test` rerun — core 1452 passed, cli 1795 passed, analytics 39 passed, auth 38 passed, backups 229 passed, billing 242 passed, blog 219 passed, crm 332 passed, forms 138 passed, listings 111 passed, notifications 33 passed, orgs 247 passed / 1 skipped, social 52 passed, storage 23 passed. Exit code non-zero solely due to pre-existing unrelated per-file coverage gap in `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py` (0%, already tracked in roadmap Deferred / Monitor).
-
----
-
-#### - [x] T1.4 — RLS DB role + generated-project settings
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Implementation completed 2026-06-24.
-
-- **OBJECTIVE:** Make the generated app's runtime DB role `NOSUPERUSER`/`NOBYPASSRLS` so per-table RLS policies (Phase 3) actually enforce.
-- **SCOPE:**
-  - `quickscale_core/.../generator/templates/` — settings `.j2` (runtime DB role), DB init SQL `.j2` (role with `NOBYPASSRLS`), generated `OPERATIONS.md`; `docker-compose.yml.j2` mounts init SQL and sets `RUNTIME_DATABASE_URL`; `start.sh.j2` unsets `RUNTIME_DATABASE_URL` during migrations; `.env.example.j2` documents runtime role vars; `generator.py` maps new template files and injects `runtime_db_role`/`runtime_db_password` into template context.
-- **ACCEPTANCE CRITERIA:** generated runtime role cannot bypass RLS (NOSUPERUSER, NOBYPASSRLS); operator path documented in generated OPERATIONS.md; template/integration test asserts role attributes and RUNTIME_DATABASE_URL override.
-- **VALIDATION PATH:** `make test`; generator/template tests for init SQL, OPERATIONS.md, and production RUNTIME_DATABASE_URL logic.
-- **DEPENDS:** none. **DECISIONS:** D4.
-- **IMPLEMENTATION NOTES:** Runtime role naming convention: `{package_name}_app` (e.g., `myapp_app`). Init SQL template creates the role with `IF NOT EXISTS` (idempotent). `RUNTIME_DATABASE_URL` env var overrides `DATABASE_URL` for runtime connections when set; falls back to backward-compatible DATABASE_URL when unset. `start.sh` unsets `RUNTIME_DATABASE_URL` during migrate so schema DDL uses the superuser connection. Operator path documented in generated `OPERATIONS.md` with Railway and manual setup instructions. Role name and password are computed as template context variables in `generator.py` rather than pinned in `runtime_pins.py`.
-
----
-
 ### Phase 2 — Per-module contract adoption (parallel after T1.1–T1.3)
 
 **Shared shape (T1.5–T1.9):** drop any module-local `TenantScopedManager`/`OperatorManager` classes and import `TenantManager` from `orgs.managers` instead (`TenantManager(super_scope=True)` for the operator bypass); models use `tenant_org_fk()` (NOT NULL/PROTECT, drop `null=True`); delete `_is_org_scoped_route`, all `| Q(organization_id__isnull=True)` unions, and redundant `.for_org()` calls; collapse URLs to a single flat tree (delete `/orgs/<slug:org_slug>/...`); route anonymous/public reads to `get_system_org()` (D2); update tests to single-route contract; squash migration to NOT NULL schema (D5, no backfill).
@@ -249,29 +209,6 @@ Implementation completed 2026-06-24.
   - Squashed migrations to clean NOT NULL/PROTECT contract (single `0001_initial.py`, no backfill per D5).
   - Updated `publish_listing_api` to use `request.org` from middleware instead of route-based org detection.
   - Updated all test fixtures to NOT NULL contract (default org via `get_system_org()`). Removed org-scoped URL tests. Rewrote isolation test for flat-route contextvar-based scoping. Replaced module-local manager tests with TenantManager auto-scoping tests. 110 listings module tests passing.
-
----
-
-#### - [x] T1.9 — Social adopt contract *(wt-track3)*
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Implementation completed 2026-06-24.
-
-- **SCOPE (on top of shared shape):** `social/models.py:33` NOT NULL migration for `BaseSocialItem`; `list_published_social_*`/`build_social_*_payload` drop the optional `organization_id` kwarg (now ambient via contextvar); public link tree resolves `get_system_org()`; squash migration (D5).
-- **ACCEPTANCE CRITERIA:** public link tree functional; cross-org read → empty/404; social isolation tests green.
-- **VALIDATION PATH:** `make MODULE=social test -- --modules`.
-- **DEPENDS:** T1.1–T1.3.
-- **IMPLEMENTATION NOTES:**
-  - Replaced module-local `TenantScopedManager`/`OperatorManager` with `orgs.managers.TenantManager` (auto-scopes via ContextVar; `super_scope=True` for operator bypass).
-  - Replaced nullable `CASCADE` FK on `BaseSocialItem.organization` with `tenant_org_fk()` (NOT NULL/PROTECT per D3).
-  - Dropped `SocialItemQuerySet.for_org()` and the `organization_id` kwarg from all four service functions (`list_published_social_links`, `list_published_social_embeds`, `build_social_link_tree_payload`, `build_social_embeds_payload`). Tenant scoping is now ambient.
-  - Added `_social_cache_key()` helper — org-aware cache keys so each org's payload is cached independently.
-  - Squashed migrations to clean NOT NULL/PROTECT contract (D5 — no backfill). Single `0001_initial.py` with all fields and `on_delete=PROTECT`.
-  - Updated tests to use `set_current_org_id()` for contextvar-based scoping rather than explicit `organization_id` parameter.
-  - **Follow-up CR-T1-9-001 (cache partitioning):** Replaced global cache keys with org-aware keys (`{base_key}:org:{org_id}`) partitioned by org identity. Final fix captures `previous_org_id` before save and clears both old and new org partitions (plus the base key) when ownership changes. Added cross-org and reassignment regression tests (`test_social_link_cache_is_partitioned_by_org`, `test_social_cache_invalidates_old_org_partition_on_reassignment`).
-  - **Follow-up CR-T1-9-002 (managed views contract):** Updated `render_social_managed_views_module()` in `quickscale_core` to generate views that (a) drop the removed `organization_id` kwarg, (b) resolve System org for anonymous/public requests via `Organization.objects.get_system_org()`, and (c) establish ambient org context before calling the social service layer.
-  - **Follow-up CR-T1-9-003 (context restoration):** The generated managed views now preserve and restore the prior ambient org context with exception-safe `try/finally` handling instead of blindly clearing to `None`. Added template regression coverage for the restoration pattern.
-  - **Follow-on check for T1.15:** The `_SOLO_ROUTE_PREFIXES` in `orgs/middleware.py` still does not include `/social/`, which is correct because social has no module-owned views/URLs. The managed views renderer (`social_manifest.py`) remains the seam that must satisfy the public/System-org contract when RLS lands.
 
 ---
 
@@ -456,6 +393,8 @@ Single-PR items that do not change the design:
 | M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
 | M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
 | M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
+| M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
+| M16 | 1 | T1.7, T1.9 | Phase 2 partial. Forms (T1.7, wt-track2) and Social (T1.9, wt-track3) contract adoption merged to v87. |
 
 ## References
 
