@@ -9,40 +9,23 @@ from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
     """Return the current organization ID for create stamping.
 
-    Phase 2: both org-scoped and solo routes stamp the active organization.
-    Org-scoped routes use ``require_current_org`` (fail-closed).  Solo routes
-    use the personal org attached by ``TenantMiddleware``.
-
-    Fallback: when ``request.org`` is not set on solo routes (e.g., tests that
-    bypass middleware via ``force_authenticate``), look up the user's personal
-    org.  In production, middleware always sets ``request.org``, so this
-    fallback is only used in tests.
-
-    Org-scoped routes NEVER use the fallback — they must fail closed when
-    ``request.org`` is not set by middleware.
-
-    Raises ``ValidationError`` when no org context is available on either
-    route type — there is no NULL/global fallback.
+    T1.5 flat-route contract: resolves ``request.org`` (set by
+    ``TenantMiddleware``).  Falls back to personal-org lookup for tests
+    that bypass middleware.  Raises ``ValidationError`` when no org
+    context is available.
     """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
     request = serializer.context.get("request")
     if request is None:
         return None
 
-    path = getattr(request, "path", "") or ""
-    is_org_scoped = path.startswith("/orgs/")
-
     org = getattr(request, "org", None)
     if org is not None:
+        set_current_org_id(org.id)
         return org.id
 
-    # Org-scoped routes must fail closed — no fallback.
-    if is_org_scoped:
-        raise serializers.ValidationError(
-            "Organization context is required for this route.",
-            code="org_required",
-        )
-
-    # Solo route fallback: look up the user's personal org (for tests).
+    # Fallback: look up the user's personal org (for tests).
     user = getattr(request, "user", None)
     if user is not None and getattr(user, "is_authenticated", False):
         from quickscale_modules_orgs.models import Organization
@@ -52,6 +35,7 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
         ).first()
         if personal_org is not None:
             request.org = personal_org
+            set_current_org_id(personal_org.id)
             return personal_org.id
 
     raise serializers.ValidationError(
@@ -63,30 +47,22 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
 def _read_org_id(serializer: serializers.Serializer) -> int | str | None:
     """Return the current organization ID for read filtering.
 
-    Phase 2: org-scoped routes filter by the active organization.  Solo routes
-    return ``None`` to enable unscoped (legacy) read behavior — helper methods
-    count all related data, not just personal-org data.
-
-    Returns ``None`` when no request context is available or when the route is
-    a solo route.
+    T1.5 flat-route contract: always returns the active org ID from
+    ``request.org``, or ``None`` when no request context is available.
+    Also sets the org contextvar so that TenantManager auto-scoping
+    works for reverse-relation queries in serializer helpers.
     """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
     request = serializer.context.get("request")
     if request is None:
         return None
 
-    path = getattr(request, "path", "") or ""
-    is_org_scoped = path.startswith("/orgs/")
-
-    # Solo routes return None for unscoped read behavior.
-    if not is_org_scoped:
-        return None
-
-    # Org-scoped routes: use request.org or fail closed.
     org = getattr(request, "org", None)
     if org is not None:
+        set_current_org_id(org.id)
         return org.id
 
-    # Org-scoped routes do NOT use the fallback.
     return None
 
 
@@ -115,23 +91,17 @@ class TagSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
     def validate_name(self, value: str) -> str:
-        """Reject duplicate tag names within the same owner bucket.
+        """Reject duplicate tag names within the same org bucket.
 
-        Owner bucket = (name, organization).  On create the bucket uses the
-        request's current org (stamped at save time).  On update the bucket
-        uses the existing instance's org.  NULL organization is a single
-        bucket (legacy NULL-owned duplicates stay blocked).  Same name across
-        different organizations is allowed.
-
-        When ``organization_id`` is ``None`` (no request context), check for
-        duplicates in the NULL bucket only.  This preserves the contract that
-        NULL-org tags are in a separate bucket from org-specific tags.
+        Uses ``all_objects`` to bypass TenantManager auto-scoping so the
+        duplicate check queries against the full table, filtered explicitly
+        by ``organization_id``.
         """
         if self.instance is not None:
             organization_id = self.instance.organization_id
         else:
             organization_id = _request_org_id(self)
-        qs = Tag.objects.filter(name=value, organization_id=organization_id)
+        qs = Tag.all_objects.filter(name=value, organization_id=organization_id)
         if self.instance is not None:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
@@ -168,16 +138,13 @@ class CompanySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_contact_count(self, obj: Company) -> int:
-        """Return the number of contacts for this company.
-
-        On org-scoped SaaS routes, only contacts belonging to the active
-        organization are counted.  On solo routes, all contacts are counted.
-        """
+        """Return the number of contacts for this company, scoped to active org."""
         org_id = _read_org_id(self)
-        contacts = obj.contacts  # type: ignore
         if org_id is not None:
-            contacts = contacts.filter(organization_id=org_id)
-        return contacts.count()
+            return Contact.all_objects.filter(
+                company=obj, organization_id=org_id
+            ).count()
+        return Contact.all_objects.filter(company=obj).count()
 
     def validate(self, attrs: dict) -> dict:
         """Fail closed on org-scoped routes without org context."""
@@ -290,14 +257,16 @@ class ContactListSerializer(serializers.ModelSerializer):
     def get_tag_names(self, obj: Contact) -> list[str]:
         """Return list of tag names.
 
-        On org-scoped SaaS routes, only tags belonging to the active
-        organization are included.  On solo routes, all tags are included.
+        T1.5: scoped to the active organization.
         """
-        tags_qs = obj.tags.all()
         org_id = _read_org_id(self)
         if org_id is not None:
-            tags_qs = tags_qs.filter(organization_id=org_id)
-        return list(tags_qs.values_list("name", flat=True))
+            return list(
+                Tag.all_objects.filter(
+                    contacts=obj, organization_id=org_id
+                ).values_list("name", flat=True)
+            )
+        return list(Tag.all_objects.filter(contacts=obj).values_list("name", flat=True))
 
 
 class ContactDetailSerializer(serializers.ModelSerializer):
@@ -305,13 +274,13 @@ class ContactDetailSerializer(serializers.ModelSerializer):
 
     company = CompanySerializer(read_only=True)
     company_id = serializers.PrimaryKeyRelatedField(
-        queryset=Company.objects.all(),
+        queryset=Company.all_objects.all(),
         source="company",
         write_only=True,
     )
     tags = TagSerializer(many=True, read_only=True)
     tag_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Tag.objects.all(),
+        queryset=Tag.all_objects.all(),
         source="tags",
         many=True,
         write_only=True,
@@ -344,16 +313,11 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "full_name", "created_at", "updated_at"]
 
     def get_deal_count(self, obj: Contact) -> int:
-        """Return the number of deals for this contact.
-
-        On org-scoped SaaS routes, only deals belonging to the active
-        organization are counted.  On solo routes, all deals are counted.
-        """
+        """Return the number of deals for this contact, scoped to active org."""
         org_id = _read_org_id(self)
-        deals = obj.deals  # type: ignore
         if org_id is not None:
-            deals = deals.filter(organization_id=org_id)
-        return deals.count()
+            return Deal.all_objects.filter(contact=obj, organization_id=org_id).count()
+        return Deal.all_objects.filter(contact=obj).count()
 
     def to_representation(self, instance: Contact) -> dict:
         """Omit foreign-org related objects on org-scoped reads.
@@ -443,25 +407,15 @@ class StageSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     def get_deal_count(self, obj: Stage) -> int:
-        """Return the number of deals in this stage.
+        """Return the number of deals in this stage, scoped to the active org.
 
-        Phase 2: both org-scoped and solo routes count deals scoped to the
-        active organization.  On org-scoped routes, ``request.org`` is set
-        by ``TenantMiddleware``.  On solo routes, ``_resolve_active_org``
-        sets it during ``get_queryset()``.  The fallback preserves backward
-        compatibility for edge cases without request context.
+        Uses ``all_objects`` to bypass TenantManager auto-scoping; the
+        explicit ``organization_id`` filter handles scoping.
         """
-        request = self.context.get("request")
-        if request is not None:
-            org = getattr(request, "org", None)
-            if org is not None:
-                return obj.deals.filter(organization_id=org.id).count()  # type: ignore[attr-defined]
-        # Fallback: _read_org_id behavior for unscoped reads.
         org_id = _read_org_id(self)
-        deals = obj.deals  # type: ignore
         if org_id is not None:
-            deals = deals.filter(organization_id=org_id)
-        return deals.count()
+            return Deal.all_objects.filter(stage=obj, organization_id=org_id).count()
+        return Deal.all_objects.filter(stage=obj).count()
 
     def validate(self, attrs: dict) -> dict:
         """Fail closed on org-scoped routes without org context."""
@@ -584,14 +538,16 @@ class DealListSerializer(serializers.ModelSerializer):
     def get_tag_names(self, obj: Deal) -> list[str]:
         """Return list of tag names.
 
-        On org-scoped SaaS routes, only tags belonging to the active
-        organization are included.  On solo routes, all tags are included.
+        T1.5: scoped to the active organization.
         """
-        tags_qs = obj.tags.all()
         org_id = _read_org_id(self)
         if org_id is not None:
-            tags_qs = tags_qs.filter(organization_id=org_id)
-        return list(tags_qs.values_list("name", flat=True))
+            return list(
+                Tag.all_objects.filter(deals=obj, organization_id=org_id).values_list(
+                    "name", flat=True
+                )
+            )
+        return list(Tag.all_objects.filter(deals=obj).values_list("name", flat=True))
 
 
 class DealDetailSerializer(serializers.ModelSerializer):
@@ -599,19 +555,19 @@ class DealDetailSerializer(serializers.ModelSerializer):
 
     contact = ContactListSerializer(read_only=True)
     contact_id = serializers.PrimaryKeyRelatedField(
-        queryset=Contact.objects.all(),
+        queryset=Contact.all_objects.all(),
         source="contact",
         write_only=True,
     )
     stage = StageSerializer(read_only=True)
     stage_id = serializers.PrimaryKeyRelatedField(
-        queryset=Stage.objects.all(),
+        queryset=Stage.all_objects.all(),
         source="stage",
         write_only=True,
     )
     tags = TagSerializer(many=True, read_only=True)
     tag_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Tag.objects.all(),
+        queryset=Tag.all_objects.all(),
         source="tags",
         many=True,
         write_only=True,
@@ -735,37 +691,21 @@ class BulkUpdateStageSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         min_length=1,
     )
-    stage_id = serializers.PrimaryKeyRelatedField(queryset=Stage.objects.all())
+    stage_id = serializers.PrimaryKeyRelatedField(queryset=Stage.all_objects.all())
 
     def validate_stage_id(self, value: Stage) -> Stage:
-        """Reject non-owned stages on all routes.
+        """Reject non-owned stages.
 
-        Phase 2: both org-scoped and solo routes require the target stage
-        to belong to the active organization.  On solo routes, the org is
-        resolved from ``request.org`` (set by ``TenantMiddleware`` or the
-        ``_resolve_active_org`` fallback).  Org-scoped routes fail closed
-        when ``request.org`` is not set — no personal-org fallback.
+        T1.5 flat-route contract: the target stage must belong to the active
+        organization resolved from ``request.org`` (set by middleware) or the
+        personal-org fallback.
         """
         request = self.context.get("request")
         if request is None:
             return value
 
-        # Check whether this is an org-scoped SaaS route so we can
-        # fail closed without personal-org fallback.
-        path = getattr(request, "path", "") or ""
-        is_org_scoped = path.startswith("/orgs/")
-
-        # Resolve the active org — check request.org first, then fall back
-        # to personal-org lookup for test scenarios without middleware.
         org = getattr(request, "org", None)
         if org is None:
-            # Org-scoped routes must fail closed — no personal-org fallback.
-            if is_org_scoped:
-                raise serializers.ValidationError(
-                    "Organization context is required for this route.",
-                    code="org_required",
-                )
-
             user = getattr(request, "user", None)
             if user is not None and getattr(user, "is_authenticated", False):
                 from quickscale_modules_orgs.models import Organization
@@ -782,7 +722,6 @@ class BulkUpdateStageSerializer(serializers.Serializer):
                 "Organization context is required for this route.",
                 code="org_required",
             )
-        # Reject both foreign-org and NULL-org stages.
         if value.organization_id != org.id:  # type: ignore[attr-defined]
             raise serializers.ValidationError(
                 "The specified stage does not belong to this organization.",

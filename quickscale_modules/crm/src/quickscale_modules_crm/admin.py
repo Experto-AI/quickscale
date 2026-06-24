@@ -157,12 +157,23 @@ class _CrmOrgAwareAdminMixin:
             fieldsets = [(first_name, first_opts)] + list(fieldsets[1:])
         return fieldsets
 
-    def get_form_for_validation(  # type: ignore[no-untyped-def]
-        self, request: Any, obj: Any | None = None, **kwargs: Any
-    ):  # type: ignore[override]
-        """Limit related-field querysets to the same organization."""
-        form_class = super().get_form(request, obj, **kwargs)  # type: ignore[misc]
-        return form_class
+    def formfield_for_manytomany(  # type: ignore[override]
+        self, db_field: Any, request: Any, **kwargs: Any
+    ) -> Any:
+        """Use all_objects for M2M related-field querysets to bypass TenantManager auto-scoping."""
+        if db_field.name in self._org_related_fields:
+            model = db_field.remote_field.model
+            kwargs["queryset"] = getattr(model, "all_objects", model.objects).all()
+        return super().formfield_for_manytomany(db_field, request, **kwargs)  # type: ignore[misc]
+
+    def formfield_for_foreignkey(  # type: ignore[override]
+        self, db_field: Any, request: Any, **kwargs: Any
+    ) -> Any:
+        """Use all_objects for FK related-field querysets to bypass TenantManager auto-scoping."""
+        if db_field.name in self._org_related_fields:
+            model = db_field.remote_field.model
+            kwargs["queryset"] = getattr(model, "all_objects", model.objects).all()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)  # type: ignore[misc]
 
     def _get_org_id_from_form(self, form: ModelForm) -> int | None:
         """Extract the organization_id from a bound form's cleaned data or instance."""

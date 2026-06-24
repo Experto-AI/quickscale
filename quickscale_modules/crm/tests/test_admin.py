@@ -662,3 +662,45 @@ class TestF1110AdminTagFormLevelValidation:
 
         # Successful create redirects to changelist.
         assert response.status_code == 302
+
+
+@pytest.mark.django_db
+class TestCRT15001ContactNoteTimestampAdminRegression:
+    """CR-T15-001 — Admin/operator ContactNote creation must refresh last_contacted_at
+    even when the tenant contextvar is not set."""
+
+    def test_contact_note_save_updates_timestamp_without_contextvar(self, db, company):
+        """ContactNote.save() updates Contact.last_contacted_at via all_objects
+        bypass even when the tenant contextvar is not set."""
+        from django.contrib.auth import get_user_model
+        from quickscale_modules_crm.models import Contact, ContactNote
+        from quickscale_modules_orgs.current_org import reset_current_org_id
+
+        # Ensure contextvar is explicitly unset (simulating admin/operator path).
+        reset_current_org_id()
+
+        user_model = get_user_model()
+        operator = user_model.objects.create_superuser(
+            username="op-ts-test",
+            email="op-ts-test@example.com",
+            password="pass",
+        )
+        contact = Contact.objects.create(
+            first_name="Timestamp",
+            last_name="Test",
+            email="ts-test@example.com",
+            company=company,
+            organization=company.organization,
+        )
+        assert contact.last_contacted_at is None
+
+        ContactNote.objects.create(
+            contact=contact,
+            created_by=operator,
+            text="Regression test for CR-T15-001 — no contextvar",
+        )
+
+        contact.refresh_from_db()
+        assert contact.last_contacted_at is not None, (
+            "last_contacted_at must be updated via all_objects bypass"
+        )

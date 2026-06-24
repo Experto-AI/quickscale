@@ -24,7 +24,7 @@ Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed
 
 | Worktree | Branch | Phase 2 owns | Phase 3 owns | Next task |
 |---------|--------|-------------|-------------|-----------|
-| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.5** |
+| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.6** |
 | `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.13** |
 | `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.10** |
 
@@ -125,7 +125,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [x] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
 
 **Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3 · fan out across all 3 worktrees)*
-- [ ] T1.5 — CRM adopt contract *(wt-track1)*
+- [x] T1.5 — CRM adopt contract *(wt-track1)*
 - [ ] T1.6 — Blog adopt contract *(wt-track1)*
 - [x] T1.7 — Forms adopt contract *(wt-track2)*
 - [x] T1.8 — Listings adopt contract *(wt-track2)*
@@ -151,16 +151,16 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 ---
 
-#### - [ ] T1.5 — CRM adopt contract
+#### - [x] T1.5 — CRM adopt contract
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
+CRM is already NOT NULL/PROTECT — mostly route/manager cleanup. Implemented 2026-06-24.
 
-- **TRACK:** `wt-track1` (branch: `wt-track1`) — **next task for this worktree**
-- **SCOPE:** `crm/views.py` ~43, ~72, ~131–134, ~234–255, ~386–423 (remove route-sniffing + `isnull` unions); `crm/urls.py` delete org-scoped pair ~41–47; `crm/managers.py` delete (import shared); `crm/models.py` use `tenant_org_fk()`; `crm/serializers.py` drop redundant same-org validation; `crm/admin.py` keep `all_objects`.
+- **SCOPE:** `crm/views.py` removed `_is_org_scoped_route`, `_require_org_for_read`, `_resolve_org_id_for_terminal_stage`; simplified `_resolve_active_org`, `_get_bulk_deal_queryset`, `OrgScopedReadMixin.get_queryset`, `CRMDashboardView.get_context_data`, `StageViewSet.get_queryset`; removed all `isnull` unions and `.for_org()` calls. `crm/urls.py` deleted org-scoped URL pair. `crm/managers.py` deleted (replaced by shared `TenantManager` from orgs). `crm/models.py` replaced `TenantScopedManager`/`OperatorManager` with `TenantManager` from `quickscale_modules_orgs.managers`. `crm/serializers.py` removed route-sniffing branches from `_request_org_id`, `_read_org_id`, `BulkUpdateStageSerializer.validate_stage_id`; fixed `PrimaryKeyRelatedField` querysets to use `all_objects`; fixed helper methods to bypass TenantManager auto-scoping. `crm/admin.py` added `formfield_for_manytomany`/`formfield_for_foreignkey` overrides for `all_objects` querysets. `crm/services.py` replaced `.for_org()` with `Stage.all_objects.filter()`. Deleted dead `backfill_crm_org_ownership` management command. Test updates: removed obsolete org-scoped URL test classes; rewrote bootstrap/isolation tests for flat routes; fixed all serializer/model/service tests for TenantManager contract; added contextvar propagation in `_resolve_active_org`, `_read_org_id`, `_request_org_id`, and test fixtures.
 - **ACCEPTANCE CRITERIA:** only `/crm/...` routes resolve; cross-org read → empty/404; no `isnull` union remains; isolation tests (Org A ⊄ Org B) green.
-- **VALIDATION PATH:** `make MODULE=crm test -- --modules`.
+- **VALIDATION PATH:** `make MODULE=crm test -- --modules` — 241 passed.
 - **DEPENDS:** T1.1–T1.3. **DECISIONS:** D1, D2.
+- **IMPLEMENTATION NOTES:** CRM is staff-only (no public/anonymous content, D2 does not apply). Switching to orgs `TenantManager` introduced contextvar auto-scoping into CRM; all internal query paths that need to bypass auto-scoping now use `all_objects` explicitly. Model-level fixtures in `conftest.py` set the contextvar for TenantManager compatibility. PrimaryKeyRelatedField querysets in serializers updated to `all_objects`. Admin form field querysets overridden to use `all_objects`. The test isolation/serializer/org-bootstrap suites were rewritten for the flat `/crm/` route contract with session-based org resolution. No schema migration needed — CRM was already NOT NULL/PROTECT per migration 0006.
 
 ---
 
@@ -394,7 +394,7 @@ Single-PR items that do not change the design:
 | M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
 | M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
 | M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
-| M16 | 1 | T1.7, T1.9 | Phase 2 partial. Forms (T1.7, wt-track2) and Social (T1.9, wt-track3) contract adoption merged to v87. |
+| M16 | 1 | T1.5, T1.7, T1.9 | Phase 2 partial. CRM (T1.5, wt-track1), Forms (T1.7, wt-track2), and Social (T1.9, wt-track3) contract adoption merged to v87. |
 
 ## References
 
