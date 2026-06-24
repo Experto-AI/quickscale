@@ -46,3 +46,55 @@ django_apps:
   - rest_framework
   - django_filters
   - quickscale_modules_crm
+
+# ---------------------------------------------------------------------------
+# Manifest derivation rules (T2.3 Phase 3)
+# ---------------------------------------------------------------------------
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - rest_framework
+          - django_filters
+          - quickscale_modules_crm
+      description: "CRM Django app labels"
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - ""
+            - quickscale_modules_crm.urls
+      description: "CRM URL includes"
+
+  option_derivations:
+    deals_per_page:
+      derived_settings:
+        - setting_key: CRM_DEALS_PER_PAGE
+          source_options: [deals_per_page]
+          derivation_type: direct
+          expression:
+            option: deals_per_page
+          default: 25
+          description: "Number of deals per page"
+
+    contacts_per_page:
+      derived_settings:
+        - setting_key: CRM_CONTACTS_PER_PAGE
+          source_options: [contacts_per_page]
+          derivation_type: direct
+          expression:
+            option: contacts_per_page
+          default: 50
+          description: "Number of contacts per page"
+
+    enable_api:
+      derived_settings:
+        - setting_key: CRM_ENABLE_API
+          source_options: [enable_api]
+          derivation_type: direct
+          expression:
+            option: enable_api
+          default: true
+          description: "Enable REST API endpoints"
