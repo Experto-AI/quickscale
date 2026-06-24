@@ -11,14 +11,14 @@ QuickScale billing is a credits-first org-backed module. Django owns plans, bala
 - Django admin registration for plans, balances, transactions, subscriptions, and webhook events
 - Stripe webhook handling for purchases and recurring subscription lifecycle events
 - Authenticated JSON APIs for balance, transactions, purchase checkout, subscription checkout, subscription status, subscription cancel, billing portal, and publishable-key discovery
-- Module-owned Django pages for canonical org-scoped dashboard/pricing, flat compatibility shims, purchase return routes, subscription return routes, and the billing portal return route
+- Module-owned Django pages for flat dashboard/pricing routes in both Solo and SaaS modes, purchase return routes, subscription return routes, and the billing portal return route
 - Manual React adoption guidance so generated frontend files remain user-owned
 
 ## Current Boundaries
 
 - Billing requires the `orgs` and `auth` modules at plan/apply/runtime; QuickScale does not support a standalone billing install without those foundations
 - Planner/apply now auto-materialize the `orgs` module when billing is selected, and `orgs` continues to auto-materialize default notifications config; auth remains an explicit prerequisite
-- In SaaS/org-aware installs, canonical authenticated billing pages and APIs are org-scoped under `/orgs/<slug>/...`; flat authenticated billing routes remain compatibility shims for Solo mode and older non-org callers
+- All billing pages and APIs use flat routes (`/billing/...`, `/api/billing/...`) in both Solo and SaaS modes; no org-scoped billing URL tree exists after T1.10
 - `GET /api/billing/plans/` is intentionally recurring-only; one-time credit packs are purchaseable but do not currently ship through a public catalog endpoint
 - Checkout success, cancel, and portal return URLs are server-owned; callers may not supply them in API requests
 - Stripe keys are resolved from environment variables at runtime and are never stored in the database
@@ -53,7 +53,7 @@ This phase documents how to wire the billing module into a generated React front
 
 ### API Contract
 
-Canonical SaaS callers should use the org-scoped `/orgs/<slug>/api/billing/...` endpoints. The flat `/api/billing/...` routes documented below remain compatibility shims for Solo mode and older non-org integrations.
+All billing API routes are flat (`/api/billing/...`) and used in both Solo and SaaS modes. The org is resolved from the session / `request.org` contract established by middleware, not from a URL slug.
 
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -69,12 +69,10 @@ Canonical SaaS callers should use the org-scoped `/orgs/<slug>/api/billing/...` 
 
 ### Module-Owned Billing Pages
 
-The module already ships Django pages that you can either use directly or treat as mount points for your React frontend. In SaaS/org-aware installs, canonical authenticated pages are org-scoped and the flat authenticated route remains a compatibility shim:
+The module ships Django pages that you can either use directly or treat as mount points for your React frontend. All billing routes are flat in both Solo and SaaS modes (no org-scoped billing URL tree exists after T1.10):
 
-- `GET /orgs/<slug>/billing/dashboard/` renders the canonical authenticated billing page with `<div id="billing-root" data-view="dashboard">`
-- `GET /orgs/<slug>/billing/pricing/` renders the canonical org-scoped pricing page with `<div id="billing-root" data-view="pricing">`
-- `GET /billing/dashboard/` remains the served authenticated dashboard route in Solo mode and the flat compatibility route for older non-org callers in SaaS installs
-- `GET /billing/pricing/` remains the flat public pricing page
+- `GET /billing/dashboard/` renders the authenticated billing page with `<div id="billing-root" data-view="dashboard">`
+- `GET /billing/pricing/` renders the pricing page with `<div id="billing-root" data-view="pricing">`
 - `GET /billing/purchase/success/` and `GET /billing/purchase/cancel/` render purchase return pages
 - `GET /billing/subscription/success/` and `GET /billing/subscription/cancel/` render subscription return pages
 - `GET /billing/portal/return/` renders the Stripe billing-portal return page

@@ -11,7 +11,6 @@ from quickscale_modules_billing.views import (
     CreateBillingPortalSessionView,
     CreateCheckoutSessionView,
     CreateSubscriptionCheckoutView,
-    OrgPricingPageView,
     PlanListView,
     PricingPageView,
     PurchaseCancelView,
@@ -34,86 +33,6 @@ SUBSCRIPTION_CANCEL_PATH = "billing/subscription/cancel/"
 app_name = "quickscale_billing"
 
 urlpatterns = [
-    path(
-        "orgs/<slug:org_slug>/api/billing/config/",
-        StripePublishableKeyView.as_view(),
-        name="org-billing-config",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/plans/",
-        PlanListView.as_view(),
-        name="org-subscription-plans",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/balance/",
-        CreditBalanceView.as_view(),
-        name="org-credit-balance",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/transactions/",
-        CreditTransactionListView.as_view(),
-        name="org-credit-transactions",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/purchase/checkout/",
-        CreateCheckoutSessionView.as_view(),
-        name="org-purchase-checkout",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/subscription/",
-        SubscriptionDetailView.as_view(),
-        name="org-subscription-detail",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/subscription/checkout/",
-        CreateSubscriptionCheckoutView.as_view(),
-        name="org-subscription-checkout",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/subscription/cancel/",
-        CancelSubscriptionView.as_view(),
-        name="org-subscription-cancel-current",
-    ),
-    path(
-        "orgs/<slug:org_slug>/api/billing/portal/",
-        CreateBillingPortalSessionView.as_view(),
-        name="org-billing-portal-session",
-    ),
-    path(
-        "orgs/<slug:org_slug>/billing/dashboard/",
-        BillingDashboardView.as_view(),
-        name="org-billing-dashboard",
-    ),
-    path(
-        "orgs/<slug:org_slug>/billing/portal/return/",
-        BillingPortalReturnView.as_view(),
-        name="org-portal-return",
-    ),
-    path(
-        "orgs/<slug:org_slug>/billing/pricing/",
-        OrgPricingPageView.as_view(),
-        name="org-pricing-page",
-    ),
-    path(
-        "orgs/<slug:org_slug>/billing/purchase/success/",
-        PurchaseSuccessView.as_view(),
-        name="org-purchase-success",
-    ),
-    path(
-        "orgs/<slug:org_slug>/billing/purchase/cancel/",
-        PurchaseCancelView.as_view(),
-        name="org-purchase-cancel",
-    ),
-    path(
-        "orgs/<slug:org_slug>/billing/subscription/success/",
-        SubscriptionSuccessView.as_view(),
-        name="org-subscription-success",
-    ),
-    path(
-        "orgs/<slug:org_slug>/billing/subscription/cancel/",
-        SubscriptionCancelView.as_view(),
-        name="org-subscription-cancel",
-    ),
     path(
         "api/billing/config/",
         StripePublishableKeyView.as_view(),

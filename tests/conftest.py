@@ -6,6 +6,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client
 
+from quickscale_modules_orgs.models import Organization
+
 
 @pytest.fixture
 def user(db):
@@ -17,6 +19,27 @@ def user(db):
         email="billing-user@example.com",
         password="billingpass123",
     )
+
+
+@pytest.fixture
+def organization(db):
+    """Return a default organization for billing model tests."""
+
+    return Organization.objects.create(name="TestOrg", slug="test-org")
+
+
+@pytest.fixture
+def org_context(organization):
+    """Set the current org context so TenantManager-scoped queries resolve correctly."""
+
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    set_current_org_id(organization.pk)
+    yield
+    reset_current_org_id()
 
 
 @pytest.fixture
