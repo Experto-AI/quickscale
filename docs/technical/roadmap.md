@@ -378,26 +378,8 @@ Independent seam — CLI/generator/manifest registry, no overlap with Track 1 ru
 ### Track 2 progress
 - [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
 - [x] T2.2 — Generic implication resolver
-- [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
+- [x] T2.3 — Migrate wiring into manifests; delete Python adapters
 - [ ] T2.4 — Delete dead ladder/shims
-
----
-
-#### - [ ] T2.3 — Migrate wiring into manifests; delete Python adapters
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Mechanical but pre-specified; split into two batches (modules 1–6, then 7–13) if context-fit is breached.
-
-- **OBJECTIVE:** Move each module's config normalization/validation/derivation from 13 `*_manifest.py` Python files into its `module.yml`; route callers through the generic resolver; delete Python adapters; replace the hardcoded `MODULE_CATALOG`.
-- **SCOPE:**
-  - For each of 13 modules: extend `module.yml` `config.mutable`/`immutable` with `validation_rules` and `derivation_rules` to express what each `*_manifest.py` does today (using existing `derivation.py` schema).
-  - `quickscale_core/src/quickscale_core/manifest/resolver.py` — add any missing rule types (integer-range, boolean-type checks).
-  - `apply_command.py`, `module_config.py` — replace `from quickscale_cli.<module>_manifest import ...` with `resolve_module_config(load_manifest_for(name), ...)`.
-  - Delete the 13 `quickscale_cli/src/quickscale_cli/*_manifest.py` files.
-  - `quickscale_core/src/quickscale_core/contracts/module_catalog.py` — replace hardcoded `MODULE_CATALOG` tuple with dynamic discovery from `module.yml` files; delete the static list.
-- **ACCEPTANCE CRITERIA:** `quickscale plan` and `quickscale apply` work end-to-end with zero `*_manifest.py` imports; catalog lists same modules; all config validation errors still surface; tests green.
-- **VALIDATION PATH:** `make test -- --core && make test -- --cli`; `quickscale plan` smoke test.
-- **DEPENDS:** T2.2.
 
 ---
 

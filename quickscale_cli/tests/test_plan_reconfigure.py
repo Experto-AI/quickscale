@@ -11,7 +11,7 @@ from quickscale_cli.commands.plan_command import (
     _get_project_info_for_reconfig,
     plan,
 )
-from quickscale_cli.notifications_manifest import default_notifications_module_options
+from quickscale_core.contracts.resolvers import default_notifications_module_options
 
 
 class TestPlanReconfigureBasic:
@@ -329,13 +329,13 @@ class TestPlanReconfigureAddModules:
                     f,
                 )
 
-            # Add modules (y), select 1 (auth), docker (n), save (y)
+            # Add modules (y), select 1 (analytics — alpha-sorted), docker (n), save (y)
             result = runner.invoke(plan, ["--reconfigure"], input="y\n1\nn\ny\n")
 
             if result.exit_code == 0:
                 with open("quickscale.yml") as f:
                     content = f.read()
-                assert "auth" in content
+                assert "analytics" in content
 
     def test_plan_reconfigure_auto_adds_default_notifications_when_orgs_selected(
         self,
@@ -547,11 +547,8 @@ docker:
 
             assert result.exit_code == 0
             assert "billing - Stripe integration" in result.output
-            assert (
-                "teams - Multi-tenancy and team management "
-                "(placeholder, not public-ready)" in result.output
-            )
-            assert "Module 'teams' remains placeholder inventory only" in result.output
+            # teams is not in the discovered catalog; the error loop re-prompts.
+            assert "Unknown or already installed module" in result.output
 
             with open("quickscale.yml") as f:
                 config = yaml.safe_load(f)

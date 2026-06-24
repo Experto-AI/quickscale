@@ -38,18 +38,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_cli.backups_manifest import (
+from quickscale_core.contracts.module_options import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-    default_backups_module_options,
     has_legacy_backups_secret_values,
     normalize_backups_module_options,
-    resolve_backups_module_options,
+    sanitize_module_options,
     validate_backups_env_var_reference,
 )
-from quickscale_core.contracts.module_options import sanitize_module_options
+from quickscale_core.contracts.resolvers import (
+    default_backups_module_options,
+    resolve_backups_module_options,
+)
 
 # ---------------------------------------------------------------------------
 # Gold expectations recovered from legacy contract and module.yml

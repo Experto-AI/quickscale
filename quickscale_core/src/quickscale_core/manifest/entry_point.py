@@ -5,7 +5,7 @@ routes a module through its manifest adapter and the manifest assembler to
 produce a complete :class:`~quickscale_core.module_wiring.ModuleWiringSpec`.
 
 Module adapter registration
-----------------------------
+---------------------------
 Manifest adapters register themselves by populating
 :data:`MANIFEST_ADAPTER_REGISTRY`.  Each entry is a callable that accepts
  ``(options, *, project_package)`` and returns a
@@ -13,6 +13,12 @@ Manifest adapters register themselves by populating
 
 All catalog modules are registered: analytics, billing, blog, listings, CRM,
 forms, backups, notifications, auth, orgs, storage, and social.
+
+Batch A modules (analytics, billing, blog, listings, CRM, forms) use the
+generic manifest-driven path that loads derivation rules from their
+``module.yml`` manifest files (T2.3 Phase 3).  Post-resolution hooks in each
+adapter handle module-specific type coercions and static settings that the
+declarative resolver cannot express.
 """
 
 from __future__ import annotations
@@ -20,7 +26,110 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from quickscale_core.contracts.module_discovery import get_modules_base_path
+from quickscale_core.manifest.derivation import build_schema_from_manifest
+from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.resolver import resolve_module_config
+from quickscale_core.manifest.assembler import (
+    PostResolutionHook,
+    assemble_wiring_spec,
+)
 from quickscale_core.module_wiring import ModuleWiringSpec
+
+
+# ---------------------------------------------------------------------------
+# Generic manifest adapter helpers (T2.3 Phase 3)
+# ---------------------------------------------------------------------------
+
+# Modules base path: uses the configurable seam from module_discovery.
+# Defaults to the maintainer-monorepo quickscale_modules/ layout, but can
+# be overridden via module_discovery.set_modules_base_path() for installed
+# or embedded-project contexts.
+
+#: Weak cache of loaded manifests keyed by ``(module_name, base_path)`` so
+#: that changing the modules base path at runtime (via
+#: :func:`~quickscale_core.contracts.module_discovery.set_modules_base_path`)
+#: does not return stale entries from a different context.
+_manifest_cache: dict[tuple[str, str], Any] = {}
+
+
+def _load_module_manifest(module_name: str) -> Any:
+    """Load the ``module.yml`` manifest for *module_name*.
+
+    Uses a module-level cache keyed by ``(module_name, base_path_str)`` to
+    avoid re-reading the YAML file on every adapter invocation while still
+    remaining correct when the modules base path changes between contexts
+    (e.g. installed/planner vs. embedded project).  Raises
+    :class:`ManifestError` when the manifest file is missing or invalid.
+
+    Args:
+        module_name: The module name (e.g. ``"analytics"``).
+
+    Returns:
+        A :class:`~quickscale_core.manifest.schema.ModuleManifest`.
+    """
+    base_path = get_modules_base_path()
+    cache_key = (module_name, str(base_path))
+    cached = _manifest_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    manifest_path = base_path / module_name / "module.yml"
+    manifest = load_manifest_from_path(manifest_path)
+    _manifest_cache[cache_key] = manifest
+    return manifest
+
+
+def _build_generic_manifest_spec(
+    module_name: str,
+    options: dict[str, Any] | None,
+    *,
+    project_package: str | None = None,
+    post_hook: PostResolutionHook | None = None,
+) -> ModuleWiringSpec:
+    """Build a :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+    *module_name* using the declarative derivation rules in its ``module.yml``.
+
+    This is the generic entry point for Batch A modules whose derivation
+    rules (wiring projections, option derivations, derived settings) are
+    declared in the module's manifest rather than hardcoded in Python.
+
+    The caller can supply an optional *post_hook* for module-specific logic
+    that the declarative resolver cannot express (type coercions, static
+    settings, conditional branches).
+
+    Args:
+        module_name: The module name (e.g. ``"analytics"``).
+        options: Module options (e.g. from ``quickscale.yml``).  ``None``
+            is treated as an empty dict.
+        project_package: Unused by generic path; present for signature
+            parity with adapters that need it.
+        post_hook: Optional post-resolution hook for module-specific
+            coercions and static settings.
+
+    Returns:
+        A frozen :class:`~quickscale_core.module_wiring.ModuleWiringSpec`.
+
+    Raises:
+        ManifestError: If the module's manifest cannot be loaded or has no
+            derivation section.
+    """
+    manifest = _load_module_manifest(module_name)
+    schema = build_schema_from_manifest(
+        manifest_name=module_name,
+        wiring_projections=manifest.wiring_projections,
+        derived_settings=manifest.derived_settings,
+        option_derivations=manifest.option_derivations,
+        version="1",
+    )
+
+    result = resolve_module_config(
+        manifest,
+        schema,
+        overrides=dict(options or {}),
+    )
+
+    return assemble_wiring_spec(result, post_hook=post_hook)
 
 
 # ---------------------------------------------------------------------------
@@ -39,8 +148,68 @@ MANIFEST_ADAPTER_REGISTRY: dict[
 
 
 # ---------------------------------------------------------------------------
-# Analytics adapter (first migrated module)
+# Analytics adapter (first migrated module — uses generic manifest path)
 # ---------------------------------------------------------------------------
+
+
+def _analytics_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
+) -> ModuleWiringSpec:
+    """Apply analytics-specific type coercions and fallback defaults.
+
+    The generic resolver handles wiring projections and option derivations
+    declared in ``module.yml``.  This hook reproduces the legacy boolean/string
+    coercions and fallback defaults that the resolver cannot express
+    declaratively.
+
+    PR-4 hazard: when ``enabled`` is ``False``, the legacy wiring returns an
+    EMPTY ``ModuleWiringSpec``.  This hook reproduces that behaviour.
+    """
+    # PR-4 short-circuit: legacy returns an empty spec when disabled.
+    if not bool(resolved.get("enabled", True)):
+        return ModuleWiringSpec()
+
+    settings = dict(spec.settings)
+
+    # Boolean coercions.
+    for bool_key in (
+        "QUICKSCALE_ANALYTICS_ENABLED",
+        "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
+        "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
+        "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
+    ):
+        if bool_key in settings:
+            settings[bool_key] = bool(settings[bool_key])
+
+    # String coercions.
+    for str_key in (
+        "QUICKSCALE_ANALYTICS_PROVIDER",
+        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
+    ):
+        if str_key in settings:
+            settings[str_key] = str(settings[str_key]).strip()
+
+    # Fallback defaults matching legacy behaviour.
+    posthog_defaults = {
+        "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
+        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://us.i.posthog.com",
+    }
+    for key, fallback in posthog_defaults.items():
+        if key in settings and not settings[key]:
+            settings[key] = fallback
+
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
+    )
 
 
 def _analytics_manifest_adapter(
@@ -50,19 +219,10 @@ def _analytics_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the analytics module via the manifest path.
 
-    Delegates to the existing ``analytics_manifest`` adapter in
-    ``quickscale_cli`` (which already uses the manifest resolver + derivation
-    schema internally).  This function is the bridge that lets
-    :func:`build_manifest_wiring_spec` call the CLI-resident adapter without
-    the CLI package needing to depend on this entry point.
-
-    The import is deferred so that ``quickscale_core`` does not gain a
-    circular dependency on ``quickscale_cli`` at module load time.
-
-    PR-4 hazard: the legacy ``_analytics_wiring`` returns an EMPTY
-    ``ModuleWiringSpec`` when ``enabled`` is ``False``.  We reproduce that
-    short-circuit here via the post-resolution hook so parity holds for the
-    disabled case.
+    Uses the generic manifest-driven path that reads derivation rules
+    (wiring projections, option derivations) from the analytics ``module.yml``
+    manifest.  A post-resolution hook applies the type coercions and fallback
+    defaults that the legacy ``analytics_contract.py`` used.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -72,195 +232,11 @@ def _analytics_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         analytics.
     """
-    # Deferred import avoids circular dependency: quickscale_core must not
-    # import from quickscale_cli at module level.
-    from quickscale_cli.analytics_manifest import (  # noqa: PLC0415
-        resolve_analytics_module_options,
+    return _build_generic_manifest_spec(
+        "analytics",
+        options,
+        post_hook=_analytics_post_hook,
     )
-    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
-        DerivedSetting,
-        ModuleDerivationSchema,
-        OptionDerivation,
-        WiringProjection,
-    )
-    from quickscale_core.manifest.resolver import ResolverResult  # noqa: PLC0415
-
-    resolved = resolve_analytics_module_options(options)
-
-    # PR-4 short-circuit: legacy returns an empty spec when disabled.
-    if not bool(resolved.get("enabled", True)):
-        return ModuleWiringSpec()
-
-    # Build derivation schema with wiring projections for the enabled case.
-    schema = ModuleDerivationSchema(
-        module_name="analytics",
-        version="1",
-        module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={"value": ["quickscale_modules_analytics"]},
-                description="Analytics Django app label",
-            ),
-            WiringProjection(
-                wiring_field="url_includes",
-                derivation_type="static",
-                expression={
-                    "value": [["analytics/", "quickscale_modules_analytics.urls"]]
-                },
-                description="Analytics URL include (added in v87 M0 analytics routing)",
-            ),
-        ],
-        option_derivations={
-            "enabled": OptionDerivation(
-                option_key="enabled",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_ENABLED",
-                        source_options=["enabled"],
-                        derivation_type="direct",
-                        expression={"option": "enabled"},
-                    ),
-                ],
-            ),
-            "provider": OptionDerivation(
-                option_key="provider",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_PROVIDER",
-                        source_options=["provider"],
-                        derivation_type="direct",
-                        expression={"option": "provider"},
-                    ),
-                ],
-            ),
-            "posthog_api_key_env_var": OptionDerivation(
-                option_key="posthog_api_key_env_var",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-                        source_options=["posthog_api_key_env_var"],
-                        derivation_type="direct",
-                        expression={"option": "posthog_api_key_env_var"},
-                    ),
-                ],
-            ),
-            "posthog_host_env_var": OptionDerivation(
-                option_key="posthog_host_env_var",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-                        source_options=["posthog_host_env_var"],
-                        derivation_type="direct",
-                        expression={"option": "posthog_host_env_var"},
-                    ),
-                ],
-            ),
-            "posthog_host": OptionDerivation(
-                option_key="posthog_host",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-                        source_options=["posthog_host"],
-                        derivation_type="direct",
-                        expression={"option": "posthog_host"},
-                    ),
-                ],
-            ),
-            "exclude_debug": OptionDerivation(
-                option_key="exclude_debug",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
-                        source_options=["exclude_debug"],
-                        derivation_type="direct",
-                        expression={"option": "exclude_debug"},
-                    ),
-                ],
-            ),
-            "exclude_staff": OptionDerivation(
-                option_key="exclude_staff",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
-                        source_options=["exclude_staff"],
-                        derivation_type="direct",
-                        expression={"option": "exclude_staff"},
-                    ),
-                ],
-            ),
-            "anonymous_by_default": OptionDerivation(
-                option_key="anonymous_by_default",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
-                        source_options=["anonymous_by_default"],
-                        derivation_type="direct",
-                        expression={"option": "anonymous_by_default"},
-                    ),
-                ],
-            ),
-        },
-    )
-
-    # Build the wiring and derived settings from the schema against the
-    # already-resolved options dict.
-    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
-        _project_all_derived_settings,
-        _project_all_wiring,
-    )
-
-    wiring = _project_all_wiring(schema, resolved)
-    derived_settings = _project_all_derived_settings(schema, resolved)
-
-    # The legacy wiring uses bool() coercion on the boolean fields; reproduce
-    # that here so the settings dict has actual booleans, not raw values.
-    for bool_key in (
-        "QUICKSCALE_ANALYTICS_ENABLED",
-        "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
-        "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
-        "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
-    ):
-        if bool_key in derived_settings:
-            derived_settings[bool_key] = bool(derived_settings[bool_key])
-
-    # The legacy wiring uses str(...).strip() or str(...).strip() or default
-    # on string fields; resolve_analytics_module_options already applied those.
-    for str_key in (
-        "QUICKSCALE_ANALYTICS_PROVIDER",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-    ):
-        if str_key in derived_settings:
-            derived_settings[str_key] = str(derived_settings[str_key]).strip()
-
-    # Apply the same fallback defaults the legacy wiring applies.
-    posthog_defaults = {
-        "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://us.i.posthog.com",
-    }
-    for key, fallback in posthog_defaults.items():
-        if key in derived_settings and not derived_settings[key]:
-            derived_settings[key] = fallback
-
-    result = ResolverResult(
-        module_name="analytics",
-        defaults={},
-        resolved=resolved,
-        derived_settings=derived_settings,
-        apps=tuple(wiring["apps"]),
-        middleware=tuple(wiring["middleware"]),
-        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
-        pre_home_url_includes=tuple(
-            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
-        ),
-    )
-
-    return assemble_wiring_spec(result)
 
 
 # Register analytics as the first manifest-driven adapter.
@@ -268,8 +244,39 @@ MANIFEST_ADAPTER_REGISTRY["analytics"] = _analytics_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Billing adapter (C1)
+# Billing adapter (C1 — uses generic manifest path)
 # ---------------------------------------------------------------------------
+
+
+def _billing_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
+) -> ModuleWiringSpec:
+    """Apply billing-specific bool/string coercions."""
+    settings = dict(spec.settings)
+
+    # Legacy bool() coercion on enabled flag.
+    settings["QUICKSCALE_BILLING_ENABLED"] = bool(
+        settings.get("QUICKSCALE_BILLING_ENABLED", True)
+    )
+
+    # Legacy str() coercion on string fields.
+    for str_key in (
+        "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
+        "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
+        "QUICKSCALE_BILLING_CURRENCY",
+    ):
+        if str_key in settings:
+            settings[str_key] = str(settings[str_key])
+
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
+    )
 
 
 def _billing_manifest_adapter(
@@ -279,9 +286,8 @@ def _billing_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the billing module via the manifest path.
 
-    Apps: ``("rest_framework", "quickscale_modules_billing")``.
-    URL includes: ``[("", "quickscale_modules_billing.urls")]``.
-    Settings: QUICKSCALE_BILLING_* keys derived from resolved options.
+    Uses the generic manifest-driven path that reads derivation rules from the
+    billing ``module.yml`` manifest.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -291,147 +297,52 @@ def _billing_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         billing that is equal to the legacy ``_billing_wiring`` output.
     """
-    from quickscale_cli.billing_manifest import (  # noqa: PLC0415
-        DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-        DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-        DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-        DEFAULT_BILLING_CURRENCY,
+    return _build_generic_manifest_spec(
+        "billing",
+        options,
+        post_hook=_billing_post_hook,
     )
-    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
-        DerivedSetting,
-        ModuleDerivationSchema,
-        OptionDerivation,
-        WiringProjection,
-    )
-    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
-        ResolverResult,
-        _project_all_derived_settings,
-        _project_all_wiring,
-    )
-    from quickscale_cli.billing_manifest import resolve_billing_module_options  # noqa: PLC0415
-
-    resolved = resolve_billing_module_options(options)
-
-    schema = ModuleDerivationSchema(
-        module_name="billing",
-        version="1",
-        module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={"value": ["rest_framework", "quickscale_modules_billing"]},
-                description="Billing Django app labels",
-            ),
-            WiringProjection(
-                wiring_field="url_includes",
-                derivation_type="static",
-                expression={"value": [["", "quickscale_modules_billing.urls"]]},
-                description="Billing URL includes",
-            ),
-        ],
-        option_derivations={
-            "enabled": OptionDerivation(
-                option_key="enabled",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_BILLING_ENABLED",
-                        source_options=["enabled"],
-                        derivation_type="direct",
-                        expression={"option": "enabled"},
-                    ),
-                ],
-            ),
-            "publishable_key_env_var": OptionDerivation(
-                option_key="publishable_key_env_var",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-                        source_options=["publishable_key_env_var"],
-                        derivation_type="direct",
-                        expression={"option": "publishable_key_env_var"},
-                        default=DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
-                    ),
-                ],
-            ),
-            "secret_key_env_var": OptionDerivation(
-                option_key="secret_key_env_var",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-                        source_options=["secret_key_env_var"],
-                        derivation_type="direct",
-                        expression={"option": "secret_key_env_var"},
-                        default=DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
-                    ),
-                ],
-            ),
-            "webhook_secret_env_var": OptionDerivation(
-                option_key="webhook_secret_env_var",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-                        source_options=["webhook_secret_env_var"],
-                        derivation_type="direct",
-                        expression={"option": "webhook_secret_env_var"},
-                        default=DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
-                    ),
-                ],
-            ),
-            "billing_currency": OptionDerivation(
-                option_key="billing_currency",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_BILLING_CURRENCY",
-                        source_options=["billing_currency"],
-                        derivation_type="direct",
-                        expression={"option": "billing_currency"},
-                        default=DEFAULT_BILLING_CURRENCY,
-                    ),
-                ],
-            ),
-        },
-    )
-
-    wiring = _project_all_wiring(schema, resolved)
-    derived_settings = _project_all_derived_settings(schema, resolved)
-
-    # Reproduce legacy bool() coercion on the enabled flag.
-    derived_settings["QUICKSCALE_BILLING_ENABLED"] = bool(
-        derived_settings.get("QUICKSCALE_BILLING_ENABLED", True)
-    )
-    # Reproduce legacy str() coercion on string fields.
-    for str_key in (
-        "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-        "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-        "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-        "QUICKSCALE_BILLING_CURRENCY",
-    ):
-        if str_key in derived_settings:
-            derived_settings[str_key] = str(derived_settings[str_key])
-
-    result = ResolverResult(
-        module_name="billing",
-        defaults={},
-        resolved=resolved,
-        derived_settings=derived_settings,
-        apps=tuple(wiring["apps"]),
-        middleware=tuple(wiring["middleware"]),
-        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
-        pre_home_url_includes=tuple(
-            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
-        ),
-    )
-
-    return assemble_wiring_spec(result)
 
 
 MANIFEST_ADAPTER_REGISTRY["billing"] = _billing_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Blog adapter (C4)
+# Blog adapter (C4 — uses generic manifest path)
 # ---------------------------------------------------------------------------
+
+
+def _blog_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
+) -> ModuleWiringSpec:
+    """Apply blog-specific type coercions and static markdownx settings."""
+    settings = dict(spec.settings)
+
+    # Legacy int()/bool()/str() coercions.
+    settings["BLOG_POSTS_PER_PAGE"] = int(settings.get("BLOG_POSTS_PER_PAGE", 10))
+    settings["BLOG_ENABLE_RSS"] = bool(settings.get("BLOG_ENABLE_RSS", True))
+    api_rate = str(settings.get("BLOG_API_RATE_LIMIT", "")).strip()
+    settings["BLOG_API_RATE_LIMIT"] = api_rate or "5/hour"
+    settings["BLOG_ORG_ROUTING_ENABLED"] = bool(
+        settings.get("BLOG_ORG_ROUTING_ENABLED", False)
+    )
+
+    # Static markdownx settings (identical to legacy).
+    settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
+        "markdown.extensions.fenced_code",
+        "markdown.extensions.tables",
+        "markdown.extensions.toc",
+    ]
+    settings["MARKDOWNX_MEDIA_PATH"] = "blog/markdownx/"
+
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
+    )
 
 
 def _blog_manifest_adapter(
@@ -441,16 +352,8 @@ def _blog_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the blog module via the manifest path.
 
-    Apps: ``("markdownx", "quickscale_modules_blog")``.
-    URL includes: ``[("", "quickscale_modules_blog.urls"), ("markdownx/", ...)]``.
-    The blog ``urls.py`` already carries its own ``blog/...`` and
-    ``orgs/<slug>/blog/...`` prefixes, so it is included at root level.
-    Settings: BLOG_* + MARKDOWNX_* keys.
-
-    Phase 1 (F11.11): added ``BLOG_ORG_ROUTING_ENABLED`` as an additive
-    wiring prerequisite for org-scoped blog routing.  The setting defaults
-    to ``False`` and is flipped to ``True`` by Phase 2 wiring logic when
-    org-scoped viewsets and URL patterns are active.
+    Uses the generic manifest-driven path that reads derivation rules from the
+    blog ``module.yml`` manifest.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -460,149 +363,45 @@ def _blog_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         blog that is equal to the legacy ``_blog_wiring`` output.
     """
-    from quickscale_cli.blog_manifest import (  # noqa: PLC0415
-        resolve_blog_module_options,
-        DEFAULT_BLOG_API_RATE_LIMIT,
+    return _build_generic_manifest_spec(
+        "blog",
+        options,
+        post_hook=_blog_post_hook,
     )
-    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
-        DerivedSetting,
-        ModuleDerivationSchema,
-        OptionDerivation,
-        WiringProjection,
-    )
-    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
-        ResolverResult,
-        _project_all_derived_settings,
-        _project_all_wiring,
-    )
-
-    resolved = resolve_blog_module_options(options)
-
-    _MARKDOWNX_EXTENSIONS = [
-        "markdown.extensions.fenced_code",
-        "markdown.extensions.tables",
-        "markdown.extensions.toc",
-    ]
-
-    schema = ModuleDerivationSchema(
-        module_name="blog",
-        version="1",
-        module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={"value": ["markdownx", "quickscale_modules_blog"]},
-                description="Blog Django app labels",
-            ),
-            WiringProjection(
-                wiring_field="url_includes",
-                derivation_type="static",
-                expression={
-                    "value": [
-                        ["", "quickscale_modules_blog.urls"],
-                        ["markdownx/", "markdownx.urls"],
-                    ]
-                },
-                description="Blog URL includes (included at root; urls.py carries its own blog/ prefix)",
-            ),
-        ],
-        option_derivations={
-            "posts_per_page": OptionDerivation(
-                option_key="posts_per_page",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="BLOG_POSTS_PER_PAGE",
-                        source_options=["posts_per_page"],
-                        derivation_type="direct",
-                        expression={"option": "posts_per_page"},
-                        default=10,
-                    ),
-                ],
-            ),
-            "enable_rss": OptionDerivation(
-                option_key="enable_rss",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="BLOG_ENABLE_RSS",
-                        source_options=["enable_rss"],
-                        derivation_type="direct",
-                        expression={"option": "enable_rss"},
-                        default=True,
-                    ),
-                ],
-            ),
-            "api_rate_limit": OptionDerivation(
-                option_key="api_rate_limit",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="BLOG_API_RATE_LIMIT",
-                        source_options=["api_rate_limit"],
-                        derivation_type="direct",
-                        expression={"option": "api_rate_limit"},
-                        default=DEFAULT_BLOG_API_RATE_LIMIT,
-                    ),
-                ],
-            ),
-            # Phase 1 (F11.11): org routing prerequisite — flipped to True
-            # by Phase 2 when org-scoped viewsets are active.
-            "org_routing_enabled": OptionDerivation(
-                option_key="org_routing_enabled",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="BLOG_ORG_ROUTING_ENABLED",
-                        source_options=["org_routing_enabled"],
-                        derivation_type="direct",
-                        expression={"option": "org_routing_enabled"},
-                        default=False,
-                    ),
-                ],
-            ),
-        },
-    )
-
-    wiring = _project_all_wiring(schema, resolved)
-    derived_settings = _project_all_derived_settings(schema, resolved)
-
-    # Reproduce legacy int()/bool()/str() coercions.
-    derived_settings["BLOG_POSTS_PER_PAGE"] = int(
-        derived_settings.get("BLOG_POSTS_PER_PAGE", 10)
-    )
-    derived_settings["BLOG_ENABLE_RSS"] = bool(
-        derived_settings.get("BLOG_ENABLE_RSS", True)
-    )
-    api_rate = str(derived_settings.get("BLOG_API_RATE_LIMIT", "")).strip()
-    derived_settings["BLOG_API_RATE_LIMIT"] = api_rate or DEFAULT_BLOG_API_RATE_LIMIT
-    derived_settings["BLOG_ORG_ROUTING_ENABLED"] = bool(
-        derived_settings.get("BLOG_ORG_ROUTING_ENABLED", False)
-    )
-
-    # Add static markdownx settings (identical to legacy).
-    derived_settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = _MARKDOWNX_EXTENSIONS
-    derived_settings["MARKDOWNX_MEDIA_PATH"] = "blog/markdownx/"
-
-    result = ResolverResult(
-        module_name="blog",
-        defaults={},
-        resolved=resolved,
-        derived_settings=derived_settings,
-        apps=tuple(wiring["apps"]),
-        middleware=tuple(wiring["middleware"]),
-        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
-        pre_home_url_includes=tuple(
-            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
-        ),
-    )
-
-    return assemble_wiring_spec(result)
 
 
 MANIFEST_ADAPTER_REGISTRY["blog"] = _blog_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Listings adapter (C3)
+# Listings adapter (C3 — uses generic manifest path)
 # ---------------------------------------------------------------------------
+
+
+def _listings_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
+) -> ModuleWiringSpec:
+    """Apply listings-specific int coercion and static markdownx settings."""
+    settings = dict(spec.settings)
+
+    # Legacy int() coercion.
+    settings["LISTINGS_PER_PAGE"] = int(settings.get("LISTINGS_PER_PAGE", 12))
+
+    # Static markdownx settings (identical to legacy).
+    settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
+        "markdown.extensions.fenced_code",
+        "markdown.extensions.tables",
+        "markdown.extensions.toc",
+    ]
+
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
+    )
 
 
 def _listings_manifest_adapter(
@@ -612,9 +411,8 @@ def _listings_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the listings module via the manifest path.
 
-    Apps: ``("django_filters", "markdownx", "quickscale_modules_listings")``.
-    URL includes: ``[("listings/", ...), ("markdownx/", ...)]``.
-    Settings: LISTINGS_PER_PAGE + MARKDOWNX_MARKDOWN_EXTENSIONS.
+    Uses the generic manifest-driven path that reads derivation rules from the
+    listings ``module.yml`` manifest.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -624,107 +422,40 @@ def _listings_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         listings that is equal to the legacy ``_listings_wiring`` output.
     """
-    from quickscale_cli.listings_manifest import (  # noqa: PLC0415
-        resolve_listings_module_options,
+    return _build_generic_manifest_spec(
+        "listings",
+        options,
+        post_hook=_listings_post_hook,
     )
-    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
-        DerivedSetting,
-        ModuleDerivationSchema,
-        OptionDerivation,
-        WiringProjection,
-    )
-    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
-        ResolverResult,
-        _project_all_derived_settings,
-        _project_all_wiring,
-    )
-
-    resolved = resolve_listings_module_options(options)
-
-    _MARKDOWNX_EXTENSIONS = [
-        "markdown.extensions.fenced_code",
-        "markdown.extensions.tables",
-        "markdown.extensions.toc",
-    ]
-
-    schema = ModuleDerivationSchema(
-        module_name="listings",
-        version="1",
-        module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={
-                    "value": [
-                        "django_filters",
-                        "markdownx",
-                        "quickscale_modules_listings",
-                    ]
-                },
-                description="Listings Django app labels",
-            ),
-            WiringProjection(
-                wiring_field="url_includes",
-                derivation_type="static",
-                expression={
-                    "value": [
-                        ["listings/", "quickscale_modules_listings.urls"],
-                        ["markdownx/", "markdownx.urls"],
-                    ]
-                },
-                description="Listings URL includes",
-            ),
-        ],
-        option_derivations={
-            "listings_per_page": OptionDerivation(
-                option_key="listings_per_page",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="LISTINGS_PER_PAGE",
-                        source_options=["listings_per_page"],
-                        derivation_type="direct",
-                        expression={"option": "listings_per_page"},
-                        default=12,
-                    ),
-                ],
-            ),
-        },
-    )
-
-    wiring = _project_all_wiring(schema, resolved)
-    derived_settings = _project_all_derived_settings(schema, resolved)
-
-    # Reproduce legacy int() coercion.
-    derived_settings["LISTINGS_PER_PAGE"] = int(
-        derived_settings.get("LISTINGS_PER_PAGE", 12)
-    )
-
-    # Add static markdownx settings (identical to legacy).
-    derived_settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = _MARKDOWNX_EXTENSIONS
-
-    result = ResolverResult(
-        module_name="listings",
-        defaults={},
-        resolved=resolved,
-        derived_settings=derived_settings,
-        apps=tuple(wiring["apps"]),
-        middleware=tuple(wiring["middleware"]),
-        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
-        pre_home_url_includes=tuple(
-            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
-        ),
-    )
-
-    return assemble_wiring_spec(result)
 
 
 MANIFEST_ADAPTER_REGISTRY["listings"] = _listings_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# CRM adapter (C6)
+# CRM adapter (C6 — uses generic manifest path)
 # ---------------------------------------------------------------------------
+
+
+def _crm_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
+) -> ModuleWiringSpec:
+    """Apply CRM-specific int/bool coercions."""
+    settings = dict(spec.settings)
+
+    # Legacy int()/bool() coercions.
+    settings["CRM_DEALS_PER_PAGE"] = int(settings.get("CRM_DEALS_PER_PAGE", 25))
+    settings["CRM_CONTACTS_PER_PAGE"] = int(settings.get("CRM_CONTACTS_PER_PAGE", 50))
+    settings["CRM_ENABLE_API"] = bool(settings.get("CRM_ENABLE_API", True))
+
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
+    )
 
 
 def _crm_manifest_adapter(
@@ -734,9 +465,8 @@ def _crm_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the CRM module via the manifest path.
 
-    Apps: ``("rest_framework", "django_filters", "quickscale_modules_crm")``.
-    URL includes: ``[("", "quickscale_modules_crm.urls")]``.
-    Settings: CRM_DEALS_PER_PAGE, CRM_CONTACTS_PER_PAGE, CRM_ENABLE_API.
+    Uses the generic manifest-driven path that reads derivation rules from the
+    CRM ``module.yml`` manifest.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -746,123 +476,48 @@ def _crm_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         CRM that is equal to the legacy ``_crm_wiring`` output.
     """
-    from quickscale_cli.crm_manifest import (  # noqa: PLC0415
-        resolve_crm_module_options,
+    return _build_generic_manifest_spec(
+        "crm",
+        options,
+        post_hook=_crm_post_hook,
     )
-    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
-        DerivedSetting,
-        ModuleDerivationSchema,
-        OptionDerivation,
-        WiringProjection,
-    )
-    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
-        ResolverResult,
-        _project_all_derived_settings,
-        _project_all_wiring,
-    )
-
-    resolved = resolve_crm_module_options(options)
-
-    schema = ModuleDerivationSchema(
-        module_name="crm",
-        version="1",
-        module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={
-                    "value": [
-                        "rest_framework",
-                        "django_filters",
-                        "quickscale_modules_crm",
-                    ]
-                },
-                description="CRM Django app labels",
-            ),
-            WiringProjection(
-                wiring_field="url_includes",
-                derivation_type="static",
-                expression={"value": [["", "quickscale_modules_crm.urls"]]},
-                description="CRM URL includes",
-            ),
-        ],
-        option_derivations={
-            "deals_per_page": OptionDerivation(
-                option_key="deals_per_page",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="CRM_DEALS_PER_PAGE",
-                        source_options=["deals_per_page"],
-                        derivation_type="direct",
-                        expression={"option": "deals_per_page"},
-                        default=25,
-                    ),
-                ],
-            ),
-            "contacts_per_page": OptionDerivation(
-                option_key="contacts_per_page",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="CRM_CONTACTS_PER_PAGE",
-                        source_options=["contacts_per_page"],
-                        derivation_type="direct",
-                        expression={"option": "contacts_per_page"},
-                        default=50,
-                    ),
-                ],
-            ),
-            "enable_api": OptionDerivation(
-                option_key="enable_api",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="CRM_ENABLE_API",
-                        source_options=["enable_api"],
-                        derivation_type="direct",
-                        expression={"option": "enable_api"},
-                        default=True,
-                    ),
-                ],
-            ),
-        },
-    )
-
-    wiring = _project_all_wiring(schema, resolved)
-    derived_settings = _project_all_derived_settings(schema, resolved)
-
-    # Reproduce legacy int()/bool() coercions.
-    derived_settings["CRM_DEALS_PER_PAGE"] = int(
-        derived_settings.get("CRM_DEALS_PER_PAGE", 25)
-    )
-    derived_settings["CRM_CONTACTS_PER_PAGE"] = int(
-        derived_settings.get("CRM_CONTACTS_PER_PAGE", 50)
-    )
-    derived_settings["CRM_ENABLE_API"] = bool(
-        derived_settings.get("CRM_ENABLE_API", True)
-    )
-
-    result = ResolverResult(
-        module_name="crm",
-        defaults={},
-        resolved=resolved,
-        derived_settings=derived_settings,
-        apps=tuple(wiring["apps"]),
-        middleware=tuple(wiring["middleware"]),
-        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
-        pre_home_url_includes=tuple(
-            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
-        ),
-    )
-
-    return assemble_wiring_spec(result)
 
 
 MANIFEST_ADAPTER_REGISTRY["crm"] = _crm_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Forms adapter (C7)
+# Forms adapter (C7 — uses generic manifest path)
 # ---------------------------------------------------------------------------
+
+
+def _forms_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
+) -> ModuleWiringSpec:
+    """Apply forms-specific int/bool/str coercions."""
+    settings = dict(spec.settings)
+
+    # Legacy int()/bool()/str() coercions.
+    settings["FORMS_PER_PAGE"] = int(settings.get("FORMS_PER_PAGE", 25))
+    settings["FORMS_SPAM_PROTECTION"] = bool(
+        settings.get("FORMS_SPAM_PROTECTION", True)
+    )
+    settings["FORMS_RATE_LIMIT"] = str(settings.get("FORMS_RATE_LIMIT", "5/hour"))
+    settings["FORMS_DATA_RETENTION_DAYS"] = int(
+        settings.get("FORMS_DATA_RETENTION_DAYS", 365)
+    )
+    settings["FORMS_SUBMISSIONS_API"] = bool(
+        settings.get("FORMS_SUBMISSIONS_API", True)
+    )
+
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
+    )
 
 
 def _forms_manifest_adapter(
@@ -872,9 +527,8 @@ def _forms_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the forms module via the manifest path.
 
-    Apps: ``("rest_framework", "django_filters", "quickscale_modules_forms")``.
-    URL includes: ``[("", "quickscale_modules_forms.urls")]``.
-    Settings: FORMS_* keys.
+    Uses the generic manifest-driven path that reads derivation rules from the
+    forms ``module.yml`` manifest.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -884,144 +538,11 @@ def _forms_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         forms that is equal to the legacy ``_forms_wiring`` output.
     """
-    from quickscale_cli.forms_manifest import (  # noqa: PLC0415
-        resolve_forms_module_options,
-        DEFAULT_FORMS_RATE_LIMIT,
+    return _build_generic_manifest_spec(
+        "forms",
+        options,
+        post_hook=_forms_post_hook,
     )
-    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
-        DerivedSetting,
-        ModuleDerivationSchema,
-        OptionDerivation,
-        WiringProjection,
-    )
-    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
-        ResolverResult,
-        _project_all_derived_settings,
-        _project_all_wiring,
-    )
-
-    resolved = resolve_forms_module_options(options)
-
-    schema = ModuleDerivationSchema(
-        module_name="forms",
-        version="1",
-        module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={
-                    "value": [
-                        "rest_framework",
-                        "django_filters",
-                        "quickscale_modules_forms",
-                    ]
-                },
-                description="Forms Django app labels",
-            ),
-            WiringProjection(
-                wiring_field="url_includes",
-                derivation_type="static",
-                expression={"value": [["", "quickscale_modules_forms.urls"]]},
-                description="Forms URL includes",
-            ),
-        ],
-        option_derivations={
-            "forms_per_page": OptionDerivation(
-                option_key="forms_per_page",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="FORMS_PER_PAGE",
-                        source_options=["forms_per_page"],
-                        derivation_type="direct",
-                        expression={"option": "forms_per_page"},
-                        default=25,
-                    ),
-                ],
-            ),
-            "spam_protection_enabled": OptionDerivation(
-                option_key="spam_protection_enabled",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="FORMS_SPAM_PROTECTION",
-                        source_options=["spam_protection_enabled"],
-                        derivation_type="direct",
-                        expression={"option": "spam_protection_enabled"},
-                        default=True,
-                    ),
-                ],
-            ),
-            "rate_limit": OptionDerivation(
-                option_key="rate_limit",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="FORMS_RATE_LIMIT",
-                        source_options=["rate_limit"],
-                        derivation_type="direct",
-                        expression={"option": "rate_limit"},
-                        default=DEFAULT_FORMS_RATE_LIMIT,
-                    ),
-                ],
-            ),
-            "data_retention_days": OptionDerivation(
-                option_key="data_retention_days",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="FORMS_DATA_RETENTION_DAYS",
-                        source_options=["data_retention_days"],
-                        derivation_type="direct",
-                        expression={"option": "data_retention_days"},
-                        default=365,
-                    ),
-                ],
-            ),
-            "submissions_api_enabled": OptionDerivation(
-                option_key="submissions_api_enabled",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="FORMS_SUBMISSIONS_API",
-                        source_options=["submissions_api_enabled"],
-                        derivation_type="direct",
-                        expression={"option": "submissions_api_enabled"},
-                        default=True,
-                    ),
-                ],
-            ),
-        },
-    )
-
-    wiring = _project_all_wiring(schema, resolved)
-    derived_settings = _project_all_derived_settings(schema, resolved)
-
-    # Reproduce legacy int()/bool()/str() coercions.
-    derived_settings["FORMS_PER_PAGE"] = int(derived_settings.get("FORMS_PER_PAGE", 25))
-    derived_settings["FORMS_SPAM_PROTECTION"] = bool(
-        derived_settings.get("FORMS_SPAM_PROTECTION", True)
-    )
-    derived_settings["FORMS_RATE_LIMIT"] = str(
-        derived_settings.get("FORMS_RATE_LIMIT", DEFAULT_FORMS_RATE_LIMIT)
-    )
-    derived_settings["FORMS_DATA_RETENTION_DAYS"] = int(
-        derived_settings.get("FORMS_DATA_RETENTION_DAYS", 365)
-    )
-    derived_settings["FORMS_SUBMISSIONS_API"] = bool(
-        derived_settings.get("FORMS_SUBMISSIONS_API", True)
-    )
-
-    result = ResolverResult(
-        module_name="forms",
-        defaults={},
-        resolved=resolved,
-        derived_settings=derived_settings,
-        apps=tuple(wiring["apps"]),
-        middleware=tuple(wiring["middleware"]),
-        url_includes=tuple((str(a), str(b)) for a, b in wiring["url_includes"]),
-        pre_home_url_includes=tuple(
-            (str(a), str(b)) for a, b in wiring["pre_home_url_includes"]
-        ),
-    )
-
-    return assemble_wiring_spec(result)
 
 
 MANIFEST_ADAPTER_REGISTRY["forms"] = _forms_manifest_adapter
@@ -1054,12 +575,14 @@ def _backups_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         backups that is equal to the legacy ``_backups_wiring`` output.
     """
-    from quickscale_cli.backups_manifest import (  # noqa: PLC0415
+    from quickscale_core.contracts.module_options import (  # noqa: PLC0415
         normalize_backups_module_options,
         BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
         BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
         DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
         DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+    )
+    from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         default_backups_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -1193,8 +716,10 @@ def _notifications_manifest_adapter(
         notifications that is equal to the legacy ``_notifications_wiring``
         output.
     """
-    from quickscale_cli.notifications_manifest import (  # noqa: PLC0415
+    from quickscale_core.contracts.module_options import (  # noqa: PLC0415
         NOTIFICATIONS_LIVE_EMAIL_BACKEND,
+    )
+    from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         notifications_runtime_email_backend,
         resolve_notifications_module_options,
     )
@@ -1457,7 +982,7 @@ def _auth_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         auth that is equal to the legacy ``_auth_wiring`` output.
     """
-    from quickscale_cli.auth_manifest import (  # noqa: PLC0415
+    from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         resolve_auth_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -1594,7 +1119,7 @@ def _orgs_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         orgs that is equal to the legacy ``_orgs_wiring`` output.
     """
-    from quickscale_cli.orgs_manifest import (  # noqa: PLC0415
+    from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         resolve_orgs_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -1716,7 +1241,7 @@ def _storage_manifest_adapter(
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
         storage that is equal to the legacy ``_storage_wiring`` output.
     """
-    from quickscale_cli.storage_manifest import (  # noqa: PLC0415
+    from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         resolve_storage_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
@@ -1874,16 +1399,20 @@ def _social_manifest_adapter(
     if project_package is None:
         raise ValueError("project_package is required for managed social wiring")
 
-    from quickscale_cli.social_manifest import (  # noqa: PLC0415
+    from quickscale_core.contracts.module_options import (  # noqa: PLC0415
         SOCIAL_EMBEDS_PATH,
         SOCIAL_INTEGRATION_BASE_PATH,
         SOCIAL_INTEGRATION_EMBEDS_PATH,
         SOCIAL_LINK_TREE_PATH,
+    )
+    from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
+        resolve_social_module_options,
+    )
+    from quickscale_core.manifest.social_manifest import (  # noqa: PLC0415
         load_social_manifest,
         render_social_managed_init_module,
         render_social_managed_urls_module,
         render_social_managed_views_module,
-        resolve_social_module_options,
         social_provider_supports_embeds,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415

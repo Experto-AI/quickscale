@@ -418,8 +418,9 @@ modules:
 
         message = str(exc.value)
         assert placeholder_name in message
-        assert "public-ready QuickScale module" in message
-        assert "placeholder inventory only" in message
+        # Placeholder-only modules are not in the discovered catalog, so the
+        # rejection is at the "unknown module" stage rather than readiness gate.
+        assert "Unknown module" in message
 
     def test_billing_module_is_accepted(self):
         """Billing should validate as a public-ready module in quickscale.yml."""

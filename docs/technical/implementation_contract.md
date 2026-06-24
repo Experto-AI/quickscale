@@ -56,8 +56,9 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 <a id="module-manifest-architecture"></a>
 ## Module Manifest Contract
 
-- Each module uses `module.yml` as the canonical installed-version and configuration-contract source when that manifest is present.
+- `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) that previously duplicated per-module config normalization/validation/derivation have been deleted; all callers now resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
 - Mutable options are applied through the documented plan/apply flow; immutable options remain embed-time contract and must not be rewritten silently.
+- Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. Known placeholder directories (e.g. `teams`) that lack a `module.yml` are excluded from discovery and fail closed. The static `MODULE_CATALOG` is supplemented but callers should prefer `get_discovered_module_entries()` for the authoritative list.
 - Generated projects remain standalone even when modules are embedded.
 - When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
 

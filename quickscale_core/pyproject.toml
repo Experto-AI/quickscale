@@ -27,6 +27,7 @@ Documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
 packages = [{include = "quickscale_core", from = "src"}]
 include = [
     "src/quickscale_core/generator/templates/**/*",
+    "src/quickscale_core/data/manifests/*/module.yml",
 ]
 
 [tool.poetry.dependencies]

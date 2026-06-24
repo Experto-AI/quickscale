@@ -8,17 +8,15 @@ import click
 import pytest
 import yaml
 
-from quickscale_cli.backups_manifest import (
+from quickscale_core.contracts.module_options import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-)
-from quickscale_cli.notifications_manifest import default_notifications_module_options
-from quickscale_cli.social_manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINK_TREE_PATH,
 )
+from quickscale_core.contracts.resolvers import default_notifications_module_options
 from quickscale_cli.commands.apply_command import (
     ApplyContext,
     EmbedModulesResult,

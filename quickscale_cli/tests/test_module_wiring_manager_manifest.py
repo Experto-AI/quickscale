@@ -147,7 +147,18 @@ class TestRegenerateManagedWiringSkipUnknown:
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
 
         # Create modules/ with both a known and unknown module.
+        # The known module must have a valid module.yml since the base path
+        # now points at the embedded modules directory.
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
         (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
         (project / "modules" / "totally_unknown").mkdir(parents=True)
 
         success, message = regenerate_managed_wiring(project)
@@ -162,7 +173,18 @@ class TestRegenerateManagedWiringSkipUnknown:
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
 
         # Create a modules/ directory with both a known and unknown module.
+        # The known module must have a valid module.yml since the base path
+        # now points at the embedded modules directory.
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
         (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
         (project / "modules" / "custom_unknown").mkdir(parents=True)
 
         success, message = regenerate_managed_wiring(project)

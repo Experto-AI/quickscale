@@ -12,6 +12,7 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
+from quickscale_core.contracts.module_discovery import get_modules_base_path
 from quickscale_core.manifest.loader import load_manifest_from_path
 
 
@@ -48,9 +49,7 @@ def resolve_module_implications(
         OSError: For I/O errors reading manifest files.
     """
     if modules_base_path is None:
-        # Default to the maintainer's quickscale_modules/ directory at the
-        # repo root, relative to this file.
-        modules_base_path = Path(__file__).resolve().parents[4] / "quickscale_modules"
+        modules_base_path = get_modules_base_path()
 
     selected: set[str] = set(names)
     implied: dict[str, dict[str, Any]] = {}

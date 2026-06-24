@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from quickscale_cli.social_manifest import (
-    get_social_provider_metadata,
+from quickscale_core.contracts.resolvers import (
     normalize_social_module_options,
-    normalize_social_provider,
     normalize_social_provider_allowlist,
     resolve_social_module_options,
+    validate_social_module_options,
+)
+from quickscale_core.manifest.social_manifest import (
+    get_social_provider_metadata,
+    normalize_social_provider,
     resolve_social_target,
     social_payload_status_code,
-    validate_social_module_options,
 )
 
 

@@ -567,10 +567,9 @@ class TestStatusCommandExtended:
             result = runner.invoke(status)
 
             assert result.exit_code != 0
-            assert "public-ready QuickScale module" in result.output
-            assert "placeholder inventory only" in result.output
+            # teams is caught at schema validation as an unknown module.
+            assert "Unknown module" in result.output
             assert "teams" in result.output
-            assert "Billing remains internal-only" not in result.output
 
     def test_status_fails_for_malformed_installed_manifest(self):
         """Status should fail fast when an installed module manifest is malformed."""

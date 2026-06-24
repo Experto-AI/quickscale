@@ -258,7 +258,7 @@ class TestSocialManifestEntryPoint:
         rather than hardcoding output paths, so module.yml remains the single
         source of truth for managed-file inventory.
         """
-        from quickscale_cli.social_manifest import load_social_manifest
+        from quickscale_core.manifest.social_manifest import load_social_manifest
 
         manifest = load_social_manifest()
         manifest_output_paths = {
@@ -281,7 +281,7 @@ class TestSocialManifestEntryPoint:
         mappings from the manifest declarations before the post-hook renders content.
         This test verifies the manifest-declared renderer IDs flow through correctly.
         """
-        from quickscale_cli.social_manifest import load_social_manifest
+        from quickscale_core.manifest.social_manifest import load_social_manifest
 
         manifest = load_social_manifest()
         manifest_renderer_ids = {
@@ -297,3 +297,321 @@ class TestSocialManifestEntryPoint:
         """Social adapter raises ValueError without project_package."""
         with pytest.raises(ValueError, match="project_package"):
             build_manifest_wiring_spec("social", {})
+
+
+# ---------------------------------------------------------------------------
+# Billing adapter integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestBillingManifestEntryPoint:
+    """End-to-end tests for build_manifest_wiring_spec with billing module."""
+
+    _BILLING_OPTIONS = {
+        "enabled": True,
+        "publishable_key_env_var": "STRIPE_PUBLISHABLE_KEY",
+        "secret_key_env_var": "STRIPE_SECRET_KEY",
+        "webhook_secret_env_var": "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "billing_currency": "usd",
+    }
+
+    def test_returns_module_wiring_spec(self) -> None:
+        spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
+        assert isinstance(spec, ModuleWiringSpec)
+
+    def test_spec_is_frozen(self) -> None:
+        spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
+        with pytest.raises(AttributeError):
+            spec.apps = ()  # type: ignore[misc]
+
+    def test_app_labels(self) -> None:
+        """Billing spec includes rest_framework and billing app labels."""
+        spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
+        assert "rest_framework" in spec.apps
+        assert "quickscale_modules_billing" in spec.apps
+
+    def test_url_include(self) -> None:
+        spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
+        assert len(spec.url_includes) >= 1
+        # Billing is included at root.
+        assert any(prefix == "" for prefix, _ in spec.url_includes)
+
+    def test_billing_currency_setting(self) -> None:
+        spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
+        assert spec.settings.get("QUICKSCALE_BILLING_CURRENCY") == "usd"
+
+    def test_enabled_setting(self) -> None:
+        spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
+        assert spec.settings.get("QUICKSCALE_BILLING_ENABLED") is True
+
+    def test_none_options_uses_defaults(self) -> None:
+        spec = build_manifest_wiring_spec("billing", None)
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_billing" in spec.apps
+        # Default currency should be usd
+        assert spec.settings.get("QUICKSCALE_BILLING_CURRENCY") == "usd"
+
+    def test_all_expected_settings_present(self) -> None:
+        spec = build_manifest_wiring_spec("billing", self._BILLING_OPTIONS)
+        expected_keys = {
+            "QUICKSCALE_BILLING_ENABLED",
+            "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
+            "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
+            "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
+            "QUICKSCALE_BILLING_CURRENCY",
+        }
+        for key in expected_keys:
+            assert key in spec.settings, f"Missing expected setting: {key}"
+
+    def test_disabled_returns_empty_spec(self) -> None:
+        """When billing is disabled, the spec should still be valid (no PR-4 short-circuit)."""
+        spec = build_manifest_wiring_spec("billing", {"enabled": False})
+        assert isinstance(spec, ModuleWiringSpec)
+
+
+# ---------------------------------------------------------------------------
+# Blog adapter integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestBlogManifestEntryPoint:
+    """End-to-end tests for build_manifest_wiring_spec with blog module."""
+
+    _BLOG_OPTIONS = {
+        "posts_per_page": 10,
+        "enable_rss": True,
+        "api_rate_limit": "5/hour",
+        "org_routing_enabled": False,
+    }
+
+    def test_returns_module_wiring_spec(self) -> None:
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        assert isinstance(spec, ModuleWiringSpec)
+
+    def test_spec_is_frozen(self) -> None:
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        with pytest.raises(AttributeError):
+            spec.apps = ()  # type: ignore[misc]
+
+    def test_app_labels(self) -> None:
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        assert "markdownx" in spec.apps
+        assert "quickscale_modules_blog" in spec.apps
+
+    def test_url_includes(self) -> None:
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        # Blog has markdownx/ and root URL includes
+        urls = dict(spec.url_includes)
+        assert "markdownx/" in urls
+
+    def test_posts_per_page_setting(self) -> None:
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        assert spec.settings.get("BLOG_POSTS_PER_PAGE") == 10
+
+    def test_enable_rss_setting(self) -> None:
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        assert spec.settings.get("BLOG_ENABLE_RSS") is True
+
+    def test_markdownx_settings(self) -> None:
+        """Blog spec includes static markdownx settings."""
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        assert "MARKDOWNX_MARKDOWN_EXTENSIONS" in spec.settings
+        assert "MARKDOWNX_MEDIA_PATH" in spec.settings
+        assert spec.settings["MARKDOWNX_MEDIA_PATH"] == "blog/markdownx/"
+
+    def test_none_options_uses_defaults(self) -> None:
+        spec = build_manifest_wiring_spec("blog", None)
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_blog" in spec.apps
+
+    def test_all_expected_settings_present(self) -> None:
+        spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
+        expected_keys = {
+            "BLOG_POSTS_PER_PAGE",
+            "BLOG_ENABLE_RSS",
+            "BLOG_API_RATE_LIMIT",
+            "BLOG_ORG_ROUTING_ENABLED",
+            "MARKDOWNX_MARKDOWN_EXTENSIONS",
+            "MARKDOWNX_MEDIA_PATH",
+        }
+        for key in expected_keys:
+            assert key in spec.settings, f"Missing expected setting: {key}"
+
+
+# ---------------------------------------------------------------------------
+# Listings adapter integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestListingsManifestEntryPoint:
+    """End-to-end tests for build_manifest_wiring_spec with listings module."""
+
+    def test_returns_module_wiring_spec(self) -> None:
+        spec = build_manifest_wiring_spec("listings", None)
+        assert isinstance(spec, ModuleWiringSpec)
+
+    def test_spec_is_frozen(self) -> None:
+        spec = build_manifest_wiring_spec("listings", None)
+        with pytest.raises(AttributeError):
+            spec.apps = ()  # type: ignore[misc]
+
+    def test_app_labels(self) -> None:
+        spec = build_manifest_wiring_spec("listings", None)
+        assert "django_filters" in spec.apps
+        assert "markdownx" in spec.apps
+        assert "quickscale_modules_listings" in spec.apps
+
+    def test_url_includes(self) -> None:
+        spec = build_manifest_wiring_spec("listings", None)
+        urls = dict(spec.url_includes)
+        assert "listings/" in urls
+        assert "markdownx/" in urls
+
+    def test_listings_per_page_default(self) -> None:
+        spec = build_manifest_wiring_spec("listings", None)
+        assert spec.settings.get("LISTINGS_PER_PAGE") == 12
+
+    def test_markdownx_settings(self) -> None:
+        """Listings spec includes static markdownx extensions."""
+        spec = build_manifest_wiring_spec("listings", None)
+        assert "MARKDOWNX_MARKDOWN_EXTENSIONS" in spec.settings
+
+    def test_custom_listings_per_page(self) -> None:
+        spec = build_manifest_wiring_spec("listings", {"listings_per_page": 24})
+        assert spec.settings.get("LISTINGS_PER_PAGE") == 24
+
+
+# ---------------------------------------------------------------------------
+# CRM adapter integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestCrmManifestEntryPoint:
+    """End-to-end tests for build_manifest_wiring_spec with CRM module."""
+
+    _CRM_OPTIONS = {
+        "deals_per_page": 25,
+        "contacts_per_page": 50,
+        "enable_api": True,
+    }
+
+    def test_returns_module_wiring_spec(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        assert isinstance(spec, ModuleWiringSpec)
+
+    def test_spec_is_frozen(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        with pytest.raises(AttributeError):
+            spec.apps = ()  # type: ignore[misc]
+
+    def test_app_labels(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        assert "rest_framework" in spec.apps
+        assert "django_filters" in spec.apps
+        assert "quickscale_modules_crm" in spec.apps
+
+    def test_url_include(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        assert len(spec.url_includes) >= 1
+
+    def test_deals_per_page_setting(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        assert spec.settings.get("CRM_DEALS_PER_PAGE") == 25
+
+    def test_contacts_per_page_setting(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        assert spec.settings.get("CRM_CONTACTS_PER_PAGE") == 50
+
+    def test_enable_api_setting(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        assert spec.settings.get("CRM_ENABLE_API") is True
+
+    def test_none_options_uses_defaults(self) -> None:
+        spec = build_manifest_wiring_spec("crm", None)
+        assert isinstance(spec, ModuleWiringSpec)
+        assert spec.settings.get("CRM_DEALS_PER_PAGE") == 25
+        assert spec.settings.get("CRM_ENABLE_API") is True
+
+    def test_all_expected_settings_present(self) -> None:
+        spec = build_manifest_wiring_spec("crm", self._CRM_OPTIONS)
+        expected_keys = {
+            "CRM_DEALS_PER_PAGE",
+            "CRM_CONTACTS_PER_PAGE",
+            "CRM_ENABLE_API",
+        }
+        for key in expected_keys:
+            assert key in spec.settings, f"Missing expected setting: {key}"
+
+
+# ---------------------------------------------------------------------------
+# Forms adapter integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestFormsManifestEntryPoint:
+    """End-to-end tests for build_manifest_wiring_spec with forms module."""
+
+    _FORMS_OPTIONS = {
+        "forms_per_page": 25,
+        "spam_protection_enabled": True,
+        "rate_limit": "5/hour",
+        "data_retention_days": 365,
+        "submissions_api_enabled": True,
+    }
+
+    def test_returns_module_wiring_spec(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert isinstance(spec, ModuleWiringSpec)
+
+    def test_spec_is_frozen(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        with pytest.raises(AttributeError):
+            spec.apps = ()  # type: ignore[misc]
+
+    def test_app_labels(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert "rest_framework" in spec.apps
+        assert "django_filters" in spec.apps
+        assert "quickscale_modules_forms" in spec.apps
+
+    def test_url_include(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert len(spec.url_includes) >= 1
+
+    def test_forms_per_page_setting(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert spec.settings.get("FORMS_PER_PAGE") == 25
+
+    def test_spam_protection_setting(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert spec.settings.get("FORMS_SPAM_PROTECTION") is True
+
+    def test_rate_limit_setting(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert spec.settings.get("FORMS_RATE_LIMIT") == "5/hour"
+
+    def test_data_retention_days_setting(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert spec.settings.get("FORMS_DATA_RETENTION_DAYS") == 365
+
+    def test_submissions_api_setting(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        assert spec.settings.get("FORMS_SUBMISSIONS_API") is True
+
+    def test_none_options_uses_defaults(self) -> None:
+        spec = build_manifest_wiring_spec("forms", None)
+        assert isinstance(spec, ModuleWiringSpec)
+        assert spec.settings.get("FORMS_PER_PAGE") == 25
+        assert spec.settings.get("FORMS_SPAM_PROTECTION") is True
+
+    def test_all_expected_settings_present(self) -> None:
+        spec = build_manifest_wiring_spec("forms", self._FORMS_OPTIONS)
+        expected_keys = {
+            "FORMS_PER_PAGE",
+            "FORMS_SPAM_PROTECTION",
+            "FORMS_RATE_LIMIT",
+            "FORMS_DATA_RETENTION_DAYS",
+            "FORMS_SUBMISSIONS_API",
+        }
+        for key in expected_keys:
+            assert key in spec.settings, f"Missing expected setting: {key}"

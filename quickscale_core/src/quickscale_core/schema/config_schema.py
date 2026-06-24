@@ -24,7 +24,7 @@ from quickscale_core.contracts import (
     LEGACY_AUTH_ALLOW_REGISTRATION_OPTION,
     LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION,
     format_auth_desired_config_contract,
-    get_module_names,
+    get_discovered_module_names,
     get_module_readiness_reason,
     sanitize_module_options,
     validate_billing_currency,
@@ -100,8 +100,8 @@ VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
 VALID_PROJECT_KEYS = {"slug", "package", "theme"}
 VALID_DOCKER_KEYS = {"start", "build", "create_superuser"}
 VALID_THEMES = {"showcase_html", "showcase_react"}
-AVAILABLE_MODULES = set(get_module_names(include_experimental=True))
-READY_MODULES = set(get_module_names(include_experimental=False))
+AVAILABLE_MODULES = set(get_discovered_module_names())
+READY_MODULES = set(get_discovered_module_names())
 
 
 def _find_line_number(yaml_content: str, key: str) -> int | None:

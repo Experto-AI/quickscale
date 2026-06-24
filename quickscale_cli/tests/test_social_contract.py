@@ -7,28 +7,32 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.social_manifest import (
-    DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
-    DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
+from quickscale_core.contracts.module_options import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LAYOUT_VARIANTS,
-    SOCIAL_PAYLOAD_STATUSES,
     SOCIAL_LINK_TREE_PATH,
+)
+from quickscale_core.contracts.resolvers import (
+    default_social_module_options,
+    normalize_social_provider_allowlist,
+    validate_social_module_options,
+)
+from quickscale_core.manifest.social_manifest import (
+    DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
+    DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
+    SOCIAL_PAYLOAD_STATUSES,
     SOCIAL_STATUS_DISABLED,
     SOCIAL_STATUS_EMPTY,
     SOCIAL_STATUS_ENABLED,
     SOCIAL_STATUS_ERROR,
-    default_social_module_options,
     detect_social_provider,
     normalize_social_provider,
-    normalize_social_provider_allowlist,
     normalize_social_url,
     resolve_social_target,
     social_payload_status_code,
     social_provider_supports_embeds,
-    validate_social_module_options,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
 

@@ -4,6 +4,8 @@ Dataclasses for module manifest (module.yml) configuration.
 Defines mutable vs immutable config options for modules.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -94,6 +96,41 @@ class ModuleManifest:
     django_apps: list[str] = field(default_factory=list)
     managed_files: dict[str, ManagedFileDeclaration] = field(default_factory=dict)
     implies: list[ImpliesEntry] = field(default_factory=list)
+
+    # ------------------------------------------------------------------ #
+    # Derivation metadata (T2.3+)
+    #
+    # These optional fields carry the derivation/validation rules that
+    # instruct the resolver how to normalise, validate, project settings,
+    # and wire the module from declarative ``module.yml`` data.  They are
+    # populated when the loader encounters a ``derivation`` section in the
+    # manifest YAML.  Existing ``module.yml`` files without a derivation
+    # section leave these fields as their default empty values.
+    # ------------------------------------------------------------------ #
+    derivation_rules: list[dict[str, Any]] = field(default_factory=list)
+    """Normalisation rules declared in the manifest derivation section."""
+    validation_rules: list[dict[str, Any]] = field(default_factory=list)
+    """Validation rules declared in the manifest derivation section."""
+    legacy_aliases: list[dict[str, Any]] = field(default_factory=list)
+    """Legacy key aliases declared in the manifest derivation section."""
+    derived_settings: list[dict[str, Any]] = field(default_factory=list)
+    """Derived Django settings declared in the manifest derivation section."""
+    wiring_projections: list[dict[str, Any]] = field(default_factory=list)
+    """Wiring projections declared in the manifest derivation section."""
+    option_derivations: dict[str, dict[str, Any]] = field(default_factory=dict)
+    """Per-option derivation metadata keyed by option name. Each value is a
+    raw dict with optional ``normalization_rules``, ``validation_rules``,
+    ``legacy_aliases``, ``derived_settings``, and ``wiring_projections``
+    sub-lists.  Populated from the ``derivation.option_derivations`` section
+    in the manifest YAML."""
+
+    # ------------------------------------------------------------------ #
+    # Readiness / lifecycle metadata
+    # ------------------------------------------------------------------ #
+    ready: bool = True
+    """Whether the module is considered publicly ready.  Shipped modules
+    with a valid ``module.yml`` default to ``True``; placeholder modules
+    that lack a manifest are excluded from discovery entirely."""
 
     def get_option(self, option_name: str) -> ConfigOption | None:
         """Get a config option by name from either mutable or immutable"""

@@ -180,7 +180,7 @@ class TestPlanModuleSelection:
         """Test selecting a single module by number"""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            # Select theme 1, module 1 (auth), docker defaults, save
+            # Select theme 1, module 1 (analytics — alpha-sorted), docker defaults, save
             result = runner.invoke(
                 plan,
                 ["myapp"],
@@ -191,13 +191,13 @@ class TestPlanModuleSelection:
 
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
-            assert "auth:" in content
+            assert "analytics:" in content
 
     def test_plan_multiple_modules_by_numbers(self):
         """Test selecting multiple modules by comma-separated numbers"""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            # Select theme 1, modules 1,3 (auth, listings), docker defaults, save
+            # Select theme 1, modules 1,3 (analytics, backups — alpha-sorted), save
             result = runner.invoke(
                 plan,
                 ["myapp"],
@@ -208,8 +208,8 @@ class TestPlanModuleSelection:
 
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
-            assert "auth:" in content
-            assert "listings:" in content
+            assert "analytics:" in content
+            assert "backups:" in content
 
     def test_only_teams_is_hidden_by_default(self):
         """Billing should be visible by default while teams stays hidden."""
@@ -225,7 +225,7 @@ class TestPlanModuleSelection:
             assert "teams - Multi-tenancy and team management" not in result.output
 
     def test_experimental_modules_visible_with_flag(self):
-        """Billing stays selectable while teams remains visibility-only with the flag."""
+        """Discovered modules are all shipped; teams placeholder stays hidden."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -235,10 +235,8 @@ class TestPlanModuleSelection:
             )
 
             assert "billing - Stripe integration" in result.output
-            assert (
-                "teams - Multi-tenancy and team management "
-                "(placeholder, not public-ready)" in result.output
-            )
+            # Placeholder-only modules are not discovered and never visible.
+            assert "teams" not in result.output
 
     def test_billing_can_be_selected_with_flag(self):
         """Billing should write into config when selected from the picker."""
@@ -256,9 +254,11 @@ class TestPlanModuleSelection:
             assert "billing:" in content
 
     def test_teams_cannot_be_selected_with_flag(self):
-        """Teams remains visible only and cannot be written into config."""
+        """Placeholder modules are not in discovered catalog and cannot be selected."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            # "teams" is not a discovered module; the error loop re-prompts and
+            # an empty selection falls through to no modules.
             result = runner.invoke(
                 plan,
                 ["myapp", "--include-experimental"],
@@ -266,8 +266,7 @@ class TestPlanModuleSelection:
             )
 
             assert result.exit_code == 0
-            assert "public-ready QuickScale module" in result.output
-            assert "placeholder inventory only" in result.output
+            assert "Unknown module" in result.output
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
             assert "teams:" not in content
@@ -371,7 +370,7 @@ class TestPlanYamlValidation:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            # Theme 1 is showcase_react (default), module 1 is auth
+            # Theme 1 is showcase_react (default), module 1 is analytics (alpha-sorted)
             result = runner.invoke(
                 plan,
                 ["myapp"],
@@ -387,4 +386,4 @@ class TestPlanYamlValidation:
             config = validate_config(content)
             assert config.project.slug == "myapp"
             assert config.project.theme == "showcase_react"
-            assert "auth" in config.modules
+            assert "analytics" in config.modules

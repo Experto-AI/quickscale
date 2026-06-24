@@ -27,7 +27,7 @@ from typing import Any
 
 import pytest
 
-from quickscale_cli.storage_manifest import (  # type: ignore[import-untyped]
+from quickscale_core.contracts.module_options import (
     DEFAULT_STORAGE_BACKEND,
     DEFAULT_STORAGE_MEDIA_URL,
     DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED,
@@ -37,6 +37,8 @@ from quickscale_cli.storage_manifest import (  # type: ignore[import-untyped]
     STORAGE_BACKEND_S3,
     STORAGE_BACKENDS,
     STORAGE_MODULE_OPTION_KEYS,
+)
+from quickscale_core.contracts.resolvers import (
     default_storage_module_options,
     normalize_storage_module_options,
     resolve_storage_module_options,
