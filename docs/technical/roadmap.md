@@ -25,7 +25,7 @@ Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed
 | Worktree | Branch | Phase 2 owns | Phase 3 owns | Next task |
 |---------|--------|-------------|-------------|-----------|
 | `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.5** |
-| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.8** |
+| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.13** |
 | `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.10** |
 
 Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
@@ -128,7 +128,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [ ] T1.5 — CRM adopt contract *(wt-track1)*
 - [ ] T1.6 — Blog adopt contract *(wt-track1)*
 - [x] T1.7 — Forms adopt contract *(wt-track2)*
-- [ ] T1.8 — Listings adopt contract *(wt-track2)*
+- [x] T1.8 — Listings adopt contract *(wt-track2)*
 - [x] T1.9 — Social adopt contract *(wt-track3)*
 - [ ] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
 
@@ -176,15 +176,39 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 
 ---
 
-#### - [ ] T1.8 — Listings adopt contract
+#### - [x] T1.7 — Forms adopt contract
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implementation completed 2026-06-24.
+
+- **TRACK:** `wt-track2` (branch: `wt-track2`) — after T1.1–T1.3
+- **SCOPE (on top of shared shape):** `forms/models.py:39` NOT NULL migration for `Form`; `forms/views.py:101+` public schema/submit endpoints resolve `get_system_org()` for anonymous submissions; delete org-scoped URL pair; squash migration (D5).
+- **ACCEPTANCE CRITERIA:** public submit functional; cross-org read → empty/404; forms isolation tests green.
+- **VALIDATION PATH:** `make MODULE=forms test -- --modules`.
+- **DEPENDS:** T1.1–T1.3.
+
+---
+
+#### - [x] T1.8 — Listings adopt contract
+
+`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implementation completed 2026-06-24.
 
 - **TRACK:** `wt-track2` (branch: `wt-track2`) — after T1.7
 - **SCOPE (on top of shared shape):** `listings/models.py:21` NOT NULL migration for `AbstractListing`; remove `OrgScopedViewMixin`/`_scope_by_org`; public listing pages + `get_absolute_url` use `get_system_org()`; per-org slug uniqueness retained; squash migration (D5).
 - **ACCEPTANCE CRITERIA:** public listing pages functional; cross-org read → empty/404; `get_absolute_url` → flat route; listings isolation tests green.
 - **VALIDATION PATH:** `make MODULE=listings test -- --modules`.
 - **DEPENDS:** T1.1–T1.3.
+- **IMPLEMENTATION NOTES:**
+  - Replaced module-local `TenantScopedManager`/`OperatorManager` with `orgs.managers.TenantManager` (auto-scopes via ContextVar; `super_scope=True` for operator bypass).
+  - Replaced nullable `CASCADE` FK on `AbstractListing.organization` with `tenant_org_fk()` (NOT NULL/PROTECT per D3).
+  - Removed `OrgScopedViewMixin`, `_is_org_scoped_route`, `_resolve_active_org`, `_resolve_active_org_optional` from views. Public listing list/detail views use `_scope_queryset()` helper — anonymous readers see System-org content (D2), authenticated readers see their ambient org.
+  - `get_absolute_url()` returns flat route (`/listings/<slug>/`) unconditionally (D1).
+  - Removed partial `UniqueConstraint` for `(slug) WHERE organization IS NULL` (unreachable with NOT NULL).
+  - Deleted all `/orgs/<slug:org_slug>/listings/...` URL patterns (single flat URL tree, D1/D5).
+  - Squashed migrations to clean NOT NULL/PROTECT contract (single `0001_initial.py`, no backfill per D5).
+  - Updated `publish_listing_api` to use `request.org` from middleware instead of route-based org detection.
+  - Updated all test fixtures to NOT NULL contract (default org via `get_system_org()`). Removed org-scoped URL tests. Rewrote isolation test for flat-route contextvar-based scoping. Replaced module-local manager tests with TenantManager auto-scoping tests. 110 listings module tests passing.
 
 ---
 

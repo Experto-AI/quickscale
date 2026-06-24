@@ -8,16 +8,15 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.test import Client
-from django.urls import resolve, reverse
+from django.urls import reverse
 
 from quickscale_modules_listings.models import Listing
+from quickscale_modules_orgs.models import Organization
 
 
 @pytest.fixture
 def staff_user(db):
-    """Create a staff user with a personal org (SaaS mode)."""
-    from quickscale_modules_orgs.models import Organization
-
+    """Create a staff user with a personal org."""
     user_model = get_user_model()
     user = user_model.objects.create_user(
         username="staff",
@@ -31,9 +30,7 @@ def staff_user(db):
 
 @pytest.fixture
 def regular_user(db):
-    """Create a non-staff user with a personal org (SaaS mode)."""
-    from quickscale_modules_orgs.models import Organization
-
+    """Create a non-staff user with a personal org."""
     user_model = get_user_model()
     user = user_model.objects.create_user(
         username="user",
@@ -47,7 +44,7 @@ def regular_user(db):
 
 @pytest.mark.django_db
 class TestPublishListingApi:
-    """Tests for publish listing API"""
+    """Tests for publish listing API (single flat route contract)"""
 
     def test_publish_listing_api_get_method_not_allowed_returns_405(self, client):
         """Test API rejects non-POST methods"""
@@ -250,22 +247,28 @@ class TestPublishListingApi:
         assert payload["slug"] == "automated-listing"
         assert payload["url"] == "/listings/automated-listing/"
 
-        listing = Listing.objects.get(slug="automated-listing")
+        listing = Listing.all_objects.get(slug="automated-listing")
         assert listing.status == "published"
         assert listing.location == "New York"
         assert listing.description == "# Markdown description"
         assert listing.price == Decimal("199.99")
+        assert listing.organization is not None
 
     def test_publish_listing_api_duplicate_slug_returns_409(
         self,
         client,
         staff_user,
     ):
-        """Test API handles duplicate generated slug as conflict"""
+        """Test API handles duplicate generated slug as conflict (same org)"""
+        # Get the personal org from the staff user so both listings share it.
+        personal_org = Organization.objects.get(
+            memberships__user=staff_user, is_personal=True
+        )
         Listing.objects.create(
             title="Duplicate Title",
             description="Existing description",
             status="published",
+            organization=personal_org,
         )
         client.force_login(staff_user)
 
@@ -332,141 +335,3 @@ class TestPublishListingApi:
 
         assert response.status_code == 409
         assert response.json()["error"] == "Listing already exists for generated slug"
-
-    # ------------------------------------------------------------------
-    # CR-003: Flat publish slug-conflict scoping
-    # ------------------------------------------------------------------
-
-    def test_publish_listing_api_flat_route_no_conflict_with_org_listing(
-        self,
-        client,
-        staff_user,
-        org,
-    ):
-        """CR-003: Flat publish does not conflict with org-owned same slug.
-
-        An org-null (flat) listing with slug ``test-item`` must be allowed
-        even when an org-owned listing already occupies that slug, because
-        the uniqueness scope differs (``organization__isnull=True`` vs.
-        ``organization=<pk>``).
-        """
-        Listing.objects.create(
-            title="Test Item",
-            description="Org-owned listing",
-            status="published",
-            organization=org,
-        )
-        client.force_login(staff_user)
-
-        response = client.post(
-            reverse("quickscale_listings:api_publish_listing"),
-            data=json.dumps({"title": "Test Item", "description": "Flat listing"}),
-            content_type="application/json",
-        )
-
-        assert response.status_code == 201, (
-            f"Flat publish should succeed when org listing has same slug, "
-            f"got {response.status_code}. Response: {response.content.decode()}"
-        )
-        payload = response.json()
-        assert payload["slug"] == "test-item"
-        assert payload["status"] == "published"
-
-    def test_publish_listing_api_flat_route_still_conflicts_with_flat_listing(
-        self,
-        client,
-        staff_user,
-    ):
-        """CR-003: Flat publish still 409s against another org-null same slug.
-
-        The fix only relaxes cross-org conflicts.  Duplicate org-null slugs
-        must still produce a 409 conflict error.
-        """
-        Listing.objects.create(
-            title="Shared Title",
-            description="Org-null listing one",
-            status="published",
-        )
-        client.force_login(staff_user)
-
-        response = client.post(
-            reverse("quickscale_listings:api_publish_listing"),
-            data=json.dumps(
-                {"title": "Shared Title", "description": "Org-null listing two"}
-            ),
-            content_type="application/json",
-        )
-
-        assert response.status_code == 409
-        assert response.json()["error"] == "Listing already exists for generated slug"
-
-
-@pytest.mark.django_db
-class TestPublishListingApiOrgScoped:
-    """CR-002: Org-scoped publish must fail closed when org context is missing."""
-
-    def test_org_scoped_publish_missing_org_context_returns_403(self, staff_user):
-        """View-level: org-scoped publish fails closed without ``request.org``.
-
-        The view calls ``_resolve_active_org`` (fail-closed) for org-scoped
-        routes.  When the middleware has not set ``request.org``, the view
-        returns a JSON 403 instead of silently stamping ``organization=None``.
-        """
-        from django.test import RequestFactory
-
-        from quickscale_modules_listings.views import publish_listing_api
-
-        factory = RequestFactory()
-        url = reverse("quickscale_listings:org-api_publish_listing", args=["some-org"])
-        request = factory.post(
-            url,
-            data=json.dumps({"title": "Org Listing", "description": "Org description"}),
-            content_type="application/json",
-        )
-        request.user = staff_user
-        request.resolver_match = resolve(url)
-
-        response = publish_listing_api(request)
-
-        assert response.status_code == 403, (
-            f"Expected 403 when org context missing on org-scoped route, "
-            f"got {response.status_code}. Response: {response.content.decode()}"
-        )
-        payload = json.loads(response.content)
-        assert "error" in payload, f"Response should contain error key: {payload}"
-        assert "organization" in payload["error"].lower() or (
-            "required" in payload["error"].lower()
-        ), f"Error should reference missing org context: {payload}"
-
-    def test_org_scoped_publish_flat_route_ignores_org_slug_in_path(
-        self, client, staff_user
-    ):
-        """CR-004: Flat-route publish is unaffected by ``orgs`` in the path.
-
-        When a flat-route slug happens to contain the substring ``orgs``,
-        the route must NOT be misidentified as org-scoped.  Publishing via
-        the flat API should succeed with ``organization=None``.
-        """
-        client.force_login(staff_user)
-
-        response = client.post(
-            reverse("quickscale_listings:api_publish_listing"),
-            data=json.dumps(
-                {
-                    "title": "My Orgs Listing",
-                    "description": "A listing whose slug contains orgs",
-                }
-            ),
-            content_type="application/json",
-        )
-
-        assert response.status_code == 201, (
-            f"Expected 201 for flat-route publish with 'orgs' in slug, "
-            f"got {response.status_code}. Response: {response.content.decode()}"
-        )
-        payload = response.json()
-        assert payload["status"] == "published"
-        assert payload["slug"] == "my-orgs-listing"
-        assert payload["url"] == "/listings/my-orgs-listing/", (
-            "URL must be flat route, not org-scoped"
-        )
