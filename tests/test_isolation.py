@@ -23,8 +23,15 @@ out of scope for F11.5.
 """
 
 import pytest
-
+from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from tests_shared.isolation import assert_org_scoped_response
+
+
+def _activate_org_in_session(client, organization):
+    """Set the active org in the client session for TenantMiddleware."""
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.id)
+    session.save()
 
 
 @pytest.mark.isolation
@@ -58,7 +65,8 @@ class TestCRMCrossTenantIsolation:
         )
 
         client.force_login(org_a_admin)
-        response = client.get(f"/orgs/{org_a.slug}/crm/api/companies/")
+        _activate_org_in_session(client, org_a)
+        response = client.get("/crm/api/companies/")
 
         assert response.status_code == 200, (
             f"Expected 200 OK, got {response.status_code}. "
@@ -97,7 +105,8 @@ class TestCRMCrossTenantIsolation:
         )
 
         client.force_login(org_a_admin)
-        response = client.get(f"/orgs/{org_a.slug}/crm/api/companies/")
+        _activate_org_in_session(client, org_a)
+        response = client.get("/crm/api/companies/")
 
         # The shared helper validates status 200 + visible-names isolation.
         # In a properly isolated system, only Org A's companies should be visible.

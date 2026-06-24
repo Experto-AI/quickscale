@@ -34,14 +34,6 @@ router.register(r"contact-notes", ContactNoteViewSet, basename="contact-note")
 router.register(r"deal-notes", DealNoteViewSet, basename="deal-note")
 
 urlpatterns = [
-    # Solo paths
     path("crm/", CRMDashboardView.as_view(), name="dashboard"),
     path("crm/api/", include(router.urls)),
-    # SaaS paths (org-scoped)
-    path(
-        "orgs/<slug:org_slug>/crm/",
-        CRMDashboardView.as_view(),
-        name="org-dashboard",
-    ),
-    path("orgs/<slug:org_slug>/crm/api/", include(router.urls)),
 ]

@@ -10,10 +10,10 @@ This module provides 7 core models for CRM functionality:
 - ContactNote: Notes on contacts (parent-derived, no dual manager)
 - DealNote: Notes on deals (parent-derived, no dual manager)
 
-Phase 2 (F11.10): Owned models (Tag, Company, Contact, Stage, Deal) use
-the dual-manager contract:
-- ``objects`` (TenantScopedManager): tenant-scoped seam with .for_org()
-- ``all_objects`` (OperatorManager): operator escape hatch (unfiltered)
+T1.5: Owned models (Tag, Company, Contact, Stage, Deal) use the shared
+``TenantManager`` from ``quickscale_modules_orgs``:
+- ``objects`` (TenantManager): contextvar-auto-scoped queryset
+- ``all_objects`` (TenantManager(super_scope=True)): operator escape hatch
 """
 
 from typing import Any
@@ -23,7 +23,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from .managers import OperatorManager, TenantScopedManager
+from quickscale_modules_orgs.managers import TenantManager
 
 
 class Tag(models.Model):
@@ -37,9 +37,9 @@ class Tag(models.Model):
     name = models.CharField(max_length=50)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Phase 2: dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    # T1.5: shared TenantManager contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -77,9 +77,9 @@ class Company(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Phase 2: dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    # T1.5: shared TenantManager contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -130,9 +130,9 @@ class Contact(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Phase 2: dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    # T1.5: shared TenantManager contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -172,9 +172,9 @@ class Stage(models.Model):
         editable=False,
     )
 
-    # Phase 2: dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    # T1.5: shared TenantManager contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -240,9 +240,9 @@ class Deal(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Phase 2: dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    # T1.5: shared TenantManager contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -280,7 +280,12 @@ class ContactNote(models.Model):
         return f"Note on {self.contact} by {self.created_by}"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        """Persist the note and refresh the contact's last-contacted timestamp."""
+        """Persist the note and refresh the contact's last-contacted timestamp.
+
+        Uses ``Contact.all_objects`` to bypass TenantManager auto-scoping so the
+        timestamp update works even when the tenant contextvar is not set (e.g.,
+        admin/operator ``ContactNoteInline`` paths where no active org exists).
+        """
         is_new = self._state.adding
         super().save(*args, **kwargs)
 
@@ -290,7 +295,7 @@ class ContactNote(models.Model):
             return
 
         timestamp = self.created_at or timezone.now()
-        Contact.objects.filter(pk=contact_pk).update(last_contacted_at=timestamp)
+        Contact.all_objects.filter(pk=contact_pk).update(last_contacted_at=timestamp)
 
 
 class DealNote(models.Model):

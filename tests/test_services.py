@@ -26,12 +26,12 @@ class TestEnsureOrgDefaultStages:
 
     def test_first_call_seeds_exactly_four_org_local_stages(self, org_a) -> None:
         """(a) First call seeds exactly one org-local default set."""
-        assert Stage.objects.filter(organization=org_a).count() == 0
+        assert Stage.all_objects.filter(organization=org_a).count() == 0
 
         result = ensure_org_default_stages(org_a)
 
         assert len(result) == 4
-        assert Stage.objects.filter(organization=org_a).count() == 4
+        assert Stage.all_objects.filter(organization=org_a).count() == 4
 
         # Verify the canonical blueprint names and ordering.
         seeded = sorted(result, key=lambda s: s.order)
@@ -56,7 +56,7 @@ class TestEnsureOrgDefaultStages:
 
         # Same stages returned, no new rows created.
         assert first_pks == second_pks
-        assert Stage.objects.filter(organization=org_a).count() == 4
+        assert Stage.all_objects.filter(organization=org_a).count() == 4
 
     def test_reentry_after_optimistic_precheck_does_not_duplicate(self, org_a) -> None:
         """(c) If stages appear between precheck and lock, under-lock recheck
@@ -68,7 +68,7 @@ class TestEnsureOrgDefaultStages:
         """
         # Seed stages first (simulating another thread already seeded).
         ensure_org_default_stages(org_a)
-        assert Stage.objects.filter(organization=org_a).count() == 4
+        assert Stage.all_objects.filter(organization=org_a).count() == 4
 
         # Simulate: optimistic precheck sees 0, under-lock recheck sees 4.
         with mock.patch(
@@ -78,7 +78,7 @@ class TestEnsureOrgDefaultStages:
             result = ensure_org_default_stages(org_a)
 
         # Still exactly 4 stages — no duplicates created.
-        assert Stage.objects.filter(organization=org_a).count() == 4
+        assert Stage.all_objects.filter(organization=org_a).count() == 4
         assert len(result) == 4
 
     def test_cross_org_stages_do_not_satisfy_bootstrap(self, org_a, org_b) -> None:
@@ -90,36 +90,36 @@ class TestEnsureOrgDefaultStages:
         """
         # Seed org_b first.
         ensure_org_default_stages(org_b)
-        assert Stage.objects.filter(organization=org_b).count() == 4
+        assert Stage.all_objects.filter(organization=org_b).count() == 4
         # Org_a should still have zero stages.
-        assert Stage.objects.filter(organization=org_a).count() == 0
+        assert Stage.all_objects.filter(organization=org_a).count() == 0
 
         # Bootstrap should seed org_a's stages independently.
         result = ensure_org_default_stages(org_a)
 
         assert len(result) == 4
-        assert Stage.objects.filter(organization=org_a).count() == 4
+        assert Stage.all_objects.filter(organization=org_a).count() == 4
         # Org_b's stages still exist untouched.
-        assert Stage.objects.filter(organization=org_b).count() == 4
+        assert Stage.all_objects.filter(organization=org_b).count() == 4
 
     def test_cross_org_isolation(self, org_a, org_b) -> None:
         """(e) One org's stages do not satisfy another org's bootstrap."""
         ensure_org_default_stages(org_a)
-        assert Stage.objects.filter(organization=org_a).count() == 4
-        assert Stage.objects.filter(organization=org_b).count() == 0
+        assert Stage.all_objects.filter(organization=org_a).count() == 4
+        assert Stage.all_objects.filter(organization=org_b).count() == 0
 
         # Org B should still get its own stages seeded.
         result_b = ensure_org_default_stages(org_b)
         assert len(result_b) == 4
-        assert Stage.objects.filter(organization=org_b).count() == 4
+        assert Stage.all_objects.filter(organization=org_b).count() == 4
 
         # Org A's count unchanged.
-        assert Stage.objects.filter(organization=org_a).count() == 4
+        assert Stage.all_objects.filter(organization=org_a).count() == 4
 
     def test_does_not_write_terminal_semantic(self, org_a) -> None:
         """Bootstrap must never set terminal_semantic on seeded stages."""
         ensure_org_default_stages(org_a)
 
-        stages = Stage.objects.filter(organization=org_a)
+        stages = Stage.all_objects.filter(organization=org_a)
         assert stages.count() == 4
         assert all(s.terminal_semantic is None for s in stages)
