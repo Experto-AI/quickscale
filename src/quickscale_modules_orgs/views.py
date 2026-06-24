@@ -22,6 +22,7 @@ from django.views import View
 from django.views.generic import FormView, ListView, TemplateView
 
 from .constants import (
+    ACTIVE_ORG_SESSION_KEY,
     ORG_INVITATION_ACCEPT_URL_NAME,
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
 )
@@ -550,6 +551,19 @@ class OrgDashboardView(
         if _is_saas_mode() and kwargs.get("org_slug") is None:
             return redirect("/orgs/")
         return cast(HttpResponse, super().dispatch(request, *args, **kwargs))
+
+    def get(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> HttpResponse:
+        # Org-switcher: record the active org in the session so the middleware
+        # can resolve it for content routes.
+        if _is_saas_mode():
+            organization = self.get_organization()
+            request.session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+        return cast(HttpResponse, super().get(request, *args, **kwargs))
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
