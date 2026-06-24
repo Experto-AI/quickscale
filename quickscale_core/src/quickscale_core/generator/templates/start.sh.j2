@@ -30,7 +30,9 @@ echo ""
 
 echo "📋 Step 3/6: Database migrations"
 echo "Running migrations..."
-python manage.py migrate --noinput
+# Unset RUNTIME_DATABASE_URL so migrations use the superuser DATABASE_URL
+# (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+RUNTIME_DATABASE_URL="" python manage.py migrate --noinput
 echo "✅ Migrations completed successfully"
 echo ""
 

@@ -117,6 +117,23 @@ DATABASES = {
     )
 }
 
+# Runtime database URL override for RLS role
+# ------------------------------------------
+# When RUNTIME_DATABASE_URL is set, use the restricted NOSUPERUSER/NOBYPASSRLS
+# role for the default database connection. When running migrations, the
+# deployment script (start.sh) unsets this env var so the superuser DATABASE_URL
+# is used instead (schema changes require elevated privileges).
+_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)
+if _runtime_db_url:
+    DATABASES["default"] = cast(
+        dict[str, object],
+        dj_database_url.config(
+            default=_runtime_db_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        ),
+    )
+
 # Email configuration
 if "EMAIL_BACKEND" not in globals():
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

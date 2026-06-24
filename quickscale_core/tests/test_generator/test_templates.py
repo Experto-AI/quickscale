@@ -48,6 +48,7 @@ def test_context() -> dict[str, str]:
     return {
         "project_name": "testproject",
         "package_name": "testproject",
+        "theme": "showcase_html",
         "python_version": PYTHON_VERSION,
         "python_constraint": PYTHON_CONSTRAINT,
         "python_docker_tag": PYTHON_DOCKER_TAG,
@@ -55,6 +56,8 @@ def test_context() -> dict[str, str]:
         "django_ci_version": DJANGO_CI_MATRIX_VERSION,
         "postgres_version": POSTGRES_VERSION,
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
+        "runtime_db_role": "testproject_app",
+        "runtime_db_password": "testproject_app_password",
     }
 
 
@@ -859,6 +862,24 @@ class TestRequiredVariables:
         assert "testproject.settings" in output
 
 
+class TestRuntimeDatabaseUrlComments:
+    """Verify RUNTIME_DATABASE_URL comments in base settings are accurate (CR-T14-003)."""
+
+    def test_base_settings_comment_narrowed_to_migrations(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The DATABASE_URL comment should mention migrations, not overstate management commands."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        # The comment should say "used for migrations" without claiming
+        # management-command coverage that isn't implemented.
+        assert "DATABASE_URL: Superuser connection used for migrations" in output
+        assert "management commands" not in output, (
+            "base.py comment should not overstate management-command coverage"
+        )
+
+
 class TestProductionReadyFeatures:
     """Verify production-ready security and configuration features are present."""
 
@@ -1152,6 +1173,104 @@ class TestGeneratedSecretKeyGuards:
             )
 
 
+class TestLocalSettingsRuntimeDatabaseUrl:
+    """Verify local settings prefers RUNTIME_DATABASE_URL when set (CR-T14-001).
+
+    The Docker Compose environment provides RUNTIME_DATABASE_URL for the
+    restricted runtime role.  When set, local.py must use that URL instead
+    of DATABASE_URL.  When unset, it must fall back to DATABASE_URL for
+    backward compatibility.
+    """
+
+    def test_uses_runtime_database_url_when_set(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When RUNTIME_DATABASE_URL is set, local.py should use it."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        local_output = _render_template(
+            jinja_env, "project_name/settings/local.py.j2", test_context
+        )
+        runtime_url = "postgresql://testproject_app:password@db:5432/testproject"
+        superuser_url = "postgresql://postgres:postgres@db:5432/testproject"
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=local_output,
+            target_module_name="local",
+            config_values={
+                "SECRET_KEY": "django-insecure-dev-key",
+                "RUNTIME_DATABASE_URL": runtime_url,
+                "DATABASE_URL": superuser_url,
+            },
+        )
+
+        databases = namespace["DATABASES"]
+        assert isinstance(databases, dict)
+        assert databases["default"]["URL"] == runtime_url
+
+    def test_falls_back_to_database_url_when_runtime_unset(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When only DATABASE_URL is set, local.py should use it (backward compat)."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        local_output = _render_template(
+            jinja_env, "project_name/settings/local.py.j2", test_context
+        )
+        database_url = "postgresql://postgres:postgres@localhost:5432/testproject"
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=local_output,
+            target_module_name="local",
+            config_values={
+                "SECRET_KEY": "django-insecure-dev-key",
+                "DATABASE_URL": database_url,
+            },
+        )
+
+        databases = namespace["DATABASES"]
+        assert isinstance(databases, dict)
+        assert databases["default"]["URL"] == database_url
+
+    def test_raises_value_error_when_neither_url_set(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When neither DATABASE_URL nor RUNTIME_DATABASE_URL is set, fail."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        local_output = _render_template(
+            jinja_env, "project_name/settings/local.py.j2", test_context
+        )
+
+        with pytest.raises(ValueError, match="DATABASE_URL"):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=local_output,
+                target_module_name="local",
+                config_values={"SECRET_KEY": "django-insecure-dev-key"},
+            )
+
+
 class TestHTMLTemplateStructure:
     """Verify HTML templates contain required structural elements."""
 
@@ -1325,6 +1444,16 @@ class TestDevOpsTemplateLoading:
         template = jinja_env.get_template(".gitignore.j2")
         assert template is not None
 
+    def test_db_init_sql_loads(self, jinja_env: Environment) -> None:
+        """Test db/init.sql.j2 template loads without errors."""
+        template = jinja_env.get_template("db/init.sql.j2")
+        assert template is not None
+
+    def test_operations_md_loads(self, jinja_env: Environment) -> None:
+        """Test OPERATIONS.md.j2 template loads without errors."""
+        template = jinja_env.get_template("OPERATIONS.md.j2")
+        assert template is not None
+
     def test_editorconfig_loads(self, jinja_env: Environment) -> None:
         """Test .editorconfig template loads without errors."""
         template = jinja_env.get_template(".editorconfig.j2")
@@ -1401,6 +1530,67 @@ class TestDevOpsTemplateRendering:
         assert "make lint-frontend" in output
         assert "make test-frontend" in output
         assert "pnpm test:coverage" in output
+
+    def test_readme_docker_migration_clears_runtime_url(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """README Docker migration should unset RUNTIME_DATABASE_URL (CR-T14-004).
+
+        The Docker Compose backend has RUNTIME_DATABASE_URL in its environment
+        for the restricted runtime role. Running ``manage.py migrate`` under
+        that role would fail because the runtime role cannot run DDL. The README
+        must clear RUNTIME_DATABASE_URL for the migration command so that
+        ``local.py`` falls back to the superuser DATABASE_URL.
+        """
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render(test_context)
+
+        assert "docker compose exec -e RUNTIME_DATABASE_URL= backend" in output, (
+            "README Docker migration should unset RUNTIME_DATABASE_URL"
+        )
+        assert "cannot run DDL" in output, (
+            "README should explain why RUNTIME_DATABASE_URL must be cleared"
+        )
+
+    def test_readme_local_migration_clears_runtime_url(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """README local/manual migration commands should unset RUNTIME_DATABASE_URL (CR-T14-004).
+
+        When running migrations locally under settings.local, RUNTIME_DATABASE_URL
+        from the environment (e.g. a leftover Docker shell) would select the
+        restricted runtime role connection, which cannot run DDL.  The README
+        migration commands must unset RUNTIME_DATABASE_URL so that local.py
+        falls back to the superuser DATABASE_URL.
+        """
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render(test_context)
+
+        assert "RUNTIME_DATABASE_URL= poetry run python manage.py migrate" in output, (
+            "README local migration should unset RUNTIME_DATABASE_URL"
+        )
+        assert "cannot run DDL" in output, (
+            "README should explain why RUNTIME_DATABASE_URL must be cleared"
+        )
+
+    def test_readme_production_checklist_migration_clears_runtime_url(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """README production checklist migration command should unset RUNTIME_DATABASE_URL (CR-T14-004).
+
+        The production checklist must instruct users to unset RUNTIME_DATABASE_URL
+        before running migrations so that production.py falls back to the
+        superuser DATABASE_URL instead of using the restricted runtime role.
+        """
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render(test_context)
+
+        assert "RUNTIME_DATABASE_URL= python manage.py migrate" in output, (
+            "README production checklist migrate should unset RUNTIME_DATABASE_URL"
+        )
+        assert "cannot run DDL" in output, (
+            "README should explain why RUNTIME_DATABASE_URL must be cleared"
+        )
 
     def test_pyproject_toml_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1539,6 +1729,61 @@ class TestDevOpsTemplateRendering:
         assert "root = true" in output
         assert "indent_style" in output
 
+    def test_db_init_sql_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test db/init.sql.j2 renders with runtime role and NOSUPERUSER/NOBYPASSRLS."""
+        template = jinja_env.get_template("db/init.sql.j2")
+        output = template.render(test_context)
+        assert output is not None
+        assert len(output) > 0
+        assert "testproject" in output
+        assert "testproject_app" in output
+        assert "NOSUPERUSER" in output
+        assert "NOBYPASSRLS" in output
+        assert "NOCREATEDB" in output
+        assert "NOCREATEROLE" in output
+        assert "GRANT USAGE ON SCHEMA public" in output
+        assert "ALTER DEFAULT PRIVILEGES" in output
+        assert "CREATE ROLE" in output
+        assert "IF NOT EXISTS" in output
+        # CR-T14-002: Sequence privileges for auto-increment primary keys
+        assert "GRANT USAGE ON ALL SEQUENCES IN SCHEMA public" in output, (
+            "init.sql should grant USAGE on all existing sequences"
+        )
+        assert "GRANT USAGE ON SEQUENCES TO" in output, (
+            "init.sql should grant USAGE on future sequences via ALTER DEFAULT PRIVILEGES"
+        )
+
+    def test_operations_md_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test OPERATIONS.md.j2 renders with runtime role and operator guide."""
+        template = jinja_env.get_template("OPERATIONS.md.j2")
+        output = template.render(test_context)
+        assert output is not None
+        assert len(output) > 0
+        assert "testproject" in output
+        assert "testproject_app" in output
+        assert "RUNTIME_DATABASE_URL" in output
+        assert "NOSUPERUSER" in output
+        assert "NOBYPASSRLS" in output
+        assert "migrations" in output.lower()
+        # CR-T14-003: Narrowed claim — the DATABASE_URL bullet should not overstate
+        # management-command coverage (the superuser table row still accurately
+        # describes superuser capabilities, but the DATABASE_URL description should
+        # only mention migrations).
+        assert "used for migrations, management commands" not in output, (
+            "OPERATIONS.md DATABASE_URL should not claim management-command coverage"
+        )
+        # CR-T14-002: Sequence privileges must appear in production SQL example
+        assert "GRANT USAGE ON ALL SEQUENCES IN SCHEMA public" in output, (
+            "OPERATIONS.md production SQL should include sequence usage grants"
+        )
+        assert "GRANT USAGE ON SEQUENCES TO" in output, (
+            "OPERATIONS.md should include ALTER DEFAULT PRIVILEGES for sequences"
+        )
+
     def test_lint_script_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
@@ -1576,6 +1821,27 @@ class TestDevOpsTemplateRendering:
         assert "Step 4/6" in output
         assert "Step 5/6" in output
         assert "Step 6/6" in output
+
+    def test_start_sh_migration_clears_runtime_url(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """start.sh should clear RUNTIME_DATABASE_URL during migration (CR-T14-004).
+
+        The deployment environment has RUNTIME_DATABASE_URL set for the
+        restricted runtime role.  Running ``migrate`` under that role would
+        fail because the runtime role cannot run DDL.  start.sh must unset
+        RUNTIME_DATABASE_URL for the migration step so that local.py falls
+        back to the superuser DATABASE_URL.
+        """
+        template = jinja_env.get_template("start.sh.j2")
+        output = template.render(test_context)
+
+        assert 'RUNTIME_DATABASE_URL="" python manage.py migrate' in output, (
+            "start.sh should unset RUNTIME_DATABASE_URL for migrations"
+        )
+        assert "cannot run DDL" in output, (
+            "start.sh should explain why RUNTIME_DATABASE_URL is cleared"
+        )
 
     def test_start_sh_superuser_setup(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -1873,6 +2139,7 @@ class TestDockerComposeContent:
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
         assert "DATABASE_URL" in output
+        assert "RUNTIME_DATABASE_URL" in output
         assert "DJANGO_SETTINGS_MODULE" in output
 
 

@@ -117,7 +117,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [x] T1.1 — System org + NOT NULL ownership contract
 - [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
 - [x] T1.3 — Middleware for the single-URL world
-- [ ] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
+- [x] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
 
 **Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3)*
 - [ ] T1.5 — CRM adopt contract
@@ -165,17 +165,18 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 ---
 
-#### - [ ] T1.4 — RLS DB role + generated-project settings
+#### - [x] T1.4 — RLS DB role + generated-project settings
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Plan-review recommended. Parallel to T1.2/T1.3. Must land before any Phase-3 RLS task.
+Implementation completed 2026-06-24.
 
 - **OBJECTIVE:** Make the generated app's runtime DB role `NOSUPERUSER`/`NOBYPASSRLS` so per-table RLS policies (Phase 3) actually enforce.
 - **SCOPE:**
-  - `quickscale_core/.../generator/templates/` — settings `.j2` (runtime DB role), DB init SQL `.j2` (role with `NOBYPASSRLS`), healthcheck template; operator path documented in a generated `OPERATIONS.md`.
-- **ACCEPTANCE CRITERIA:** generated runtime role cannot bypass RLS; operator path documented; template/integration test asserts role attributes.
-- **VALIDATION PATH:** `make test -- --core`; generator/template tests.
+  - `quickscale_core/.../generator/templates/` — settings `.j2` (runtime DB role), DB init SQL `.j2` (role with `NOBYPASSRLS`), generated `OPERATIONS.md`; `docker-compose.yml.j2` mounts init SQL and sets `RUNTIME_DATABASE_URL`; `start.sh.j2` unsets `RUNTIME_DATABASE_URL` during migrations; `.env.example.j2` documents runtime role vars; `generator.py` maps new template files and injects `runtime_db_role`/`runtime_db_password` into template context.
+- **ACCEPTANCE CRITERIA:** generated runtime role cannot bypass RLS (NOSUPERUSER, NOBYPASSRLS); operator path documented in generated OPERATIONS.md; template/integration test asserts role attributes and RUNTIME_DATABASE_URL override.
+- **VALIDATION PATH:** `make test`; generator/template tests for init SQL, OPERATIONS.md, and production RUNTIME_DATABASE_URL logic.
 - **DEPENDS:** none. **DECISIONS:** D4.
+- **IMPLEMENTATION NOTES:** Runtime role naming convention: `{package_name}_app` (e.g., `myapp_app`). Init SQL template creates the role with `IF NOT EXISTS` (idempotent). `RUNTIME_DATABASE_URL` env var overrides `DATABASE_URL` for runtime connections when set; falls back to backward-compatible DATABASE_URL when unset. `start.sh` unsets `RUNTIME_DATABASE_URL` during migrate so schema DDL uses the superuser connection. Operator path documented in generated `OPERATIONS.md` with Railway and manual setup instructions. Role name and password are computed as template context variables in `generator.py` rather than pinned in `runtime_pins.py`.
 
 ---
 

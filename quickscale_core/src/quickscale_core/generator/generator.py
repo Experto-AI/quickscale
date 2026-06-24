@@ -252,6 +252,11 @@ class ProjectGenerator:
         output_path: Path,
     ) -> None:
         """Generate project structure in specified directory"""
+        # Default runtime DB role name derived from the Python package name.
+        # Used for the NOSUPERUSER/NOBYPASSRLS role created by the init SQL.
+        _runtime_db_role = f"{package_name}_app"
+        _runtime_db_default_password = f"{_runtime_db_role}_password"
+
         # Context for template rendering
         context = {
             "project_name": project_slug,
@@ -270,6 +275,9 @@ class ProjectGenerator:
             "django_ci_version": DJANGO_CI_MATRIX_VERSION,
             "postgres_version": POSTGRES_VERSION,
             "postgres_docker_tag": POSTGRES_DOCKER_TAG,
+            # Runtime DB role (RLS enforcement — NOSUPERUSER, NOBYPASSRLS)
+            "runtime_db_role": _runtime_db_role,
+            "runtime_db_password": _runtime_db_default_password,
         }
 
         # Map of template files to output files
@@ -343,6 +351,10 @@ class ProjectGenerator:
             ("tests/__init__.py.j2", "tests/__init__.py", False),
             ("tests/conftest.py.j2", "tests/conftest.py", False),
             ("tests/test_example.py.j2", "tests/test_example.py", False),
+            # Database init SQL for restricted runtime role (RLS enforcement)
+            ("db/init.sql.j2", "db/init.sql", False),
+            # Operations guide for the generated project
+            ("OPERATIONS.md.j2", "OPERATIONS.md", False),
         ]
 
         # Theme-specific files: HTML uses Django templates, React uses frontend/
