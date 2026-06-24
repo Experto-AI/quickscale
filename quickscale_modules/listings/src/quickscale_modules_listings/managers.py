@@ -1,53 +1,31 @@
-"""Listings module dual-manager contract.
+"""Listings module manager contract — delegates to shared orgs TenantManager.
 
-Phase F11.12b: explicit tenant-scoped seam for the Listing model.
+T1.8: Replaced module-local ``TenantScopedManager``/``OperatorManager`` with
+the shared ``TenantManager`` from ``quickscale_modules_orgs.managers``.
+Scoping is now ambient via the ContextVar set by ``TenantMiddleware``.
 
-Dual-manager contract:
-- ``objects`` (TenantScopedManager): default manager. Returns ``ListingQuerySet``
-  with an explicit ``.for_org(org_id)`` method for tenant-scoped queries.
-- ``all_objects`` (OperatorManager): operator escape hatch. Returns unfiltered
-  ``QuerySet`` for admin/operator paths that need cross-tenant visibility.
+Follow-up CR-T18-001: ``OperatorManager`` is now a proper subclass that
+passes ``super_scope=True`` so callers who instantiate ``OperatorManager()``
+get the correct operator-bypass semantics.
 """
 
-from __future__ import annotations
+from quickscale_modules_orgs.managers import TenantManager
 
-from django.db import models
-
-
-class ListingQuerySet(models.QuerySet):
-    """Base queryset for Listing with explicit tenant-scoping."""
-
-    def for_org(self, organization_id: int | str | None) -> "ListingQuerySet":
-        """Return rows belonging to the specified organization.
-
-        When ``organization_id`` is ``None``, returns an empty queryset
-        (fail-closed: no org context means no visible rows).
-        """
-        if organization_id is None:
-            return self.none()
-        return self.filter(organization_id=organization_id)
+# Re-export for backward compatibility.
+# TenantScopedManager was the default-scoped manager — same as TenantManager().
+TenantScopedManager = TenantManager
 
 
-class TenantScopedManager(models.Manager):
-    """Default manager for Listing.
+class OperatorManager(TenantManager):
+    """Operator bypass manager — returns all rows (super_scope=True).
 
-    Returns ``ListingQuerySet`` with explicit ``.for_org()`` method.
+    Compatibility wrapper preserved from the module-local implementation.
+    Use for admin/operator paths that need to bypass tenant scoping
+    (e.g. ``all_objects = OperatorManager()``).
     """
 
-    def get_queryset(self) -> ListingQuerySet:
-        return ListingQuerySet(self.model, using=self._db)
-
-    def for_org(self, organization_id: int | str | None) -> ListingQuerySet:
-        """Convenience: scope to the specified organization."""
-        return self.get_queryset().for_org(organization_id)
+    def __init__(self) -> None:
+        super().__init__(super_scope=True)
 
 
-class OperatorManager(models.Manager):
-    """Operator escape hatch for Listing.
-
-    Returns unfiltered ``QuerySet`` for admin/operator paths that need
-    cross-tenant visibility.
-    """
-
-    def get_queryset(self) -> models.QuerySet:
-        return models.QuerySet(self.model, using=self._db)
+__all__ = ["TenantManager", "TenantScopedManager", "OperatorManager"]

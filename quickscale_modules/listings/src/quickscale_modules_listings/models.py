@@ -5,7 +5,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
-from .managers import OperatorManager, TenantScopedManager
+from quickscale_modules_orgs.managers import TenantManager
+from quickscale_modules_orgs.tenancy import tenant_org_fk
 
 
 class AbstractListing(models.Model):
@@ -18,18 +19,8 @@ class AbstractListing(models.Model):
         ("archived", "Archived"),
     ]
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.CASCADE,
-        null=True,
+    organization = tenant_org_fk(
         related_name="%(class)s_listings",
-        help_text=(
-            "Per-subclass related_name avoids collisions when multiple "
-            "concrete models inherit AbstractListing. Subclasses must add a "
-            "UniqueConstraint on (slug, organization) for per-org uniqueness "
-            "and a partial UniqueConstraint on (slug) WHERE organization IS NULL "
-            "for flat-route slug safety."
-        ),
     )
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, blank=True)
@@ -97,20 +88,10 @@ class AbstractListing(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:
-        """Return the URL for this listing.
+        """Return the flat URL for this listing.
 
-        Org-stamped listings use the org-scoped route
-        (``/orgs/<org_slug>/listings/<slug>/``); tenant-agnostic listings
-        use the flat route (``/listings/<slug>/``).
+        All listings use the flat route ``/listings/<slug>/`` (D1).
         """
-        if self.organization_id is not None:
-            return reverse(
-                "quickscale_listings:org-listing_detail",
-                kwargs={
-                    "org_slug": self.organization.slug,
-                    "slug": self.slug,
-                },
-            )
         return reverse("quickscale_listings:listing_detail", kwargs={"slug": self.slug})
 
     @property
@@ -140,8 +121,8 @@ class Listing(AbstractListing):
     - ``all_objects`` (OperatorManager): escape hatch for admin/operator paths.
     """
 
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta(AbstractListing.Meta):
         abstract = False
@@ -151,10 +132,5 @@ class Listing(AbstractListing):
             models.UniqueConstraint(
                 fields=["slug", "organization"],
                 name="listings_listing_slug_organization_unique",
-            ),
-            models.UniqueConstraint(
-                fields=["slug"],
-                name="listings_listing_slug_org_null_unique",
-                condition=models.Q(organization__isnull=True),
             ),
         ]
