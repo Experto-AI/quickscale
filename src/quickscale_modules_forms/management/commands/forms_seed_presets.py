@@ -193,14 +193,23 @@ class Command(BaseCommand):
     ]
 
     def handle(self, *args: Any, **options: Any) -> None:
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
         for preset in self.PRESETS:
-            form, created = Form.objects.get_or_create(
+            # Use all_objects (operator path) so that get_or_create can find
+            # existing rows regardless of the current org context. Scope the
+            # lookup to System org (D2) so tenant-owned rows with the same
+            # slug are not mistaken for presets.
+            form, created = Form.all_objects.get_or_create(
                 slug=preset["slug"],
+                organization=system_org,
                 defaults={
                     "title": preset["title"],
                     "description": preset["description"],
                     "success_message": preset["success_message"],
                     "notify_emails": preset["notify_emails"],
+                    "organization": system_org,
                 },
             )
             status_label = "Created" if created else "Already exists"

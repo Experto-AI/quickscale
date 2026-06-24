@@ -11,9 +11,18 @@ from quickscale_modules_forms.models import Form, FormField, FormSubmission
 class TestFormModel:
     """Tests for the Form model"""
 
-    def test_form_str_returns_title(self):
+    @pytest.fixture(autouse=True)
+    def _system_org(self, db):
+        """Ensure System org exists for all Form tests."""
+        from quickscale_modules_orgs.models import Organization
+
+        return Organization.objects.get_system_org()
+
+    def test_form_str_returns_title(self, _system_org):
         """__str__ returns the form title"""
-        form = Form.objects.create(title="Test Contact", slug="test-contact")
+        form = Form.objects.create(
+            title="Test Contact", slug="test-contact", organization=_system_org
+        )
         assert str(form) == "Test Contact"
 
     def test_form_slug_uniqueness_per_org(self):
@@ -35,42 +44,55 @@ class TestFormModel:
         # Should not raise — different orgs
         Form.objects.create(title="Second", slug="same-slug", organization=org_b)
 
-    def test_form_data_retention_days_default_is_365(self):
+    def test_form_data_retention_days_default_is_365(self, _system_org):
         """data_retention_days defaults to 365"""
-        form = Form.objects.create(title="Test", slug="test-retention")
+        form = Form.objects.create(
+            title="Test", slug="test-retention", organization=_system_org
+        )
         assert form.data_retention_days == 365
 
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
-    def test_form_data_retention_days_default_comes_from_setting(self):
+    def test_form_data_retention_days_default_comes_from_setting(self, _system_org):
         """New forms should inherit the settings-backed retention default."""
-        form = Form.objects.create(title="Configured", slug="configured-retention")
+        form = Form.objects.create(
+            title="Configured", slug="configured-retention", organization=_system_org
+        )
 
         assert form.data_retention_days == 730
 
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
-    def test_form_explicit_data_retention_days_preserves_per_row_value(self):
+    def test_form_explicit_data_retention_days_preserves_per_row_value(
+        self, _system_org
+    ):
         """Explicit per-form retention must win over the global default."""
         form = Form.objects.create(
             title="Explicit",
             slug="explicit-retention",
             data_retention_days=14,
+            organization=_system_org,
         )
 
         assert form.data_retention_days == 14
 
-    def test_form_is_active_defaults_to_true(self):
+    def test_form_is_active_defaults_to_true(self, _system_org):
         """is_active defaults to True"""
-        form = Form.objects.create(title="Test", slug="test-active")
+        form = Form.objects.create(
+            title="Test", slug="test-active", organization=_system_org
+        )
         assert form.is_active is True
 
-    def test_form_spam_protection_defaults_to_true(self):
+    def test_form_spam_protection_defaults_to_true(self, _system_org):
         """spam_protection_enabled defaults to True"""
-        form = Form.objects.create(title="Test", slug="test-spam")
+        form = Form.objects.create(
+            title="Test", slug="test-spam", organization=_system_org
+        )
         assert form.spam_protection_enabled is True
 
-    def test_form_success_message_default(self):
+    def test_form_success_message_default(self, _system_org):
         """success_message has a sensible default value"""
-        form = Form.objects.create(title="Test", slug="test-msg")
+        form = Form.objects.create(
+            title="Test", slug="test-msg", organization=_system_org
+        )
         assert "Thank you" in form.success_message
 
 
