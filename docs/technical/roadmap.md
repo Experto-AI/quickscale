@@ -128,7 +128,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [ ] T1.6 — Blog adopt contract *(wt-track1)*
 - [ ] T1.7 — Forms adopt contract *(wt-track2)*
 - [ ] T1.8 — Listings adopt contract *(wt-track2)*
-- [ ] T1.9 — Social adopt contract *(wt-track3)*
+- [x] T1.9 — Social adopt contract *(wt-track3)*
 - [ ] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
 
 **Phase 3 — RLS backstop** *(parallel; each after its Phase-2 task + T1.4)*
@@ -235,14 +235,24 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup.
 
 ---
 
-#### - [ ] T1.9 — Social adopt contract
+#### - [x] T1.9 — Social adopt contract *(wt-track3)*
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **SCOPE (on top of shared shape):** `social/models.py:33` NOT NULL migration for `BaseSocialItem`; `list_published_social_*`/`build_social_*_payload` drop the optional `organization_id` kwarg (now ambient via contextvar); public link tree resolves `get_system_org()`; squash migration (D5).
-- **ACCEPTANCE CRITERIA:** public link tree functional; cross-org read → empty/404; social isolation tests green.
+- **SCOPE (on top of shared shape):** `social/models.py` NOT NULL migration for `BaseSocialItem`; `list_published_social_*`/`build_social_*_payload` drop the optional `organization_id` kwarg (now ambient via contextvar); public link tree resolves `get_system_org()`; squash migration (D5).
+- **ACCEPTANCE CRITERIA:** public link tree functional; cross-org read -> empty/404; social isolation tests green.
 - **VALIDATION PATH:** `make MODULE=social test -- --modules`.
 - **DEPENDS:** T1.1–T1.3.
+- **IMPLEMENTATION NOTES:**
+  - Replaced module-local `TenantScopedManager`/`OperatorManager` with `orgs.managers.TenantManager` (auto-scopes via ContextVar; `super_scope=True` for operator bypass).
+  - Replaced nullable `CASCADE` FK on `BaseSocialItem.organization` with `tenant_org_fk()` (NOT NULL/PROTECT per D3).
+  - Dropped `SocialItemQuerySet.for_org()` and the `organization_id` kwarg from all four service functions (`list_published_social_links`, `list_published_social_embeds`, `build_social_link_tree_payload`, `build_social_embeds_payload`). Tenant scoping is now ambient.
+  - Added `_social_cache_key()` helper — org-aware cache keys so each org's payload is cached independently.
+  - Squashed migrations to clean NOT NULL/PROTECT contract (D5 — no backfill). Single `0001_initial.py` with all fields and `on_delete=PROTECT`.
+  - Updated tests to use `set_current_org_id()` for contextvar-based scoping rather than explicit `organization_id` parameter.
+   - **Follow-up CR-T1-9-001 (cache partitioning):** Replaced global cache keys with org-aware keys (`{base_key}:org:{org_id}`) partitioned by org identity. Updated model `save()`/`delete()` to also clear the org-scoped variant via `_keys_to_clear()`. Added cross-org cache regression test (`test_social_link_cache_is_partitioned_by_org`) that queries org A then org B without clearing cache and verifies isolation.
+   - **Follow-up CR-T1-9-002 (managed views contract):** Updated `render_social_managed_views_module()` in `quickscale_core` to generate views that (a) drop the removed `organization_id` kwarg, (b) resolve System org for anonymous/public requests via `Organization.objects.get_system_org()`, (c) set/reset `set_current_org_id()`/`reset_current_org_id()` around the service call. Added 5 regression tests in `quickscale_core/tests/test_social_managed_views_template.py` covering kwarg removal, contextvar usage, and System-org resolution.
+   - **Pre-existing finding:** The `_SOLO_ROUTE_PREFIXES` in `orgs/middleware.py` does not include `/social/`. Since the social module has no views/URLs (model + services only), this is correct — the managed views renderer (`social_manifest.py`) in `quickscale_core` is responsible for setting the org context before calling social services. T1.15 (Social RLS) must ensure the renderer resolves `get_system_org()` for public/anonymous access per D2.
 
 ---
 

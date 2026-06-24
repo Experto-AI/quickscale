@@ -24,17 +24,14 @@ from quickscale_modules_social.contracts import (
     resolve_social_target,
     social_provider_supports_embeds,
 )
-from quickscale_modules_social.managers import OperatorManager, TenantScopedManager
+from quickscale_modules_orgs.managers import TenantManager
+from quickscale_modules_orgs.tenancy import tenant_org_fk
 
 
 class BaseSocialItem(models.Model):
     """Shared curated social item fields and normalization behavior."""
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
+    organization = tenant_org_fk(
         related_name="%(app_label)s_%(class)s_set",
     )
     title = models.CharField(max_length=120)
@@ -65,9 +62,9 @@ class BaseSocialItem(models.Model):
     cache_keys: ClassVar[tuple[str, ...]] = ()
     require_embed_support: ClassVar[bool] = False
 
-    # Phase F11.13a: dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    # T1.9: TenantManager auto-scopes via contextvar; super_scope=True for operator bypass.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         abstract = True
@@ -119,17 +116,48 @@ class BaseSocialItem(models.Model):
     def _prepare_for_save(self) -> None:
         return None
 
+    @staticmethod
+    def _org_cache_keys(
+        base_keys: tuple[str, ...],
+        org_id: object,
+    ) -> list[str]:
+        """Build org-scoped cache key variants for a given org ID."""
+        keys: list[str] = []
+        for base_key in base_keys:
+            keys.append(base_key)
+            if org_id is not None:
+                keys.append(f"{base_key}:org:{org_id}")
+        return keys
+
     def save(self, *args: Any, **kwargs: Any) -> None:
+        # Capture previous org ownership before the mutation so we can
+        # invalidate both the old and new cache partitions (CR-T1-9-001).
+        previous_org_id: object = None
+        if self.pk is not None:
+            previous = (
+                type(self)
+                .all_objects.filter(pk=self.pk)
+                .values("organization_id")
+                .first()
+            )
+            if previous is not None:
+                previous_org_id = previous["organization_id"]
+
         self.full_clean()
         self._prepare_for_save()
         super().save(*args, **kwargs)
-        if self.cache_keys:
-            cache.delete_many(self.cache_keys)
+
+        keys_to_clear = self._org_cache_keys(self.cache_keys, self.organization_id)
+        if previous_org_id is not None and previous_org_id != self.organization_id:
+            keys_to_clear.extend(self._org_cache_keys(self.cache_keys, previous_org_id))
+        if keys_to_clear:
+            cache.delete_many(keys_to_clear)
 
     def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
         result = super().delete(*args, **kwargs)
-        if self.cache_keys:
-            cache.delete_many(self.cache_keys)
+        keys_to_clear = self._org_cache_keys(self.cache_keys, self.organization_id)
+        if keys_to_clear:
+            cache.delete_many(keys_to_clear)
         return result
 
 
@@ -193,7 +221,7 @@ class SocialEmbed(BaseSocialItem):
             return True
 
         previous = (
-            SocialEmbed.objects.filter(pk=self.pk)
+            SocialEmbed.all_objects.filter(pk=self.pk)
             .values(
                 "normalized_url",
                 "provider_name",
