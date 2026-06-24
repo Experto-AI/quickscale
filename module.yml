@@ -46,3 +46,69 @@ dependencies:
 
 django_apps:
   - quickscale_modules_billing
+
+# ---------------------------------------------------------------------------
+# Manifest derivation rules (T2.3 Phase 3)
+# ---------------------------------------------------------------------------
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - rest_framework
+          - quickscale_modules_billing
+      description: "Billing Django app labels"
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - ""
+            - quickscale_modules_billing.urls
+      description: "Billing URL includes"
+
+  option_derivations:
+    enabled:
+      derived_settings:
+        - setting_key: QUICKSCALE_BILLING_ENABLED
+          source_options: [enabled]
+          derivation_type: direct
+          expression:
+            option: enabled
+          description: "Whether billing is enabled"
+
+    publishable_key_env_var:
+      derived_settings:
+        - setting_key: QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR
+          source_options: [publishable_key_env_var]
+          derivation_type: direct
+          expression:
+            option: publishable_key_env_var
+          description: "Env-var name for Stripe publishable key"
+
+    secret_key_env_var:
+      derived_settings:
+        - setting_key: QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR
+          source_options: [secret_key_env_var]
+          derivation_type: direct
+          expression:
+            option: secret_key_env_var
+          description: "Env-var name for Stripe secret key"
+
+    webhook_secret_env_var:
+      derived_settings:
+        - setting_key: QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR
+          source_options: [webhook_secret_env_var]
+          derivation_type: direct
+          expression:
+            option: webhook_secret_env_var
+          description: "Env-var name for Stripe webhook secret"
+
+    billing_currency:
+      derived_settings:
+        - setting_key: QUICKSCALE_BILLING_CURRENCY
+          source_options: [billing_currency]
+          derivation_type: direct
+          expression:
+            option: billing_currency
+          description: "ISO 4217 billing currency code"
