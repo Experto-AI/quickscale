@@ -223,6 +223,13 @@ Implementation completed 2026-06-24.
 - **ACCEPTANCE CRITERIA:** every billing row org-owned NOT NULL; one active subscription per org enforced; no user-subject code path; org delete blocked by PROTECT (purge via T1.17); billing tests green.
 - **VALIDATION PATH:** `make MODULE=billing test -- --modules`.
 - **DEPENDS:** T1.1–T1.3. **DECISIONS:** D3.
+- **PLAN-REVIEW FINDING (CR-T110-004 — medium, blocking, completeness):** The flat-route hard cut plan is approved in direction but still needs adjacent shipped contract-surface updates in:
+  - `quickscale_core/src/quickscale_core/generator/templates/templates/404.html.j2`
+  - `quickscale_core/tests/test_error_pages.py`
+  - `quickscale_modules/billing/README.md`
+  - `docs/technical/organizations.md`
+  - plus a narrow `quickscale_core` error-page check before the final billing suite.
+  Plan-review hit the cap and the user chose to stop here. **Deferred** — resolve these surfaces before implementing T1.10.
 
 ---
 
