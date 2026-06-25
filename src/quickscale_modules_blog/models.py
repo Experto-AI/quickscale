@@ -18,7 +18,7 @@ from django.utils.text import slugify
 from markdownx.models import MarkdownxField
 from PIL import Image
 
-from .managers import OperatorManager, TenantScopedManager
+from quickscale_modules_orgs.managers import TenantManager
 
 storage_build_upload_path: Callable[..., str] | None = None
 storage_build_public_media_url: Callable[..., str] | None = None
@@ -117,17 +117,15 @@ class Category(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.CASCADE,
-        null=True,
+        on_delete=models.PROTECT,
         related_name="blog_categories",
     )
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, blank=True)
     description = models.TextField(blank=True)
 
-    # Phase 1 (F11.11): dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         verbose_name_plural = "Categories"
@@ -153,20 +151,7 @@ class Category(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:
-        """Return the URL for this category.
-
-        Org-stamped categories use the org-scoped route
-        (``/orgs/<org_slug>/blog/category/<slug>/``); tenant-agnostic
-        categories use the flat route (``/blog/category/<slug>/``).
-        """
-        if self.organization_id is not None:  # type: ignore[attr-defined]
-            return reverse(
-                "quickscale_blog:org-category_list",
-                kwargs={
-                    "org_slug": self.organization.slug,
-                    "slug": self.slug,
-                },
-            )
+        """Return the flat route URL for this category."""
         return reverse("quickscale_blog:category_list", kwargs={"slug": self.slug})
 
 
@@ -175,16 +160,14 @@ class Tag(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.CASCADE,
-        null=True,
+        on_delete=models.PROTECT,
         related_name="blog_tags",
     )
     name = models.CharField(max_length=50)
     slug = models.SlugField(max_length=50, blank=True)
 
-    # Phase 1 (F11.11): dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         ordering = ["name"]
@@ -209,20 +192,7 @@ class Tag(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:
-        """Return the URL for this tag.
-
-        Org-stamped tags use the org-scoped route
-        (``/orgs/<org_slug>/blog/tag/<slug>/``); tenant-agnostic tags
-        use the flat route (``/blog/tag/<slug>/``).
-        """
-        if self.organization_id is not None:  # type: ignore[attr-defined]
-            return reverse(
-                "quickscale_blog:org-tag_list",
-                kwargs={
-                    "org_slug": self.organization.slug,
-                    "slug": self.slug,
-                },
-            )
+        """Return the flat route URL for this tag."""
         return reverse("quickscale_blog:tag_list", kwargs={"slug": self.slug})
 
 
@@ -265,8 +235,7 @@ class BlogMediaAsset(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.CASCADE,
-        null=True,
+        on_delete=models.PROTECT,
         related_name="blog_media_assets",
     )
     file = models.ImageField(upload_to=blog_media_upload_to)
@@ -293,9 +262,8 @@ class BlogMediaAsset(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Phase 1 (F11.11): dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -314,8 +282,7 @@ class Post(models.Model):
 
     organization = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
-        on_delete=models.CASCADE,
-        null=True,
+        on_delete=models.PROTECT,
         related_name="blog_posts",
     )
     title = models.CharField(max_length=200)
@@ -357,9 +324,8 @@ class Post(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     published_date = models.DateTimeField(null=True, blank=True)
 
-    # Phase 1 (F11.11): dual-manager contract.
-    objects = TenantScopedManager()
-    all_objects = OperatorManager()
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         ordering = ["-published_date", "-created_at"]
@@ -402,20 +368,7 @@ class Post(models.Model):
             self._generate_thumbnails()
 
     def get_absolute_url(self) -> str:
-        """Return the URL for this post.
-
-        Org-stamped posts use the org-scoped route
-        (``/orgs/<org_slug>/blog/post/<slug>/``), while tenant-agnostic
-        posts use the flat route (``/blog/post/<slug>/``).
-        """
-        if self.organization_id is not None:  # type: ignore[attr-defined]
-            return reverse(
-                "quickscale_blog:org-post_detail",
-                kwargs={
-                    "org_slug": self.organization.slug,
-                    "slug": self.slug,
-                },
-            )
+        """Return the flat route URL for this post."""
         return reverse("quickscale_blog:post_detail", kwargs={"slug": self.slug})
 
     def get_featured_image_url(self) -> str:
