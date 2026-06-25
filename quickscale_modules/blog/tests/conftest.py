@@ -74,6 +74,14 @@ def author_user(db):
 
 
 @pytest.fixture
+def system_org(db):
+    """Return the singleton System organization (reserved slug __system__)."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.get_system_org()
+
+
+@pytest.fixture
 def org(db):
     """Create a default test organization for blog model tests."""
     from quickscale_modules_orgs.models import Organization

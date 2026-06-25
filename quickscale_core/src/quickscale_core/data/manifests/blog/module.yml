@@ -25,12 +25,7 @@ config:
       django_setting: BLOG_ENABLE_RSS
       description: "Enable RSS routes at runtime"
 
-  immutable:
-    org_routing_enabled:
-      type: boolean
-      default: false
-      django_setting: BLOG_ORG_ROUTING_ENABLED
-      description: "Enable org-scoped blog routing (Phase 2 of F11.11)"
+  immutable: {}
 
 required_modules:
   - orgs
@@ -94,13 +89,3 @@ derivation:
           expression:
             option: api_rate_limit
           description: "Blog API rate limit"
-
-    org_routing_enabled:
-      derived_settings:
-        - setting_key: BLOG_ORG_ROUTING_ENABLED
-          source_options: [org_routing_enabled]
-          derivation_type: direct
-          expression:
-            option: org_routing_enabled
-          default: false
-          description: "Enable org-scoped blog routing"

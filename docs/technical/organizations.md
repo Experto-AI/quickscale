@@ -26,7 +26,7 @@ QuickScale supports two first-class deployment modes, switchable at runtime with
 | Org management UI | Hidden | Full (create, invite, settings, billing) |
 | Org switcher | Not shown | Shown in sidebar |
 | Invitations | Disabled | Enabled |
-| URL structure | `/blog/`, `/crm/` (no slug) | `/orgs/<slug>/blog/` (CRM uses flat `/crm/` per T1.5) |
+| URL structure | `/blog/`, `/crm/` (no slug) | Flat routes: `/blog/` (T1.6), `/crm/` (T1.5); remaining modules under `/orgs/<slug>/.../` until T1.7–T1.8 |
 | Billing scope | Per-user (org has one member) | Per-org (team billing contact) |
 | Isolation today | App-layer guards + middleware org context | App-layer guards + middleware org context; **social module adds PostgreSQL RLS (T1.15)** |
 | PostgreSQL RLS | Deferred until downstream tenant tables carry concrete `organization_id` columns | Partially deployed: active for social tables (T1.15); others deferred until their tenant tables carry concrete `organization_id` columns |
@@ -52,7 +52,7 @@ QUICKSCALE_MODE = 'solo'   # or 'saas'
 
 `TenantMiddleware` reads this setting and changes two behaviours:
 
-- **URL resolution**: In solo mode, no `org_slug` appears in URLs; middleware auto-resolves the org from the user's personal org via ``request.org`` (set by session or fallback). In SaaS mode, the org is resolved from the **session** (``ACTIVE_ORG_SESSION_KEY``) set by the org-switcher, not from URL kwargs. Prior to T1.3/T1.5 the CRM module used slug-based resolution for org-scoped routes (``/orgs/<slug>/crm/``); after T1.5 CRM uses a single flat route tree (``/crm/``) with session/request-based org resolution.
+- **URL resolution**: In solo mode, no `org_slug` appears in URLs; middleware auto-resolves the org from the user's personal org via ``request.org`` (set by session or fallback). In SaaS mode, the org is resolved from the **session** (``ACTIVE_ORG_SESSION_KEY``) set by the org-switcher, not from URL kwargs. The CRM and blog modules now use flat route trees (``/crm/`` after T1.5, ``/blog/`` after T1.6) with session/request-based org resolution.
 - **Guard behaviour**: In solo mode, the post-signup guard auto-creates a personal org silently. In SaaS mode, it redirects the user to `/orgs/new/` to name their organization.
 
 URL patterns are loaded conditionally:
@@ -454,7 +454,7 @@ Invitations are active only in SaaS mode. In Solo mode the invitation views stay
 
 ### SaaS Mode
 
-Path routing (not subdomain). The org slug appears in every URL so the active organization is always explicit, bookmarkable, and shareable.
+Path routing (not subdomain). The org slug appears in most module URLs so the active organization is always explicit, bookmarkable, and shareable. Modules that have adopted the flat-route contract (CRM per T1.5, blog per T1.6, billing per T1.10) resolve the active organization from ``request.org`` (set by middleware) rather than from a URL slug.
 
 ```
 /orgs/                                     # List orgs the current user belongs to
@@ -463,14 +463,14 @@ Path routing (not subdomain). The org slug appears in every URL so the active or
 /orgs/<slug>/members/                      # Member list, role management, invite send/revoke
 /orgs/invitations/<token>/accept/          # Public invitation accept / continuation
 /orgs/<slug>/settings/                     # Org settings (name, slug)
-# All module routes are nested under the org slug:
-/orgs/<slug>/blog/                         # Blog for this org
+# Module routes (blog uses flat route per T1.6; remaining modules nest under org slug):
+/blog/                                     # Blog (flat route per T1.6)
 /orgs/<slug>/forms/                        # Forms for this org
 /orgs/<slug>/listings/                     # Listings for this org
 
 **Note (T1.10)**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/api/billing/...`). No org-scoped billing URL tree exists after T1.10 — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
 
-**Note (T1.5)**: The CRM module no longer uses org-scoped URLs. After T1.5, all CRM routes are flat (``/crm/``, ``/crm/api/...``) regardless of deployment mode. The active organization is resolved from ``request.org`` (set by ``TenantMiddleware`` from the session or the personal-org fallback), not from a URL slug. Other modules (blog, forms, listings) may still use org-scoped routes until their own T1.6–T1.8 contract-adoption tasks land.
+**Note (T1.5 / T1.6)**: The CRM and blog modules no longer use org-scoped URLs. After T1.5, all CRM routes are flat (``/crm/``, ``/crm/api/...``) regardless of deployment mode. After T1.6, all blog routes are flat (``/blog/``, ``/blog/post/<slug>/``, ...) regardless of deployment mode. The active organization is resolved from ``request.org`` (set by ``TenantMiddleware`` from the session or the personal-org fallback), not from a URL slug. Remaining modules (forms, listings) may still use org-scoped routes until their own T1.7–T1.8 contract-adoption tasks land.
 ```
 
 ### Solo Mode
@@ -500,14 +500,14 @@ No org management pages are exposed in solo mode.
 /orgs/:slug/settings    → OrgSettingsPage
 /billing/dashboard                → BillingPage (flat route in both modes after T1.10)
 /billing/pricing                  → PricingPage (flat route in both modes after T1.10)
-/orgs/:slug/blog        → BlogPage
+/blog                   → BlogPage (flat route per T1.6)
 /orgs/:slug/forms       → FormsPage
 /orgs/:slug/listings    → ListingsPage
 ```
 
-**Note (T1.5)**: The CRM module no longer uses org-scoped React routes. CRM pages are served at flat `/crm` paths in both modes, with the org resolved from `request.org` (session or personal-org fallback) rather than a URL slug.
+**Note (T1.5 / T1.6)**: The CRM and blog modules no longer use org-scoped React routes. CRM pages are served at flat `/crm` paths in both modes; blog pages are served at flat `/blog` paths after T1.6. The org is resolved from `request.org` (session or personal-org fallback) rather than a URL slug.
 
-`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into all nested pages. An org switcher in the sidebar shows the active organization and lets the user navigate to another by changing the slug in the URL. Modules that have not yet adopted the flat-route contract (blog, forms, listings) continue to use org-scoped React routes handled by `OrgLayout`.
+`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into all nested pages. An org switcher in the sidebar shows the active organization and lets the user navigate to another by changing the slug in the URL. Modules that have not yet adopted the flat-route contract (forms, listings) continue to use org-scoped React routes handled by `OrgLayout`.
 
 #### Solo mode
 
@@ -549,7 +549,7 @@ Everything downstream (RLS context, `request.org`, permission checks) is identic
 
 The current middleware implementation (shipped in T1.3/T1.5) uses **session-based org resolution**. It reads the active org from ``request.session[ACTIVE_ORG_SESSION_KEY]`` (set by the org-switcher), applies fallback resolution for legacy downstream module paths and solo-format routes, and populates ``request.org`` and the ``app.current_org_id`` contextvar/``SET LOCAL``.
 
-The pre-T1.3 middleware extracted the org slug from URL kwargs (e.g. ``/orgs/<slug>/crm/``). That slug-based approach is no longer used for CRM, which now uses flat routes with session-based org resolution per Track 1 decisions D1/D4. Other modules may still carry slug-based URL patterns until their own T1.6+ contract-adoption tasks land.
+The pre-T1.3 middleware extracted the org slug from URL kwargs (e.g. ``/orgs/<slug>/crm/``). That slug-based approach is no longer used for CRM or blog, which now use flat routes with session-based org resolution per Track 1 decisions D1/D4/D5. Remaining modules (forms, listings) may still carry slug-based URL patterns until their own T1.7+ contract-adoption tasks land.
 
 Key behaviours (current):
 - **Saas mode + active session org** → resolves the org from the session key, validates membership, sets ``request.org`` + contextvar + ``SET LOCAL app.current_org_id``.
@@ -586,7 +586,7 @@ All open questions from the original design were resolved before implementation 
 | Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
 | Billing migration path? | **Auto-create personal org per user** | Management command `migrate_billing_to_orgs`; idempotent; zero manual operator work |
 | Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | Social RLS is now active under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
-| Active org routing? | **Session-based in SaaS (mid-2026+); legacy slug compatibility for non-CRM modules** | T1.3/T1.5: CRM uses flat routes with session/request-based org resolution. Other modules still use slug-based URL routing until their T1.6+ adoption tasks. Solo: transparent, org resolved from user's personal org |
+| Active org routing? | **Session-based in SaaS (mid-2026+); legacy slug compatibility for remaining modules** | T1.3/T1.5/T1.6: CRM and blog use flat routes with session/request-based org resolution. Remaining modules (forms, listings) still use slug-based URL routing until their T1.7+ adoption tasks. Solo: transparent, org resolved from user's personal org |
 | Post-signup flow? | **SaaS: force `/orgs/new/`. Solo: auto-create personal org** | SaaS users must name their workspace; solo users should not see org concepts |
 | Module access per plan? | **Feature gates + credits** | Credits for consumption metering; feature gates for upsell leverage; no per-org custom flags |
 | Seat pricing? | **Optional, designed in** | Operator-configurable; enforced at UI/API layer in v0.86.0; hard DB enforcement deferred |
@@ -645,7 +645,7 @@ Use `Model.objects.for_org(organization_id)` in:
 
 - **Views and services** — every org-scoped view or service function resolves the org and chains `.for_org()`:
   ```python
-  def blog_index(request, org_slug):
+  def listing_index(request, org_slug):
       org = get_object_or_404(Organization, slug=org_slug)
       posts = Post.objects.for_org(org.pk).filter(published=True)
       ...

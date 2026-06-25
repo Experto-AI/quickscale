@@ -581,7 +581,6 @@ def get_default_blog_config() -> dict[str, Any]:
         "posts_per_page": 10,
         "enable_rss": True,
         "api_rate_limit": DEFAULT_BLOG_API_RATE_LIMIT,
-        "org_routing_enabled": False,
     }
 
 

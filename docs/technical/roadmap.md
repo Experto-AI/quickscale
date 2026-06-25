@@ -24,7 +24,7 @@ Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed
 
 | Worktree | Branch | Phase 2 owns | Phase 3 owns | Next task |
 |---------|--------|-------------|-------------|-----------|
-| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.6** |
+| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.11** |
 | `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.13** |
 | `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.16** |
 
@@ -126,7 +126,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 **Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3 · fan out across all 3 worktrees)*
 - [x] T1.5 — CRM adopt contract *(wt-track1)*
-- [ ] T1.6 — Blog adopt contract *(wt-track1)*
+- [x] T1.6 — Blog adopt contract *(wt-track1)*
 - [x] T1.7 — Forms adopt contract *(wt-track2)*
 - [x] T1.8 — Listings adopt contract *(wt-track2)*
 - [x] T1.9 — Social adopt contract *(wt-track3)*
@@ -164,14 +164,19 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup. Implemented 20
 
 ---
 
-#### - [ ] T1.6 — Blog adopt contract
+#### - [x] T1.6 — Blog adopt contract
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
+Closeout completed 2026-06-25.
+
 - **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.5
-- **SCOPE (on top of shared shape):** `blog/models.py:118+` NOT NULL migration (Category/Tag/Post/BlogMediaAsset); `blog/views.py:64–183` drop `_is_org_scoped_route`; anonymous/token-auth reads resolve `get_system_org()`; `blog/feeds.py` RSS feed scopes to System org; delete org-scoped URL pair; squash migration (D5).
-- **ACCEPTANCE CRITERIA:** public feed returns System-org posts; authed org reads return that org's posts only; no `isnull` union; blog isolation tests green.
-- **VALIDATION PATH:** `make MODULE=blog test -- --modules`; feed + cross-org isolation tests green.
+- **COMPLETED:** Blog runtime contract adoption — shared `TenantManager`, NOT NULL/PROTECT ownership, flat `/blog/` routes only, System-org anonymous/public reads (D2), squashed migration, updated blog tests, and manual-install docs aligned with the shipped `markdownx/` URL include contract.
+- **ACCEPTANCE CRITERIA:** only `/blog/...` routes resolve; public/anonymous reads use System org; cross-org read → empty/404; no `isnull` union remains.
+- **VALIDATION PATH:** `make MODULE=blog test -- --modules` — 179 passed.
+- **FINDINGS / FOLLOW-UP:**
+  - **CR-T16-001 (resolved 2026-06-25):** `quickscale_modules/blog/README.md` now documents the required manual-install `path("markdownx/", include("markdownx.urls"))` include so README guidance matches the shipped manifest/runtime contract.
+  - **CR-T16-002 (advisory/pending):** Does not block T1.12. Legacy `org_routing_enabled` still round-trips through resolver/config-sanitization/reconfigure paths. Needs cleanup plus regression coverage. Carried as advisory follow-up.
 - **DEPENDS:** T1.1–T1.3.
 
 ---
@@ -411,7 +416,7 @@ Single-PR items that do not change the design:
 | M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
 | M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
 | M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
-| M16 | 1 | T1.5, T1.7, T1.9, T1.8, T1.10 | Phase 2 partial. CRM (T1.5, wt-track1), Forms (T1.7, wt-track2), Social (T1.9, wt-track3), Listings (T1.8, wt-track2), and Billing (T1.10, wt-track3) contract adoption merged to v87. |
+| M16 | 1 | T1.5, T1.6, T1.7, T1.8, T1.9, T1.10 | Phase 2 complete. CRM (T1.5, wt-track1), Blog (T1.6, wt-track1), Forms (T1.7, wt-track2), Listings (T1.8, wt-track2), Social (T1.9, wt-track3), and Billing (T1.10, wt-track3) contract adoption merged to v87. |
 | M17 | 1 | T1.15 | Phase 3 partial. Social RLS (T1.15, wt-track3) — RLS active for social tables via UUID predicate; per-org runtime-role admin contract with fail-closed behavior; no operator bypass. Social module 81/81, admin contracts 40/40. |
 
 ## References

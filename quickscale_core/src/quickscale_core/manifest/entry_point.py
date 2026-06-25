@@ -323,9 +323,6 @@ def _blog_post_hook(
     settings["BLOG_ENABLE_RSS"] = bool(settings.get("BLOG_ENABLE_RSS", True))
     api_rate = str(settings.get("BLOG_API_RATE_LIMIT", "")).strip()
     settings["BLOG_API_RATE_LIMIT"] = api_rate or "5/hour"
-    settings["BLOG_ORG_ROUTING_ENABLED"] = bool(
-        settings.get("BLOG_ORG_ROUTING_ENABLED", False)
-    )
 
     # Static markdownx settings (identical to legacy).
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [

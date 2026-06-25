@@ -121,10 +121,11 @@ class TestCategory:
         assert category.slug == "web-development"
 
     def test_category_get_absolute_url(self, org):
-        """Test category URL generation"""
+        """Test category URL generation returns flat route"""
         category = Category.objects.create(name="Python", organization=org)
         url = category.get_absolute_url()
-        assert "/category/python/" in url
+        assert url == "/blog/category/python/"
+        assert "org" not in url
 
 
 @pytest.mark.django_db
@@ -144,10 +145,11 @@ class TestTag:
         assert tag.slug == "machine-learning"
 
     def test_tag_get_absolute_url(self, org):
-        """Test tag URL generation"""
+        """Test tag URL generation returns flat route"""
         tag = Tag.objects.create(name="Python", organization=org)
         url = tag.get_absolute_url()
-        assert "/tag/python/" in url
+        assert url == "/blog/tag/python/"
+        assert "org" not in url
 
 
 @pytest.mark.django_db
@@ -258,26 +260,35 @@ class TestPost:
 
     def test_post_with_category_and_tags(self, author_user, org):
         """Test post with category and tags"""
-        category = Category.objects.create(name="Tech", organization=org)
-        tag1 = Tag.objects.create(name="Python", organization=org)
-        tag2 = Tag.objects.create(name="Django", organization=org)
-
-        post = Post.objects.create(
-            title="Test",
-            author=author_user,
-            content="Content",
-            category=category,
-            organization=org,
+        from quickscale_modules_orgs.current_org import (
+            reset_current_org_id,
+            set_current_org_id,
         )
-        post.tags.add(tag1, tag2)
 
-        assert post.category == category
-        assert post.tags.count() == 2
-        assert tag1 in post.tags.all()
-        assert tag2 in post.tags.all()
+        set_current_org_id(org.pk)
+        try:
+            category = Category.objects.create(name="Tech", organization=org)
+            tag1 = Tag.objects.create(name="Python", organization=org)
+            tag2 = Tag.objects.create(name="Django", organization=org)
+
+            post = Post.objects.create(
+                title="Test",
+                author=author_user,
+                content="Content",
+                category=category,
+                organization=org,
+            )
+            post.tags.add(tag1, tag2)
+
+            assert post.category == category
+            assert post.tags.count() == 2
+            assert tag1 in post.tags.all()
+            assert tag2 in post.tags.all()
+        finally:
+            reset_current_org_id()
 
     def test_post_get_absolute_url(self, author_user, org):
-        """Test post URL generation"""
+        """Test post URL generation returns flat route"""
         post = Post.objects.create(
             title="Test Post",
             author=author_user,
@@ -285,7 +296,8 @@ class TestPost:
             organization=org,
         )
         url = post.get_absolute_url()
-        assert "/post/test-post/" in url
+        assert url == "/blog/post/test-post/"
+        assert "org" not in url
 
     def test_post_short_content_no_ellipsis(self, author_user, org):
         """Test excerpt for short content has no ellipsis"""

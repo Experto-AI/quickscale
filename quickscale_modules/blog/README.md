@@ -45,44 +45,67 @@ The shipped `quickscale.yml` options for this module are:
 
 ### Manual Installation
 
-If embedding manually:
+If embedding manually, install the orgs baseline first. The blog module depends
+on `quickscale-module-orgs` and relies on `quickscale_modules_orgs.Organization`
+plus `request.org` tenant resolution from `TenantMiddleware`. In SaaS mode, keep
+the orgs active-org session flow in place so flat `/blog/...` requests resolve
+the current organization correctly.
 
 1. Add to `INSTALLED_APPS` in `settings.py`:
    ```python
    INSTALLED_APPS = [
-       # ... other apps
-       'markdownx',
-       'quickscale_modules_blog',
+        # ... other apps
+        'markdownx',
+        'quickscale_modules_orgs',
+        'quickscale_modules_blog',
+    ]
+    ```
+
+2. Add the orgs tenant middleware after session/auth middleware in `settings.py`:
+   ```python
+   MIDDLEWARE = [
+       # ... other middleware
+       'django.contrib.sessions.middleware.SessionMiddleware',
+       'django.contrib.auth.middleware.AuthenticationMiddleware',
+       'quickscale_modules_orgs.middleware.TenantMiddleware',
    ]
    ```
 
-2. Configure Markdownx in `settings.py`:
+3. Configure Markdownx in `settings.py`:
    ```python
    # Markdownx settings
    MARKDOWNX_MARKDOWN_EXTENSIONS = [
-       'markdown.extensions.fenced_code',
-       'markdown.extensions.tables',
+        'markdown.extensions.fenced_code',
+        'markdown.extensions.tables',
        'markdown.extensions.toc',
    ]
    MARKDOWNX_MEDIA_PATH = 'blog/markdownx/'
    ```
 
-3. Add blog URLs to `urls.py`:
+4. Root-include blog URLs and the Markdownx upload URLs in `urls.py`:
    ```python
    from django.urls import include, path
 
    urlpatterns = [
-       # ... other patterns
-       path('blog/', include('quickscale_modules_blog.urls')),
+        # ... other patterns
+        path('', include('quickscale_modules_blog.urls')),
+        path('markdownx/', include('markdownx.urls')),
    ]
    ```
 
-4. Run migrations:
+   > **Note**: The blog module's ``urls.py`` already defines the ``/blog/...``
+   > prefix, so it must be included at root (``path('', ...)``). Keep the
+   > sibling ``markdownx/`` include as shown so the editor upload/browser URLs
+   > resolve correctly. There are no ``/orgs/<slug>/blog/...`` paths — the
+   > active organization is resolved from ``request.org`` at runtime (System org
+   > for anonymous readers, session- or personal-org for authenticated readers).
+
+5. Run migrations:
    ```bash
    python manage.py migrate quickscale_modules_blog
    ```
 
-5. Collect static files:
+6. Collect static files:
    ```bash
    python manage.py collectstatic
    ```
@@ -208,21 +231,26 @@ If you do not configure bearer tokens, both endpoints continue to work with stan
 ```python
 from django.contrib.auth import get_user_model
 from quickscale_modules_blog.models import Post, Category, Tag
+from quickscale_modules_orgs.models import Organization
 
 User = get_user_model()
 user = User.objects.first()
 
-# Create a category
+# Public content uses the System organization (D2)
+system_org = Organization.objects.get_system_org()
+
+# Create a category in the System org
 category = Category.objects.create(
     name="Technology",
-    description="Posts about technology"
+    description="Posts about technology",
+    organization=system_org,
 )
 
-# Create tags
-tag1 = Tag.objects.create(name="Python")
-tag2 = Tag.objects.create(name="Django")
+# Create tags in the System org
+tag1 = Tag.objects.create(name="Python", organization=system_org)
+tag2 = Tag.objects.create(name="Django", organization=system_org)
 
-# Create a post
+# Create a published post in the System org
 post = Post.objects.create(
     title="Getting Started with Django",
     author=user,
@@ -230,8 +258,18 @@ post = Post.objects.create(
     excerpt="Learn the basics of Django development",
     status="published",
     category=category,
+    organization=system_org,
 )
 post.tags.add(tag1, tag2)
+
+# For tenant-scoped content, use the active org from request context:
+# tenant_post = Post.objects.create(
+#     title="Tenant Post",
+#     author=user,
+#     content="# Tenant content",
+#     status="published",
+#     organization=request.org,  # set by TenantMiddleware
+# )
 ```
 
 ### Template Customization
