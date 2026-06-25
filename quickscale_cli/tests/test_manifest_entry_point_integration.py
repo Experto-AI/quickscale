@@ -381,7 +381,6 @@ class TestBlogManifestEntryPoint:
         "posts_per_page": 10,
         "enable_rss": True,
         "api_rate_limit": "5/hour",
-        "org_routing_enabled": False,
     }
 
     def test_returns_module_wiring_spec(self) -> None:
@@ -430,7 +429,6 @@ class TestBlogManifestEntryPoint:
             "BLOG_POSTS_PER_PAGE",
             "BLOG_ENABLE_RSS",
             "BLOG_API_RATE_LIMIT",
-            "BLOG_ORG_ROUTING_ENABLED",
             "MARKDOWNX_MARKDOWN_EXTENSIONS",
             "MARKDOWNX_MEDIA_PATH",
         }

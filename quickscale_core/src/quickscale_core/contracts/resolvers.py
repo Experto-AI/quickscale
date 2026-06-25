@@ -506,14 +506,12 @@ def billing_production_targeted(options: Mapping[str, Any] | None) -> bool:
 DEFAULT_BLOG_POSTS_PER_PAGE = 10
 DEFAULT_BLOG_ENABLE_RSS = True
 DEFAULT_BLOG_API_RATE_LIMIT = "5/hour"
-DEFAULT_BLOG_ORG_ROUTING_ENABLED = False
 
 BLOG_MODULE_OPTION_KEYS = frozenset(
     {
         "posts_per_page",
         "enable_rss",
         "api_rate_limit",
-        "org_routing_enabled",
     }
 )
 
@@ -566,9 +564,6 @@ def resolve_blog_module_options(options: Mapping[str, Any] | None) -> dict[str, 
     stripped_rate = str(resolved.get("api_rate_limit", "")).strip()
     resolved["api_rate_limit"] = (
         stripped_rate if stripped_rate else DEFAULT_BLOG_API_RATE_LIMIT
-    )
-    resolved["org_routing_enabled"] = bool(
-        resolved.get("org_routing_enabled", DEFAULT_BLOG_ORG_ROUTING_ENABLED)
     )
     return resolved
 
@@ -1853,7 +1848,6 @@ __all__ = [
     "BLOG_MODULE_OPTION_KEYS",
     "DEFAULT_BLOG_API_RATE_LIMIT",
     "DEFAULT_BLOG_ENABLE_RSS",
-    "DEFAULT_BLOG_ORG_ROUTING_ENABLED",
     "DEFAULT_BLOG_POSTS_PER_PAGE",
     "default_blog_module_options",
     "normalize_blog_module_options",

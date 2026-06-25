@@ -67,15 +67,21 @@ If embedding manually:
    MARKDOWNX_MEDIA_PATH = 'blog/markdownx/'
    ```
 
-3. Add blog URLs to `urls.py`:
+3. Root-include blog URLs in `urls.py` (flat route; no org-scoped paths):
    ```python
    from django.urls import include, path
 
    urlpatterns = [
        # ... other patterns
-       path('blog/', include('quickscale_modules_blog.urls')),
+       path('', include('quickscale_modules_blog.urls')),
    ]
    ```
+
+   > **Note**: The blog module's ``urls.py`` already defines the ``/blog/...``
+   > prefix, so it must be included at root (``path('', ...)``). There are no
+   > ``/orgs/<slug>/blog/...`` paths — the active organization is resolved from
+   > ``request.org`` at runtime (System org for anonymous readers, session- or
+   > personal-org for authenticated readers).
 
 4. Run migrations:
    ```bash
@@ -208,21 +214,26 @@ If you do not configure bearer tokens, both endpoints continue to work with stan
 ```python
 from django.contrib.auth import get_user_model
 from quickscale_modules_blog.models import Post, Category, Tag
+from quickscale_modules_orgs.models import Organization
 
 User = get_user_model()
 user = User.objects.first()
 
-# Create a category
+# Public content uses the System organization (D2)
+system_org = Organization.objects.get_system_org()
+
+# Create a category in the System org
 category = Category.objects.create(
     name="Technology",
-    description="Posts about technology"
+    description="Posts about technology",
+    organization=system_org,
 )
 
-# Create tags
-tag1 = Tag.objects.create(name="Python")
-tag2 = Tag.objects.create(name="Django")
+# Create tags in the System org
+tag1 = Tag.objects.create(name="Python", organization=system_org)
+tag2 = Tag.objects.create(name="Django", organization=system_org)
 
-# Create a post
+# Create a published post in the System org
 post = Post.objects.create(
     title="Getting Started with Django",
     author=user,
@@ -230,8 +241,18 @@ post = Post.objects.create(
     excerpt="Learn the basics of Django development",
     status="published",
     category=category,
+    organization=system_org,
 )
 post.tags.add(tag1, tag2)
+
+# For tenant-scoped content, use the active org from request context:
+# tenant_post = Post.objects.create(
+#     title="Tenant Post",
+#     author=user,
+#     content="# Tenant content",
+#     status="published",
+#     organization=request.org,  # set by TenantMiddleware
+# )
 ```
 
 ### Template Customization

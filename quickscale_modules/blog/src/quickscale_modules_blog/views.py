@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.core.exceptions import PermissionDenied
 from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -57,157 +56,46 @@ RATE_LIMIT_VALUE_PARSE_ERRORS = (TypeError, ValueError)
 RATE_LIMIT_CACHE_FALLBACK_ERRORS = (AttributeError, NotImplementedError, ValueError)
 
 # ---------------------------------------------------------------------------
-# Org-scoped routing helpers (Phase 2, F11.11)
+# Org-resolution helpers for the single-URL contract (T1.6)
 # ---------------------------------------------------------------------------
 
 
-def _is_org_scoped_route(request: HttpRequest) -> bool:
-    """Return whether the request targets an org-scoped SaaS route.
+def _resolve_org_for_read(request: HttpRequest) -> Any | None:
+    """Return the organization to scope blog reads to.
 
-    Uses the same path-prefix contract as the CRM module: only
-    ``/orgs/<slug>/...`` routes are treated as org-scoped.
+    Anonymous/public readers see System-org content (D2).
+    Authenticated readers see their active org via ``request.org``.
     """
-    path = getattr(request, "path", "") or ""
-    return path.startswith("/orgs/")
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        from quickscale_modules_orgs.models import Organization
+
+        return Organization.objects.get_system_org()
+    return getattr(request, "org", None)
 
 
-def _resolve_active_org(request: HttpRequest) -> Any:
-    """Return the active organization for the current request.
+def _resolve_api_org(request: HttpRequest, author: Any) -> Any:
+    """Return the organization for staff API write operations.
 
-    Org-scoped routes use ``require_current_org`` (fail-closed).
-    Flat routes return ``None`` since they have no org context.
+    Session-authenticated requests use ``request.org`` from middleware.
+    Token-authenticated requests resolve the user's personal org, falling
+    back to the System org.
     """
-    if not _is_org_scoped_route(request):
-        return None
-
-    from quickscale_modules_orgs.current_org import (
-        CurrentOrgError,
-        require_current_org,
-    )
-
-    try:
-        return require_current_org(request)
-    except CurrentOrgError:
-        raise PermissionDenied("Organization context is required for this route.")
-
-
-def _resolve_active_org_optional(request: HttpRequest) -> Any | None:
-    """Return the active organization or ``None`` if not on an org-scoped route.
-
-    Flat routes always get ``None`` — no org stamping.
-    """
-    if not _is_org_scoped_route(request):
-        return None
-
-    from quickscale_modules_orgs.current_org import get_current_org
-
-    return get_current_org(request)
-
-
-def _same_org_or_operator(
-    organization: Any,
-    related_org_id: Any | None,
-) -> bool:
-    """Return True if *related_org_id* matches *organization* or is ``None``.
-
-    ``None`` is treated as legacy data — permitted for operator/backfill
-    but scoped routes still return it.  Strict same-org validation should
-    use ``_validate_same_org`` instead.
-    """
-    if related_org_id is None:
-        return True
-    if organization is None:
-        return False
-    org_pk = getattr(organization, "pk", organization)
-    return str(org_pk) == str(related_org_id)
-
-
-def _resolve_org_for_token_auth(
-    request: HttpRequest,
-    user: Any,
-) -> Any | None:
-    """Resolve organization and validate membership for token-authenticated requests.
-
-    Token auth runs inside the view, after ``TenantMiddleware`` has already
-    passed through without resolving the org (since ``request.user`` was
-    anonymous at that point).  This helper resolves the org from the URL
-    slug and checks membership directly.
-
-    Returns the ``Organization`` instance, or ``None`` if the org cannot be
-    resolved or the user lacks membership.
-
-    Note: in solo mode (``QUICKSCALE_MODE != "saas"``), org-scoped routes
-    are rejected with ``None`` — consistent with
-    ``TenantMiddleware._handle_solo_request()`` which returns 404 for
-    ``/orgs/...`` paths.  Token auth bypasses the middleware (the user is
-    anonymous at middleware time) so this check is duplicated here.
-    """
-    if not _is_org_scoped_route(request):
-        return None
-
-    # CR-001: Honor solo-mode gate — reject org-scoped token auth in solo
-    # mode, consistent with TenantMiddleware._handle_solo_request.
-    if getattr(settings, "QUICKSCALE_MODE", "solo") != "saas":
-        return None
-
-    from django.urls import Resolver404, resolve
-    from quickscale_modules_orgs.current_org import set_current_org
+    org = getattr(request, "org", None)
+    if org is not None:
+        return org
+    # Token auth path — resolve user's personal org.
     from quickscale_modules_orgs.models import (
         Organization,
         OrganizationMembership,
     )
 
-    try:
-        match = resolve(request.path_info)
-    except Resolver404:
-        return None
-
-    org_slug = match.kwargs.get("org_slug")
-    if org_slug is None:
-        return None
-
-    organization = Organization.objects.filter(slug=org_slug).first()
-    if organization is None:
-        return None
-
-    # Validate membership (superusers are always permitted).
-    if user is not None and not getattr(user, "is_superuser", False):
-        membership = OrganizationMembership.objects.filter(
-            user=user,
-            organization=organization,
-        ).exists()
-        if not membership:
-            return None
-
-    # Stamp the org context on the request, matching TenantMiddleware.
-    set_current_org(request, organization)
-    return organization
-
-
-def _validate_same_org(
-    *,
-    organization: Any,
-    instance: Any,
-    label: str,
-    errors: dict[str, str],
-) -> bool:
-    """Validate that *instance* belongs to *organization*.
-
-    Adds a validation error to *errors* and returns ``False`` when the
-    instance belongs to a different org.
-    """
-    if organization is None:
-        return True
-    if instance is None:
-        return True
-    instance_org_id = getattr(instance, "organization_id", None)
-    if instance_org_id is None:
-        return True
-    org_pk = getattr(organization, "pk", organization)
-    if str(instance_org_id) != str(org_pk):
-        errors[label] = "This resource does not belong to the current organization."
-        return False
-    return True
+    membership = OrganizationMembership.objects.filter(
+        user=author, organization__is_personal=True
+    ).first()
+    if membership is not None:
+        return membership.organization
+    return Organization.objects.get_system_org()
 
 
 ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
@@ -565,7 +453,7 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
 def create_blog_media_asset_from_request(
     request: HttpRequest,
     author: Any,
-    organization: Any = None,
+    organization: Any,
 ) -> BlogMediaAsset:
     """Create and return a stored media asset from a multipart upload request."""
     errors: dict[str, str] = {}
@@ -605,13 +493,12 @@ def create_blog_media_asset_from_request(
 def create_published_post_from_payload(
     payload: Mapping[str, Any],
     author: Any,
-    organization: Any = None,
+    organization: Any,
 ) -> Post:
     """Create and return a published blog post from validated API payload.
 
-    If *organization* is provided (org-scoped route), the post is stamped
-    with that org and referenced resources (category, tags, media asset)
-    are validated to belong to the same organization.
+    The post and all referenced resources (category, tags, media asset)
+    are scoped to *organization*.
     """
     errors: dict[str, str] = {}
 
@@ -642,12 +529,9 @@ def create_published_post_from_payload(
         if not isinstance(featured_image_id, int):
             errors["featured_image_id"] = "Must be an integer"
         else:
-            qs = BlogMediaAsset.objects.all()
-            if organization is not None:
-                qs = qs.filter(organization=organization)
-            else:
-                qs = qs.filter(organization__isnull=True)
-            featured_media_asset = qs.filter(pk=featured_image_id).first()
+            featured_media_asset = BlogMediaAsset.all_objects.filter(
+                pk=featured_image_id, organization=organization
+            ).first()
             if featured_media_asset is None:
                 errors["featured_image_id"] = "Media asset not found"
     elif featured_image_alt is not None and str(featured_image_alt).strip():
@@ -659,12 +543,9 @@ def create_published_post_from_payload(
         if not isinstance(category_slug, str) or not category_slug.strip():
             errors["category_slug"] = "Must be a non-empty string"
         else:
-            qs = Category.objects.all()
-            if organization is not None:
-                qs = qs.filter(organization=organization)
-            else:
-                qs = qs.filter(organization__isnull=True)
-            category = qs.filter(slug=category_slug.strip()).first()
+            category = Category.all_objects.filter(
+                slug=category_slug.strip(), organization=organization
+            ).first()
             if category is None:
                 errors["category_slug"] = "Category not found"
 
@@ -692,11 +573,7 @@ def create_published_post_from_payload(
     content_text = str(content).strip()
     generated_slug = slugify(title_text)
 
-    # Use Post.objects.filter for forward-compat with race-condition mocks.
-    slug_check = Post.objects.filter
-    if organization is not None:
-        slug_check = slug_check(organization=organization).filter
-    if slug_check(slug=generated_slug).exists():
+    if Post.all_objects.filter(slug=generated_slug, organization=organization).exists():
         raise BlogPublishConflictError("Post already exists for generated slug")
 
     try:
@@ -719,10 +596,9 @@ def create_published_post_from_payload(
             organization=organization,
         )
     except IntegrityError as exc:
-        conflict_check = Post.objects.filter
-        if organization is not None:
-            conflict_check = conflict_check(organization=organization).filter
-        if conflict_check(slug=generated_slug).exists():
+        if Post.all_objects.filter(
+            slug=generated_slug, organization=organization
+        ).exists():
             raise BlogPublishConflictError(
                 "Post already exists for generated slug"
             ) from exc
@@ -732,12 +608,9 @@ def create_published_post_from_payload(
         tag_objects: list[Tag] = []
         for tag_name in tag_names:
             tag_slug = slugify(tag_name)
-            tag_qs = Tag.objects.all()
-            if organization is not None:
-                tag_qs = tag_qs.filter(organization=organization)
-            else:
-                tag_qs = tag_qs.filter(organization__isnull=True)
-            tag_obj, _ = tag_qs.get_or_create(
+            tag_obj, _ = Tag.all_objects.filter(
+                organization=organization
+            ).get_or_create(
                 slug=tag_slug,
                 defaults={"name": tag_name, "organization": organization},
             )
@@ -751,8 +624,8 @@ def create_published_post_from_payload(
 def upload_media_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     """Upload a blog image for later use in Markdown or as a featured image.
 
-    On org-scoped routes, the media asset is stamped with the active
-    organization.
+    The media asset is stamped with the active organization from
+    ``request.org`` (session auth) or the user's personal org (token auth).
     """
     if request.method != "POST":
         return JsonResponse(
@@ -768,17 +641,9 @@ def upload_media_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     if throttle_error is not None:
         return throttle_error
 
-    # Resolve org context: for session auth this is already set by
-    # TenantMiddleware; for token auth we resolve from the URL slug
-    # since TenantMiddleware passes through unauthenticated requests.
-    organization = _resolve_active_org_optional(request)
-    if organization is None and _is_org_scoped_route(request):
-        organization = _resolve_org_for_token_auth(request, author)
-        if organization is None:
-            return JsonResponse(
-                {"error": "Organization not found or access denied"},
-                status=403,
-            )
+    # Resolve org: session auth uses request.org from middleware;
+    # token auth resolves the user's personal org.
+    organization = _resolve_api_org(request, author)
 
     try:
         asset = create_blog_media_asset_from_request(
@@ -804,9 +669,10 @@ def upload_media_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
 def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     """Create and publish a blog post from JSON payload for authenticated staff users.
 
-    On org-scoped routes, the post is stamped with the active organization
-    and referenced resources (category, tags, media asset) are validated
-    to belong to the same organization.
+    The post is stamped with the active organization from ``request.org``
+    (session auth) or the user's personal org (token auth). Referenced
+    resources (category, tags, media asset) are validated to belong to
+    the same organization.
     """
     if request.method != "POST":
         return JsonResponse(
@@ -832,17 +698,9 @@ def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     if not isinstance(payload, dict):
         return JsonResponse({"error": "JSON object payload expected"}, status=400)
 
-    # Resolve org context: for session auth this is already set by
-    # TenantMiddleware; for token auth we resolve from the URL slug
-    # since TenantMiddleware passes through unauthenticated requests.
-    organization = _resolve_active_org_optional(request)
-    if organization is None and _is_org_scoped_route(request):
-        organization = _resolve_org_for_token_auth(request, author)
-        if organization is None:
-            return JsonResponse(
-                {"error": "Organization not found or access denied"},
-                status=403,
-            )
+    # Resolve org: session auth uses request.org from middleware;
+    # token auth resolves the user's personal org.
+    organization = _resolve_api_org(request, author)
 
     try:
         post = create_published_post_from_payload(
@@ -871,26 +729,25 @@ def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
 
 
 class OrgScopedViewMixin:
-    """Mixin for blog list/detail views that applies org scoping on SaaS routes.
+    """Mixin for blog list/detail views that applies org scoping.
 
-    On org-scoped routes (``/orgs/<slug>/blog/...``), the queryset is
-    filtered to match ``request.org``.  Flat routes (``/blog/...``) are
-    unchanged.
+    Anonymous/public readers see System-org content (D2).
+    Authenticated readers see their active org via ``request.org``.
+
+    Uses ``all_objects`` (operator bypass) for the base queryset since
+    org scoping is done explicitly here — TenantManager auto-scoping is
+    bypassed to avoid double-filtering.
     """
 
     request: HttpRequest
 
     def _scope_by_org(self, qs):  # type: ignore[no-untyped-def]
-        """Filter *qs* by org context for route-aware scoping.
+        """Filter *qs* by org context.
 
-        On flat routes (``/blog/...``), only tenant-agnostic records
-        (``organization=None``) are visible.  On org-scoped routes
-        (``/orgs/<slug>/blog/...``), only records belonging to the active
-        org are visible.
+        Anonymous readers are scoped to the System org (D2).
+        Authenticated readers are scoped to their active org.
         """
-        if not _is_org_scoped_route(self.request):
-            return qs.filter(organization__isnull=True)
-        organization = _resolve_active_org_optional(self.request)
+        organization = _resolve_org_for_read(self.request)
         if organization is None:
             return qs.none()
         return qs.filter(organization=organization)
@@ -915,7 +772,7 @@ class PostListView(OrgScopedViewMixin, ListView):
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return only published posts, ordered by publish date"""
         return self._scope_by_org(
-            Post.objects.filter(status="published")
+            Post.all_objects.filter(status="published")
             .select_related("author", "category")
             .prefetch_related("tags")
         )
@@ -931,7 +788,7 @@ class PostDetailView(OrgScopedViewMixin, DetailView):
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return only published posts"""
         return self._scope_by_org(
-            Post.objects.filter(status="published")
+            Post.all_objects.filter(status="published")
             .select_related("author", "category")
             .prefetch_related("tags")
         )
@@ -961,16 +818,16 @@ class CategoryListView(OrgScopedViewMixin, ListView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts in the specified category"""
-        category_qs = Category.objects.all()
-        if _is_org_scoped_route(self.request):
-            organization = _resolve_active_org_optional(self.request)
-            if organization is not None:
-                category_qs = category_qs.filter(organization=organization)
+        organization = _resolve_org_for_read(self.request)
+        if organization is None:
+            self.category = get_object_or_404(Category.all_objects.none())
         else:
-            category_qs = category_qs.filter(organization__isnull=True)
-        self.category = get_object_or_404(category_qs, slug=self.kwargs["slug"])
+            self.category = get_object_or_404(
+                Category.all_objects.filter(organization=organization),
+                slug=self.kwargs["slug"],
+            )
         return self._scope_by_org(
-            Post.objects.filter(status="published", category=self.category)
+            Post.all_objects.filter(status="published", category=self.category)
             .select_related("author", "category")
             .prefetch_related("tags")
         )
@@ -1000,16 +857,16 @@ class TagListView(OrgScopedViewMixin, ListView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts with the specified tag"""
-        tag_qs = Tag.objects.all()
-        if _is_org_scoped_route(self.request):
-            organization = _resolve_active_org_optional(self.request)
-            if organization is not None:
-                tag_qs = tag_qs.filter(organization=organization)
+        organization = _resolve_org_for_read(self.request)
+        if organization is None:
+            self.tag = get_object_or_404(Tag.all_objects.none())
         else:
-            tag_qs = tag_qs.filter(organization__isnull=True)
-        self.tag = get_object_or_404(tag_qs, slug=self.kwargs["slug"])
+            self.tag = get_object_or_404(
+                Tag.all_objects.filter(organization=organization),
+                slug=self.kwargs["slug"],
+            )
         return self._scope_by_org(
-            Post.objects.filter(status="published", tags=self.tag)
+            Post.all_objects.filter(status="published", tags=self.tag)
             .select_related("author", "category")
             .prefetch_related("tags")
         )
