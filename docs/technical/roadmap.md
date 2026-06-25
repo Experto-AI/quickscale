@@ -267,10 +267,25 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.5
-- **SCOPE:** CRM migration `RunSQL` for all owned tables (Contact, Company, Deal, Activity, pipeline) + operator carve-out (D4).
+- **SCOPE:** CRM migration `RunSQL` for all owned tables (Contact, Company, Deal, Activity, pipeline) + per-org admin/runtime-role contract per D4 (no SQL bypass).
 - **ACCEPTANCE CRITERIA:** app role + `app.current_org_id` set → only that org's rows visible; unset → fail-closed; zero rows whose `organization_id` ≠ session var; CRM suite green under the RLS role.
 - **VALIDATION PATH:** `make MODULE=crm test -- --modules` including Postgres-backed RLS integration test (skips on SQLite).
 - **DEPENDS:** T1.5 + T1.4.
+- **PREP COMPLETED (2026-06-25):**
+  - Prerequisites verified: T1.4 (RLS DB role + generated-project settings) and T1.5 (CRM contract adoption) both resolved and merged to `v87`.
+  - Decision D4 (RLS role: NOSUPERUSER / NOBYPASSRLS) resolved.
+  - Worktree synced: `quickscale-wt-track1` clean-status check passed, fast-forward merged to `v87` (46b0ea8).
+  - Plan-review cycle completed (2 passes): finding CR-PR-T111-001 resolved; user chose to stop at the cap.
+- **USER-APPROVED IMPLEMENTATION CHOICES (established during plan-review):**
+  - Parent-derived note-table RLS policies without schema change — RLS on the parent `organization_id` FK covers inherited CRM note tables; no separate note-table policy needed.
+  - Explicit org-selection and fail-closed admin behavior — no operator bypass policy deployed; admin operations run under the runtime role (`NOSUPERUSER` / `NOBYPASSRLS`) with per-org session selection.
+  - When implementation eventually lands, update `docs/technical/organizations.md` to document the CRM RLS policies.
+- **REMAINING BLOCKER — CR-PR-T111-002:**
+  The future Phase 2/final closeout migration (`0008` or equivalent) must require:
+  1. **PostgreSQL guard** — run only under PostgreSQL; skip or error cleanly on SQLite.
+  2. **Explicit reverse path** — `DROP POLICY ...` + `ALTER TABLE ... DISABLE ROW LEVEL SECURITY` in the reverse migration.
+  3. **Forward + reverse migration proof** — test that the migration applies and reverses cleanly.
+  This finding must be resolved before T1.11 can be closed. Carried forward as a requirement for the next implementation phase.
 
 ---
 
