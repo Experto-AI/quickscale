@@ -94,3 +94,30 @@ def reset_current_org_id() -> None:
     prior request is not leaked.
     """
     _current_org_id_var.set(None)
+
+
+# ---------------------------------------------------------------------------
+# T1.15 — shared SET LOCAL helper for non-middleware callers
+# ---------------------------------------------------------------------------
+
+
+def set_db_current_org_id(org_id: uuid.UUID | str) -> None:
+    """Set PostgreSQL ``app.current_org_id`` for the active transaction scope.
+
+    Non-middleware callers (e.g. generated social managed views) should call
+    this inside a ``transaction.atomic()`` block alongside
+    :func:`set_current_org_id`.
+
+    Uses the authoritative DB-side form documented in ``organizations.md``:
+      ``current_setting('app.current_org_id', true)::uuid``
+
+    Does nothing when the database backend is not PostgreSQL.
+    This is the same ``SET LOCAL`` primitive used by
+    :class:`~.middleware.TenantMiddleware` in its request lifecycle.
+    """
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        return
+    with connection.cursor() as cursor:
+        cursor.execute("SET LOCAL app.current_org_id = %s", [str(org_id)])
