@@ -24,9 +24,9 @@ Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed
 
 | Worktree | Branch | Phase 2 owns | Phase 3 owns | Next task |
 |---------|--------|-------------|-------------|-----------|
-| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.6** |
+| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.11** |
 | `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.13** |
-| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.10** |
+| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.15** |
 
 Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
 
@@ -126,7 +126,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 **Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3 · fan out across all 3 worktrees)*
 - [x] T1.5 — CRM adopt contract *(wt-track1)*
-- [ ] T1.6 — Blog adopt contract — **handoff** *(wt-track1)*
+- [x] T1.6 — Blog adopt contract *(wt-track1)*
 - [x] T1.7 — Forms adopt contract *(wt-track2)*
 - [x] T1.8 — Listings adopt contract *(wt-track2)*
 - [x] T1.9 — Social adopt contract *(wt-track3)*
@@ -164,18 +164,19 @@ CRM is already NOT NULL/PROTECT — mostly route/manager cleanup. Implemented 20
 
 ---
 
-#### - [ ] T1.6 — Blog adopt contract — **handoff state**
+#### - [x] T1.6 — Blog adopt contract
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-Substantial implementation complete 2026-06-25. **Not yet fully closed** — two findings remain (see below); only CR-T16-001 blocks advancement. Merge-back to `v87` records this handoff; continuation resolves CR-T16-001 before T1.12.
+Closeout completed 2026-06-25.
 
 - **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.5
-- **COMPLETED (validated green):** Blog runtime contract adoption — shared `TenantManager`, NOT NULL/PROTECT ownership, flat `/blog/` routes only, System-org anonymous/public reads (D2), squashed migration, updated blog tests. Scoped validation (`make MODULE=blog lint -- --modules && make MODULE=blog typecheck -- --modules && make MODULE=blog test -- --modules`) green.
-- **REMAINING FINDINGS (handoff):**
-  - **CR-T16-001 (blocking):** Blocks T1.6 closeout and advancement to T1.12. `quickscale_modules/blog/README.md` — manual-install markdownx URL include needs documentation to match shipped contract.
-  - **CR-T16-002 (advisory/pending):** Does not block T1.6 closeout or T1.12. Legacy `org_routing_enabled` still round-trips through resolver/config-sanitization/reconfigure paths. Needs cleanup plus regression coverage. Carried as advisory follow-up.
-- **VALIDATION PATH (continuation):** Resolve CR-T16-001 to unblock T1.6 closeout and T1.12. CR-T16-002 is advisory follow-up and does not gate advancement. Re-run `make MODULE=blog test -- --modules`, confirm docs/manifest consistency, then advance to T1.12.
+- **COMPLETED:** Blog runtime contract adoption — shared `TenantManager`, NOT NULL/PROTECT ownership, flat `/blog/` routes only, System-org anonymous/public reads (D2), squashed migration, updated blog tests, and manual-install docs aligned with the shipped `markdownx/` URL include contract.
+- **ACCEPTANCE CRITERIA:** only `/blog/...` routes resolve; public/anonymous reads use System org; cross-org read → empty/404; no `isnull` union remains.
+- **VALIDATION PATH:** `make MODULE=blog test -- --modules` — 179 passed.
+- **FINDINGS / FOLLOW-UP:**
+  - **CR-T16-001 (resolved 2026-06-25):** `quickscale_modules/blog/README.md` now documents the required manual-install `path("markdownx/", include("markdownx.urls"))` include so README guidance matches the shipped manifest/runtime contract.
+  - **CR-T16-002 (advisory/pending):** Does not block T1.12. Legacy `org_routing_enabled` still round-trips through resolver/config-sanitization/reconfigure paths. Needs cleanup plus regression coverage. Carried as advisory follow-up.
 - **DEPENDS:** T1.1–T1.3.
 
 ---
@@ -412,7 +413,7 @@ Single-PR items that do not change the design:
 | M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
 | M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
 | M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
-| M16 | 1 | T1.5, T1.6 (handoff), T1.7, T1.8, T1.9, T1.10 | Phase 2 partial. CRM (T1.5, wt-track1), Blog (T1.6 handoff, wt-track1), Forms (T1.7, wt-track2), Listings (T1.8, wt-track2), Social (T1.9, wt-track3), and Billing (T1.10, wt-track3) contract adoption merged to v87. T1.6 not yet fully closed — one blocking finding (CR-T16-001) remains; see T1.6 section. |
+| M16 | 1 | T1.5, T1.6, T1.7, T1.8, T1.9, T1.10 | Phase 2 complete. CRM (T1.5, wt-track1), Blog (T1.6, wt-track1), Forms (T1.7, wt-track2), Listings (T1.8, wt-track2), Social (T1.9, wt-track3), and Billing (T1.10, wt-track3) contract adoption merged to v87. |
 
 ## References
 
