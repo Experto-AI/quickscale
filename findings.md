@@ -10,13 +10,15 @@ The single most important structural fact: **the multi-tenant isolation that the
 
 **Implementation notes:** no backward compatibility, no migration path, no existing users — every change is a clean break. Squash/rewrite migrations; drop dead paths outright.
 
-**Findings 1, 2, and 4 are three faces of one decision** — tenant isolation was added as an application-layer convention layered onto a single-user scaffold, rather than as a data-layer invariant. Finding 3 is independent. Finding 5 (DR) is resolved and archived to CHANGELOG (M12 / T3.1–T3.3).
+**Findings 1, 2, and 4** are fully resolved via Track 1 (T1.1–T1.16 / M13–M18). **Finding 5** (DR) is resolved and archived to CHANGELOG (M12 / T3.1–T3.3). **Finding 3** is partially resolved — T2.3/T2.4 eliminated per-module CLI adapters (M14); the residual `MODULE_CATALOG` static tuple in core remains (tracked in roadmap Deferred/Monitor).
 
 ---
 
 ## Finding 1 — Tenant isolation is procedural; the RLS boundary does not exist
 
-**Time horizon: now**
+**STATUS: RESOLVED** — Contextvar `TenantManager` active across all modules (T1.2/M13); FORCE ROW LEVEL SECURITY active on all six tenant-table sets (T1.11–T1.16/M17–M18). See CHANGELOG M13, M15, M16, M17, M18.
+
+**Time horizon: now** *(was)*
 
 **Problem.** Cross-tenant data isolation is enforced by every callsite remembering to call `.for_org()` (or hand-write a `Q(organization_id=...)` filter). The default model manager returns *all* tenants' rows. The one piece of code that looks like a database-level guarantee — `SET LOCAL app.current_org_id` — is consumed by nothing.
 
@@ -40,7 +42,9 @@ The contextvar manager inverts the footgun (scoped is default, unscoped is opt-i
 
 ## Finding 2 — The org-ownership contract is inconsistent; NULL silently means "visible to everyone"
 
-**Time horizon: now**
+**STATUS: RESOLVED** — All six modules: NOT NULL/PROTECT org FK (T1.5–T1.10/M16); System org owns public content (T1.1/M13); teardown via `purge_organization` pending (T1.17, the only remaining Track 1 task). See CHANGELOG M13, M16.
+
+**Time horizon: now** *(was)*
 
 **Problem.** Each module made a different decision about the `organization` FK — nullability, `on_delete`, and whether `organization IS NULL` is a legal "global/flat" state — so there is no single answer to "who owns this row" or "what happens when a tenant is deleted."
 
@@ -66,7 +70,9 @@ NULL stops being a security-relevant value. Flat routes disappear (every row has
 
 ## Finding 3 — Adding a module requires coordinated edits across ~8 sites; T2.3/T2.4 resolved the CLI wiring bottleneck, but the module-catalog tuple remains hardcoded
 
-**Time horizon: <6 months**
+**STATUS: PARTIAL** — T2.3/T2.4 (M14) deleted all per-module CLI adapters and the implication-defaults ladder; generic resolver is operational. Residual: `quickscale_core/src/quickscale_core/contracts/module_catalog.py` static `MODULE_CATALOG` tuple still hardcoded — tracked in roadmap Deferred/Monitor for retirement.
+
+**Time horizon: <6 months** *(was)*
 
 **Problem.** Module identity is not owned in one place — it's spread between the module's own source, the core catalog tuple, and the generator. T2.3/T2.4 eliminated the CLI's per-module Python adapters, the implication-defaults ladder, and the CLI catalog re-export shim, but the core module-catalog tuple still requires per-module edits.
 
@@ -90,7 +96,9 @@ The per-module CLI Python adapters, the implication-defaults ladder, and the CLI
 
 ## Finding 4 — The flat-route / org-route dual surface was a migration bridge that became permanent
 
-**Time horizon: 6–18 months**
+**STATUS: RESOLVED** — All `/orgs/<slug:org_slug>/...` content routes deleted across CRM, Blog, Forms, Listings, Social, Billing (T1.5–T1.10/M16). Middleware always produces `request.org`; `_is_org_scoped_route()` eliminated everywhere. See CHANGELOG M15, M16.
+
+**Time horizon: 6–18 months** *(was)*
 
 **Problem.** Every isolated module serves the same content under two URL trees — flat `/crm/...` (scopes to `organization__isnull=True`) and `/orgs/<slug>/crm/...` (scopes to active org) — selected per-request by a `_is_org_scoped_route()` branch duplicated in each module, on top of a `solo` vs `saas` fork in `TenantMiddleware`.
 
