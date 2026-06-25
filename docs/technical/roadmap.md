@@ -325,9 +325,12 @@ Implemented 2026-06-25.
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track3` (branch: `wt-track3`) — after T1.10
-- **SCOPE:** Billing migration `RunSQL` for Subscription, CreditTransaction, Customer + operator carve-out. Confirm `app.current_org_id` is set in Celery tasks / webhook handlers before enabling `FORCE ROW LEVEL SECURITY`.
+- **SCOPE:** Billing migration `RunSQL` for Subscription, CreditTransaction, CreditBalance — no operator bypass policy; explicit `app.current_org_id` context establishment in webhook/runtime paths before enabling `FORCE ROW LEVEL SECURITY`; fail-closed behavior under the runtime role (`NOSUPERUSER` / `NOBYPASSRLS` per T1.4).
 - **VALIDATION PATH:** `make MODULE=billing test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.10 + T1.4.
+- **PREP COMPLETED (2026-06-25):** T1.10 + T1.4 confirmed complete; wt-track3 synced with v87 (`46b0ea8`); discovery and mandatory plan-review completed; no implementation started.
+- **REMAINING BLOCKER:** PLAN-T1.16-006 (medium, blocking, test-gap) — webhook/runtime Postgres tests must start with no ambient org context so they prove `handle_stripe_event()` establishes/restores org context internally under RLS. Implementation cannot proceed safely until this test gap is closed.
+- **DECISION NEEDED:** Confirm approach for simulating Stripe webhook entry with zero ambient org context in the RLS test harness.
 
 ---
 
