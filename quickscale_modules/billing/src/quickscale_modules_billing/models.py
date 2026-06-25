@@ -7,6 +7,9 @@ from typing import Any
 from django.conf import settings
 from django.db import models, transaction
 
+from quickscale_modules_orgs.managers import TenantManager
+from quickscale_modules_orgs.tenancy import tenant_org_fk
+
 
 CURRENT_SUBSCRIPTION_STATUSES = (
     "incomplete",
@@ -19,14 +22,10 @@ CURRENT_SUBSCRIPTION_STATUSES = (
 
 
 def populated_value_q(field_name: str) -> models.Q:
-    """Return a predicate that matches non-empty string values."""
-
     return models.Q(**{f"{field_name}__isnull": False}) & ~models.Q(**{field_name: ""})
 
 
 def current_subscription_status_q(*, field_name: str = "status") -> models.Q:
-    """Return a predicate that matches current subscription rows."""
-
     return models.Q(**{f"{field_name}__in": CURRENT_SUBSCRIPTION_STATUSES})
 
 
@@ -61,16 +60,14 @@ class Plan(models.Model):
 
 
 class CreditBalance(models.Model):
-    """Current credit balance snapshot for a single user."""
+    """Current credit balance snapshot for a single organization."""
 
     organization = models.OneToOneField(
         "quickscale_modules_orgs.Organization",
         related_name="credit_balance",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
     )
-    user = models.OneToOneField(
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="credit_balance",
         on_delete=models.SET_NULL,
@@ -80,15 +77,16 @@ class CreditBalance(models.Model):
     balance = models.IntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
+
     class Meta:
         app_label = "quickscale_modules_billing"
 
     @classmethod
-    def get_or_create_for_user(cls, user: Any) -> tuple["CreditBalance", bool]:
-        """Return the user's balance row, locking it when called inside a transaction."""
-
+    def get_or_create_for_org(cls, organization: Any) -> tuple["CreditBalance", bool]:
         balance, created = cls.objects.get_or_create(
-            user=user,
+            organization=organization,
             defaults={"balance": 0},
         )
 
@@ -98,7 +96,7 @@ class CreditBalance(models.Model):
         return cls.objects.get(pk=balance.pk), created
 
     def __str__(self) -> str:
-        return f"{self.user} ({self.balance} credits)"
+        return f"{self.organization} ({self.balance} credits)"
 
 
 class CreditTransaction(models.Model):
@@ -118,13 +116,12 @@ class CreditTransaction(models.Model):
         null=True,
         blank=True,
     )
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
+    organization = tenant_org_fk(
         related_name="credit_transactions",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
     )
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
     amount = models.IntegerField()
     transaction_type = models.CharField(max_length=20, choices=TransactionType.choices)
     stripe_event_id = models.CharField(max_length=255, blank=True, db_index=True)
@@ -167,12 +164,8 @@ class Subscription(models.Model):
 
     CURRENT_STATUSES = CURRENT_SUBSCRIPTION_STATUSES
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
+    organization = tenant_org_fk(
         related_name="subscriptions",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -207,7 +200,8 @@ class Subscription(models.Model):
     current_period_start = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
 
-    objects = SubscriptionQuerySet.as_manager()
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_billing"
@@ -225,8 +219,7 @@ class Subscription(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["organization"],
-                condition=current_subscription_status_q()
-                & models.Q(organization__isnull=False),
+                condition=current_subscription_status_q(),
                 name="quickscale_billing_unique_current_subscription_per_organization",
             ),
         ]
@@ -251,7 +244,7 @@ class Subscription(models.Model):
         return current_subscription_status_q(field_name=field_name)
 
     def __str__(self) -> str:
-        return f"{self.user} / {self.plan.slug} ({self.status})"
+        return f"{self.organization} / {self.plan.slug} ({self.status})"
 
 
 class WebhookEvent(models.Model):

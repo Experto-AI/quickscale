@@ -130,7 +130,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [x] T1.7 — Forms adopt contract *(wt-track2)*
 - [x] T1.8 — Listings adopt contract *(wt-track2)*
 - [x] T1.9 — Social adopt contract *(wt-track3)*
-- [ ] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
+- [x] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
 
 **Phase 3 — RLS backstop** *(parallel; each after its Phase-2 task + T1.4)*
 - [ ] T1.11 — CRM RLS policies *(wt-track1 · plan-review mandatory)*
@@ -216,22 +216,31 @@ Implementation completed 2026-06-24.
 
 ---
 
-#### - [ ] T1.10 — Billing: org-only subject
+#### - [x] T1.10 — Billing: org-only subject
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-**Plan-review mandatory** (financial).
+**Plan-review mandatory** (financial). Implemented 2026-06-25.
 
 - **TRACK:** `wt-track3` (branch: `wt-track3`) — after T1.9
 - **OBJECTIVE:** Make org the sole billing subject — NOT NULL/PROTECT org FK — and delete the user-subject duality and sync convention.
 - **SCOPE:** `billing/models.py:121` `CreditTransaction.organization`: `SET_NULL`→`PROTECT`, `null=True`→NOT NULL; `billing/models.py:170` `Subscription.organization`: same; `billing/models.py:66/73` `Customer` collapse to org-keyed (user retained as actor/provenance only); retain `quickscale_billing_unique_current_subscription_per_organization`; **delete `_sync_subscription_authority()`** and all callsites; update billing services/views/serializers; squash migration (D5).
 - **ACCEPTANCE CRITERIA:** every billing row org-owned NOT NULL; one active subscription per org enforced; no user-subject code path; org delete blocked by PROTECT (purge via T1.17); billing tests green.
-- **VALIDATION PATH:** `make MODULE=billing test -- --modules`.
+- **VALIDATION PATH:** `make MODULE=billing test -- --modules` — 176 passed.
 - **DEPENDS:** T1.1–T1.3. **DECISIONS:** D3.
 - **CR-T110-004 (resolved 2026-06-24):** Adjacent contract surfaces updated for flat-route billing contract:
   - `quickscale_core/.../404.html.j2` — removed SaaS org-scoped billing route guidance
   - `quickscale_core/tests/test_error_pages.py` — updated billing route assertions to flat-only
   - `quickscale_modules/billing/README.md` — removed org-scoped route docs, canonical/flat shim language
   - `docs/technical/organizations.md` — removed org-scoped billing routes from URL structure, added T1.10 flat-route note
+- **IMPLEMENTATION NOTES:**
+  - Models: CreditBalance, CreditTransaction, Subscription org FKs changed to `PROTECT`/NOT NULL. CreditBalance collapsed to org-keyed (user retained as nullable provenance). All three models use `TenantManager` from `orgs.managers` with `all_objects` for operator bypass.
+  - Services: `_sync_subscription_authority()` deleted; all callsites replaced with inline field updates. Service functions now require `organization=` — user-subject duality removed. Internal lookups use `all_objects` for cross-org webhook access.
+  - Views: Simplified org resolution via `_resolve_request_organization()` using `request.org` from middleware. Removed all `_resolve_authenticated_billing_organization`, `_resolve_compatibility_organization_for_user`, org-scoped route helpers, and SaaS mode sniffing. User-subject fallback paths eliminated from CreditBalance, CreditTransaction, and Subscription views.
+  - URLs: Deleted all 16 `/orgs/<slug:org_slug>/...` URL pairs. Flat routes only.
+  - Admin: Added `get_queryset` overrides using `all_objects` for operator visibility.
+  - Migrations squashed to single `0001_initial.py` with NOT NULL/PROTECT contract.
+  - Removed `get_or_create_for_user` → replaced with `get_or_create_for_org`.
+  - Coverage: 176 tests passing; 88.7% (below 90% threshold due to new code paths).
 
 ---
 
@@ -403,7 +412,7 @@ Single-PR items that do not change the design:
 | M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
 | M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
 | M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
-| M16 | 1 | T1.5, T1.6 (handoff), T1.7, T1.8, T1.9 | Phase 2 partial. CRM (T1.5), Blog (T1.6 handoff — blockers remain), Forms (T1.7), Listings (T1.8), and Social (T1.9) contract adoption merged to v87. T1.6 not yet fully closed — see T1.6 section. |
+| M16 | 1 | T1.5, T1.6 (handoff), T1.7, T1.8, T1.9, T1.10 | Phase 2 partial. CRM (T1.5, wt-track1), Blog (T1.6 handoff, wt-track1), Forms (T1.7, wt-track2), Listings (T1.8, wt-track2), Social (T1.9, wt-track3), and Billing (T1.10, wt-track3) contract adoption merged to v87. T1.6 not yet fully closed — one blocking finding (CR-T16-001) remains; see T1.6 section. |
 
 ## References
 

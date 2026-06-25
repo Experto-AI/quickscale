@@ -32,6 +32,10 @@ from quickscale_modules_billing.services import (
 )
 
 
+def _organization_reference(organization: Any) -> str:
+    return f"{organization._meta.label_lower}:{organization.pk}"
+
+
 def _create_one_time_plan(
     *,
     slug: str = "credits-pack",
@@ -194,7 +198,9 @@ class FakePurchaseStripeClient:
 
 
 @pytest.mark.django_db
-def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(user) -> None:
+def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(
+    user, organization, org_context
+) -> None:
     plan = _create_one_time_plan()
     fake_client = FakePurchaseStripeClient(
         prices={
@@ -212,12 +218,13 @@ def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(user) 
         plan,
         "https://app.example.com/billing/purchase/success",
         "https://app.example.com/billing/purchase/cancel",
+        organization=organization,
         stripe_client=fake_client,
     )
 
     assert checkout_url == "https://checkout.stripe.test/session/123"
     assert fake_client.retrieved_price_ids == [plan.stripe_price_id]
-    assert fake_client.searched_references == [_user_reference(user)]
+    assert fake_client.searched_references == [_organization_reference(organization)]
     assert fake_client.created_customers[0]["email"] == ""
     assert fake_client.created_customers[0]["name"] == ""
     assert fake_client.created_checkout_payloads == [
@@ -227,6 +234,9 @@ def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(user) 
             "success_url": "https://app.example.com/billing/purchase/success",
             "cancel_url": "https://app.example.com/billing/purchase/cancel",
             "session_metadata": {
+                "quickscale_org_reference": _organization_reference(organization),
+                "quickscale_org_model": organization._meta.label_lower,
+                "quickscale_org_pk": str(organization.pk),
                 "quickscale_user_reference": _user_reference(user),
                 "quickscale_user_model": user._meta.label_lower,
                 "quickscale_user_pk": str(user.pk),
@@ -236,6 +246,9 @@ def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(user) 
                 "stripe_price_id": plan.stripe_price_id,
             },
             "payment_intent_metadata": {
+                "quickscale_org_reference": _organization_reference(organization),
+                "quickscale_org_model": organization._meta.label_lower,
+                "quickscale_org_pk": str(organization.pk),
                 "quickscale_user_reference": _user_reference(user),
                 "quickscale_user_model": user._meta.label_lower,
                 "quickscale_user_pk": str(user.pk),
@@ -250,7 +263,9 @@ def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(user) 
 
 
 @pytest.mark.django_db
-def test_create_checkout_session_rejects_non_one_time_plan(user) -> None:
+def test_create_checkout_session_rejects_non_one_time_plan(
+    user, organization, org_context
+) -> None:
     monthly_plan = _create_monthly_plan()
 
     with pytest.raises(BillingValidationError, match="one-time purchases"):
@@ -259,12 +274,15 @@ def test_create_checkout_session_rejects_non_one_time_plan(user) -> None:
             monthly_plan,
             "https://app.example.com/billing/purchase/success",
             "https://app.example.com/billing/purchase/cancel",
+            organization=organization,
             stripe_client=FakePurchaseStripeClient(),
         )
 
 
 @pytest.mark.django_db
-def test_create_checkout_session_rejects_mismatched_stripe_price(user) -> None:
+def test_create_checkout_session_rejects_mismatched_stripe_price(
+    user, organization, org_context
+) -> None:
     plan = _create_one_time_plan(price_cents=4900)
     fake_client = FakePurchaseStripeClient(
         prices={
@@ -283,6 +301,7 @@ def test_create_checkout_session_rejects_mismatched_stripe_price(user) -> None:
             plan,
             "https://app.example.com/billing/purchase/success",
             "https://app.example.com/billing/purchase/cancel",
+            organization=organization,
             stripe_client=fake_client,
         )
 
@@ -343,8 +362,12 @@ def test_create_checkout_session_serializer_rejects_inactive_plan() -> None:
 
 
 @pytest.mark.django_db
-def test_credit_balance_serializer_serializes_balance_snapshot(user) -> None:
-    balance = CreditBalance.objects.create(user=user, balance=325)
+def test_credit_balance_serializer_serializes_balance_snapshot(
+    user, organization, org_context
+) -> None:
+    balance = CreditBalance.all_objects.create(
+        organization=organization, user=user, balance=325
+    )
     serializer = CreditBalanceSerializer(balance)
 
     assert serializer.data["balance"] == 325
@@ -352,10 +375,13 @@ def test_credit_balance_serializer_serializes_balance_snapshot(user) -> None:
 
 
 @pytest.mark.django_db
-def test_credit_transaction_serializer_serializes_purchase_transaction(user) -> None:
+def test_credit_transaction_serializer_serializes_purchase_transaction(
+    user, organization, org_context
+) -> None:
     transaction_row = credit_user(
         user,
         amount=125,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PURCHASE,
         description="Credits purchase",
         stripe_event_id="evt_purchase_serializer",
@@ -377,6 +403,8 @@ def test_credit_transaction_serializer_serializes_purchase_transaction(user) -> 
 @pytest.mark.django_db
 def test_handle_stripe_event_credits_purchase_from_checkout_session_metadata(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_one_time_plan(
@@ -389,6 +417,7 @@ def test_handle_stripe_event_credits_purchase_from_checkout_session_metadata(
             customer_id="cus_purchase_123",
             payment_intent_id="pi_purchase_123",
             metadata={
+                "quickscale_org_reference": _organization_reference(organization),
                 "quickscale_user_reference": _user_reference(user),
                 "quickscale_plan_slug": plan.slug,
                 "quickscale_plan_credits": str(plan.credits_per_period),
@@ -405,12 +434,15 @@ def test_handle_stripe_event_credits_purchase_from_checkout_session_metadata(
         stripe_client=fake_client,
     )
 
-    transaction_row = CreditTransaction.objects.get(user=user)
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
     webhook_event = WebhookEvent.objects.get(stripe_event_id="evt_checkout_purchase")
 
     assert result.duplicate is False
     assert result.status == "processed"
-    assert CreditBalance.objects.get(user=user).balance == plan.credits_per_period
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
     assert (
         transaction_row.transaction_type == CreditTransaction.TransactionType.PURCHASE
     )
@@ -428,6 +460,8 @@ def test_handle_stripe_event_credits_purchase_from_checkout_session_metadata(
 @pytest.mark.django_db
 def test_handle_stripe_event_suppresses_second_checkout_session_business_object(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_one_time_plan(slug="dedupe-plan", price_id="price_dedupe_purchase")
@@ -438,6 +472,7 @@ def test_handle_stripe_event_suppresses_second_checkout_session_business_object(
             customer_id="cus_purchase_duplicate",
             payment_intent_id="pi_purchase_duplicate",
             metadata={
+                "quickscale_org_reference": _organization_reference(organization),
                 "quickscale_user_reference": _user_reference(user),
                 "quickscale_plan_slug": plan.slug,
                 "quickscale_plan_credits": str(plan.credits_per_period),
@@ -459,6 +494,7 @@ def test_handle_stripe_event_suppresses_second_checkout_session_business_object(
         customer_id="cus_purchase_duplicate",
         payment_intent_id="pi_purchase_duplicate",
         metadata={
+            "quickscale_org_reference": _organization_reference(organization),
             "quickscale_user_reference": _user_reference(user),
             "quickscale_plan_slug": plan.slug,
             "quickscale_plan_credits": str(plan.credits_per_period),
@@ -475,14 +511,19 @@ def test_handle_stripe_event_suppresses_second_checkout_session_business_object(
     assert first_result.status == "processed"
     assert second_result.duplicate is False
     assert second_result.status == "processed"
-    assert CreditTransaction.objects.filter(user=user).count() == 1
-    assert CreditBalance.objects.get(user=user).balance == plan.credits_per_period
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
     assert WebhookEvent.objects.count() == 2
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_uses_payment_intent_metadata_fallback_for_purchase(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_one_time_plan(
@@ -500,6 +541,7 @@ def test_handle_stripe_event_uses_payment_intent_metadata_fallback_for_purchase(
             "pi_purchase_fallback": {
                 "id": "pi_purchase_fallback",
                 "metadata": {
+                    "quickscale_org_reference": _organization_reference(organization),
                     "quickscale_user_reference": _user_reference(user),
                     "quickscale_plan_slug": plan.slug,
                     "quickscale_plan_credits": str(plan.credits_per_period),
@@ -518,13 +560,18 @@ def test_handle_stripe_event_uses_payment_intent_metadata_fallback_for_purchase(
     )
 
     assert result.status == "processed"
-    assert CreditBalance.objects.get(user=user).balance == plan.credits_per_period
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
     assert fake_client.retrieved_payment_intent_ids == ["pi_purchase_fallback"]
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_credits_purchase_from_purchase_time_metadata_when_plan_drifts(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_one_time_plan(
@@ -540,6 +587,7 @@ def test_handle_stripe_event_credits_purchase_from_purchase_time_metadata_when_p
             customer_id="cus_purchase_time",
             payment_intent_id="pi_purchase_time",
             metadata={
+                "quickscale_org_reference": _organization_reference(organization),
                 "quickscale_user_reference": _user_reference(user),
                 "quickscale_plan_slug": plan.slug,
                 "quickscale_plan_credits": str(plan.credits_per_period),
@@ -561,15 +609,18 @@ def test_handle_stripe_event_credits_purchase_from_purchase_time_metadata_when_p
         stripe_client=fake_client,
     )
 
-    transaction_row = CreditTransaction.objects.get(user=user)
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
     webhook_event = WebhookEvent.objects.get(
         stripe_event_id="evt_checkout_purchase_time"
     )
 
     assert result.duplicate is False
     assert result.status == "processed"
-    assert CreditTransaction.objects.filter(user=user).count() == 1
-    assert CreditBalance.objects.get(user=user).balance == stored_credits
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == stored_credits
+    )
     assert transaction_row.amount == stored_credits
     assert transaction_row.stripe_reference_data == {
         "checkout_session_id": "cs_purchase_time",
@@ -584,6 +635,7 @@ def test_handle_stripe_event_credits_purchase_from_purchase_time_metadata_when_p
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_unpaid_checkout_session(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_one_time_plan(slug="unpaid-plan", price_id="price_purchase_unpaid")

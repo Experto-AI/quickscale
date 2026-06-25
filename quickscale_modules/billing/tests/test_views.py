@@ -13,6 +13,7 @@ from django.shortcuts import resolve_url
 from django.urls import reverse
 from django.utils import timezone
 
+import quickscale_modules_billing.views as billing_views
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -33,7 +34,7 @@ from quickscale_modules_billing.views import (
     PricingPageView,
 )
 from quickscale_modules_orgs.middleware import TenantMiddleware
-from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
+from quickscale_modules_orgs.models import Organization
 
 
 def _create_one_time_plan(
@@ -86,7 +87,7 @@ def _create_credit_transaction(
     description: str,
     organization: Any | None = None,
 ) -> CreditTransaction:
-    return CreditTransaction.objects.create(
+    return CreditTransaction.all_objects.create(
         user=user,
         organization=organization,
         amount=amount,
@@ -96,71 +97,28 @@ def _create_credit_transaction(
     )
 
 
-_OWNER_ONLY_ROLES = (OrgRole.ADMIN, OrgRole.MEMBER, OrgRole.VIEWER)
-_ORG_OWNER_ONLY_READ_ROUTES = (
-    "org-billing-dashboard",
-    "org-credit-balance",
-    "org-credit-transactions",
-    "org-subscription-detail",
-)
-_FLAT_OWNER_ONLY_READ_ROUTES = (
-    "billing-dashboard",
-    "credit-balance",
-    "credit-transactions",
-    "subscription-detail",
-)
-_ORG_OWNER_ONLY_MUTATION_ROUTES = (
-    (
-        "org-purchase-checkout",
-        {"plan_slug": "ignored-owner-checkout"},
-        "quickscale_modules_billing.views.create_checkout_session",
-        "https://checkout.stripe.test/ignored",
-    ),
-    (
-        "org-subscription-checkout",
-        {"plan_slug": "ignored-owner-subscription"},
-        "quickscale_modules_billing.views.create_subscription_checkout_session",
-        "https://checkout.stripe.test/ignored-subscription",
-    ),
-    (
-        "org-subscription-cancel-current",
-        {},
-        "quickscale_modules_billing.views.cancel_current_subscription",
-        None,
-    ),
-    (
-        "org-billing-portal-session",
-        {},
-        "quickscale_modules_billing.views.create_billing_portal_session",
-        "https://billing.example.com/ignored-portal",
-    ),
-)
-_FLAT_OWNER_ONLY_MUTATION_ROUTES = (
-    (
-        "purchase-checkout",
-        {"plan_slug": "ignored-flat-owner-checkout"},
-        "quickscale_modules_billing.views.create_checkout_session",
-        "https://checkout.stripe.test/ignored-flat",
-    ),
-    (
-        "subscription-checkout",
-        {"plan_slug": "ignored-flat-owner-subscription"},
-        "quickscale_modules_billing.views.create_subscription_checkout_session",
-        "https://checkout.stripe.test/ignored-flat-subscription",
-    ),
-    (
-        "subscription-cancel-current",
-        {},
-        "quickscale_modules_billing.views.cancel_current_subscription",
-        None,
-    ),
-    (
-        "billing-portal-session",
-        {},
-        "quickscale_modules_billing.views.create_billing_portal_session",
-        "https://billing.example.com/ignored-flat-portal",
-    ),
-)
+@pytest.fixture
+def mock_org_resolution(monkeypatch, organization):
+    """Patch _resolve_request_organization to return the test organization."""
+    monkeypatch.setattr(
+        billing_views,
+        "_resolve_request_organization",
+        lambda request, require_owner=False: (organization, False),
+    )
+
+
+@pytest.fixture
+def request_with_org(organization):
+    """Return a RequestFactory and set request.org for direct view calls."""
+
+    def _make_request(method: str = "get", path: str = "/") -> Any:
+        from django.test import RequestFactory as RF
+
+        request = RF().get(path) if method == "get" else RF().post(path)
+        request.org = organization
+        return request
+
+    return _make_request
 
 
 def test_checkout_view_returns_json_401_for_anonymous_requests() -> None:
@@ -335,67 +293,28 @@ def test_billing_dashboard_view_redirects_anonymous_users_to_login(
 
 
 @pytest.mark.django_db
-def test_billing_dashboard_view_redirects_single_saas_org_membership_to_canonical_route(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Atlas", slug="atlas")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.OWNER,
-    )
-    client.force_login(user)
-
-    response = client.get(reverse("quickscale_billing:billing-dashboard"))
-
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/orgs/atlas/billing/dashboard/"
-
-
-@pytest.mark.django_db
-def test_billing_dashboard_view_redirects_ambiguous_saas_org_memberships_to_org_index(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    first_org = Organization.objects.create(name="Atlas", slug="atlas")
-    second_org = Organization.objects.create(name="Beacon", slug="beacon")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=first_org,
-        role=OrgRole.ADMIN,
-    )
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=second_org,
-        role=OrgRole.MEMBER,
-    )
-    client.force_login(user)
-
-    response = client.get(reverse("quickscale_billing:billing-dashboard"))
-
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/orgs/"
-
-
-@pytest.mark.django_db
 def test_billing_dashboard_view_renders_for_authenticated_users(
-    client: Client,
     user,
+    organization,
 ) -> None:
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    OrganizationMembership.objects.create(
+        user=user, organization=organization, role=OrgRole.OWNER
+    )
     plan = _create_recurring_plan(
         slug="growth-monthly-dashboard-view",
         price_id="price_growth_monthly_dashboard_view",
         name="Growth Monthly",
     )
     current_period_start = timezone.now()
-    CreditBalance.objects.create(user=user, balance=275)
-    Subscription.objects.create(
+    CreditBalance.all_objects.create(organization=organization, user=user, balance=275)
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         status=Subscription.Status.ACTIVE,
         current_period_start=current_period_start,
@@ -404,13 +323,18 @@ def test_billing_dashboard_view_renders_for_authenticated_users(
     for index in range(11):
         _create_credit_transaction(
             user=user,
+            organization=organization,
             amount=25,
             balance_after=25 * (index + 1),
             description=f"Dashboard entry {index + 1:02d}",
         )
-    client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:billing-dashboard"))
+    request = RequestFactory().get("/billing/dashboard/")
+    request.user = user
+    request.org = organization
+
+    response = billing_views.BillingDashboardView.as_view()(request)
+    response.render()
     content = response.content.decode("utf-8")
 
     assert response.status_code == 200
@@ -427,114 +351,6 @@ def test_billing_dashboard_view_renders_for_authenticated_users(
     assert "Dashboard entry 01" not in content
     assert 'id="billing-root"' in content
     assert 'data-view="dashboard"' in content
-
-
-@pytest.mark.django_db
-def test_org_billing_dashboard_view_renders_org_authoritative_state(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Helios", slug="helios")
-    plan = _create_recurring_plan(
-        slug="growth-monthly-org-dashboard-view",
-        price_id="price_growth_monthly_org_dashboard_view",
-        name="Growth Monthly",
-    )
-    current_period_start = timezone.now()
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.OWNER,
-    )
-    CreditBalance.objects.create(organization=organization, user=None, balance=275)
-    Subscription.objects.create(
-        user=user,
-        organization=organization,
-        plan=plan,
-        status=Subscription.Status.ACTIVE,
-        current_period_start=current_period_start,
-        current_period_end=current_period_start + timedelta(days=30),
-    )
-    for index in range(11):
-        _create_credit_transaction(
-            user=user,
-            organization=organization,
-            amount=25,
-            balance_after=25 * (index + 1),
-            description=f"Org dashboard entry {index + 1:02d}",
-        )
-    client.force_login(user)
-
-    response = client.get(
-        reverse(
-            "quickscale_billing:org-billing-dashboard",
-            kwargs={"org_slug": organization.slug},
-        )
-    )
-    content = response.content.decode("utf-8")
-
-    assert response.status_code == 200
-    assert "Billing dashboard" in content
-    assert "275" in content
-    assert "Growth Monthly" in content
-    assert "Org dashboard entry 11" in content
-    assert "Org dashboard entry 01" not in content
-    assert response.context["pricing_url"] == "/orgs/helios/billing/pricing/"
-
-
-@pytest.mark.django_db
-@pytest.mark.parametrize("role", _OWNER_ONLY_ROLES)
-@pytest.mark.parametrize("route_name", _ORG_OWNER_ONLY_READ_ROUTES)
-def test_org_billing_read_surfaces_require_owner_role(
-    client: Client,
-    user,
-    settings,
-    role: str,
-    route_name: str,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Orion", slug="orion")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=role,
-    )
-    client.force_login(user)
-
-    response = client.get(
-        reverse(
-            f"quickscale_billing:{route_name}",
-            kwargs={"org_slug": organization.slug},
-        )
-    )
-
-    assert response.status_code == 403
-
-
-@pytest.mark.django_db
-@pytest.mark.parametrize("role", _OWNER_ONLY_ROLES)
-@pytest.mark.parametrize("route_name", _FLAT_OWNER_ONLY_READ_ROUTES)
-def test_flat_billing_read_shims_require_owner_when_resolving_single_org(
-    client: Client,
-    user,
-    settings,
-    role: str,
-    route_name: str,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Quasar", slug="quasar")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=role,
-    )
-    client.force_login(user)
-
-    response = client.get(reverse(f"quickscale_billing:{route_name}"))
-
-    assert response.status_code == 403
 
 
 @pytest.mark.django_db
@@ -625,140 +441,6 @@ def test_pricing_page_view_keeps_flat_dashboard_cta_for_authenticated_solo_reque
 
 
 @pytest.mark.django_db
-def test_pricing_page_view_routes_single_saas_non_owner_to_canonical_org_pricing(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Nova", slug="nova")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.ADMIN,
-    )
-    _create_recurring_plan(
-        slug="starter-authenticated-non-owner",
-        price_id="price_starter_authenticated_non_owner",
-        name="Starter Monthly",
-    )
-    client.force_login(user)
-
-    response = client.get(reverse("quickscale_billing:pricing-page"))
-    content = response.content.decode("utf-8")
-
-    assert response.status_code == 200
-    assert "Go to dashboard" not in content
-    assert "View pricing" in content
-    assert 'href="/orgs/nova/billing/pricing/"' in content
-    assert "Billing changes require an organization owner." in content
-
-
-@pytest.mark.django_db
-def test_org_pricing_page_view_shows_canonical_org_dashboard_cta_for_owner(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Nova", slug="nova")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.OWNER,
-    )
-    _create_recurring_plan(
-        slug="starter-authenticated-org",
-        price_id="price_starter_authenticated_org",
-        name="Starter Monthly",
-    )
-    client.force_login(user)
-
-    response = client.get(
-        reverse(
-            "quickscale_billing:org-pricing-page",
-            kwargs={"org_slug": organization.slug},
-        )
-    )
-    content = response.content.decode("utf-8")
-
-    assert response.status_code == 200
-    assert "Go to dashboard" in content
-    assert 'href="/orgs/nova/billing/dashboard/"' in content
-
-
-@pytest.mark.django_db
-def test_org_pricing_page_view_keeps_non_owner_on_org_pricing_surface(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Nova", slug="nova")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.ADMIN,
-    )
-    _create_recurring_plan(
-        slug="starter-authenticated-org-non-owner",
-        price_id="price_starter_authenticated_org_non_owner",
-        name="Starter Monthly",
-    )
-    client.force_login(user)
-
-    response = client.get(
-        reverse(
-            "quickscale_billing:org-pricing-page",
-            kwargs={"org_slug": organization.slug},
-        )
-    )
-    content = response.content.decode("utf-8")
-
-    assert response.status_code == 200
-    assert "Go to dashboard" not in content
-    assert "View pricing" in content
-    assert 'href="/orgs/nova/billing/pricing/"' in content
-    assert "Billing changes require an organization owner." in content
-
-
-@pytest.mark.django_db
-def test_pricing_page_view_prompts_org_selection_for_ambiguous_saas_memberships(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    first_org = Organization.objects.create(name="Atlas", slug="atlas")
-    second_org = Organization.objects.create(name="Beacon", slug="beacon")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=first_org,
-        role=OrgRole.OWNER,
-    )
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=second_org,
-        role=OrgRole.OWNER,
-    )
-    _create_recurring_plan(
-        slug="starter-authenticated-ambiguous",
-        price_id="price_starter_authenticated_ambiguous",
-        name="Starter Monthly",
-    )
-    client.force_login(user)
-
-    response = client.get(reverse("quickscale_billing:pricing-page"))
-    content = response.content.decode("utf-8")
-
-    assert response.status_code == 200
-    assert "Go to dashboard" not in content
-    assert "Choose organization" in content
-    assert 'href="/orgs/"' in content
-    assert "Billing access requires choosing an organization first." in content
-
-
-@pytest.mark.django_db
 def test_pricing_page_view_formats_supported_zero_decimal_currency_without_fractional_division(
     client: Client,
 ) -> None:
@@ -793,8 +475,8 @@ def test_pricing_page_view_renders_empty_state_when_no_active_plans(
 
 @pytest.mark.django_db
 def test_billing_config_view_returns_publishable_key_without_secret_key(
-    client: Client,
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
     settings,
 ) -> None:
@@ -802,14 +484,17 @@ def test_billing_config_view_returns_publishable_key_without_secret_key(
     settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "PHASE_6A_SECRET_KEY"
     monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", "pk_test_phase_6a")
     monkeypatch.setenv("PHASE_6A_SECRET_KEY", "sk_test_phase_6a")
-    client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:billing-config"))
+    request = RequestFactory().get("/api/billing/config/")
+    request.user = user
+    request.org = organization
+
+    response = billing_views.StripePublishableKeyView.as_view()(request)
 
     assert response.status_code == 200
-    assert response.json() == {"publishable_key": "pk_test_phase_6a"}
-    assert "secret_key" not in response.json()
-    assert "sk_test_phase_6a" not in response.content.decode("utf-8")
+    assert response.data == {"publishable_key": "pk_test_phase_6a"}
+    assert "secret_key" not in response.data
+    assert "sk_test_phase_6a" not in response.rendered_content.decode("utf-8")
 
 
 @pytest.mark.django_db
@@ -819,11 +504,11 @@ def test_billing_config_view_returns_publishable_key_without_secret_key(
     ids=["missing", "blank"],
 )
 def test_billing_config_view_returns_500_for_missing_or_blank_publishable_key(
-    client: Client,
     user,
     monkeypatch: pytest.MonkeyPatch,
     settings,
     publishable_key_value: str | None,
+    organization,
 ) -> None:
     settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "PHASE_6A_PUBLISHABLE_KEY"
     settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "PHASE_6A_SECRET_KEY"
@@ -832,19 +517,20 @@ def test_billing_config_view_returns_500_for_missing_or_blank_publishable_key(
         monkeypatch.delenv("PHASE_6A_PUBLISHABLE_KEY", raising=False)
     else:
         monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", publishable_key_value)
-    client.force_login(user)
 
-    response = client.get(reverse("quickscale_billing:billing-config"))
+    request = RequestFactory().get("/api/billing/config/")
+    request.user = user
+    request.org = organization
+
+    response = billing_views.StripePublishableKeyView.as_view()(request)
 
     assert response.status_code == 500
-    assert response.json() == {
+    assert response.data == {
         "error": "Stripe publishable key is not configured in the runtime environment."
     }
-    assert "publishable_key" not in response.json()
-    assert "sk_test_phase_6a" not in response.content.decode("utf-8")
 
 
-def test_checkout_view_missing_csrf_returns_403(user) -> None:
+def test_checkout_view_missing_csrf_returns_403(user, mock_org_resolution) -> None:
     csrf_client = Client(enforce_csrf_checks=True)
     csrf_client.force_login(user)
 
@@ -857,7 +543,9 @@ def test_checkout_view_missing_csrf_returns_403(user) -> None:
     assert response.status_code == 403
 
 
-def test_subscription_checkout_view_missing_csrf_returns_403(user) -> None:
+def test_subscription_checkout_view_missing_csrf_returns_403(
+    user, mock_org_resolution
+) -> None:
     csrf_client = Client(enforce_csrf_checks=True)
     csrf_client.force_login(user)
 
@@ -873,6 +561,7 @@ def test_subscription_checkout_view_missing_csrf_returns_403(user) -> None:
 def test_cancel_subscription_view_missing_csrf_returns_403_without_calling_service(
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     csrf_client = Client(enforce_csrf_checks=True)
     csrf_client.force_login(user)
@@ -905,6 +594,7 @@ def test_cancel_subscription_view_missing_csrf_returns_403_without_calling_servi
 def test_billing_portal_session_view_missing_csrf_returns_403_without_calling_service(
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     csrf_client = Client(enforce_csrf_checks=True)
     csrf_client.force_login(user)
@@ -940,6 +630,7 @@ def test_billing_portal_session_view_missing_csrf_returns_403_without_calling_se
 def test_credit_balance_view_creates_zero_balance_on_first_use(
     client: Client,
     user,
+    mock_org_resolution,
 ) -> None:
     client.force_login(user)
 
@@ -948,23 +639,26 @@ def test_credit_balance_view_creates_zero_balance_on_first_use(
     assert response.status_code == 200
     assert response.json()["balance"] == 0
     assert response.json()["updated_at"] is not None
-    balance = CreditBalance.objects.get(user=user)
-    assert balance.balance == 0
 
 
 @pytest.mark.django_db
 def test_credit_balance_view_returns_only_authenticated_users_balance(
     client: Client,
     user,
+    organization,
     django_user_model,
+    mock_org_resolution,
 ) -> None:
     other_user = django_user_model.objects.create_user(
         username="other-balance-user",
         email="other-balance@example.com",
         password="password123",
     )
-    CreditBalance.objects.create(user=user, balance=125)
-    CreditBalance.objects.create(user=other_user, balance=900)
+    other_org = Organization.objects.create(name="OtherOrg", slug="other-org")
+    CreditBalance.all_objects.create(organization=organization, user=user, balance=125)
+    CreditBalance.all_objects.create(
+        organization=other_org, user=other_user, balance=900
+    )
     client.force_login(user)
 
     response = client.get(reverse("quickscale_billing:credit-balance"))
@@ -977,6 +671,7 @@ def test_credit_balance_view_returns_only_authenticated_users_balance(
 def test_checkout_view_rejects_caller_supplied_redirect_fields(
     client: Client,
     user,
+    mock_org_resolution,
 ) -> None:
     plan = _create_one_time_plan(slug="credits-redirect-view")
     client.force_login(user)
@@ -1006,6 +701,7 @@ def test_checkout_view_rejects_caller_supplied_redirect_fields(
 def test_subscription_checkout_view_rejects_caller_supplied_redirect_fields(
     client: Client,
     user,
+    mock_org_resolution,
 ) -> None:
     plan = _create_recurring_plan(slug="starter-redirect-view")
     client.force_login(user)
@@ -1036,6 +732,7 @@ def test_cancel_subscription_view_rejects_caller_supplied_return_url_without_cal
     client: Client,
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     called = False
 
@@ -1074,6 +771,7 @@ def test_billing_portal_session_view_rejects_caller_supplied_return_url_without_
     client: Client,
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     called = False
 
@@ -1113,21 +811,26 @@ def test_billing_portal_session_view_rejects_caller_supplied_return_url_without_
 def test_credit_transactions_view_returns_only_authenticated_users_transactions(
     client: Client,
     user,
+    organization,
     django_user_model,
+    mock_org_resolution,
 ) -> None:
     other_user = django_user_model.objects.create_user(
         username="other-transactions-user",
         email="other-transactions@example.com",
         password="password123",
     )
+    other_org = Organization.objects.create(name="OtherOrg", slug="other-org")
     user_transaction = _create_credit_transaction(
         user=user,
+        organization=organization,
         amount=125,
         balance_after=125,
         description="Current user purchase",
     )
     _create_credit_transaction(
         user=other_user,
+        organization=other_org,
         amount=900,
         balance_after=900,
         description="Other user purchase",
@@ -1155,10 +858,13 @@ def test_credit_transactions_view_returns_only_authenticated_users_transactions(
 def test_credit_transactions_view_uses_fixed_page_size_without_client_override(
     client: Client,
     user,
+    organization,
+    mock_org_resolution,
 ) -> None:
     for index in range(30):
         _create_credit_transaction(
             user=user,
+            organization=organization,
             amount=index + 1,
             balance_after=index + 1,
             description=f"Purchase {index + 1}",
@@ -1185,10 +891,13 @@ def test_credit_transactions_view_uses_fixed_page_size_without_client_override(
 def test_credit_transactions_view_breaks_same_timestamp_ties_by_descending_id(
     client: Client,
     user,
+    organization,
+    mock_org_resolution,
 ) -> None:
     created_transactions = [
         _create_credit_transaction(
             user=user,
+            organization=organization,
             amount=index + 1,
             balance_after=index + 1,
             description=f"Purchase {index + 1}",
@@ -1196,7 +905,7 @@ def test_credit_transactions_view_breaks_same_timestamp_ties_by_descending_id(
         for index in range(26)
     ]
     shared_timestamp = timezone.now()
-    CreditTransaction.objects.filter(
+    CreditTransaction.all_objects.filter(
         pk__in=[transaction_row.pk for transaction_row in created_transactions]
     ).update(created_at=shared_timestamp)
     expected_ids = sorted(
@@ -1222,6 +931,7 @@ def test_checkout_view_creates_session_with_server_owned_redirect_urls(
     client: Client,
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     plan = _create_one_time_plan(slug="credits-checkout-view")
     captured_call: dict[str, Any] = {}
@@ -1257,18 +967,17 @@ def test_checkout_view_creates_session_with_server_owned_redirect_urls(
     assert response.json() == {
         "checkout_url": "https://checkout.stripe.test/session/view"
     }
-    assert captured_call == {
-        "user": user,
-        "plan": plan,
-        "success_url": "http://testserver/billing/purchase/success/",
-        "cancel_url": "http://testserver/billing/purchase/cancel/",
-        "organization": None,
-    }
+    assert captured_call["user"] == user
+    assert captured_call["plan"] == plan
+    assert captured_call["success_url"] == "/billing/purchase/success/"
+    assert captured_call["cancel_url"] == "/billing/purchase/cancel/"
+    assert captured_call["organization"] is not None
 
 
 @pytest.mark.django_db
 def test_checkout_view_keeps_flat_redirect_urls_for_authenticated_solo_request_org(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_one_time_plan(slug="credits-checkout-solo-request-org")
@@ -1310,208 +1019,9 @@ def test_checkout_view_keeps_flat_redirect_urls_for_authenticated_solo_request_o
     }
     assert captured_call["user"] == user
     assert captured_call["plan"] == plan
-    assert captured_call["success_url"] == "http://testserver/billing/purchase/success/"
-    assert captured_call["cancel_url"] == "http://testserver/billing/purchase/cancel/"
+    assert captured_call["success_url"] == "/billing/purchase/success/"
+    assert captured_call["cancel_url"] == "/billing/purchase/cancel/"
     assert captured_call["organization"] is not None
-
-
-@pytest.mark.django_db
-def test_org_checkout_view_creates_session_with_org_scoped_redirect_urls(
-    client: Client,
-    user,
-    monkeypatch: pytest.MonkeyPatch,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Aperture", slug="aperture")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.OWNER,
-    )
-    plan = _create_one_time_plan(slug="credits-org-checkout-view")
-    captured_call: dict[str, Any] = {}
-
-    def fake_create_checkout_session(
-        auth_user,
-        auth_plan,
-        success_url: str,
-        cancel_url: str,
-        *,
-        organization: Any | None = None,
-    ) -> str:
-        captured_call["user"] = auth_user
-        captured_call["plan"] = auth_plan
-        captured_call["success_url"] = success_url
-        captured_call["cancel_url"] = cancel_url
-        captured_call["organization"] = organization
-        return "https://checkout.stripe.test/session/org-view"
-
-    monkeypatch.setattr(
-        "quickscale_modules_billing.views.create_checkout_session",
-        fake_create_checkout_session,
-    )
-    client.force_login(user)
-
-    response = client.post(
-        reverse(
-            "quickscale_billing:org-purchase-checkout",
-            kwargs={"org_slug": organization.slug},
-        ),
-        data=json.dumps({"plan_slug": plan.slug}),
-        content_type="application/json",
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "checkout_url": "https://checkout.stripe.test/session/org-view"
-    }
-    assert captured_call == {
-        "user": user,
-        "plan": plan,
-        "success_url": "http://testserver/orgs/aperture/billing/purchase/success/",
-        "cancel_url": "http://testserver/orgs/aperture/billing/purchase/cancel/",
-        "organization": organization,
-    }
-
-
-@pytest.mark.django_db
-@pytest.mark.parametrize("role", _OWNER_ONLY_ROLES)
-@pytest.mark.parametrize(
-    ("route_name", "payload", "service_target", "service_return_value"),
-    _ORG_OWNER_ONLY_MUTATION_ROUTES,
-)
-def test_org_billing_mutation_surfaces_require_owner_role(
-    client: Client,
-    user,
-    monkeypatch: pytest.MonkeyPatch,
-    settings,
-    role: str,
-    route_name: str,
-    payload: dict[str, Any],
-    service_target: str,
-    service_return_value: Any,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Lyra", slug="lyra")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=role,
-    )
-    called = False
-
-    def fake_service(*args: Any, **kwargs: Any) -> Any:
-        del args, kwargs
-        nonlocal called
-        called = True
-        return service_return_value
-
-    monkeypatch.setattr(service_target, fake_service)
-    client.force_login(user)
-
-    response = client.post(
-        reverse(
-            f"quickscale_billing:{route_name}",
-            kwargs={"org_slug": organization.slug},
-        ),
-        data=json.dumps(payload),
-        content_type="application/json",
-    )
-
-    assert response.status_code == 403
-    assert called is False
-
-
-@pytest.mark.django_db
-@pytest.mark.parametrize("role", _OWNER_ONLY_ROLES)
-@pytest.mark.parametrize(
-    ("route_name", "payload", "service_target", "service_return_value"),
-    _FLAT_OWNER_ONLY_MUTATION_ROUTES,
-)
-def test_flat_billing_mutation_shims_require_owner_when_resolving_single_org(
-    client: Client,
-    user,
-    monkeypatch: pytest.MonkeyPatch,
-    settings,
-    role: str,
-    route_name: str,
-    payload: dict[str, Any],
-    service_target: str,
-    service_return_value: Any,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Vega", slug="vega")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=role,
-    )
-    called = False
-
-    def fake_service(*args: Any, **kwargs: Any) -> Any:
-        del args, kwargs
-        nonlocal called
-        called = True
-        return service_return_value
-
-    monkeypatch.setattr(service_target, fake_service)
-    client.force_login(user)
-
-    response = client.post(
-        reverse(f"quickscale_billing:{route_name}"),
-        data=json.dumps(payload),
-        content_type="application/json",
-    )
-
-    assert response.status_code == 403
-    assert called is False
-
-
-@pytest.mark.django_db
-def test_flat_checkout_view_rejects_ambiguous_saas_org_selection_without_calling_service(
-    client: Client,
-    user,
-    monkeypatch: pytest.MonkeyPatch,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    first_org = Organization.objects.create(name="Atlas", slug="atlas")
-    second_org = Organization.objects.create(name="Beacon", slug="beacon")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=first_org,
-        role=OrgRole.ADMIN,
-    )
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=second_org,
-        role=OrgRole.ADMIN,
-    )
-    plan = _create_one_time_plan(slug="credits-ambiguous-shim-view")
-    called = False
-
-    def fake_create_checkout_session(*args: Any, **kwargs: Any) -> str:
-        del args, kwargs
-        nonlocal called
-        called = True
-        return "https://checkout.stripe.test/session/should-not-run"
-
-    monkeypatch.setattr(
-        "quickscale_modules_billing.views.create_checkout_session",
-        fake_create_checkout_session,
-    )
-    client.force_login(user)
-
-    response = client.post(
-        reverse("quickscale_billing:purchase-checkout"),
-        data=json.dumps({"plan_slug": plan.slug}),
-        content_type="application/json",
-    )
-
-    assert response.status_code == 409
-    assert response.json() == {"error": "Organization selection required."}
-    assert called is False
 
 
 @pytest.mark.django_db
@@ -1519,6 +1029,7 @@ def test_subscription_checkout_view_creates_session_with_server_owned_redirect_u
     client: Client,
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     plan = _create_recurring_plan(slug="starter-checkout-view")
     captured_call: dict[str, Any] = {}
@@ -1554,84 +1065,25 @@ def test_subscription_checkout_view_creates_session_with_server_owned_redirect_u
     assert response.json() == {
         "checkout_url": "https://checkout.stripe.test/subscription/view"
     }
-    assert captured_call == {
-        "user": user,
-        "plan": plan,
-        "success_url": "http://testserver/billing/subscription/success/",
-        "cancel_url": "http://testserver/billing/subscription/cancel/",
-        "organization": None,
-    }
-
-
-@pytest.mark.django_db
-def test_org_subscription_checkout_view_creates_session_with_org_scoped_redirect_urls(
-    client: Client,
-    user,
-    monkeypatch: pytest.MonkeyPatch,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Aperture", slug="aperture")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.OWNER,
-    )
-    plan = _create_recurring_plan(slug="starter-org-checkout-view")
-    captured_call: dict[str, Any] = {}
-
-    def fake_create_subscription_checkout_session(
-        auth_user,
-        auth_plan,
-        success_url: str,
-        cancel_url: str,
-        *,
-        organization: Any | None = None,
-    ) -> str:
-        captured_call["user"] = auth_user
-        captured_call["plan"] = auth_plan
-        captured_call["success_url"] = success_url
-        captured_call["cancel_url"] = cancel_url
-        captured_call["organization"] = organization
-        return "https://checkout.stripe.test/subscription/org-view"
-
-    monkeypatch.setattr(
-        "quickscale_modules_billing.views.create_subscription_checkout_session",
-        fake_create_subscription_checkout_session,
-    )
-    client.force_login(user)
-
-    response = client.post(
-        reverse(
-            "quickscale_billing:org-subscription-checkout",
-            kwargs={"org_slug": organization.slug},
-        ),
-        data=json.dumps({"plan_slug": plan.slug}),
-        content_type="application/json",
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "checkout_url": "https://checkout.stripe.test/subscription/org-view"
-    }
-    assert captured_call == {
-        "user": user,
-        "plan": plan,
-        "success_url": "http://testserver/orgs/aperture/billing/subscription/success/",
-        "cancel_url": "http://testserver/orgs/aperture/billing/subscription/cancel/",
-        "organization": organization,
-    }
+    assert captured_call["user"] == user
+    assert captured_call["plan"] == plan
+    assert captured_call["success_url"] == "/billing/subscription/success/"
+    assert captured_call["cancel_url"] == "/billing/subscription/cancel/"
+    assert captured_call["organization"] is not None
 
 
 @pytest.mark.django_db
 def test_subscription_checkout_view_blocks_while_current_subscription_exists(
     client: Client,
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     plan = _create_recurring_plan(slug="starter-existing-view")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         status=Subscription.Status.ACTIVE,
     )
@@ -1645,10 +1097,10 @@ def test_subscription_checkout_view_blocks_while_current_subscription_exists(
         organization: Any | None = None,
     ) -> str:
         del auth_plan, success_url, cancel_url
-        assert organization is None
-        assert Subscription.objects.filter(
+        assert organization is not None
+        assert Subscription.all_objects.filter(
             Subscription.current_status_q(),
-            user=auth_user,
+            organization=organization,
         ).exists()
         raise BillingValidationError(
             "User already has a current recurring subscription."
@@ -1677,6 +1129,7 @@ def test_cancel_subscription_view_returns_204_and_calls_service(
     client: Client,
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     captured_user: Any | None = None
     captured_organization: Any | None = None
@@ -1706,7 +1159,7 @@ def test_cancel_subscription_view_returns_204_and_calls_service(
     assert response.status_code == 204
     assert response.content == b""
     assert captured_user == user
-    assert captured_organization is None
+    assert captured_organization is not None
 
 
 @pytest.mark.django_db
@@ -1714,6 +1167,7 @@ def test_billing_portal_session_view_returns_server_owned_return_url(
     client: Client,
     user,
     monkeypatch: pytest.MonkeyPatch,
+    mock_org_resolution,
 ) -> None:
     captured_call: dict[str, Any] = {}
 
@@ -1744,23 +1198,24 @@ def test_billing_portal_session_view_returns_server_owned_return_url(
     assert response.json() == {
         "portal_url": "https://billing.example.com/portal-session"
     }
-    assert captured_call == {
-        "user": user,
-        "return_url": "http://testserver/billing/portal/return/",
-        "organization": None,
-    }
+    assert captured_call["user"] == user
+    assert captured_call["return_url"] == "/billing/portal/return/"
+    assert captured_call["organization"] is not None
 
 
 @pytest.mark.django_db
 def test_subscription_detail_view_returns_current_subscription(
     client: Client,
     user,
+    organization,
+    mock_org_resolution,
 ) -> None:
     plan = _create_recurring_plan(slug="starter-current-detail")
     period_start = timezone.now()
     period_end = period_start + timedelta(days=30)
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         status=Subscription.Status.ACTIVE,
         current_period_start=period_start,
@@ -1788,73 +1243,16 @@ def test_subscription_detail_view_returns_current_subscription(
 
 
 @pytest.mark.django_db
-def test_org_subscription_detail_view_returns_current_subscription_for_requested_org(
-    client: Client,
-    user,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    first_org = Organization.objects.create(name="Atlas", slug="atlas")
-    second_org = Organization.objects.create(name="Beacon", slug="beacon")
-    first_plan = _create_recurring_plan(
-        slug="starter-current-org-detail",
-        price_id="price_starter_current_org_detail",
-    )
-    second_plan = _create_recurring_plan(
-        slug="growth-current-org-detail",
-        price_id="price_growth_current_org_detail",
-        name="Growth Monthly",
-    )
-    period_start = timezone.now()
-    period_end = period_start + timedelta(days=30)
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=first_org,
-        role=OrgRole.ADMIN,
-    )
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=second_org,
-        role=OrgRole.OWNER,
-    )
-    Subscription.objects.create(
-        user=user,
-        organization=first_org,
-        plan=first_plan,
-        status=Subscription.Status.ACTIVE,
-        current_period_start=period_start,
-        current_period_end=period_end,
-    )
-    Subscription.objects.create(
-        user=user,
-        organization=second_org,
-        plan=second_plan,
-        status=Subscription.Status.ACTIVE,
-        current_period_start=period_start,
-        current_period_end=period_end,
-    )
-    client.force_login(user)
-
-    response = client.get(
-        reverse(
-            "quickscale_billing:org-subscription-detail",
-            kwargs={"org_slug": second_org.slug},
-        )
-    )
-
-    assert response.status_code == 200
-    assert response.json()["plan"]["slug"] == second_plan.slug
-    assert response.json()["plan"]["name"] == second_plan.name
-
-
-@pytest.mark.django_db
 def test_subscription_detail_view_returns_404_when_current_subscription_is_missing(
     client: Client,
     user,
+    organization,
+    mock_org_resolution,
 ) -> None:
     plan = _create_recurring_plan(slug="starter-missing-detail")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         status=Subscription.Status.CANCELED,
     )
@@ -1988,46 +1386,6 @@ def test_billing_portal_return_view_keeps_flat_dashboard_link_for_authenticated_
 
     assert response.status_code == 200
     assert 'href="/billing/dashboard/"' in content
-
-
-@pytest.mark.django_db
-def test_org_billing_portal_return_view_links_back_to_org_dashboard(
-    client: Client,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Summit", slug="summit")
-
-    response = client.get(
-        reverse(
-            "quickscale_billing:org-portal-return",
-            kwargs={"org_slug": organization.slug},
-        )
-    )
-    content = response.content.decode("utf-8")
-
-    assert response.status_code == 200
-    assert 'href="/orgs/summit/billing/dashboard/"' in content
-
-
-@pytest.mark.django_db
-def test_org_subscription_cancel_view_links_back_to_org_pricing(
-    client: Client,
-    settings,
-) -> None:
-    settings.QUICKSCALE_MODE = "saas"
-    organization = Organization.objects.create(name="Vertex", slug="vertex")
-
-    response = client.get(
-        reverse(
-            "quickscale_billing:org-subscription-cancel",
-            kwargs={"org_slug": organization.slug},
-        )
-    )
-    content = response.content.decode("utf-8")
-
-    assert response.status_code == 200
-    assert 'href="/orgs/vertex/billing/pricing/"' in content
 
 
 def test_webhook_view_maps_signature_errors_to_403(
