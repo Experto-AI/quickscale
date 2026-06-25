@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, and the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes after T1.10, migration/promote commands, and ORM-backed plan feature gating). Ordinary requests are still isolated in the application layer. PostgreSQL RLS activation, downstream tenant-table adoption, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, and the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes after T1.10, migration/promote commands, and ORM-backed plan feature gating). Ordinary requests are still isolated in the application layer for most modules. PostgreSQL RLS is now active for the **social module** (T1.15), providing database-level org isolation for social tables via `current_setting('app.current_org_id', true)::uuid`. Social admin uses per-org explicit request selection → session persistence → fail-closed behavior under the runtime role, with no operator bypass policy. RLS for remaining modules, downstream tenant-table adoption for modules not yet on the NOT NULL contract, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
 
 ---
 
@@ -28,8 +28,8 @@ QuickScale supports two first-class deployment modes, switchable at runtime with
 | Invitations | Disabled | Enabled |
 | URL structure | `/blog/`, `/crm/` (no slug) | `/orgs/<slug>/blog/` (CRM uses flat `/crm/` per T1.5) |
 | Billing scope | Per-user (org has one member) | Per-org (team billing contact) |
-| Isolation today | App-layer guards + middleware org context | App-layer guards + middleware org context |
-| PostgreSQL RLS | Deferred until downstream tenant tables carry concrete `organization_id` columns | Deferred until downstream tenant tables carry concrete `organization_id` columns |
+| Isolation today | App-layer guards + middleware org context | App-layer guards + middleware org context; **social module adds PostgreSQL RLS (T1.15)** |
+| PostgreSQL RLS | Deferred until downstream tenant tables carry concrete `organization_id` columns | Partially deployed: active for social tables (T1.15); others deferred until their tenant tables carry concrete `organization_id` columns |
 
 ### Why Runtime Instead of Generation Time
 
@@ -101,7 +101,7 @@ The platform owner is **not** an organization member in the RBAC sense and does 
 
 ### Level 2: Organization Hierarchy (Customer Users)
 
-Each customer workspace (organization) has its own internal hierarchy. Today, ordinary organization requests are isolated by org membership checks, routing, and request-scoped org context. PostgreSQL RLS is a later hardening step once downstream tenant tables carry concrete `organization_id` columns.
+Each customer workspace (organization) has its own internal hierarchy. Today, ordinary organization requests are isolated by org membership checks, routing, and request-scoped org context. PostgreSQL RLS provides database-level isolation for the social module (T1.15); RLS for remaining modules is a later hardening step once their tenant tables carry concrete `organization_id` columns.
 
 ```
 Platform Owner (Django superuser)
@@ -124,7 +124,8 @@ Platform Owner (Django superuser)
 Current request isolation:
     Acme Corp users      → org middleware + membership checks resolve Acme context
     Widget Co users      → org middleware + membership checks resolve Widget context
-    Future DB hardening  → PostgreSQL RLS after downstream tenant tables expose organization_id
+    Social DB hardening  → PostgreSQL RLS active (T1.15), via `current_setting('app.current_org_id', true)::uuid`
+    Future DB hardening  → PostgreSQL RLS for remaining modules after their tenant tables expose organization_id
 ```
 
 ### Capability Matrix
@@ -165,31 +166,33 @@ A user account is global (one email, one login). A user's role is org-scoped —
 
 ### Architecture
 
-One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. The current foundation slice enforces org isolation for ordinary requests in middleware, URL resolution, and membership/role checks. `TenantMiddleware` already sets `app.current_org_id` for resolved org-scoped requests as the future database-policy hook, but PostgreSQL Row-Level Security (RLS) is not yet enabled because downstream business modules do not all carry concrete `organization_id` columns.
+One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. The current foundation slice enforces org isolation for ordinary requests in middleware, URL resolution, and membership/role checks. `TenantMiddleware` already sets `app.current_org_id` for resolved org-scoped requests as the database-policy hook. PostgreSQL Row-Level Security (RLS) is now **active for the social module** (T1.15), where social tables carry concrete NOT NULL `organization_id` columns. RLS for remaining downstream modules (blog, forms, listings, CRM, billing) is deferred until those tables adopt the same NOT NULL contract.
 
 ```
 Railway project
 ├── app service (Django + Gunicorn)
 │   └── TenantMiddleware → resolves request.org and sets app.current_org_id for org-scoped requests
 └── postgres service (PostgreSQL 18)
-    └── Future RLS policies only after downstream tenant tables expose organization_id
+    ├── Active RLS — social tables (T1.15):
+    │   USING (organization_id = current_setting('app.current_org_id', true)::uuid)
+    └── Future RLS — remaining modules after tenant tables expose organization_id
         USING (organization_id = current_setting('app.current_org_id', true)::uuid)
 ```
 
-For the later RLS migration, the `true` second argument to `current_setting` will return `NULL` instead of raising an error when the setting is absent. That makes an unguarded query fail closed with an empty set, but only after the PostgreSQL policies are actually enabled.
+For each RLS migration, the `true` second argument to `current_setting` returns `NULL` instead of raising an error when the setting is absent. That makes an unguarded query fail closed with an empty set — now active for social tables once the migration runs.
 
 ### Why This Architecture
 
 - **Cost**: 2 Railway services regardless of how many tenants exist. Railway bills by compute and memory, not by tenant count. At 100 tenants or 10 000, the bill changes only with actual usage.
-- **Planned defence-in-depth**: the middleware-set org context gives a future RLS migration a fail-closed database hook. Until that activation work lands, views still rely on the application layer to enforce org scoping correctly.
+- **Defence-in-depth (partially active)**: the middleware-set org context gives RLS a fail-closed database hook. RLS is now active for the social module (T1.15), adding database-level isolation on top of application-layer guards. Other modules still rely on the application layer until their own RLS activation lands.
 - **Operational simplicity**: One backup covers all tenants. One migration covers all tenants. One deploy upgrades all tenants simultaneously.
 - **Proven pattern**: Supabase, Stripe, and Slack all use shared-database isolation at scale. Detailed code examples are in [`docs/legacy/tenancy-isolation-strategies.md`](../legacy/tenancy-isolation-strategies.md) — that document is the reference implementation; this document does not duplicate it.
 
 ### Known Constraints
 
-- **Operator access must stay explicit**: the current admin/operator surface is outside the tenant-scoped runtime path. If PostgreSQL RLS is activated later, operator access must be implemented deliberately rather than inferred from Django `is_superuser`.
+- **Operator access must stay explicit**: the current admin/operator surface is outside the tenant-scoped runtime path. Now that RLS is active for the social module, operator access is implemented deliberately per the per-org runtime-role admin contract — explicit per-org selection via the session, fail-closed when unresolved, with no `BYPASSRLS` or automatic cross-tenant bypass. Django `is_superuser` does not infer database-level access.
 - **Noisy neighbour**: One tenant running expensive queries slows response times for others. Acceptable at MVP scale; address with `statement_timeout` and rate limiting later.
-- **Future RLS debugging**: when PostgreSQL policies are enabled later, policy failures will be silent (rows vanish; no exception is raised). Debugging will require checking `pg_policies` and PostgreSQL logs, not just Django stack traces.
+- **RLS debugging**: when PostgreSQL policies are active (social module and future modules), policy failures are silent (rows vanish; no exception is raised). Debugging requires checking `pg_policies` and PostgreSQL logs, not just Django stack traces.
 - **Migrations**: Migrations that add columns or change constraints on tenant tables run against all tenants at once. This is a feature (one migration), but large-table migrations need `CONCURRENTLY` indexes and zero-downtime patterns.
 - **`SET LOCAL` vs `SET`**: `SET LOCAL` scopes the org context to the current transaction. `SET` (session-level) is needed for PgBouncer compatibility. Choose based on connection pooling setup; document this in the deployment guide.
 
@@ -562,9 +565,9 @@ Key behaviours (current):
 
 ## Admin Panel Contract
 
-The current organizations foundation keeps Django `/admin/` as the primary operator surface. The shipped foundation slice also allows Django superusers through org-scoped runtime middleware and role guards without membership, but that remains an application-layer operator path. Today that means admin visibility comes from standard Django ORM/admin behaviour in the app-layer model, not from a special PostgreSQL bypass.
+The current organizations foundation keeps Django `/admin/` as the primary operator surface. With RLS now active for the social module, the per-org runtime-role admin contract applies: social admin operates through explicit per-org request selection → session persistence → fail-closed behavior under the app runtime role. No `BYPASSRLS` role or automatic cross-tenant operator bypass was introduced. Django superusers on the runtime-role connection see only the rows their session org selects, matching the contract enforced for ordinary users.
 
-**Future RLS note**: if PostgreSQL RLS is activated later, operator access must be implemented explicitly, for example with dedicated policies or a distinct database role. Do **not** assume Django `is_superuser` or `is_staff` automatically bypasses database policies.
+**RLS note**: operator access is implemented deliberately per the per-org runtime-role contract. Do **not** assume Django `is_superuser` or `is_staff` automatically bypasses database policies — they do not, and no operator bypass policy was deployed.
 
 **Operator expectation**: admin list views for org-aware models should expose an `organization` column and an `organization` list filter so the operator can focus on a specific client when needed. Any later RLS rollout must re-verify those admin query paths before claiming all-tenant visibility.
 
@@ -582,7 +585,7 @@ All open questions from the original design were resolved before implementation 
 | `Organization` model location? | **`quickscale_modules_orgs`** | Auth stays minimal and standalone; orgs depends on auth, not the reverse |
 | Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
 | Billing migration path? | **Auto-create personal org per user** | Management command `migrate_billing_to_orgs`; idempotent; zero manual operator work |
-| Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | The current slice is app-layer guarded, and any future RLS-era operator access must be designed explicitly rather than inferred from Django flags |
+| Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | Social RLS is now active under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
 | Active org routing? | **Session-based in SaaS (mid-2026+); legacy slug compatibility for non-CRM modules** | T1.3/T1.5: CRM uses flat routes with session/request-based org resolution. Other modules still use slug-based URL routing until their T1.6+ adoption tasks. Solo: transparent, org resolved from user's personal org |
 | Post-signup flow? | **SaaS: force `/orgs/new/`. Solo: auto-create personal org** | SaaS users must name their workspace; solo users should not see org concepts |
 | Module access per plan? | **Feature gates + credits** | Credits for consumption metering; feature gates for upsell leverage; no per-org custom flags |
@@ -607,8 +610,8 @@ This section records the current repository slice, not the eventual end-state de
 | `require_org_role` decorator + `OrgRoleMixin` | ✅ implemented |
 | `require_org_feature` decorator | ✅ implemented with ORM-backed active-subscription lookup and `Plan.features` entitlement checks |
 | Post-signup: auto-create personal org (Solo) or redirect to `/orgs/new/` (SaaS) | ✅ implemented |
-| PostgreSQL RLS migration for downstream tenant tables | ❌ deferred until those tables carry concrete `organization_id` columns |
-| PostgreSQL cross-org isolation test suite | ❌ deferred with the RLS migration; requires real PostgreSQL |
+| PostgreSQL RLS migration for downstream tenant tables | ✅ partial — social module (T1.15); others deferred until their tables carry concrete `organization_id` columns |
+| PostgreSQL cross-org isolation test suite | ✅ partial — social module RLS integration tests pass on PostgreSQL (81/81); others deferred with their RLS migration |
 | Server-rendered self-service org creation, dashboard, members, settings, and import-compatible org URL surfaces | ✅ implemented |
 | Server-rendered invitation flow: invite send/revoke on org admin surfaces, notifications registry-backed email, and slugless public accept continuation under `/orgs` | ✅ implemented |
 | Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, flat compatibility shims, and ORM-backed feature gating) | ✅ implemented |

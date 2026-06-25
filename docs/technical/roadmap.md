@@ -26,7 +26,7 @@ Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed
 |---------|--------|-------------|-------------|-----------|
 | `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.6** |
 | `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.13** |
-| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.10** |
+| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.16** |
 
 Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
 
@@ -137,7 +137,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [ ] T1.12 — Blog RLS policies *(wt-track1 · plan-review mandatory)*
 - [ ] T1.13 — Forms RLS policies *(wt-track2 · plan-review mandatory)*
 - [ ] T1.14 — Listings RLS policies *(wt-track2 · plan-review mandatory)*
-- [ ] T1.15 — Social RLS policies *(wt-track3 · plan-review mandatory)*
+- [x] T1.15 — Social RLS policies *(wt-track3)*
 - [ ] T1.16 — Billing RLS policies *(wt-track3 · plan-review mandatory)*
 
 **Phase 4 — Teardown**
@@ -248,9 +248,10 @@ Implementation completed 2026-06-24.
 ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;
 ALTER TABLE <table> FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON <table>
-  USING (organization_id = current_setting('app.current_org_id')::bigint);
-CREATE POLICY operator_bypass ON <table> TO operator_role USING (true);
+  USING (organization_id = current_setting('app.current_org_id', true)::uuid);
 ```
+
+The `true` second argument to `current_setting` returns `NULL` instead of raising when the setting is absent, making unguarded queries fail closed. The app role is `NOSUPERUSER` / `NOBYPASSRLS` (T1.4); no operator bypass policy is deployed — the per-org runtime-role admin contract relies on explicit per-org session selection and fail-closed behavior instead.
 
 All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
@@ -301,13 +302,15 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 ---
 
-#### - [ ] T1.15 — Social RLS policies
+#### - [x] T1.15 — Social RLS policies
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implemented 2026-06-25.
 
 - **TRACK:** `wt-track3` (branch: `wt-track3`) — after T1.9
-- **SCOPE:** Social migration `RunSQL` for BaseSocialItem and concrete social tables + operator carve-out.
-- **VALIDATION PATH:** `make MODULE=social test -- --modules` + Postgres RLS integration test.
+- **SCOPE:** Social migration `RunSQL` enables + FORCEs RLS on social tables using `current_setting('app.current_org_id', true)::uuid` predicate. Generated social payload callers (build payload functions, managed views renderer) establish DB and ContextVar org state. Social admin is per-org via explicit request selection → session persistence → fail-closed behavior under the runtime role. No operator bypass policy was introduced. Operator access at the DB level is `NOSUPERUSER` / `NOBYPASSRLS` per T1.4.
+- **ACCEPTANCE CRITERIA:** PostgreSQL-backed social module test target passed (81/81) and PostgreSQL admin contract tests passed (40/40). Template-view tests (11/11) pass under the shared DB + ContextVar activation seam. Cross-org isolation: social payload callers scope to the active org's data only; no `BYPASSRLS` or automatic operator exemption deployed.
+- **VALIDATION PATH:** `make MODULE=social test -- --modules` under Postgres — 81/81 passed; targeted social admin tests — 40/40 passed.
 - **DEPENDS:** T1.9 + T1.4.
 
 ---
@@ -409,6 +412,7 @@ Single-PR items that do not change the design:
 | M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
 | M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
 | M16 | 1 | T1.5, T1.7, T1.9, T1.8, T1.10 | Phase 2 partial. CRM (T1.5, wt-track1), Forms (T1.7, wt-track2), Social (T1.9, wt-track3), Listings (T1.8, wt-track2), and Billing (T1.10, wt-track3) contract adoption merged to v87. |
+| M17 | 1 | T1.15 | Phase 3 partial. Social RLS (T1.15, wt-track3) — RLS active for social tables via UUID predicate; per-org runtime-role admin contract with fail-closed behavior; no operator bypass. Social module 81/81, admin contracts 40/40. |
 
 ## References
 

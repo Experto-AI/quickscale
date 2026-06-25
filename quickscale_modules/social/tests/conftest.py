@@ -31,8 +31,16 @@ django.setup()
 
 
 @pytest.fixture(autouse=True)
-def clear_social_cache() -> Iterator[None]:
-    """Clear cached social payloads before each test for deterministic assertions."""
+def _reset_test_state() -> Iterator[None]:
+    """Reset per-test state: cache and ContextVar.
+
+    ContextVars persist across tests within the same thread; this fixture
+    clears the org ContextVar before each test so the baseline is always
+    ``None`` (fail-closed).
+    """
+    from quickscale_modules_orgs.current_org import reset_current_org_id
+
+    reset_current_org_id()
     cache.clear()
     yield
     cache.clear()

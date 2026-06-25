@@ -89,9 +89,56 @@ def test_generated_views_resolve_system_org_for_anonymous() -> None:
     assert "Organization.objects.get_system_org()" in content
 
 
-def test_generated_views_conditionally_set_org_context() -> None:
-    """The generated views must branch on org presence to set the right context."""
+def test_generated_views_conditionally_resolve_org_context() -> None:
+    """The generated views must conditionally resolve org context (auth vs anonymous).
+
+    T1.15: the resolved_org_id ternary replaces the old inline if/else
+    so the org id is established before the transaction.atomic() block,
+    making it reusable for both ContextVar and SET LOCAL.
+    """
     content = _render()
-    assert "if org is not None:" in content
+    assert "resolved_org_id" in content
+    assert "org.id if org is not None" in content
+    assert "get_system_org().id" in content
     assert "build_social_link_tree_payload()" in content
     assert "build_social_embeds_payload()" in content
+
+
+# ---------------------------------------------------------------------------
+# T1.15 Phase 1 — shared org activation seam for non-middleware callers
+# ---------------------------------------------------------------------------
+
+
+def test_generated_views_import_transaction() -> None:
+    """The generated views must import django.db.transaction for SET LOCAL scope."""
+    content = _render()
+    assert "from django.db import transaction" in content
+
+
+def test_generated_views_import_set_db_current_org_id() -> None:
+    """The generated views must import the shared DB activation helper."""
+    content = _render()
+    assert "set_db_current_org_id" in content
+
+
+def test_generated_views_use_transaction_atomic() -> None:
+    """The generated views must wrap org activation in transaction.atomic()."""
+    content = _render()
+    assert "transaction.atomic()" in content
+
+
+def test_generated_views_call_set_db_current_org_id() -> None:
+    """The generated views must call set_db_current_org_id for PostgreSQL SET LOCAL."""
+    content = _render()
+    assert "set_db_current_org_id(resolved_org_id)" in content
+
+
+def test_generated_views_set_both_contextvar_and_db() -> None:
+    """The generated views must set both ContextVar and DB org id in the same scope.
+
+    Inside the transaction.atomic() block, both set_current_org_id and
+    set_db_current_org_id must be called with the same resolved_org_id.
+    """
+    content = _render()
+    assert "set_current_org_id(resolved_org_id)" in content
+    assert "set_db_current_org_id(resolved_org_id)" in content
