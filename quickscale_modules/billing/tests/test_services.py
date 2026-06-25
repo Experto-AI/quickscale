@@ -333,11 +333,14 @@ def test_get_stripe_client_returns_configured_wrapper(
 @pytest.mark.django_db
 def test_get_or_create_stripe_customer_prefers_existing_subscription(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan()
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_123",
         stripe_customer_id="cus_existing",
@@ -348,7 +351,9 @@ def test_get_or_create_stripe_customer_prefers_existing_subscription(
         lambda **kwargs: (_ for _ in ()).throw(AssertionError(kwargs)),
     )
 
-    customer_id, created = get_or_create_stripe_customer(user)
+    customer_id, created = get_or_create_stripe_customer(
+        user, organization=organization
+    )
 
     assert customer_id == "cus_existing"
     assert created is False
@@ -378,28 +383,34 @@ def test_get_or_create_stripe_customer_prefers_authoritative_org_customer(user) 
 @pytest.mark.django_db
 def test_get_or_create_stripe_customer_searches_remote_metadata_before_create(
     user,
+    organization,
+    org_context,
 ) -> None:
     fake_client = FakeStripeClient(customers=[{"id": "cus_remote"}])
 
     customer_id, created = get_or_create_stripe_customer(
         user,
+        organization=organization,
         stripe_client=fake_client,
     )
 
     assert customer_id == "cus_remote"
     assert created is False
-    assert fake_client.searched_references == [_user_reference(user)]
+    assert fake_client.searched_references == [_organization_reference(organization)]
     assert fake_client.created_payloads == []
 
 
 @pytest.mark.django_db
 def test_get_or_create_stripe_customer_creates_remote_customer_when_missing(
     user,
+    organization,
+    org_context,
 ) -> None:
     fake_client = FakeStripeClient()
 
     customer_id, created = get_or_create_stripe_customer(
         user,
+        organization=organization,
         stripe_client=fake_client,
     )
 
@@ -411,6 +422,9 @@ def test_get_or_create_stripe_customer_creates_remote_customer_when_missing(
         "email": "",
         "name": "",
         "metadata": {
+            "quickscale_org_reference": _organization_reference(organization),
+            "quickscale_org_model": organization._meta.label_lower,
+            "quickscale_org_pk": str(organization.pk),
             "quickscale_user_reference": _user_reference(user),
             "quickscale_user_model": user._meta.label_lower,
             "quickscale_user_pk": str(user.pk),
@@ -458,6 +472,8 @@ def test_get_or_create_stripe_customer_creates_and_persists_org_customer_with_or
 @pytest.mark.django_db
 def test_get_or_create_stripe_customer_omits_mutable_fields_from_idempotent_create(
     user,
+    organization,
+    org_context,
 ) -> None:
     user.first_name = "Billing"
     user.last_name = "User"
@@ -467,6 +483,7 @@ def test_get_or_create_stripe_customer_omits_mutable_fields_from_idempotent_crea
 
     _, created = get_or_create_stripe_customer(
         user,
+        organization=organization,
         stripe_client=fake_client,
     )
 
@@ -474,6 +491,9 @@ def test_get_or_create_stripe_customer_omits_mutable_fields_from_idempotent_crea
     assert fake_client.created_payloads[0]["email"] == ""
     assert fake_client.created_payloads[0]["name"] == ""
     assert fake_client.created_payloads[0]["metadata"] == {
+        "quickscale_org_reference": _organization_reference(organization),
+        "quickscale_org_model": organization._meta.label_lower,
+        "quickscale_org_pk": str(organization.pk),
         "quickscale_user_reference": _user_reference(user),
         "quickscale_user_model": user._meta.label_lower,
         "quickscale_user_pk": str(user.pk),
@@ -483,11 +503,14 @@ def test_get_or_create_stripe_customer_omits_mutable_fields_from_idempotent_crea
 @pytest.mark.django_db
 def test_get_or_create_stripe_customer_reuses_idempotent_create_when_search_stays_stale_after_mutable_fields_change(
     user,
+    organization,
+    org_context,
 ) -> None:
     fake_client = FakeStripeClient(reject_changed_idempotent_payload=True)
 
     first_customer_id, first_created = get_or_create_stripe_customer(
         user,
+        organization=organization,
         stripe_client=fake_client,
     )
     user.email = "billing-user-renamed@example.com"
@@ -497,65 +520,71 @@ def test_get_or_create_stripe_customer_reuses_idempotent_create_when_search_stay
     user.save(update_fields=["email", "first_name", "last_name", "username"])
     second_customer_id, second_created = get_or_create_stripe_customer(
         user,
+        organization=organization,
         stripe_client=fake_client,
     )
 
     assert first_customer_id == "cus_created"
     assert second_customer_id == first_customer_id
     assert first_created is True
-    assert second_created is True
+    assert second_created is False
     assert fake_client.searched_references == [
-        _user_reference(user),
-        _user_reference(user),
+        _organization_reference(organization),
     ]
-    assert len(fake_client.created_payloads) == 2
-    assert {payload["id"] for payload in fake_client.created_payloads} == {
-        "cus_created"
-    }
-    assert {payload["email"] for payload in fake_client.created_payloads} == {""}
-    assert {payload["name"] for payload in fake_client.created_payloads} == {""}
-    assert (
-        fake_client.created_payloads[0]["metadata"]
-        == fake_client.created_payloads[1]["metadata"]
-    )
+    assert len(fake_client.created_payloads) == 1
+    assert fake_client.created_payloads[0]["id"] == "cus_created"
+    assert fake_client.created_payloads[0]["email"] == ""
+    assert fake_client.created_payloads[0]["name"] == ""
     assert fake_client.created_payloads[0]["idempotency_key"]
-    assert (
-        fake_client.created_payloads[0]["idempotency_key"]
-        == fake_client.created_payloads[1]["idempotency_key"]
-    )
+    assert organization.stripe_customer_id == "cus_created"
 
 
 @pytest.mark.django_db
-def test_get_or_create_stripe_customer_rejects_disabled_runtime(user) -> None:
+def test_get_or_create_stripe_customer_rejects_disabled_runtime(
+    user, organization, org_context
+) -> None:
     with override_settings(QUICKSCALE_BILLING_ENABLED=False):
         with pytest.raises(BillingDisabledError, match="disabled"):
-            get_or_create_stripe_customer(user, stripe_client=FakeStripeClient())
+            get_or_create_stripe_customer(
+                user, organization=organization, stripe_client=FakeStripeClient()
+            )
 
 
 @pytest.mark.django_db
-def test_get_or_create_stripe_customer_rejects_remote_customer_without_id(user) -> None:
+def test_get_or_create_stripe_customer_rejects_remote_customer_without_id(
+    user, organization, org_context
+) -> None:
     fake_client = FakeStripeClient(customers=[{}])
 
     with pytest.raises(BillingWebhookError, match="without an id"):
-        get_or_create_stripe_customer(user, stripe_client=fake_client)
+        get_or_create_stripe_customer(
+            user, organization=organization, stripe_client=fake_client
+        )
 
 
 @pytest.mark.django_db
 def test_get_or_create_stripe_customer_rejects_created_customer_without_id(
     user,
+    organization,
+    org_context,
 ) -> None:
     fake_client = FakeStripeClient()
     fake_client.create_customer = lambda **kwargs: {}  # type: ignore[method-assign]
 
     with pytest.raises(BillingWebhookError, match="did not return an id"):
-        get_or_create_stripe_customer(user, stripe_client=fake_client)
+        get_or_create_stripe_customer(
+            user, organization=organization, stripe_client=fake_client
+        )
 
 
 @pytest.mark.django_db
-def test_create_billing_portal_session_returns_stripe_url(user) -> None:
+def test_create_billing_portal_session_returns_stripe_url(
+    user, organization, org_context
+) -> None:
     plan = _create_plan()
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_portal",
         stripe_customer_id="cus_portal",
@@ -568,6 +597,7 @@ def test_create_billing_portal_session_returns_stripe_url(user) -> None:
     portal_url = create_billing_portal_session(
         user,
         " https://app.example.com/billing/portal/return/ ",
+        organization=organization,
         stripe_client=fake_client,
     )
 
@@ -582,20 +612,26 @@ def test_create_billing_portal_session_returns_stripe_url(user) -> None:
 
 
 @pytest.mark.django_db
-def test_create_billing_portal_session_requires_return_url(user) -> None:
+def test_create_billing_portal_session_requires_return_url(
+    user, organization, org_context
+) -> None:
     with pytest.raises(BillingValidationError, match="return URL"):
         create_billing_portal_session(
             user,
             " ",
+            organization=organization,
             stripe_client=FakeStripeClient(),
         )
 
 
 @pytest.mark.django_db
-def test_create_billing_portal_session_rejects_missing_hosted_url(user) -> None:
+def test_create_billing_portal_session_rejects_missing_hosted_url(
+    user, organization, org_context
+) -> None:
     plan = _create_plan(price_id="price_portal_missing_url")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_portal_missing_url",
         stripe_customer_id="cus_portal_missing_url",
@@ -606,6 +642,7 @@ def test_create_billing_portal_session_rejects_missing_hosted_url(user) -> None:
         create_billing_portal_session(
             user,
             "https://app.example.com/billing/portal/return/",
+            organization=organization,
             stripe_client=FakeStripeClient(portal_session={}),
         )
 
@@ -613,12 +650,15 @@ def test_create_billing_portal_session_rejects_missing_hosted_url(user) -> None:
 @pytest.mark.django_db
 def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_local_snapshot(
     user,
+    organization,
+    org_context,
 ) -> None:
     plan = _create_plan(price_id="price_cancel")
     current_period_start = billing_services._stripe_timestamp_to_datetime(1713225600)
     current_period_end = billing_services._stripe_timestamp_to_datetime(1715817600)
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_cancel",
         stripe_customer_id="cus_cancel",
@@ -639,6 +679,7 @@ def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_loc
 
     updated_subscription = cancel_current_subscription(
         user,
+        organization=organization,
         stripe_client=fake_client,
     )
     subscription.refresh_from_db()
@@ -658,34 +699,46 @@ def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_loc
 
 
 @pytest.mark.django_db
-def test_cancel_current_subscription_rejects_missing_current_subscription(user) -> None:
+def test_cancel_current_subscription_rejects_missing_current_subscription(
+    user, organization, org_context
+) -> None:
     with pytest.raises(BillingValidationError, match="current recurring subscription"):
-        cancel_current_subscription(user, stripe_client=FakeStripeClient())
+        cancel_current_subscription(
+            user, organization=organization, stripe_client=FakeStripeClient()
+        )
 
 
 @pytest.mark.django_db
 def test_cancel_current_subscription_rejects_missing_stripe_subscription_id(
     user,
+    organization,
+    org_context,
 ) -> None:
     plan = _create_plan(price_id="price_cancel_missing_stripe_id")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_cancel_missing_stripe_id",
         status=Subscription.Status.INCOMPLETE,
     )
 
     with pytest.raises(BillingValidationError, match="Stripe subscription id"):
-        cancel_current_subscription(user, stripe_client=FakeStripeClient())
+        cancel_current_subscription(
+            user, organization=organization, stripe_client=FakeStripeClient()
+        )
 
 
 @pytest.mark.django_db
 def test_credit_user_updates_balance_and_suppresses_duplicate_business_object(
     user,
+    organization,
+    org_context,
 ) -> None:
     first_transaction = credit_user(
         user,
         amount=100,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         description="First credit",
         stripe_event_id="evt_123",
@@ -695,6 +748,7 @@ def test_credit_user_updates_balance_and_suppresses_duplicate_business_object(
     duplicate_transaction = credit_user(
         user,
         amount=100,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         description="Duplicate credit",
         stripe_event_id="evt_456",
@@ -702,19 +756,22 @@ def test_credit_user_updates_balance_and_suppresses_duplicate_business_object(
         stripe_reference_data={"invoice_id": "in_123"},
     )
 
-    balance = CreditBalance.objects.get(user=user)
+    balance = CreditBalance.all_objects.get(organization=organization)
 
     assert duplicate_transaction.pk == first_transaction.pk
     assert balance.balance == 100
-    assert CreditTransaction.objects.filter(user=user).count() == 1
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
 
 
 @pytest.mark.django_db
-def test_credit_user_rejects_non_positive_amount(user) -> None:
+def test_credit_user_rejects_non_positive_amount(
+    user, organization, org_context
+) -> None:
     with pytest.raises(BillingValidationError, match="greater than zero"):
         credit_user(
             user,
             amount=0,
+            organization=organization,
             transaction_type=CreditTransaction.TransactionType.PLAN,
         )
 
@@ -722,29 +779,36 @@ def test_credit_user_rejects_non_positive_amount(user) -> None:
 @pytest.mark.django_db
 def test_credit_user_suppresses_duplicate_reference_data_without_object_id(
     user,
+    organization,
+    org_context,
 ) -> None:
     first_transaction = credit_user(
         user,
         amount=75,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         stripe_reference_data={"invoice_id": "in_reference"},
     )
     duplicate_transaction = credit_user(
         user,
         amount=75,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         stripe_reference_data={"invoice_id": "in_reference"},
     )
 
     assert duplicate_transaction.pk == first_transaction.pk
-    assert CreditBalance.objects.get(user=user).balance == 75
+    assert CreditBalance.all_objects.get(organization=organization).balance == 75
 
 
 @pytest.mark.django_db
-def test_credit_user_records_distinct_invoice_ids_for_same_subscription(user) -> None:
+def test_credit_user_records_distinct_invoice_ids_for_same_subscription(
+    user, organization, org_context
+) -> None:
     first_transaction = credit_user(
         user,
         amount=75,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         stripe_event_id="evt_invoice_one",
         stripe_object_id="in_invoice_one",
@@ -758,6 +822,7 @@ def test_credit_user_records_distinct_invoice_ids_for_same_subscription(user) ->
     second_transaction = credit_user(
         user,
         amount=75,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         stripe_event_id="evt_invoice_two",
         stripe_object_id="in_invoice_two",
@@ -769,23 +834,28 @@ def test_credit_user_records_distinct_invoice_ids_for_same_subscription(user) ->
         },
     )
 
-    transactions = list(CreditTransaction.objects.filter(user=user).order_by("pk"))
+    transactions = list(
+        CreditTransaction.all_objects.filter(organization=organization).order_by("pk")
+    )
 
     assert second_transaction.pk != first_transaction.pk
     assert [transaction.stripe_object_id for transaction in transactions] == [
         "in_invoice_one",
         "in_invoice_two",
     ]
-    assert CreditBalance.objects.get(user=user).balance == 150
+    assert CreditBalance.all_objects.get(organization=organization).balance == 150
 
 
 @pytest.mark.django_db
 def test_credit_user_suppresses_replayed_reference_data_after_many_intervening_credits(
     user,
+    organization,
+    org_context,
 ) -> None:
     first_transaction = credit_user(
         user,
         amount=75,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         stripe_reference_data={"invoice_id": "in_reference_replay"},
     )
@@ -794,6 +864,7 @@ def test_credit_user_suppresses_replayed_reference_data_after_many_intervening_c
         credit_user(
             user,
             amount=5,
+            organization=organization,
             transaction_type=CreditTransaction.TransactionType.PLAN,
             stripe_reference_data={"invoice_id": f"in_intervening_{index}"},
         )
@@ -801,23 +872,27 @@ def test_credit_user_suppresses_replayed_reference_data_after_many_intervening_c
     duplicate_transaction = credit_user(
         user,
         amount=75,
+        organization=organization,
         transaction_type=CreditTransaction.TransactionType.PLAN,
         stripe_reference_data={"invoice_id": "in_reference_replay"},
     )
 
     assert duplicate_transaction.pk == first_transaction.pk
-    assert CreditTransaction.objects.filter(user=user).count() == 27
-    assert CreditBalance.objects.get(user=user).balance == 205
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 27
+    assert CreditBalance.all_objects.get(organization=organization).balance == 205
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_credits_subscription_user_and_records_event(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_runtime")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_123",
         stripe_customer_id="cus_runtime",
@@ -839,8 +914,8 @@ def test_handle_stripe_event_credits_subscription_user_and_records_event(
         stripe_client=fake_client,
     )
 
-    balance = CreditBalance.objects.get(user=user)
-    transaction_row = CreditTransaction.objects.get(user=user)
+    balance = CreditBalance.all_objects.get(organization=organization)
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
     webhook_event = WebhookEvent.objects.get(stripe_event_id="evt_runtime")
 
     assert result.duplicate is False
@@ -873,11 +948,11 @@ def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org
 ) -> None:
     plan = _create_plan(price_id="price_org_runtime")
     organization = Organization.objects.create(name="Nova", slug="nova")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
         organization=organization,
         plan=plan,
-        stripe_subscription_id="sub_org_runtime",
+        stripe_subscription_id="sub_123",
         status=Subscription.Status.ACTIVE,
     )
     event = _invoice_paid_event(
@@ -890,7 +965,30 @@ def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org
     event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
         _organization_reference(organization)
     )
-    fake_client = FakeStripeClient(event=event)
+    fake_client = FakeStripeClient(
+        event=event,
+        subscriptions={
+            "sub_123": {
+                "id": "sub_123",
+                "customer": "cus_org_runtime",
+                "status": "active",
+                "current_period_start": 1713225600,
+                "current_period_end": 1715817600,
+                "metadata": {
+                    "stripe_price_id": plan.stripe_price_id,
+                },
+                "items": {
+                    "data": [
+                        {
+                            "price": {
+                                "id": plan.stripe_price_id,
+                            }
+                        }
+                    ]
+                },
+            }
+        },
+    )
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_org_runtime")
 
     result = handle_stripe_event(
@@ -900,9 +998,9 @@ def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org
     )
     organization.refresh_from_db()
 
-    balance = CreditBalance.objects.get(organization=organization)
-    transaction_row = CreditTransaction.objects.get(organization=organization)
-    subscription = Subscription.objects.get(organization=organization)
+    balance = CreditBalance.all_objects.get(organization=organization)
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
+    subscription = Subscription.all_objects.get(organization=organization)
 
     assert result.status == "processed"
     assert organization.stripe_customer_id == "cus_org_runtime"
@@ -922,17 +1020,23 @@ def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org
 @pytest.mark.django_db
 def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_metadata")
+    backfill_event = _invoice_paid_event(
+        event_id="evt_metadata",
+        invoice_id="in_metadata",
+        customer_id="cus_metadata",
+        price_id=plan.stripe_price_id,
+        user_reference=_user_reference(user),
+    )
+    backfill_event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
     fake_client = FakeStripeClient(
-        event=_invoice_paid_event(
-            event_id="evt_metadata",
-            invoice_id="in_metadata",
-            customer_id="cus_metadata",
-            price_id=plan.stripe_price_id,
-            user_reference=_user_reference(user),
-        ),
+        event=backfill_event,
         subscriptions={
             "sub_123": {
                 "id": "sub_123",
@@ -963,8 +1067,8 @@ def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
         stripe_client=fake_client,
     )
 
-    transaction_row = CreditTransaction.objects.get(user=user)
-    subscription = Subscription.objects.get(user=user)
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
+    subscription = Subscription.all_objects.get(organization=organization)
 
     assert result.status == "processed"
     assert fake_client.retrieved_subscription_ids == ["sub_123"]
@@ -981,17 +1085,20 @@ def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
         == billing_services._stripe_timestamp_to_datetime(1715817600)
     )
     assert transaction_row.stripe_object_id == "in_metadata"
-    assert CreditBalance.objects.get(user=user).balance == 100
+    assert CreditBalance.all_objects.get(organization=organization).balance == 100
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_returns_duplicate_without_second_credit(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_duplicate")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_subscription_id="sub_duplicate",
         stripe_customer_id="cus_duplicate",
@@ -1021,8 +1128,8 @@ def test_handle_stripe_event_returns_duplicate_without_second_credit(
     assert first_result.status == "processed"
     assert second_result.duplicate is True
     assert second_result.status == "duplicate"
-    assert CreditTransaction.objects.filter(user=user).count() == 1
-    assert CreditBalance.objects.get(user=user).balance == 100
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+    assert CreditBalance.all_objects.get(organization=organization).balance == 100
 
 
 @pytest.mark.django_db
@@ -1049,12 +1156,14 @@ def test_handle_stripe_event_marks_unknown_types_as_processed(
     assert result.duplicate is False
     assert result.status == "ignored"
     assert webhook_event.processed is True
-    assert CreditTransaction.objects.count() == 0
+    assert CreditTransaction.all_objects.count() == 0
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_records_processing_errors_for_retry(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_client = FakeStripeClient(
@@ -1086,6 +1195,8 @@ def test_handle_stripe_event_records_processing_errors_for_retry(
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_missing_webhook_secret(
     monkeypatch: pytest.MonkeyPatch,
+    organization,
+    org_context,
 ) -> None:
     monkeypatch.delenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", raising=False)
 
@@ -1102,6 +1213,8 @@ def test_handle_stripe_event_rejects_missing_webhook_secret(
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_missing_event_id(
     monkeypatch: pytest.MonkeyPatch,
+    organization,
+    org_context,
 ) -> None:
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_id")
 
@@ -1116,6 +1229,8 @@ def test_handle_stripe_event_rejects_missing_event_id(
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_missing_event_type(
     monkeypatch: pytest.MonkeyPatch,
+    organization,
+    org_context,
 ) -> None:
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_type")
 
@@ -1130,6 +1245,8 @@ def test_handle_stripe_event_rejects_missing_event_type(
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_missing_event_object(
     monkeypatch: pytest.MonkeyPatch,
+    organization,
+    org_context,
 ) -> None:
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_object")
 
@@ -1150,6 +1267,8 @@ def test_handle_stripe_event_rejects_missing_event_object(
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_missing_event_data(
     monkeypatch: pytest.MonkeyPatch,
+    organization,
+    org_context,
 ) -> None:
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_data")
 
@@ -1169,11 +1288,14 @@ def test_handle_stripe_event_rejects_missing_event_data(
 @pytest.mark.django_db
 def test_handle_stripe_event_uses_metadata_price_fallback(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_fallback")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_fallback",
         stripe_subscription_id="sub_123",
@@ -1198,12 +1320,14 @@ def test_handle_stripe_event_uses_metadata_price_fallback(
     )
 
     assert result.status == "processed"
-    assert CreditBalance.objects.get(user=user).balance == 100
+    assert CreditBalance.all_objects.get(organization=organization).balance == 100
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_invoice_without_id(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_missing_invoice_id")
@@ -1231,6 +1355,8 @@ def test_handle_stripe_event_rejects_invoice_without_id(
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_missing_billing_price_id(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     event = _invoice_paid_event(
@@ -1254,6 +1380,8 @@ def test_handle_stripe_event_rejects_missing_billing_price_id(
 @pytest.mark.django_db
 def test_handle_stripe_event_uses_subscription_details_user_reference(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_subscription_details")
@@ -1262,6 +1390,9 @@ def test_handle_stripe_event_uses_subscription_details_user_reference(
         invoice_id="in_subscription_details",
         customer_id="",
         price_id=plan.stripe_price_id,
+    )
+    event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
     )
     event["data"]["object"]["subscription_details"] = {
         "metadata": {"quickscale_user_reference": _user_reference(user)}
@@ -1301,8 +1432,8 @@ def test_handle_stripe_event_uses_subscription_details_user_reference(
         stripe_client=fake_client,
     )
 
-    transaction_row = CreditTransaction.objects.get(user=user)
-    subscription = Subscription.objects.get(user=user)
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
+    subscription = Subscription.all_objects.get(organization=organization)
 
     assert result.status == "processed"
     assert fake_client.retrieved_subscription_ids == ["sub_123"]
@@ -1320,6 +1451,8 @@ def test_handle_stripe_event_uses_subscription_details_user_reference(
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_multiple_price_ids(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     event = _invoice_paid_event(
@@ -1347,6 +1480,8 @@ def test_handle_stripe_event_rejects_multiple_price_ids(
 
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_unresolvable_user_reference(
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_plan(price_id="price_unresolvable")
@@ -1390,6 +1525,8 @@ def test_handle_stripe_event_rejects_unresolvable_user_reference(
 
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_unknown_model_user_reference(
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_plan(price_id="price_unknown_model")
@@ -1433,6 +1570,8 @@ def test_handle_stripe_event_rejects_unknown_model_user_reference(
 
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_invalid_signature(
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_client = FakeStripeClient(
@@ -1452,6 +1591,8 @@ def test_handle_stripe_event_rejects_invalid_signature(
 
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_disabled_runtime(
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_client = FakeStripeClient(

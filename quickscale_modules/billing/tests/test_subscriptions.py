@@ -52,6 +52,10 @@ def _user_reference(user: Any) -> str:
     return f"{user._meta.label_lower}:{user.pk}"
 
 
+def _organization_reference(organization: Any) -> str:
+    return f"{organization._meta.label_lower}:{organization.pk}"
+
+
 def _invoice_event(
     *,
     event_id: str,
@@ -258,7 +262,7 @@ class FakeSubscriptionStripeClient:
 def _simulate_subscription_reservation_conflict(
     monkeypatch: pytest.MonkeyPatch,
     *,
-    user: Any,
+    organization: Any,
     recovered_reservation: Subscription,
 ) -> None:
     original_resolve = billing_services._resolve_authoritative_subscription_reservation
@@ -271,26 +275,24 @@ def _simulate_subscription_reservation_conflict(
 
     def resolve_with_recovered_row(
         *,
-        user: Any | None = None,
         organization: Any | None = None,
         customer_id: str = "",
         for_update: bool = False,
     ) -> Subscription | None:
         nonlocal resolve_calls
-        if user == target_user and not customer_id:
+        if not customer_id:
             resolve_calls += 1
             if resolve_calls == 2:
                 recovered_reservation.status = Subscription.Status.INCOMPLETE
                 recovered_reservation.save(update_fields=["status"])
         return original_resolve(
-            user=user,
             organization=organization,
             customer_id=customer_id,
             for_update=for_update,
         )
 
-    target_user = user
     monkeypatch.setattr(Subscription.objects, "create", create_with_conflict)
+    monkeypatch.setattr(Subscription.all_objects, "create", create_with_conflict)
     monkeypatch.setattr(
         billing_services,
         "_resolve_authoritative_subscription_reservation",
@@ -300,7 +302,7 @@ def _simulate_subscription_reservation_conflict(
 
 @pytest.mark.django_db
 def test_create_subscription_checkout_session_marks_failed_reservation_expired(
-    user,
+    user, organization, org_context
 ) -> None:
     plan = _create_recurring_plan()
     fake_client = FakeSubscriptionStripeClient(
@@ -324,24 +326,26 @@ def test_create_subscription_checkout_session_marks_failed_reservation_expired(
             plan,
             "https://app.example.com/billing/subscription/success",
             "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
             stripe_client=fake_client,
         )
 
-    reservation = Subscription.objects.get(user=user)
+    reservation = Subscription.all_objects.get(organization=organization)
 
     assert reservation.status == Subscription.Status.INCOMPLETE_EXPIRED
     assert reservation.stripe_customer_id == "cus_created_1"
-    assert Subscription.objects.current().count() == 0
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 0
 
 
 @pytest.mark.django_db
 def test_create_subscription_checkout_session_reuses_live_checkout_session_url(
-    user,
+    user, organization, org_context
 ) -> None:
     plan = _create_recurring_plan()
     live_expiry = timezone.now() + timedelta(hours=1)
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_live",
         stripe_checkout_session_id="cs_live",
@@ -373,22 +377,24 @@ def test_create_subscription_checkout_session_reuses_live_checkout_session_url(
         plan,
         "https://app.example.com/billing/subscription/success",
         "https://app.example.com/billing/subscription/cancel",
+        organization=organization,
         stripe_client=fake_client,
     )
 
     assert checkout_url == "https://checkout.stripe.test/subscription/live"
     assert fake_client.retrieved_checkout_session_ids == ["cs_live"]
     assert fake_client.created_subscription_checkout_payloads == []
-    assert Subscription.objects.current().count() == 1
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 1
 
 
 @pytest.mark.django_db
 def test_create_subscription_checkout_session_expires_stale_reservation_and_recreates(
-    user,
+    user, organization, org_context
 ) -> None:
     plan = _create_recurring_plan()
-    stale_reservation = Subscription.objects.create(
+    stale_reservation = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_stale",
         stripe_checkout_session_id="cs_stale",
@@ -412,11 +418,14 @@ def test_create_subscription_checkout_session_expires_stale_reservation_and_recr
         plan,
         "https://app.example.com/billing/subscription/success",
         "https://app.example.com/billing/subscription/cancel",
+        organization=organization,
         stripe_client=fake_client,
     )
 
     stale_reservation.refresh_from_db()
-    current_reservation = Subscription.objects.current().get(user=user)
+    current_reservation = Subscription.all_objects.filter(
+        Subscription.current_status_q()
+    ).get(organization=organization)
 
     assert checkout_url == "https://checkout.stripe.test/subscription/123"
     assert stale_reservation.status == Subscription.Status.INCOMPLETE_EXPIRED
@@ -468,6 +477,7 @@ def test_create_subscription_checkout_session_expires_stale_reservation_and_recr
 )
 def test_create_subscription_checkout_session_rejects_price_parity_mismatches(
     user,
+    organization,
     stripe_price: dict[str, Any],
     message: str,
 ) -> None:
@@ -487,26 +497,29 @@ def test_create_subscription_checkout_session_rejects_price_parity_mismatches(
             plan,
             "https://app.example.com/billing/subscription/success",
             "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
             stripe_client=fake_client,
         )
 
-    assert Subscription.objects.count() == 0
+    assert Subscription.all_objects.count() == 0
 
 
 @pytest.mark.django_db
 def test_create_subscription_checkout_session_reuses_customer_on_recreated_reservation(
-    user,
+    user, organization, org_context
 ) -> None:
     plan = _create_recurring_plan()
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_survivor",
         stripe_subscription_id="sub_historical",
         status=Subscription.Status.CANCELED,
     )
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_survivor",
         status=Subscription.Status.INCOMPLETE,
@@ -528,10 +541,13 @@ def test_create_subscription_checkout_session_reuses_customer_on_recreated_reser
         plan,
         "https://app.example.com/billing/subscription/success",
         "https://app.example.com/billing/subscription/cancel",
+        organization=organization,
         stripe_client=fake_client,
     )
 
-    current_reservation = Subscription.objects.current().get(user=user)
+    current_reservation = Subscription.all_objects.filter(
+        Subscription.current_status_q()
+    ).get(organization=organization)
 
     assert checkout_url == "https://checkout.stripe.test/subscription/123"
     assert current_reservation.stripe_customer_id == "cus_survivor"
@@ -542,11 +558,13 @@ def test_create_subscription_checkout_session_reuses_customer_on_recreated_reser
 @pytest.mark.django_db
 def test_create_subscription_checkout_session_reuses_live_reservation_after_create_race(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan()
-    recovered_reservation = Subscription.objects.create(
+    recovered_reservation = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_race",
         stripe_checkout_session_id="cs_race",
@@ -574,7 +592,7 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_crea
     )
     _simulate_subscription_reservation_conflict(
         monkeypatch,
-        user=user,
+        organization=organization,
         recovered_reservation=recovered_reservation,
     )
 
@@ -583,6 +601,7 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_crea
         plan,
         "https://app.example.com/billing/subscription/success",
         "https://app.example.com/billing/subscription/cancel",
+        organization=organization,
         stripe_client=fake_client,
     )
 
@@ -590,7 +609,12 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_crea
 
     assert checkout_url == "https://checkout.stripe.test/subscription/race"
     assert recovered_reservation.status == Subscription.Status.INCOMPLETE
-    assert Subscription.objects.current().get(user=user).pk == recovered_reservation.pk
+    assert (
+        Subscription.all_objects.filter(Subscription.current_status_q())
+        .get(organization=organization)
+        .pk
+        == recovered_reservation.pk
+    )
     assert fake_client.created_subscription_checkout_payloads == []
     assert fake_client.retrieved_checkout_session_ids == ["cs_race"]
 
@@ -598,6 +622,7 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_crea
 @pytest.mark.django_db
 def test_create_subscription_checkout_session_raises_validation_error_after_create_race(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan()
@@ -606,8 +631,9 @@ def test_create_subscription_checkout_session_raises_validation_error_after_crea
         price_id="price_pro_monthly",
         price_cents=2900,
     )
-    conflicting_reservation = Subscription.objects.create(
+    conflicting_reservation = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=conflicting_plan,
         stripe_customer_id="cus_conflict",
         stripe_checkout_session_id="cs_conflict",
@@ -627,7 +653,7 @@ def test_create_subscription_checkout_session_raises_validation_error_after_crea
     )
     _simulate_subscription_reservation_conflict(
         monkeypatch,
-        user=user,
+        organization=organization,
         recovered_reservation=conflicting_reservation,
     )
 
@@ -640,32 +666,36 @@ def test_create_subscription_checkout_session_raises_validation_error_after_crea
             plan,
             "https://app.example.com/billing/subscription/success",
             "https://app.example.com/billing/subscription/cancel",
+            organization=organization,
             stripe_client=fake_client,
         )
 
     conflicting_reservation.refresh_from_db()
 
     assert conflicting_reservation.status == Subscription.Status.CANCELED
-    assert Subscription.objects.current().count() == 0
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 0
     assert fake_client.created_subscription_checkout_payloads == []
 
 
 @pytest.mark.django_db
 def test_create_subscription_checkout_session_reuses_live_reservation_after_recreate_race(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan()
-    stale_reservation = Subscription.objects.create(
+    stale_reservation = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_stale",
         stripe_checkout_session_id="cs_stale",
         status=Subscription.Status.INCOMPLETE,
         checkout_expires_at=timezone.now() + timedelta(hours=1),
     )
-    recovered_reservation = Subscription.objects.create(
+    recovered_reservation = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_race",
         stripe_checkout_session_id="cs_race_recreated",
@@ -699,7 +729,7 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_recr
     )
     _simulate_subscription_reservation_conflict(
         monkeypatch,
-        user=user,
+        organization=organization,
         recovered_reservation=recovered_reservation,
     )
 
@@ -708,6 +738,7 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_recr
         plan,
         "https://app.example.com/billing/subscription/success",
         "https://app.example.com/billing/subscription/cancel",
+        organization=organization,
         stripe_client=fake_client,
     )
 
@@ -717,7 +748,12 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_recr
     assert checkout_url == ("https://checkout.stripe.test/subscription/race-recreated")
     assert stale_reservation.status == Subscription.Status.INCOMPLETE_EXPIRED
     assert recovered_reservation.status == Subscription.Status.INCOMPLETE
-    assert Subscription.objects.current().get(user=user).pk == recovered_reservation.pk
+    assert (
+        Subscription.all_objects.filter(Subscription.current_status_q())
+        .get(organization=organization)
+        .pk
+        == recovered_reservation.pk
+    )
     assert fake_client.created_subscription_checkout_payloads == []
     assert fake_client.retrieved_checkout_session_ids == [
         "cs_stale",
@@ -728,25 +764,31 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_recr
 @pytest.mark.django_db
 def test_handle_stripe_event_updates_pending_row_on_subscription_created(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_created")
-    pending_reservation = Subscription.objects.create(
+    pending_reservation = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_created",
         stripe_checkout_session_id="cs_created",
         status=Subscription.Status.INCOMPLETE,
     )
+    sub_created_event = _subscription_event(
+        event_id="evt_subscription_created",
+        event_type="customer.subscription.created",
+        subscription_id="sub_created",
+        customer_id="cus_created",
+        price_id=plan.stripe_price_id,
+        status="active",
+    )
+    sub_created_event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
     fake_client = FakeSubscriptionStripeClient(
-        event=_subscription_event(
-            event_id="evt_subscription_created",
-            event_type="customer.subscription.created",
-            subscription_id="sub_created",
-            customer_id="cus_created",
-            price_id=plan.stripe_price_id,
-            status="active",
-        )
+        event=sub_created_event,
     )
     monkeypatch.setenv(
         "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_subscription_created"
@@ -761,7 +803,7 @@ def test_handle_stripe_event_updates_pending_row_on_subscription_created(
     pending_reservation.refresh_from_db()
 
     assert result.status == "processed"
-    assert Subscription.objects.current().count() == 1
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 1
     assert pending_reservation.status == Subscription.Status.ACTIVE
     assert pending_reservation.stripe_subscription_id == "sub_created"
     assert pending_reservation.current_period_start is not None
@@ -771,26 +813,32 @@ def test_handle_stripe_event_updates_pending_row_on_subscription_created(
 @pytest.mark.django_db
 def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_invoice_first_incomplete")
-    pending_reservation = Subscription.objects.create(
+    pending_reservation = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_invoice_first_incomplete",
         stripe_checkout_session_id="cs_invoice_first_incomplete",
         status=Subscription.Status.INCOMPLETE,
     )
+    reconcile_event = _invoice_event(
+        event_id="evt_invoice_first_incomplete",
+        event_type="invoice.paid",
+        invoice_id="in_invoice_first_incomplete",
+        customer_id="cus_invoice_first_incomplete",
+        price_id=plan.stripe_price_id,
+        subscription_id="sub_invoice_first_incomplete",
+        billing_reason="subscription_create",
+    )
+    reconcile_event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
     fake_client = FakeSubscriptionStripeClient(
-        event=_invoice_event(
-            event_id="evt_invoice_first_incomplete",
-            event_type="invoice.paid",
-            invoice_id="in_invoice_first_incomplete",
-            customer_id="cus_invoice_first_incomplete",
-            price_id=plan.stripe_price_id,
-            subscription_id="sub_invoice_first_incomplete",
-            billing_reason="subscription_create",
-        )
+        event=reconcile_event,
     )
     monkeypatch.setenv(
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
@@ -806,11 +854,19 @@ def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
     pending_reservation.refresh_from_db()
 
     assert paid_result.status == "processed"
-    assert Subscription.objects.current().count() == 1
-    assert Subscription.objects.current().get(user=user).pk == pending_reservation.pk
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 1
+    assert (
+        Subscription.all_objects.filter(Subscription.current_status_q())
+        .get(organization=organization)
+        .pk
+        == pending_reservation.pk
+    )
     assert pending_reservation.status == Subscription.Status.ACTIVE
     assert pending_reservation.stripe_subscription_id == "sub_invoice_first_incomplete"
-    assert CreditBalance.objects.get(user=user).balance == plan.credits_per_period
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
 
     fake_client.event = _subscription_event(
         event_id="evt_invoice_first_incomplete_late_update",
@@ -829,35 +885,46 @@ def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
     pending_reservation.refresh_from_db()
 
     assert updated_result.status == "processed"
-    assert Subscription.objects.current().count() == 1
-    assert Subscription.objects.current().get(user=user).pk == pending_reservation.pk
+    assert Subscription.all_objects.filter(Subscription.current_status_q()).count() == 1
+    assert (
+        Subscription.all_objects.filter(Subscription.current_status_q())
+        .get(organization=organization)
+        .pk
+        == pending_reservation.pk
+    )
     assert pending_reservation.current_period_start is not None
     assert pending_reservation.current_period_end is not None
-    assert CreditTransaction.objects.filter(user=user).count() == 1
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_failed")
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_failed",
         stripe_subscription_id="sub_failed",
         status=Subscription.Status.ACTIVE,
     )
+    past_due_event = _invoice_event(
+        event_id="evt_payment_failed",
+        event_type="invoice.payment_failed",
+        invoice_id="in_payment_failed",
+        customer_id="cus_failed",
+        price_id=plan.stripe_price_id,
+        subscription_id="sub_failed",
+    )
+    past_due_event["data"]["object"]["metadata"]["quickscale_org_reference"] = (
+        _organization_reference(organization)
+    )
     fake_client = FakeSubscriptionStripeClient(
-        event=_invoice_event(
-            event_id="evt_payment_failed",
-            event_type="invoice.payment_failed",
-            invoice_id="in_payment_failed",
-            customer_id="cus_failed",
-            price_id=plan.stripe_price_id,
-            subscription_id="sub_failed",
-        )
+        event=past_due_event,
     )
     monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_payment_failed")
 
@@ -876,11 +943,13 @@ def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
 @pytest.mark.django_db
 def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_recovery")
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_recovery",
         stripe_subscription_id="sub_recovery",
@@ -890,6 +959,7 @@ def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
     fake_client = FakeSubscriptionStripeClient(
         event=_invoice_event(
             event_id="evt_failed_recovery",
+            user_reference=_user_reference(user),
             event_type="invoice.payment_failed",
             invoice_id="in_failed_recovery",
             customer_id="cus_recovery",
@@ -939,18 +1009,23 @@ def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
     assert updated_result.status == "processed"
     assert paid_result.status == "processed"
     assert subscription.status == Subscription.Status.ACTIVE
-    assert CreditBalance.objects.get(user=user).balance == plan.credits_per_period
-    assert CreditTransaction.objects.filter(user=user).count() == 1
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_recovers_after_payment_failed_on_later_invoice_paid(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_recovery_invoice_paid")
-    subscription = Subscription.objects.create(
+    subscription = Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_recovery_invoice_paid",
         stripe_subscription_id="sub_recovery_invoice_paid",
@@ -997,18 +1072,23 @@ def test_handle_stripe_event_recovers_after_payment_failed_on_later_invoice_paid
     assert failed_result.status == "processed"
     assert paid_result.status == "processed"
     assert subscription.status == Subscription.Status.ACTIVE
-    assert CreditBalance.objects.get(user=user).balance == plan.credits_per_period
-    assert CreditTransaction.objects.filter(user=user).count() == 1
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
 
 
 @pytest.mark.django_db
 def test_handle_stripe_event_rejects_unsupported_subscription_status(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_future")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_future",
         stripe_subscription_id="sub_future",
@@ -1062,7 +1142,7 @@ def test_handle_stripe_event_does_not_credit_subscription_checkout_completion(
     )
 
     assert result.status == "processed"
-    assert CreditTransaction.objects.count() == 0
+    assert CreditTransaction.all_objects.count() == 0
 
 
 @pytest.mark.django_db
@@ -1077,14 +1157,16 @@ def test_handle_stripe_event_does_not_credit_subscription_checkout_completion(
 )
 def test_handle_stripe_event_ignores_non_creditable_invoice_paid_reason(
     user,
+    organization,
     monkeypatch: pytest.MonkeyPatch,
     billing_reason: str | None,
     event_id: str,
     invoice_id: str,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_manual_invoice")
-    Subscription.objects.create(
+    Subscription.all_objects.create(
         user=user,
+        organization=organization,
         plan=plan,
         stripe_customer_id="cus_manual_invoice",
         stripe_subscription_id="sub_manual_invoice",
@@ -1110,8 +1192,8 @@ def test_handle_stripe_event_ignores_non_creditable_invoice_paid_reason(
     )
 
     assert result.status == "processed"
-    assert CreditTransaction.objects.count() == 0
-    assert CreditBalance.objects.count() == 0
+    assert CreditTransaction.all_objects.count() == 0
+    assert CreditBalance.all_objects.count() == 0
 
 
 def test_stripe_client_create_subscription_checkout_session_uses_checkout_api() -> None:

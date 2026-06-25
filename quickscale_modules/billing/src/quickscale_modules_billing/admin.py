@@ -92,10 +92,13 @@ class PlanAdmin(admin.ModelAdmin):
 
 @admin.register(CreditBalance)
 class CreditBalanceAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
-    """Read-only admin for per-user balance snapshots."""
+    """Read-only admin for per-organization balance snapshots."""
 
     list_display = ["organization", "user", "balance", "updated_at"]
     list_select_related = ["organization", "user"]
+
+    def get_queryset(self, request):
+        return self.model.all_objects.all()
 
 
 @admin.register(CreditTransaction)
@@ -113,6 +116,9 @@ class CreditTransactionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     ]
     list_filter = ["transaction_type", "created_at"]
     list_select_related = ["organization", "user"]
+
+    def get_queryset(self, request):
+        return self.model.all_objects.all()
 
 
 @admin.register(Subscription)
@@ -135,6 +141,11 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "stripe_subscription_id",
         "stripe_customer_id",
     ]
+
+    def get_queryset(self, request):
+        return self.model.all_objects.all().select_related(
+            "organization", "user", "plan"
+        )
 
 
 @admin.register(WebhookEvent)
