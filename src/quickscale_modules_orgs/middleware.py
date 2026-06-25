@@ -31,7 +31,7 @@ from collections.abc import Callable
 from typing import cast
 
 from django.conf import settings
-from django.db import connection, transaction
+from django.db import transaction
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -45,6 +45,7 @@ from .current_org import (
     reset_current_org_id,
     set_current_org,
     set_current_org_id,
+    set_db_current_org_id,
 )
 from .models import Organization, OrganizationMembership
 
@@ -275,10 +276,7 @@ class TenantMiddleware:
             reset_current_org_id()
 
     def _set_current_org_id(self, organization_id: uuid.UUID | str) -> None:
-        if connection.vendor != "postgresql":
-            return
-        with connection.cursor() as cursor:
-            cursor.execute("SET LOCAL app.current_org_id = %s", [str(organization_id)])
+        set_db_current_org_id(organization_id)
 
     @staticmethod
     def _is_authenticated_user(request: HttpRequest) -> bool:
