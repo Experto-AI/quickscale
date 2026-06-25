@@ -24,9 +24,9 @@ Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed
 
 | Worktree | Branch | Phase 2 owns | Phase 3 owns | Next task |
 |---------|--------|-------------|-------------|-----------|
-| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | **T1.11** |
-| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | **T1.13** |
-| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | **T1.16** |
+| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | *(complete)* |
+| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | *(complete)* |
+| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | *(complete)* |
 
 Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
 
@@ -133,12 +133,12 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [x] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
 
 **Phase 3 — RLS backstop** *(parallel; each after its Phase-2 task + T1.4)*
-- [ ] T1.11 — CRM RLS policies *(wt-track1 · plan-review mandatory)*
-- [ ] T1.12 — Blog RLS policies *(wt-track1 · plan-review mandatory)*
-- [ ] T1.13 — Forms RLS policies *(wt-track2 · plan-review mandatory)*
-- [ ] T1.14 — Listings RLS policies *(wt-track2 · plan-review mandatory)*
+- [x] T1.11 — CRM RLS policies *(wt-track1)*
+- [x] T1.12 — Blog RLS policies *(wt-track1)*
+- [x] T1.13 — Forms RLS policies *(wt-track2)*
+- [x] T1.14 — Listings RLS policies *(wt-track2)*
 - [x] T1.15 — Social RLS policies *(wt-track3)*
-- [ ] T1.16 — Billing RLS policies *(wt-track3 · plan-review mandatory)*
+- [x] T1.16 — Billing RLS policies *(wt-track3)*
 
 **Phase 4 — Teardown**
 - [ ] T1.17 — `purge_organization` command
@@ -262,61 +262,50 @@ All six tasks: `PLANNING TIER: medium`, **plan-review mandatory**.
 
 ---
 
-#### - [ ] T1.11 — CRM RLS policies
+#### - [x] T1.11 — CRM RLS policies
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implemented 2026-06-25.
 
 - **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.5
-- **SCOPE:** CRM migration `RunSQL` for all owned tables (Contact, Company, Deal, Activity, pipeline) + per-org admin/runtime-role contract per D4 (no SQL bypass).
-- **ACCEPTANCE CRITERIA:** app role + `app.current_org_id` set → only that org's rows visible; unset → fail-closed; zero rows whose `organization_id` ≠ session var; CRM suite green under the RLS role.
+- **SCOPE:** `crm/migrations/0008_enable_rls.py` — ENABLE + FORCE RLS + ALL policy on Tag, Company, Contact, Stage, Deal tables. ContactNote/DealNote scoped via parent FK (no direct `organization_id`). PostgreSQL guard (no-op on SQLite). Full reverse SQL. `crm/tests/test_rls_boundary.py` — restricted-role boundary proof: bogus-org fail-closed, cross-org isolation, unset-context fail-closed.
+- **ACCEPTANCE CRITERIA:** app role + `app.current_org_id` set → only that org's rows visible; unset → fail-closed; CRM suite green under the RLS role.
 - **VALIDATION PATH:** `make MODULE=crm test -- --modules` including Postgres-backed RLS integration test (skips on SQLite).
 - **DEPENDS:** T1.5 + T1.4.
-- **PREP COMPLETED (2026-06-25):**
-  - Prerequisites verified: T1.4 (RLS DB role + generated-project settings) and T1.5 (CRM contract adoption) both resolved and merged to `v87`.
-  - Decision D4 (RLS role: NOSUPERUSER / NOBYPASSRLS) resolved.
-  - Worktree synced: `quickscale-wt-track1` clean-status check passed, fast-forward merged to `v87` (46b0ea8).
-  - Plan-review cycle completed (2 passes): finding CR-PR-T111-001 resolved; user chose to stop at the cap.
-- **USER-APPROVED IMPLEMENTATION CHOICES (established during plan-review):**
-  - Parent-derived note-table RLS policies without schema change — RLS on the parent `organization_id` FK covers inherited CRM note tables; no separate note-table policy needed.
-  - Explicit org-selection and fail-closed admin behavior — no operator bypass policy deployed; admin operations run under the runtime role (`NOSUPERUSER` / `NOBYPASSRLS`) with per-org session selection.
-  - When implementation eventually lands, update `docs/technical/organizations.md` to document the CRM RLS policies.
-- **REMAINING BLOCKER — CR-PR-T111-002:**
-  The future Phase 2/final closeout migration (`0008` or equivalent) must require:
-  1. **PostgreSQL guard** — run only under PostgreSQL; skip or error cleanly on SQLite.
-  2. **Explicit reverse path** — `DROP POLICY ...` + `ALTER TABLE ... DISABLE ROW LEVEL SECURITY` in the reverse migration.
-  3. **Forward + reverse migration proof** — test that the migration applies and reverses cleanly.
-  This finding must be resolved before T1.11 can be closed. Carried forward as a requirement for the next implementation phase.
 
 ---
 
-#### - [ ] T1.12 — Blog RLS policies
+#### - [x] T1.12 — Blog RLS policies
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implemented 2026-06-25.
 
 - **TRACK:** `wt-track1` (branch: `wt-track1`) — after T1.6
-- **SCOPE:** Blog migration `RunSQL` for Post, Category, Tag, BlogMediaAsset + operator carve-out.
+- **SCOPE:** `blog/migrations/0002_enable_rls.py` — ENABLE + FORCE RLS + ALL policy on Category, Tag, BlogMediaAsset, Post tables. AuthorProfile has no `organization_id` (user-linked) and is not covered. PostgreSQL guard. Full reverse SQL. `blog/tests/test_rls_boundary.py` — restricted-role boundary proof.
 - **VALIDATION PATH:** `make MODULE=blog test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.6 + T1.4.
 
 ---
 
-#### - [ ] T1.13 — Forms RLS policies
+#### - [x] T1.13 — Forms RLS policies
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implemented 2026-06-25.
 
 - **TRACK:** `wt-track2` (branch: `wt-track2`) — after T1.7
-- **SCOPE:** Forms migration `RunSQL` for Form (+ submission/response tables) + operator carve-out.
+- **SCOPE:** `forms/migrations/0006_enable_rls.py` — ENABLE + FORCE RLS + ALL policy on the Form table (org-ownership root). FormField, FormSubmission, FormFieldValue carry no direct `organization_id` — scoped through the Form FK. PostgreSQL guard. Full reverse SQL. `forms/tests/test_rls_boundary.py` — restricted-role boundary proof.
 - **VALIDATION PATH:** `make MODULE=forms test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.7 + T1.4.
 
 ---
 
-#### - [ ] T1.14 — Listings RLS policies
+#### - [x] T1.14 — Listings RLS policies
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implemented 2026-06-25.
 
 - **TRACK:** `wt-track2` (branch: `wt-track2`) — after T1.8
-- **SCOPE:** Listings migration `RunSQL` for AbstractListing and concrete listing tables + operator carve-out.
+- **SCOPE:** `listings/migrations/0002_enable_rls.py` — ENABLE + FORCE RLS + ALL policy on the concrete `Listing` table. AbstractListing is abstract (no DB table). Projects extending AbstractListing with custom concrete types must add their own RLS migration. PostgreSQL guard. Full reverse SQL. `listings/tests/test_rls_boundary.py` — restricted-role boundary proof.
 - **VALIDATION PATH:** `make MODULE=listings test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.8 + T1.4.
 
@@ -335,17 +324,16 @@ Implemented 2026-06-25.
 
 ---
 
-#### - [ ] T1.16 — Billing RLS policies
+#### - [x] T1.16 — Billing RLS policies
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implemented 2026-06-25.
 
 - **TRACK:** `wt-track3` (branch: `wt-track3`) — after T1.10
-- **SCOPE:** Billing migration `RunSQL` for Subscription, CreditTransaction, CreditBalance — no operator bypass policy; explicit `app.current_org_id` context establishment in webhook/runtime paths before enabling `FORCE ROW LEVEL SECURITY`; fail-closed behavior under the runtime role (`NOSUPERUSER` / `NOBYPASSRLS` per T1.4).
+- **SCOPE:** `billing/migrations/0002_enable_rls.py` — ENABLE + FORCE RLS + ALL policy on CreditBalance, CreditTransaction, Subscription. Plan and WebhookEvent have no `organization_id` and are excluded. PostgreSQL guard. Full reverse SQL. `billing/services.py` — `_billing_org_db_context(organization)` context manager added; wraps org-scoped mutations in `_handle_invoice_paid_event`, `_handle_invoice_payment_failed_event`, `_upsert_subscription_from_payload`, and `_handle_checkout_session_completed_event` after org resolution. `billing/tests/test_rls_boundary.py` — three test classes: `_billing_org_db_context` unit tests, restricted-role boundary proof, and webhook zero-ambient-context proof (PLAN-T1.16-006).
+- **APPROACH:** Option A — per-handler `_billing_org_db_context` wrapping. Org is resolved from the Stripe payload first (via Organization `stripe_customer_id`, no RLS needed); context is established before the first write to any RLS-protected table. Ignored events never touch RLS tables.
 - **VALIDATION PATH:** `make MODULE=billing test -- --modules` + Postgres RLS integration test.
 - **DEPENDS:** T1.10 + T1.4.
-- **PREP COMPLETED (2026-06-25):** T1.10 + T1.4 confirmed complete; wt-track3 synced with v87 (`46b0ea8`); discovery and mandatory plan-review completed; no implementation started.
-- **REMAINING BLOCKER:** PLAN-T1.16-006 (medium, blocking, test-gap) — webhook/runtime Postgres tests must start with no ambient org context so they prove `handle_stripe_event()` establishes/restores org context internally under RLS. Implementation cannot proceed safely until this test gap is closed.
-- **DECISION NEEDED:** Confirm approach for simulating Stripe webhook entry with zero ambient org context in the RLS test harness.
 
 ---
 
@@ -436,6 +424,7 @@ Single-PR items that do not change the design:
 | M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
 | M16 | 1 | T1.5, T1.6, T1.7, T1.8, T1.9, T1.10 | Phase 2 complete. CRM (T1.5, wt-track1), Blog (T1.6, wt-track1), Forms (T1.7, wt-track2), Listings (T1.8, wt-track2), Social (T1.9, wt-track3), and Billing (T1.10, wt-track3) contract adoption merged to v87. |
 | M17 | 1 | T1.15 | Phase 3 partial. Social RLS (T1.15, wt-track3) — RLS active for social tables via UUID predicate; per-org runtime-role admin contract with fail-closed behavior; no operator bypass. Social module 81/81, admin contracts 40/40. |
+| M18 | 1 | T1.11–T1.14, T1.16 | Phase 3 complete. CRM (T1.11, wt-track1), Blog (T1.12, wt-track1), Forms (T1.13, wt-track2), Listings (T1.14, wt-track2), Billing (T1.16, wt-track3) RLS backstop merged to v87. All six modules now FORCE RLS with fail-closed UUID predicate; billing adds `_billing_org_db_context` for per-handler org context in webhook paths. |
 
 ## References
 
