@@ -24,7 +24,7 @@ User = get_user_model()
 class TestPostAdmin:
     """Tests for PostAdmin save_model behavior"""
 
-    def test_save_model_keeps_authorless_on_create(self):
+    def test_save_model_keeps_authorless_on_create(self, system_org):
         """Test that save_model does not force an author when explicitly omitted"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -40,6 +40,7 @@ class TestPostAdmin:
             title="Admin Created Post",
             content="Content",
             status="draft",
+            organization=system_org,
         )
 
         # Simulate creating a new post (change=False) without author
@@ -48,7 +49,7 @@ class TestPostAdmin:
         assert post.pk is not None
         assert post.author is None
 
-    def test_save_model_preserves_author_on_edit(self):
+    def test_save_model_preserves_author_on_edit(self, system_org):
         """Test that save_model preserves existing author on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -69,6 +70,7 @@ class TestPostAdmin:
             title="Existing Post",
             author=original_author,
             content="Content",
+            organization=system_org,
         )
 
         request = factory.post("/admin/")
@@ -80,7 +82,7 @@ class TestPostAdmin:
         post.refresh_from_db()
         assert post.author == original_author
 
-    def test_save_model_keeps_explicit_author_on_create(self):
+    def test_save_model_keeps_explicit_author_on_create(self, system_org):
         """Test that save_model keeps explicitly set author on new posts"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -104,6 +106,7 @@ class TestPostAdmin:
             title="Post With Author",
             author=explicit_author,
             content="Content",
+            organization=system_org,
         )
 
         # When author is already set, save_model should keep it
@@ -111,7 +114,7 @@ class TestPostAdmin:
 
         assert post.author == explicit_author
 
-    def test_save_model_explicit_blank_author_remains_none(self):
+    def test_save_model_explicit_blank_author_remains_none(self, system_org):
         """Test that explicitly selecting blank author yields an authorless post"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -129,6 +132,7 @@ class TestPostAdmin:
             title="Post Without Author",
             content="Content",
             status="draft",
+            organization=system_org,
         )
 
         explicit_none_form = SimpleNamespace(cleaned_data={"author": None})
@@ -181,7 +185,7 @@ class TestPostAdmin:
 
         assert form_field.required is False
 
-    def test_formfield_for_foreignkey_edit_includes_all_users(self):
+    def test_formfield_for_foreignkey_edit_includes_all_users(self, system_org):
         """Test author dropdown keeps all user options on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -201,6 +205,7 @@ class TestPostAdmin:
             title="Post With Existing Author",
             author=existing_author,
             content="Content",
+            organization=system_org,
         )
 
         request = factory.get(f"/admin/{post.pk}/change/")
@@ -309,7 +314,7 @@ class TestPostAdmin:
         )
 
         assert response.status_code == 302
-        post = Post.objects.get(title="Admin Blank Author Post")
+        post = Post.all_objects.get(title="Admin Blank Author Post")
         assert post.author is None
 
     def test_get_form_submission_blank_author_is_valid_on_create(self):
@@ -352,7 +357,9 @@ class TestPostAdmin:
         assert form.is_valid(), form.errors.as_text()
         assert form.cleaned_data["author"] is None
 
-    def test_get_form_submission_blank_author_preserves_existing_author_on_edit(self):
+    def test_get_form_submission_blank_author_preserves_existing_author_on_edit(
+        self, system_org
+    ):
         """Test full admin form submission keeps existing author on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -373,6 +380,7 @@ class TestPostAdmin:
             author=existing_author,
             content="Content",
             status="draft",
+            organization=system_org,
         )
 
         request = factory.post(f"/admin/{post.pk}/change/")
@@ -566,14 +574,16 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_post_admin_org_readonly_on_change_form(self):
+    def test_post_admin_org_readonly_on_change_form(self, system_org):
         """PostAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
         request = factory.get("/admin/")
 
-        post = Post.objects.create(title="Change Org", content="...", status="draft")
+        post = Post.objects.create(
+            title="Change Org", content="...", status="draft", organization=system_org
+        )
         readonly = admin.get_readonly_fields(request, obj=post)
         assert "organization" in readonly
 
@@ -602,14 +612,16 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_category_admin_org_readonly_on_change_form(self):
+    def test_category_admin_org_readonly_on_change_form(self, system_org):
         """CategoryAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = CategoryAdmin(Category, site)
         factory = RequestFactory()
         request = factory.get("/admin/")
 
-        cat = Category.objects.create(name="ReadOnly Cat", slug="readonly-cat")
+        cat = Category.objects.create(
+            name="ReadOnly Cat", slug="readonly-cat", organization=system_org
+        )
         readonly = admin.get_readonly_fields(request, obj=cat)
         assert "organization" in readonly
 
@@ -638,14 +650,16 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_tag_admin_org_readonly_on_change_form(self):
+    def test_tag_admin_org_readonly_on_change_form(self, system_org):
         """TagAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = TagAdmin(Tag, site)
         factory = RequestFactory()
         request = factory.get("/admin/")
 
-        tag = Tag.objects.create(name="ReadOnly Tag", slug="readonly-tag")
+        tag = Tag.objects.create(
+            name="ReadOnly Tag", slug="readonly-tag", organization=system_org
+        )
         readonly = admin.get_readonly_fields(request, obj=tag)
         assert "organization" in readonly
 
@@ -664,7 +678,7 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_media_asset_admin_org_readonly_on_change_form(self):
+    def test_media_asset_admin_org_readonly_on_change_form(self, system_org):
         """BlogMediaAssetAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = BlogMediaAssetAdmin(BlogMediaAsset, site)
@@ -677,6 +691,7 @@ class TestBlogAdminOrgAwareMixin:
         asset = BlogMediaAsset.objects.create(
             original_filename="test.png",
             file=SimpleUploadedFile("test.png", io.BytesIO(b"dummy").read()),
+            organization=system_org,
         )
         readonly = admin.get_readonly_fields(request, obj=asset)
         assert "organization" in readonly
@@ -801,34 +816,26 @@ class TestBlogAdminOrgAwareMixin:
 
         assert form.is_valid(), form.errors.as_text()
 
-    def test_post_admin_accepts_null_org_category(self):
-        """PostAdmin accepts a category with no org (legacy compat) when the
-        post itself has an org."""
-        from quickscale_modules_orgs.models import Organization
-
+    def test_post_admin_add_rejects_same_org_category_missing_in_form(self, org_a):
+        """PostAdmin add form requires selecting a valid category."""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
         request = factory.post("/admin/")
         request.user = User.objects.create_superuser(
-            username="null-cat-admin",
-            email="null-cat@example.com",
+            username="missing-cat-admin",
+            email="missing-cat@example.com",
             password="pass123",
-        )
-
-        org = Organization.objects.create(name="Test Org", slug="test-org")
-        cat_no_org = Category.objects.create(
-            name="No Org Cat", slug="no-org-cat", organization=None
         )
 
         form_class = admin.get_form(request, obj=None, change=False)
         form = form_class(
             data={
-                "title": "Null-Org Cat Post",
+                "title": "No Cat Post",
                 "content": "Content",
                 "status": "draft",
-                "organization": str(org.pk),
-                "category": str(cat_no_org.pk),
+                "organization": str(org_a.pk),
+                "category": "",
                 "tags": [],
             }
         )

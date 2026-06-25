@@ -1,17 +1,20 @@
-"""Cross-tenant isolation tests for the blog module.
+"""Cross-tenant isolation tests for the blog module (T1.6 flat-route contract).
 
-Phase 2 (F11.11) delivers org-scoped URL patterns and view isolation.
-The ``test_org_a_cannot_see_org_b_posts`` test is now active (skip marker
-removed).  It validates that the org-scoped post list (HTML) returns only
-the requesting org's posts.
+With the single flat URL tree (D1), org scoping is now ambient via
+TenantManager auto-scoping on the ContextVar.  Anonymous/public reads
+are scoped to System org (D2).  Authenticated reads use the active org
+set by TenantMiddleware.
 
-The test uses the HTML ``PostListView`` at ``/orgs/<slug>/blog/`` and checks
-response content directly since the blog module uses template views rather
-than JSON API endpoints for list rendering.  AuthorProfile is global and
-not org-scoped, consistent with the Phase 2 plan.
+Isolation is verified by:
+1. Setting the contextvar explicitly to simulate a specific org context.
+2. Verifying that queries through the default manager only return that
+   org's rows.
+3. Verifying that the operator escape hatch (all_objects) bypasses
+   scoping.
 """
 
 import pytest
+from quickscale_modules_blog.models import Post
 
 
 @pytest.mark.isolation
@@ -20,17 +23,17 @@ def test_org_a_cannot_see_org_b_posts(
     org_a,
     org_b,
     org_a_admin,
-    client,
 ):
-    """Org A must not be able to read Org B's blog posts via an org-scoped path.
+    """Org A must not be able to read Org B's blog posts via TenantManager scoping.
 
-    Phase 2 (F11.11):
-    1. Create a ``Post`` owned by Org A and a ``Post`` owned by Org B.
-    2. Authenticate as an Org A admin (member of Org A).
-    3. Issue a GET to ``/orgs/<org_a.slug>/blog/`` (org-scoped PostListView).
-    4. Assert that only Org A's post is visible in the HTML response.
+    With the single flat URL tree and TenantManager auto-scoping,
+    setting the contextvar to Org A's ID should only return Org A's
+    posts.  Org B's posts must be invisible.
     """
-    from quickscale_modules_blog.models import Post
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
 
     Post.objects.create(
         title="Org A Post",
@@ -49,17 +52,47 @@ def test_org_a_cannot_see_org_b_posts(
         organization=org_b,
     )
 
-    client.force_login(org_a_admin)
-    response = client.get(f"/orgs/{org_a.slug}/blog/")
+    # Scope to Org A — only Org A's post should be visible.
+    set_current_org_id(org_a.pk)
+    try:
+        posts = list(
+            Post.objects.filter(status="published").values_list("title", flat=True)
+        )
+        assert "Org A Post" in posts
+        assert "Org B Post" not in posts, (
+            "Org B's post must not be visible when scoped to Org A"
+        )
+    finally:
+        reset_current_org_id()
 
-    assert response.status_code == 200, (
-        f"Expected 200 OK, got {response.status_code}. "
-        f"Response: {response.content.decode()[:500]}"
+
+@pytest.mark.isolation
+@pytest.mark.django_db
+def test_operator_bypass_returns_all_orgs_posts(
+    org_a,
+    org_b,
+    org_a_admin,
+):
+    """The operator escape hatch (all_objects) must return posts from all orgs."""
+    Post.objects.create(
+        title="Org A Post",
+        slug="org-a-post-operator",
+        author=org_a_admin,
+        content="Org A content",
+        status="published",
+        organization=org_a,
+    )
+    Post.objects.create(
+        title="Org B Post",
+        slug="org-b-post-operator",
+        author=org_a_admin,
+        content="Org B content",
+        status="published",
+        organization=org_b,
     )
 
-    html = response.content.decode()
-    assert "Org A Post" in html, "Org A's own post should be visible"
-    assert "Org B Post" not in html, (
-        "Org B's post must not be visible to Org A. "
-        "This confirms the cross-tenant isolation gap (Finding 11)."
+    titles = list(
+        Post.all_objects.filter(status="published").values_list("title", flat=True)
     )
+    assert "Org A Post" in titles
+    assert "Org B Post" in titles

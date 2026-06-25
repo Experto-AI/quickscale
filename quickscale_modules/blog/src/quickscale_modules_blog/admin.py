@@ -335,7 +335,11 @@ class PostAdmin(_BlogOrgAwareAdminMixin, MarkdownxModelAdmin):
         return Post.all_objects.all()
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):  # type: ignore[no-untyped-def]
-        """Show author as dropdown with blank default and current user option."""
+        """Show author as dropdown with blank default and current user option.
+
+        Uses ``all_objects`` for the category FK to bypass TenantManager
+        auto-scoping in the admin (operator path).
+        """
         if db_field.name == "author":
             user_model = get_user_model()
             allowed_author_ids = {request.user.pk}
@@ -347,7 +351,7 @@ class PostAdmin(_BlogOrgAwareAdminMixin, MarkdownxModelAdmin):
             )
             if object_id:
                 try:
-                    current_author_id = Post.objects.values_list(
+                    current_author_id = Post.all_objects.values_list(
                         "author_id", flat=True
                     ).get(pk=object_id)
                     allowed_author_ids.add(current_author_id)
@@ -363,7 +367,15 @@ class PostAdmin(_BlogOrgAwareAdminMixin, MarkdownxModelAdmin):
             kwargs["queryset"] = user_model.objects.filter(
                 pk__in=allowed_author_ids
             ).order_by("username")
+        if db_field.name == "category":
+            kwargs["queryset"] = Category.all_objects.all()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):  # type: ignore[no-untyped-def]
+        """Use ``all_objects`` for the tags M2M to bypass TenantManager auto-scoping."""
+        if db_field.name == "tags":
+            kwargs["queryset"] = Tag.all_objects.all()
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]
         """Save the model."""

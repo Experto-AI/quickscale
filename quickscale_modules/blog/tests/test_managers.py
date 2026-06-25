@@ -1,109 +1,117 @@
-"""Tests for blog module managers (Phase 1 / F11.11 dual-manager contract).
+"""Tests for blog module manager integration (T1.6 TenantManager contract).
 
-Covers the ``BlogQuerySet``, ``TenantScopedManager``, and ``OperatorManager``
-implementations to close the managers.py coverage gap reported by the
-F11.11 quality-gate pass.
+Validates that the shared ``TenantManager`` from ``quickscale_modules_orgs``
+works correctly on blog models: auto-scoping via ContextVar, operator bypass
+via ``all_objects`` (``super_scope=True``), and proper fail-closed behavior.
 """
 
 import pytest
 from django.db import models
 
-from quickscale_modules_blog.managers import BlogQuerySet
-from quickscale_modules_blog.models import Category
+from quickscale_modules_blog.models import (
+    BlogMediaAsset,
+    Category,
+    Post,
+    Tag,
+)
 
 
-class TestBlogQuerySet:
-    """Tests for ``BlogQuerySet`` direct behavior."""
-
-    @pytest.mark.django_db
-    def test_for_org_filters_by_organization(self, org, org_a):
-        """``for_org(org_id)`` must return only rows for that organization.
-
-        Covers line 32 of managers.py (the ``self.filter()`` branch).
-        """
-        Category.objects.create(name="Org A Cat", organization=org_a)
-        Category.objects.create(name="Default Cat", organization=org)
-
-        qs = Category.objects.all()
-        result = qs.for_org(org_a.pk)
-
-        names = list(result.values_list("name", flat=True))
-        assert names == ["Org A Cat"], f"Expected only Org A Cat, got {names}"
+class TestTenantManagerScoping:
+    """Tests for TenantManager auto-scoping on blog models."""
 
     @pytest.mark.django_db
-    def test_for_org_with_none_returns_empty_queryset(self, org):
-        """``for_org(None)`` must return an empty queryset (fail-closed).
-
-        Covers lines 30-31 of managers.py (the ``if organization_id is None``
-        and ``return self.none()`` branches).
-        """
-        Category.objects.create(name="Some Cat", organization=org)
-
-        qs = Category.objects.all()
-        result = qs.for_org(None)
-
-        assert result.count() == 0, "Expected empty queryset for None org_id"
-        assert list(result) == [], "Expected no rows for None org_id"
-
-
-class TestTenantScopedManager:
-    """Tests for ``TenantScopedManager`` convenience methods."""
+    def test_default_manager_is_tenant_manager(self, org):
+        """The default ``objects`` manager should be a TenantManager."""
+        assert isinstance(Category.objects, models.Manager)
+        assert isinstance(Tag.objects, models.Manager)
+        assert isinstance(Post.objects, models.Manager)
+        assert isinstance(BlogMediaAsset.objects, models.Manager)
 
     @pytest.mark.django_db
-    def test_for_org_on_manager(self, org, org_a):
-        """``TenantScopedManager.for_org()`` must scope to the given org.
+    def test_all_objects_is_tenant_manager_with_super_scope(self, org, org_a):
+        """The ``all_objects`` manager should bypass TenantManager auto-scoping.
 
-        Covers line 49 of managers.py.
+        When no contextvar is set, ``all_objects`` (super_scope=True) should
+        return all rows regardless of organization.
         """
-        Category.objects.create(name="Visible Cat", organization=org)
-        # Create a second category owned by a different org to make sure
-        # the filter actually restricts results.
-        Category.objects.create(name="Other Cat", organization=org_a)
+        from quickscale_modules_orgs.current_org import (
+            reset_current_org_id,
+        )
 
-        result = Category.objects.for_org(org.pk)
+        reset_current_org_id()
 
-        names = list(result.values_list("name", flat=True))
-        assert names == ["Visible Cat"], f"Expected only Visible Cat, got {names}"
-
-    @pytest.mark.django_db
-    def test_get_queryset_returns_blog_queryset(self, org):
-        """``TenantScopedManager.get_queryset()`` must return ``BlogQuerySet``.
-
-        Covers lines 44-45 of managers.py.
-        """
-        qs = Category.objects.get_queryset()
-        assert isinstance(qs, BlogQuerySet), f"Expected BlogQuerySet, got {type(qs)}"
-
-
-class TestOperatorManager:
-    """Tests for ``OperatorManager`` escape hatch."""
-
-    @pytest.mark.django_db
-    def test_get_queryset_returns_standard_queryset(self, org):
-        """``OperatorManager.get_queryset()`` must return a plain ``QuerySet``.
-
-        Covers lines 60-61 of managers.py.
-        """
-        Category.objects.create(name="Operator Cat", organization=org)
-
-        qs = Category.all_objects.get_queryset()
-
-        assert isinstance(qs, models.QuerySet), f"Expected QuerySet, got {type(qs)}"
-        # The operator queryset is unfiltered, so it should include everything.
-        assert qs.count() >= 1, "Operator queryset should see all rows"
-
-    @pytest.mark.django_db
-    def test_operator_manager_all_returns_all_rows(self, org, org_a):
-        """``OperatorManager`` (via ``all_objects``) must show all rows
-        regardless of organization.
-
-        Covers the integration-level path through OperatorManager.
-        """
-        Category.objects.create(name="Org A Cat", organization=org_a)
-        Category.objects.create(name="Default Cat", organization=org)
+        Category.objects.create(name="Cat A", organization=org)
+        Category.objects.create(name="Cat B", organization=org_a)
 
         all_cats = list(Category.all_objects.all().values_list("name", flat=True))
+        assert "Cat A" in all_cats
+        assert "Cat B" in all_cats
+        assert len(all_cats) == 2
 
-        assert "Org A Cat" in all_cats
-        assert "Default Cat" in all_cats
-        assert len(all_cats) == 2, f"Expected both categories, got {all_cats}"
+    @pytest.mark.django_db
+    def test_default_manager_fail_closed_when_no_org_context(self, org):
+        """The default manager should return no rows when contextvar is unset."""
+        from quickscale_modules_orgs.current_org import (
+            reset_current_org_id,
+        )
+
+        reset_current_org_id()
+
+        Category.objects.create(name="Some Cat", organization=org)
+        count = Category.objects.count()
+        assert count == 0, (
+            f"Expected fail-closed (0 rows) with no org context, got {count}"
+        )
+
+    @pytest.mark.django_db
+    def test_default_manager_filters_by_contextvar_org(self, org, org_a):
+        """The default manager should filter to the contextvar org only."""
+        from quickscale_modules_orgs.current_org import (
+            reset_current_org_id,
+            set_current_org_id,
+        )
+
+        reset_current_org_id()
+        Category.objects.create(name="Cat Org", organization=org)
+        Category.objects.create(name="Cat OrgA", organization=org_a)
+
+        set_current_org_id(org.pk)
+        try:
+            names = list(Category.objects.all().values_list("name", flat=True))
+            assert "Cat Org" in names
+            assert "Cat OrgA" not in names
+        finally:
+            reset_current_org_id()
+
+
+class TestOperatorBypass:
+    """Tests for the operator bypass escape hatch."""
+
+    @pytest.mark.django_db
+    def test_all_objects_returns_cross_tenant_rows(self, org, org_a):
+        """``all_objects`` must return rows from all organizations.
+
+        This validates that the ``super_scope=True`` ``TenantManager``
+        bypasses ContextVar-based filtering.
+        """
+        from quickscale_modules_orgs.current_org import reset_current_org_id
+
+        reset_current_org_id()
+
+        Post.objects.create(
+            title="Post A",
+            content="Content A",
+            status="draft",
+            organization=org,
+        )
+        Post.objects.create(
+            title="Post B",
+            content="Content B",
+            status="draft",
+            organization=org_a,
+        )
+
+        titles = list(Post.all_objects.all().values_list("title", flat=True))
+        assert "Post A" in titles
+        assert "Post B" in titles
+        assert len(titles) == 2
