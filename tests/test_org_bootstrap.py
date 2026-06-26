@@ -66,7 +66,7 @@ def test_solo_crm_route_seeds_personal_org_stages_on_first_access(
     for item in stages_data:
         assert Stage.all_objects.get(pk=item["id"]).organization_id == organization.id
 
-    dashboard_response = client.get("/crm/")
+    dashboard_response = client.get("/crm/dashboard/")
     assert dashboard_response.status_code == 200
     # Dashboard should not have created extra stages beyond the seeded set.
     assert Stage.all_objects.filter(organization=organization).count() == 4

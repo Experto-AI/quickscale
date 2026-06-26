@@ -34,6 +34,6 @@ router.register(r"contact-notes", ContactNoteViewSet, basename="contact-note")
 router.register(r"deal-notes", DealNoteViewSet, basename="deal-note")
 
 urlpatterns = [
-    path("crm/", CRMDashboardView.as_view(), name="dashboard"),
+    path("crm/dashboard/", CRMDashboardView.as_view(), name="dashboard"),
     path("crm/api/", include(router.urls)),
 ]
