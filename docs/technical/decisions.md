@@ -1102,6 +1102,33 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
 - Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
 
+### Multi-tenant SaaS Architecture {#multitenant-saas-architecture}
+
+**Architectural Decision (v0.86.0):** QuickScale-generated SaaS apps use **PostgreSQL FORCE RLS on a single Railway deployment** — one app service + one PostgreSQL 18 service, all tenants share one database and schema. Organizations are the billing and isolation unit. See [organizations.md](./organizations.md) for the full design and [roadmap.md](./roadmap.md) for open implementation work.
+
+**Chosen shape:**
+- ✅ Single Railway project (one app + one PostgreSQL 18 service); Railway bill is flat regardless of tenant count
+- ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS + contextvar TenantManager
+- ✅ Billing unit: `Subscription → Organization` (not per-user)
+- ✅ URL routing: flat routes only — `/crm/`, `/blog/`; no `/orgs/<slug>/` content routes
+- ✅ Users may belong to multiple organizations; org-switcher in the React UI
+- ✅ All organizations get all modules; differentiate by credit limits only (no feature gating)
+
+**RLS enforcement rule (critical):**
+- RLS enforces only when the app connects as the `NOSUPERUSER/NOBYPASSRLS` runtime role, selected by `RUNTIME_DATABASE_URL`
+- When `RUNTIME_DATABASE_URL` is unset the app falls back to the superuser `DATABASE_URL` (BYPASSRLS) — **all RLS silently disables; fail open**
+- Boot guard required: `orgs.QuickscaleOrgsConfig.ready()` must assert `rolbypassrls=false` in saas mode with `DEBUG=False`; raise `ImproperlyConfigured` and refuse to start if the connected role has BYPASSRLS (T1.18)
+- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` — this is correct for migrations; catastrophic for `runserver`/`gunicorn`
+
+**Rejected alternatives (do not re-introduce):**
+- ❌ **Per-client Railway deployment** — linear operational overhead per tenant; not a SaaS platform
+- ❌ **App-layer-only filtering without RLS** — no defence-in-depth; a single missed filter leaks cross-tenant data
+- ❌ **PostgreSQL schema-per-tenant isolation** — schema metadata bloat, migration complexity with many tenants
+
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (open implementation tasks T1.17–T1.20) | [findings.md](../../findings.md) (current risk posture)
+
+---
+
 ### Billing Contract (v0.85.0 behavior)
 
 - Authoritative billing configuration lives in `quickscale.yml`, generated Django settings, and environment variables. Planner/apply may write env-var references into managed settings, but Stripe publishable keys, secret keys, and webhook secrets stay environment-only and never persist in QuickScale database rows.
@@ -1116,6 +1143,13 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ❌ Advanced configuration layers beyond the shipped `quickscale.yml` + `.quickscale/state.yml` workflow
 
 ## Prohibitions (Critical - DO NOT)
+
+**Multi-tenant / Tenant Isolation:**
+- ❌ Per-client Railway deployment (linear overhead per tenant — not a SaaS platform)
+- ❌ App-layer-only filtering without a PostgreSQL RLS backstop (no defence-in-depth; one missed filter leaks cross-tenant data)
+- ❌ PostgreSQL schema-per-tenant isolation (schema metadata bloat, migration complexity)
+- ❌ Connecting generated apps in saas/prod mode under a BYPASSRLS role (silently disables all RLS policies across all modules)
+- ❌ Route-slug-based org resolution for content routes (`/orgs/<slug>/crm/...`) — use flat routes + session active-org; org-admin API may keep `/api/orgs/<slug>/`
 
 **Package Structure:**
 - ❌ Nested package names (NO `quickscale/quickscale_core`)
