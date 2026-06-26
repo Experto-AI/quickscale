@@ -269,18 +269,177 @@ Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md]
 
 ## Deferred / Monitor
 
-- [ ] **Generated `showcase_react` SaaS org-switch billing parity** *(Adaptive tier: 2)* — discovered during the T1.17 stop-here closeout. Need a product/implementation decision on how SPA org switches synchronize the active-org session before flat billing pages/APIs are used: either add an explicit org-switch/session-sync flow (plus billing query invalidation) or keep generated billing entry points off the SPA org dashboard until that state contract exists.
-- [ ] **Retire static MODULE_CATALOG tuple** *(Adaptive tier: 1)* — `quickscale_core/src/quickscale_core/contracts/module_catalog.py` still contains a hardcoded catalog tuple; retire it in favor of manifest-backed `module_discovery.py` as the sole authoritative inventory. Finding 3 residual — T2.3/T2.4 resolved the CLI-wiring half; this is the remaining gap.
-- [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
-- [ ] **Backups terminology sweep outside T3.3 scope** *(Adaptive tier: 1)* — broad `legacy|fallback|backward` grep still hits historical migration/test fixtures plus Django's `FallbackStorage` import in `quickscale_modules/backups/`; T3.3 only cleared stale single-path wording from the active DR service/adapter surfaces.
-- [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
-- [ ] **Pre-existing quickscale_core coverage gaps** *(Adaptive tier: 1)* — `quickscale_core/src/quickscale_core/contracts/resolvers.py` and `quickscale_core/src/quickscale_core/manifest/social_manifest.py` remained below the 80% per-file coverage floor during T2.4 closeout. Unrelated to the Track 2 shim cleanup; address when those core surfaces are touched next.
-- [ ] **Broader compatibility-window widening** *(Adaptive tier: 2)* — monitor user-reported version conflicts before investing beyond runtime-pin decoupling.
-- [ ] **Decouple request-scoped transaction from external I/O** *(Adaptive tier: 3 · 6–18 month horizon)* — `TenantMiddleware._call_with_org` wraps the entire view in `transaction.atomic()` to carry `SET LOCAL app.current_org_id`; billing checkout/portal views make 2–4 sequential Stripe network calls inside that transaction, holding a DB connection idle-in-transaction during third-party latency. Fix shape: replace `SET LOCAL` with session-scoped `SET` reset at request end via a connection hook; remove the outer `atomic()` from `_call_with_org`; move external calls outside transactions. `findings.md` Finding 3. **Promote when:** `pg_stat_activity` shows idle-in-transaction duration rising with Stripe API latency, or when `WEB_CONCURRENCY > 1` + Stripe latency spikes are observed.
-- [ ] **Emitted-project operability & API-contract substrate** *(deferred)* — no structured logging/correlation IDs, no versioned public API, no webhook payload boundary validation. Promote when a second external provider lands or the first public-API consumer appears.
-  - [ ] *(Tier 1)* Add structured logging and correlation-ID baseline to generated modules.
-  - [ ] *(Tier 2)* Add versioned public-API surface (`/api/vN`) to generated module `urls.py`.
-  - [ ] *(Tier 2)* Add webhook payload boundary validation baseline.
+Nine deferred items. Items marked **Pursue** are actionable now or on a near-horizon trigger. Items marked **Drop / Monitor** have no runtime impact or no clear trigger yet.
+
+---
+
+#### - [ ] D1 — Generated `showcase_react` SaaS org-switch billing parity
+
+`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+
+- **TRACK:** unassigned — new worktree; start after T1.18/T1.19 land
+- **WHY:** Discovered during T1.17 stop-here closeout. In a generated SaaS project the React SPA performs org-switches client-side but the server session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before flat `/billing/...` and `/api/billing/...` calls fire. If a billing page loads before session persistence completes the billing views resolve the wrong org from the session.
+- **OBJECTIVE:** Decide between two implementation shapes — (A) add an explicit org-switch/session-sync endpoint (`POST /orgs/set-active/`) that the SPA must call and await before navigating to billing, plus billing query invalidation on org change; or (B) remove generated billing entry points from the SPA org dashboard until the session-sync contract exists. Record the choice as a locked decision and implement it in the generated template.
+- **SCOPE:**
+  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/templates/index.html.j2` — SPA nav/routing section (lines 77–88); `currentOrgSlug` usage and billing URL construction
+  - `quickscale_modules/orgs/` — if Option A: add session-sync view + URL; update middleware/session to write `ACTIVE_ORG_SESSION_KEY` on org-switch POST
+  - `quickscale_modules/billing/` — if Option A: billing views validate session org matches request before serving
+- **ACCEPTANCE CRITERIA:** In a generated SaaS project, navigating billing pages after an org switch always resolves the correct org; no cross-tenant billing data is served. If Option B: billing link is absent from the SPA nav until the contract ships.
+- **VALIDATION PATH:** Manual test in a generated SaaS project — switch org, load billing dashboard, confirm correct org is active. `make MODULE=billing test -- --modules` + `make MODULE=orgs test -- --modules`.
+- **DEPENDS:** T1.18/T1.19 (`org_scope()` primitive should land first so any new session-sync path uses it). Decision required before implementation starts.
+- **RECOMMENDATION:** **Pursue** — active functional gap in generated SaaS projects. A user who runs `quickscale apply` with `billing` + `orgs` gets broken cross-org billing navigation. Option B is the safer quick fix while a session-sync contract is designed.
+
+---
+
+#### - [ ] D2 — Retire static `MODULE_CATALOG` tuple
+
+`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** `quickscale_core` — any available worktree; independent of all active tracks
+- **WHY:** Finding 3 residual. T2.3/T2.4 wired `get_discovered_module_entries()` as the authoritative manifest-backed inventory, but the static `MODULE_CATALOG` tuple in `module_catalog.py` still exists and is referenced for inventory purposes in three test files and two CLI test sites. The two inventories can silently diverge: a new module with a `module.yml` appears in manifest discovery but not in the tuple until someone manually updates it.
+- **OBJECTIVE:** Make `get_discovered_module_entries()` the sole inventory path. Freeze `MODULE_CATALOG` to description-only metadata; update callers that use it for inventory to use `get_discovered_module_entries()`; add a CI assertion that no caller imports `MODULE_CATALOG` for inventory use.
+- **SCOPE:**
+  - `quickscale_core/src/quickscale_core/contracts/module_catalog.py` — add deprecation note to `MODULE_CATALOG` tuple; `get_module_names()` and `get_module_entries()` already carry `.. note:: kept for backward compatibility` — strengthen those notes
+  - `quickscale_core/tests/generator/test_themes.py` lines 413, 419, 424 — replace `MODULE_CATALOG` / `get_module_names()` inventory assertions with `get_discovered_module_entries()`
+  - `quickscale_core/tests/test_e2e_full_workflow.py` lines 341, 361 — same swap
+  - `quickscale_cli/tests/test_orgs_contract.py`, `test_plan_add.py`, `test_module_manifest_contract.py` — migrate inventory assertions to `get_discovered_module_entries()`
+- **ACCEPTANCE CRITERIA:** `grep -rn "MODULE_CATALOG\|get_module_names\|get_module_entries" quickscale_core/tests quickscale_cli/tests` returns zero inventory-purpose hits (per-module description lookups via `get_module_entry(name)` are fine); `make test -- --core` + `make test -- --cli` green.
+- **VALIDATION PATH:** `make test -- --core` + `make test -- --cli`.
+- **DEPENDS:** T2.3/T2.4 (complete). Independent of Track 1.
+- **RECOMMENDATION:** **Pursue** — small, contained, removes divergence risk. The static tuple already carries backward-compat markers; finishing the job is a single focused session.
+
+---
+
+#### - [ ] D3 — Documentation consolidation
+
+`**Tier 2 — Medium | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** unassigned
+- **WHY:** Multiple doc surfaces (roadmap, decisions, findings, scaffolding, CHANGELOG, module READMEs) have accrued independent update histories. Some module facts are repeated across files. Track 2 manifest work means module names/descriptions can be derived from `module.yml` rather than hand-maintained in prose.
+- **OBJECTIVE:** Audit cross-doc duplication; establish a single-source rule for module facts (manifest → auto-generated); prune stale or redundant sections.
+- **SCOPE:** `docs/technical/`, `docs/findings.md`, per-module `README.md` files, `CHANGELOG.md` preamble.
+- **ACCEPTANCE CRITERIA:** No module fact (name, description, readiness) appears both in a static doc and in the manifest without the doc citing the manifest as the source; `START_HERE.md` onboarding path has no dead links.
+- **VALIDATION PATH:** Manual review.
+- **DEPENDS:** None.
+- **RECOMMENDATION:** **Drop for now** — no evidence of real onboarding failures. Defer until a new developer reports confusion, or until a manifest auto-generation layer emits doc stubs. Revisiting prematurely is pure churn.
+
+---
+
+#### - [ ] D4 — Backups terminology sweep outside T3.3 scope
+
+`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** unassigned — opportunistic; bundle with next backups module touch
+- **WHY:** T3.3 cleared stale single-path terminology from active DR service/adapter surfaces. A `legacy|fallback|backward` grep still hits two active-code docstrings: `backups/models.py:167` ("conservative legacy fallback") and `backups/admin.py:833` ("provenance fallbacks"). Django's `FallbackStorage` is a first-party class name and cannot be renamed.
+- **OBJECTIVE:** Reword the two docstring hits to drop legacy-DR framing; confirm `FallbackStorage` is the only remaining non-actionable hit.
+- **SCOPE:**
+  - `quickscale_modules/backups/src/quickscale_modules_backups/models.py` line 167 — reword docstring
+  - `quickscale_modules/backups/src/quickscale_modules_backups/admin.py` line 833 — reword docstring
+- **ACCEPTANCE CRITERIA:** `grep -rn "legacy\|fallback\|backward" quickscale_modules/backups/src/` returns only `FallbackStorage` hits and test/migration fixtures; no active-code docstring uses legacy DR framing.
+- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
+- **DEPENDS:** None. Opportunistic.
+- **RECOMMENDATION:** **Drop / opportunistic** — both hits are docstrings with zero runtime impact. Bundle with the next substantive backups change; do not schedule as a standalone task.
+
+---
+
+#### - [ ] D5 — Pre-existing backups coverage gap (`dr_adapter_call.py`)
+
+`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** unassigned — address when backups module is next touched
+- **WHY:** `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py` (61 lines) reported 0% test coverage during CRM closeout `make test`. It is an active management command that dispatches to the DR adapter; 0% means no test exercises any of its argument parsing or dispatch logic.
+- **OBJECTIVE:** Add unit tests covering at least: argument parsing (valid + invalid input), successful adapter dispatch (mocked DR engine), and error-path exit code.
+- **SCOPE:**
+  - `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py` — read to identify testable branches
+  - `quickscale_modules/backups/tests/` — add `test_dr_adapter_call.py` with ≥ 3 test cases
+- **ACCEPTANCE CRITERIA:** `make MODULE=backups test -- --modules` green; `dr_adapter_call.py` coverage ≥ 80%.
+- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
+- **DEPENDS:** None. Independent.
+- **RECOMMENDATION:** **Pursue** — 0% on an active management command is a real blind spot. Small scope (61-line file); bundle with D4 when backups is next touched.
+
+---
+
+#### - [ ] D6 — Pre-existing `quickscale_core` coverage gaps
+
+`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** unassigned — address when those surfaces are next touched
+- **WHY:** Two files fell below the 80% per-file coverage floor during T2.4 closeout: `contracts/resolvers.py` (1903 lines) and `manifest/social_manifest.py` (544 lines). `resolvers.py` is the manifest implication resolution engine; `social_manifest.py` parses social provider manifests. Low coverage on large, logic-heavy files is a regression risk.
+- **OBJECTIVE:** Bring both files to ≥ 80% statement coverage without adding `pragma: no cover` markers; focus on untested branches in the implication resolver and social manifest parser.
+- **SCOPE:**
+  - `quickscale_core/src/quickscale_core/contracts/resolvers.py` — identify uncovered branches; add tests in `quickscale_core/tests/`
+  - `quickscale_core/src/quickscale_core/manifest/social_manifest.py` — same approach
+- **ACCEPTANCE CRITERIA:** `make test -- --core` green; both files report ≥ 80% coverage in the per-file report.
+- **VALIDATION PATH:** `make test -- --core`.
+- **DEPENDS:** None. Independent.
+- **RECOMMENDATION:** **Pursue — `resolvers.py` is high priority** given its size (1903 lines) and central role in manifest resolution. `social_manifest.py` is lower urgency. Bundle with the next `quickscale_core` contracts or manifest change; do not let the gap widen.
+
+---
+
+#### - [ ] D7 — Broader compatibility-window widening
+
+`**Tier 2 — Medium | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** unassigned — monitor only
+- **WHY:** M11 decoupled the generator from generated-project runtime pins. No user-reported version conflicts exist as of 2026-06-26. Proactive widening without a reported failure is speculative.
+- **OBJECTIVE:** When a user-reported version conflict surfaces (e.g. Django version range too narrow, Stripe SDK pin incompatible with a newer generated project), widen the affected pin range in generator templates and/or `pyproject.toml`.
+- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — dependency sections; `quickscale_modules/*/pyproject.toml` — runtime pin declarations.
+- **ACCEPTANCE CRITERIA:** Reported conflict resolved; `make test` green on both old and new version.
+- **VALIDATION PATH:** `make test`.
+- **DEPENDS:** User-reported conflict (trigger condition).
+- **RECOMMENDATION:** **Monitor only — do not pursue proactively.** No evidence of conflicts. Promote when a user reports a real version conflict.
+
+---
+
+#### - [ ] D8 — Decouple request-scoped transaction from external I/O
+
+`**Tier 3 — High | PLANNING TIER: big | RISK LEVEL: high | EXECUTION PATH: full-path | HORIZON: 6–18 months**`
+
+- **TRACK:** unassigned — new worktree; promote when metrics trigger
+- **WHY:** `findings.md` Finding 3. `TenantMiddleware._call_with_org` (middleware.py:164–177) wraps the entire view in `transaction.atomic()` to carry `SET LOCAL app.current_org_id`. Billing checkout/portal views (`billing/services.py` lines 1075, 1173, 1325, 1461) make 2–4 sequential Stripe network calls inside that transaction, holding a Postgres connection idle-in-transaction during third-party latency. Under `WEB_CONCURRENCY > 1` and Stripe p99 latency spikes this exhausts the connection pool.
+- **OBJECTIVE:** Replace `SET LOCAL` (transaction-scoped) with session-scoped `SET` reset via a connection hook at request end; remove the outer `transaction.atomic()` from `_call_with_org`; ensure billing views wrap only their own DB writes, not the Stripe calls.
+- **SCOPE:**
+  - `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py` `_call_with_org` (line 164) — remove `transaction.atomic()` wrapper; replace `_set_current_org_id` with session-scoped `SET app.current_org_id`; add connection reset hook
+  - `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py` — `org_scope()` (T1.19) will need adjustment to use session-scoped SET if T1.19 lands first
+  - `quickscale_modules/billing/src/quickscale_modules_billing/services.py` — wrap only DB-write sections in explicit `transaction.atomic()`; move Stripe calls outside
+  - `quickscale_modules/orgs/tests/test_middleware.py` — add test asserting no idle-in-transaction connections accumulate during a mocked slow external call
+- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test -- --modules` + `make MODULE=billing test -- --modules` green; `pg_stat_activity` shows no idle-in-transaction connections during a Stripe-call-mocked request cycle.
+- **VALIDATION PATH:** `make MODULE=orgs test -- --modules` + `make MODULE=billing test -- --modules` + load test under `WEB_CONCURRENCY > 1` with Stripe latency mock.
+- **DEPENDS:** T1.19 (`org_scope()` primitive) should land first to avoid double-refactor. **PROMOTE WHEN:** `pg_stat_activity` shows idle-in-transaction duration rising with Stripe API latency, or `WEB_CONCURRENCY > 1` + Stripe latency spikes are observed in production.
+- **RECOMMENDATION:** **Pursue after T1.19, at the first production latency signal.** The risk is real and well-understood; the fix shape is clear. Tier 3 complexity is warranted because it touches the middleware transaction boundary that underpins all RLS. Do not promote until the production trigger fires.
+
+---
+
+#### - [ ] D9 — Emitted-project operability & API-contract substrate
+
+`**Mixed tiers — deferred | EXECUTION PATH: full-path | HORIZON: next external provider or first public-API consumer**`
+
+- **TRACK:** unassigned — promote sub-items independently as triggers fire
+- **WHY:** Generated projects have no structured logging/correlation IDs, no versioned public API surface, and no webhook payload boundary validation. None are blocking today because only one external provider (Stripe) is integrated and no external consumers of the public API exist. Each sub-item has an independent promote trigger.
+
+##### D9a — Structured logging and correlation-ID baseline *(Tier 1)*
+
+- **OBJECTIVE:** Add `structlog` (or Django's `JSONFormatter`) to generated module settings; emit a `correlation_id` (from `X-Request-ID` header or generated UUID) on every request log line.
+- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — settings template, middleware stack; generated `urls.py` — add correlation-ID middleware entry.
+- **ACCEPTANCE CRITERIA:** Generated project log output is JSON; every log line includes `correlation_id`; `make test -- --core` green.
+- **VALIDATION PATH:** `make test -- --core` + manual `runserver` log inspection.
+- **RECOMMENDATION:** **Pursue first among D9 sub-items** — structured logging has value regardless of provider count; it improves debuggability today.
+
+##### D9b — Versioned public-API surface *(Tier 2)*
+
+- **OBJECTIVE:** Add `/api/v1/` URL namespace to generated module `urls.py`; document the versioning contract in `scaffolding.md`.
+- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — generated `urls.py` pattern.
+- **ACCEPTANCE CRITERIA:** Generated project routes all module API views under `/api/v1/`; no unversioned `/api/` routes in generated output.
+- **VALIDATION PATH:** `make test -- --core`.
+- **RECOMMENDATION:** **Defer** — no external API consumer exists yet. Promote when a second provider or the first external consumer appears.
+
+##### D9c — Webhook payload boundary validation baseline *(Tier 2)*
+
+- **OBJECTIVE:** Extract Stripe webhook signature verification into a reusable `WebhookValidator` class; document the pattern for future providers.
+- **SCOPE:** `quickscale_modules/billing/src/quickscale_modules_billing/` — extract verification into a shared utility; `quickscale_core/` — add to generator as a template pattern.
+- **ACCEPTANCE CRITERIA:** Billing webhook handler uses `WebhookValidator`; a second provider can implement the same interface without duplicating verification logic.
+- **VALIDATION PATH:** `make MODULE=billing test -- --modules`.
+- **RECOMMENDATION:** **Defer** — Stripe verification already works; no second webhook provider exists. Promote when a second provider lands.
 
 ### Explicitly out of scope
 
