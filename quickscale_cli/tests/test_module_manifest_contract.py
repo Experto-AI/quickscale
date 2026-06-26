@@ -17,7 +17,7 @@ from quickscale_cli.commands.module_config import (
     get_default_social_config,
     get_default_storage_config,
 )
-from quickscale_core.contracts.module_catalog import get_module_entries
+from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
 from quickscale_core.manifest.loader import load_manifest_from_path
 
@@ -165,7 +165,7 @@ def _required_module_package_names(module_name: str) -> set[str]:
 
 def test_ready_modules_have_valid_manifest() -> None:
     """Every catalog-ready module must have a valid module.yml manifest."""
-    for entry in get_module_entries(include_experimental=False):
+    for entry in get_discovered_module_entries():
         manifest_path = _manifest_path(entry.name)
         assert manifest_path.exists(), f"Missing manifest: {manifest_path}"
 
@@ -188,7 +188,7 @@ def test_configurator_defaults_match_manifest_option_keys() -> None:
 
 def test_mutable_options_map_to_valid_django_settings() -> None:
     """Mutable options must declare valid Django setting names."""
-    for entry in get_module_entries(include_experimental=False):
+    for entry in get_discovered_module_entries():
         manifest = load_manifest_from_path(_manifest_path(entry.name))
 
         for option_name, option in manifest.mutable_options.items():
@@ -203,7 +203,7 @@ def test_mutable_options_map_to_valid_django_settings() -> None:
 
 def test_ready_packaged_module_versions_match_manifest_version() -> None:
     """Ready packaged modules must keep manifest, pyproject, and __version__ aligned."""
-    for entry in get_module_entries(include_experimental=False):
+    for entry in get_discovered_module_entries():
         module_name = entry.name
         manifest = load_manifest_from_path(_manifest_path(module_name))
         pyproject_version = _pyproject_data(module_name)["project"]["version"]
@@ -232,7 +232,7 @@ def test_ready_packaged_module_dependency_names_match_pyproject_runtime_dependen
     None
 ):
     """Ready packaged modules must keep third-party dependency names aligned."""
-    for entry in get_module_entries(include_experimental=False):
+    for entry in get_discovered_module_entries():
         module_name = entry.name
         manifest_dependency_names = _manifest_dependency_names(module_name)
         runtime_dependency_names = _runtime_dependency_names(module_name)
@@ -248,7 +248,7 @@ def test_ready_packaged_module_required_modules_match_pyproject_first_party_depe
     None
 ):
     """Required module metadata must align with first-party package dependencies."""
-    for entry in get_module_entries(include_experimental=False):
+    for entry in get_discovered_module_entries():
         module_name = entry.name
         required_module_packages = _required_module_package_names(module_name)
         runtime_module_dependencies = _runtime_module_dependency_names(module_name)
@@ -307,7 +307,7 @@ def test_all_catalog_modules_have_manifest_adapter() -> None:
     """
     unwired = [
         entry.name
-        for entry in get_module_entries(include_experimental=False)
+        for entry in get_discovered_module_entries()
         if entry.name not in MANIFEST_ADAPTER_REGISTRY
     ]
 
@@ -366,7 +366,7 @@ def test_all_catalog_modules_in_react_index_html_modules_block() -> None:
 
     missing = [
         entry.name
-        for entry in get_module_entries(include_experimental=False)
+        for entry in get_discovered_module_entries()
         if entry.name not in _REACT_UI_EXCLUDED_MODULES
         and f"{entry.name}:" not in modules_block
     ]
@@ -396,7 +396,7 @@ def test_all_catalog_modules_in_react_typescript_interface() -> None:
 
     missing = [
         entry.name
-        for entry in get_module_entries(include_experimental=False)
+        for entry in get_discovered_module_entries()
         if entry.name not in _REACT_UI_EXCLUDED_MODULES
         and f"{entry.name}: boolean" not in interface_block
     ]
@@ -449,7 +449,7 @@ def test_all_catalog_modules_have_html_theme_card() -> None:
 
     missing = [
         entry.name
-        for entry in get_module_entries(include_experimental=False)
+        for entry in get_discovered_module_entries()
         if entry.name not in _HTML_THEME_EXCLUDED_MODULES
         and f"quickscale_modules_{entry.name}" not in index_html
     ]
@@ -475,7 +475,7 @@ def test_html_theme_empty_state_includes_all_card_modules() -> None:
 
     card_modules = [
         entry.name
-        for entry in get_module_entries(include_experimental=False)
+        for entry in get_discovered_module_entries()
         if entry.name not in _HTML_THEME_EXCLUDED_MODULES
     ]
     not_in_empty_state = [

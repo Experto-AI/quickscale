@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from quickscale_core.contracts.module_catalog import MODULE_CATALOG, get_module_names
+from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.generator.generator import (
     REACT_THEME_OPTIONAL_FILES,
@@ -409,19 +409,19 @@ class TestReactOptionalFilesModuleCatalogAlignment:
     """
 
     def test_all_react_optional_file_gating_modules_are_in_catalog(self) -> None:
-        """Every module referenced by ``REACT_THEME_OPTIONAL_FILES`` must exist in the catalog."""
-        catalog_names = set(get_module_names(include_experimental=True))
+        """Every module referenced by ``REACT_THEME_OPTIONAL_FILES`` must exist in the discovered catalog."""
+        catalog_names = {entry.name for entry in get_discovered_module_entries()}
         gating_modules = set(REACT_THEME_OPTIONAL_FILES.values())
 
         missing = gating_modules - catalog_names
         assert not missing, (
             "REACT_THEME_OPTIONAL_FILES references gating modules that are "
-            f"missing from MODULE_CATALOG: {sorted(missing)}"
+            f"missing from the discovered catalog: {sorted(missing)}"
         )
 
     def test_all_react_optional_file_gating_modules_are_ready(self) -> None:
         """Gating modules should be public-ready so apply accepts them by default."""
-        ready_names = {entry.name for entry in MODULE_CATALOG if entry.ready}
+        ready_names = {entry.name for entry in get_discovered_module_entries()}
         gating_modules = set(REACT_THEME_OPTIONAL_FILES.values())
 
         not_ready = gating_modules - ready_names

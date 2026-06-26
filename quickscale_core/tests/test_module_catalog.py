@@ -201,3 +201,47 @@ class TestPlaceholderModuleRejection:
         reason = get_module_readiness_reason("teams")
         assert reason is not None
         assert "placeholder inventory only" in reason
+
+
+# ---------------------------------------------------------------------------
+# Canonical inventory guard — D2
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoveredCatalogIsCanonicalInventory:
+    """Guard that ``get_discovered_module_entries`` is the sole inventory path.
+
+    ``MODULE_CATALOG`` is frozen to description-only metadata after D2.
+    Any caller that needs the list of shipped modules must use
+    :func:`get_discovered_module_entries` or
+    :func:`get_discovered_module_names` instead of iterating the static
+    ``MODULE_CATALOG`` tuple.
+    """
+
+    def test_discovered_entries_cover_all_ready_static_entries(self) -> None:
+        """Every ready module in the static catalog must appear in discovered entries.
+
+        This prevents divergence: if you add a ``module.yml`` for a new module,
+        it must also appear in the static catalog's ready set (for description
+        metadata), and vice versa.
+        """
+        discovered = {e.name for e in get_discovered_module_entries()}
+        static_ready = {e.name for e in MODULE_CATALOG if e.ready}
+        missing = static_ready - discovered
+        assert not missing, (
+            "Ready static catalog modules missing from discovered inventory: "
+            f"{sorted(missing)}. "
+            "Either the module.yml is missing or the static catalog entry "
+            "is stale."
+        )
+
+    def test_discovered_names_are_sorted(self) -> None:
+        """get_discovered_module_names must return sorted names."""
+        names = get_discovered_module_names()
+        assert names == sorted(names)
+
+    def test_discovered_entries_are_sorted(self) -> None:
+        """get_discovered_module_entries must return sorted entries."""
+        entries = get_discovered_module_entries()
+        names = [e.name for e in entries]
+        assert names == sorted(names)

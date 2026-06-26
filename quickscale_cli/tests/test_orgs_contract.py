@@ -1,6 +1,9 @@
 """Contract tests for the ready-state orgs module integration."""
 
-from quickscale_core.contracts.module_catalog import get_module_entry, get_module_names
+from quickscale_core.contracts.module_catalog import (
+    get_discovered_module_names,
+    get_module_entry,
+)
 from quickscale_core.manifest.entry_point import build_manifest_wiring_spec
 from quickscale_cli.schema.config_schema import validate_config
 from quickscale_core.module_wiring import collect_wiring
@@ -17,7 +20,7 @@ def test_orgs_catalog_entry_is_public_ready() -> None:
 
 def test_orgs_is_in_ready_module_names() -> None:
     """Ready module names should surface orgs without experimental flags."""
-    assert "orgs" in get_module_names(include_experimental=False)
+    assert "orgs" in get_discovered_module_names()
 
 
 def test_orgs_module_is_accepted_by_config_validation() -> None:
