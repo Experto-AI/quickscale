@@ -18,6 +18,9 @@ django-allauth = ">=65.14.1,<66.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest-django = "^4.11.1"
+django-filter = ">=25.2"
+django-markdownx = ">=4.0.9"
+pillow = ">=12.2.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -28,7 +31,7 @@ target-version = "py313"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = [".", "src", "../billing/src"]
+pythonpath = [".", "src", "../billing/src", "../social/src", "../forms/src", "../listings/src", "../blog/src", "../crm/src"]
 python_files = ["test_*.py"]
 norecursedirs = [".*", "build", "dist", "node_modules", "quickscale_cli", "quickscale_core", "analytics", "auth", "backups", "billing", "blog", "crm", "forms", "listings", "notifications", "social", "storage", "teams"]
 testpaths = ["tests"]

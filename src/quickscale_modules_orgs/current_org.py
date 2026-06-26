@@ -121,3 +121,29 @@ def set_db_current_org_id(org_id: uuid.UUID | str) -> None:
         return
     with connection.cursor() as cursor:
         cursor.execute("SET LOCAL app.current_org_id = %s", [str(org_id)])
+
+
+# ---------------------------------------------------------------------------
+# T1.17 — combined helper for non-middleware callers
+# ---------------------------------------------------------------------------
+
+
+def set_current_org_for_context(*, org_id: uuid.UUID) -> None:
+    """Set both the ContextVar and ``SET LOCAL app.current_org_id``.
+
+    Non-middleware callers (management commands, background tasks, or any
+    code outside the request cycle) should call this inside a
+    ``transaction.atomic()`` block to establish consistent org context for
+    both Python-level tenant-scoped managers and database-level row security.
+
+    Combines :func:`set_current_org_id` and :func:`set_db_current_org_id`
+    so callers do not need to remember both calls.
+
+    Example::
+
+        with transaction.atomic():
+            set_current_org_for_context(org_id=organization.pk)
+            # ... tenant-scoped queries and DB SET LOCAL are in sync ...
+    """
+    set_current_org_id(org_id)
+    set_db_current_org_id(org_id)
