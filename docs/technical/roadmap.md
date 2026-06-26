@@ -20,12 +20,12 @@ Work is split across 3 git worktrees that develop in parallel and merge back to 
 
 ### Track assignment
 
-All tracks complete. wt-track1 and wt-track2 have committed work pending merge to v87; wt-track3 is idle.
+All tracks complete. wt-track1 has committed work pending merge to v87; wt-track2 and wt-track3 are idle.
 
 | Worktree | Branch | Phase 5 work | Status |
 |---------|--------|-------------|--------|
 | `quickscale-wt-track1` | `wt-track1` | T1.18 RLS boot guard · T1.19 `org_scope()` | T1.18 merged · T1.19 complete, pending merge |
-| `quickscale-wt-track2` | `wt-track2` | T1.20 slug fallback · D2 MODULE_CATALOG · D6 coverage | T1.20/D2 merged · D6 complete, pending merge |
+| `quickscale-wt-track2` | `wt-track2` | T1.20 slug fallback · D2 MODULE_CATALOG · D6 coverage | T1.20/D2 merged · D6 merged — idle |
 | `quickscale-wt-track3` | `wt-track3` | D4+D5 backups coverage + cleanup · D9a structured logging | All merged to v87 — idle |
 
 ### Start procedure
@@ -297,7 +297,7 @@ Single-PR items that do not change the design:
 | M17 | 1 | T1.15 | Phase 3 partial. Social RLS (T1.15, wt-track3) — RLS active for social tables via UUID predicate; per-org runtime-role admin contract with fail-closed behavior; no operator bypass. Social module 81/81, admin contracts 40/40. |
 | M18 | 1 | T1.11–T1.14, T1.16 | Phase 3 complete. CRM (T1.11, wt-track1), Blog (T1.12, wt-track1), Forms (T1.13, wt-track2), Listings (T1.14, wt-track2), Billing (T1.16, wt-track3) RLS backstop merged to v87. All six modules now FORCE RLS with fail-closed UUID predicate. |
 | M19 | 1 | T1.17 | Phase 4 complete. `purge_organization` management command: UUID-only destructive targeting, tombstone-backed rerun semantics, FK-safe delete order across social/forms/listings/blog/crm/billing/orgs, dry-run count parity, shared `set_current_org_for_context()` helper, Postgres-backed RLS proof. Stop-here rerun: orgs PostgreSQL suite 278 passed / 3 skipped. |
-| M20 | 1+2+3 | T1.18, T1.19, T1.20 · D2, D4+D5, D9a, D6 | Phase 5 complete + deferred items closed. RLS boot guard (T1.18) · unified `org_scope()` (T1.19) · slug-routing fallback deleted (T1.20) · MODULE_CATALOG retired as inventory (D2) · backups DR coverage + terminology (D4+D5) · structured logging baseline (D9a) · core coverage gaps closed (D6). T1.19 and D6 pending merge to v87. |
+| M20 | 1+2+3 | T1.18, T1.19, T1.20 · D2, D4+D5, D9a, D6 | Phase 5 complete + deferred items closed. RLS boot guard (T1.18) · unified `org_scope()` (T1.19) · slug-routing fallback deleted (T1.20) · MODULE_CATALOG retired as inventory (D2) · backups DR coverage + terminology (D4+D5) · structured logging baseline (D9a) · core coverage gaps closed (D6). T1.19 pending merge to v87. |
 
 ## References
 
