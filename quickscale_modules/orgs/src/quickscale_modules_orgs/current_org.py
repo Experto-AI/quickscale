@@ -16,7 +16,9 @@ managers can auto-filter without a ``request`` reference.
 
 from __future__ import annotations
 
+import contextlib
 import uuid
+from collections.abc import Iterator
 from contextvars import ContextVar
 from typing import Any
 
@@ -123,6 +125,24 @@ def set_db_current_org_id(org_id: uuid.UUID | str) -> None:
         cursor.execute("SET LOCAL app.current_org_id = %s", [str(org_id)])
 
 
+def reset_db_current_org_id() -> None:
+    """Reset PostgreSQL ``app.current_org_id`` to the default (cleared).
+
+    After calling this, ``current_setting('app.current_org_id', true)::uuid``
+    returns ``NULL``, which is the "no org" RLS fail-closed state.
+
+    Must be called inside an active ``transaction.atomic()`` block because
+    ``RESET`` (like ``SET LOCAL``) is transaction-scoped.
+    Does nothing when the database backend is not PostgreSQL.
+    """
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        return
+    with connection.cursor() as cursor:
+        cursor.execute("RESET app.current_org_id")
+
+
 # ---------------------------------------------------------------------------
 # T1.17 — combined helper for non-middleware callers
 # ---------------------------------------------------------------------------
@@ -147,3 +167,75 @@ def set_current_org_for_context(*, org_id: uuid.UUID) -> None:
     """
     set_current_org_id(org_id)
     set_db_current_org_id(org_id)
+
+
+# ---------------------------------------------------------------------------
+# T1.19 — unified org_scope context manager
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def org_scope(organization: Any) -> Iterator[None]:
+    """Set ContextVar + DB ``app.current_org_id`` for the active execution context.
+
+    This is the **preferred, unified entry point** for entering org scope
+    from middleware and module-level callers.  On entry it sets the ContextVar
+    and opens a ``transaction.atomic()`` block that wraps ``SET LOCAL
+    app.current_org_id`` so that RLS-protected tables see the expected tenant
+    context.
+
+    On exit it restores both the prior ContextVar value and the prior DB-side
+    ``app.current_org_id`` so tenant context never leaks across call
+    boundaries, even under nested ``org_scope()`` use (T1.19 fail-closed
+    contract).
+
+    Parameters
+    ----------
+    organization : object or None
+        A Django model instance with a ``pk`` attribute (typically
+        ``Organization``), or ``None`` to clear the ContextVar and reset
+        the DB setting (fail-closed — RLS queries return zero rows).
+
+    Yields
+    ------
+    None
+    """
+    prior = get_current_org_id()
+    if organization is None:
+        # Reset both ContextVar and DB so that RLS fail-closed behavior
+        # is enforced even under a nested scope (CR-T119-001).
+        set_current_org_id(None)
+        from django.db import transaction
+
+        with transaction.atomic():
+            reset_db_current_org_id()
+            try:
+                yield
+            finally:
+                # Restore DB side first, then ContextVar — both inside the
+                # atomic so SET LOCAL takes effect in the same transaction.
+                if prior is None:
+                    reset_db_current_org_id()
+                else:
+                    set_db_current_org_id(prior)
+                set_current_org_id(prior)
+        return
+
+    # DB-backed path: set both ContextVar and DB inside an atomic block,
+    # and restore both before the atomic exits so that nested scopes do
+    # not leave the DB side desynchronized (CR-T119-001).
+    set_current_org_id(organization.pk)
+    from django.db import transaction
+
+    with transaction.atomic():
+        set_db_current_org_id(organization.pk)
+        try:
+            yield
+        finally:
+            # Restore DB side first, then ContextVar — both inside the
+            # atomic so SET LOCAL takes effect in the same transaction.
+            if prior is None:
+                reset_db_current_org_id()
+            else:
+                set_db_current_org_id(prior)
+            set_current_org_id(prior)

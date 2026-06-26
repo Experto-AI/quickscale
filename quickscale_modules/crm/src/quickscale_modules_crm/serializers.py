@@ -13,16 +13,18 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
     ``TenantMiddleware``).  Falls back to personal-org lookup for tests
     that bypass middleware.  Raises ``ValidationError`` when no org
     context is available.
-    """
-    from quickscale_modules_orgs.current_org import set_current_org_id
 
+    The contextvar is already set by ``TenantMiddleware._call_with_org``
+    via ``org_scope()``; this function only reads the org ID for stamping
+    purposes and does not re-set the contextvar (T1.19 — unified entry
+    point).
+    """
     request = serializer.context.get("request")
     if request is None:
         return None
 
     org = getattr(request, "org", None)
     if org is not None:
-        set_current_org_id(org.id)
         return org.id
 
     # Fallback: look up the user's personal org (for tests).
@@ -35,7 +37,6 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
         ).first()
         if personal_org is not None:
             request.org = personal_org
-            set_current_org_id(personal_org.id)
             return personal_org.id
 
     raise serializers.ValidationError(
@@ -49,18 +50,18 @@ def _read_org_id(serializer: serializers.Serializer) -> int | str | None:
 
     T1.5 flat-route contract: always returns the active org ID from
     ``request.org``, or ``None`` when no request context is available.
-    Also sets the org contextvar so that TenantManager auto-scoping
-    works for reverse-relation queries in serializer helpers.
-    """
-    from quickscale_modules_orgs.current_org import set_current_org_id
 
+    The contextvar is already set by ``TenantMiddleware._call_with_org``
+    via ``org_scope()``; this function only reads the org ID for
+    scoping purposes and does not re-set the contextvar (T1.19 —
+    unified entry point).
+    """
     request = serializer.context.get("request")
     if request is None:
         return None
 
     org = getattr(request, "org", None)
     if org is not None:
-        set_current_org_id(org.id)
         return org.id
 
     return None

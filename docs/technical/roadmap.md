@@ -203,13 +203,14 @@ Implemented 2026-06-26. Review-driven fix 2026-06-26.
 
 ---
 
-#### - [ ] T1.19 — Unified `org_scope()` context manager
+#### - [x] T1.19 — Unified `org_scope()` context manager
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+Implemented 2026-06-26.
 
 - **TRACK:** `wt-track1` (sequential after T1.18)
 - **WHY:** `findings.md` Finding 2 — contextvar and DB `SET LOCAL` are co-set by three independent mechanisms (middleware `_call_with_org`, billing `_billing_org_db_context`, serializer `_request_org_id`), creating divergence risk and making org-scope entry points impossible to audit uniformly.
-- **OBJECTIVE:** Promote `_billing_org_db_context` from `billing/services.py` to `orgs.current_org.org_scope()` as the **single supported entry point** for entering org scope (sets contextvar + opens `transaction.atomic()` + `SET LOCAL`). Update middleware `_call_with_org` and billing services to use it. Audit CRM serializer `all_objects` + manual `organization_id=` sites: where the contextvar is already set by middleware, remove the redundant re-set or document the bypass reason.
+- **COMPLETED:** Added `org_scope(organization)` context manager to `current_org.py` — the preferred, unified entry point for entering org scope from middleware and module-level callers. Updated `middleware._call_with_org` to delegate to `org_scope()` instead of managing ContextVar/SET_LOCAL inline. Deleted `_billing_org_db_context` from `billing/services.py`; all 4 call sites now import and use `org_scope` from `quickscale_modules_orgs.current_org`. Removed redundant `set_current_org_id()` calls and lazy imports from both `_request_org_id` and `_read_org_id` in CRM serializers — contextvar is already set by middleware. Cleaned up unused imports: `contextlib`/`Iterator` in billing, `transaction` in middleware, dead `_set_current_org_id` method, unused `set_current_org_id`/`set_db_current_org_id` imports in middleware. Existing `all_objects` bypass sites in CRM serializers remain documented as intentional. **Scope:** This unified the middleware+billing+CRM seam. Remaining callers (management commands, CRM views, social admin `_org_db_context`) still use `set_current_org_for_context()` / `set_current_org_id()` / `set_db_current_org_id()` directly; migrating them is deferred as follow-up work outside this task.
 - **SCOPE:**
   - `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py` — add `org_scope(organization)` context manager
   - `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py` — `_call_with_org` delegates to `org_scope()`
