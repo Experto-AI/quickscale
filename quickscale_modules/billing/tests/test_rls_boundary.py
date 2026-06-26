@@ -6,7 +6,7 @@ These tests verify that:
 1. ``FORCE ROW LEVEL SECURITY`` on billing tables enforces org isolation
    at the DB layer when ``app.current_org_id`` is set / unset.
 2. ``handle_stripe_event()`` starts with zero ambient org context and
-   establishes context internally via ``_billing_org_db_context``, so the
+    establishes context internally via ``org_scope``, so the
    resulting CreditBalance/CreditTransaction rows are only visible under
    the correct ``app.current_org_id``.
 
@@ -30,11 +30,11 @@ from quickscale_modules_billing.models import (
     Subscription,
 )
 from quickscale_modules_billing.services import (
-    _billing_org_db_context,
     handle_stripe_event,
 )
 from quickscale_modules_orgs.current_org import (
     get_current_org_id,
+    org_scope,
     set_current_org_id,
 )
 
@@ -96,13 +96,13 @@ def _make_plan(db) -> Plan:  # type: ignore[return]
 
 
 # ---------------------------------------------------------------------------
-# _billing_org_db_context tests
+# org_scope tests
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
 class TestBillingOrgDbContext:
-    """Unit tests for the ``_billing_org_db_context`` context manager."""
+    """Unit tests for the ``org_scope`` context manager."""
 
     @pytest.fixture(autouse=True)
     def _skip_if_not_postgres(self) -> None:
@@ -112,7 +112,7 @@ class TestBillingOrgDbContext:
     def test_sets_and_restores_contextvar(self, organization) -> None:
         """Context manager sets org context on entry and restores it on exit."""
         prior = get_current_org_id()
-        with _billing_org_db_context(organization):
+        with org_scope(organization):
             assert get_current_org_id() == organization.pk
         assert get_current_org_id() == prior
 
@@ -120,7 +120,7 @@ class TestBillingOrgDbContext:
         """When org is None, context manager clears the ContextVar."""
         set_current_org_id(organization.pk)
         try:
-            with _billing_org_db_context(None):
+            with org_scope(None):
                 assert get_current_org_id() is None
         finally:
             set_current_org_id(None)
@@ -129,10 +129,93 @@ class TestBillingOrgDbContext:
         """ContextVar is restored even when the body raises."""
         set_current_org_id(None)
         with pytest.raises(ValueError):
-            with _billing_org_db_context(organization):
+            with org_scope(organization):
                 assert get_current_org_id() == organization.pk
                 raise ValueError("test exception")
         assert get_current_org_id() is None
+
+    def _read_db_current_org_id(self) -> str | None:
+        """Read the current ``app.current_org_id`` directly from PostgreSQL."""
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (value,) = cursor.fetchone()
+        return value
+
+    def test_restores_db_setting_on_exit(self, organization) -> None:
+        """DB ``app.current_org_id`` is restored to prior value on exit."""
+        prior_db = self._read_db_current_org_id()
+        prior_ctx = get_current_org_id()
+        with org_scope(organization):
+            assert self._read_db_current_org_id() == str(organization.pk)
+        assert get_current_org_id() == prior_ctx
+        assert self._read_db_current_org_id() == prior_db
+
+    def test_restores_db_setting_when_prior_is_none(self, organization) -> None:
+        """When prior DB value was unset (NULL), exit resets to NULL."""
+        # Ensure clean slate
+        with connection.cursor() as cursor:
+            cursor.execute("RESET app.current_org_id")
+        prior_ctx = get_current_org_id()
+        with org_scope(organization):
+            assert self._read_db_current_org_id() == str(organization.pk)
+        assert get_current_org_id() == prior_ctx
+        assert self._read_db_current_org_id() is None
+
+    def test_nested_scope_restores_db_setting(self, organization) -> None:
+        """Nested ``org_scope()`` restores the outer DB value on inner exit."""
+        org_b = organization.__class__.objects.create(name="Org B", slug="org-b")
+        prior_db = self._read_db_current_org_id()
+        prior_ctx = get_current_org_id()
+
+        with org_scope(organization):
+            assert self._read_db_current_org_id() == str(organization.pk)
+            with org_scope(org_b):
+                assert self._read_db_current_org_id() == str(org_b.pk)
+            # After inner scope exits, DB must be restored to org_a
+            assert self._read_db_current_org_id() == str(organization.pk)
+            assert get_current_org_id() == organization.pk
+
+        # After outer scope exits, DB must be restored to prior
+        assert get_current_org_id() == prior_ctx
+        assert self._read_db_current_org_id() == prior_db
+
+    def test_none_inside_non_none_scope_resets_and_restores_db(
+        self, organization
+    ) -> None:
+        """``org_scope(None)`` inside ``org_scope(org)`` temporarily resets
+        the DB to NULL (fail-closed) and restores on exit (CR-T119-001).
+
+        Exercises the real nested path: outer ``org_scope(organization)``
+        then inner ``org_scope(None)``.  Verifies:
+
+        1. Inner ContextVar is ``None``.
+        2. Inner DB ``app.current_org_id`` is ``NULL`` (fail-closed).
+        3. After inner exit, both ContextVar and DB are restored to the
+           outer org value.
+        4. After outer exit, both ContextVar and DB are restored to the
+           original prior state (whatever it was before the outer scope).
+        """
+        prior_ctx = get_current_org_id()
+        prior_db = self._read_db_current_org_id()
+
+        with org_scope(organization):
+            # Outer scope — ContextVar and DB are set to the outer org
+            assert get_current_org_id() == organization.pk
+            assert self._read_db_current_org_id() == str(organization.pk)
+
+            with org_scope(None):
+                # Inner None scope — ContextVar is None, DB is NULL
+                # (fail-closed — RLS returns zero rows)
+                assert get_current_org_id() is None
+                assert self._read_db_current_org_id() is None
+
+            # After inner exit — both restored to the outer org value
+            assert get_current_org_id() == organization.pk
+            assert self._read_db_current_org_id() == str(organization.pk)
+
+        # After outer exit — both restored to the original prior state
+        assert get_current_org_id() == prior_ctx
+        assert self._read_db_current_org_id() == prior_db
 
 
 # ---------------------------------------------------------------------------

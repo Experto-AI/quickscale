@@ -22,7 +22,6 @@ from collections.abc import Callable
 from typing import cast
 
 from django.conf import settings
-from django.db import transaction
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -33,10 +32,9 @@ from django.shortcuts import redirect
 from .constants import ACTIVE_ORG_SESSION_KEY
 from .current_org import (
     clear_current_org,
+    org_scope,
     reset_current_org_id,
     set_current_org,
-    set_current_org_id,
-    set_db_current_org_id,
 )
 from .models import Organization, OrganizationMembership
 
@@ -167,17 +165,11 @@ class TenantMiddleware:
         organization: Organization,
     ) -> HttpResponse:
         set_current_org(request, organization)
-        set_current_org_id(organization.id)
         try:
-            with transaction.atomic():
-                self._set_current_org_id(organization.id)
+            with org_scope(organization):
                 return self.get_response(request)
         finally:
             clear_current_org(request)
-            reset_current_org_id()
-
-    def _set_current_org_id(self, organization_id: uuid.UUID | str) -> None:
-        set_db_current_org_id(organization_id)
 
     @staticmethod
     def _is_authenticated_user(request: HttpRequest) -> bool:
