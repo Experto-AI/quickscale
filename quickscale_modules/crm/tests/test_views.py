@@ -1040,7 +1040,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         )
 
         client.force_login(staff_user)
-        response = client.get("/crm/")
+        response = client.get("/crm/dashboard/")
 
         assert response.status_code == status.HTTP_200_OK
         content = response.content.decode("utf-8")
@@ -1082,7 +1082,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         )
 
         client.force_login(staff_user)
-        response = client.get("/crm/")
+        response = client.get("/crm/dashboard/")
 
         assert response.status_code == status.HTTP_200_OK
         content = response.content.decode("utf-8")
@@ -1162,6 +1162,7 @@ class TestF1110Phase1SoloRoutePersonalOrgTerminalStageResolution:
         staff_user.is_staff = True
         staff_user.save(update_fields=["is_staff"])
         client.force_login(staff_user)
+        _activate_org_in_session(client, personal_org)
 
         # Solo route request — TenantMiddleware attaches personal_org.
         response = client.post(
@@ -1216,6 +1217,11 @@ class TestF1110StandaloneNoteSoloParentValidation:
         before = ContactNote.objects.count()
         client.force_login(staff_user)
 
+        staff_personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
+        _activate_org_in_session(client, staff_personal_org)
+
         response = client.post(
             "/crm/api/contact-notes/",
             data={
@@ -1250,6 +1256,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         )
 
         client.force_login(staff_user)
+        _activate_org_in_session(client, personal_org)
 
         response = client.post(
             "/crm/api/contact-notes/",
@@ -1309,6 +1316,11 @@ class TestF1110StandaloneNoteSoloParentValidation:
         before = DealNote.objects.count()
         client.force_login(staff_user)
 
+        staff_personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
+        _activate_org_in_session(client, staff_personal_org)
+
         response = client.post(
             "/crm/api/deal-notes/",
             data={
@@ -1361,6 +1373,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
         )
 
         client.force_login(staff_user)
+        _activate_org_in_session(client, personal_org)
 
         response = client.post(
             "/crm/api/deal-notes/",

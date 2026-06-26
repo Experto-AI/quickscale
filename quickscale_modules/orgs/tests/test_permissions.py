@@ -8,6 +8,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 
 from quickscale_modules_billing.models import Plan, Subscription
+from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
     CurrentOrgError,
     clear_current_org,
@@ -48,10 +49,15 @@ def test_require_org_role_admin_matrix(client, settings) -> None:
             role=role,
         )
         client.force_login(user)
+        session = client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+        session.save()
 
         response = client.get(f"/orgs/{organization.slug}/admin-only/")
 
-        assert response.status_code == expected_status
+        assert response.status_code == expected_status, (
+            f"expected {expected_status} for role {role}, got {response.status_code}"
+        )
         if expected_status == 200:
             assert response.content.decode() == organization.slug
         client.logout()
@@ -83,10 +89,16 @@ def test_require_org_role_owner_matrix(client, settings) -> None:
     )
 
     client.force_login(admin)
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+    session.save()
     admin_response = client.get(f"/orgs/{organization.slug}/owner-only/")
     client.logout()
 
     client.force_login(owner)
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+    session.save()
     owner_response = client.get(f"/orgs/{organization.slug}/owner-only/")
 
     assert admin_response.status_code == 403
@@ -120,10 +132,16 @@ def test_org_role_mixin_uses_same_role_contract(client, settings) -> None:
     )
 
     client.force_login(admin)
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+    session.save()
     admin_response = client.get(f"/orgs/{organization.slug}/admin-mixin/")
     client.logout()
 
     client.force_login(viewer)
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+    session.save()
     viewer_response = client.get(f"/orgs/{organization.slug}/admin-mixin/")
 
     assert admin_response.status_code == 200
