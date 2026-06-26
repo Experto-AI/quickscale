@@ -189,24 +189,11 @@ def test_saas_mode_unmatched_org_management_paths_return_404(client, settings) -
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/orgs/{slug}/",
-        "/orgs/{slug}/admin-only/",
-        "/orgs/{slug}/owner-only/",
-        "/orgs/{slug}/admin-mixin/",
-    ],
-)
-def test_saas_mode_returns_403_for_non_member_org_routes(
-    client, settings, path
-) -> None:
-    """Org management routes with view-level role checks block non-members.
+def test_saas_mode_returns_403_for_non_member_org_dashboard(client, settings) -> None:
+    """Org dashboard (/orgs/<slug>/) blocks non-members via view role check.
 
     The middleware passes through on management paths; the views own access
-    control.  Unguarded test-only paths (``current-org-id``,
-    ``api-org-context``) no longer return 403 — they return 200 with no
-    middleware org context.
+    control.
     """
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
@@ -217,7 +204,7 @@ def test_saas_mode_returns_403_for_non_member_org_routes(
     organization = Organization.objects.create(name="Acme", slug="acme")
     client.force_login(user)
 
-    response = client.get(path.format(slug=organization.slug))
+    response = client.get(f"/orgs/{organization.slug}/")
 
     assert response.status_code == 403
 
@@ -1038,12 +1025,6 @@ def test_org_switcher_updates_session_org(client, settings) -> None:
         "/orgs/acme/members/invitations/00000000-0000-0000-0000-000000000000/revoke/",
         "/orgs/acme/settings/",
         "/orgs/invitations/00000000-0000-0000-0000-000000000000/accept/",
-        # Orgs-module test routes
-        "/orgs/acme/admin-only/",
-        "/orgs/acme/owner-only/",
-        "/orgs/acme/admin-mixin/",
-        "/orgs/acme/feature/",
-        "/orgs/acme/current-org-id/",
         # API orgs module routes
         "/api/orgs/",
         "/api/orgs/acme/",
@@ -1070,10 +1051,16 @@ def test_is_org_management_path_accepts_orgs_module_paths(path) -> None:
         "/orgs/acme/forms/",
         "/orgs/acme/forms/api/admin/forms/",
         "/orgs/acme/listings/",
+        # Orgs-module test-only routes — NOT management bypass (fail-closed)
+        "/orgs/acme/admin-only/",
+        "/orgs/acme/owner-only/",
+        "/orgs/acme/admin-mixin/",
+        "/orgs/acme/feature/",
+        "/orgs/acme/current-org-id/",
     ],
 )
 def test_is_org_management_path_rejects_downstream_module_paths(path) -> None:
-    """Downstream module paths under /orgs/<slug>/<module>/ are NOT bypassed."""
+    """Unknown segments under /orgs/<slug>/ are NOT treated as management bypass."""
     assert TenantMiddleware._is_org_management_path(path) is False
 
 
@@ -1091,39 +1078,6 @@ def test_is_org_management_path_rejects_downstream_module_paths(path) -> None:
 def test_is_org_management_path_returns_false_for_non_org_paths(path) -> None:
     """Non-org paths are never management paths."""
     assert TenantMiddleware._is_org_management_path(path) is False
-
-
-@pytest.mark.django_db
-def test_downstream_module_path_redirects_without_session_org(client, settings) -> None:
-    """A downstream module path (/orgs/<slug>/crm/...) without session org
-    resolves the org from slug and returns 403 for non-members, confirming
-    it is NOT treated as a management bypass — the path goes through org
-    resolution.
-    """
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="downstream-user",
-        email="downstream@example.com",
-        password="secret123",
-    )
-    Organization.objects.create(name="Acme", slug="acme")
-    client.force_login(user)
-
-    # Since the test URL conf has no CRM route, we use a direct middleware
-    # call instead of client.get, which also avoids a 404 masking the
-    # middleware behavior.
-    request = RequestFactory().get("/orgs/acme/crm/dashboard/")
-    request.user = user
-    request.session = {}
-
-    from django.http import HttpResponse
-
-    response = TenantMiddleware(lambda req: HttpResponse("ok"))(request)
-
-    # Middleware resolves the org from slug, finds non-member → 403.
-    # This is correct: the path IS resolved (not bypassed), and the
-    # non-member is properly blocked.
-    assert response.status_code == 403
 
 
 @pytest.mark.django_db
@@ -1162,247 +1116,15 @@ def test_downstream_module_path_resolves_from_session_when_org_set(
 
 
 # ---------------------------------------------------------------------------
-# T1.3 — Slug fallback and personal org fallback (integration regressions)
+# T1.20 — No-session redirect (post slug-fallback removal)
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_saas_downstream_module_resolves_org_from_slug_without_session(
-    settings,
-) -> None:
-    """Downstream module path (/orgs/<slug>/crm/...) without session org
-    resolves the org from the URL slug (Fallback A)."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="slug-fallback",
-        email="slug-fallback@example.com",
-        password="secret123",
-    )
-    organization = Organization.objects.create(name="Acme", slug="acme")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.MEMBER,
-    )
-
-    request = RequestFactory().get("/orgs/acme/crm/dashboard/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 200
-    expected = (
-        f"{organization.slug}|{str(organization.id)}"
-        if connection.vendor == "postgresql"
-        else f"{organization.slug}|none"
-    )
-    assert response.content.decode() == expected
-    # The session should have been seeded for subsequent requests.
-    assert request.session.get(ACTIVE_ORG_SESSION_KEY) == str(organization.pk)
-
-
-@pytest.mark.django_db
-def test_saas_downstream_module_non_member_returns_403_without_session(
-    settings,
-) -> None:
-    """Downstream module path without session org and non-member user returns 403."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="non-member-slug",
-        email="non-member-slug@example.com",
-        password="secret123",
-    )
-    Organization.objects.create(name="Beta", slug="beta")
-
-    request = RequestFactory().get("/orgs/beta/crm/dashboard/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 403
-    assert request.session.get(ACTIVE_ORG_SESSION_KEY) is None
-
-
-@pytest.mark.django_db
-def test_saas_downstream_module_bad_slug_redirects_without_session(
-    settings,
-) -> None:
-    """Downstream module path with non-existent slug redirects to /orgs/."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="bad-slug",
-        email="bad-slug@example.com",
-        password="secret123",
-    )
-
-    request = RequestFactory().get("/orgs/nonexistent/crm/dashboard/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/orgs/"
-
-
-@pytest.mark.django_db
-def test_saas_listings_style_path_resolves_org_from_slug_without_session(
-    settings,
-) -> None:
-    """Non-/orgs/ path containing /orgs/<slug>/ (e.g. /listings/orgs/<slug>/)
-    resolves the org from the slug segment (Fallback A, pattern 2)."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="listings-style",
-        email="listings-style@example.com",
-        password="secret123",
-    )
-    organization = Organization.objects.create(name="Gamma", slug="gamma")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=organization,
-        role=OrgRole.MEMBER,
-    )
-
-    request = RequestFactory().get("/listings/orgs/gamma/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 200
-    expected = (
-        f"{organization.slug}|{str(organization.id)}"
-        if connection.vendor == "postgresql"
-        else f"{organization.slug}|none"
-    )
-    assert response.content.decode() == expected
-    assert request.session.get(ACTIVE_ORG_SESSION_KEY) == str(organization.pk)
-
-
-@pytest.mark.django_db
-def test_saas_listings_style_non_member_returns_403_without_session(
-    settings,
-) -> None:
-    """Non-/orgs/ path with /orgs/<slug>/ for non-member returns 403."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="listings-non-member",
-        email="listings-non-member@example.com",
-        password="secret123",
-    )
-    Organization.objects.create(name="Delta", slug="delta")
-
-    request = RequestFactory().get("/listings/orgs/delta/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 403
-
-
-@pytest.mark.django_db
-def test_saas_solo_format_route_resolves_personal_org_without_session(
-    settings,
-) -> None:
-    """Solo-format route (/crm/api/tags/) in SaaS mode without session org
-    resolves the personal org (Fallback B)."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="solo-format",
-        email="solo-format@example.com",
-        password="secret123",
-    )
-
-    request = RequestFactory().get("/crm/api/tags/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 200
-    # The personal org should have been created and used.
-    personal_org = Organization.objects.get(is_personal=True, memberships__user=user)
-    expected = (
-        f"{personal_org.slug}|{str(personal_org.id)}"
-        if connection.vendor == "postgresql"
-        else f"{personal_org.slug}|none"
-    )
-    assert response.content.decode() == expected
-    # Personal org is NOT stored in session (it's a fallback, not a navigation).
-    assert request.session.get(ACTIVE_ORG_SESSION_KEY) is None
-
-
-@pytest.mark.django_db
-def test_saas_billing_flat_route_resolves_personal_org_without_session(
-    settings,
-) -> None:
-    """Billing flat route (/billing/pricing/) in SaaS mode without session org
-    resolves the personal org (Fallback B)."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="billing-flat",
-        email="billing-flat@example.com",
-        password="secret123",
-    )
-
-    request = RequestFactory().get("/billing/pricing/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 200
-    personal_org = Organization.objects.get(is_personal=True, memberships__user=user)
-    expected = (
-        f"{personal_org.slug}|{str(personal_org.id)}"
-        if connection.vendor == "postgresql"
-        else f"{personal_org.slug}|none"
-    )
-    assert response.content.decode() == expected
-    # Personal org is NOT stored in session (it's a fallback, not a navigation).
-    assert request.session.get(ACTIVE_ORG_SESSION_KEY) is None
-
-
-@pytest.mark.django_db
-def test_saas_api_billing_flat_route_resolves_personal_org_without_session(
-    settings,
-) -> None:
-    """API billing flat route (/api/billing/config/) in SaaS mode without
-    session org resolves the personal org (Fallback B)."""
-    settings.QUICKSCALE_MODE = "saas"
-    user = get_user_model().objects.create_user(
-        username="api-billing-flat",
-        email="api-billing-flat@example.com",
-        password="secret123",
-    )
-
-    request = RequestFactory().get("/api/billing/config/")
-    request.user = user
-    request.session = {}
-
-    response = TenantMiddleware(home_view)(request)
-
-    assert response.status_code == 200
-    personal_org = Organization.objects.get(is_personal=True, memberships__user=user)
-    expected = (
-        f"{personal_org.slug}|{str(personal_org.id)}"
-        if connection.vendor == "postgresql"
-        else f"{personal_org.slug}|none"
-    )
-    assert response.content.decode() == expected
-    assert request.session.get(ACTIVE_ORG_SESSION_KEY) is None
 
 
 @pytest.mark.django_db
 def test_saas_generic_content_route_still_redirects_without_session(
     settings,
 ) -> None:
-    """Generic content route (/) in SaaS mode without session org
-    still redirects to /orgs/ (not affected by Fallback B)."""
+    """Generic content route (/) in SaaS mode without session org redirects."""
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
         username="generic-route",
@@ -1421,40 +1143,56 @@ def test_saas_generic_content_route_still_redirects_without_session(
 
 
 @pytest.mark.django_db
-def test_saas_session_org_still_takes_priority_over_slug_fallback(
+def test_saas_unknown_org_segment_redirects_without_session(
     settings,
 ) -> None:
-    """When a valid session org is present, it takes priority over slug fallback."""
+    """Unknown segment under /orgs/<slug>/ without session org redirects."""
     settings.QUICKSCALE_MODE = "saas"
     user = get_user_model().objects.create_user(
-        username="session-priority",
-        email="session-priority@example.com",
+        username="unknown-segment",
+        email="unknown-segment@example.com",
         password="secret123",
     )
-    slug_org = Organization.objects.create(name="SlugOrg", slug="slug-org")
-    session_org = Organization.objects.create(name="SessionOrg", slug="session-org")
-    OrganizationMembership.objects.create(
-        user=user,
-        organization=slug_org,
-        role=OrgRole.MEMBER,
+    Organization.objects.create(name="Acme", slug="acme")
+
+    request = RequestFactory().get("/orgs/acme/unknown-route/")
+    request.user = user
+    request.session = {}
+
+    response = TenantMiddleware(home_view)(request)
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/orgs/"
+
+
+@pytest.mark.django_db
+def test_saas_unknown_org_segment_resolves_org_with_session(
+    settings,
+) -> None:
+    """Unknown segment under /orgs/<slug>/ resolves the session org."""
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="unknown-session",
+        email="unknown-session@example.com",
+        password="secret123",
     )
+    organization = Organization.objects.create(name="Acme", slug="acme")
     OrganizationMembership.objects.create(
         user=user,
-        organization=session_org,
+        organization=organization,
         role=OrgRole.MEMBER,
     )
 
-    request = RequestFactory().get("/orgs/slug-org/crm/dashboard/")
+    request = RequestFactory().get("/orgs/acme/unknown-route/")
     request.user = user
-    request.session = {ACTIVE_ORG_SESSION_KEY: str(session_org.pk)}
+    request.session = {ACTIVE_ORG_SESSION_KEY: str(organization.pk)}
 
     response = TenantMiddleware(home_view)(request)
 
     assert response.status_code == 200
     expected = (
-        f"{session_org.slug}|{str(session_org.id)}"
+        f"{organization.slug}|{str(organization.id)}"
         if connection.vendor == "postgresql"
-        else f"{session_org.slug}|none"
+        else f"{organization.slug}|none"
     )
-    # The session org (not the slug org) is used.
     assert response.content.decode() == expected
