@@ -10,6 +10,8 @@
 
 **Prior autopsy status.** The previous round's Findings 1, 2, 4, 5 are recorded as resolved (CHANGELOG M12–M18). This is a fresh pass over the *post-RLS* shape. The headline: Track 1 made isolation a data-layer guarantee *in principle*, but the guarantee is now distributed across three mechanisms (Django manager + Postgres RLS + manual filters) that must all agree, and the operative one (RLS) is **opt-in via an env var that fails open**. That is the spine of Findings 1–2.
 
+**Current autopsy resolution status (2026-06-26).** Finding 1 (RLS fails open) → resolved by T1.18 (boot guard in `QuickscaleOrgsConfig.ready()`). Finding 2 (two carriers + pervasive `all_objects`) → resolved by T1.19 (`org_scope()` unified primitive). Finding 4 (two routing models) → resolved by T1.20 (slug-routing fallback deleted). Finding 5 (static MODULE_CATALOG) → resolved by D2 (manifest-backed discovery canonical). **Finding 3 remains open** — request-scoped transaction/Stripe I/O coupling; tracked as D8 in roadmap (6–18 month horizon, production trigger required).
+
 **Already acknowledged, not re-reported here.** The roadmap's Deferred/Monitor list already owns: no structured logging/correlation IDs, no versioned public API, no webhook payload-boundary validation, and the static `MODULE_CATALOG` tuple (kept below as the one tracked residual). Single-PR items (Stripe `api_version` pin, orphaned `apply-recovery.yml`, per-admin `select_related`) are out of scope by the autopsy's own rules. The module-upgrade story (subtree pull + "Module Extension Contract", `docs/technical/module-extension.md`) is a **deliberate, documented design** — excluded, not a load-bearing wrong decision.
 
 ---
