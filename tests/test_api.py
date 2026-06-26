@@ -42,6 +42,25 @@ def regular_user(db):
     return user
 
 
+def _login_with_org(client, user):
+    """Log in *user* and activate their personal org in the session.
+
+    TenantMiddleware in SaaS mode requires ACTIVE_ORG_SESSION_KEY for
+    authenticated users; without it the middleware redirects to /orgs/.
+    """
+    from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+    from quickscale_modules_orgs.models import OrganizationMembership
+
+    client.force_login(user)
+    membership = OrganizationMembership.objects.filter(
+        user=user, organization__is_personal=True
+    ).first()
+    if membership is not None:
+        session = client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(membership.organization_id)
+        session.save()
+
+
 @pytest.mark.django_db
 class TestPublishListingApi:
     """Tests for publish listing API (single flat route contract)"""
@@ -66,7 +85,7 @@ class TestPublishListingApi:
 
     def test_publish_listing_api_non_staff_returns_403(self, client, regular_user):
         """Test API requires staff permissions"""
-        client.force_login(regular_user)
+        _login_with_org(client, regular_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -80,7 +99,7 @@ class TestPublishListingApi:
     def test_publish_listing_api_missing_csrf_returns_403(self, staff_user):
         """Test API enforces CSRF protection for session-authenticated requests"""
         csrf_client = Client(enforce_csrf_checks=True)
-        csrf_client.force_login(staff_user)
+        _login_with_org(csrf_client, staff_user)
 
         response = csrf_client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -92,7 +111,7 @@ class TestPublishListingApi:
 
     def test_publish_listing_api_invalid_json_returns_400(self, client, staff_user):
         """Test API validates JSON format"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -107,7 +126,7 @@ class TestPublishListingApi:
         self, client, staff_user
     ):
         """Test API requires JSON object payload"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -122,7 +141,7 @@ class TestPublishListingApi:
         self, client, staff_user
     ):
         """Test API rejects non-UTF-8 request body payload"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -139,7 +158,7 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API validates required fields"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -159,7 +178,7 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API requires title to generate a usable slug"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -178,7 +197,7 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API validates location type"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -201,7 +220,7 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API validates price payload format"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -226,7 +245,7 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API creates published listing and returns metadata"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -270,7 +289,7 @@ class TestPublishListingApi:
             status="published",
             organization=personal_org,
         )
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_listings:api_publish_listing"),
@@ -287,7 +306,7 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API returns server error for non-conflict integrity failures"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         with patch(
             "quickscale_modules_listings.views.create_published_listing_from_payload",
@@ -308,7 +327,7 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API maps race-condition slug conflicts to conflict response"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         initial_slug_lookup = MagicMock()
         initial_slug_lookup.exists.return_value = False
