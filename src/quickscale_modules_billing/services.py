@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone as dt_timezone
 import hashlib
@@ -18,6 +17,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
+from quickscale_modules_orgs.current_org import org_scope
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -908,44 +908,6 @@ def _apply_locked_credit_balance_delta(*, balance: CreditBalance, delta: int) ->
     return int(balance.balance)
 
 
-@contextlib.contextmanager
-def _billing_org_db_context(organization: Any) -> Iterator[None]:
-    """Set ContextVar + DB ``app.current_org_id`` for RLS-protected billing tables.
-
-    On entry:
-    * Captures the prior ContextVar value.
-    * If organization is not None: sets the ContextVar and calls
-      ``SET LOCAL app.current_org_id`` (inside a savepoint) for FORCE RLS.
-    * If organization is None: clears the ContextVar (fail-closed — any query
-      on an RLS-protected table returns zero rows).
-
-    On exit: restores the prior ContextVar value so stale context never
-    leaks across call boundaries (T1.16 fail-closed contract).
-
-    Lazy-imports from ``quickscale_modules_orgs.current_org`` to avoid
-    circular-import issues at module load time.
-    """
-    from quickscale_modules_orgs.current_org import (
-        get_current_org_id,
-        set_current_org_id,
-        set_db_current_org_id,
-    )
-
-    prior = get_current_org_id()
-    try:
-        if organization is None:
-            set_current_org_id(None)
-            yield
-            return
-        org_id = organization.pk
-        set_current_org_id(org_id)
-        with transaction.atomic():
-            set_db_current_org_id(org_id)
-            yield
-    finally:
-        set_current_org_id(prior)
-
-
 def handle_stripe_event(
     *,
     body: bytes,
@@ -1072,7 +1034,7 @@ def _handle_invoice_paid_event(
     resolved_organization = _resolve_organization_for_invoice(
         invoice_payload=invoice_payload,
     )
-    with _billing_org_db_context(resolved_organization):
+    with org_scope(resolved_organization):
         resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
         subscription_id = str(invoice_payload.get("subscription") or "").strip()
         customer_id = str(invoice_payload.get("customer") or "").strip()
@@ -1170,7 +1132,7 @@ def _handle_invoice_payment_failed_event(
     resolved_organization = _resolve_organization_for_invoice(
         invoice_payload=invoice_payload,
     )
-    with _billing_org_db_context(resolved_organization):
+    with org_scope(resolved_organization):
         resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
         subscription = _resolve_subscription_for_runtime_event(
             stripe_subscription_id=str(
@@ -1322,7 +1284,7 @@ def _upsert_subscription_from_payload(
     if organization is None:
         organization = fallback_organization
 
-    with _billing_org_db_context(organization):
+    with org_scope(organization):
         user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
         if user is None:
             user = fallback_user
@@ -1458,7 +1420,7 @@ def _handle_checkout_session_completed_event(
     if payment_intent_id:
         reference_data["payment_intent_id"] = payment_intent_id
 
-    with _billing_org_db_context(organization):
+    with org_scope(organization):
         return credit_user(
             user,
             organization=organization,
