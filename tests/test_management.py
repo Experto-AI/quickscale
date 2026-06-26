@@ -8,6 +8,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from quickscale_modules_forms.models import Form, FormField, FormSubmission
+from quickscale_modules_orgs.models import Organization, OrganizationTombstone
 
 
 @pytest.mark.django_db
@@ -253,3 +254,33 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
             mock_mgr.all.return_value = Form.objects.none()
             call_command("forms_anonymize_submissions", verbosity=0)
             mock_mgr.all.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# T1.17 — purge_organization integration test for forms delete branch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestPurgeOrganization:
+    """purge_organization must delete form rows owned by the purged org."""
+
+    def test_purge_deletes_org_forms(self):
+        """Form and FormSubmission rows are deleted by purge_organization."""
+        from io import StringIO
+
+        org = Organization.objects.create(name="Purgeable Org", slug="purgeable")
+        Form.objects.create(organization=org, title="Purge Me", slug="purge-me")
+        org_id = org.pk
+
+        call_command(
+            "purge_organization",
+            organization_id=str(org_id),
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+        assert not Organization.objects.filter(pk=org_id).exists()
+        assert Form.all_objects.filter(organization_id=org_id).count() == 0
+        assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
