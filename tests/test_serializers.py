@@ -786,10 +786,17 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
     def test_contact_detail_serializer_filters_foreign_org_tags(
         self, org_a, org_b, org_a_admin
     ):
-        """ContactDetailSerializer filters out foreign-org tags on org-scoped reads."""
+        """ContactDetailSerializer filters out foreign-org tags on org-scoped reads.
+
+        T1.19: The contextvar is now set by middleware ``org_scope()``, not
+        by ``_read_org_id``.  Tests that bypass middleware must set the
+        contextvar explicitly so that TenantManager auto-scoping works for
+        M2M reverse queries (``instance.tags.all()``).
+        """
         from rest_framework.test import APIRequestFactory
 
         from quickscale_modules_crm.models import Company, Contact, Tag
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
         company = Company.objects.create(name="Org-A Corp", organization=org_a)
         contact = Contact.objects.create(
@@ -807,6 +814,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
         request.user = org_a_admin
         request.org = org_a
+        set_current_org_id(org_a.id)
 
         serializer = ContactDetailSerializer(contact, context={"request": request})
         tag_names = [t["name"] for t in serializer.data["tags"]]
@@ -893,12 +901,19 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
     def test_deal_detail_serializer_filters_foreign_org_tags(
         self, org_a, org_b, org_a_admin
     ):
-        """DealDetailSerializer filters out foreign-org tags on org-scoped reads."""
+        """DealDetailSerializer filters out foreign-org tags on org-scoped reads.
+
+        T1.19: The contextvar is now set by middleware ``org_scope()``, not
+        by ``_read_org_id``.  Tests that bypass middleware must set the
+        contextvar explicitly so that TenantManager auto-scoping works for
+        M2M reverse queries (``instance.tags.all()``).
+        """
         from decimal import Decimal
 
         from rest_framework.test import APIRequestFactory
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
         company = Company.objects.create(name="Org-A Corp", organization=org_a)
         contact = Contact.objects.create(
@@ -924,6 +939,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/deals/")
         request.user = org_a_admin
         request.org = org_a
+        set_current_org_id(org_a.id)
 
         serializer = DealDetailSerializer(deal, context={"request": request})
         tag_names = [t["name"] for t in serializer.data["tags"]]
