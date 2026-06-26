@@ -138,25 +138,18 @@ Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md]
 
 ## Deferred / Monitor
 
-Six deferred items. Track 1 (wt-track1) is active — D1 can start once T1.19 merges to v87. Tracks 2 and 3 are idle.
+One deferred item. Track 1 (wt-track1) is active — D1 starts once T1.19 merges to v87.
 
 ### Track assignment
 
 | Item | Track | Start | Recommendation |
 |------|-------|-------|----------------|
 | D1 — SaaS org-switch billing parity | **1** | after T1.19 merges | Pursue |
-| D8 — Decouple tx from external I/O | **1** | after D1; on production trigger | Pursue on trigger |
-| D3 — Documentation consolidation | — | on onboarding failure | Drop |
-| D7 — Compat-window widening | — | on user conflict | Monitor |
-| D9b — Versioned API surface | — | on first consumer | Defer |
-| D9c — Webhook validation baseline | — | on second provider | Defer |
 
 ### Track sequences
 
 ```
-Track 1 (wt-track1):  [T1.19 merge] → D1 → D8 (on trigger)
-Tracks 2 & 3:         idle — complete; next assignment TBD
-Unassigned:           D3 · D7 · D9b · D9c  (promote on trigger)
+Track 1 (wt-track1):  [T1.19 merge] → D1
 ```
 
 ---
@@ -183,88 +176,6 @@ Unassigned:           D3 · D7 · D9b · D9c  (promote on trigger)
 
 ---
 
-#### - [ ] D8 — Decouple request-scoped transaction from external I/O
-
-`**Tier 3 — High | PLANNING TIER: big | RISK LEVEL: high | EXECUTION PATH: full-path | HORIZON: 6–18 months**`
-
-- **TRACK:** `wt-track1` — after D1; promote on production trigger
-- **WHY:** `findings.md` Finding 3. `TenantMiddleware._call_with_org` (middleware.py:164–177) wraps the entire view in `transaction.atomic()` to carry `SET LOCAL app.current_org_id`. Billing checkout/portal views (`billing/services.py`) make 2–4 sequential Stripe network calls inside that transaction, holding a Postgres connection idle-in-transaction during third-party latency. Under `WEB_CONCURRENCY > 1` and Stripe p99 latency spikes this exhausts the connection pool.
-- **OBJECTIVE:** Replace `SET LOCAL` (transaction-scoped) with session-scoped `SET` reset via a connection hook at request end; remove the outer `transaction.atomic()` from `_call_with_org`; ensure billing views wrap only their own DB writes, not the Stripe calls.
-- **SCOPE:**
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py` — `_call_with_org`: remove `transaction.atomic()` wrapper; replace `_set_current_org_id` with session-scoped `SET app.current_org_id`; add connection reset hook
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py` — `org_scope()` (T1.19) may need adjustment to use session-scoped SET
-  - `quickscale_modules/billing/src/quickscale_modules_billing/services.py` — wrap only DB-write sections in explicit `transaction.atomic()`; move Stripe calls outside
-  - `quickscale_modules/orgs/tests/test_middleware.py` — add test asserting no idle-in-transaction connections accumulate during a mocked slow external call
-- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test -- --modules` + `make MODULE=billing test -- --modules` green; `pg_stat_activity` shows no idle-in-transaction connections during a Stripe-call-mocked request cycle.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules` + `make MODULE=billing test -- --modules` + load test under `WEB_CONCURRENCY > 1` with Stripe latency mock.
-- **DEPENDS:** D1. **PROMOTE WHEN:** `pg_stat_activity` shows idle-in-transaction duration rising with Stripe API latency, or `WEB_CONCURRENCY > 1` + Stripe latency spikes are observed in production.
-- **RECOMMENDATION:** **Pursue after D1, at the first production latency signal.** Tier 3 complexity is warranted because it touches the middleware transaction boundary that underpins all RLS. Do not promote until the production trigger fires.
-
----
-
-### Unassigned — promote on trigger
-
----
-
-#### - [ ] D3 — Documentation consolidation
-
-`**Tier 2 — Medium | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** unassigned — promote when doc drift causes real onboarding failures
-- **WHY:** Multiple doc surfaces (roadmap, decisions, findings, scaffolding, CHANGELOG, module READMEs) have accrued independent update histories. Some module facts are repeated across files. Track 2 manifest work means module names/descriptions can be derived from `module.yml` rather than hand-maintained in prose.
-- **OBJECTIVE:** Audit cross-doc duplication; establish a single-source rule for module facts (manifest → auto-generated); prune stale or redundant sections.
-- **SCOPE:** `docs/technical/`, `docs/findings.md`, per-module `README.md` files, `CHANGELOG.md` preamble.
-- **ACCEPTANCE CRITERIA:** No module fact (name, description, readiness) appears both in a static doc and in the manifest without the doc citing the manifest as the source; `START_HERE.md` onboarding path has no dead links.
-- **VALIDATION PATH:** Manual review.
-- **DEPENDS:** None.
-- **RECOMMENDATION:** **Drop for now** — no evidence of real onboarding failures. Defer until a new developer reports confusion, or until a manifest auto-generation layer emits doc stubs.
-
----
-
-#### - [ ] D7 — Broader compatibility-window widening
-
-`**Tier 2 — Medium | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** unassigned — promote on first user-reported version conflict
-- **WHY:** M11 decoupled the generator from generated-project runtime pins. No user-reported version conflicts exist as of 2026-06-26. Proactive widening without a reported failure is speculative.
-- **OBJECTIVE:** When a user-reported version conflict surfaces, widen the affected pin range in generator templates and/or `pyproject.toml`.
-- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — dependency sections; `quickscale_modules/*/pyproject.toml` — runtime pin declarations.
-- **ACCEPTANCE CRITERIA:** Reported conflict resolved; `make test` green on both old and new version.
-- **VALIDATION PATH:** `make test`.
-- **DEPENDS:** User-reported conflict (trigger condition).
-- **RECOMMENDATION:** **Monitor only** — no evidence of conflicts. Promote when a user reports a real version conflict.
-
----
-
-#### - [ ] D9b — Versioned public-API surface
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: low | EXECUTION PATH: full-path**`
-
-- **TRACK:** unassigned — promote when a second provider or first external API consumer appears
-- **WHY:** Generated module `urls.py` exposes unversioned `/api/` routes. No external consumers exist today, but once a second provider or an API-consuming client lands, adding versioning retroactively is a breaking change.
-- **OBJECTIVE:** Add `/api/v1/` URL namespace to generated module `urls.py`; document the versioning contract in `scaffolding.md`.
-- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — generated `urls.py` pattern.
-- **ACCEPTANCE CRITERIA:** Generated project routes all module API views under `/api/v1/`; no unversioned `/api/` routes in generated output; `make test -- --core` green.
-- **VALIDATION PATH:** `make test -- --core`.
-- **DEPENDS:** No active blocker; promote trigger is the first external API consumer.
-- **RECOMMENDATION:** **Defer** — no external consumer exists yet.
-
----
-
-#### - [ ] D9c — Webhook payload boundary validation baseline
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: low | EXECUTION PATH: full-path**`
-
-- **TRACK:** unassigned — promote when a second webhook provider lands
-- **WHY:** Stripe webhook signature verification is implemented ad-hoc in the billing module. No shared `WebhookValidator` abstraction exists; a second provider would duplicate the verification pattern.
-- **OBJECTIVE:** Extract Stripe webhook signature verification into a reusable `WebhookValidator` class; document the pattern for future providers.
-- **SCOPE:** `quickscale_modules/billing/src/quickscale_modules_billing/` — extract verification into a shared utility; `quickscale_core/` — add to generator as a template pattern.
-- **ACCEPTANCE CRITERIA:** Billing webhook handler uses `WebhookValidator`; a second provider can implement the same interface without duplicating verification logic; `make MODULE=billing test -- --modules` green.
-- **VALIDATION PATH:** `make MODULE=billing test -- --modules`.
-- **DEPENDS:** No active blocker; promote trigger is the second webhook provider.
-- **RECOMMENDATION:** **Defer** — Stripe verification already works; no second webhook provider exists.
-
----
 
 ### Explicitly out of scope
 
