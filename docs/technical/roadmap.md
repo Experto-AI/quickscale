@@ -280,7 +280,7 @@ Nine deferred items assigned to three parallel tracks. Tracks 2 and 3 start imme
 | D2 — Retire `MODULE_CATALOG` tuple | **2** | completed 2026-06-26 | Done |
 | D5 — Backups `dr_adapter_call` coverage | **3** | now (bundle with D4) | Pursue |
 | D6 — `quickscale_core` coverage gaps | **2** | after D2 | Pursue |
-| D9a — Structured logging | **3** | after D5 | Pursue |
+| D9a — Structured logging | **3** | ✅ Complete | Pursue — Done |
 | D1 — SaaS org-switch billing parity | **1** | after T1.18/T1.19 | Pursue |
 | D8 — Decouple tx from external I/O | **1** | after T1.19 + trigger | Pursue on trigger |
 | D4 — Backups terminology sweep | **3** | bundle with D5 | Drop / opportunistic |
@@ -294,7 +294,7 @@ Nine deferred items assigned to three parallel tracks. Tracks 2 and 3 start imme
 ```
 Track 1 (wt-track1):  [T1.18 → T1.19] → D1 → D8 (on trigger)
 Track 2 (wt-track2):  D2 (done) → D6
-Track 3 (wt-track3):  D4+D5 (bundled) → D9a
+Track 3 (wt-track3):  D4+D5 (bundled) → D9a ✓
 Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 ```
 
@@ -386,18 +386,28 @@ Implemented 2026-06-26 as a D5 bundle.
 
 ---
 
-#### - [ ] D9a — Structured logging and correlation-ID baseline
+#### - [x] D9a — Structured logging and correlation-ID baseline
 
 `**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
 
+Implemented 2026-06-26.
+
 - **TRACK:** `wt-track3` — after D5
 - **WHY:** Generated projects emit no structured log output and carry no correlation IDs. Debugging cross-request failures in production currently requires grepping unstructured Django logs. This is independent of any provider count or external consumer.
-- **OBJECTIVE:** Add `structlog` (or Django's `JSONFormatter`) to generated module settings; emit a `correlation_id` (from `X-Request-ID` header or generated UUID) on every request log line.
-- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — settings template, middleware stack; generated `urls.py` — add correlation-ID middleware entry.
+- **OBJECTIVE:** Add stdlib-based JSON logging and per-request correlation ID to generated project settings templates.
+- **COMPLETED:** Added `CorrelationIdMiddleware`, `JsonFormatter`, and `CorrelationIdFilter` classes inline in `base.py.j2`. `CorrelationIdMiddleware` reads `X-Request-ID` header or generates a UUID, exposes it as `request.correlation_id`, and sets the `X-Request-ID` response header for end-to-end traceability. Middleware is registered first in the `MIDDLEWARE` list. `JsonFormatter` renders every log line as a JSON object with `timestamp`, `level`, `logger`, `module`, `message`, and `correlation_id` keys (exception tracebacks included when present). `CorrelationIdFilter` promotes the per-request value into log records. All three environment settings files (`base.py.j2`, `local.py.j2`, `production.py.j2`) use the JSON formatter and correlation ID filter on all handlers (console, file, mail_admins). Stdlib-only — no new dependencies. No `urls.py` change needed (middleware registration is settings-only).
+- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2` — `CorrelationIdMiddleware`, `JsonFormatter`, `CorrelationIdFilter` classes, updated `MIDDLEWARE` and `LOGGING`; `local.py.j2` — updated `LOGGING`; `production.py.j2` — updated `LOGGING`.
 - **ACCEPTANCE CRITERIA:** Generated project log output is JSON; every log line includes `correlation_id`; `make test -- --core` green.
-- **VALIDATION PATH:** `make test -- --core` + manual `runserver` log inspection.
-- **DEPENDS:** D5/D4 (same worktree — run after D5 merges).
-- **RECOMMENDATION:** **Pursue** — highest-value D9 sub-item; improves debuggability today regardless of provider count or API consumers.
+- **VALIDATION PATH:** `make lint -- --core` + `make test -- --core` green (177 template tests; 1562/1562 core tests passed, 28 deselected; mypy on `test_templates.py` passed after in-scope fixes). Manual `runserver` log inspection on a generated project can verify JSON output with correlation IDs.
+- **DEPENDS:** D5/D4 (same worktree — completed before this task).
+- **FINDINGS / FOLLOW-UP:**
+  - **Resolved:** The roadmap prose mentioned a `urls.py` middleware entry, but Django middleware is registered in settings, not URLs. No `urls.py` change was needed. The middleware template reference in the original prose was a documentation artifact.
+  - **Resolved (CR-D9A-001, review-driven follow-up 2026-06-26):** Blank `correlation_id` in generated log output. The `CorrelationIdFilter` was not consistently populating the field across all log emission paths. Fixed so every log record carries a valid correlation ID.
+  - **Resolved (CR-D9A-002, review-driven follow-up 2026-06-26):** The `django.server` logger emitted unstructured log lines without the JSON formatter or correlation filter. Updated the `LOGGING` configuration in all three settings templates to ensure the `django.server` logger uses the JSON formatter and correlation filter on its handler.
+  - **Stdlib-only approach confirmed:** `structlog` is not introduced. The `JsonFormatter` and `CorrelationIdFilter` classes use only `json`, `logging`, and `uuid` from the Python standard library. This avoids dependency churn and lock-file regeneration.
+  - **Local and production settings override LOGGING completely:** Both `local.py.j2` and `production.py.j2` define their own `LOGGING` dict via `from .base import *` rather than merging with base's `LOGGING`. Both templates were updated to use the JSON formatter and correlation filter — they do not inherit these from base automatically.
+  - **Advisory:** The `CorrelationIdMiddleware` is defined inline in `base.py.j2` (the settings module) rather than in a separate middleware module. This keeps the change contained to a single file but is an architectural convention difference from a typical Django middleware placement. If a future task extracts middleware to a separate `middleware.py`, the reference in `MIDDLEWARE` (currently a dotted string `{{ package_name }}.settings.base.CorrelationIdMiddleware`) and the import in `base.py.j2` must be updated together.
+  - **Advisory:** The generated `JsonFormatter` does not include the `process` and `thread` fields that the verbose production formatter previously included. These are available as `%(process)d` and `%(thread)d` in `logging.Formatter` but are not in the current JSON schema. Future enhancement could add them as optional keys per environment.
 
 ---
 
