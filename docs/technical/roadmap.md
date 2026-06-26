@@ -141,7 +141,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [x] T1.16 — Billing RLS policies *(wt-track3)*
 
 **Phase 4 — Teardown**
-- [ ] T1.17 — `purge_organization` command
+- [x] T1.17 — `purge_organization` command
 
 ---
 
@@ -339,15 +339,24 @@ Implemented 2026-06-25.
 
 ### Phase 4 — Teardown
 
-#### - [ ] T1.17 — `purge_organization` management command
+#### - [x] T1.17 — `purge_organization` management command
 
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+`**Tier 2 — Medium | PLANNING TIER: big | RISK LEVEL: high | EXECUTION PATH: full-path**`
+Implemented 2026-06-25. Phase 3 docs closeout 2026-06-25.
 
-- **TRACK:** `v87` (main integration branch) — after all T1.5–T1.10 merged
-- **OBJECTIVE:** Ordered, GDPR-capable org purge across all owned tables despite PROTECT FKs.
-- **SCOPE:** `orgs/.../management/commands/purge_organization.py` — FK-safe deletion order (social → forms → listings → blog → crm → billing → memberships); transactional; `--dry-run`; refuses System/personal org without `--force`; cross-module fixture tests.
-- **ACCEPTANCE CRITERIA:** purges all org-owned rows in FK-safe order; transactional; idempotent; refuses reserved orgs by default; dry-run shows counts; full `make test` green.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules` + `make test` cross-module regression.
+- **TRACK:** `wt-track1` (branch: `wt-track1`) — after all T1.5–T1.10 merged
+- **COMPLETED:** Ordered, FK-safe org purge command in `quickscale_modules_orgs`. Delivered in 3 phases:
+  - **Phase 1 (contract lock):** `OrganizationTombstone` model/migration, `set_current_org_for_context()` shared helper (ContextVar + `SET LOCAL app.current_org_id`), UUID-only destructive targeting (`--organization-id`), slug-only non-destructive preflight (`--slug`), dry-run parity, reserved-org (System) refusal, tombstone-backed rerun no-op success, invitation inclusion in ownership counts, and 13 contract tests.
+  - **Phase 2 (transactional delete path):** Shared `_build_ownership_map()` single source of truth for counts across dry-run and destructive paths. `_delete_owned_rows()` in FK-safe order using `apps.get_model()` with graceful fallback for uninstalled modules: social -> forms (FormSubmission -> Form) -> listings -> blog (Post -> Category -> Tag -> BlogMediaAsset) -> crm (DealNote -> ContactNote -> Deal -> Contact -> Company -> Stage -> Tag) -> billing (CreditTransaction -> Subscription -> CreditBalance) -> org memberships + invitations. `set_current_org_for_context()` called inside `transaction.atomic()`. Postgres-backed test env support (`QUICKSCALE_TEST_DB=postgres`) with `current_setting('app.current_org_id', true)::uuid` RLS proof test. 3 new tests (billing cross-module purge, rollback transaction safety, slug-reuse).
+  - **Phase 3 (bugs + docs):** Fixed `_get_active_org_subscription()` to use `all_objects` instead of `objects` (TenantManager contextvar scoping broke feature-requiring views resolved outside full middleware). Roadmap and changelog updated.
+- **CONTRACT:** `purge_organization --organization-id <uuid>` (destructive); `--slug <slug>` (preflight); `--dry-run` (counts only); `--force` (bypass reserved-org guard). Tombstone-backed rerun returns no-op success with already-gone message. System and personal orgs guarded by default; `--force` overrides.
+- **VALIDATION PATH:** `POSTGRESQL` (opt-in via `QUICKSCALE_TEST_DB=postgres`): configure a Postgres target and run ``make MODULE=orgs test -- --modules`` — **278 passed, 3 skipped** on the stop-here rerun. Supporting checks kept on this branch: `make MODULE=forms test -- --modules` — **130 passed, 3 skipped, 11 deselected**; `make MODULE=notifications test -- --modules` — **33 passed**; `make test -- --core` runtime suite — **1552 passed, 28 deselected** with a pre-existing unrelated coverage shortfall. Real purge integration coverage proves deletion of social, forms, listings, blog, and CRM owned rows (both destructive and dry-run paths). Social cache invalidation verified — after purge the ``SOCIAL_LINKS_CACHE_KEY``, ``SOCIAL_EMBEDS_CACHE_KEY``, and their ``:org:{org_id}`` variants are cleared.
+- **FINDINGS / FOLLOW-UP:**
+  - **Resolved (2026-06-25):** `_get_active_org_subscription()` in `permissions.py` used `TenantManager.objects` which returns `.none()` when ambient org context is absent. Changed to `all_objects` (super-scope bypass). This was discovered during the Postgres orgs checkpoint.
+  - **Advisory:** 3 legacy billing migration tests (`test_migrate_billing_to_orgs_*`) are skipped on PostgreSQL. The historical scenario depends on pre-NOT-NULL billing rows that no longer exist in the current schema. These tests can be removed or rewritten when the billing module test suite is next touched.
+  - **Resolved (2026-06-25):** `--force` flag implemented — bypasses the reserved-org guard (System and personal orgs). The guard now checks both `is_system` and `is_personal`. Applied consistently across slug preflight, dry-run, and destructive paths.
+  - **Advisory:** No interactive confirmation prompt is implemented. The destroy command runs immediately with `--organization-id` (or `--organization-id --force` for reserved orgs). Add interactive confirmation in a follow-up if needed.
+  - **Pending / decision needed (recorded 2026-06-26):** Generated `showcase_react` SaaS org-switch billing parity remains unresolved outside the locked T1.17 DB-rows-only scope. A separate follow-up must decide whether SPA org switches should explicitly persist `ACTIVE_ORG_SESSION_KEY` / selected-org session state before flat `/billing/...` and `/api/billing/...` calls, or whether generated billing entry points should stay off the SPA org dashboard until that contract exists.
 - **DEPENDS:** all of T1.5–T1.10. **DECISIONS:** D3.
 
 ---
@@ -385,6 +394,7 @@ Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md]
 
 ## Deferred / Monitor
 
+- [ ] **Generated `showcase_react` SaaS org-switch billing parity** *(Adaptive tier: 2)* — discovered during the T1.17 stop-here closeout. Need a product/implementation decision on how SPA org switches synchronize the active-org session before flat billing pages/APIs are used: either add an explicit org-switch/session-sync flow (plus billing query invalidation) or keep generated billing entry points off the SPA org dashboard until that state contract exists.
 - [ ] **Documentation consolidation** *(Adaptive tier: 2)* — defer until doc drift causes real onboarding failures; manifest work (Track 2) simplifies auto-generated module facts.
 - [ ] **Backups terminology sweep outside T3.3 scope** *(Adaptive tier: 1)* — broad `legacy|fallback|backward` grep still hits historical migration/test fixtures plus Django's `FallbackStorage` import in `quickscale_modules/backups/`; T3.3 only cleared stale single-path wording from the active DR service/adapter surfaces.
 - [ ] **Pre-existing backups coverage gap** *(Adaptive tier: 1)* — `dr_adapter_call.py` registered at 0% coverage; surfaced by `make test` during CRM closeout. Unrelated to tenant isolation work; address when touching backups module next.
@@ -425,6 +435,7 @@ Single-PR items that do not change the design:
 | M16 | 1 | T1.5, T1.6, T1.7, T1.8, T1.9, T1.10 | Phase 2 complete. CRM (T1.5, wt-track1), Blog (T1.6, wt-track1), Forms (T1.7, wt-track2), Listings (T1.8, wt-track2), Social (T1.9, wt-track3), and Billing (T1.10, wt-track3) contract adoption merged to v87. |
 | M17 | 1 | T1.15 | Phase 3 partial. Social RLS (T1.15, wt-track3) — RLS active for social tables via UUID predicate; per-org runtime-role admin contract with fail-closed behavior; no operator bypass. Social module 81/81, admin contracts 40/40. |
 | M18 | 1 | T1.11–T1.14, T1.16 | Phase 3 complete. CRM (T1.11, wt-track1), Blog (T1.12, wt-track1), Forms (T1.13, wt-track2), Listings (T1.14, wt-track2), Billing (T1.16, wt-track3) RLS backstop merged to v87. All six modules now FORCE RLS with fail-closed UUID predicate; billing adds `_billing_org_db_context` for per-handler org context in webhook paths. |
+| M19 | 1 | T1.17 | Phase 4 complete. `purge_organization` management command delivered: UUID-only destructive targeting, tombstone-backed rerun semantics, FK-safe delete order across social/forms/listings/blog/crm/billing/orgs, dry-run count parity, shared `set_current_org_for_context()` helper, Postgres-backed RLS proof, and resolved `_get_active_org_subscription` permissions fix. Stop-here rerun: orgs PostgreSQL suite 278 passed / 3 skipped. |
 
 ## References
 

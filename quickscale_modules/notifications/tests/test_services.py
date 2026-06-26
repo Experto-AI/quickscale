@@ -17,6 +17,7 @@ from quickscale_modules_forms.models import (
     FormFieldValue,
     FormSubmission,
 )
+from quickscale_modules_orgs.models import Organization
 from quickscale_modules_forms.notifications import notify_submission
 
 from quickscale_modules_notifications.models import (
@@ -38,6 +39,7 @@ from quickscale_modules_notifications.services import (
 
 
 def _create_contact_form(*, slug: str, notify_emails: str) -> Form:
+    system_org = Organization.objects.get_system_org()
     form = Form.objects.create(
         title="Tracked Contact",
         slug=slug,
@@ -45,6 +47,7 @@ def _create_contact_form(*, slug: str, notify_emails: str) -> Form:
         success_message="Thank you, we will be in touch.",
         notify_emails=notify_emails,
         spam_protection_enabled=True,
+        organization=system_org,
     )
     FormField.objects.create(
         form=form,
