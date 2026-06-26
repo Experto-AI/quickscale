@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 import sys
 import types
+import typing
 from collections.abc import Callable
 
 import pytest
@@ -901,6 +902,80 @@ class TestProductionReadyFeatures:
         assert "LOGGING" in output
         assert "RotatingFileHandler" in output
 
+    def test_json_logging_formatter(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test JSON formatter is configured in base settings."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+        assert "JsonFormatter" in output
+        assert '"()": JsonFormatter' in output
+        assert '"formatter": "json"' in output
+
+    def test_correlation_id_filter(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test correlation_id filter is configured in base settings."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+        assert "CorrelationIdFilter" in output
+        assert '"()": CorrelationIdFilter' in output
+        assert '"filters": ["correlation_id"]' in output
+
+    def test_contextvar_mechanism_in_base(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Base settings should use contextvars to bridge middleware and filter."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+        assert "import contextvars" in output
+        assert "_correlation_id_var" in output
+
+    def test_django_server_logger_in_base(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Base settings should configure the django.server logger explicitly."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+        assert '"django.server"' in output
+        assert '"filters": ["correlation_id"]' in output
+
+    def test_correlation_id_middleware(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test CorrelationIdMiddleware is registered in MIDDLEWARE."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+        assert "CorrelationIdMiddleware" in output
+        # Find the MIDDLEWARE assignment specifically (not MODULE_MIDDLEWARE)
+        middleware_start = output.index("MIDDLEWARE = [")
+        middleware_section = output[middleware_start:]
+        assert "CorrelationIdMiddleware" in middleware_section.split("]")[0]
+
+    def test_local_logging_json_formatter(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test local settings use JSON formatter, correlation_id filter, and django.server."""
+        template = jinja_env.get_template("project_name/settings/local.py.j2")
+        output = template.render(test_context)
+        assert '"()": JsonFormatter' in output
+        assert '"()": CorrelationIdFilter' in output
+        assert '"formatter": "json"' in output
+        assert '"filters": ["correlation_id"]' in output
+        assert '"django.server"' in output
+
+    def test_production_logging_json_formatter(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test production settings use JSON formatter, correlation_id filter, and django.server."""
+        template = jinja_env.get_template("project_name/settings/production.py.j2")
+        output = template.render(test_context)
+        assert '"()": JsonFormatter' in output
+        assert '"()": CorrelationIdFilter' in output
+        assert '"formatter": "json"' in output
+        assert '"filters": ["correlation_id"]' in output
+        assert '"django.server"' in output
+
     def test_production_security_settings(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
@@ -1062,6 +1137,153 @@ class TestProductionReadyFeatures:
         assert 'if "EMAIL_BACKEND" not in globals():' in output
         assert 'if "DEFAULT_FROM_EMAIL" not in globals():' in output
         assert 'if "SERVER_EMAIL" not in globals():' in output
+
+
+class TestCorrelationIdFilterRuntime:
+    """Verify CorrelationIdFilter actually sources correlation_id from middleware.
+
+    CR-D9A-001 regression: the filter must read from the ``_correlation_id_var``
+    context variable (set by ``CorrelationIdMiddleware``) rather than falling
+    back to itself (which always produces an empty string).
+    """
+
+    def test_filter_sources_from_contextvar_default_empty(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When the context variable is unset, ``correlation_id`` should be empty."""
+        import logging
+
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        package_name = test_context["package_name"]
+        settings_package_name = f"{package_name}.settings"
+        modules_name = f"{settings_package_name}.modules"
+
+        # Stub out module-level imports that are not needed for filter tests
+        package_module = types.ModuleType(package_name)
+        package_module.__dict__["__path__"] = []
+        settings_package_module = types.ModuleType(settings_package_name)
+        settings_package_module.__dict__["__path__"] = []
+        modules_module = types.ModuleType(modules_name)
+        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
+        setattr(modules_module, "MODULE_MIDDLEWARE", [])
+        setattr(modules_module, "MODULE_SETTINGS", {})
+
+        def fake_config(
+            _key: str,
+            default: object = "",
+            cast: Callable[[object], object] | None = None,
+        ) -> object:
+            if cast is None:
+                return default
+            return cast(default)
+
+        decouple_module = types.ModuleType("decouple")
+        setattr(decouple_module, "config", fake_config)
+
+        monkeypatch.setitem(sys.modules, package_name, package_module)
+        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
+        monkeypatch.setitem(sys.modules, modules_name, modules_module)
+        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
+
+        namespace: dict[str, object] = {
+            "__file__": f"/tmp/{package_name}/settings/base.py",
+            "__name__": f"{settings_package_name}.base",
+            "__package__": settings_package_name,
+        }
+        exec(base_output, namespace)
+
+        CorrelationIdFilter = typing.cast(
+            type[logging.Filter], namespace["CorrelationIdFilter"]
+        )
+        filter_instance = CorrelationIdFilter()
+
+        record = logging.LogRecord(
+            "test", logging.INFO, __file__, 42, "test message", (), None
+        )
+        filter_instance.filter(record)
+        assert record.correlation_id == "", (  # type: ignore[attr-defined]
+            "correlation_id should default to empty string when context var is unset"
+        )
+
+    def test_filter_sources_middleware_correlation_id(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When the context variable is set (by middleware), filter should use it."""
+        import contextvars
+        import logging
+
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        package_name = test_context["package_name"]
+        settings_package_name = f"{package_name}.settings"
+        modules_name = f"{settings_package_name}.modules"
+
+        package_module = types.ModuleType(package_name)
+        package_module.__dict__["__path__"] = []
+        settings_package_module = types.ModuleType(settings_package_name)
+        settings_package_module.__dict__["__path__"] = []
+        modules_module = types.ModuleType(modules_name)
+        setattr(modules_module, "MODULE_INSTALLED_APPS", [])
+        setattr(modules_module, "MODULE_MIDDLEWARE", [])
+        setattr(modules_module, "MODULE_SETTINGS", {})
+
+        def fake_config(
+            _key: str,
+            default: object = "",
+            cast: Callable[[object], object] | None = None,
+        ) -> object:
+            if cast is None:
+                return default
+            return cast(default)
+
+        decouple_module = types.ModuleType("decouple")
+        setattr(decouple_module, "config", fake_config)
+
+        monkeypatch.setitem(sys.modules, package_name, package_module)
+        monkeypatch.setitem(sys.modules, settings_package_name, settings_package_module)
+        monkeypatch.setitem(sys.modules, modules_name, modules_module)
+        monkeypatch.setitem(sys.modules, "decouple", decouple_module)
+
+        namespace: dict[str, object] = {
+            "__file__": f"/tmp/{package_name}/settings/base.py",
+            "__name__": f"{settings_package_name}.base",
+            "__package__": settings_package_name,
+        }
+        exec(base_output, namespace)
+
+        CorrelationIdFilter = typing.cast(
+            type[logging.Filter], namespace["CorrelationIdFilter"]
+        )
+        _correlation_id_var = typing.cast(
+            contextvars.ContextVar[str], namespace["_correlation_id_var"]
+        )
+        filter_instance = CorrelationIdFilter()
+
+        # Simulate middleware setting the context variable
+        expected_id = "req-abc-123"
+        token = _correlation_id_var.set(expected_id)
+
+        record = logging.LogRecord(
+            "test", logging.INFO, __file__, 42, "test message", (), None
+        )
+        filter_instance.filter(record)
+        assert record.correlation_id == expected_id, (  # type: ignore[attr-defined]
+            f"correlation_id should be {expected_id!r} when context var is set, "
+            f"got {record.correlation_id!r}"  # type: ignore[attr-defined]
+        )
+
+        _correlation_id_var.reset(token)
 
 
 class TestGeneratedSecretKeyGuards:

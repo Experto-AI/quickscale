@@ -203,6 +203,9 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
+        "json": {
+            "()": JsonFormatter,
+        },
         "verbose": {
             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
             "style": "{",
@@ -213,6 +216,9 @@ LOGGING = {
         },
     },
     "filters": {
+        "correlation_id": {
+            "()": CorrelationIdFilter,
+        },
         "require_debug_false": {
             "()": "django.utils.log.RequireDebugFalse",
         },
@@ -220,13 +226,14 @@ LOGGING = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "verbose",
+            "formatter": "json",
+            "filters": ["correlation_id"],
         },
         "mail_admins": {
             "level": "ERROR",
             "class": "django.utils.log.AdminEmailHandler",
             "filters": ["require_debug_false"],
-            "formatter": "verbose",
+            "formatter": "json",
         },
     },
     "root": {
@@ -242,6 +249,11 @@ LOGGING = {
         "django.request": {
             "handlers": ["console", "mail_admins"],
             "level": "ERROR",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["console"],
+            "level": "INFO",
             "propagate": False,
         },
         "{{ package_name }}": {

@@ -18,22 +18,6 @@ Tracks only pending roadmap work. Completed history is in [CHANGELOG.md](../../C
 
 Work is split across 3 git worktrees that develop in parallel and merge back to `v87` after each phase. `v87` is the clean integration branch — never commit directly to it.
 
-### Track assignment
-
-Tracks 2 and 3 original work is **complete**. All three worktrees are repurposed for the Track 1 Phase 2–3 fan-out. Each worktree owns a module pair end-to-end (Phase 2 contract adoption → Phase 3 RLS backstop).
-
-| Worktree | Branch | Phase 2 owns | Phase 3 owns | Next task |
-|---------|--------|-------------|-------------|-----------|
-| `quickscale-wt-track1` | `wt-track1` | T1.5 CRM · T1.6 Blog | T1.11 CRM RLS · T1.12 Blog RLS | *(complete)* |
-| `quickscale-wt-track2` | `wt-track2` | T1.7 Forms · T1.8 Listings | T1.13 Forms RLS · T1.14 Listings RLS | *(complete)* |
-| `quickscale-wt-track3` | `wt-track3` | T1.9 Social · T1.10 Billing | T1.15 Social RLS · T1.16 Billing RLS | *(complete)* |
-
-Within each worktree, tasks run sequentially (Phase 2 first, then Phase 3). All three worktrees run in parallel.
-
-### Cross-track dependency
-
-All Phase 2 tasks (T1.5–T1.10) are mutually independent — no inter-worktree coordination needed. Phase 3 RLS tasks each require their Phase 2 counterpart **and** T1.4 (completed). T1.17 waits for all Phase 2. See [Track 1 sequencing](#track-1-sequencing) below.
-
 ### Start procedure
 
 Run at the beginning of every new phase, before touching any files:
@@ -68,8 +52,8 @@ git merge --no-ff wt-track{N}
 | 3 — Module wiring | **A** — self-describing manifests + generic resolver; delete the `if`-ladder |
 | 4 — Routing | **A** — one URL tree: `/crm/...` for both solo and saas; no `/orgs/<slug>/crm/...` |
 | 5 — DR | **A** — hard cutover: delete the legacy env-var protocol, single typed adapter |
-| F1 — RLS boot guard | Boot-time `rolbypassrls` assertion in orgs `AppConfig.ready()`; fail-fast in saas/prod if connected role has BYPASSRLS |
-| F2 — Unified org scope | Promote `_billing_org_db_context` to `orgs.current_org.org_scope()`; middleware + billing use the shared primitive; phase out manual `all_objects` + filter sites |
+| F1 — RLS boot guard | Boot-time `rolbypassrls` assertion in orgs `AppConfig.ready()`; fail-fast in saas/prod if connected role has BYPASSRLS — **implemented T1.18** |
+| F2 — Unified org scope | Promote `_billing_org_db_context` to `orgs.current_org.org_scope()`; middleware + billing use the shared primitive; phase out manual `all_objects` + filter sites — **implemented T1.19** |
 
 **Global constraints:** no backward compatibility, no migration path, no existing users — every change is a clean break. Drop dead paths outright; squash/rewrite migrations rather than layering compat shims.
 
@@ -92,317 +76,13 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ---
 
-## Track 1 — Tenant isolation, ownership contract & single URL tree
+## Open work
 
-**Findings 1C, 2A+2C, 4A, F1, F2, F4.** Five phases: Foundation (serial) → Per-module fan-out (parallel) → RLS backstop (parallel) → Teardown → RLS hardening & routing teardown.
-
-The shared scoping seam (contextvar + base managers) lives in **`orgs`**, not `quickscale_core`. Core is Django-free by invariant; all tenant modules already depend on `orgs`.
-
-### Track 1 sequencing
-
-```
-T1.1 → T1.2 → T1.3  (T1.4 ∥)
-              │
-              ▼  (foundation merged)
-T1.5  T1.6  T1.7  T1.8  T1.9  T1.10   ← fan out across worktrees (mutually independent)
-│     │     │     │     │     │
-▼     ▼     ▼     ▼     ▼     ▼        (+ T1.4)
-T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
-                    │
-                    ▼
-                  T1.17  (complete)
-                    │
-          ┌─────────┤
-          ▼         ▼
-        T1.18      T1.20    ← parallel (T1.18 on wt-track1; T1.20 on wt-track2)
-          │
-          ▼
-        T1.19              ← wt-track1, after T1.18
-```
-
-
-**Hard dependency edges:** T1.1–T1.3 block all of T1.5–T1.10 · T1.4 blocks every RLS task · each module's Phase-2 blocks its Phase-3 RLS · T1.17 after all Phase-2 · T1.18 after T1.17 · T1.19 after T1.18 · T1.20 after all Phase-2 (independent of T1.17–T1.19).
-
-**T1.1 is the lynchpin** — removes the NULL bucket, which is what makes single-URL routing (4A) and RLS policies clean.
-
-### Track 1 progress
-
-**Phase 1 — Foundation**
-- [x] T1.1 — System org + NOT NULL ownership contract
-- [x] T1.2 — Shared tenant-scoping seam (contextvar + base managers)
-- [x] T1.3 — Middleware for the single-URL world
-- [x] T1.4 — RLS DB role + generated-project settings *(parallel to T1.2/T1.3)*
-
-**Phase 2 — Per-module contract adoption** *(parallel; after T1.1–T1.3 · fan out across all 3 worktrees)*
-- [x] T1.5 — CRM adopt contract *(wt-track1)*
-- [x] T1.6 — Blog adopt contract *(wt-track1)*
-- [x] T1.7 — Forms adopt contract *(wt-track2)*
-- [x] T1.8 — Listings adopt contract *(wt-track2)*
-- [x] T1.9 — Social adopt contract *(wt-track3)*
-- [x] T1.10 — Billing: org-only subject *(wt-track3 · plan-review mandatory)*
-
-**Phase 3 — RLS backstop** *(parallel; each after its Phase-2 task + T1.4)*
-- [x] T1.11 — CRM RLS policies *(wt-track1)*
-- [x] T1.12 — Blog RLS policies *(wt-track1)*
-- [x] T1.13 — Forms RLS policies *(wt-track2)*
-- [x] T1.14 — Listings RLS policies *(wt-track2)*
-- [x] T1.15 — Social RLS policies *(wt-track3)*
-- [x] T1.16 — Billing RLS policies *(wt-track3)*
-
-**Phase 4 — Teardown**
-- [x] T1.17 — `purge_organization` command
-
-**Phase 5 — RLS hardening & routing teardown** *(after T1.17 merges; T1.18/T1.19 on wt-track1; T1.20 on wt-track2 — can start now)*
-- [x] T1.18 — RLS boot guard *(wt-track1)*
-- [ ] T1.19 — Unified `org_scope()` primitive *(wt-track1, after T1.18)*
-- [ ] T1.20 — Delete slug-routing fallback; finish Decision 4A *(wt-track2, independent)*
-
----
-
-### Phase 4 — Teardown
-
-#### - [x] T1.17 — `purge_organization` management command
-
-`**Tier 2 — Medium | PLANNING TIER: big | RISK LEVEL: high | EXECUTION PATH: full-path**`
-Implemented 2026-06-25. Phase 3 docs closeout 2026-06-25.
-
-- **TRACK:** `wt-track1` (branch: `wt-track1`) — after all T1.5–T1.10 merged
-- **COMPLETED:** Ordered, FK-safe org purge command in `quickscale_modules_orgs`. Delivered in 3 phases:
-  - **Phase 1 (contract lock):** `OrganizationTombstone` model/migration, `set_current_org_for_context()` shared helper (ContextVar + `SET LOCAL app.current_org_id`), UUID-only destructive targeting (`--organization-id`), slug-only non-destructive preflight (`--slug`), dry-run parity, reserved-org (System) refusal, tombstone-backed rerun no-op success, invitation inclusion in ownership counts, and 13 contract tests.
-  - **Phase 2 (transactional delete path):** Shared `_build_ownership_map()` single source of truth for counts across dry-run and destructive paths. `_delete_owned_rows()` in FK-safe order using `apps.get_model()` with graceful fallback for uninstalled modules: social -> forms (FormSubmission -> Form) -> listings -> blog (Post -> Category -> Tag -> BlogMediaAsset) -> crm (DealNote -> ContactNote -> Deal -> Contact -> Company -> Stage -> Tag) -> billing (CreditTransaction -> Subscription -> CreditBalance) -> org memberships + invitations. `set_current_org_for_context()` called inside `transaction.atomic()`. Postgres-backed test env support (`QUICKSCALE_TEST_DB=postgres`) with `current_setting('app.current_org_id', true)::uuid` RLS proof test. 3 new tests (billing cross-module purge, rollback transaction safety, slug-reuse).
-  - **Phase 3 (bugs + docs):** Fixed `_get_active_org_subscription()` to use `all_objects` instead of `objects` (TenantManager contextvar scoping broke feature-requiring views resolved outside full middleware). Roadmap and changelog updated.
-- **CONTRACT:** `purge_organization --organization-id <uuid>` (destructive); `--slug <slug>` (preflight); `--dry-run` (counts only); `--force` (bypass reserved-org guard). Tombstone-backed rerun returns no-op success with already-gone message. System and personal orgs guarded by default; `--force` overrides.
-- **VALIDATION PATH:** `POSTGRESQL` (opt-in via `QUICKSCALE_TEST_DB=postgres`): configure a Postgres target and run ``make MODULE=orgs test -- --modules`` — **278 passed, 3 skipped** on the stop-here rerun. Supporting checks kept on this branch: `make MODULE=forms test -- --modules` — **130 passed, 3 skipped, 11 deselected**; `make MODULE=notifications test -- --modules` — **33 passed**; `make test -- --core` runtime suite — **1552 passed, 28 deselected** with a pre-existing unrelated coverage shortfall. Real purge integration coverage proves deletion of social, forms, listings, blog, and CRM owned rows (both destructive and dry-run paths). Social cache invalidation verified — after purge the ``SOCIAL_LINKS_CACHE_KEY``, ``SOCIAL_EMBEDS_CACHE_KEY``, and their ``:org:{org_id}`` variants are cleared.
-- **FINDINGS / FOLLOW-UP:**
-  - **Resolved (2026-06-25):** `_get_active_org_subscription()` in `permissions.py` used `TenantManager.objects` which returns `.none()` when ambient org context is absent. Changed to `all_objects` (super-scope bypass). This was discovered during the Postgres orgs checkpoint.
-  - **Advisory:** 3 legacy billing migration tests (`test_migrate_billing_to_orgs_*`) are skipped on PostgreSQL. The historical scenario depends on pre-NOT-NULL billing rows that no longer exist in the current schema. These tests can be removed or rewritten when the billing module test suite is next touched.
-  - **Resolved (2026-06-25):** `--force` flag implemented — bypasses the reserved-org guard (System and personal orgs). The guard now checks both `is_system` and `is_personal`. Applied consistently across slug preflight, dry-run, and destructive paths.
-  - **Advisory:** No interactive confirmation prompt is implemented. The destroy command runs immediately with `--organization-id` (or `--organization-id --force` for reserved orgs). Add interactive confirmation in a follow-up if needed.
-  - **Pending / decision needed (recorded 2026-06-26):** Generated `showcase_react` SaaS org-switch billing parity remains unresolved outside the locked T1.17 DB-rows-only scope. A separate follow-up must decide whether SPA org switches should explicitly persist `ACTIVE_ORG_SESSION_KEY` / selected-org session state before flat `/billing/...` and `/api/billing/...` calls, or whether generated billing entry points should stay off the SPA org dashboard until that contract exists.
-- **DEPENDS:** all of T1.5–T1.10. **DECISIONS:** D3.
-
----
-
-### Phase 5 — RLS hardening & routing teardown
-
-**Why → `findings.md` Findings 1, 2, 4.** Three tasks. T1.18 and T1.19 run sequentially on `wt-track1` (after T1.17 merges). T1.20 runs in parallel on `wt-track2` — it only depends on T1.5–T1.10 (all complete) and can start immediately.
-
-#### - [x] T1.18 — RLS boot guard in orgs AppConfig
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-Implemented 2026-06-26. Review-driven fix 2026-06-26.
-
-- **TRACK:** `wt-track1` (after T1.17 merges to v87)
-- **WHY:** `findings.md` Finding 1 — `RUNTIME_DATABASE_URL` is optional; when unset the app connects as the superuser (BYPASSRLS) and all RLS policies silently disable, with no error or boot guard. Fix priority: **now**.
-- **COMPLETED:** Added `_check_rls_role()` function and `AppConfig.ready()` to `QuickscaleOrgsConfig`. The guard queries `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user` and raises `ImproperlyConfigured` if the connected role has `rolbypassrls = true`. Behavior by mode: saas + `DEBUG=False` + PostgreSQL = active check; solo mode = no-op; `DEBUG=True` = no-op; non-PostgreSQL (SQLite) = no-op. Seven unit tests in `test_rls_boot_guard.py` cover raise/pass/no-op cases, including solo mode, DEBUG=True, SQLite vendor, unset mode (solo default), and defensive None-row handling. Validation: `make MODULE=orgs test -- --modules` green.
-- **REVIEW-DRIVEN FIX (CR-T118-001, narrowed 2026-06-26):** Change-review found that `ready()` blocked the documented superuser migration/bootstrap path (`start.sh.j2` unsets `RUNTIME_DATABASE_URL` and runs `manage.py migrate` under `DATABASE_URL`). Initial fix exempted all management commands, but that contradicted `decisions.md` line 1121 (`migrate` correct; `runserver` catastrophic). Narrowed to `_is_migrate_command()` — only `manage.py migrate` (with any args) is exempt. `manage.py runserver`, `collectstatic`, and all other management commands still fail closed. Lifecycle-seam coverage: 6 `_is_migrate_command` unit tests (migrate, migrate-with-flags, runserver false, collectstatic false, gunicorn false, bare-python false) and 4 `ready()` integration tests (migrate exempt, runserver fail-closed, collectstatic fail-closed, gunicorn fail-closed). Total: 17 tests in `test_rls_boot_guard.py` → 282 passed, 5 skipped in orgs suite.
-- **SCOPE:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` — added `_is_migrate_command()`, `import sys`, and narrow migrate-only guard in `ready()`. Tests in `quickscale_modules/orgs/tests/test_rls_boot_guard.py`.
-- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test` green; saas/prod with superuser `DATABASE_URL` raises `ImproperlyConfigured` for gunicorn/WSGI startup; `manage.py migrate` passes without raising; solo mode and `DEBUG=True` unaffected.
-- **VALIDATION PATH:** `make MODULE=orgs lint -- --modules` + `make MODULE=orgs typecheck -- --modules` + `make MODULE=orgs test -- --modules` — all green.
-- **DEPENDS:** T1.17 merged. **DECISIONS:** D4.
-
----
-
-#### - [x] T1.19 — Unified `org_scope()` context manager
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-Implemented 2026-06-26.
-
-- **TRACK:** `wt-track1` (sequential after T1.18)
-- **WHY:** `findings.md` Finding 2 — contextvar and DB `SET LOCAL` are co-set by three independent mechanisms (middleware `_call_with_org`, billing `_billing_org_db_context`, serializer `_request_org_id`), creating divergence risk and making org-scope entry points impossible to audit uniformly.
-- **COMPLETED:** Added `org_scope(organization)` context manager to `current_org.py` — the preferred, unified entry point for entering org scope from middleware and module-level callers. Updated `middleware._call_with_org` to delegate to `org_scope()` instead of managing ContextVar/SET_LOCAL inline. Deleted `_billing_org_db_context` from `billing/services.py`; all 4 call sites now import and use `org_scope` from `quickscale_modules_orgs.current_org`. Removed redundant `set_current_org_id()` calls and lazy imports from both `_request_org_id` and `_read_org_id` in CRM serializers — contextvar is already set by middleware. Cleaned up unused imports: `contextlib`/`Iterator` in billing, `transaction` in middleware, dead `_set_current_org_id` method, unused `set_current_org_id`/`set_db_current_org_id` imports in middleware. Existing `all_objects` bypass sites in CRM serializers remain documented as intentional. **Scope:** This unified the middleware+billing+CRM seam. Remaining callers (management commands, CRM views, social admin `_org_db_context`) still use `set_current_org_for_context()` / `set_current_org_id()` / `set_db_current_org_id()` directly; migrating them is deferred as follow-up work outside this task.
-- **SCOPE:**
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py` — add `org_scope(organization)` context manager
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py` — `_call_with_org` delegates to `org_scope()`
-  - `quickscale_modules/billing/src/quickscale_modules_billing/services.py` — delete `_billing_org_db_context`; import `org_scope` from orgs
-  - `quickscale_modules/crm/src/quickscale_modules_crm/serializers.py` — remove redundant `set_current_org_id()` calls from `_request_org_id`; annotate remaining `all_objects` bypass sites
-- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test`, `make MODULE=billing test`, `make MODULE=crm test` green; no `_billing_org_db_context` symbol remains in billing; `grep -r "set_current_org_id" quickscale_modules/crm` returns zero serializer hits; full `make test` green.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules` + `make MODULE=billing test -- --modules` + `make MODULE=crm test -- --modules` + `make test`.
-- **DEPENDS:** T1.18. **DECISIONS:** F2.
-
----
-
-#### - [x] T1.20 — Delete slug-routing fallback; finish Decision 4A
+### - [ ] D1 — Generated `showcase_react` SaaS org-switch billing parity
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track2` (can start now — independent of T1.17–T1.19)
-- **WHY:** `findings.md` Finding 4 — locked Decision 4A ("one URL tree, no `/orgs/<slug>/crm/...`") is violated in three places: (a) `_DOWNSTREAM_ORG_SCOPED_MODULES` + `_SOLO_ROUTE_PREFIXES` + `_resolve_org_from_path_slug` remain in middleware; (b) an unknown-segment branch in `_is_org_management_path` is fail-open (skips org resolution); (c) the generated React template still emits `/orgs/<slug>/crm` in saas mode. T1.5–T1.10 adopted the module contracts but did not delete this scaffolding.
-- **OBJECTIVE:** Delete the slug-based fallback model from middleware. Make the unknown-segment default fail-closed. Fix the generated React template to use flat routes in all modes.
-- **SCOPE:**
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py` — delete `_DOWNSTREAM_ORG_SCOPED_MODULES`, `_SOLO_ROUTE_PREFIXES`, `_resolve_org_from_path_slug`, Fallback A, Fallback B from `_handle_saas_request`; in `_is_org_management_path` flip unknown-segment return from `True` (bypass) to `False` (resolve org)
-  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/templates/index.html.j2` — line 83: replace `saas ? "/orgs/<slug>/crm" : "/crm"` with `/crm/` unconditionally; `currentOrgSlug` at line 77 may remain for display (breadcrumbs) but must not drive route construction
-  - `quickscale_modules/orgs/tests/test_middleware.py` — remove slug-fallback tests; add test asserting unknown `/orgs/<slug>/<unknown>` goes through org resolution
-- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test` green; `grep -rn "_DOWNSTREAM_ORG_SCOPED_MODULES\|_SOLO_ROUTE_PREFIXES\|_resolve_org_from_path_slug" quickscale_modules/orgs/src/` returns zero hits; React template emits `/crm/` unconditionally; full `make test` green.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules` + `make test`.
-- **DEPENDS:** T1.5–T1.10 (all complete). **Independent of T1.17–T1.19.**
-
----
-
-## Track 2 — Module wiring manifests (Finding 3A)
-
-Independent seam — CLI/generator/manifest registry, no overlap with Track 1 runtime code. **Starts day 1.**
-
-### Track 2 progress
-- [x] T2.1 — Manifest schema: `implies` support (config-expression fields deferred to T2.3)
-- [x] T2.2 — Generic implication resolver
-- [x] T2.3 — Migrate wiring into manifests; delete Python adapters
-- [x] T2.4 — Delete dead ladder/shims
-
----
-
-Track 2 implementation is complete; closed-phase history lives in [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-## Track 3 — DR hard cutover (Finding 5A)
-
-Fully independent — backups has no org FK; lives in `backups/services.py`, `dr_engine/`, and the `dr` CLI. **Starts day 1.**
-
-### Track 3 progress
-- [x] T3.1 — Single adapter path (route all commands through dr_engine)
-- [x] T3.2 — Shrink `services.py`
-- [x] T3.3 — Cleanup
-
----
-
-Track 3 implementation is complete; closed-phase history lives in [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-## Deferred / Monitor
-
-Nine deferred items assigned to three parallel tracks. Tracks 2 and 3 start immediately; Track 1 is gated on T1.18/T1.19. Items without a track are promoted only when their named trigger fires.
-
-### Track assignment
-
-| Item | Track | Start | Recommendation |
-|------|-------|-------|----------------|
-| D2 — Retire `MODULE_CATALOG` tuple | **2** | now | Pursue |
-| D5 — Backups `dr_adapter_call` coverage | **3** | now (bundle with D4) | Pursue |
-| D6 — `quickscale_core` coverage gaps | **2** | after D2 | Pursue |
-| D9a — Structured logging | **3** | after D5 | Pursue |
-| D1 — SaaS org-switch billing parity | **1** | after T1.18/T1.19 | Pursue |
-| D8 — Decouple tx from external I/O | **1** | after T1.19 + trigger | Pursue on trigger |
-| D4 — Backups terminology sweep | **3** | bundle with D5 | Drop / opportunistic |
-| D3 — Documentation consolidation | — | on onboarding failure | Drop |
-| D7 — Compat-window widening | — | on user conflict | Monitor |
-| D9b — Versioned API surface | — | on first consumer | Defer |
-| D9c — Webhook validation baseline | — | on second provider | Defer |
-
-### Track sequences
-
-```
-Track 1 (wt-track1):  [T1.18 → T1.19] → D1 → D8 (on trigger)
-Track 2 (wt-track2):  D2 → D6
-Track 3 (wt-track3):  D4+D5 (bundled) → D9a
-Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
-```
-
----
-
-### Track 2 — active now (`wt-track2`)
-
----
-
-#### - [ ] D2 — Retire static `MODULE_CATALOG` tuple
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track2` — starts now; independent of all active tracks
-- **WHY:** Finding 3 residual. T2.3/T2.4 wired `get_discovered_module_entries()` as the authoritative manifest-backed inventory, but the static `MODULE_CATALOG` tuple in `module_catalog.py` still exists and is referenced for inventory purposes in three test files and two CLI test sites. The two inventories can silently diverge: a new module with a `module.yml` appears in manifest discovery but not in the tuple until someone manually updates it.
-- **OBJECTIVE:** Make `get_discovered_module_entries()` the sole inventory path. Freeze `MODULE_CATALOG` to description-only metadata; update callers that use it for inventory to use `get_discovered_module_entries()`; add a CI assertion that no caller imports `MODULE_CATALOG` for inventory use.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/contracts/module_catalog.py` — add deprecation note to `MODULE_CATALOG` tuple; `get_module_names()` and `get_module_entries()` already carry `.. note:: kept for backward compatibility` — strengthen those notes
-  - `quickscale_core/tests/generator/test_themes.py` lines 413, 419, 424 — replace `MODULE_CATALOG` / `get_module_names()` inventory assertions with `get_discovered_module_entries()`
-  - `quickscale_core/tests/test_e2e_full_workflow.py` lines 341, 361 — same swap
-  - `quickscale_cli/tests/test_orgs_contract.py`, `test_plan_add.py`, `test_module_manifest_contract.py` — migrate inventory assertions to `get_discovered_module_entries()`
-- **ACCEPTANCE CRITERIA:** `grep -rn "MODULE_CATALOG\|get_module_names\|get_module_entries" quickscale_core/tests quickscale_cli/tests` returns zero inventory-purpose hits (per-module description lookups via `get_module_entry(name)` are fine); `make test -- --core` + `make test -- --cli` green.
-- **VALIDATION PATH:** `make test -- --core` + `make test -- --cli`.
-- **DEPENDS:** T2.3/T2.4 (complete). Independent of Track 1.
-- **RECOMMENDATION:** **Pursue** — small, contained, removes divergence risk. The static tuple already carries backward-compat markers; finishing the job is a single focused session.
-
----
-
-#### - [ ] D6 — Pre-existing `quickscale_core` coverage gaps
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track2` — after D2
-- **WHY:** Two files fell below the 80% per-file coverage floor during T2.4 closeout: `contracts/resolvers.py` (1903 lines) and `manifest/social_manifest.py` (544 lines). `resolvers.py` is the manifest implication resolution engine; `social_manifest.py` parses social provider manifests. Low coverage on large, logic-heavy files is a regression risk.
-- **OBJECTIVE:** Bring both files to ≥ 80% statement coverage without adding `pragma: no cover` markers; focus on untested branches in the implication resolver and social manifest parser.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/contracts/resolvers.py` — identify uncovered branches; add tests in `quickscale_core/tests/`
-  - `quickscale_core/src/quickscale_core/manifest/social_manifest.py` — same approach
-- **ACCEPTANCE CRITERIA:** `make test -- --core` green; both files report ≥ 80% coverage in the per-file report.
-- **VALIDATION PATH:** `make test -- --core`.
-- **DEPENDS:** D2 (same worktree; run after D2 merges to avoid conflicts in `quickscale_core/tests/`).
-- **RECOMMENDATION:** **Pursue — `resolvers.py` is high priority** given its size (1903 lines) and central role in manifest resolution. `social_manifest.py` is lower urgency. Do not let the gap widen further.
-
----
-
-### Track 3 — active now (`wt-track3`)
-
----
-
-#### - [ ] D5 — Pre-existing backups coverage gap (`dr_adapter_call.py`)
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track3` — starts now; bundle with D4
-- **WHY:** `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py` (61 lines) reported 0% test coverage during CRM closeout `make test`. It is an active management command that dispatches to the DR adapter; 0% means no test exercises any of its argument parsing or dispatch logic.
-- **OBJECTIVE:** Add unit tests covering at least: argument parsing (valid + invalid input), successful adapter dispatch (mocked DR engine), and error-path exit code.
-- **SCOPE:**
-  - `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py` — read to identify testable branches
-  - `quickscale_modules/backups/tests/` — add `test_dr_adapter_call.py` with ≥ 3 test cases
-- **ACCEPTANCE CRITERIA:** `make MODULE=backups test -- --modules` green; `dr_adapter_call.py` coverage ≥ 80%.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
-- **DEPENDS:** None. Independent.
-- **RECOMMENDATION:** **Pursue** — 0% on an active management command is a real blind spot. Small scope (61-line file); bundle with D4 in the same session.
-
----
-
-#### - [ ] D4 — Backups terminology sweep outside T3.3 scope
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track3` — bundle with D5 (same worktree, same session)
-- **WHY:** T3.3 cleared stale single-path terminology from active DR service/adapter surfaces. A `legacy|fallback|backward` grep still hits two active-code docstrings: `backups/models.py:167` ("conservative legacy fallback") and `backups/admin.py:833` ("provenance fallbacks"). Django's `FallbackStorage` is a first-party class name and cannot be renamed.
-- **OBJECTIVE:** Reword the two docstring hits to drop legacy-DR framing; confirm `FallbackStorage` is the only remaining non-actionable hit.
-- **SCOPE:**
-  - `quickscale_modules/backups/src/quickscale_modules_backups/models.py` line 167 — reword docstring
-  - `quickscale_modules/backups/src/quickscale_modules_backups/admin.py` line 833 — reword docstring
-- **ACCEPTANCE CRITERIA:** `grep -rn "legacy\|fallback\|backward" quickscale_modules/backups/src/` returns only `FallbackStorage` hits and test/migration fixtures; no active-code docstring uses legacy DR framing.
-- **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
-- **DEPENDS:** None. Opportunistic.
-- **RECOMMENDATION:** **Drop / opportunistic** — both hits are docstrings with zero runtime impact. Bundle with D5; do not schedule as a standalone task.
-
----
-
-#### - [ ] D9a — Structured logging and correlation-ID baseline
-
-`**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track3` — after D5
-- **WHY:** Generated projects emit no structured log output and carry no correlation IDs. Debugging cross-request failures in production currently requires grepping unstructured Django logs. This is independent of any provider count or external consumer.
-- **OBJECTIVE:** Add `structlog` (or Django's `JSONFormatter`) to generated module settings; emit a `correlation_id` (from `X-Request-ID` header or generated UUID) on every request log line.
-- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — settings template, middleware stack; generated `urls.py` — add correlation-ID middleware entry.
-- **ACCEPTANCE CRITERIA:** Generated project log output is JSON; every log line includes `correlation_id`; `make test -- --core` green.
-- **VALIDATION PATH:** `make test -- --core` + manual `runserver` log inspection.
-- **DEPENDS:** D5/D4 (same worktree — run after D5 merges).
-- **RECOMMENDATION:** **Pursue** — highest-value D9 sub-item; improves debuggability today regardless of provider count or API consumers.
-
----
-
-### Track 1 — after T1.19 (`wt-track1`)
-
----
-
-#### - [ ] D1 — Generated `showcase_react` SaaS org-switch billing parity
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track1` — after T1.18/T1.19
+- **TRACK:** `wt-track1` — after T1.19 merges to v87
 - **WHY:** Discovered during T1.17 stop-here closeout. In a generated SaaS project the React SPA performs org-switches client-side but the server session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before flat `/billing/...` and `/api/billing/...` calls fire. If a billing page loads before session persistence completes the billing views resolve the wrong org from the session.
 - **OBJECTIVE:** Decide between two implementation shapes — (A) add an explicit org-switch/session-sync endpoint (`POST /orgs/set-active/`) that the SPA must call and await before navigating to billing, plus billing query invalidation on org change; or (B) remove generated billing entry points from the SPA org dashboard until the session-sync contract exists. Record the choice as a locked decision and implement it in the generated template.
 - **SCOPE:**
@@ -411,91 +91,117 @@ Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
   - `quickscale_modules/billing/` — if Option A: billing views validate session org matches request before serving
 - **ACCEPTANCE CRITERIA:** In a generated SaaS project, navigating billing pages after an org switch always resolves the correct org; no cross-tenant billing data is served. If Option B: billing link is absent from the SPA nav until the contract ships.
 - **VALIDATION PATH:** Manual test in a generated SaaS project — switch org, load billing dashboard, confirm correct org is active. `make MODULE=billing test -- --modules` + `make MODULE=orgs test -- --modules`.
-- **DEPENDS:** T1.18/T1.19 (`org_scope()` primitive should land first so any new session-sync path uses it). Decision required before implementation starts.
-- **RECOMMENDATION:** **Pursue** — active functional gap in generated SaaS projects. A user who runs `quickscale apply` with `billing` + `orgs` gets broken cross-org billing navigation. Option B is the safer quick fix while a session-sync contract is designed.
+- **DEPENDS:** T1.19 merged to v87. Decision required before implementation starts.
+- **RECOMMENDATION:** **Pursue** — active functional gap in generated SaaS projects. Option B is the safer quick fix while a session-sync contract is designed.
 
 ---
 
-#### - [ ] D8 — Decouple request-scoped transaction from external I/O
+## Autopsy follow-on — v87 structural findings (AF1–AF7)
 
-`**Tier 3 — High | PLANNING TIER: big | RISK LEVEL: high | EXECUTION PATH: full-path | HORIZON: 6–18 months**`
+Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). Two disjoint clusters; see the per-finding "Alternatives" + preferred option in findings.md before locking each decision.
 
-- **TRACK:** `wt-track1` — after T1.19; promote on production trigger
-- **WHY:** `findings.md` Finding 3. `TenantMiddleware._call_with_org` (middleware.py:164–177) wraps the entire view in `transaction.atomic()` to carry `SET LOCAL app.current_org_id`. Billing checkout/portal views (`billing/services.py` lines 1075, 1173, 1325, 1461) make 2–4 sequential Stripe network calls inside that transaction, holding a Postgres connection idle-in-transaction during third-party latency. Under `WEB_CONCURRENCY > 1` and Stripe p99 latency spikes this exhausts the connection pool.
-- **OBJECTIVE:** Replace `SET LOCAL` (transaction-scoped) with session-scoped `SET` reset via a connection hook at request end; remove the outer `transaction.atomic()` from `_call_with_org`; ensure billing views wrap only their own DB writes, not the Stripe calls.
-- **SCOPE:**
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py` `_call_with_org` (line 164) — remove `transaction.atomic()` wrapper; replace `_set_current_org_id` with session-scoped `SET app.current_org_id`; add connection reset hook
-  - `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py` — `org_scope()` (T1.19) will need adjustment to use session-scoped SET if T1.19 lands first
-  - `quickscale_modules/billing/src/quickscale_modules_billing/services.py` — wrap only DB-write sections in explicit `transaction.atomic()`; move Stripe calls outside
-  - `quickscale_modules/orgs/tests/test_middleware.py` — add test asserting no idle-in-transaction connections accumulate during a mocked slow external call
-- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test -- --modules` + `make MODULE=billing test -- --modules` green; `pg_stat_activity` shows no idle-in-transaction connections during a Stripe-call-mocked request cycle.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules` + `make MODULE=billing test -- --modules` + load test under `WEB_CONCURRENCY > 1` with Stripe latency mock.
-- **DEPENDS:** T1.19 (`org_scope()` primitive) must land first to avoid double-refactor. **PROMOTE WHEN:** `pg_stat_activity` shows idle-in-transaction duration rising with Stripe API latency, or `WEB_CONCURRENCY > 1` + Stripe latency spikes are observed in production.
-- **RECOMMENDATION:** **Pursue after T1.19, at the first production latency signal.** The risk is real and well-understood; the fix shape is clear. Tier 3 complexity is warranted because it touches the middleware transaction boundary that underpins all RLS. Do not promote until the production trigger fires.
+### Track assignment & parallelization
+
+| Track | Findings | Cluster | Parallel? |
+|---|---|---|---|
+| `wt-track1` | **AF1** (foundation) → **AF3** | Runtime isolation | AF1 must merge to `v87` before AF2/AF4 start |
+| `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Starts after AF1's `TenantModel` base lands |
+| `wt-track3` | **AF6** (enabler) → **AF5**, **AF7** | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
+
+**Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
 
 ---
 
-### Unassigned — promote on trigger
+### - [ ] AF1 — Tenant-table isolation conformance gate + declarative RLS
 
----
+`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-#### - [ ] D3 — Documentation consolidation
+- **TRACK:** `wt-track1` — **foundation; must merge to `v87` before AF2/AF4 begin.**
+- **WHY → Finding 1.** RLS is six hand-written `enable_rls` migrations with copy-pasted SQL and hardcoded table lists; child tables without `organization_id` (`ContactNote`/`DealNote`) sit outside *both* the Python manager and RLS, and nothing asserts coverage.
+- **OBJECTIVE:** (1) Land a CI **conformance test** that walks `apps.get_models()`, selects tenant-owned models, and asserts each has either an `organization_id` column + a live FORCE-RLS policy in `pg_policies` or a declared parent-join policy — failing the build on any gap. (2) Introduce a reusable `EnableTenantRLS(model)` migration operation generating the policy from one source string; migrate the six modules onto it. (3) Decide child-table policy: parent-join RLS vs denormalized `organization_id` (findings.md Finding 1 alt A vs C).
+- **SCOPE:** new conformance test in `tests_shared/`; `orgs/.../tenancy.py` (registry/`TenantModel` marker); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`).
+- **ACCEPTANCE CRITERIA:** conformance test is green and *fails* when a tenant table lacks a policy (prove with a temporary uncovered model); no duplicated policy SQL remains; child-table category is explicitly covered or exempted.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, run conformance test on PostgreSQL.
+- **DEPENDS:** none (starts immediately). **Blocks:** AF2, AF4.
+- **RECOMMENDATION:** **Pursue (A)** — converts "did someone remember?" into a build-enforced property; highest blast-radius finding.
 
-`**Tier 2 — Medium | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+### - [ ] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()`
 
-- **TRACK:** unassigned — promote when doc drift causes real onboarding failures
-- **WHY:** Multiple doc surfaces (roadmap, decisions, findings, scaffolding, CHANGELOG, module READMEs) have accrued independent update histories. Some module facts are repeated across files. Track 2 manifest work means module names/descriptions can be derived from `module.yml` rather than hand-maintained in prose.
-- **OBJECTIVE:** Audit cross-doc duplication; establish a single-source rule for module facts (manifest → auto-generated); prune stale or redundant sections.
-- **SCOPE:** `docs/technical/`, `docs/findings.md`, per-module `README.md` files, `CHANGELOG.md` preamble.
-- **ACCEPTANCE CRITERIA:** No module fact (name, description, readiness) appears both in a static doc and in the manifest without the doc citing the manifest as the source; `START_HERE.md` onboarding path has no dead links.
-- **VALIDATION PATH:** Manual review.
-- **DEPENDS:** None.
-- **RECOMMENDATION:** **Drop for now** — no evidence of real onboarding failures. Defer until a new developer reports confusion, or until a manifest auto-generation layer emits doc stubs. Revisiting prematurely is pure churn.
+`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
----
+- **TRACK:** `wt-track2` — pairs with AF4 (shared connection-init GUC).
+- **WHY → Finding 2.** `objects = TenantManager()` with no `base_manager_name` makes the auto-scoping manager Django's `_base_manager`, so all ORM graph traversal (forward FK, `refresh_from_db`, cascade collector, admin inlines) silently depends on an ambient contextvar; three modules already re-implement the context wrapper.
+- **OBJECTIVE:** Set `base_manager_name` to an unfiltered base on the shared `TenantModel`; collapse `_billing_org_db_context`, social `_org_db_context`, and `set_current_org_for_context` into one shared `orgs.current_org.tenant_context()`; keep `objects` auto-scoping for views.
+- **SCOPE:** `orgs/.../models.py` (`TenantModel` base + `base_manager_name`), `orgs/.../current_org.py` (single primitive), `billing/.../services.py:912`, `social/.../admin.py`, every tenant model's manager block.
+- **ACCEPTANCE CRITERIA:** forward-FK traversal and `refresh_from_db` work with no org context set; only one context-manager implementation remains; no behavior change in request-path scoping.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`, `make MODULE=social test`; add a regression test for FK traversal under no context.
+- **DEPENDS:** AF1 merged (uses the `TenantModel` base). Shares fix-seam with AF4.
+- **RECOMMENDATION:** **Pursue (A)** — removes a whole class of silent `DoesNotExist`/empty-result bugs and deletes duplicated context code.
 
-#### - [ ] D7 — Broader compatibility-window widening
+### - [ ] AF4 — Connection-level org GUC; views open short transactions only around writes
 
-`**Tier 2 — Medium | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **TRACK:** unassigned — promote on first user-reported version conflict
-- **WHY:** M11 decoupled the generator from generated-project runtime pins. No user-reported version conflicts exist as of 2026-06-26. Proactive widening without a reported failure is speculative.
-- **OBJECTIVE:** When a user-reported version conflict surfaces (e.g. Django version range too narrow, Stripe SDK pin incompatible with a newer generated project), widen the affected pin range in generator templates and/or `pyproject.toml`.
-- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — dependency sections; `quickscale_modules/*/pyproject.toml` — runtime pin declarations.
-- **ACCEPTANCE CRITERIA:** Reported conflict resolved; `make test` green on both old and new version.
-- **VALIDATION PATH:** `make test`.
-- **DEPENDS:** User-reported conflict (trigger condition).
-- **RECOMMENDATION:** **Monitor only — do not pursue proactively.** No evidence of conflicts. Promote when a user reports a real version conflict.
+- **TRACK:** `wt-track2` — **same fix-seam as AF2; implement together.**
+- **WHY → Finding 4.** `SET LOCAL` requires a transaction, so `TenantMiddleware._call_with_org` wraps the whole view in `transaction.atomic()`; since T1.20 every authenticated org-scoped request holds a connection idle-in-transaction across template render and in-view Stripe calls.
+- **OBJECTIVE:** Apply `app.current_org_id` via a `connection_created`/checkout hook keyed to the resolved org (re-applied at transaction start), so RLS is satisfied without a request-long transaction; move external API calls outside DB transactions (commit writes before/after the round-trip, or outbox).
+- **SCOPE:** `orgs/.../middleware.py:164-177` (`_call_with_org`), connection-init hook in orgs, `billing/.../services.py` checkout (`:511-564`) + webhook (`_billing_org_db_context`), generator `production.py.j2` (pooling note).
+- **ACCEPTANCE CRITERIA:** RLS still enforced (cross-org boundary tests pass); no org-scoped request holds an open transaction across a Stripe call; `idle in transaction` count flat under induced Stripe latency.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`; manual `pg_stat_activity` check under a slow-Stripe stub.
+- **DEPENDS:** AF1 merged; co-developed with AF2.
+- **RECOMMENDATION:** **Pursue (A)** — the connection-init hook is the same primitive AF2 needs; one change closes both.
 
----
+### - [ ] AF3 — Single audited operator-access seam
 
-#### - [ ] D9b — Versioned public-API surface
+`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: low | EXECUTION PATH: full-path**`
+- **TRACK:** `wt-track1` — after AF1 (and after AF2 lands the base-manager change).
+- **WHY → Finding 3.** Cross-tenant reach is governed by two ambient, unaudited switches — per-model `all_objects` and the connected DB role's `BYPASSRLS` — with no logged boundary.
+- **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager that is the only path to the unfiltered queryset / privileged role and emits a structured audit record; route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`) through it; begin tightening `all_objects` out of model declarations.
+- **SCOPE:** new seam in `orgs/`; `*/management/commands/*`; `all_objects` callsites in `*/admin.py`, `*/services.py`.
+- **ACCEPTANCE CRITERIA:** every cross-tenant operator read goes through the seam and logs who/which-orgs/why; conformance test counts `all_objects` entrypoints trending toward the seam.
+- **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests.
+- **DEPENDS:** AF1, AF2 merged.
+- **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; do after AF1/AF2 so the seam lands on the hardened base.
 
-- **TRACK:** unassigned — promote when a second provider or first external API consumer appears
-- **WHY:** Generated module `urls.py` exposes unversioned `/api/` routes. No external consumers exist today, but once a second provider or an API-consuming client lands, adding versioning retroactively is a breaking change.
-- **OBJECTIVE:** Add `/api/v1/` URL namespace to generated module `urls.py`; document the versioning contract in `scaffolding.md`.
-- **SCOPE:** `quickscale_core/src/quickscale_core/generator/templates/` — generated `urls.py` pattern.
-- **ACCEPTANCE CRITERIA:** Generated project routes all module API views under `/api/v1/`; no unversioned `/api/` routes in generated output; `make test -- --core` green.
-- **VALIDATION PATH:** `make test -- --core`.
-- **DEPENDS:** No active blocker; promote trigger is the first external API consumer.
-- **RECOMMENDATION:** **Defer** — no external consumer exists yet. Promote when a second provider or the first public-API consumer appears.
+### - [ ] AF6 — Decompose generator god files into per-concern packages (enabler)
 
----
+`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-#### - [ ] D9c — Webhook payload boundary validation baseline
+- **TRACK:** `wt-track3` — **generator-cluster enabler; do first.** Fully independent of tracks 1–2.
+- **WHY → Finding 6.** `apply_command.py` (3.1k), `dr_engine/orchestration.py` (3.7k), `module_config.py` (2.1k), `resolvers.py` (1.9k), `entry_point.py` (1.6k) are serial merge chokepoints that fight the 3-worktree workflow.
+- **OBJECTIVE:** Extract `apply_command.py`'s 16 step bodies into a `quickscale_core/apply/steps/<step>.py` package called by a thin orchestrator (maps onto the existing `apply/step.py` registry); split `dr_engine/orchestration.py` by concern (locking / upload / restore / verification). Behaviour-preserving.
+- **SCOPE:** `quickscale_cli/.../apply_command.py`, `quickscale_core/apply/`, `quickscale_core/dr_engine/orchestration.py`.
+- **ACCEPTANCE CRITERIA:** no behaviour change (full apply + DR test suites green); no single new file > ~800 lines; step bodies are independently importable.
+- **VALIDATION PATH:** full `quickscale_core` + `quickscale_cli` test suites; a real generate→apply smoke test.
+- **DEPENDS:** none. **Enables:** AF5, AF7.
+- **RECOMMENDATION:** **Pursue (A)** — creates the per-step/per-adapter seams AF5/AF7 need; mechanical and low-risk.
 
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: low | EXECUTION PATH: full-path**`
+### - [ ] AF5 — Apply step executor: per-step `is_satisfied()` + post-step checkpoint + fault-injection harness
 
-- **TRACK:** unassigned — promote when a second webhook provider lands
-- **WHY:** Stripe webhook signature verification is implemented ad-hoc in the billing module. No shared `WebhookValidator` abstraction exists; a second provider would duplicate the verification pattern.
-- **OBJECTIVE:** Extract Stripe webhook signature verification into a reusable `WebhookValidator` class; document the pattern for future providers.
-- **SCOPE:** `quickscale_modules/billing/src/quickscale_modules_billing/` — extract verification into a shared utility; `quickscale_core/` — add to generator as a template pattern.
-- **ACCEPTANCE CRITERIA:** Billing webhook handler uses `WebhookValidator`; a second provider can implement the same interface without duplicating verification logic; `make MODULE=billing test -- --modules` green.
-- **VALIDATION PATH:** `make MODULE=billing test -- --modules`.
-- **DEPENDS:** No active blocker; promote trigger is the second webhook provider.
-- **RECOMMENDATION:** **Defer** — Stripe verification already works; no second webhook provider exists. Promote when a second provider lands.
+`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+
+- **TRACK:** `wt-track3` — after AF6 (lands on the extracted step package).
+- **WHY → Finding 5.** Apply is 16 all-irreversible cross-system steps (git/FS/Docker/migrations/**Railway**) with no rollback; recovery is convention-based, untested idempotent-rerun gated only by ledger-file presence.
+- **OBJECTIVE:** Give each extracted step an `is_satisfied()`/`apply()` contract; checkpoint state *after each* step so recovery resumes at the first unsatisfied step (not rerun-all); add a fault-injection test (kill after step N, rerun, assert convergence). Fence the remote/destructive steps (Railway, migrations) as a final separately-confirmable phase.
+- **SCOPE:** `quickscale_core/apply/steps/*`, `apply/step.py`, `apply/ledger.py`, `apply_command.py` orchestrator.
+- **ACCEPTANCE CRITERIA:** fault-injection harness proves rerun-convergence for all 16 steps; resume reads "first unsatisfied step", not file-presence-only; no half-applied state after an induced mid-pipeline failure.
+- **VALIDATION PATH:** new fault-injection suite + existing apply tests.
+- **DEPENDS:** AF6 merged.
+- **RECOMMENDATION:** **Pursue (A)** — keeps the idempotent-rerun philosophy but makes it tested and resumable; (C) test-only is insufficient.
+
+### - [ ] AF7 — Push per-module manifest adapters out of core into the modules
+
+`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+
+- **TRACK:** `wt-track3` — after AF6 (lands on the decomposed manifest surface).
+- **WHY → Finding 7.** D3 ("self-describing modules") half-landed: `MANIFEST_ADAPTER_REGISTRY` holds hand-written `billing`/`crm`/`social` adapters in core (`entry_point.py`, 110 module-name refs) plus `social_manifest.py` — adding a rich module means editing core.
+- **OBJECTIVE:** Relocate each module's adapter into its own package and have core discover adapters via the manifest/entry-point mechanism (core keeps only the protocol). Start with `social` (move `_social_manifest_adapter` + `social_manifest.py`), then `billing`, `crm`.
+- **SCOPE:** `quickscale_core/manifest/entry_point.py`, `manifest/social_manifest.py`, `quickscale_modules/{social,billing,crm}/`, discovery in `contracts/module_discovery.py`.
+- **ACCEPTANCE CRITERIA:** adding/repointing a rich module touches zero core files; concrete module-name literal count in `quickscale_core` drops; `entry_point.py` shrinks.
+- **VALIDATION PATH:** generate a project with social+billing+crm and apply; module test suites.
+- **DEPENDS:** AF6 merged.
+- **RECOMMENDATION:** **Pursue (A)** — finishes the D3 decision the code drifted from; makes subtree-distributed modules actually self-contained.
 
 ---
 
@@ -509,27 +215,6 @@ Single-PR items that do not change the design:
 - Individual `pragma: no cover` lines.
 
 ---
-
-## Completed milestones (summary)
-
-| Milestone | Track | Phases | Summary |
-|-----------|-------|--------|---------|
-| M1 | 1 | F11.2–F11.5 | Merged to v87. |
-| M3 | 1 | F11.6–F11.10 | Merged to v87. Same-org FK audit/fix (225/225), pre/post-sync closeout (254/254). |
-| M5 | 3 | F2.5–F2.9b | Merged to v87. Project state + module provenance. |
-| M7 | 1 | F11.11–F11.13b | Merged to v87. Structural isolation rollout complete (non-view paths, blog admin, forms seed, migration docs). |
-| M8 | 3 | F12.1–F12.3b | Merged to v87. Railway rollback/resume closeout. |
-| M9 | 1 | F13.1–F13.3 | Merged to v87. Org-authoritative billing contract; unique subscription constraint; dual-FK backfill. |
-| M10 | 2 | F5.2a–F5.4 | Merged to v87. DR engine extracted to `quickscale_core.dr_engine`; `dr_engine_migration.md` added. |
-| M11 | 3 | F7.1–F7.3 | Merged to v87. Generator vs generated-project runtime-pin decoupling complete. |
-| M12 | 3 | T3.1–T3.3 | DR hard cutover cleanup complete; single adapter path and slim backups services are now the only active path. |
-| M13 | 1 | T1.1–T1.2 | Merged to v87. System org + NOT NULL contract; fail-closed contextvar TenantManager. |
-| M14 | 2 | T2.1–T2.4 | Merged to v87. Manifest-backed module wiring rollout complete; dead CLI implication/catalog shims removed. |
-| M15 | 1 | T1.3–T1.4 | Phase 1 Foundation complete. Session-based middleware single-URL contract (T1.3) and RLS DB role + generated-project template wiring (T1.4) merged to v87. |
-| M16 | 1 | T1.5, T1.6, T1.7, T1.8, T1.9, T1.10 | Phase 2 complete. CRM (T1.5, wt-track1), Blog (T1.6, wt-track1), Forms (T1.7, wt-track2), Listings (T1.8, wt-track2), Social (T1.9, wt-track3), and Billing (T1.10, wt-track3) contract adoption merged to v87. |
-| M17 | 1 | T1.15 | Phase 3 partial. Social RLS (T1.15, wt-track3) — RLS active for social tables via UUID predicate; per-org runtime-role admin contract with fail-closed behavior; no operator bypass. Social module 81/81, admin contracts 40/40. |
-| M18 | 1 | T1.11–T1.14, T1.16 | Phase 3 complete. CRM (T1.11, wt-track1), Blog (T1.12, wt-track1), Forms (T1.13, wt-track2), Listings (T1.14, wt-track2), Billing (T1.16, wt-track3) RLS backstop merged to v87. All six modules now FORCE RLS with fail-closed UUID predicate; billing adds `_billing_org_db_context` for per-handler org context in webhook paths. |
-| M19 | 1 | T1.17 | Phase 4 complete. `purge_organization` management command delivered: UUID-only destructive targeting, tombstone-backed rerun semantics, FK-safe delete order across social/forms/listings/blog/crm/billing/orgs, dry-run count parity, shared `set_current_org_for_context()` helper, Postgres-backed RLS proof, and resolved `_get_active_org_subscription` permissions fix. Stop-here rerun: orgs PostgreSQL suite 278 passed / 3 skipped. |
 
 ## References
 

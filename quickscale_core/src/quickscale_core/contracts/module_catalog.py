@@ -129,19 +129,28 @@ def get_module_names(*, include_experimental: bool = True) -> list[str]:
     """Return module names from the catalog.
 
     .. note::
-       This function is kept for backward compatibility.  For the
-       authoritative list of shipped modules, prefer
-       :func:`get_discovered_module_names`.
+       Deprecated since D2.  For the authoritative list of shipped modules,
+       prefer :func:`get_discovered_module_names`.  This function is kept
+       for backward compatibility only — it delegates to manifest-backed
+       discovery for shipped modules and supplements with static-catalog
+       experimental entries when requested.
 
     Args:
         include_experimental: If ``True`` (default), includes experimental
             (non-ready) modules in the result.
 
     Returns:
-        Sorted list of module names from the static catalog.
+        Sorted list of module names.
     """
-    entries = get_module_entries(include_experimental=include_experimental)
-    return [entry.name for entry in entries]
+    discovered = get_discovered_module_names()
+    if include_experimental:
+        experimental = [
+            entry.name
+            for entry in MODULE_CATALOG
+            if not entry.ready and entry.name not in discovered
+        ]
+        return sorted(set(discovered) | set(experimental))
+    return discovered
 
 
 def get_module_entries(
@@ -150,9 +159,11 @@ def get_module_entries(
     """Return catalog entries filtered by readiness/experimental visibility.
 
     .. note::
-       This function is kept for backward compatibility.  For the
-       authoritative list of shipped modules, prefer
-       :func:`get_discovered_module_entries`.
+       Deprecated since D2.  For the authoritative list of shipped modules,
+       prefer :func:`get_discovered_module_entries`.  This function is kept
+       for backward compatibility only — it delegates to manifest-backed
+       discovery for shipped entries and supplements with static-catalog
+       experimental entries when requested.
 
     Args:
         include_experimental: If ``True``, includes experimental
@@ -161,9 +172,19 @@ def get_module_entries(
     Returns:
         List of :class:`ModuleCatalogEntry` instances.
     """
+    discovered = get_discovered_module_entries()
     if include_experimental:
-        return list(MODULE_CATALOG)
-    return [entry for entry in MODULE_CATALOG if entry.ready]
+        discovered_names = {entry.name for entry in discovered}
+        experimental = [
+            entry
+            for entry in MODULE_CATALOG
+            if not entry.ready and entry.name not in discovered_names
+        ]
+        return sorted(
+            discovered + experimental,
+            key=lambda e: e.name,
+        )
+    return discovered
 
 
 # ---------------------------------------------------------------------------

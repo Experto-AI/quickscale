@@ -164,7 +164,7 @@ class BackupArtifact(models.Model):
         return self.filename
 
     def effective_restore_scope(self) -> str | None:
-        """Return the recorded restore scope or a conservative legacy fallback."""
+        """Return the recorded restore scope or infer one conservatively from format."""
         if self.restore_scope:
             return self.restore_scope
         if self.backup_format == "json":

@@ -338,7 +338,9 @@ class TestGeneratedProjectDependencyInstallSmoke:
             _run_poetry_install,
             _run_poetry_lock,
         )
-        from quickscale_core.contracts.module_catalog import get_module_entries
+        from quickscale_core.contracts.module_catalog import (
+            get_discovered_module_entries,
+        )
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
         )
@@ -357,9 +359,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
         module_options_by_name: dict[str, dict[str, object]] = {}
         expected_distribution_names: set[str] = set()
         expected_module_package_names: set[str] = set()
-        ready_module_names = [
-            entry.name for entry in get_module_entries(include_experimental=False)
-        ]
+        ready_module_names = [entry.name for entry in get_discovered_module_entries()]
 
         for module_name in ready_module_names:
             _copytree_for_generated_project_smoke(
