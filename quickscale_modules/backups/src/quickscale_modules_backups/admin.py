@@ -830,7 +830,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         return None
 
     def _snapshot_metadata(self, obj: BackupArtifact) -> dict[str, Any]:
-        """Return artifact metadata as a dict for provenance fallbacks."""
+        """Return artifact metadata as a dict for provenance details."""
         metadata = obj.metadata_json
         if isinstance(metadata, dict):
             return metadata

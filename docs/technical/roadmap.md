@@ -344,9 +344,11 @@ Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 
 ---
 
-#### - [ ] D5 — Pre-existing backups coverage gap (`dr_adapter_call.py`)
+#### - [x] D5 — Pre-existing backups coverage gap (`dr_adapter_call.py`)
 
 `**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+Implemented 2026-06-26. Bundled with D4 in the same session.
 
 - **TRACK:** `wt-track3` — starts now; bundle with D4
 - **WHY:** `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py` (61 lines) reported 0% test coverage during CRM closeout `make test`. It is an active management command that dispatches to the DR adapter; 0% means no test exercises any of its argument parsing or dispatch logic.
@@ -358,12 +360,16 @@ Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 - **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
 - **DEPENDS:** None. Independent.
 - **RECOMMENDATION:** **Pursue** — 0% on an active management command is a real blind spot. Small scope (61-line file); bundle with D4 in the same session.
+- **COMPLETED:** Added `quickscale_modules/backups/tests/test_dr_adapter_call.py` covering successful dispatch, invalid JSON / non-object payload rejection, unknown function rejection, and command-line exit code behavior for adapter failures. No production-code changes were needed in `dr_adapter_call.py` itself.
+- **FINDINGS / FOLLOW-UP:** D4 completed opportunistically in the same session. Active-code terminology hits were removed from `backups/models.py` and `backups/admin.py`; the only remaining `legacy|fallback|backward` hit under `quickscale_modules/backups/src/` is the historical migration helper in `migrations/0003_backupartifact_restore_scope_and_versions.py`.
 
 ---
 
-#### - [ ] D4 — Backups terminology sweep outside T3.3 scope
+#### - [x] D4 — Backups terminology sweep outside T3.3 scope
 
 `**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+Implemented 2026-06-26 as a D5 bundle.
 
 - **TRACK:** `wt-track3` — bundle with D5 (same worktree, same session)
 - **WHY:** T3.3 cleared stale single-path terminology from active DR service/adapter surfaces. A `legacy|fallback|backward` grep still hits two active-code docstrings: `backups/models.py:167` ("conservative legacy fallback") and `backups/admin.py:833` ("provenance fallbacks"). Django's `FallbackStorage` is a first-party class name and cannot be renamed.
@@ -375,6 +381,8 @@ Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 - **VALIDATION PATH:** `make MODULE=backups test -- --modules`.
 - **DEPENDS:** None. Opportunistic.
 - **RECOMMENDATION:** **Drop / opportunistic** — both hits are docstrings with zero runtime impact. Bundle with D5; do not schedule as a standalone task.
+- **COMPLETED:** Reworded the two active-code docstrings in `backups/models.py` and `backups/admin.py` to remove legacy/fallback DR framing.
+- **FINDINGS / FOLLOW-UP:** Post-change grep leaves only the historical migration helper hit in `quickscale_modules/backups/src/quickscale_modules_backups/migrations/0003_backupartifact_restore_scope_and_versions.py`; no active-code docstring hits remain.
 
 ---
 
