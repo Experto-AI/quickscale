@@ -153,7 +153,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 - [x] T1.17 — `purge_organization` command
 
 **Phase 5 — RLS hardening & routing teardown** *(after T1.17 merges; T1.18/T1.19 on wt-track1; T1.20 on wt-track2 — can start now)*
-- [ ] T1.18 — RLS boot guard *(wt-track1)*
+- [x] T1.18 — RLS boot guard *(wt-track1)*
 - [ ] T1.19 — Unified `org_scope()` primitive *(wt-track1, after T1.18)*
 - [ ] T1.20 — Delete slug-routing fallback; finish Decision 4A *(wt-track2, independent)*
 
@@ -187,16 +187,18 @@ Implemented 2026-06-25. Phase 3 docs closeout 2026-06-25.
 
 **Why → `findings.md` Findings 1, 2, 4.** Three tasks. T1.18 and T1.19 run sequentially on `wt-track1` (after T1.17 merges). T1.20 runs in parallel on `wt-track2` — it only depends on T1.5–T1.10 (all complete) and can start immediately.
 
-#### - [ ] T1.18 — RLS boot guard in orgs AppConfig
+#### - [x] T1.18 — RLS boot guard in orgs AppConfig
 
 `**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
+Implemented 2026-06-26. Review-driven fix 2026-06-26.
 
 - **TRACK:** `wt-track1` (after T1.17 merges to v87)
 - **WHY:** `findings.md` Finding 1 — `RUNTIME_DATABASE_URL` is optional; when unset the app connects as the superuser (BYPASSRLS) and all RLS policies silently disable, with no error or boot guard. Fix priority: **now**.
-- **OBJECTIVE:** Add `AppConfig.ready()` to `QuickscaleOrgsConfig` that, in saas mode with `DEBUG=False`, queries `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user` and raises `ImproperlyConfigured` if the connected role has `rolbypassrls = true`. No-op on SQLite (non-Postgres), no-op in solo mode, no-op when `DEBUG=True`.
-- **SCOPE:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` — add `ready()` (~20 lines). Add test in `quickscale_modules/orgs/tests/` asserting the check raises for a BYPASSRLS role stub and passes for a NOBYPASSRLS role stub.
-- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test` green; a saas/prod process that falls back to the superuser `DATABASE_URL` (no `RUNTIME_DATABASE_URL`) raises `ImproperlyConfigured` at startup; solo mode and `DEBUG=True` are unaffected.
-- **VALIDATION PATH:** `make MODULE=orgs test -- --modules` + manual `django-admin check` with a mocked BYPASSRLS connection.
+- **COMPLETED:** Added `_check_rls_role()` function and `AppConfig.ready()` to `QuickscaleOrgsConfig`. The guard queries `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user` and raises `ImproperlyConfigured` if the connected role has `rolbypassrls = true`. Behavior by mode: saas + `DEBUG=False` + PostgreSQL = active check; solo mode = no-op; `DEBUG=True` = no-op; non-PostgreSQL (SQLite) = no-op. Seven unit tests in `test_rls_boot_guard.py` cover raise/pass/no-op cases, including solo mode, DEBUG=True, SQLite vendor, unset mode (solo default), and defensive None-row handling. Validation: `make MODULE=orgs test -- --modules` green.
+- **REVIEW-DRIVEN FIX (CR-T118-001, narrowed 2026-06-26):** Change-review found that `ready()` blocked the documented superuser migration/bootstrap path (`start.sh.j2` unsets `RUNTIME_DATABASE_URL` and runs `manage.py migrate` under `DATABASE_URL`). Initial fix exempted all management commands, but that contradicted `decisions.md` line 1121 (`migrate` correct; `runserver` catastrophic). Narrowed to `_is_migrate_command()` — only `manage.py migrate` (with any args) is exempt. `manage.py runserver`, `collectstatic`, and all other management commands still fail closed. Lifecycle-seam coverage: 6 `_is_migrate_command` unit tests (migrate, migrate-with-flags, runserver false, collectstatic false, gunicorn false, bare-python false) and 4 `ready()` integration tests (migrate exempt, runserver fail-closed, collectstatic fail-closed, gunicorn fail-closed). Total: 17 tests in `test_rls_boot_guard.py` → 282 passed, 5 skipped in orgs suite.
+- **SCOPE:** `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` — added `_is_migrate_command()`, `import sys`, and narrow migrate-only guard in `ready()`. Tests in `quickscale_modules/orgs/tests/test_rls_boot_guard.py`.
+- **ACCEPTANCE CRITERIA:** `make MODULE=orgs test` green; saas/prod with superuser `DATABASE_URL` raises `ImproperlyConfigured` for gunicorn/WSGI startup; `manage.py migrate` passes without raising; solo mode and `DEBUG=True` unaffected.
+- **VALIDATION PATH:** `make MODULE=orgs lint -- --modules` + `make MODULE=orgs typecheck -- --modules` + `make MODULE=orgs test -- --modules` — all green.
 - **DEPENDS:** T1.17 merged. **DECISIONS:** D4.
 
 ---
