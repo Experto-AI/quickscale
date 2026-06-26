@@ -45,7 +45,7 @@ export function useOrgNavigation() {
         dashboard: orgBasePath ?? (isSaas ? '/orgs' : '/'),
         blog: orgBasePath ? joinPath(orgBasePath, 'blog') : '/blog',
         listings: orgBasePath ? joinPath(orgBasePath, 'listings') : '/listings',
-        crm: orgBasePath ? joinPath(orgBasePath, 'crm') : '/crm',
+        crm: '/crm',
         forms: '/forms/contact',
         members: orgBasePath ? joinPath(orgBasePath, 'members') : '/orgs',
         settings: orgBasePath ? joinPath(orgBasePath, 'settings') : '/settings',
@@ -59,8 +59,8 @@ export function useOrgNavigation() {
         listingsIndex: orgBasePath
           ? withTrailingSlash(joinPath(orgBasePath, 'listings'))
           : '/listings/',
-        crmDashboard: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'crm')) : '/crm/',
-        crmApiBase: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'crm/api')) : '/crm/api/',
+        crmDashboard: '/crm/dashboard/',
+        crmApiBase: '/crm/api/',
         formsApiBase: '/api/forms/',
       },
     }

@@ -456,10 +456,52 @@ def test_generated_urls_template_places_react_shell_reservations_before_modules(
     assert react_shell_marker in content
     assert pre_home_marker in content
     assert post_home_marker in content
-    assert r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$" in content
+    assert r"^orgs/[^/]+/(blog|listings|members|settings)/?$" in content
     assert r"^orgs/[^/]+/forms/[^/]+/?$" not in content
     assert r"^orgs/[^/]+/billing/" not in content
     assert r"^orgs/invitations/" not in content
     assert content.index(react_shell_marker) < content.index(pre_home_marker)
     assert content.index(non_react_home_marker) < content.index(pre_home_marker)
     assert content.index(post_home_marker) > content.index(non_react_home_marker)
+
+    # CR-T120-002: Prove the final route-ownership contract.
+    # React shell owns /crm (and /crm/ via the /?$ anchor in the regex).
+    assert r"^(profile|blog|listings|crm|settings)/?$" in content
+    # The shell reservation uses /?$ which does NOT claim /crm/dashboard/.
+    assert r"^crm/dashboard" not in content
+
+
+def test_crm_module_dashboard_route_moved_to_crm_dashboard() -> None:
+    """CR-T120-003: CRM dashboard route moved from /crm/ to /crm/dashboard/.
+
+    The React SPA owns both /crm and /crm/; the Django staff dashboard
+    lives at /crm/dashboard/ to avoid shadowing.
+    """
+    crm_urls_path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "quickscale_core"
+        / "generator"
+        / "templates"
+        / "project_name"
+        / "urls.py.j2"
+    )
+    template_content = crm_urls_path.read_text()
+
+    # The template's React shell owns /crm (flat, not nested under orgs).
+    assert r"^(profile|blog|listings|crm|settings)/?$" in template_content
+    assert r"^orgs/[^/]+/crm" not in template_content
+    assert r"/crm/dashboard" not in template_content
+
+    # The actual CRM module urls.py registers the dashboard at /crm/dashboard/.
+    crm_urls_module = (
+        Path(__file__).resolve().parents[2]
+        / "quickscale_modules"
+        / "crm"
+        / "src"
+        / "quickscale_modules_crm"
+        / "urls.py"
+    )
+    crm_content = crm_urls_module.read_text()
+    assert 'path("crm/dashboard/",' in crm_content
+    assert 'path("crm/",' not in crm_content

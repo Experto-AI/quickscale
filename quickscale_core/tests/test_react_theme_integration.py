@@ -462,9 +462,13 @@ class TestReactThemeGeneration:
         assert (
             're_path(r"^orgs/[^/]+/?$", orgs_react_shell_view)' in react_shell_prelude
         )
+        # T1.20: CRM is flat-only — not in org-scoped shell routes.
+        assert (
+            'r"^orgs/[^/]+/(blog|listings|members|settings)/?$"' in react_shell_prelude
+        )
         assert (
             'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"'
-            in react_shell_prelude
+            not in react_shell_prelude
         )
         assert 'r"^(profile|blog|listings|crm|settings)/?$"' in react_shell_prelude
         assert 'r"^forms/[^/]+/?$"' in react_shell_prelude
@@ -1403,12 +1407,13 @@ class TestReactThemeModuleActivationMatrix:
             'path="/orgs/:orgSlug"',
             'path="blog"',
             'path="listings"',
-            'path="crm"',
             'path="members"',
             'path="settings"',
         ]:
             assert nested_path in app_tsx, f"Missing route for {nested_path}"
+        # T1.20: CRM is flat-only — not nested under orgs.
         assert 'path="/crm"' in app_tsx
+        assert 'path="crm"' not in app_tsx
         assert 'path="/forms/:slug"' in app_tsx
         assert "LegacySaasRedirect" in app_tsx
         assert 'path="/crm-workspace"' not in app_tsx
