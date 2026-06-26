@@ -43,6 +43,25 @@ DECOMPRESSION_BOMB_PATHS = (
 )
 
 
+def _login_with_org(client, user):
+    """Log in *user* and activate their personal org in the session.
+
+    TenantMiddleware in SaaS mode requires ACTIVE_ORG_SESSION_KEY for
+    authenticated users; without it the middleware redirects to /orgs/.
+    """
+    from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+    from quickscale_modules_orgs.models import OrganizationMembership
+
+    client.force_login(user)
+    membership = OrganizationMembership.objects.filter(
+        user=user, organization__is_personal=True
+    ).first()
+    if membership is not None:
+        session = client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(membership.organization_id)
+        session.save()
+
+
 def make_uploaded_test_image(
     *,
     filename: str = "upload.png",
@@ -185,7 +204,7 @@ class TestPublishPostApi:
 
     def test_publish_post_api_non_staff_returns_403(self, client, user):
         """Test API requires staff permissions"""
-        client.force_login(user)
+        _login_with_org(client, user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -199,7 +218,7 @@ class TestPublishPostApi:
     def test_publish_post_api_missing_csrf_returns_403(self, staff_user):
         """Test API enforces CSRF protection for session-authenticated requests"""
         csrf_client = Client(enforce_csrf_checks=True)
-        csrf_client.force_login(staff_user)
+        _login_with_org(csrf_client, staff_user)
 
         response = csrf_client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -281,7 +300,7 @@ class TestPublishPostApi:
 
         token_client = Client(enforce_csrf_checks=True)
         session_client = Client(enforce_csrf_checks=True)
-        session_client.force_login(staff_user)
+        _login_with_org(session_client, staff_user)
 
         warm_response = token_client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -300,7 +319,7 @@ class TestPublishPostApi:
 
     def test_publish_post_api_invalid_json_returns_400(self, client, staff_user):
         """Test API validates JSON format"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -313,7 +332,7 @@ class TestPublishPostApi:
 
     def test_publish_post_api_non_object_payload_returns_400(self, client, staff_user):
         """Test API requires JSON object payload"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -328,7 +347,7 @@ class TestPublishPostApi:
         self, client, staff_user
     ):
         """Test API rejects non-UTF-8 request body payload"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -345,7 +364,7 @@ class TestPublishPostApi:
         staff_user,
     ):
         """Test API validates required fields"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -365,7 +384,7 @@ class TestPublishPostApi:
         staff_user,
     ):
         """Test API requires title to generate a usable slug"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -389,7 +408,7 @@ class TestPublishPostApi:
         Category.objects.create(
             name="Missing Cat", slug="missing-category", organization=staff_org
         )
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         # Use a slug that doesn't exist in the resolved org
         response = client.post(
@@ -413,7 +432,7 @@ class TestPublishPostApi:
         staff_user,
     ):
         """Test API validates excerpt type"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -436,7 +455,7 @@ class TestPublishPostApi:
         staff_user,
     ):
         """Test API validates category_slug type"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -468,7 +487,7 @@ class TestPublishPostApi:
         )
 
         category = Category.objects.create(name="Automation", organization=staff_org)
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -525,7 +544,7 @@ class TestPublishPostApi:
             uploaded_by=staff_user,
             organization=staff_org,
         )
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -551,7 +570,7 @@ class TestPublishPostApi:
         staff_org,
     ):
         """Test publish API validates the uploaded featured image reference."""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -576,7 +595,7 @@ class TestPublishPostApi:
         staff_user,
     ):
         """Test publish API rejects a featured image alt without an image."""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -606,7 +625,7 @@ class TestPublishPostApi:
             author=staff_user,
             organization=staff_org,
         )
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -619,7 +638,7 @@ class TestPublishPostApi:
 
     def test_publish_post_api_invalid_tags_returns_400(self, client, staff_user):
         """Test API validates tags payload type"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -632,7 +651,7 @@ class TestPublishPostApi:
 
     def test_publish_post_api_non_sluggable_tag_returns_400(self, client, staff_user):
         """Test API validates tags can generate usable slugs"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -649,7 +668,7 @@ class TestPublishPostApi:
         self, client, staff_user
     ):
         """Test API validates each tag value type"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -668,7 +687,7 @@ class TestPublishPostApi:
         staff_user,
     ):
         """Test API returns server error for non-conflict integrity failures"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         with patch(
             "quickscale_modules_blog.views.create_published_post_from_payload",
@@ -689,7 +708,7 @@ class TestPublishPostApi:
         staff_user,
     ):
         """Test API maps race-condition slug conflicts to conflict response"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         initial_slug_lookup = MagicMock()
         initial_slug_lookup.exists.return_value = False
@@ -717,7 +736,7 @@ class TestPublishPostApi:
 
     def test_publish_post_api_creates_missing_tags(self, client, staff_user, staff_org):
         """Test API creates new tags when they do not exist"""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
         assert Tag.objects.count() == 0
 
         response = client.post(
@@ -826,7 +845,7 @@ class TestUploadMediaApi:
 
     def test_upload_media_api_non_staff_returns_403(self, client, user):
         """Test media uploads require staff access."""
-        client.force_login(user)
+        _login_with_org(client, user)
 
         response = client.post(
             reverse("quickscale_blog:api_upload_media"),
@@ -839,7 +858,7 @@ class TestUploadMediaApi:
     def test_upload_media_api_missing_csrf_returns_403(self, staff_user):
         """Test session-authenticated media uploads enforce CSRF protection."""
         csrf_client = Client(enforce_csrf_checks=True)
-        csrf_client.force_login(staff_user)
+        _login_with_org(csrf_client, staff_user)
 
         response = csrf_client.post(
             reverse("quickscale_blog:api_upload_media"),
@@ -862,7 +881,7 @@ class TestUploadMediaApi:
         settings.MEDIA_ROOT = str(tmp_path)
         settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
         settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         with patch(
             "quickscale_modules_blog.views.storage_validate_file_upload",
@@ -899,7 +918,7 @@ class TestUploadMediaApi:
         """Upload API should apply the same width ceiling in both validation paths."""
         settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
         settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         with patch(
             "quickscale_modules_blog.views.storage_validate_file_upload",
@@ -926,7 +945,7 @@ class TestUploadMediaApi:
         """Upload API should apply the same height ceiling in both validation paths."""
         settings.BLOG_API_UPLOAD_MAX_WIDTH = 1600
         settings.BLOG_API_UPLOAD_MAX_HEIGHT = 900
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         with patch(
             "quickscale_modules_blog.views.storage_validate_file_upload",
@@ -952,7 +971,7 @@ class TestUploadMediaApi:
         """Test upload API returns CDN/public base URL when configured."""
         settings.MEDIA_ROOT = str(tmp_path)
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         response = client.post(
             reverse("quickscale_blog:api_upload_media"),
@@ -977,7 +996,7 @@ class TestUploadMediaApi:
     ):
         """Upload API should build canonical CDN URLs from the stored key."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         file_mock = MagicMock()
         file_mock.name = "blog/uploads/2026/03/hero-image.png"
@@ -1017,7 +1036,7 @@ class TestUploadMediaApi:
     ):
         """Upload API should build local media URLs from the stored key."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         file_mock = MagicMock()
         file_mock.name = "blog/uploads/2026/03/hero-image.png"
@@ -1071,7 +1090,7 @@ class TestUploadMediaApi:
         staff_user,
     ):
         """Test upload API rejects files that are not valid supported images."""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
         bad_file = SimpleUploadedFile(
             "notes.txt",
             b"not an image",
@@ -1101,7 +1120,7 @@ class TestUploadMediaApi:
         image_open_target,
     ):
         """Upload API should normalize Pillow bomb protection failures in both paths."""
-        client.force_login(staff_user)
+        _login_with_org(client, staff_user)
 
         with (
             patch(
