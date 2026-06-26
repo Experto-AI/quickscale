@@ -1,4 +1,17 @@
-"""Django settings for QuickScale organizations module tests."""
+"""Django settings for QuickScale organizations module tests.
+
+Default database is SQLite (``:memory:``).  Set the environment variable
+``QUICKSCALE_TEST_DB=postgres`` to run the full test suite against
+PostgreSQL — the following env vars configure the connection:
+
+* ``QS_ORGS_DB_NAME`` (default: ``test_quickscale_orgs``)
+* ``QS_ORGS_DB_USER`` (default: ``postgres``)
+* ``QS_ORGS_DB_PASSWORD`` (default: ``""``)
+* ``QS_ORGS_DB_HOST`` (default: ``localhost``)
+* ``QS_ORGS_DB_PORT`` (default: ``5432``)
+"""
+
+import os
 
 SECRET_KEY = "test-secret-key-for-orgs-module"
 DEBUG = True
@@ -14,8 +27,13 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "allauth",
     "allauth.account",
-    "quickscale_modules_billing",
     "quickscale_modules_orgs",
+    "quickscale_modules_billing",
+    "quickscale_modules_social",
+    "quickscale_modules_forms",
+    "quickscale_modules_listings",
+    "quickscale_modules_blog",
+    "quickscale_modules_crm",
 ]
 
 MIDDLEWARE = [
@@ -47,12 +65,24 @@ TEMPLATES = [
     }
 ]
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+if os.environ.get("QUICKSCALE_TEST_DB") == "postgres":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("QS_ORGS_DB_NAME", "test_quickscale_orgs"),
+            "USER": os.environ.get("QS_ORGS_DB_USER", "postgres"),
+            "PASSWORD": os.environ.get("QS_ORGS_DB_PASSWORD", ""),
+            "HOST": os.environ.get("QS_ORGS_DB_HOST", "localhost"),
+            "PORT": os.environ.get("QS_ORGS_DB_PORT", "5432"),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
+        }
+    }
 
 USE_TZ = True
 TIME_ZONE = "UTC"

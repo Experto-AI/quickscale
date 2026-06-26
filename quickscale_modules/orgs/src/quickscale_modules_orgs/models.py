@@ -342,6 +342,49 @@ class OrganizationInvitation(models.Model):
         return f"{self.email} -> {self.organization}"
 
 
+class OrganizationTombstone(models.Model):
+    """Record of a purged (permanently deleted) organization (T1.17).
+
+    This is the authoritative rerun guard: when an organization no longer
+    exists in the live ``Organization`` table, a matching row here means
+    the purge already happened.  Re-runs return no-op success instead of
+    erroring.
+
+    The payload stays minimal per CR-PR-T117-004 — only the deleted org's
+    UUID, the purge timestamp, and strictly necessary operator metadata.
+    Slug and name are explicitly excluded.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization_id = models.UUIDField(
+        unique=True,
+        verbose_name="purged organization UUID",
+        help_text="The UUID of the purged organization (not a FK — the org row is gone).",
+    )
+    purged_at = models.DateTimeField(auto_now_add=True)
+    purged_by_user_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="purged by user ID",
+        help_text="Operator identifier who triggered the purge, if known.",
+    )
+    reason = models.TextField(
+        blank=True,
+        default="",
+        help_text="Optional human-readable reason for the purge.",
+    )
+
+    class Meta:
+        app_label = "quickscale_modules_orgs"
+        verbose_name = "organization tombstone"
+        verbose_name_plural = "organization tombstones"
+        ordering = ["-purged_at"]
+
+    def __str__(self) -> str:
+        return f"Tombstone for org {self.organization_id} (purged {self.purged_at:%Y-%m-%d %H:%M:%S})"
+
+
 class TenantModel(models.Model):
     """Abstract base for tenant-scoped models.
 

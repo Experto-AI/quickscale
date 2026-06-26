@@ -141,8 +141,12 @@ def _get_active_org_subscription(organization: Organization) -> Any | None:
     except LookupError:
         return None
 
+    # Use all_objects (super-scope bypass) because the query already has an
+    # explicit organization filter.  TenantManager's contextvar-based scoping
+    # is redundant here and breaks when ambient org context is absent (e.g.
+    # slug-resolved views that don't go through full middleware).
     return (
-        subscription_model.objects.select_related("plan")
+        subscription_model.all_objects.select_related("plan")
         .filter(
             organization=organization,
             status=subscription_model.Status.ACTIVE,

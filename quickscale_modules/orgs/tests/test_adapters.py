@@ -39,7 +39,10 @@ def test_solo_signup_redirect_creates_personal_org(settings) -> None:
     redirect_url = OrgsAccountAdapter().get_signup_redirect_url(request)
 
     assert redirect_url == "/"
-    assert Organization.objects.get().slug == "aliceorg"
+    assert (
+        Organization.objects.get(is_personal=True, memberships__user=user).slug
+        == "aliceorg"
+    )
 
 
 @pytest.mark.django_db
