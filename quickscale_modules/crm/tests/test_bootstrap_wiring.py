@@ -39,7 +39,7 @@ def test_crm_dashboard_read_calls_bootstrap_helper(client, org_a, org_a_admin) -
     _activate_org_in_session(client, org_a)
 
     with patch("quickscale_modules_crm.views.ensure_org_default_stages") as mock_seed:
-        response = client.get("/crm/")
+        response = client.get("/crm/dashboard/")
 
     assert response.status_code == 200
     mock_seed.assert_called_once()

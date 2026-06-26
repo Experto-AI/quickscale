@@ -1,5 +1,5 @@
 {%- raw -%}
-import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 {% endraw -%}
@@ -69,15 +69,17 @@ function App() {
             <Route path="listings" element={<ListingsPage />} />
 {%- endraw %}
 {%- endif %}
-{%- if selected_modules is none or 'crm' in selected_modules %}
-{%- raw %}
-            <Route path="crm" element={<CrmPage />} />
-{%- endraw %}
-{%- endif %}
 {%- raw %}
             <Route path="members" element={<OrgMembersPage />} />
             <Route path="settings" element={<OrgSettingsPage />} />
           </Route>
+{%- endraw %}
+{%- if selected_modules is none or 'crm' in selected_modules %}
+{%- raw %}
+          <Route path="/crm" element={<CrmPage />} />
+{%- endraw %}
+{%- endif %}
+{%- raw %}
           <Route path="/profile" element={<ProfilePage />} />
 {%- endraw %}
 {%- if selected_modules is none or 'blog' in selected_modules %}
@@ -88,11 +90,6 @@ function App() {
 {%- if selected_modules is none or 'listings' in selected_modules %}
 {%- raw %}
           <Route path="/listings" element={<LegacySaasRedirect path="listings" />} />
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'crm' in selected_modules %}
-{%- raw %}
-          <Route path="/crm" element={<LegacySaasRedirect path="crm" />} />
 {%- endraw %}
 {%- endif %}
 {%- if selected_modules is none or 'forms' in selected_modules %}

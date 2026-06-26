@@ -210,7 +210,7 @@ T1.11 T1.12 T1.13 T1.14 T1.15 T1.16   ← RLS, each after its module
 
 ---
 
-#### - [ ] T1.20 — Delete slug-routing fallback; finish Decision 4A
+#### - [x] T1.20 — Delete slug-routing fallback; finish Decision 4A
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 

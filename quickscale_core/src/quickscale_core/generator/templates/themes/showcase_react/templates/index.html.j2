@@ -80,7 +80,7 @@
 {% endraw -%}
 {%- if selected_modules is none or 'crm' in selected_modules %}
 {%- raw %}
-          crm: "{% if settings.QUICKSCALE_MODE == 'saas' and request.org and request.org.slug %}/orgs/{{ request.org.slug|escapejs }}/crm{% else %}/crm{% endif %}",
+          crm: "/crm/",
 {%- endraw %}
 {%- endif %}
 {%- if selected_modules is none or 'billing' in selected_modules %}

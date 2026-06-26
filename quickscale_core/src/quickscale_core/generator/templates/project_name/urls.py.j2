@@ -56,7 +56,7 @@ react_shell_urlpatterns = [
     re_path(r"^orgs/new/?$", orgs_react_shell_view),
     re_path(r"^orgs/[^/]+/?$", orgs_react_shell_view),
     re_path(
-        r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$",
+        r"^orgs/[^/]+/(blog|listings|members|settings)/?$",
         orgs_react_shell_view,
     ),
     re_path(r"^(profile|blog|listings|crm|settings)/?$", react_shell_view),
