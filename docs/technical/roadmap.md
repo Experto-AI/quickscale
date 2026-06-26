@@ -277,7 +277,7 @@ Nine deferred items assigned to three parallel tracks. Tracks 2 and 3 start imme
 
 | Item | Track | Start | Recommendation |
 |------|-------|-------|----------------|
-| D2 — Retire `MODULE_CATALOG` tuple | **2** | now | Pursue |
+| D2 — Retire `MODULE_CATALOG` tuple | **2** | completed 2026-06-26 | Done |
 | D5 — Backups `dr_adapter_call` coverage | **3** | now (bundle with D4) | Pursue |
 | D6 — `quickscale_core` coverage gaps | **2** | after D2 | Pursue |
 | D9a — Structured logging | **3** | ✅ Complete | Pursue — Done |
@@ -293,7 +293,7 @@ Nine deferred items assigned to three parallel tracks. Tracks 2 and 3 start imme
 
 ```
 Track 1 (wt-track1):  [T1.18 → T1.19] → D1 → D8 (on trigger)
-Track 2 (wt-track2):  D2 → D6
+Track 2 (wt-track2):  D2 (done) → D6
 Track 3 (wt-track3):  D4+D5 (bundled) → D9a ✓
 Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 ```
@@ -304,22 +304,22 @@ Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 
 ---
 
-#### - [ ] D2 — Retire static `MODULE_CATALOG` tuple
+#### - [x] D2 — Retire static `MODULE_CATALOG` tuple
 
 `**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
 
-- **TRACK:** `wt-track2` — starts now; independent of all active tracks
-- **WHY:** Finding 3 residual. T2.3/T2.4 wired `get_discovered_module_entries()` as the authoritative manifest-backed inventory, but the static `MODULE_CATALOG` tuple in `module_catalog.py` still exists and is referenced for inventory purposes in three test files and two CLI test sites. The two inventories can silently diverge: a new module with a `module.yml` appears in manifest discovery but not in the tuple until someone manually updates it.
-- **OBJECTIVE:** Make `get_discovered_module_entries()` the sole inventory path. Freeze `MODULE_CATALOG` to description-only metadata; update callers that use it for inventory to use `get_discovered_module_entries()`; add a CI assertion that no caller imports `MODULE_CATALOG` for inventory use.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/contracts/module_catalog.py` — add deprecation note to `MODULE_CATALOG` tuple; `get_module_names()` and `get_module_entries()` already carry `.. note:: kept for backward compatibility` — strengthen those notes
-  - `quickscale_core/tests/generator/test_themes.py` lines 413, 419, 424 — replace `MODULE_CATALOG` / `get_module_names()` inventory assertions with `get_discovered_module_entries()`
-  - `quickscale_core/tests/test_e2e_full_workflow.py` lines 341, 361 — same swap
-  - `quickscale_cli/tests/test_orgs_contract.py`, `test_plan_add.py`, `test_module_manifest_contract.py` — migrate inventory assertions to `get_discovered_module_entries()`
+- **TRACK:** `wt-track2` — independent of all active tracks
+- **COMPLETED:** 2026-06-26. Retired `MODULE_CATALOG` as an inventory source. `get_module_names()` and `get_module_entries()` now delegate to manifest-backed discovery (`get_discovered_module_names()` / `get_discovered_module_entries()`), falling back to `MODULE_CATALOG` only for supplementing experimental entries not present in the module workspace (e.g. `teams`). Strengthened deprecation notes on both backward-compat functions. Migration details:
+  - **Core test** (`test_themes.py`): Replaced `MODULE_CATALOG` / `get_module_names()` inventory assertions with `get_discovered_module_entries()`. Error messages updated to reference the discovered catalog.
+  - **E2E test** (`test_e2e_full_workflow.py`): Swapped `get_module_entries(include_experimental=False)` import and ready-module-name iteration to `get_discovered_module_entries()`.
+  - **CLI tests** (`test_orgs_contract.py`, `test_plan_add.py`, `test_module_manifest_contract.py`): Migrated all inventory-purpose `get_module_names()` / `get_module_entries()` calls to `get_discovered_module_names()` / `get_discovered_module_entries()`.
+  - **Guard assertion**: Added `TestDiscoveredCatalogIsCanonicalInventory` test class in `test_module_catalog.py` with a divergence-prevention guard (`test_discovered_entries_cover_all_ready_static_entries`) ensuring every ready static module also appears in discovered entries.
+- **FINDINGS / FOLLOW-UP:**
+  - **Advisory:** `get_module_names()` and `get_module_entries()` in `module_catalog.py` remain as backward-compat thin wrappers. New code should import `get_discovered_module_names` / `get_discovered_module_entries` directly.
+  - **Advisory:** The static `MODULE_CATALOG` tuple and `get_module_entry(name)` remain for description/label lookup. No inventory-path assertions use `MODULE_CATALOG` directly.
 - **ACCEPTANCE CRITERIA:** `grep -rn "MODULE_CATALOG\|get_module_names\|get_module_entries" quickscale_core/tests quickscale_cli/tests` returns zero inventory-purpose hits (per-module description lookups via `get_module_entry(name)` are fine); `make test -- --core` + `make test -- --cli` green.
 - **VALIDATION PATH:** `make test -- --core` + `make test -- --cli`.
 - **DEPENDS:** T2.3/T2.4 (complete). Independent of Track 1.
-- **RECOMMENDATION:** **Pursue** — small, contained, removes divergence risk. The static tuple already carries backward-compat markers; finishing the job is a single focused session.
 
 ---
 

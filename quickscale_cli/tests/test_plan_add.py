@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
 from quickscale_core.contracts.resolvers import default_notifications_module_options
-from quickscale_core.contracts.module_catalog import get_module_names
+from quickscale_core.contracts.module_catalog import get_discovered_module_names
 
 
 class TestPlanAddBasic:
@@ -669,7 +669,7 @@ class TestPlanAddAllModulesInstalled:
         runner = CliRunner()
         with runner.isolated_filesystem():
             os.makedirs(".quickscale", exist_ok=True)
-            installed_modules = get_module_names(include_experimental=False)
+            installed_modules = get_discovered_module_names()
 
             # Create state with all modules
             with open(".quickscale/state.yml", "w") as f:
