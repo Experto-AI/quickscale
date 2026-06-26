@@ -65,20 +65,29 @@ STORAGES["staticfiles"] = {  # noqa: F405
 # CORS settings (if using Django CORS Headers)
 # CORS_ALLOW_ALL_ORIGINS = True  # Only for development!
 
-# Logging - more verbose in development
+# Logging - more verbose in development with structured output
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
+        "json": {
+            "()": JsonFormatter,
+        },
         "verbose": {
             "format": "{levelname} {asctime} {module} {message}",
             "style": "{",
         },
     },
+    "filters": {
+        "correlation_id": {
+            "()": CorrelationIdFilter,
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "verbose",
+            "formatter": "json",
+            "filters": ["correlation_id"],
         },
     },
     "root": {
@@ -87,6 +96,11 @@ LOGGING = {
     },
     "loggers": {
         "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.server": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
