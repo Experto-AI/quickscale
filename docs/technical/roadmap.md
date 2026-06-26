@@ -279,7 +279,7 @@ Nine deferred items assigned to three parallel tracks. Tracks 2 and 3 start imme
 |------|-------|-------|----------------|
 | D2 — Retire `MODULE_CATALOG` tuple | **2** | completed 2026-06-26 | Done |
 | D5 — Backups `dr_adapter_call` coverage | **3** | now (bundle with D4) | Pursue |
-| D6 — `quickscale_core` coverage gaps | **2** | after D2 | Pursue |
+| D6 — `quickscale_core` coverage gaps | **2** | completed 2026-06-26 | Done |
 | D9a — Structured logging | **3** | after D5 | Pursue |
 | D1 — SaaS org-switch billing parity | **1** | after T1.18/T1.19 | Pursue |
 | D8 — Decouple tx from external I/O | **1** | after T1.19 + trigger | Pursue on trigger |
@@ -293,7 +293,7 @@ Nine deferred items assigned to three parallel tracks. Tracks 2 and 3 start imme
 
 ```
 Track 1 (wt-track1):  [T1.18 → T1.19] → D1 → D8 (on trigger)
-Track 2 (wt-track2):  D2 (done) → D6
+Track 2 (wt-track2):  D2 (done) → D6 (done)
 Track 3 (wt-track3):  D4+D5 (bundled) → D9a
 Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 ```
@@ -323,20 +323,20 @@ Unassigned:           D3 · D7 · D9b · D9c  (promote individually on trigger)
 
 ---
 
-#### - [ ] D6 — Pre-existing `quickscale_core` coverage gaps
+#### - [x] D6 — Pre-existing `quickscale_core` coverage gaps
 
 `**Tier 1 — Low | PLANNING TIER: low | RISK LEVEL: low | EXECUTION PATH: direct**`
 
 - **TRACK:** `wt-track2` — after D2
-- **WHY:** Two files fell below the 80% per-file coverage floor during T2.4 closeout: `contracts/resolvers.py` (1903 lines) and `manifest/social_manifest.py` (544 lines). `resolvers.py` is the manifest implication resolution engine; `social_manifest.py` parses social provider manifests. Low coverage on large, logic-heavy files is a regression risk.
-- **OBJECTIVE:** Bring both files to ≥ 80% statement coverage without adding `pragma: no cover` markers; focus on untested branches in the implication resolver and social manifest parser.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/contracts/resolvers.py` — identify uncovered branches; add tests in `quickscale_core/tests/`
-  - `quickscale_core/src/quickscale_core/manifest/social_manifest.py` — same approach
-- **ACCEPTANCE CRITERIA:** `make test -- --core` green; both files report ≥ 80% coverage in the per-file report.
-- **VALIDATION PATH:** `make test -- --core`.
-- **DEPENDS:** D2 (same worktree; run after D2 merges to avoid conflicts in `quickscale_core/tests/`).
-- **RECOMMENDATION:** **Pursue — `resolvers.py` is high priority** given its size (1903 lines) and central role in manifest resolution. `social_manifest.py` is lower urgency. Do not let the gap widen further.
+- **COMPLETED:** 2026-06-26. Raised `quickscale_core/src/quickscale_core/contracts/resolvers.py` from 40% to 91% and `quickscale_core/src/quickscale_core/manifest/social_manifest.py` from 47% to 94% per-file statement coverage, exceeding the 80% floor. Two new test files added:
+  - `quickscale_core/tests/test_resolvers_module_options.py` — 83 tests covering per-module resolve/validate/default functions across all 12 module sections (Analytics, Auth, Backups, Billing, Blog, CRM, Forms, Listings, Notifications, Orgs, Social, Storage). Manifest I/O mocked; tests exercise resolver/wiring logic without requiring `module.yml` files on disk.
+  - `quickscale_core/tests/test_social_manifest_full.py` — 53 tests covering provider metadata resolution, URL detection/resolution, URL normalization helpers, payload status helpers, remaining managed-file renderers (`render_social_managed_init_module`, `render_social_managed_urls_module`), `load_social_manifest`, and dataclass contract checks.
+- **VALIDATION PATH:** `make test -- --core` green (1692 passed, 28 deselected). Total core coverage: 93%.
+- **DEPENDS:** D2 (completed 2026-06-26). Independent of other active tracks.
+- **FINDINGS:**
+  - The `normalize_*_module_options` functions in `resolvers.py` that have duplicates in `module_options.py` (e.g. `normalize_analytics_module_options`, `normalize_notifications_module_options`) are exported through the resolvers `__all__` but unused within resolvers' own resolve/validate paths. The resolve functions call `resolve_module_config()` directly.
+  - Several validation branches (e.g. `enable_rss` non-bool check in blog, boolean flag checks in forms) are unreachable at runtime because the corresponding `resolve_*_module_options` function coerces the value to bool before validation runs. These branches remain for defensive consistency but are best-effort defensive coverage.
+  - `social_manifest.py` URL resolution handles all 6 social providers with path normalization and tracking-parameter stripping for YouTube.
 
 ---
 
