@@ -1,7 +1,6 @@
 """Tenant resolution middleware for QuickScale organizations.
 
-T1.3 — single-URL session-based middleware contract with backward-compatible
-slug fallback for legacy routes.
+T1.20 — single-URL session-based middleware contract without slug fallback.
 
 **Solo mode** — each authenticated user gets their personal org.
 
@@ -9,16 +8,8 @@ slug fallback for legacy routes.
 
 * **Session org present and valid** — ``request.org``, the contextvar, and
   ``SET LOCAL app.current_org_id`` are populated from the session.
-* **No session org + downstream module slug path** (``/orgs/<slug>/crm/...``,
-  ``/orgs/<slug>/blog/...``, etc.) — the org is resolved from the URL slug
-  and stored in the session so subsequent navigation works seamlessly.
-  This preserves caller parity for legacy slugged routes until T1.5–T1.10
-  migrate them to the single-URL contract.
-    * **No session org + solo-format module prefix** (``/crm/...``, ``/listings/...``,
-        ``/billing/...``, ``/api/billing/...``, etc.) — the personal org is
-        resolved so solo routes continue to work during the transition.
-* **No session org + ``/orgs/`` path without slug** — the request is
-  redirected to ``/orgs/``.
+* **No session org** — the request is redirected to ``/orgs/``. Unknown org
+  subpaths fail closed (go through org resolution) rather than bypassing.
 
 Org-management paths (owned by the orgs module) pass through without
 org resolution — the views own access control for those routes.
@@ -51,28 +42,6 @@ from .models import Organization, OrganizationMembership
 
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
 API_ORG_PREFIX = "/api/orgs/"
-# Known downstream modules that still use slug-based org-scoped routes
-# under /orgs/<slug>/<module>/... until T1.5-T1.10 adopt the single-URL
-# contract.  These paths must go through normal session‑based org resolution
-# rather than bypassing.
-_DOWNSTREAM_ORG_SCOPED_MODULES = frozenset({"crm", "blog", "forms", "listings"})
-# Flat-route prefixes for modules that have solo-format equivalents.
-# In SaaS mode, requests to these prefixes resolve the personal org when no
-# session org is set (backward compat until T1.5–T1.10).
-# Includes billing flat routes (/billing/..., /api/billing/...) so users can
-# access pricing, dashboard, and API billing endpoints without first selecting
-# an org.  The billing views have their own compatibility fallback for
-# user-with-single-membership scenarios layered on top.
-_SOLO_ROUTE_PREFIXES = frozenset(
-    {
-        "/crm/",
-        "/listings/",
-        "/forms/",
-        "/blog/",
-        "/billing/",
-        "/api/billing/",
-    }
-)
 
 GetResponse = Callable[[HttpRequest], HttpResponse]
 
@@ -90,12 +59,7 @@ class TenantMiddleware:
 
     **Saas mode** — org is resolved from ``request.session[ACTIVE_ORG_SESSION_KEY]``:
 
-    * **No active org, downstream module slug path** — org is resolved from
-      the URL slug and stored in the session (backward-compat fallback for
-      legacy routes like ``/orgs/<slug>/crm/...``).
-    * **No active org, solo-format module prefix** (including billing flat routes
-      like ``/billing/...`` and ``/api/billing/...``) — personal org is resolved.
-    * **No active org, ``/orgs/`` path without slug** — redirect to ``/orgs/``.
+    * **No active org** — redirect to ``/orgs/``.
     * **Valid member org** — ``request.org``, the contextvar, and
       ``SET LOCAL app.current_org_id`` are populated.
     * **Non-member org in session** — the session key is cleared and a 403
@@ -107,10 +71,8 @@ class TenantMiddleware:
     without org resolution — the views own membership and access control
     for those routes.
 
-    Downstream module paths under ``/orgs/<slug>/<module>/...`` (crm, blog,
-    forms, listings) DO resolve the active org from the session.  When no
-    session org is set, they fall back to slug-based resolution so legacy
-    caller parity is preserved until T1.5–T1.10 adopt the single-URL contract.
+    All other paths under ``/orgs/<slug>/`` go through org resolution
+    (fail-closed).  Unknown segments are not treated as management bypass.
     """
 
     def __init__(self, get_response: GetResponse) -> None:
@@ -144,8 +106,7 @@ class TenantMiddleware:
 
     def _handle_saas_request(self, request: OrganizationRequest) -> HttpResponse:
         # Orgs-module management paths pass through without org resolution.
-        # Downstream module paths (crm, blog, forms, listings) go through
-        # normal session-based org resolution.
+        # All other paths resolve the org from the session (fail-closed).
         if self._is_org_management_path(request.path_info):
             return self.get_response(request)
 
@@ -162,31 +123,7 @@ class TenantMiddleware:
             # Stale/invalid session org — clear and fall through to fallback.
             request.session.pop(ACTIVE_ORG_SESSION_KEY, None)
 
-        # ---- No valid session org. Use backward-compatible fallbacks ----
-
-        # Fallback A: Resolve org from URL slug for legacy downstream module
-        # paths (e.g. /orgs/<slug>/crm/..., /listings/orgs/<slug>/...).
-        # This preserves backward compat for slugged routes until T1.5–T1.10
-        # migrate them to the single-URL session contract.
-        slug_org = self._resolve_org_from_path_slug(request.path_info)
-        if slug_org is not None:
-            if not self._is_superuser(request.user) and not self._is_org_member(
-                request.user, slug_org
-            ):
-                return HttpResponseForbidden()
-            # Seed the session so subsequent navigation within this org works.
-            request.session[ACTIVE_ORG_SESSION_KEY] = str(slug_org.pk)
-            return self._call_with_org(request, slug_org)
-
-        # Fallback B: For known solo-format module prefixes (e.g. /crm/, /listings/),
-        # resolve the personal org so these routes continue to work during the
-        # transition.  Generic content paths (like ``/``) redirect instead.
-        path = request.path_info
-        if any(path.startswith(prefix) for prefix in _SOLO_ROUTE_PREFIXES):
-            organization = self._get_personal_org(request)
-            return self._call_with_org(request, organization)
-
-        # Fallback C: /orgs/ path with no session and no slug — redirect.
+        # No session org — redirect to /orgs/.
         return redirect("/orgs/")
 
     @staticmethod
@@ -207,42 +144,6 @@ class TenantMiddleware:
             return Organization.objects.get(pk=org_id)
         except Organization.DoesNotExist:
             return None
-
-    @staticmethod
-    def _resolve_org_from_path_slug(path: str) -> Organization | None:
-        """Resolve an organization from a slug embedded in the URL path.
-
-        Tries two patterns when no session org is present:
-
-        1. ``/orgs/<slug>/<downstream_module>/...`` where the module is in
-           ``_DOWNSTREAM_ORG_SCOPED_MODULES`` (crm, blog, forms, listings).
-        2. Any path containing an ``orgs/<slug>/`` segment pair, which handles
-           module-specific org-scoped routes such as ``/listings/orgs/<slug>/``.
-
-        Returns ``None`` when no slug can be resolved or no matching
-        organization exists.
-        """
-        segments = path.strip("/").split("/")
-
-        # Pattern 1: /orgs/<slug>/<downstream_module>/...
-        if len(segments) >= 3 and segments[0] == "orgs":
-            if segments[2] in _DOWNSTREAM_ORG_SCOPED_MODULES:
-                try:
-                    return Organization.objects.get(slug=segments[1])
-                except Organization.DoesNotExist:
-                    return None
-
-        # Pattern 2: Any /orgs/<slug>/ segment pair in the path (handles
-        # e.g. /listings/orgs/<slug>/ patterns that aren't under /orgs/).
-        for i, segment in enumerate(segments):
-            if segment == "orgs" and i + 1 < len(segments):
-                candidate_slug = segments[i + 1]
-                try:
-                    return Organization.objects.get(slug=candidate_slug)
-                except Organization.DoesNotExist:
-                    continue
-
-        return None
 
     @staticmethod
     def _is_org_member(user: object, organization: Organization) -> bool:
@@ -296,10 +197,8 @@ class TenantMiddleware:
         """Return True for paths owned by the orgs module (bypass org resolution).
 
         Management paths skip middleware org resolution because the views
-        own access control.  Downstream module paths under
-        ``/orgs/<slug>/<module>/...`` where *module* is one of
-        ``_DOWNSTREAM_ORG_SCOPED_MODULES`` go through normal session-based
-        org resolution instead.
+        own access control.  All other paths under ``/orgs/<slug>/`` go
+        through org resolution (fail-closed).
         """
         # Exact /orgs/, /orgs/new/, /orgs/invitations/... are management.
         if (
@@ -326,12 +225,8 @@ class TenantMiddleware:
             # Known management sub-paths.
             if next_segment in ("members", "settings"):
                 return True
-            # Known downstream module prefixes — NOT management.
-            if next_segment in _DOWNSTREAM_ORG_SCOPED_MODULES:
-                return False
-            # Unknown segment — treat as management bypass (safe default
-            # for orgs-module-owned test routes and future additions).
-            return True
+            # Unknown segment — fail closed: resolve org instead of bypassing.
+            return False
 
         return False
 
