@@ -1112,6 +1112,43 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ✅ Single providers at the product policy layer (Stripe payments, Resend email)
 - ✅ Django email delivery for notifications uses `django-anymail` as the approved delivery layer with Resend as the current first-class provider for v0.78.0
 - ✅ Version pinning (predictable compatibility for Django foundations)
+- ✅ **Fail hard** — every configuration error, missing dependency, and invalid runtime state raises an explicit exception; no silent fallbacks, no graceful degradation (see §fail-hard-principle below)
+
+---
+
+### Fail-Hard Principle {#fail-hard-principle}
+
+**Rule:** Every configuration error, missing required dependency, or invalid runtime state must raise an explicit, descriptive exception immediately. Silent fallbacks, best-effort defaults, and graceful degradation are prohibited in the generator, CLI, and manifest stack.
+
+**What this means concretely:**
+- ✅ Raise `ImproperlyConfigured`, `ValueError`, `RuntimeError`, or `SystemExit` on invalid config — never substitute a default
+- ✅ Raise immediately when a required adapter, path, or resource cannot be located — do not attempt to continue with a substitute
+- ✅ Surface the root cause in the error message so the operator knows exactly what to fix
+- ✅ Fail at startup / import time — not at first use — so configuration problems are visible immediately
+- ❌ No `except Exception: pass` or `except ImportError: pass` in configuration, setup, or discovery paths
+- ❌ No "best-effort defaults" when a required path or resource cannot be found
+- ❌ No silent fallback chains (try A → try B → silently return something)
+- ❌ No backward-compat shims or read-through legacy imports, unless explicitly documented below with a bounded exception and a sunset plan
+
+**Scope:** Applies to the generator/CLI setup, manifest adapter resolution, module discovery, configuration loading, and Django app startup. Does **not** apply to domain logic inside generated projects (which are user-owned code) or to DR recovery orchestration (which is intentionally error-recovery context — fallback artifacts and remote restoration are by design).
+
+**Global constraint that reinforces this:** No existing users, no migration path, no backward compatibility — every change is a clean break. The fail-hard principle is the runtime expression of this constraint: if something is misconfigured it must be fixed, not silently worked around.
+
+**Documented exceptions** (each requires explicit justification in the code comment, a `# F-EXCEPTION: <tag>` label, and removal when the condition no longer applies):
+
+| Tag | Location | Justification | Sunset |
+|-----|----------|---------------|--------|
+| F12.2 | `project_state.py:_read_through_import_legacy()` | One-time M2 consolidation path: pre-M2 projects have `config.yml` + `file_hashes.yml` but lack consolidated `state.yml` fields; failing hard on stale legacy files would block the M2 migration. Failures are logged and import is skipped. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
+
+**Known violations to fix** (ordered by severity):
+
+| Violation | File | Fix |
+|-----------|------|-----|
+| `_CORE_FALLBACK_ADAPTERS` + three fallback adapters silently degrade managed module wiring when module package is not importable | `quickscale_core/manifest/entry_point.py` | Delete fallbacks; raise `ImproperlyConfigured` in `refresh_managed_adapters()` — see AF7 roadmap task |
+| `except Exception: pass` + "best-effort default" path returned when neither monorepo nor bundled manifests dir is found; callers "cope gracefully" with non-existent path | `quickscale_core/contracts/module_discovery.py:get_modules_base_path()` | Remove bundled-context branch (unsupported per AF7 decision); raise `ImproperlyConfigured` when monorepo path not found |
+| `Path.cwd().name` fallback when `project_name` is not provided to `get_railway_service_name()` | `quickscale_cli/utils/railway_utils.py` | Require project name explicitly; raise `ValueError` if absent |
+
+---
 
 ### Notifications Contract (v0.83.0 behavior)
 
@@ -1187,8 +1224,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ❌ DI frameworks or service registries (direct imports in production)
 - ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
-- ❌ Core fallback adapters for module-owned wiring — managed adapters (social, billing, CRM) must be importable from their module package; no compat shims in core; if the module package is not importable, raise `ImproperlyConfigured` and refuse to proceed
-- ❌ Backward-compat shims, graceful degradation paths, or silent fallbacks anywhere in the generator/CLI/manifest stack — fail hard and fast; the caller must fix the configuration
+- ❌ Core fallback adapters, compat shims, or silent degradation paths — see §fail-hard-principle
 - ❌ Ad hoc or undocumented module HTTP APIs beyond the documented module-owned routes and webhooks QuickScale wires today
 - ❌ Tight coupling themes to modules
 
