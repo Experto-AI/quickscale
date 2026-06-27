@@ -47,22 +47,14 @@ find "$WORK_DIR" -mindepth 1 -maxdepth 1 -not -name "node_modules" -exec rm -rf 
 
 echo "📦 Rendering React theme templates..."
 
-# Render .j2 templates by stripping Jinja2 syntax
-# Replace {{ project_name }} / {{ package_name }} with dummy values
+# Render .j2 templates using Python/Jinja2 for proper handling of
+# all constructs: {% if %}, {% for %}, {% set %}, {% raw %}...{% endraw %},
+# whitespace control, and {{ variables }}.
 render_template() {
 	local src="$1"
 	local dest="$2"
 
-	mkdir -p "$(dirname "$dest")"
-
-	# Strip Jinja2 directives and replace template variables
-	sed \
-		-e 's/{%-\{0,1\}[[:space:]]*raw[[:space:]]*-\{0,1\}%}//g' \
-		-e 's/{%-\{0,1\}[[:space:]]*endraw[[:space:]]*-\{0,1\}%}//g' \
-		-e 's/{{[[:space:]]*project_name[[:space:]]*}}/myapp/g' \
-		-e 's/{{[[:space:]]*package_name[[:space:]]*}}/myapp/g' \
-		-e 's/{{[[:space:]]*project_description[[:space:]]*}}/A QuickScale project/g' \
-		"$src" > "$dest"
+	python3 "$SCRIPT_DIR/render_j2_template.py" "$src" "$dest"
 }
 
 # Walk through theme directory and render all files

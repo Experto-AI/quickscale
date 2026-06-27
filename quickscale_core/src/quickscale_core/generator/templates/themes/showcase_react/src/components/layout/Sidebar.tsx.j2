@@ -25,11 +25,6 @@ import {
   ClipboardList,
 {%- endraw %}
 {%- endif %}
-{%- if selected_modules is none or 'billing' in selected_modules %}
-{%- raw %}
-  CreditCard,
-{%- endraw %}
-{%- endif %}
 {%- if selected_modules is none or 'social' in selected_modules %}
 {%- raw %}
   Share2,
@@ -42,9 +37,8 @@ import {
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import { OrgSwitcher } from '@/components/orgs/OrgSwitcher'
-import { buildOrgPath, useProjectConfig } from '@/hooks/useModules'
+import { useProjectConfig } from '@/hooks/useModules'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
-import { useOrg } from '@/hooks/useOrgs'
 
 interface NavItem {
   name: string
@@ -57,15 +51,7 @@ interface NavItem {
 
 export function Sidebar() {
   const { modules, modulePaths } = useProjectConfig()
-  const { appPaths, currentOrgSlug, hasOrgContext, isSaas } = useOrgNavigation()
-  const orgQuery = useOrg(currentOrgSlug ?? '')
-  const billingPath =
-    isSaas && currentOrgSlug
-      ? buildOrgPath(
-          currentOrgSlug,
-          orgQuery.data?.actor.is_owner_like ? 'billing/dashboard/' : 'billing/pricing/',
-        )
-      : modulePaths.billing
+  const { appPaths, hasOrgContext, isSaas } = useOrgNavigation()
 
   const navigation: NavItem[] = [
     { name: 'Organizations', href: appPaths.orgList, icon: Building2, show: isSaas, end: true },
@@ -114,17 +100,6 @@ export function Sidebar() {
 {%- raw %}
     { name: 'Members', href: appPaths.members, icon: Users, show: isSaas && hasOrgContext },
 {%- endraw %}
-{%- if selected_modules is none or 'billing' in selected_modules %}
-{%- raw %}
-    {
-      name: 'Billing',
-      href: billingPath,
-      icon: CreditCard,
-      show: modules.billing && (!isSaas || hasOrgContext),
-      reloadDocument: true,
-    },
-{%- endraw %}
-{%- endif %}
 {%- if selected_modules is none or 'social' in selected_modules %}
 {%- raw %}
     {

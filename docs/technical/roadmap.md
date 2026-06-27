@@ -78,21 +78,33 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work
 
-### - [ ] D1 — Generated `showcase_react` SaaS org-switch billing parity
+### - [~] D1 — Generated `showcase_react` SaaS org-switch billing parity (BLOCKED — see D1-REV-005)
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track1` — after T1.19 merges to v87
 - **WHY:** Discovered during T1.17 stop-here closeout. In a generated SaaS project the React SPA performs org-switches client-side but the server session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before flat `/billing/...` and `/api/billing/...` calls fire. If a billing page loads before session persistence completes the billing views resolve the wrong org from the session.
-- **OBJECTIVE:** Decide between two implementation shapes — (A) add an explicit org-switch/session-sync endpoint (`POST /orgs/set-active/`) that the SPA must call and await before navigating to billing, plus billing query invalidation on org change; or (B) remove generated billing entry points from the SPA org dashboard until the session-sync contract exists. Record the choice as a locked decision and implement it in the generated template.
+- **RESOLUTION:** Option B locked — removed generated SPA billing entry points (dashboard cards, sidebar navigation, org-dashboard billing cards/links, `modulePaths.billing` from the React hook contract) until a session-sync contract exists.
 - **SCOPE:**
-  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/templates/index.html.j2` — SPA nav/routing section (lines 77–88); `currentOrgSlug` usage and billing URL construction
-  - `quickscale_modules/orgs/` — if Option A: add session-sync view + URL; update middleware/session to write `ACTIVE_ORG_SESSION_KEY` on org-switch POST
-  - `quickscale_modules/billing/` — if Option A: billing views validate session org matches request before serving
-- **ACCEPTANCE CRITERIA:** In a generated SaaS project, navigating billing pages after an org switch always resolves the correct org; no cross-tenant billing data is served. If Option B: billing link is absent from the SPA nav until the contract ships.
-- **VALIDATION PATH:** Manual test in a generated SaaS project — switch org, load billing dashboard, confirm correct org is active. `make MODULE=billing test -- --modules` + `make MODULE=orgs test -- --modules`.
+  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/` — removed billing from `templates/index.html.j2` (modulePaths), `src/hooks/useModules.ts.j2` (module path interface + defaults), `src/components/layout/Sidebar.tsx.j2` (nav entry + CreditCard icon), `src/pages/Dashboard.tsx.j2` (billing dashboard card), `src/pages/orgs/OrgDashboardPage.tsx.j2` (billing cards, links, useOrgBilling call)
+  - `lint_frontend.sh` repaired to use proper Jinja rendering (Python + Poetry entrypoint) instead of sed-based stripping
+  - `App.test.tsx.j2` and `PublicSocialPages.test.tsx.j2` updated to remove `billing: '/billing/pricing/'` from test fixtures
+  - Tests updated and documentation (`decisions.md`, `generated_project_structure.md`) refreshed
+- **ACCEPTANCE CRITERIA:** Generated `showcase_react` SPA has no billing nav entry, no billing dashboard card, no org-dashboard billing cards/links, and `modulePaths.billing` is absent from the React hook config. Module flags (`modules.billing`) remain present.
+- **VALIDATION PATH:** `poetry run pytest quickscale_core/tests/test_react_theme_integration.py -v`
 - **DEPENDS:** T1.19 merged to v87. Decision required before implementation starts.
-- **RECOMMENDATION:** **Pursue** — active functional gap in generated SaaS projects. Option B is the safer quick fix while a session-sync contract is designed.
+- **RECOMMENDATION:** **Pursue (B)** — implementation started but **not merge-ready** (see findings below).
+- **FINDING:** The `useOrgs.ts` hook still exports `useOrgBilling` and `buildOrgBillingApiPath` — these remain available for future use when the session-sync contract ships (Option A). The generated project's `useOrgs.ts` is owned by the orgs/billing backend integration, not the `showcase_react` theme templates, and was left untouched by D1 Option B.
+
+> **🛑 D1-REV-005 — Blocking: empty/partial `selected_modules` variants not compile-safe.**
+>
+> `main.tsx.j2` is **unchanged**: it unconditionally imports `SocialEmbedsPublicPage` and `SocialLinkTreePublicPage` from `@/pages/`, and `renderQuickScaleRoot()` always expects a `PublicSocialSurface` argument with social-page routes. The generated SPA will fail to compile if the `social` module is not selected.
+>
+> `App.test.tsx.j2` still assumes all-module `modulePaths` shapes (`social`, `analytics`). `PublicSocialPages.test.tsx.j2` unconditionally imports social page components and types. Neither fixture is compile-safe for empty or partial `selected_modules`.
+>
+> **Status:** Design approved, billing-surgery scope is complete, but the compile-safety gap blocks merge to `v87` until these three templates are hardened for arbitrary module selections.
+>
+> **Next action:** Either (A) fix `main.tsx.j2` with conditional imports/lazy routes + harden test fixtures for partial module configurations, or (B) explicitly decide to defer compile-safety to a later phase and document the known gap in generated-project documentation.
 
 ---
 

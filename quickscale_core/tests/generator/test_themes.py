@@ -550,7 +550,8 @@ class TestSelectedModulesReactTheme:
             )
 
         assert "crm: string" in module_paths_block
-        assert "billing: string" in module_paths_block
+        # D1 Option B: billing path removed from module paths until session-sync contract exists
+        assert "billing: string" not in module_paths_block
         assert "social: string" not in module_paths_block
 
     def test_app_tsx_routes_only_emit_selected_module_paths(
