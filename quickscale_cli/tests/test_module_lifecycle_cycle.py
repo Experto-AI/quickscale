@@ -1,4 +1,5 @@
 """Tests for module lifecycle cycle coverage."""
+# ruff: noqa: E402 — AF5 Phase 4: module-level bypass set before imports
 
 import os
 import subprocess
@@ -9,6 +10,12 @@ from unittest.mock import Mock, patch
 import pytest
 import yaml
 from click.testing import CliRunner
+
+# AF5 Phase 4: Bypass the late destructive/remote confirmation gate so test
+# assertions remain stable with the new two-phase confirmation flow.
+import quickscale_cli.commands.apply_command as _apply_command_mod
+
+_apply_command_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
 
 from quickscale_cli.commands.apply_command import (  # type: ignore[import-untyped]
     EmbedModulesResult,
@@ -466,6 +473,10 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
             "quickscale_cli.commands.apply_command._run_post_generation_steps",
             return_value=True,
         ),
+        patch(
+            "quickscale_cli.commands.apply_command._run_local_migrations",
+            return_value=True,
+        ),
     ):
         apply_result = cli_runner.invoke(
             apply,
@@ -546,6 +557,10 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
         ),
         patch(
             "quickscale_cli.commands.apply_command._run_post_generation_steps",
+            return_value=True,
+        ),
+        patch(
+            "quickscale_cli.commands.apply_command._run_local_migrations",
             return_value=True,
         ),
     ):
@@ -776,6 +791,10 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             ),
             patch(
                 "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_local_migrations",
                 return_value=True,
             ),
         ):
@@ -1043,6 +1062,38 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
             f'name: {module_name}\nversion: "0.1.0"\n'
         )
 
+    # AF5: the update command now reads module state from .quickscale/state.yml
+    # via ProjectStateManager rather than from legacy config.yml.  Create a
+    # minimal consolidated state file so the update path finds the modules.
+    state_dir = project_path / ".quickscale"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_file = state_dir / "state.yml"
+    state_file.write_text(
+        yaml.dump(
+            {
+                "version": "1",
+                "project": {
+                    "slug": "testproject",
+                    "package": "testproject",
+                    "theme": "showcase_react",
+                },
+                "modules": {
+                    "auth": {
+                        "version": "v0.1.0",
+                        "prefix": "modules/auth",
+                        "branch": "splits/auth-module",
+                    },
+                    "listings": {
+                        "version": "v0.1.0",
+                        "prefix": "modules/listings",
+                        "branch": "splits/listings-module",
+                    },
+                },
+                "managed_files": {},  # Signal consolidated state; skip legacy read-through.
+            }
+        )
+    )
+
     subprocess.run(["git", "add", "."], cwd=project_path, check=True)
     subprocess.run(
         ["git", "commit", "-m", "chore: baseline"],
@@ -1090,12 +1141,12 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
                 return_value=config,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
-                side_effect=_fake_subtree_pull,
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="abc123def456abc123def456abc123def456abc1",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.update_module_version",
-                return_value=None,
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                side_effect=_fake_subtree_pull,
             ),
             patch(
                 "quickscale_cli.commands.module_commands.click.confirm",

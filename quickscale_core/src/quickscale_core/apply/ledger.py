@@ -63,6 +63,115 @@ class LedgerError(StateError):
 
 
 # ---------------------------------------------------------------------------
+# AF5 resume-checkpoint entry
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ResumeCheckpoint:
+    """AF5 resume/checkpoint metadata for the apply recovery ledger.
+
+    This object stores the step-level resume checkpoint that the AF5 runner
+    expansion (Phase 2+) will use to resume an interrupted apply pass from
+    a specific step rather than re-running from the beginning.
+
+    For Phase 1, the shape is defined and frozen here so that the recovery
+    ledger YAML contract is stable before any runner code is written.
+    Consumers that save or update the recovery ledger must carry the
+    ``resume_checkpoint`` field forward when it is present in the existing
+    ledger (caller parity / AF6-era compatibility).
+
+    Attributes:
+        resume_step_id: The stable step id (from
+            :data:`~quickscale_core.apply.step.APPLY_STEPS`) from which
+            resume should begin.  Step bodies with ``resume="idempotent-rerun"``
+            are presence-gated and safe to re-run.
+        suspend_after_step_id: Optional step id at which execution should
+            pause after the resume pass completes.  When ``None`` the resume
+            runs to completion.
+        checkpoint_tree_id: The git tree id captured at checkpoint time.
+            Mirrors the top-level ``git_index_checkpoint`` on the ledger but
+            is duplicated here so that the resume checkpoint is self-describing.
+    """
+
+    resume_step_id: str
+    suspend_after_step_id: str | None = None
+    checkpoint_tree_id: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        """Serialise to a YAML-friendly mapping."""
+        result: dict[str, str | None] = {
+            "resume_step_id": self.resume_step_id,
+        }
+        if self.suspend_after_step_id is not None:
+            result["suspend_after_step_id"] = self.suspend_after_step_id
+        if self.checkpoint_tree_id is not None:
+            result["checkpoint_tree_id"] = self.checkpoint_tree_id
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ResumeCheckpoint":
+        """Build a :class:`ResumeCheckpoint` from a raw mapping.
+
+        Raises:
+            LedgerError: If the ``resume_step_id`` field is absent or
+                invalid, or if the step id is not recognised.
+        """
+        if not isinstance(data, dict):
+            raise LedgerError(
+                f"resume_checkpoint must be a mapping, got {type(data).__name__}"
+            )
+
+        if "resume_step_id" not in data:
+            raise LedgerError(
+                "resume_checkpoint is missing required field 'resume_step_id'"
+            )
+
+        resume_step_id = data["resume_step_id"]
+        if not isinstance(resume_step_id, str) or not resume_step_id:
+            raise LedgerError(
+                f"resume_checkpoint 'resume_step_id' must be a non-empty string, "
+                f"got {resume_step_id!r}"
+            )
+
+        # Validate against the registry — fail hard on unknown ids.
+        if resume_step_id not in _VALID_STEP_IDS:
+            raise LedgerError(
+                f"resume_checkpoint references unknown step_id={resume_step_id!r}. "
+                f"Valid ids: {sorted(_VALID_STEP_IDS)}"
+            )
+
+        suspend_after = data.get("suspend_after_step_id")
+        if suspend_after is not None:
+            if not isinstance(suspend_after, str) or not suspend_after:
+                raise LedgerError(
+                    f"resume_checkpoint 'suspend_after_step_id' must be a non-empty "
+                    f"string, got {suspend_after!r}"
+                )
+            if suspend_after not in _VALID_STEP_IDS:
+                raise LedgerError(
+                    f"resume_checkpoint references unknown "
+                    f"suspend_after_step_id={suspend_after!r}. "
+                    f"Valid ids: {sorted(_VALID_STEP_IDS)}"
+                )
+
+        checkpoint_tree_id = data.get("checkpoint_tree_id")
+        if checkpoint_tree_id is not None and (
+            not isinstance(checkpoint_tree_id, str) or not checkpoint_tree_id
+        ):
+            raise LedgerError(
+                f"resume_checkpoint 'checkpoint_tree_id' must be a non-empty "
+                f"string, got {checkpoint_tree_id!r}"
+            )
+
+        return cls(
+            resume_step_id=resume_step_id,
+            suspend_after_step_id=suspend_after,
+            checkpoint_tree_id=checkpoint_tree_id,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Step-progress entry
 # ---------------------------------------------------------------------------
 
@@ -160,17 +269,23 @@ class RecoveryLedger:
 
     Attributes:
         applied_state: The applied-state snapshot embedded in the ledger.
-        step_progress: Optional mapping of step_id to
-            :class:`StepProgress`.  May be empty or absent (``None``);
-            both are treated as valid.  **Diagnostic-only.**
         git_index_checkpoint: Git tree-id captured at the time the recovery
             ledger was written.  Records the current git-index state for
             diagnostic or recovery reference.  **Required — present ledgers
             must carry a non-empty string.**
+        resume_checkpoint: Optional AF5 resume/checkpoint metadata.
+            When present, the ledger carries a step-level checkpoint that
+            the AF5 runner uses to resume from a specific step.  Absent in
+            AF6-era ledgers; backward-compatible by default.
+            **Preserved on save when present.**
+        step_progress: Optional mapping of step_id to
+            :class:`StepProgress`.  May be empty or absent (``None``);
+            both are treated as valid.  **Diagnostic-only.**
     """
 
     applied_state: QuickScaleState
     git_index_checkpoint: str
+    resume_checkpoint: ResumeCheckpoint | None = field(default=None)
     step_progress: dict[str, StepProgress] | None = field(default=None)
 
     def to_dict(self) -> dict[str, Any]:
@@ -219,6 +334,9 @@ class RecoveryLedger:
             data["managed_files"] = [
                 record.to_dict() for record in state.managed_files.values()
             ]
+
+        if self.resume_checkpoint is not None:
+            data["resume_checkpoint"] = self.resume_checkpoint.to_dict()
 
         if self.step_progress:
             data["step_progress"] = [
@@ -349,6 +467,12 @@ def _parse_ledger(raw: Any) -> RecoveryLedger:
     if raw_sp is not None:
         step_progress = _parse_step_progress(raw_sp)
 
+    # --- Optional resume_checkpoint section (AF5, absent in AF6-era) ----
+    resume_checkpoint: ResumeCheckpoint | None = None
+    raw_rc = raw.get("resume_checkpoint")
+    if raw_rc is not None:
+        resume_checkpoint = _parse_resume_checkpoint(raw_rc)
+
     # --- Required git_index_checkpoint field ----------------------------
     raw_gic = raw.get("git_index_checkpoint")
     if not isinstance(raw_gic, str) or not raw_gic:
@@ -360,6 +484,7 @@ def _parse_ledger(raw: Any) -> RecoveryLedger:
 
     return RecoveryLedger(
         applied_state=applied_state,
+        resume_checkpoint=resume_checkpoint,
         step_progress=step_progress,
         git_index_checkpoint=git_index_checkpoint,
     )
@@ -542,9 +667,30 @@ def _parse_step_progress(raw_sp: Any) -> dict[str, StepProgress]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Resume-checkpoint parser
+# ---------------------------------------------------------------------------
+
+
+def _parse_resume_checkpoint(raw_rc: Any) -> ResumeCheckpoint:
+    """Parse and validate the ``resume_checkpoint`` section.
+
+    Raises:
+        LedgerError: If the section is not a mapping, required fields are
+            missing, or referenced step ids are not in the
+            :data:`~quickscale_core.apply.step.APPLY_STEPS` registry.
+    """
+    if not isinstance(raw_rc, dict):
+        raise LedgerError(
+            f"'resume_checkpoint' must be a mapping, got {type(raw_rc).__name__}"
+        )
+    return ResumeCheckpoint.from_dict(raw_rc)
+
+
 __all__ = [
     "LedgerError",
     "LedgerManager",
     "RecoveryLedger",
+    "ResumeCheckpoint",
     "StepProgress",
 ]

@@ -23,6 +23,7 @@ from quickscale_core.apply.ledger import (
     LedgerError,
     LedgerManager,
     RecoveryLedger,
+    ResumeCheckpoint,
     StepProgress,
 )
 from quickscale_core.schema.state_schema import (
@@ -909,3 +910,253 @@ class TestPackageLevelReExports:
         from quickscale_core.apply import StepProgress as SP
 
         assert SP is StepProgress
+
+    def test_resume_checkpoint_is_importable_from_apply(self) -> None:
+        """ResumeCheckpoint must be re-exported from the apply package."""
+        from quickscale_core.apply import ResumeCheckpoint as RC
+
+        assert RC is ResumeCheckpoint
+
+
+# ---------------------------------------------------------------------------
+# AF5 Phase 1 — ResumeCheckpoint and AF6-era compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestAF5ResumeCheckpoint:
+    """AF5 resume-checkpoint dataclass — shape, parsing, and round-trip."""
+
+    # --- AF6-era compatibility: absent resume_checkpoint ---
+
+    def test_af6_era_ledger_without_resume_checkpoint_loads(
+        self, tmp_path: Path
+    ) -> None:
+        """An AF6-era ledger (no resume_checkpoint) must parse successfully."""
+        data = _minimal_ledger_dict()
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        result = mgr.load()
+
+        assert result is not None
+        assert result.resume_checkpoint is None
+
+    # --- Valid resume_checkpoint parsing ---
+
+    def test_load_with_valid_resume_checkpoint(self, tmp_path: Path) -> None:
+        """A ledger with a valid resume_checkpoint must parse successfully."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = {
+            "resume_step_id": _FIRST_STEP_ID,
+        }
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        result = mgr.load()
+
+        assert result is not None
+        assert result.resume_checkpoint is not None
+        assert result.resume_checkpoint.resume_step_id == _FIRST_STEP_ID
+        assert result.resume_checkpoint.suspend_after_step_id is None
+        assert result.resume_checkpoint.checkpoint_tree_id is None
+
+    def test_load_with_full_resume_checkpoint(self, tmp_path: Path) -> None:
+        """A ledger with all resume_checkpoint fields must parse."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = {
+            "resume_step_id": _FIRST_STEP_ID,
+            "suspend_after_step_id": _SECOND_STEP_ID,
+            "checkpoint_tree_id": "deadbeefcafebabedeadbeefcafebabedeadbeef",
+        }
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        result = mgr.load()
+
+        assert result is not None
+        assert result.resume_checkpoint is not None
+        assert result.resume_checkpoint.resume_step_id == _FIRST_STEP_ID
+        assert result.resume_checkpoint.suspend_after_step_id == _SECOND_STEP_ID
+        assert (
+            result.resume_checkpoint.checkpoint_tree_id
+            == "deadbeefcafebabedeadbeefcafebabedeadbeef"
+        )
+
+    # --- Round-trip ---
+
+    def test_round_trip_resume_checkpoint(self, tmp_path: Path) -> None:
+        """ResumeCheckpoint must survive save+load."""
+        state = _minimal_state()
+        rc = ResumeCheckpoint(
+            resume_step_id=_FIRST_STEP_ID,
+            suspend_after_step_id=_SECOND_STEP_ID,
+            checkpoint_tree_id="aabbccddeeff00112233445566778899aabbccdd",
+        )
+        ledger = RecoveryLedger(
+            applied_state=state,
+            resume_checkpoint=rc,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
+        mgr = LedgerManager(tmp_path)
+
+        mgr.save(ledger)
+        loaded = mgr.load()
+
+        assert loaded is not None
+        assert loaded.resume_checkpoint is not None
+        assert loaded.resume_checkpoint.resume_step_id == _FIRST_STEP_ID
+        assert loaded.resume_checkpoint.suspend_after_step_id == _SECOND_STEP_ID
+        assert (
+            loaded.resume_checkpoint.checkpoint_tree_id
+            == "aabbccddeeff00112233445566778899aabbccdd"
+        )
+
+    def test_round_trip_resume_checkpoint_without_optional_fields(
+        self, tmp_path: Path
+    ) -> None:
+        """Minimal ResumeCheckpoint (only resume_step_id) must round-trip."""
+        state = _minimal_state()
+        rc = ResumeCheckpoint(resume_step_id=_FIRST_STEP_ID)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            resume_checkpoint=rc,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
+        mgr = LedgerManager(tmp_path)
+
+        mgr.save(ledger)
+        loaded = mgr.load()
+
+        assert loaded is not None
+        assert loaded.resume_checkpoint is not None
+        assert loaded.resume_checkpoint.resume_step_id == _FIRST_STEP_ID
+        assert loaded.resume_checkpoint.suspend_after_step_id is None
+        assert loaded.resume_checkpoint.checkpoint_tree_id is None
+
+    def test_round_trip_preserves_existing_resume_checkpoint_through_save(
+        self, tmp_path: Path
+    ) -> None:
+        """A RecoveryLedger with resume_checkpoint must re-save the field
+        when to_dict() is called, so that downstream consumers that create
+        a fresh RecoveryLedger from existing state (e.g. remove_command)
+        preserve the checkpoint."""
+        state = _minimal_state()
+        rc = ResumeCheckpoint(resume_step_id=_FIRST_STEP_ID)
+        ledger = RecoveryLedger(
+            applied_state=state,
+            resume_checkpoint=rc,
+            git_index_checkpoint=_GIT_INDEX_CHECKPOINT,
+        )
+        d = ledger.to_dict()
+        assert "resume_checkpoint" in d
+        assert d["resume_checkpoint"]["resume_step_id"] == _FIRST_STEP_ID
+
+    # --- Malformed resume_checkpoint ---
+
+    def test_resume_checkpoint_not_a_dict_raises(self, tmp_path: Path) -> None:
+        """resume_checkpoint that is not a dict must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = "just-a-string"
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="must be a mapping"):
+            mgr.load()
+
+    def test_resume_checkpoint_missing_resume_step_id_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """resume_checkpoint without resume_step_id must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = {"suspend_after_step_id": _FIRST_STEP_ID}
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="missing required field"):
+            mgr.load()
+
+    def test_resume_checkpoint_empty_resume_step_id_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """resume_checkpoint with empty resume_step_id must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = {"resume_step_id": ""}
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="non-empty string"):
+            mgr.load()
+
+    def test_resume_checkpoint_unknown_resume_step_id_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """resume_checkpoint with unknown step id must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = {
+            "resume_step_id": "nonexistent-step-that-never-existed"
+        }
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="unknown step_id"):
+            mgr.load()
+
+    def test_resume_checkpoint_unknown_suspend_after_step_id_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """suspend_after_step_id referencing unknown step must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = {
+            "resume_step_id": _FIRST_STEP_ID,
+            "suspend_after_step_id": "bad-unknown-step",
+        }
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="unknown"):
+            mgr.load()
+
+    def test_resume_checkpoint_empty_checkpoint_tree_id_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """Empty checkpoint_tree_id must raise LedgerError."""
+        data = _minimal_ledger_dict()
+        data["resume_checkpoint"] = {
+            "resume_step_id": _FIRST_STEP_ID,
+            "checkpoint_tree_id": "",
+        }
+        _write_yaml(tmp_path / ".quickscale" / "apply-recovery.yml", data)
+
+        mgr = LedgerManager(tmp_path)
+        with pytest.raises(LedgerError, match="non-empty"):
+            mgr.load()
+
+    # --- ResumeCheckpoint.from_dict edge cases ---
+
+    def test_resume_checkpoint_from_dict_non_dict_value_raises(self) -> None:
+        """ResumeCheckpoint.from_dict must reject non-dict input."""
+        with pytest.raises(LedgerError, match="mapping"):
+            ResumeCheckpoint.from_dict("not-a-dict")  # type: ignore[arg-type]
+
+    def test_resume_checkpoint_from_dict_missing_resume_step_id_raises(
+        self,
+    ) -> None:
+        """ResumeCheckpoint.from_dict must reject missing resume_step_id."""
+        with pytest.raises(LedgerError, match="missing required field"):
+            ResumeCheckpoint.from_dict({"suspend_after_step_id": "test"})
+
+    def test_resume_checkpoint_from_dict_non_string_resume_step_id_raises(
+        self,
+    ) -> None:
+        """ResumeCheckpoint.from_dict must reject non-string resume_step_id."""
+        with pytest.raises(LedgerError, match="non-empty string"):
+            ResumeCheckpoint.from_dict({"resume_step_id": 42})
+
+    def test_resume_checkpoint_from_dict_empty_suspend_after_raises(
+        self,
+    ) -> None:
+        """ResumeCheckpoint.from_dict must reject empty suspend_after_step_id."""
+        with pytest.raises(LedgerError, match="non-empty"):
+            ResumeCheckpoint.from_dict(
+                {"resume_step_id": _FIRST_STEP_ID, "suspend_after_step_id": ""}
+            )

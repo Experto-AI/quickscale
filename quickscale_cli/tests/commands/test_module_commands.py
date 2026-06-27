@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import click
 import pytest
+import yaml
 
 from quickscale_cli.commands.module_config import (
     APPLY_MODULE_EXECUTION_MODE,
@@ -2391,3 +2392,142 @@ class TestCallerParityUpdateSyncHelper:
         assert module_state.embedded_at is not None
         assert module_state.embedded_at != ""
         assert module_state.embedded_at != "2025-01-01T00:00:00"
+
+
+# ============================================================================
+# AF5 Phase 1 — Recovery-ledger regression for module commands (AF5-PLAN-005)
+# ============================================================================
+
+
+class TestAF5RecoveryLedgerRegression:
+    """AF5-PLAN-005: module_commands recovery-ledger must handle AF5-era
+    resume_checkpoint field without breaking and must fail hard on
+    malformed ledgers."""
+
+    def test_load_update_recovery_handles_af6_era_ledger(self, tmp_path: Path) -> None:
+        """An AF6-era ledger (without resume_checkpoint) must load cleanly."""
+        from quickscale_cli.commands.module_commands import (
+            _load_update_recovery_state,
+        )
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        recovery_path = quickscale_dir / "apply-recovery.yml"
+        recovery_path.write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_html",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-06-01T00:00:00",
+                    },
+                    "git_index_checkpoint": (
+                        "deadbeefcafebabedeadbeefcafebabedeadbeef"
+                    ),
+                },
+                sort_keys=False,
+            )
+        )
+
+        result = _load_update_recovery_state(tmp_path)
+        assert result is not None
+        assert result.project.slug == "myapp"
+
+    def test_load_update_recovery_handles_af5_era_ledger(self, tmp_path: Path) -> None:
+        """An AF5-era ledger WITH resume_checkpoint must load cleanly."""
+        from quickscale_cli.commands.module_commands import (
+            _load_update_recovery_state,
+        )
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        recovery_path = quickscale_dir / "apply-recovery.yml"
+        recovery_path.write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_html",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-06-01T00:00:00",
+                    },
+                    "resume_checkpoint": {
+                        "resume_step_id": "module embedding",
+                    },
+                    "git_index_checkpoint": (
+                        "deadbeefcafebabedeadbeefcafebabedeadbeef"
+                    ),
+                },
+                sort_keys=False,
+            )
+        )
+
+        result = _load_update_recovery_state(tmp_path)
+        assert result is not None
+        assert result.project.slug == "myapp"
+
+    def test_load_update_recovery_fails_hard_on_malformed_ledger(
+        self, tmp_path: Path
+    ) -> None:
+        """Malformed recovery content must fail hard as RuntimeError."""
+        from quickscale_cli.commands.module_commands import (
+            _load_update_recovery_state,
+        )
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        recovery_path = quickscale_dir / "apply-recovery.yml"
+        recovery_path.write_text("- this\n- is\n- a\n- list\n")
+
+        with pytest.raises(RuntimeError, match="Failed to load"):
+            _load_update_recovery_state(tmp_path)
+
+    def test_load_update_recovery_fails_hard_on_bad_resume_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """A malformed resume_checkpoint must fail hard as RuntimeError."""
+        from quickscale_cli.commands.module_commands import (
+            _load_update_recovery_state,
+        )
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        recovery_path = quickscale_dir / "apply-recovery.yml"
+        recovery_path.write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_html",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-06-01T00:00:00",
+                    },
+                    "resume_checkpoint": "not-a-dict",
+                    "git_index_checkpoint": (
+                        "deadbeefcafebabedeadbeefcafebabedeadbeef"
+                    ),
+                },
+                sort_keys=False,
+            )
+        )
+
+        with pytest.raises(RuntimeError, match="Failed to load"):
+            _load_update_recovery_state(tmp_path)
+
+    def test_load_update_recovery_returns_none_when_file_absent(
+        self, tmp_path: Path
+    ) -> None:
+        """Absent recovery file must return None."""
+        from quickscale_cli.commands.module_commands import (
+            _load_update_recovery_state,
+        )
+
+        result = _load_update_recovery_state(tmp_path)
+        assert result is None
