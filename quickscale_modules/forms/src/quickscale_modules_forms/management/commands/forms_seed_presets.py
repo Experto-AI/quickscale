@@ -220,7 +220,8 @@ class Command(BaseCommand):
                 field_defaults.setdefault("placeholder", "")
                 field_defaults.setdefault("options", [])
                 field_defaults.setdefault("validation_rules", {})
-                FormField.objects.get_or_create(
+                field_defaults["organization"] = form.organization
+                FormField.all_objects.get_or_create(
                     form=form,
                     name=field_data["name"],
                     defaults=field_defaults,

@@ -15,8 +15,9 @@ class TestFormSchemaSerializer:
 
     def test_formschema_serializer_returns_active_fields_only(self, form, form_field):
         """Inactive fields are excluded from the schema"""
-        FormField.objects.create(
+        FormField.all_objects.create(
             form=form,
+            organization=form.organization,
             field_type="text",
             label="Hidden",
             name="hidden_field",
@@ -30,11 +31,21 @@ class TestFormSchemaSerializer:
 
     def test_formschema_serializer_fields_ordered_by_order(self, form):
         """Fields appear in ascending order"""
-        FormField.objects.create(
-            form=form, field_type="text", label="Last", name="last_field", order=10
+        FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type="text",
+            label="Last",
+            name="last_field",
+            order=10,
         )
-        FormField.objects.create(
-            form=form, field_type="text", label="First", name="first_field", order=1
+        FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type="text",
+            label="First",
+            name="first_field",
+            order=1,
         )
         data = FormSchemaSerializer(form).data
         orders = [f["order"] for f in data["fields"]]

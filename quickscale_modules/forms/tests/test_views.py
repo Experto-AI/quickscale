@@ -10,7 +10,10 @@ from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
 
-from quickscale_modules_forms.models import FormSubmission
+from quickscale_modules_forms.models import (
+    FormFieldValue,
+    FormSubmission,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -113,7 +116,7 @@ class TestFormSubmitAPIView:
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 201
         # The submission is marked as spam in the DB
-        submission = FormSubmission.objects.filter(form=form).latest("submitted_at")
+        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
         assert submission.is_spam is True
 
     @override_settings(FORMS_SPAM_PROTECTION=False)
@@ -127,7 +130,7 @@ class TestFormSubmitAPIView:
         response = api_client.post(url, data=data, format="json")
 
         assert response.status_code == 201
-        submission = FormSubmission.objects.filter(form=form).latest("submitted_at")
+        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
         assert submission.is_spam is False
 
     def test_honeypot_is_ignored_when_form_spam_protection_disabled(
@@ -142,7 +145,7 @@ class TestFormSubmitAPIView:
         response = api_client.post(url, data=data, format="json")
 
         assert response.status_code == 201
-        submission = FormSubmission.objects.filter(form=form).latest("submitted_at")
+        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
         assert submission.is_spam is False
 
     def test_returns_404_for_inactive_form(self, api_client, inactive_form):
@@ -158,9 +161,14 @@ class TestFormSubmitAPIView:
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         api_client.post(url, data=data, format="json")
-        sub = FormSubmission.objects.filter(form=form).first()
+        sub = FormSubmission.all_objects.filter(form=form).first()
         assert sub is not None
-        assert sub.values.filter(field_name="full_name").exists()
+        # NOTE: sub.values uses TenantManager which scopes to the org contextvar.
+        # The org_scope() context manager in the view restores the contextvar to
+        # None after the request, so use all_objects for the assertion.
+        assert FormFieldValue.all_objects.filter(
+            submission=sub, field_name="full_name"
+        ).exists()
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
     def test_submission_captures_analytics_when_available(
@@ -227,7 +235,7 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.objects.filter(form=form).count() == 1
+        assert FormSubmission.all_objects.filter(form=form).count() == 1
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=False)
     def test_submission_skips_analytics_when_disabled_but_installed_and_env_present(
@@ -266,7 +274,7 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.objects.filter(form=form).count() == 1
+        assert FormSubmission.all_objects.filter(form=form).count() == 1
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
     def test_submission_stays_non_blocking_when_analytics_capture_fails(
@@ -299,7 +307,7 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.objects.filter(form=form).count() == 1
+        assert FormSubmission.all_objects.filter(form=form).count() == 1
 
     def test_submission_persists_when_notification_delivery_fails(
         self, api_client, form, form_field, email_field, monkeypatch
@@ -324,15 +332,13 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.objects.filter(form=form).count() == 1
-        assert (
-            FormSubmission.objects.get(form=form)
-            .values.filter(
-                field_name="full_name",
-                value="Alice",
-            )
-            .exists()
-        )
+        assert FormSubmission.all_objects.filter(form=form).count() == 1
+        sub = FormSubmission.all_objects.get(form=form)
+        assert FormFieldValue.all_objects.filter(
+            submission=sub,
+            field_name="full_name",
+            value="Alice",
+        ).exists()
 
     @override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False)
     def test_submission_uses_untracked_email_when_notifications_installed_but_disabled(
@@ -370,7 +376,7 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.objects.filter(form=form).count() == 1
+        assert FormSubmission.all_objects.filter(form=form).count() == 1
         assert len(mail.outbox) == 1
         assert "admin@example.com" in mail.outbox[0].recipients()
 
@@ -440,8 +446,9 @@ class TestAdminSubmissionListAPIView:
     @override_settings(FORMS_PER_PAGE=1)
     def test_respects_forms_per_page_setting(self, staff_client, form, submission):
         """The admin submission list should page according to FORMS_PER_PAGE."""
-        FormSubmission.objects.create(
+        FormSubmission.all_objects.create(
             form=form,
+            organization=form.organization,
             ip_address="127.0.0.2",
             user_agent="TestBrowser/2.0",
         )
@@ -578,3 +585,73 @@ class TestAdminSubmissionDetailNotFound:
         )
         response = staff_client.get(url)
         assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# AF1-CR-001: DB-side org scope for public forms routes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestPublicViewsDbOrgScope:
+    """AF1-CR-001: Verify FormSchemaAPIView and FormSubmitAPIView establish
+    DB-side app.current_org_id via org_scope(), not just ContextVar state."""
+
+    def test_form_schema_view_sets_db_current_org_id(
+        self, api_client, form, monkeypatch
+    ):
+        """FormSchemaAPIView.get_object() must call set_db_current_org_id
+        (proving org_scope is entered for the DB side)."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        called_with = None
+
+        def _track_db_set(org_id):
+            nonlocal called_with
+            called_with = org_id
+
+        monkeypatch.setattr(
+            "quickscale_modules_orgs.current_org.set_db_current_org_id",
+            _track_db_set,
+        )
+
+        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
+        api_client.get(url)
+
+        assert called_with is not None, (
+            "set_db_current_org_id was never called during schema GET"
+        )
+        assert str(called_with) == str(system_org.pk), (
+            "DB-side org must be set to the resolved org (System org for anonymous)"
+        )
+
+    def test_form_submit_view_sets_db_current_org_id(
+        self, api_client, form, form_field, email_field, monkeypatch
+    ):
+        """FormSubmitAPIView.create() must call set_db_current_org_id
+        (proving org_scope is entered for the DB side)."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        called_with = None
+
+        def _track_db_set(org_id):
+            nonlocal called_with
+            called_with = org_id
+
+        monkeypatch.setattr(
+            "quickscale_modules_orgs.current_org.set_db_current_org_id",
+            _track_db_set,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+        api_client.post(url, data=data, format="json")
+
+        assert called_with is not None, (
+            "set_db_current_org_id was never called during form submit"
+        )
+        assert str(called_with) == str(system_org.pk), (
+            "DB-side org must be set to the resolved org (System org for anonymous)"
+        )

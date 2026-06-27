@@ -15,7 +15,12 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from quickscale_modules_forms.models import Form, FormFieldValue, FormSubmission
+from quickscale_modules_forms.models import (
+    Form,
+    FormField,
+    FormFieldValue,
+    FormSubmission,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +82,11 @@ class TestContactFormE2EWorkflow:
 
     def test_seed_creates_contact_form_with_required_fields(self, seeded_contact_form):
         """forms_seed_presets creates the contact form with all five expected fields."""
-        field_names = list(seeded_contact_form.fields.values_list("name", flat=True))
+        field_names = list(
+            FormField.all_objects.filter(form=seeded_contact_form).values_list(
+                "name", flat=True
+            )
+        )
         assert seeded_contact_form.slug == "contact"
         assert seeded_contact_form.is_active is True
         for expected in ("full_name", "email", "company", "subject", "project_context"):
@@ -141,7 +150,7 @@ class TestContactFormE2EWorkflow:
         assert response.status_code == 201
         assert "message" in response.data
 
-        submission = FormSubmission.objects.filter(form=seeded_contact_form).first()
+        submission = FormSubmission.all_objects.filter(form=seeded_contact_form).first()
         assert submission is not None
         assert submission.is_spam is False
 
@@ -157,11 +166,11 @@ class TestContactFormE2EWorkflow:
         }
         api_client.post(url, data=payload, format="json")
 
-        submission = FormSubmission.objects.filter(form=seeded_contact_form).latest(
+        submission = FormSubmission.all_objects.filter(form=seeded_contact_form).latest(
             "submitted_at"
         )
         stored_names = list(
-            FormFieldValue.objects.filter(submission=submission).values_list(
+            FormFieldValue.all_objects.filter(submission=submission).values_list(
                 "field_name", flat=True
             )
         )
@@ -202,7 +211,7 @@ class TestContactFormE2EWorkflow:
 
         # Returns 201 to fool bots — but marks submission as spam
         assert response.status_code == 201
-        latest = FormSubmission.objects.filter(form=seeded_contact_form).latest(
+        latest = FormSubmission.all_objects.filter(form=seeded_contact_form).latest(
             "submitted_at"
         )
         assert latest.is_spam is True

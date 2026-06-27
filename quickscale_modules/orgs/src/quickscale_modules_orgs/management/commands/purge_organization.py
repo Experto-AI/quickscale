@@ -76,14 +76,30 @@ _DELETE_SPECS: list[dict[str, object]] = [
         "label": "Social embeds",
     },
     # -- forms --
-    # FormSubmission has form FK (PROTECT) but no org FK; must delete before Form.
+    # FormFieldValue has org FK (PROTECT) and submission FK (CASCADE);
+    # must delete before FormSubmission.
+    {
+        "app_label": "quickscale_modules_forms",
+        "model_name": "FormFieldValue",
+        "filter_key": "organization",
+        "label": "Form field values",
+    },
+    # FormField has org FK (PROTECT); must delete before Form.
+    {
+        "app_label": "quickscale_modules_forms",
+        "model_name": "FormField",
+        "filter_key": "organization",
+        "label": "Form fields",
+    },
+    # FormSubmission has org FK (PROTECT) and form FK (PROTECT);
+    # must delete before Form.
     {
         "app_label": "quickscale_modules_forms",
         "model_name": "FormSubmission",
-        "filter_key": "form__organization",
+        "filter_key": "organization",
         "label": "Form submissions",
     },
-    # Form has org FK (PROTECT); cascades FormField and FormFieldValue.
+    # Form has org FK (PROTECT).
     {
         "app_label": "quickscale_modules_forms",
         "model_name": "Form",
@@ -123,18 +139,20 @@ _DELETE_SPECS: list[dict[str, object]] = [
         "label": "Blog media assets",
     },
     # -- crm --
-    # DealNote has deal FK (CASCADE) but no org FK; delete before Deal.
+    # DealNote has direct org FK (PROTECT); delete before Deal because
+    # Deal CASCADE would also remove DealNote.
     {
         "app_label": "quickscale_modules_crm",
         "model_name": "DealNote",
-        "filter_key": "deal__organization",
+        "filter_key": "organization",
         "label": "CRM deal notes",
     },
-    # ContactNote has contact FK (CASCADE) but no org FK; delete before Contact.
+    # ContactNote has direct org FK (PROTECT); delete before Contact because
+    # Contact CASCADE would also remove ContactNote.
     {
         "app_label": "quickscale_modules_crm",
         "model_name": "ContactNote",
-        "filter_key": "contact__organization",
+        "filter_key": "organization",
         "label": "CRM contact notes",
     },
     # Deal has org FK (PROTECT); must delete before Stage (PROTECT on deal FK).

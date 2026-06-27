@@ -23,7 +23,12 @@ from quickscale_modules_forms.models import Form
 # ---------------------------------------------------------------------------
 
 _RESTRICTED_ROLE = "quickscale_rls_test_role"
-_FORMS_TABLES = ("quickscale_modules_forms_form",)
+_FORMS_TABLES = (
+    "quickscale_modules_forms_form",
+    "quickscale_modules_forms_formfield",
+    "quickscale_modules_forms_formsubmission",
+    "quickscale_modules_forms_formfieldvalue",
+)
 
 
 def _ensure_rls_test_role() -> None:

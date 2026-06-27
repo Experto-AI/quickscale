@@ -17,7 +17,7 @@ from typing import Any
 from django.apps import apps
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.http import Http404, HttpResponse
 from django.views.generic import TemplateView
 from rest_framework import status
@@ -49,6 +49,7 @@ from quickscale_modules_forms.serializers import (
     FormSubmissionCreateSerializer,
 )
 from quickscale_modules_forms.throttles import FormSubmitThrottle
+from quickscale_modules_orgs.current_org import org_scope
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,12 @@ class FormSchemaAPIView(RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = FormSchemaSerializer
 
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Wrap in org_scope so DB-side app.current_org_id is set for FORCE-RLS."""
+        org = _resolve_subject_org(request)
+        with org_scope(org):
+            return super().retrieve(request, *args, **kwargs)
+
     def get_object(self) -> Form:
         slug = self.kwargs.get("slug")
         org = _resolve_subject_org(self.request)
@@ -199,57 +206,61 @@ class FormSubmitAPIView(CreateAPIView):
         return form
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        form = self._get_form()
-        data = request.data
+        org = _resolve_subject_org(self.request)
+        with org_scope(org):
+            form = self._get_form()
+            data = request.data
 
-        # Honeypot check — silently mark as spam, do NOT reveal detection
-        honeypot_value = data.get(HONEYPOT_FIELD_NAME, "")
-        if is_form_spam_protection_enabled(form) and honeypot_value:
+            # Honeypot check — silently mark as spam, do NOT reveal detection
+            honeypot_value = data.get(HONEYPOT_FIELD_NAME, "")
+            if is_form_spam_protection_enabled(form) and honeypot_value:
+                with transaction.atomic():
+                    submission = FormSubmission.objects.create(
+                        form=form,
+                        organization=form.organization,
+                        ip_address=request.META.get("REMOTE_ADDR"),
+                        user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
+                        is_spam=True,
+                    )
+                    self._create_field_values(submission, form, data)
+                return Response(
+                    {
+                        "message": form.success_message,
+                        "redirect_url": form.redirect_url or None,
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
+
+            # Validate submitted data against form field definitions
+            serializer = self.get_serializer(data=data)
+            if not serializer.is_valid():
+                return Response(
+                    {"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Persist submission inside a transaction
             with transaction.atomic():
                 submission = FormSubmission.objects.create(
                     form=form,
+                    organization=form.organization,
                     ip_address=request.META.get("REMOTE_ADDR"),
                     user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-                    is_spam=True,
+                    is_spam=False,
                 )
                 self._create_field_values(submission, form, data)
+
+            # Notifications run outside the transaction — delivery failure must not roll back submission
+            notification_status = notify_submission(submission)
+            _capture_submission_analytics(submission, request)
+
             return Response(
                 {
                     "message": form.success_message,
                     "redirect_url": form.redirect_url or None,
+                    "notification_status": notification_status,
                 },
                 status=status.HTTP_201_CREATED,
             )
-
-        # Validate submitted data against form field definitions
-        serializer = self.get_serializer(data=data)
-        if not serializer.is_valid():
-            return Response(
-                {"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Persist submission inside a transaction
-        with transaction.atomic():
-            submission = FormSubmission.objects.create(
-                form=form,
-                ip_address=request.META.get("REMOTE_ADDR"),
-                user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-                is_spam=False,
-            )
-            self._create_field_values(submission, form, data)
-
-        # Notifications run outside the transaction — delivery failure must not roll back submission
-        notification_status = notify_submission(submission)
-        _capture_submission_analytics(submission, request)
-
-        return Response(
-            {
-                "message": form.success_message,
-                "redirect_url": form.redirect_url or None,
-                "notification_status": notification_status,
-            },
-            status=status.HTTP_201_CREATED,
-        )
 
     def _create_field_values(
         self, submission: FormSubmission, form: Form, data: dict
@@ -260,6 +271,7 @@ class FormSubmitAPIView(CreateAPIView):
             submitted_value = data.get(field.name, "")
             FormFieldValue.objects.create(
                 submission=submission,
+                organization=submission.organization,
                 field=field,
                 field_name=field.name,
                 field_label=field.label,
@@ -289,9 +301,14 @@ class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
     def get_queryset(self):
         form_pk = self.kwargs.get("pk")
         qs = (
-            FormSubmission.objects.filter(form_id=form_pk)
+            FormSubmission.all_objects.filter(form_id=form_pk)
             .select_related("form")
-            .prefetch_related("values")
+            .prefetch_related(
+                Prefetch(
+                    "values",
+                    queryset=FormFieldValue.all_objects.all(),
+                )
+            )
         )
 
         status_filter = self.request.query_params.get("status")
@@ -320,9 +337,14 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        return FormSubmission.objects.filter(
+        return FormSubmission.all_objects.filter(
             form_id=self.kwargs.get("pk")
-        ).prefetch_related("values")
+        ).prefetch_related(
+            Prefetch(
+                "values",
+                queryset=FormFieldValue.all_objects.all(),
+            )
+        )
 
     def get_object(self):
         qs = self.get_queryset()
@@ -351,14 +373,19 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
             raise Http404
 
         submissions = (
-            FormSubmission.objects.filter(form=form)
-            .prefetch_related("values")
+            FormSubmission.all_objects.filter(form=form)
+            .prefetch_related(
+                Prefetch(
+                    "values",
+                    queryset=FormFieldValue.all_objects.filter(submission__form=form),
+                )
+            )
             .order_by("-submitted_at")
         )
 
         # Collect all unique field names across submissions to build CSV header
         all_field_names: list[str] = list(
-            FormFieldValue.objects.filter(submission__form=form)
+            FormFieldValue.all_objects.filter(submission__form=form)
             .values_list("field_name", flat=True)
             .distinct()
             .order_by("field_name")

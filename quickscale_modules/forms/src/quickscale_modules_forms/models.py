@@ -122,6 +122,7 @@ class FormField(models.Model):
         (LAYOUT_HALF_RIGHT, "Half width (right)"),
     ]
 
+    organization = tenant_org_fk(related_name="form_fields")
     form = models.ForeignKey(Form, related_name="fields", on_delete=models.CASCADE)
     field_type = models.CharField(max_length=20, choices=FIELD_TYPE_CHOICES)
     label = models.CharField(max_length=200)
@@ -138,6 +139,10 @@ class FormField(models.Model):
         max_length=20, choices=LAYOUT_HINT_CHOICES, default=LAYOUT_FULL
     )
     is_active = models.BooleanField(default=True)
+
+    # T1.7: shared tenant contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_forms"
@@ -164,6 +169,7 @@ class FormSubmission(models.Model):
         (STATUS_ARCHIVED, "Archived"),
     ]
 
+    organization = tenant_org_fk(related_name="form_submissions")
     form = models.ForeignKey(Form, related_name="submissions", on_delete=models.PROTECT)
     # Anonymized to null when data_retention_days expires
     ip_address = models.GenericIPAddressField(null=True, blank=True)
@@ -173,6 +179,10 @@ class FormSubmission(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
     )
+
+    # T1.7: shared tenant contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_forms"
@@ -186,6 +196,7 @@ class FormSubmission(models.Model):
 class FormFieldValue(models.Model):
     """The value for a single field in a submission — preserves historical snapshots"""
 
+    organization = tenant_org_fk(related_name="form_field_values")
     submission = models.ForeignKey(
         FormSubmission, related_name="values", on_delete=models.CASCADE
     )
@@ -202,6 +213,10 @@ class FormFieldValue(models.Model):
     # Snapshot of FormField.label at submission time
     field_label = models.CharField(max_length=200)
     value = models.TextField()
+
+    # T1.7: shared tenant contract.
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_forms"

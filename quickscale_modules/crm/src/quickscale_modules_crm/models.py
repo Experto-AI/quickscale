@@ -260,6 +260,11 @@ class Deal(models.Model):
 class ContactNote(models.Model):
     """Notes/interactions with a contact"""
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.PROTECT,
+        related_name="crm_contact_notes",
+    )
     contact = models.ForeignKey(
         Contact,
         on_delete=models.CASCADE,
@@ -271,6 +276,9 @@ class ContactNote(models.Model):
     )
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"
@@ -301,6 +309,11 @@ class ContactNote(models.Model):
 class DealNote(models.Model):
     """Notes/interactions with a deal"""
 
+    organization = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.PROTECT,
+        related_name="crm_deal_notes",
+    )
     deal = models.ForeignKey(
         Deal,
         on_delete=models.CASCADE,
@@ -312,6 +325,9 @@ class DealNote(models.Model):
     )
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         app_label = "quickscale_modules_crm"

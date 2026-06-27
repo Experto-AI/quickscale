@@ -27,7 +27,7 @@ class Command(BaseCommand):
                 continue
 
             cutoff = now - timedelta(days=form.data_retention_days)
-            old_submissions = FormSubmission.objects.filter(
+            old_submissions = FormSubmission.all_objects.filter(
                 form=form,
                 submitted_at__lt=cutoff,
             ).exclude(ip_address=None)

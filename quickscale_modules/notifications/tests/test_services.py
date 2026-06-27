@@ -17,6 +17,7 @@ from quickscale_modules_forms.models import (
     FormFieldValue,
     FormSubmission,
 )
+from quickscale_modules_orgs.current_org import set_current_org_id
 from quickscale_modules_orgs.models import Organization
 from quickscale_modules_forms.notifications import notify_submission
 
@@ -40,6 +41,7 @@ from quickscale_modules_notifications.services import (
 
 def _create_contact_form(*, slug: str, notify_emails: str) -> Form:
     system_org = Organization.objects.get_system_org()
+    set_current_org_id(system_org.pk)
     form = Form.objects.create(
         title="Tracked Contact",
         slug=slug,
@@ -49,16 +51,18 @@ def _create_contact_form(*, slug: str, notify_emails: str) -> Form:
         spam_protection_enabled=True,
         organization=system_org,
     )
-    FormField.objects.create(
+    FormField.all_objects.create(
         form=form,
+        organization=form.organization,
         field_type=FormField.FIELD_TYPE_TEXT,
         label="Name",
         name="full_name",
         required=True,
         order=1,
     )
-    FormField.objects.create(
+    FormField.all_objects.create(
         form=form,
+        organization=form.organization,
         field_type=FormField.FIELD_TYPE_EMAIL,
         label="Email",
         name="email",
@@ -69,22 +73,25 @@ def _create_contact_form(*, slug: str, notify_emails: str) -> Form:
 
 
 def _create_submission(form: Form) -> FormSubmission:
-    submission = FormSubmission.objects.create(
+    submission = FormSubmission.all_objects.create(
         form=form,
+        organization=form.organization,
         ip_address="127.0.0.1",
         user_agent="pytest",
     )
-    full_name_field = form.fields.get(name="full_name")
-    email_field = form.fields.get(name="email")
-    FormFieldValue.objects.create(
+    full_name_field = FormField.all_objects.get(form=form, name="full_name")
+    email_field = FormField.all_objects.get(form=form, name="email")
+    FormFieldValue.all_objects.create(
         submission=submission,
+        organization=submission.organization,
         field=full_name_field,
         field_name="full_name",
         field_label=full_name_field.label,
         value="Alice",
     )
-    FormFieldValue.objects.create(
+    FormFieldValue.all_objects.create(
         submission=submission,
+        organization=submission.organization,
         field=email_field,
         field_name="email",
         field_label=email_field.label,
@@ -399,7 +406,7 @@ def test_forms_submit_keeps_saved_submission_when_tracked_delivery_fails(
             format="json",
         )
 
-    submission = FormSubmission.objects.get(form=form)
+    submission = FormSubmission.all_objects.get(form=form)
     message = NotificationMessage.objects.get(
         template_key="notifications.forms_submission"
     )
