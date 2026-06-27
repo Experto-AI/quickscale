@@ -115,6 +115,28 @@ from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 
+# AF6 Phase 2 — core step bodies
+from quickscale_core.apply.steps import (
+    GitIndexSnapshot,
+    step_apply_mutable_config,
+    step_backups_gitignore,
+    step_capture_hashes,
+    step_display_next_steps,
+    step_embed_modules,
+    step_finalize_state,
+    step_notifications_env_sync,
+    step_analytics_env_sync,
+    step_billing_env_sync,
+    step_post_embed_snapshot,
+    step_post_generation_setup,
+    step_railway_deploy,
+    step_regenerate_wiring,
+    step_run_migrations,
+    step_start_docker,
+    step_sync_dependencies,
+)
+from quickscale_core.apply.steps.types import StepContext
+
 
 @dataclass
 class ApplyContext:
@@ -476,8 +498,8 @@ def _run_migrations(project_path: Path) -> bool:
     )[0]
 
 
-def _run_migrations_in_docker(project_path: Path) -> bool:
-    """Run Django migrations inside the backend Docker container."""
+def _run_migrations_in_docker_impl(project_path: Path) -> bool:
+    """Original implementation used as callback for core step body."""
     return _run_command(
         ["quickscale", "manage", "migrate"],
         project_path,
@@ -485,25 +507,26 @@ def _run_migrations_in_docker(project_path: Path) -> bool:
     )[0]
 
 
-def _start_docker(
+def _run_migrations_in_docker(project_path: Path) -> bool:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=project_path)
+    outcome = step_run_migrations(
+        step_ctx,
+        should_auto_start_docker=True,
+        docker_started=True,
+        run_migrations_in_docker_fn=_run_migrations_in_docker_impl,
+    )
+    return outcome.success
+
+
+def _start_docker_impl(
     project_path: Path, build: bool = True, verbose: bool = False
 ) -> bool:
-    """Start Docker services using quickscale up
-
-    Args:
-        project_path: Path to the project directory
-        build: Whether to build images before starting
-        verbose: Whether to show Docker build output (useful for debugging)
-
-    Returns:
-        True if Docker started successfully, False otherwise
-    """
+    """Original implementation used as callback for core step body."""
     cmd = ["quickscale", "up"]
     if build:
         cmd.append("--build")
-
     if verbose:
-        # Show Docker build output for debugging
         click.echo("⏳ Starting Docker services (showing build output)...")
         click.echo("=" * 50)
         try:
@@ -534,6 +557,23 @@ def _start_docker(
             capture=False,
         )
         return success
+
+
+def _start_docker(
+    project_path: Path, build: bool = True, verbose: bool = False
+) -> bool:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=project_path, verbose_docker=verbose)
+    outcome = step_start_docker(
+        step_ctx,
+        should_auto_start_docker=True,
+        start_docker_fn=lambda p, q: _start_docker_impl(
+            p,
+            build=build,
+            verbose=verbose,
+        ),
+    )
+    return outcome.success
 
 
 def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
@@ -778,37 +818,37 @@ def _capture_managed_file_hashes_after_apply(
     qs_config: QuickScaleConfig,
     state: QuickScaleState,
 ) -> None:
-    """Capture SHA-256 hashes for the managed wiring files into consolidated state.
+    """Thin wrapper delegating to core step body (AF6 Phase 2).
 
-    Hash capture is best-effort: failures must not abort apply because
-    drift detection is informational. The captured hashes are written into
-    the ``managed_files`` section of ``.quickscale/state.yml`` (Phase 2
-    consolidated form) and consumed by ``quickscale status`` on subsequent
-    runs.
-
-    The function intentionally returns ``None``. The only caller treats
-    hash capture as a fire-and-forget step, so a boolean success signal
-    would be misleading. Failures are reported to the operator via
-    ``click.secho`` warnings and do not propagate.
+    Returns ``None`` — hash capture is best-effort and never aborts apply.
     """
-    try:
-        managed_paths = _resolve_managed_wiring_paths(qs_config)
-        hashes = compute_file_hashes(project_path, managed_paths)
-    except OSError as error:
-        click.secho(
-            f"⚠️  Failed to capture managed file hashes: {error}",
-            fg="yellow",
-        )
-        return
 
-    for path, digest in hashes.items():
-        state.managed_files[path] = ManagedFileRecord(path=path, hash=digest)
+    def _resolve_paths() -> list[str]:
+        return _resolve_managed_wiring_paths(qs_config)
 
-    if hashes:
-        click.echo(
-            "  • Tracked managed file hashes for "
-            f"{len(hashes)} managed file(s) in .quickscale/state.yml"
-        )
+    def _compute_hashes(path: Path, paths: list[str]) -> dict[str, str]:
+        return compute_file_hashes(path, paths)
+
+    def _record_hash(path_str: str, digest: str) -> None:
+        state.managed_files[path_str] = ManagedFileRecord(path=path_str, hash=digest)
+
+    def _reporter(message: str, *, ok: bool = True) -> None:
+        if ok:
+            click.echo(message)
+        else:
+            click.secho(message, fg="yellow")
+
+    step_ctx = StepContext(
+        output_path=project_path,
+        qs_config=qs_config,
+        reporter=_reporter,
+    )
+    step_capture_hashes(
+        step_ctx,
+        compute_file_hashes_fn=_compute_hashes,
+        resolve_managed_wiring_paths_fn=_resolve_paths,
+        record_hash_fn=_record_hash,
+    )
 
 
 def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
@@ -1097,22 +1137,20 @@ def _render_notifications_env_example_block(
     return "\n".join(lines)
 
 
-def _sync_notifications_env_example(
+def _sync_notifications_env_example_impl(
     output_path: Path,
     qs_config: QuickScaleConfig,
 ) -> bool:
-    """Keep `.env.example` aligned with the notifications env-var names."""
+    """Original implementation used as callback for core step body."""
     notifications_config = qs_config.modules.get("notifications")
     env_example_path = output_path / ".env.example"
     if notifications_config is None or not env_example_path.exists():
         return True
-
     start_marker = "# QuickScale Notifications (managed)"
     end_marker = "# End QuickScale Notifications"
     rendered_block = _render_notifications_env_example_block(
         notifications_config.options or {}
     )
-
     try:
         content = env_example_path.read_text()
     except OSError as e:
@@ -1121,7 +1159,6 @@ def _sync_notifications_env_example(
             fg="yellow",
         )
         return False
-
     if start_marker in content and end_marker in content:
         before, remainder = content.split(start_marker, maxsplit=1)
         _, after = remainder.split(end_marker, maxsplit=1)
@@ -1130,7 +1167,6 @@ def _sync_notifications_env_example(
     else:
         suffix = "" if content.endswith("\n") else "\n"
         updated_content = content + suffix + "\n" + rendered_block + "\n"
-
     try:
         env_example_path.write_text(updated_content)
     except OSError as e:
@@ -1139,9 +1175,21 @@ def _sync_notifications_env_example(
             fg="yellow",
         )
         return False
-
     click.secho("✅ Updated .env.example with notifications env vars", fg="green")
     return True
+
+
+def _sync_notifications_env_example(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = step_notifications_env_sync(
+        step_ctx,
+        sync_notifications_fn=_sync_notifications_env_example_impl,
+    )
+    return outcome.success
 
 
 def _render_analytics_env_example_block(
@@ -1183,34 +1231,26 @@ def _render_analytics_env_example_block(
     )
 
 
-def _sync_analytics_env_example(
+def _sync_analytics_env_example_impl(
     output_path: Path,
     qs_config: QuickScaleConfig,
 ) -> bool:
-    """Keep `.env.example` aligned with analytics env-var names and scope."""
+    """Original implementation used as callback for core step body."""
     analytics_config = qs_config.modules.get("analytics")
     env_example_path = output_path / ".env.example"
     if not env_example_path.exists():
         return True
-
     start_marker = "# QuickScale Analytics (managed)"
     end_marker = "# End QuickScale Analytics"
-
     try:
         content = env_example_path.read_text()
-    except OSError as e:
-        click.secho(
-            f"⚠️  Failed to read .env.example for analytics wiring: {e}",
-            fg="yellow",
-        )
+    except OSError:
         return False
-
     rendered_block: str | None = None
     if analytics_config is not None:
         resolved = resolve_analytics_module_options(analytics_config.options or {})
         if bool(resolved.get("enabled", True)):
             rendered_block = _render_analytics_env_example_block(resolved)
-
     if start_marker in content and end_marker in content:
         before, remainder = content.split(start_marker, maxsplit=1)
         _, after = remainder.split(end_marker, maxsplit=1)
@@ -1229,21 +1269,24 @@ def _sync_analytics_env_example(
             return True
         suffix = "" if content.endswith("\n") else "\n"
         updated_content = content + suffix + "\n" + rendered_block + "\n"
-
     try:
         env_example_path.write_text(updated_content)
-    except OSError as e:
-        click.secho(
-            f"⚠️  Failed to update .env.example for analytics wiring: {e}",
-            fg="yellow",
-        )
+    except OSError:
         return False
-
-    if rendered_block is None:
-        click.secho("✅ Removed analytics env vars from .env.example", fg="green")
-    else:
-        click.secho("✅ Updated .env.example with analytics env vars", fg="green")
     return True
+
+
+def _sync_analytics_env_example(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = step_analytics_env_sync(
+        step_ctx,
+        sync_analytics_fn=_sync_analytics_env_example_impl,
+    )
+    return outcome.success
 
 
 def _render_billing_env_example_block(
@@ -1290,29 +1333,22 @@ def _render_billing_env_example_block(
     )
 
 
-def _sync_billing_env_example(
+def _sync_billing_env_example_impl(
     output_path: Path,
     qs_config: QuickScaleConfig,
 ) -> bool:
-    """Keep `.env.example` aligned with the billing env-var names."""
+    """Original implementation used as callback for core step body."""
     billing_config = qs_config.modules.get("billing")
     env_example_path = output_path / ".env.example"
     if billing_config is None or not env_example_path.exists():
         return True
-
     start_marker = "# QuickScale Billing (managed)"
     end_marker = "# End QuickScale Billing"
     rendered_block = _render_billing_env_example_block(billing_config.options or {})
-
     try:
         content = env_example_path.read_text()
-    except OSError as e:
-        click.secho(
-            f"⚠️  Failed to read .env.example for billing wiring: {e}",
-            fg="yellow",
-        )
+    except OSError:
         return False
-
     if start_marker in content and end_marker in content:
         before, remainder = content.split(start_marker, maxsplit=1)
         _, after = remainder.split(end_marker, maxsplit=1)
@@ -1321,18 +1357,24 @@ def _sync_billing_env_example(
     else:
         suffix = "" if content.endswith("\n") else "\n"
         updated_content = content + suffix + "\n" + rendered_block + "\n"
-
     try:
         env_example_path.write_text(updated_content)
-    except OSError as e:
-        click.secho(
-            f"⚠️  Failed to update .env.example for billing wiring: {e}",
-            fg="yellow",
-        )
+    except OSError:
         return False
-
-    click.secho("✅ Updated .env.example with billing env vars", fg="green")
     return True
+
+
+def _sync_billing_env_example(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = step_billing_env_sync(
+        step_ctx,
+        sync_billing_fn=_sync_billing_env_example_impl,
+    )
+    return outcome.success
 
 
 def _normalize_backups_gitignore_entry(local_directory: str) -> str | None:
@@ -1377,57 +1419,59 @@ def _ensure_backups_gitignore_rules(
     project_path: Path,
     qs_config: QuickScaleConfig,
 ) -> bool:
-    """Ensure custom backups directories are ignored safely in git."""
-    backups_config = qs_config.modules.get("backups")
-    if backups_config is None:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+
+    def _impl(path: Path, config: QuickScaleConfig) -> bool:
+        backups_config = config.modules.get("backups")
+        if backups_config is None:
+            return True
+        options = normalize_backups_module_options(backups_config.options or {})
+        default_local_directory = str(get_default_backups_config()["local_directory"])
+        local_directory = options.get("local_directory", default_local_directory)
+        entry = _normalize_backups_gitignore_entry(str(local_directory))
+        if entry is None:
+            click.secho(
+                "⚠️  Skipping automatic backups .gitignore update because "
+                "`modules.backups.local_directory` is not a safe repo-relative path.",
+                fg="yellow",
+            )
+            return True
+        gitignore_path = path / ".gitignore"
+        try:
+            existing = gitignore_path.read_text() if gitignore_path.exists() else ""
+        except OSError as error:
+            click.secho(
+                f"❌ Failed to read .gitignore for backups hardening: {error}",
+                fg="red",
+                err=True,
+            )
+            return False
+        existing_entries = {
+            line.strip() for line in existing.splitlines() if line.strip()
+        }
+        if entry in existing_entries:
+            return True
+        new_content = existing
+        if new_content and not new_content.endswith("\n"):
+            new_content += "\n"
+        if "# QuickScale private backup artifacts" not in new_content:
+            new_content += "\n# QuickScale private backup artifacts\n"
+        new_content += f"{entry}\n"
+        try:
+            gitignore_path.write_text(new_content)
+        except OSError as error:
+            click.secho(
+                f"❌ Failed to update .gitignore for backups hardening: {error}",
+                fg="red",
+                err=True,
+            )
+            return False
+        click.secho(f"✅ Added backups ignore rule to .gitignore: {entry}", fg="green")
         return True
 
-    options = normalize_backups_module_options(backups_config.options or {})
-    default_local_directory = str(get_default_backups_config()["local_directory"])
-    local_directory = options.get("local_directory", default_local_directory)
-    entry = _normalize_backups_gitignore_entry(str(local_directory))
-    if entry is None:
-        click.secho(
-            "⚠️  Skipping automatic backups .gitignore update because "
-            "`modules.backups.local_directory` is not a safe repo-relative path.",
-            fg="yellow",
-        )
-        return True
-
-    gitignore_path = project_path / ".gitignore"
-    try:
-        existing = gitignore_path.read_text() if gitignore_path.exists() else ""
-    except OSError as error:
-        click.secho(
-            f"❌ Failed to read .gitignore for backups hardening: {error}",
-            fg="red",
-            err=True,
-        )
-        return False
-
-    existing_entries = {line.strip() for line in existing.splitlines() if line.strip()}
-    if entry in existing_entries:
-        return True
-
-    new_content = existing
-    if new_content and not new_content.endswith("\n"):
-        new_content += "\n"
-    if "# QuickScale private backup artifacts" not in new_content:
-        new_content += "\n# QuickScale private backup artifacts\n"
-    new_content += f"{entry}\n"
-
-    try:
-        gitignore_path.write_text(new_content)
-    except OSError as error:
-        click.secho(
-            f"❌ Failed to update .gitignore for backups hardening: {error}",
-            fg="red",
-            err=True,
-        )
-        return False
-
-    click.secho(f"✅ Added backups ignore rule to .gitignore: {entry}", fg="green")
-    return True
+    step_ctx = StepContext(output_path=project_path, qs_config=qs_config)
+    outcome = step_backups_gitignore(step_ctx, ensure_backups_ignore_fn=_impl)
+    return outcome.success
 
 
 def _determine_output_path(config_path: Path, project_slug: str) -> Path:
@@ -1838,91 +1882,79 @@ def _embed_modules_step(
     no_modules: bool,
     existing_state: QuickScaleState | None,
 ) -> EmbedModulesResult:
-    """Embed modules with fail-fast semantics."""
-    embedded_modules: list[str] = []
-    provenance_payloads: dict[str, ModuleEmbedProvenance] = {}
-
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
     if no_modules or not modules_to_embed:
         if existing_state and not modules_to_embed:
             click.echo("⏭️  No new modules to embed")
-        return EmbedModulesResult(success=True, embedded_modules=embedded_modules)
+        return EmbedModulesResult(success=True, embedded_modules=[])
 
-    skip_auth_migration_check = existing_state is None
+    step_ctx = StepContext(
+        output_path=output_path,
+        existing_state=existing_state,
+    )
 
-    for module_name in modules_to_embed:
-        module_provenance: list[ModuleEmbedProvenance] = []
-        if not _embed_module(
-            output_path,
-            module_name,
-            skip_auth_migration_check=skip_auth_migration_check,
-            provenance_sink=module_provenance,
-        ):
-            if not is_working_directory_clean(output_path):
-                if not _git_commit(
-                    output_path,
-                    f"Partial module: {module_name} (incomplete)",
-                ):
-                    click.secho(
-                        "\n❌ Cannot continue 'quickscale apply' because QuickScale could not create the partial module checkpoint commit after embedding failed.",
-                        fg="red",
-                        err=True,
-                    )
-                    raise click.Abort()
-            click.secho(
-                f"❌ Module embedding failed for required module: {module_name}",
-                fg="red",
-                err=True,
-            )
-            return EmbedModulesResult(
-                success=False,
-                embedded_modules=embedded_modules,
-                failed_module=module_name,
-            )
+    outcome = step_embed_modules(
+        step_ctx,
+        modules_to_embed=modules_to_embed,
+        no_modules=no_modules,
+        embed_one_module=_embed_module,
+        commit_changes=_git_commit,
+        is_working_directory_clean_fn=is_working_directory_clean,
+    )
 
-        if not _git_commit(output_path, f"Add module: {module_name}"):
-            click.secho(
-                f"\n❌ Cannot continue 'quickscale apply' because QuickScale could not create the checkpoint commit for embedded module '{module_name}'.",
-                fg="red",
-                err=True,
-            )
-            raise click.Abort()
+    if outcome.success:
+        return EmbedModulesResult(
+            success=True,
+            embedded_modules=step_ctx.embedded_modules,
+            provenance_payloads=(
+                step_ctx.provenance_payloads if step_ctx.provenance_payloads else None
+            ),
+        )
 
-        embedded_modules.append(module_name)
-        # Capture per-module provenance from the apply-side handoff seam.
-        # Each module resolves its source_ref exactly once; the payload is
-        # carried forward in-memory for later phases.
-        if module_provenance:
-            provenance_payloads[module_name] = module_provenance[0]
+    # Failure path — distinguish hard-stop (commit failure) from soft-stop
+    # (embed failure) to match historical behavior expected by tests.
+    if step_ctx.embed_commit_failure:
+        raise click.Abort()
 
     return EmbedModulesResult(
-        success=True,
-        embedded_modules=embedded_modules,
-        provenance_payloads=provenance_payloads if provenance_payloads else None,
+        success=False,
+        embedded_modules=step_ctx.embedded_modules,
+        failed_module=step_ctx.embed_failed_module,
     )
 
 
-def _run_post_generation_steps(output_path: Path, run_migrations: bool = True) -> bool:
-    """Refresh the lockfile, install dependencies, and optionally run migrations."""
+def _run_post_generation_steps_impl(
+    output_path: Path, run_migrations: bool = True
+) -> bool:
+    """Original implementation used as callback for core step body."""
     if not _run_poetry_lock(output_path):
         return False
-
     if not _run_poetry_install(output_path):
         return False
-
     if run_migrations and not _run_migrations(output_path):
         return False
-
     return True
 
 
-def _sync_project_module_dependencies_for_apply(
+def _run_post_generation_steps(output_path: Path, run_migrations: bool = True) -> bool:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=output_path)
+    outcome = step_post_generation_setup(
+        step_ctx,
+        should_auto_start_docker=False,
+        should_run_local_migrations=run_migrations,
+        run_post_gen_steps_fn=_run_post_generation_steps_impl,
+    )
+    return outcome.success
+
+
+def _sync_project_module_dependencies_for_apply_impl(
     output_path: Path,
     qs_config: QuickScaleConfig,
 ) -> bool:
-    """Sync missing module dependency entries into the generated project pyproject."""
+    """Original implementation used as callback for core step body."""
     if not qs_config.modules:
         return True
-
     click.echo("\n⏳ Syncing module dependency entries...")
     try:
         sync_result = sync_project_module_dependencies(
@@ -1935,7 +1967,6 @@ def _sync_project_module_dependencies_for_apply(
     except (DependencySyncError, ManifestError) as error:
         click.secho(f"❌ Module dependency sync failed: {error}", fg="red", err=True)
         return False
-
     if sync_result.added_package_dependencies:
         click.echo(
             "  • Added package dependencies: "
@@ -1948,9 +1979,21 @@ def _sync_project_module_dependencies_for_apply(
         )
     if not sync_result.changed:
         click.echo("  • Module dependency entries already in sync")
-
     click.secho("✅ Module dependency entries synced", fg="green")
     return True
+
+
+def _sync_project_module_dependencies_for_apply(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = step_sync_dependencies(
+        step_ctx,
+        sync_project_deps_fn=_sync_project_module_dependencies_for_apply_impl,
+    )
+    return outcome.success
 
 
 def _populate_consolidated_tracking_from_legacy(
@@ -2210,7 +2253,7 @@ def _save_project_state(
         return False
 
 
-def _display_next_steps(
+def _display_next_steps_impl(
     output_path: Path,
     qs_config: QuickScaleConfig,
     no_docker: bool,
@@ -2415,6 +2458,25 @@ def _display_next_steps(
     click.echo("\n  Visit: http://localhost:8000")
 
 
+def _display_next_steps(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+    no_docker: bool,
+    docker_started: bool | None = None,
+    *,
+    existing_project: bool = False,
+) -> None:
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
+    step_ctx = StepContext(output_path=output_path, qs_config=qs_config)
+    step_display_next_steps(
+        step_ctx,
+        display_next_steps_fn=_display_next_steps_impl,
+        no_docker=no_docker,
+        docker_started=docker_started,
+        existing_project=existing_project,
+    )
+
+
 def _prepare_apply_context(config_path: Path) -> ApplyContext:
     """Prepare all context needed for apply execution.
 
@@ -2495,36 +2557,49 @@ def _regenerate_managed_wiring_for_apply(
     ctx: ApplyContext,
     embedded_modules: list[str],
 ) -> bool:
-    """Regenerate managed module wiring files after embed/config changes."""
-    desired_module_names = sorted(ctx.qs_config.modules.keys())
-    if ctx.existing_state is None:
-        selected_modules = embedded_modules
-    else:
-        # Existing state may include unchanged modules that should remain wired.
-        selected_modules = sorted(
-            set(ctx.delta.modules_unchanged) | set(embedded_modules)
-        )
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
 
-    # If no desired modules are configured, explicitly render empty managed files.
-    if not desired_module_names:
-        selected_modules = []
+    def _wiring_fn(
+        output_path: Path,
+        module_names: list[str],
+        qs_config: Any,
+        existing_state: Any | None,
+        delta: Any | None,
+    ) -> tuple[bool, str]:
+        try:
+            desired_module_names = sorted(qs_config.modules.keys())
+            if existing_state is None:
+                selected = module_names
+            else:
+                unchanged = getattr(delta, "modules_unchanged", []) if delta else []
+                selected = sorted(set(unchanged) | set(module_names))
+            if not desired_module_names:
+                selected = []
+            options = {m: c.options for m, c in qs_config.modules.items()}
+            return regenerate_managed_wiring(
+                output_path,
+                module_names=selected,
+                option_overrides=options,
+                project_package=qs_config.project.package,
+            )
+        except Exception as exc:
+            return False, str(exc)
 
-    options = {
-        module_name: module_config.options
-        for module_name, module_config in ctx.qs_config.modules.items()
-    }
-
-    success, message = regenerate_managed_wiring(
-        ctx.output_path,
-        module_names=selected_modules,
-        option_overrides=options,
-        project_package=ctx.qs_config.project.package,
+    step_ctx = _build_step_context(ctx, embedded_modules=embedded_modules)
+    outcome = step_regenerate_wiring(
+        step_ctx,
+        embedded_modules=embedded_modules,
+        regenerate_wiring_fn=_wiring_fn,
     )
-    if success:
-        click.secho("✅ Managed module wiring regenerated", fg="green")
+
+    if outcome.success:
+        if step_ctx.reporter:
+            step_ctx.reporter("Managed module wiring regenerated", ok=True)
         return True
 
-    click.secho(f"❌ Managed wiring regeneration failed: {message}", fg="red", err=True)
+    click.secho(
+        f"❌ Managed wiring regeneration failed: {outcome.message}", fg="red", err=True
+    )
     return False
 
 
@@ -2580,45 +2655,49 @@ def _finalize_apply_state(
     *,
     checkpoint_tree_id: str,
 ) -> None:
-    """Persist authoritative state and keep rerun recovery if it fails."""
-    if _save_project_state(
-        ctx.output_path,
-        ctx.qs_config,
-        ctx.existing_state,
-        list(post_embed_state.modules.keys()),
-        ctx.delta,
-        state_snapshot=post_embed_state,
-    ):
-        _clear_apply_recovery_state(ctx.output_path)
-        return
+    """Thin wrapper delegating to core step body (AF6 Phase 2)."""
 
-    recovery_saved = _save_apply_recovery_state(
-        ctx.output_path,
-        ctx.qs_config,
-        ctx.existing_state,
-        list(post_embed_state.modules.keys()),
-        ctx.delta,
-        state_snapshot=post_embed_state,
+    def _save_state() -> bool:
+        return _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            list(post_embed_state.modules.keys()),
+            ctx.delta,
+            state_snapshot=post_embed_state,
+        )
+
+    def _save_recovery(*, checkpoint_tree_id: str) -> bool:
+        return _save_apply_recovery_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            list(post_embed_state.modules.keys()),
+            ctx.delta,
+            state_snapshot=post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
+        )
+
+    def _clear_recovery() -> None:
+        _clear_apply_recovery_state(ctx.output_path)
+
+    step_ctx = _build_step_context(ctx, state_snapshot=post_embed_state)
+    outcome = step_finalize_state(
+        step_ctx,
+        save_project_state_fn=_save_state,
+        save_recovery_state_fn=_save_recovery,
+        clear_recovery_state_fn=_clear_recovery,
         checkpoint_tree_id=checkpoint_tree_id,
     )
-    if recovery_saved:
-        _print_apply_failure_summary(
-            failed_step=_FAILED_STEP["authoritative state persistence"],
-            reason=(
-                "All apply steps completed, but QuickScale could not save "
-                ".quickscale/state.yml. Recovery state was saved to "
-                f".quickscale/{_APPLY_RECOVERY_FILENAME} so apply remains rerunnable."
-            ),
-        )
-        raise click.Abort()
+
+    if outcome.success:
+        return
 
     _print_apply_failure_summary(
-        failed_step=_FAILED_STEP["authoritative state persistence"],
-        reason=(
-            "All apply steps completed, but QuickScale could not save "
-            ".quickscale/state.yml and could not preserve rerunnable recovery state "
-            f"in .quickscale/{_APPLY_RECOVERY_FILENAME}."
+        failed_step=_FAILED_STEP.get(
+            "authoritative state persistence", "authoritative state persistence"
         ),
+        reason=str(outcome.message),
     )
     raise click.Abort()
 
@@ -2693,6 +2772,132 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
     ctx.delta = delta
     ctx.has_pending_post_embed_recovery = recovery_state is not None
     ctx.had_existing_state = True
+
+
+# ---------------------------------------------------------------------------
+# AF6 Phase 2 — Step context adapter
+# ---------------------------------------------------------------------------
+
+
+def _build_step_context(
+    ctx: ApplyContext,
+    *,
+    state_snapshot: Any = None,
+    embedded_modules: list[str] | None = None,
+    no_docker: bool = False,
+    verbose_docker: bool = False,
+) -> StepContext:
+    """Build a core-safe :class:`StepContext` from the CLI-level :class:`ApplyContext`."""
+    return StepContext(
+        output_path=ctx.output_path,
+        qs_config=ctx.qs_config,
+        existing_state=getattr(ctx, "existing_state", None),
+        state_snapshot=state_snapshot,
+        manifests=getattr(ctx, "manifests", {}),
+        delta=getattr(ctx, "delta", None),
+        embedded_modules=embedded_modules or [],
+        no_docker=no_docker,
+        verbose_docker=verbose_docker,
+    )
+
+
+# ---------------------------------------------------------------------------
+# AF6 Phase 2 — CLI adapters for inline step bodies
+# ---------------------------------------------------------------------------
+
+
+def _exec_step_post_embed_snapshot(
+    ctx: ApplyContext,
+    embedded_modules: list[str],
+    provenance_payloads: dict[str, ModuleEmbedProvenance] | None,
+) -> tuple[QuickScaleState | None, str | None]:
+    """Adapter for step 2 (post-embed state snapshot + git index capture).
+
+    Returns ``(post_embed_state, checkpoint_tree_id)`` on success, or
+    ``(None, None)`` and raises ``click.Abort`` on failure.
+    """
+    step_ctx = _build_step_context(ctx, embedded_modules=embedded_modules)
+
+    def _build_snapshot() -> QuickScaleState | None:
+        return _build_project_state_snapshot(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+            provenance_payloads=provenance_payloads,
+        )
+
+    def _capture_index() -> GitIndexSnapshot | None:
+        snapshot = _capture_git_index_snapshot(ctx.output_path)
+        if snapshot is None:
+            return None
+        return GitIndexSnapshot(tree_id=snapshot.tree_id)
+
+    outcome = step_post_embed_snapshot(
+        step_ctx,
+        build_state_snapshot=_build_snapshot,
+        capture_git_index=_capture_index,
+    )
+
+    if not outcome.success:
+        _print_apply_failure_summary(
+            failed_step="post-embed state snapshot",
+            reason=str(outcome.message),
+        )
+        raise click.Abort()
+
+    post_embed_state = cast(QuickScaleState, step_ctx.state_snapshot)
+    return post_embed_state, step_ctx.checkpoint_tree_id or ""
+
+
+def _exec_step_apply_mutable_config(ctx: ApplyContext) -> None:
+    """Adapter for step 11 (apply mutable config).
+
+    Informational step — never fails.
+    """
+    step_ctx = _build_step_context(ctx)
+    step_apply_mutable_config(step_ctx)
+
+
+def _exec_step_railway_deploy(
+    ctx: ApplyContext,
+    post_embed_state: QuickScaleState,
+    *,
+    checkpoint_tree_id: str,
+) -> None:
+    """Adapter for step 14 (Railway deploy).
+
+    Raises ``click.Abort`` on failure via ``_abort_after_post_embed_failure``.
+    """
+    is_railway_linked = (ctx.output_path / ".railway").is_dir()
+
+    def _deploy_fn(
+        project_path: Path,
+        service_name: str,
+    ) -> Any:
+        return deploy_railway_service(
+            project_path=project_path,
+            service_name=service_name,
+        )
+
+    step_ctx = _build_step_context(ctx, state_snapshot=post_embed_state)
+
+    outcome = step_railway_deploy(
+        step_ctx,
+        is_railway_linked=is_railway_linked,
+        deploy_railway_fn=_deploy_fn,
+        get_service_name_fn=get_app_service_name,
+    )
+
+    if not outcome.success:
+        _abort_after_post_embed_failure(
+            ctx,
+            post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
+            failed_step="railway deploy",
+            reason=str(outcome.message),
+        )
 
 
 def _execute_apply_steps(
@@ -2823,38 +3028,16 @@ def _execute_apply_steps_locked(
         )
         raise click.Abort()
 
-    try:
-        post_embed_state = _build_project_state_snapshot(
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            embedded_modules,
-            ctx.delta,
-            provenance_payloads=provenance_payloads,
-        )
-    except Exception as error:
-        _print_apply_failure_summary(
-            failed_step=_FAILED_STEP["post-embed state snapshot"],
-            reason=(
-                "QuickScale could not compute the post-embed state required for "
-                f"safe apply recovery: {error}"
-            ),
-        )
-        raise click.Abort() from error
-
-    # Capture the git index checkpoint immediately after embedding succeeds
-    # and before any post-embed steps modify the working tree.  Threading
-    # the exact tree id through the recovery save path (instead of
-    # re-capturing later) ensures the ledger records the authoritative
-    # post-embed index state (CR-F12.1E-002).
-    checkpoint_snapshot = _capture_git_index_snapshot(ctx.output_path)
-    if checkpoint_snapshot is None:
-        _print_apply_failure_summary(
-            failed_step=_FAILED_STEP["post-embed state snapshot"],
-            reason="QuickScale could not capture the git index tree id after module embedding for apply recovery state.",
-        )
-        raise click.Abort()
-    checkpoint_tree_id = checkpoint_snapshot.tree_id
+    # AF6 Phase 2 — post-embed state snapshot (step 2) delegated to core step body
+    post_embed_state, checkpoint_tree_id = _exec_step_post_embed_snapshot(
+        ctx,
+        embedded_modules,
+        provenance_payloads,
+    )
+    # Narrow the optional types: the adapter raises click.Abort on failure,
+    # so these are always populated past this point.
+    assert post_embed_state is not None
+    assert checkpoint_tree_id is not None
 
     # Deterministic managed wiring generation for selected modules.
     if not _regenerate_managed_wiring_for_apply(ctx, embedded_modules):
@@ -2944,12 +3127,8 @@ def _execute_apply_steps_locked(
             reason="Poetry lock refresh, dependency installation, or local migrations failed after module dependency sync.",
         )
 
-    # Apply mutable configuration changes
-    if ctx.existing_state and ctx.delta.has_mutable_config_changes:
-        click.secho(
-            "✅ Mutable configuration changes applied via managed wiring",
-            fg="green",
-        )
+    # AF6 Phase 2 — apply mutable config (step 11) delegated to core step body
+    _exec_step_apply_mutable_config(ctx)
 
     # Start Docker
     docker_started: bool | None = None
@@ -2979,41 +3158,12 @@ def _execute_apply_steps_locked(
                     reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
                 )
 
-    # Railway deploy (if project is Railway-linked)
-    # The .railway directory is created by `railway init` when the project
-    # is linked to a Railway project, making it the correct gate.
-    # railway.json alone is not sufficient — the ProjectGenerator always
-    # creates one from template.
-    if (ctx.output_path / ".railway").is_dir():
-        service_name = get_app_service_name(ctx.qs_config.project.slug)
-        try:
-            result = deploy_railway_service(
-                project_path=ctx.output_path,
-                service_name=service_name,
-            )
-        except (FileNotFoundError, TimeoutError) as error:
-            _abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["railway deploy"],
-                reason=f"Railway CLI error: {error}",
-            )
-
-        if result.returncode != 0:
-            error_detail = (result.stderr or result.stdout or "").strip()
-            reason = (
-                error_detail or "Railway deploy command returned non-zero exit code"
-            )
-            _abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["railway deploy"],
-                reason=reason,
-            )
-
-        click.secho("✅ Railway deploy triggered", fg="green")
+    # AF6 Phase 2 — Railway deploy (step 14) delegated to core step body
+    _exec_step_railway_deploy(
+        ctx,
+        post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+    )
 
     # Save state
     _finalize_apply_state(ctx, post_embed_state, checkpoint_tree_id=checkpoint_tree_id)
