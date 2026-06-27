@@ -1145,7 +1145,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ❌ **App-layer-only filtering without RLS** — no defence-in-depth; a single missed filter leaks cross-tenant data
 - ❌ **PostgreSQL schema-per-tenant isolation** — schema metadata bloat, migration complexity with many tenants
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (open implementation tasks T1.17–T1.20) | [findings.md](../../findings.md) (current risk posture)
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (open implementation tasks D1, AF1–AF7) | [findings.md](../../findings.md) (current risk posture)
 
 ---
 
