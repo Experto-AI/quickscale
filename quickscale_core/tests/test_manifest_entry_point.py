@@ -7,6 +7,7 @@ quickscale_core without a quickscale_cli dependency:
 - build_manifest_wiring_spec routing for unknown modules.
 - Custom adapter registration and unregistration.
 - Public exports from quickscale_core.manifest.
+- Provenance-sensitive checks for module-owned vs core fallback adapters.
 
 Integration tests that call build_manifest_wiring_spec('analytics', ...)
 live in quickscale_cli/tests/test_manifest_entry_point_integration.py,
@@ -15,15 +16,21 @@ where both packages are on sys.path.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from quickscale_core.manifest import (
     MANIFEST_ADAPTER_REGISTRY,
     ManifestAdapterNotFound,
+    build_generic_manifest_spec,
     build_manifest_wiring_spec,
+    load_module_manifest,
+    refresh_managed_adapters,
 )
 from quickscale_core.manifest.entry_point import (
     MANIFEST_ADAPTER_REGISTRY as REGISTRY_DIRECT,
+    MANAGED_ADAPTER_ORIGINS,
     ManifestAdapterNotFound as ManifestAdapterNotFoundDirect,
     build_manifest_wiring_spec as build_manifest_wiring_spec_direct,
 )
@@ -379,3 +386,155 @@ class TestRegisteredAdapterPaths:
             assert isinstance(spec, ModuleWiringSpec), (
                 f"{name} adapter failed with project_package kwarg"
             )
+
+
+# ---------------------------------------------------------------------------
+# Provenance-sensitive tests (AF7-CR-002): verify that
+# module-owned adapters are selected in monorepo/embedded contexts
+# and that core fallbacks exist for bundled/installed contexts.
+# ---------------------------------------------------------------------------
+
+
+class TestManagedAdapterProvenance:
+    """Verify the AF7 hybrid discovery contract.
+
+    In monorepo / embedded contexts the module-owned adapter (from
+    ``quickscale_modules_{name}.adapter``) should be the active
+    registry entry.  In bundled / installed contexts the core
+    fallback adapter should be used instead.
+    """
+
+    _MANAGED_MODULES = frozenset({"social", "billing", "crm"})
+
+    def test_module_owned_adapters_are_active_in_monorepo(self) -> None:
+        """When the module package is importable (monorepo/embedded context),
+        the registry entry for each managed module should be the module-owned
+        implementation, not the core fallback."""
+        for name in self._MANAGED_MODULES:
+            assert name in MANIFEST_ADAPTER_REGISTRY, f"{name} not registered"
+            fn_file = inspect.getfile(MANIFEST_ADAPTER_REGISTRY[name])
+            assert "quickscale_modules" in fn_file, (
+                f"{name} adapter should be module-owned in monorepo context, "
+                f"but source is {fn_file}"
+            )
+
+    def test_module_owned_adapter_source_location(self) -> None:
+        """Each managed module's active adapter comes from its own package."""
+        expected = {
+            "social": "quickscale_modules_social/adapter.py",
+            "billing": "quickscale_modules_billing/adapter.py",
+            "crm": "quickscale_modules_crm/adapter.py",
+        }
+        for name, expected_suffix in expected.items():
+            fn_file = inspect.getfile(MANIFEST_ADAPTER_REGISTRY[name])
+            assert fn_file.endswith(expected_suffix), (
+                f"{name} adapter expected to end with {expected_suffix}, got {fn_file}"
+            )
+
+    def test_module_owned_adapter_produces_valid_spec(self) -> None:
+        """Module-owned adapters produce a valid ModuleWiringSpec via
+        the public build_manifest_wiring_spec entry point."""
+        for name in self._MANAGED_MODULES:
+            if name == "social":
+                spec = build_manifest_wiring_spec(
+                    "social", {}, project_package="myproject"
+                )
+            else:
+                spec = build_manifest_wiring_spec(name, {})
+            assert isinstance(spec, ModuleWiringSpec), (
+                f"{name} module-owned adapter did not return ModuleWiringSpec"
+            )
+            # Verify module-specific keys are present.
+            if name == "social":
+                assert "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED" in spec.settings
+                assert len(spec.managed_files) == 3
+            elif name == "billing":
+                assert "quickscale_modules_billing" in spec.apps
+                assert "QUICKSCALE_BILLING_ENABLED" in spec.settings
+            elif name == "crm":
+                assert "quickscale_modules_crm" in spec.apps
+                assert "CRM_DEALS_PER_PAGE" in spec.settings
+
+    def test_core_fallbacks_exist_for_bundled_context(self) -> None:
+        """Core fallback adapters are registered in _CORE_FALLBACK_ADAPTERS
+        for every managed module, so that bundled/installed contexts (where
+        module packages are not importable) still work."""
+        from quickscale_core.manifest.entry_point import (
+            _CORE_FALLBACK_ADAPTERS,
+        )
+
+        for name in self._MANAGED_MODULES:
+            assert name in _CORE_FALLBACK_ADAPTERS, (
+                f"Core fallback for {name} not registered"
+            )
+            assert callable(_CORE_FALLBACK_ADAPTERS[name]), (
+                f"Core fallback for {name} is not callable"
+            )
+
+    def test_core_fallback_source_is_core_not_module(self) -> None:
+        """Core fallback adapters are defined in entry_point.py, not in
+        module packages."""
+        from quickscale_core.manifest.entry_point import (
+            _CORE_FALLBACK_ADAPTERS,
+        )
+
+        for name in self._MANAGED_MODULES:
+            fn_file = inspect.getfile(_CORE_FALLBACK_ADAPTERS[name])
+            assert "quickscale_core" in fn_file, (
+                f"Core fallback for {name} should be in core, got {fn_file}"
+            )
+
+    def test_core_fallback_and_module_owned_are_different_objects(self) -> None:
+        """Module-owned adapters and core fallbacks are distinct function
+        objects, proving the adapter logic truly lives in the module."""
+        from quickscale_core.manifest.entry_point import (
+            _CORE_FALLBACK_ADAPTERS,
+        )
+
+        for name in self._MANAGED_MODULES:
+            module_owned = MANIFEST_ADAPTER_REGISTRY[name]
+            core_fallback = _CORE_FALLBACK_ADAPTERS[name]
+            assert module_owned is not core_fallback, (
+                f"{name} module-owned and core fallback are the same object — "
+                f"the adapter logic is NOT truly in the module package"
+            )
+
+    def test_managed_adapter_origins_refect_registered_modules(self) -> None:
+        """MANAGED_ADAPTER_ORIGINS contains exactly the managed modules."""
+        assert MANAGED_ADAPTER_ORIGINS == self._MANAGED_MODULES, (
+            f"Expected MANAGED_ADAPTER_ORIGINS to be {self._MANAGED_MODULES}, "
+            f"got {MANAGED_ADAPTER_ORIGINS}"
+        )
+
+    def test_custom_entries_preserved_after_refresh(self) -> None:
+        """Custom (non-managed) entries survive a call to
+        refresh_managed_adapters unchanged."""
+        original = dict(MANIFEST_ADAPTER_REGISTRY)
+        try:
+            MANIFEST_ADAPTER_REGISTRY["_test_custom"] = lambda opts, **kw: (
+                ModuleWiringSpec()
+            )
+            refresh_managed_adapters()
+            assert "_test_custom" in MANIFEST_ADAPTER_REGISTRY, (
+                "Custom entry was removed after refresh"
+            )
+            # Managed entries should still be present.
+            for name in self._MANAGED_MODULES:
+                assert name in MANIFEST_ADAPTER_REGISTRY
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original)
+
+    def test_public_functions_exported(self) -> None:
+        """New public functions are exportable from the manifest package."""
+        assert callable(build_generic_manifest_spec)
+        assert callable(load_module_manifest)
+        assert callable(refresh_managed_adapters)
+        # backward-compat private aliases still work.
+        from quickscale_core.manifest.entry_point import (
+            _build_generic_manifest_spec,
+            _load_module_manifest,
+        )
+
+        assert _build_generic_manifest_spec is build_generic_manifest_spec
+        assert _load_module_manifest is load_module_manifest

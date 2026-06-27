@@ -62,6 +62,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) that previously duplicated per-module config normalization/validation/derivation have been deleted; all callers now resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
 - Mutable options are applied through the documented plan/apply flow; immutable options remain embed-time contract and must not be rewritten silently.
 - Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. Known placeholder directories (e.g. `teams`) that lack a `module.yml` are excluded from discovery and fail closed. The static `MODULE_CATALOG` is supplemented but callers should prefer `get_discovered_module_entries()` for the authoritative list.
+- Manifest adapters use a hybrid discovery contract (AF7): module-owned adapters in ``quickscale_modules/{name}/adapter.py`` are primary for monorepo contexts, while core compatibility fallback adapters remain for bundled/installed fallback. See [Manifest Adapter Architecture](#manifest-adapter-architecture-af7).
 - Generated projects remain standalone even when modules are embedded.
 - When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
 
@@ -206,6 +207,44 @@ class OrderProcessor:
         from quickscale_modules.payments import services
         self.payment_service = payment_service or services.DefaultPaymentService()
 ```
+
+### Manifest Adapter Architecture (AF7)
+
+Starting v0.87.0, manifest adapters follow a **hybrid discovery contract**:
+
+1. **Module-owned adapters** are the primary path for monorepo and embedded
+   ``modules/<name>`` contexts. Each module package (``quickscale_modules/{name}/``)
+   may ship an ``adapter.py`` that exposes a ``get_manifest_adapter()`` sentinel
+   function. Core's :func:`refresh_managed_adapters` discovers these via
+   ``quickscale_modules_{name}.adapter`` imports during registry refresh.
+
+2. **Core compatibility fallback adapters** live in
+   ``quickscale_core.manifest.entry_point`` and are used when the module-owned
+   adapter is not importable (bundled/installed contexts where only manifest
+   ``yml`` files are shipped in the ``quickscale_core`` package, not module
+   Python source).
+
+3. **Origin tracking:** :data:`MANAGED_ADAPTER_ORIGINS` tracks which registry
+   entries are system-managed. Custom entries added by end users survive
+   refresh unchanged. Call ``refresh_managed_adapters()`` after
+   :func:`set_modules_base_path()` to keep the registry consistent.
+
+4. **Refresh coordination:** :func:`~quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring`
+   calls ``refresh_managed_adapters()`` after changing and restoring the modules
+   base path, ensuring the correct adapter set is active for each context.
+
+Currently managed adapters: social, billing, CRM. Remaining modules
+(analytics, blog, listings, forms, backups, notifications, auth, orgs,
+storage) are still registered at import time in ``entry_point.py`` and may be
+migrated in future phases.
+
+> **AF7 status — partial (blocked by AF7-CR-003).** The module-owned primary
+> adapters and infrastructure seam have landed (managed-origin tracking,
+> provenance tests, refresh coordination). However, the bundled/installed core
+> fallback adapters for social, billing, and CRM are currently too thin and no
+> longer preserve parity with the module-owned implementations. Bundled-context
+> regression coverage is also missing. Until the fallbacks are restored to
+> parity and regression tests are added, AF7 remains open.
 
 ### Configuration Boundaries
 

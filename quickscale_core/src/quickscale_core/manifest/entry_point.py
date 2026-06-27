@@ -6,10 +6,19 @@ produce a complete :class:`~quickscale_core.module_wiring.ModuleWiringSpec`.
 
 Module adapter registration
 ---------------------------
-Manifest adapters register themselves by populating
-:data:`MANIFEST_ADAPTER_REGISTRY`.  Each entry is a callable that accepts
- ``(options, *, project_package)`` and returns a
-:class:`~quickscale_core.module_wiring.ModuleWiringSpec`.
+Manifest adapters are registered in :data:`MANIFEST_ADAPTER_REGISTRY` via one
+of two paths:
+
+1. **Managed origin** (AF7) — modules whose adapter is owned by the module
+   package (social, billing, CRM).  The registry entry is established by
+   :func:`refresh_managed_adapters`, which first attempts to import a
+   module-owned adapter from ``quickscale_modules_{name}.adapter`` and falls
+   back to a core compatibility adapter when the module package is not
+   importable (bundled/installed context).
+
+2. **Import-time** — modules registered directly at module load time
+   (analytics, blog, listings, forms, backups, notifications, auth, orgs,
+   storage).  These are not affected by :func:`refresh_managed_adapters`.
 
 All catalog modules are registered: analytics, billing, blog, listings, CRM,
 forms, backups, notifications, auth, orgs, storage, and social.
@@ -53,7 +62,7 @@ from quickscale_core.module_wiring import ModuleWiringSpec
 _manifest_cache: dict[tuple[str, str], Any] = {}
 
 
-def _load_module_manifest(module_name: str) -> Any:
+def load_module_manifest(module_name: str) -> Any:
     """Load the ``module.yml`` manifest for *module_name*.
 
     Uses a module-level cache keyed by ``(module_name, base_path_str)`` to
@@ -80,7 +89,11 @@ def _load_module_manifest(module_name: str) -> Any:
     return manifest
 
 
-def _build_generic_manifest_spec(
+# Backward-compat alias for in-repo callers that import the private name.
+_load_module_manifest = load_module_manifest
+
+
+def build_generic_manifest_spec(
     module_name: str,
     options: dict[str, Any] | None,
     *,
@@ -98,6 +111,11 @@ def _build_generic_manifest_spec(
     that the declarative resolver cannot express (type coercions, static
     settings, conditional branches).
 
+    This function is the **public** version of the generic manifest path.  It
+    is used by module-owned adapters (social, billing, CRM) as well as the
+    import-time-registered modules.  The underscore-prefixed alias
+    ``_build_generic_manifest_spec`` is preserved for backward compatibility.
+
     Args:
         module_name: The module name (e.g. ``"analytics"``).
         options: Module options (e.g. from ``quickscale.yml``).  ``None``
@@ -114,7 +132,7 @@ def _build_generic_manifest_spec(
         ManifestError: If the module's manifest cannot be loaded or has no
             derivation section.
     """
-    manifest = _load_module_manifest(module_name)
+    manifest = load_module_manifest(module_name)
     schema = build_schema_from_manifest(
         manifest_name=module_name,
         wiring_projections=manifest.wiring_projections,
@@ -132,8 +150,12 @@ def _build_generic_manifest_spec(
     return assemble_wiring_spec(result, post_hook=post_hook)
 
 
+# Backward-compat alias for in-repo callers that import the private name.
+_build_generic_manifest_spec = build_generic_manifest_spec
+
+
 # ---------------------------------------------------------------------------
-# Adapter registry
+# Adapter registry + origin tracking
 # ---------------------------------------------------------------------------
 
 #: Registry mapping module name -> manifest adapter callable.
@@ -145,6 +167,92 @@ MANIFEST_ADAPTER_REGISTRY: dict[
     str,
     Callable[..., ModuleWiringSpec],
 ] = {}
+
+#: Set of module names whose registry entry is "managed" — auto-registered
+#: by the system from module-owned adapters or core fallback adapters.
+#: Custom entries added by end users (or by extensions that are not part of
+#: the shipped catalog) are **not** tracked here and survive
+#: :func:`refresh_managed_adapters` unchanged.
+MANAGED_ADAPTER_ORIGINS: set[str] = set()
+
+#: Core fallback adapters keyed by module name.  These are used when the
+#: module-owned adapter cannot be imported (bundled/installed contexts where
+#: the module package source is not available, e.g. ``quickscale_core/data/manifests/``).
+_CORE_FALLBACK_ADAPTERS: dict[str, Callable[..., ModuleWiringSpec]] = {}
+
+
+def refresh_managed_adapters() -> None:
+    """Refresh managed adapter entries in :data:`MANIFEST_ADAPTER_REGISTRY`
+    based on the current modules base path.
+
+    Decisions are made per module name in :data:`MANAGED_ADAPTER_ORIGINS`:
+
+    1. **Monorepo / embedded context** — if the module has a ``module.yml``
+       at the active base path **and** the module package is importable, the
+       module-owned adapter (``quickscale_modules_{name}.adapter``) is used.
+       This is the primary path for monorepo development and embedded
+       project ``modules/<name>/`` directories.
+
+    2. **Bundled / installed context** — if the module's ``module.yml`` is
+       **not** at the active base path, or the module package is not
+       importable, the core fallback adapter from
+       :data:`_CORE_FALLBACK_ADAPTERS` is used.  This is the fallback for
+       installed ``quickscale-core`` where only manifest yml files are
+       shipped.
+
+    3. **No adapter available** — if neither the module-owned adapter nor a
+       core fallback is available, the module is removed from the registry
+       and from :data:`MANAGED_ADAPTER_ORIGINS`.
+
+    The :data:`MANIFEST_ADAPTER_REGISTRY` dict identity is preserved across
+    refreshes so that existing references remain valid.  Custom entries
+    (those not in :data:`MANAGED_ADAPTER_ORIGINS`) are **preserved** unchanged.
+
+    Call this after :func:`~quickscale_core.contracts.module_discovery.set_modules_base_path`
+    to keep the registry consistent with the current path context.
+    """
+    import importlib  # noqa: PLC0415
+
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        discover_shipped_module_names,
+    )
+
+    shipped_at_base = set(discover_shipped_module_names())
+
+    for module_name in list(MANAGED_ADAPTER_ORIGINS):
+        # Step 1: If the module has a manifest at the active base path,
+        # try the module-owned adapter (monorepo / embedded context).
+        owned_adapter: Callable[..., ModuleWiringSpec] | None = None
+        if module_name in shipped_at_base:
+            try:
+                adapter_module = importlib.import_module(
+                    f"quickscale_modules_{module_name}.adapter"
+                )
+                sentinel = getattr(adapter_module, "get_manifest_adapter", None)
+                if sentinel is not None:
+                    owned_adapter = sentinel()
+            except ImportError:
+                pass
+
+        if owned_adapter is not None:
+            MANIFEST_ADAPTER_REGISTRY[module_name] = owned_adapter
+            continue
+
+        # Step 2: Fall back to core compatibility adapter (bundled context).
+        fallback = _CORE_FALLBACK_ADAPTERS.get(module_name)
+        if fallback is not None:
+            MANIFEST_ADAPTER_REGISTRY[module_name] = fallback
+            # Keep the module in MANAGED_ADAPTER_ORIGINS so it gets
+            # re-evaluated on the next refresh (e.g. when base path
+            # changes to a context where the module-owned adapter is
+            # available).
+            continue
+
+        # Step 3: Neither fallback nor owned adapter is available — remove
+        # from registry and origins so subsequent calls don't retry the
+        # same dead entry.
+        MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
+        MANAGED_ADAPTER_ORIGINS.discard(module_name)
 
 
 # ---------------------------------------------------------------------------
@@ -244,67 +352,34 @@ MANIFEST_ADAPTER_REGISTRY["analytics"] = _analytics_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Billing adapter (C1 — uses generic manifest path)
+# Billing adapter — core fallback (bundled/installed contexts)
 # ---------------------------------------------------------------------------
+# The primary billing adapter lives in
+# ``quickscale_modules_billing.adapter``.  This core fallback is a thin
+# compatibility wrapper used when the module package is not importable
+# (bundled/installed fallback).
 
 
-def _billing_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
-) -> ModuleWiringSpec:
-    """Apply billing-specific bool/string coercions."""
-    settings = dict(spec.settings)
-
-    # Legacy bool() coercion on enabled flag.
-    settings["QUICKSCALE_BILLING_ENABLED"] = bool(
-        settings.get("QUICKSCALE_BILLING_ENABLED", True)
-    )
-
-    # Legacy str() coercion on string fields.
-    for str_key in (
-        "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-        "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-        "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-        "QUICKSCALE_BILLING_CURRENCY",
-    ):
-        if str_key in settings:
-            settings[str_key] = str(settings[str_key])
-
-    return ModuleWiringSpec(
-        apps=spec.apps,
-        middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        managed_files=spec.managed_files,
-    )
-
-
-def _billing_manifest_adapter(
+def _billing_core_fallback(
     options: dict[str, Any],
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the billing module via the manifest path.
+    """Core fallback billing adapter (bundled/installed context).
 
-    Uses the generic manifest-driven path that reads derivation rules from the
-    billing ``module.yml`` manifest.
-
-    Args:
-        options: Module options (e.g. from ``quickscale.yml``).
-        project_package: Unused for billing; present for signature parity.
-
-    Returns:
-        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
-        billing that is equal to the legacy ``_billing_wiring`` output.
+    Thin compatibility wrapper that delegates to the generic manifest path.
+    The primary implementation lives in ``quickscale_modules_billing.adapter``.
     """
-    return _build_generic_manifest_spec(
-        "billing",
-        options,
-        post_hook=_billing_post_hook,
-    )
+    return build_generic_manifest_spec("billing", options)
 
 
-MANIFEST_ADAPTER_REGISTRY["billing"] = _billing_manifest_adapter
+# Register billing as a managed adapter.  The module-owned adapter
+# (quickscale_modules_billing.adapter) is used when available (monorepo /
+# embedded context).  When it is not available (bundled/installed context
+# where only manifest yml files are shipped), this core fallback adapter
+# is used instead.
+_CORE_FALLBACK_ADAPTERS["billing"] = _billing_core_fallback
+MANAGED_ADAPTER_ORIGINS.add("billing")
 
 
 # ---------------------------------------------------------------------------
@@ -430,57 +505,33 @@ MANIFEST_ADAPTER_REGISTRY["listings"] = _listings_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# CRM adapter (C6 — uses generic manifest path)
+# CRM adapter — core fallback (bundled/installed contexts)
 # ---------------------------------------------------------------------------
+# The primary CRM adapter lives in ``quickscale_modules_crm.adapter``.
+# This core fallback is a thin compatibility wrapper used when the module
+# package is not importable (bundled/installed fallback).
 
 
-def _crm_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
-) -> ModuleWiringSpec:
-    """Apply CRM-specific int/bool coercions."""
-    settings = dict(spec.settings)
-
-    # Legacy int()/bool() coercions.
-    settings["CRM_DEALS_PER_PAGE"] = int(settings.get("CRM_DEALS_PER_PAGE", 25))
-    settings["CRM_CONTACTS_PER_PAGE"] = int(settings.get("CRM_CONTACTS_PER_PAGE", 50))
-    settings["CRM_ENABLE_API"] = bool(settings.get("CRM_ENABLE_API", True))
-
-    return ModuleWiringSpec(
-        apps=spec.apps,
-        middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        managed_files=spec.managed_files,
-    )
-
-
-def _crm_manifest_adapter(
+def _crm_core_fallback(
     options: dict[str, Any],
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the CRM module via the manifest path.
+    """Core fallback CRM adapter (bundled/installed context).
 
-    Uses the generic manifest-driven path that reads derivation rules from the
-    CRM ``module.yml`` manifest.
-
-    Args:
-        options: Module options (e.g. from ``quickscale.yml``).
-        project_package: Unused for CRM; present for signature parity.
-
-    Returns:
-        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
-        CRM that is equal to the legacy ``_crm_wiring`` output.
+    Thin compatibility wrapper that delegates to the generic manifest path.
+    The primary implementation lives in ``quickscale_modules_crm.adapter``.
     """
-    return _build_generic_manifest_spec(
-        "crm",
-        options,
-        post_hook=_crm_post_hook,
-    )
+    return build_generic_manifest_spec("crm", options)
 
 
-MANIFEST_ADAPTER_REGISTRY["crm"] = _crm_manifest_adapter
+# Register CRM as a managed adapter.  The module-owned adapter
+# (quickscale_modules_crm.adapter) is used when available (monorepo /
+# embedded context).  When it is not available (bundled/installed context
+# where only manifest yml files are shipped), this core fallback adapter
+# is used instead.
+_CORE_FALLBACK_ADAPTERS["crm"] = _crm_core_fallback
+MANAGED_ADAPTER_ORIGINS.add("crm")
 
 
 # ---------------------------------------------------------------------------
@@ -1352,163 +1403,61 @@ MANIFEST_ADAPTER_REGISTRY["storage"] = _storage_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Social adapter (Track 2 Phase 1.3 — Phase 2)
+# Social adapter — core fallback (bundled/installed contexts)
 # ---------------------------------------------------------------------------
+# The primary social adapter lives in
+# ``quickscale_modules_social.adapter``.  This core fallback is a thin
+# compatibility wrapper used when the module package is not importable
+# (bundled/installed fallback).
 
 
-def _social_manifest_adapter(
+def _social_core_fallback(
     options: dict[str, Any],
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the social module via the manifest path.
+    """Core fallback social adapter (bundled/installed context).
 
-    Settings: ``QUICKSCALE_SOCIAL_*`` keys derived from resolved options plus
-    fixed path constants.
-    URL includes: a single ``project_package``-qualified include pointing at
-    ``{project_package}.quickscale_managed.social_urls``.
-    Managed files: sourced from the manifest-declared ``managed_files``
-    contract in ``quickscale_modules/social/module.yml``.  The assembler
-    converts each declaration's ``output_path`` and ``renderer`` into a
-    placeholder mapping; the post-resolution hook then replaces each
-    renderer-ID placeholder with the actual rendered file content.  This
-    keeps the managed-file inventory in the manifest as the single source
-    of truth rather than hardcoding paths in the adapter.
+    Thin compatibility adapter that provides the social wiring spec via
+    the generic manifest path when the module-owned adapter is not
+    available (bundled context where only manifest yml files are shipped).
 
-    The managed-file content is injected via a post-resolution hook that
-    replaces the structural renderer-ID placeholders emitted by the generic
-    assembler with the actual rendered file content.  This keeps the
-    extension local to the social adapter and does not alter the generic
-    assembler behaviour.
-
-    Args:
-        options: Module options (e.g. from ``quickscale.yml``).
-        project_package: The generated project's Python package name.
-            Required for the URL include qualification.
-
-    Returns:
-        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
-        social.
-
-    Raises:
-        ValueError: When *project_package* is ``None``.
+    The primary implementation lives in ``quickscale_modules_social.adapter``.
     """
     if project_package is None:
         raise ValueError("project_package is required for managed social wiring")
 
-    from quickscale_core.contracts.module_options import (  # noqa: PLC0415
-        SOCIAL_EMBEDS_PATH,
-        SOCIAL_INTEGRATION_BASE_PATH,
-        SOCIAL_INTEGRATION_EMBEDS_PATH,
-        SOCIAL_LINK_TREE_PATH,
+    # For the bundled fallback, load the manifest from the active base
+    # path and build a spec with minimal settings.  The rich managed-file
+    # rendering is handled by the module-owned adapter when available.
+    manifest = load_module_manifest("social")
+    schema = build_schema_from_manifest(
+        manifest_name="social",
+        wiring_projections=manifest.wiring_projections,
+        derived_settings=manifest.derived_settings,
+        option_derivations=manifest.option_derivations,
+        version="1",
     )
     from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         resolve_social_module_options,
     )
-    from quickscale_core.manifest.social_manifest import (  # noqa: PLC0415
-        load_social_manifest,
-        render_social_managed_init_module,
-        render_social_managed_urls_module,
-        render_social_managed_views_module,
-        social_provider_supports_embeds,
-    )
-    from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.resolver import (  # noqa: PLC0415
-        ResolverResult,
-    )
 
     resolved = resolve_social_module_options(dict(options))
-    provider_allowlist = list(resolved["provider_allowlist"])
-    embed_provider_allowlist = [
-        provider
-        for provider in provider_allowlist
-        if social_provider_supports_embeds(provider)
-    ]
-
-    derived_settings: dict[str, Any] = {
-        "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED": bool(
-            resolved.get("link_tree_enabled", True)
-        ),
-        "QUICKSCALE_SOCIAL_LAYOUT_VARIANT": str(resolved.get("layout_variant", "list")),
-        "QUICKSCALE_SOCIAL_EMBEDS_ENABLED": bool(resolved.get("embeds_enabled", True)),
-        "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": provider_allowlist,
-        "QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST": embed_provider_allowlist,
-        "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS": int(
-            resolved.get("cache_ttl_seconds", 300)
-        ),
-        "QUICKSCALE_SOCIAL_LINKS_PER_PAGE": int(resolved.get("links_per_page", 24)),
-        "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE": int(resolved.get("embeds_per_page", 12)),
-        "QUICKSCALE_SOCIAL_LINK_TREE_PATH": SOCIAL_LINK_TREE_PATH,
-        "QUICKSCALE_SOCIAL_EMBEDS_PATH": SOCIAL_EMBEDS_PATH,
-        "QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH": SOCIAL_INTEGRATION_BASE_PATH,
-        "QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH": SOCIAL_INTEGRATION_EMBEDS_PATH,
-    }
-
-    # Load the manifest-declared managed_files contract so the assembler
-    # populates spec.managed_files with output_path -> renderer_id mappings
-    # sourced from module.yml rather than hardcoded in this adapter.
-    social_manifest = load_social_manifest()
-    managed_file_declarations = tuple(social_manifest.managed_files.values())
-
-    result = ResolverResult(
-        module_name="social",
-        defaults={},
-        resolved=resolved,
-        derived_settings=derived_settings,
-        apps=(),
-        middleware=(),
-        url_includes=(
-            (
-                SOCIAL_INTEGRATION_BASE_PATH.lstrip("/"),
-                f"{project_package}.quickscale_managed.social_urls",
-            ),
-        ),
-        pre_home_url_includes=(),
-        managed_files=managed_file_declarations,
-    )
-
-    # Post-resolution hook: replace renderer-ID placeholders (sourced from the
-    # manifest-declared managed_files contract) with rendered content.
-    def _social_managed_files_hook(
-        spec: ModuleWiringSpec, resolved_opts: dict[str, Any]
-    ) -> ModuleWiringSpec:
-        from quickscale_core.module_wiring import ModuleWiringSpec as _MWS  # noqa: PLC0415
-
-        # Dispatch table: renderer_id (from module.yml) -> rendered content.
-        # The output_path keys come from spec.managed_files which the assembler
-        # populated from the manifest declarations, not from hardcoded paths.
-        renderer_dispatch: dict[str, str] = {
-            "social.managed_init": render_social_managed_init_module(),
-            "social.managed_urls": render_social_managed_urls_module(),
-            "social.managed_views": render_social_managed_views_module(
-                provider_allowlist,
-                embed_provider_allowlist,
-                layout_variant=str(resolved_opts.get("layout_variant", "list")),
-                cache_ttl_seconds=int(resolved_opts.get("cache_ttl_seconds", 300)),
-                links_per_page=int(resolved_opts.get("links_per_page", 24)),
-                embeds_per_page=int(resolved_opts.get("embeds_per_page", 12)),
-            ),
-        }
-
-        managed_content: dict[str, str] = {}
-        for output_path, renderer_id in spec.managed_files.items():
-            rendered = renderer_dispatch.get(renderer_id)
-            if rendered is not None:
-                managed_content[output_path] = rendered
-
-        return _MWS(
-            apps=spec.apps,
-            middleware=spec.middleware,
-            settings=spec.settings,
-            pre_home_url_includes=spec.pre_home_url_includes,
-            url_includes=spec.url_includes,
-            managed_files=managed_content,
-        )
-
-    return assemble_wiring_spec(result, post_hook=_social_managed_files_hook)
+    result = resolve_module_config(manifest, schema, overrides=resolved)
+    return assemble_wiring_spec(result)
 
 
-MANIFEST_ADAPTER_REGISTRY["social"] = _social_manifest_adapter
+# Register social as a managed adapter.  The module-owned adapter
+# (quickscale_modules_social.adapter) is used when available (monorepo /
+# embedded context).  When it is not available (bundled/installed context
+# where only manifest yml files are shipped), this core fallback adapter
+# is used instead.
+_CORE_FALLBACK_ADAPTERS["social"] = _social_core_fallback
+MANAGED_ADAPTER_ORIGINS.add("social")
+
+# Initialise all managed adapters (social, billing, CRM) in one pass so
+# the registry is consistent at import time.
+refresh_managed_adapters()
 
 
 # ---------------------------------------------------------------------------
@@ -1560,5 +1509,8 @@ def build_manifest_wiring_spec(
 __all__ = [
     "MANIFEST_ADAPTER_REGISTRY",
     "ManifestAdapterNotFound",
+    "build_generic_manifest_spec",
     "build_manifest_wiring_spec",
+    "load_module_manifest",
+    "refresh_managed_adapters",
 ]
