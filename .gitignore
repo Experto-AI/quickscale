@@ -233,3 +233,6 @@ pytest_cov_log.txt
 
 # Marketing content drafts (generated content not tracked in repo)
 marketing/
+
+# Graphify
+graphify-out/
