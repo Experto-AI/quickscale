@@ -12,6 +12,7 @@ from quickscale_core.contracts.module_discovery import (
 from quickscale_core.manifest.entry_point import (
     ManifestAdapterNotFound,
     build_manifest_wiring_spec,
+    refresh_managed_adapters,
 )
 from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
@@ -140,6 +141,7 @@ def regenerate_managed_wiring(
     try:
         if _has_real_manifests:
             set_modules_base_path(modules_dir)
+            refresh_managed_adapters()
 
         selected_options = {
             module_name: module_options.get(module_name, {})
@@ -185,3 +187,4 @@ def regenerate_managed_wiring(
         return True, "Managed wiring files regenerated"
     finally:
         set_modules_base_path(_prior_base_path)
+        refresh_managed_adapters()

@@ -109,9 +109,9 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 |---|---|---|---|
 | `wt-track1` | **D1** ✅ → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 completed and merged to `v87`; AF1 must merge to `v87` before AF2/AF4 start |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
-| `wt-track3` | **AF6** (enabler) → **AF5**, **AF7** | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
+| `wt-track3` | **AF6** ✅ → **AF5** ✅ → **AF7** ⏸️ (partial, blocked) | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
 
-**Sequencing rationale.** Track 1 opened with **D1** (billing surgery in the generated React template; no AF dependencies; completed and merged to `v87`), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
+**Sequencing rationale.** Track 1 opened with **D1** (billing surgery in the generated React template; no AF dependencies; completed and merged to `v87`), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → AF5 → AF7` — decomposing the god files created the per-step/per-adapter seams AF5 and AF7 land on. AF6 and AF5 are complete. AF7 infrastructure and module-owned adapters landed but bundled-fallback parity is blocked; see AF7 entry for details. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
 
 ### QA hardening thread (cross-track)
 
@@ -215,7 +215,7 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
   - The `ApplyExecutor.find_first_unsatisfied_step()` checkpoint currently re-reads the ledger from disk each call. For recovery scenarios with many steps, this is acceptable but could be cached if recovery-latency feedback emerges.
   - The destructive confirmation gate and checkpoint write are CLI-adapter-level responsibilities. If a future phase moves the executor into core, the gate location should be documented as an architectural seam.
 
-### - [ ] AF7 — Push per-module manifest adapters out of core into the modules
+### - [ ] AF7 — Push per-module manifest adapters out of core into the modules (PARTIAL — blocked by AF7-CR-003)
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -227,6 +227,21 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 - **VALIDATION PATH:** generate a project with social+billing+crm and apply; module test suites.
 - **DEPENDS:** AF6 merged.
 - **RECOMMENDATION:** **Pursue (A)** — finishes the D3 decision the code drifted from; makes subtree-distributed modules actually self-contained.
+- **LANDED (track 3, wt-track3):**
+  - **Infrastructure seam:** `MANAGED_ADAPTER_ORIGINS`, `_CORE_FALLBACK_ADAPTERS`, `refresh_managed_adapters()` with base-path-aware discovery via `discover_shipped_module_names()`.
+  - **Module-owned primary adapters:** social, billing, and CRM each ship an `adapter.py` in their own package with the real rich adapter implementation (post-hooks, option resolution, settings assembly, managed-file rendering). These are used in monorepo/embedded contexts where the module package is importable.
+  - **Provenance-sensitive tests:** 9 tests in `TestManagedAdapterProvenance` verify module-owned vs core-fallback selection, distinct function objects, source provenance, origin-set correctness, and custom-entry preservation.
+  - **Refresh coordination:** `module_wiring_manager.py` calls `refresh_managed_adapters()` after `set_modules_base_path()` and after restoring the prior base path.
+  - **Public API:** `build_generic_manifest_spec()` and `load_module_manifest()` made public (old private aliases preserved).
+  - **Docs:** architecture section in `implementation_contract.md` added.
+- **BLOCKING — AF7-CR-003 (completeness, high):** Bundled/installed core fallbacks for social, billing, and CRM are now too thin and no longer preserve parity with the module-owned implementations. Bundled-context regression coverage is also missing. This means that in a packaged `quickscale-core` install (where only manifest yml files are shipped, not module Python source), the fallback adapters produce different wiring specs than the module-owned versions produce in the monorepo.
+- **NEXT STEP / REQUIRED:**
+  1. Restore parity-complete bundled fallbacks in `entry_point.py` so that bundled-context wiring matches module-owned wiring.
+  2. Add bundled-context regression tests that prove the fallback adapters produce identical specs to the module-owned versions.
+  3. Re-run `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
+  4. Only then mark AF7 complete and merge.
+- **FINDINGS / FOLLOW-UP (on landed scope):**
+  - Remaining import-time-registered modules (analytics, blog, listings, forms, backups, notifications, auth, orgs, storage) may also be migrated using the same pattern once AF7 is unblocked. No pressing need — the seam is proven with social + billing + crm.
 
 ---
 
