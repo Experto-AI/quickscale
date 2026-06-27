@@ -152,7 +152,7 @@ myproject/
   └── base.py            # INSTALLED_APPS = [..., "modules.auth", "modules.blog"]
 ```
 
-Billing now has a public-ready implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide. Public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows now surface billing, while generated starter output keeps billing on module-owned Django pages (`/billing/pricing/` public and `/billing/dashboard/` for signed-in users) rather than generating a starter-owned billing frontend page. Teams remains placeholder inventory only.
+Billing now has a public-ready implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide. Public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows now surface billing. The generated `showcase_react` SPA surfaces billing as a module flag only (`modules.billing`); it does not include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages. Teams remains placeholder inventory only.
 
 **Key Characteristics:**
 - ✅ Runtime dependencies (in INSTALLED_APPS)
@@ -191,10 +191,13 @@ Planned vertical themes such as CRM remain roadmap work. They are not part of th
 current shipped generator surface until a release note and this file explicitly add
 them.
 
-Generated starter output now surfaces billing as flags, dashboard cards, helper links,
-and navigation into module-owned Django billing pages while keeping starter-owned
-billing React pages out of scope. Teams routes, flags, dashboard cards, and
-navigation remain excluded until teams ships as a valid public `quickscale plan` /
+Generated starter output surfaces billing as a module flag only (`modules.billing`).
+The generated `showcase_react` SPA does not include billing dashboard cards, sidebar
+navigation entries, org-dashboard billing cards/links, module paths for billing, or
+full-document links into billing Django pages until a session-sync contract (D1 Option A)
+explicitly syncs the server session's active org after client-side org switches.
+QuickScale does not generate a starter-owned billing React page. Teams routes, flags, dashboard cards,
+and navigation remain excluded until teams ships as a valid public `quickscale plan` /
 `quickscale.yml` / `quickscale apply` selection.
 
 **Default React Theme Tech Stack (v0.74.0):**
@@ -300,19 +303,36 @@ Fresh generations copy `showcase_react/src/**` into the generated project's
 
 **Key Characteristics:**
 - ❌ NOT runtime dependencies (just generated code)
-- ❌ NO updates after generation (user owns and customizes)
+- ❌ NO updates after generation (user owns completely)
 - ✅ One-time scaffolding, user owns completely
 - ✅ `showcase_react` and `showcase_html` are the current shipped starter themes
 - ✅ Fresh `showcase_react` generations include dormant analytics starter support and
   Django-owned public social pages
 - ✅ Fresh `showcase_html` generations do not scaffold public social pages; non-React
   themes rely on manual adoption for that public page surface
-- ✅ Generated starter output surfaces billing only as links into module-owned
-  Django billing pages; teams routes, navigation, flags, and dashboard cards remain excluded until teams ships
+- ✅ Generated starter output surfaces billing as a module flag only (`modules.billing`);
+  the generated SPA does not include billing dashboard cards, sidebar navigation entries,
+  org-dashboard billing cards/links, module paths for billing, or full-document links into
+  billing Django pages. Teams routes, navigation, flags, and dashboard cards remain excluded until teams ships
 - ❌ Complete vertical themes are not part of the current shipped CLI surface yet
 - ✅ Module releases may extend managed backend/runtime surfaces in existing projects, but newly scaffolded theme-owned routes, navigation, registries, and page source are only guaranteed on fresh generation or explicit manual adoption
 
+**D1 — Generated showcase_react SSA org-switch billing parity (Option B locked):**
+The generated `showcase_react` SPA performs org-switches client-side, but the server
+session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before billing API calls
+fire. This means billing pages can resolve the wrong org after a client-side switch.
+QuickScale has locked **Option B** — remove generated SPA billing entry points
+(dashboard cards, sidebar navigation, org-dashboard billing cards/links, and
+`modulePaths.billing` from the React hook contract) until a session-sync contract
+(Option A) is designed and implemented. The module flags (`modules.billing`) remain
+in the generated config so the frontend can still detect whether billing is installed.
+Option A (session-sync endpoint) is deferred; the D1 decision applies to the current
+shipped surface in `showcase_react` templates and will be revisited when a session-sync
+contract is ready.
+
 ---
+
+
 
 #### **Summary: Modules vs Themes**
 

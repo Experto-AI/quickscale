@@ -54,6 +54,7 @@ git merge --no-ff wt-track{N}
 | 5 — DR | **A** — hard cutover: delete the legacy env-var protocol, single typed adapter |
 | F1 — RLS boot guard | Boot-time `rolbypassrls` assertion in orgs `AppConfig.ready()`; fail-fast in saas/prod if connected role has BYPASSRLS — **implemented T1.18** |
 | F2 — Unified org scope | Promote `_billing_org_db_context` to `orgs.current_org.org_scope()`; middleware + billing use the shared primitive; phase out manual `all_objects` + filter sites — **implemented T1.19** |
+| **AF1 — child-table policy** | **C** — denormalize `organization_id` onto every child table; every tenant-owned table carries the column and uses a direct FORCE-RLS policy; parent-join RLS policies are not used. This is the project default for all future child/detail tables. |
 
 **Global constraints:** no backward compatibility, no migration path, no existing users — every change is a clean break. Drop dead paths outright; squash/rewrite migrations rather than layering compat shims.
 
@@ -78,21 +79,23 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work
 
-### - [ ] D1 — Generated `showcase_react` SaaS org-switch billing parity
+### - [x] D1 — Generated `showcase_react` SaaS org-switch billing parity
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track1` — after T1.19 merges to v87
 - **WHY:** Discovered during T1.17 stop-here closeout. In a generated SaaS project the React SPA performs org-switches client-side but the server session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before flat `/billing/...` and `/api/billing/...` calls fire. If a billing page loads before session persistence completes the billing views resolve the wrong org from the session.
-- **OBJECTIVE:** Decide between two implementation shapes — (A) add an explicit org-switch/session-sync endpoint (`POST /orgs/set-active/`) that the SPA must call and await before navigating to billing, plus billing query invalidation on org change; or (B) remove generated billing entry points from the SPA org dashboard until the session-sync contract exists. Record the choice as a locked decision and implement it in the generated template.
+- **RESOLUTION:** Option B locked — removed generated SPA billing entry points (dashboard cards, sidebar navigation, org-dashboard billing cards/links, `modulePaths.billing` from the React hook contract) until a session-sync contract exists.
 - **SCOPE:**
-  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/templates/index.html.j2` — SPA nav/routing section (lines 77–88); `currentOrgSlug` usage and billing URL construction
-  - `quickscale_modules/orgs/` — if Option A: add session-sync view + URL; update middleware/session to write `ACTIVE_ORG_SESSION_KEY` on org-switch POST
-  - `quickscale_modules/billing/` — if Option A: billing views validate session org matches request before serving
-- **ACCEPTANCE CRITERIA:** In a generated SaaS project, navigating billing pages after an org switch always resolves the correct org; no cross-tenant billing data is served. If Option B: billing link is absent from the SPA nav until the contract ships.
-- **VALIDATION PATH:** Manual test in a generated SaaS project — switch org, load billing dashboard, confirm correct org is active. `make MODULE=billing test -- --modules` + `make MODULE=orgs test -- --modules`.
+  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/` — removed billing from `templates/index.html.j2` (modulePaths), `src/hooks/useModules.ts.j2` (module path interface + defaults), `src/components/layout/Sidebar.tsx.j2` (nav entry + CreditCard icon), `src/pages/Dashboard.tsx.j2` (billing dashboard card), `src/pages/orgs/OrgDashboardPage.tsx.j2` (billing cards, links, useOrgBilling call)
+  - `lint_frontend.sh` repaired to use proper Jinja rendering (Python + Poetry entrypoint) instead of sed-based stripping
+  - `App.test.tsx.j2` and `PublicSocialPages.test.tsx.j2` updated to remove `billing: '/billing/pricing/'` from test fixtures
+  - Tests updated and documentation (`decisions.md`, `generated_project_structure.md`) refreshed
+- **ACCEPTANCE CRITERIA:** Generated `showcase_react` SPA has no billing nav entry, no billing dashboard card, no org-dashboard billing cards/links, and `modulePaths.billing` is absent from the React hook config. Module flags (`modules.billing`) remain present.
+- **VALIDATION PATH:** `poetry run pytest quickscale_core/tests/test_react_theme_integration.py -v`
 - **DEPENDS:** T1.19 merged to v87. Decision required before implementation starts.
-- **RECOMMENDATION:** **Pursue** — active functional gap in generated SaaS projects. Option B is the safer quick fix while a session-sync contract is designed.
+- **RECOMMENDATION:** **Pursue (B)** — completed and merged to `v87`. See CHANGELOG.md for merged status and validation results.
+- **FINDING:** The `useOrgs.ts` hook still exports `useOrgBilling` and `buildOrgBillingApiPath` — these remain available for future use when the session-sync contract ships (Option A). The generated project's `useOrgs.ts` is owned by the orgs/billing backend integration, not the `showcase_react` theme templates, and was left untouched by D1 Option B.
 
 ---
 
@@ -104,11 +107,11 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **D1** → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 ready now (T1.19 merged); AF1 must merge to `v87` before AF2/AF4 start |
+| `wt-track1` | **D1** ✅ → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 completed and merged to `v87`; AF1 must merge to `v87` before AF2/AF4 start |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
 | `wt-track3` | **AF6** (enabler) → **AF5**, **AF7** | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
 
-**Sequencing rationale.** Track 1 opens with **D1** (billing session-sync fix in the generated React template; no AF dependencies; ready now that T1.19 is merged), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
+**Sequencing rationale.** Track 1 opened with **D1** (billing surgery in the generated React template; no AF dependencies; completed and merged to `v87`), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
 
 ### QA hardening thread (cross-track)
 
@@ -130,12 +133,12 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 
 - **TRACK:** `wt-track1` — **foundation; must merge to `v87` before AF2/AF4 begin.**
 - **WHY → Finding 1.** RLS is six hand-written `enable_rls` migrations with copy-pasted SQL and hardcoded table lists; child tables without `organization_id` (`ContactNote`/`DealNote`) sit outside *both* the Python manager and RLS, and nothing asserts coverage.
-- **OBJECTIVE:** (1) Land a CI **conformance test** that walks `apps.get_models()`, selects tenant-owned models, and asserts each has either an `organization_id` column + a live FORCE-RLS policy in `pg_policies` or a declared parent-join policy — failing the build on any gap. (2) Introduce a reusable `EnableTenantRLS(model)` migration operation generating the policy from one source string; migrate the six modules onto it. (3) Decide child-table policy: parent-join RLS vs denormalized `organization_id` (findings.md Finding 1 alt A vs C).
-- **SCOPE:** new conformance test in `tests_shared/`; `orgs/.../tenancy.py` (registry/`TenantModel` marker); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`).
-- **ACCEPTANCE CRITERIA:** conformance test is green and *fails* when a tenant table lacks a policy (prove with a temporary uncovered model); no duplicated policy SQL remains; child-table category is explicitly covered or exempted.
+- **OBJECTIVE:** (1) Land a CI **conformance test** that walks `apps.get_models()`, selects tenant-owned models, and asserts each has an `organization_id` column + a live FORCE-RLS policy in `pg_policies` — failing the build on any gap. Parent-join policies are not a valid exemption (child-table policy locked to Option C). (2) Introduce a reusable `EnableTenantRLS(model)` migration operation generating the policy from one source string; migrate the six modules onto it. (3) Add `organization_id` FK to `ContactNote` and `DealNote` (denormalize — **child-table policy locked to C**); add a DB constraint/trigger to keep child `organization_id` equal to the parent's; promote both to `TenantModel`; apply `EnableTenantRLS` on them.
+- **SCOPE:** new conformance test in `tests_shared/`; `orgs/.../tenancy.py` (registry/`TenantModel` marker); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`) — schema migration + FK + constraint.
+- **ACCEPTANCE CRITERIA:** conformance test is green and *fails* when a tenant table lacks a direct-column policy (prove with a temporary uncovered model); no duplicated policy SQL remains; `ContactNote` and `DealNote` each have `organization_id` and a live FORCE-RLS policy.
 - **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, run conformance test on PostgreSQL.
 - **DEPENDS:** none (starts immediately). **Blocks:** AF2, AF4.
-- **RECOMMENDATION:** **Pursue (A)** — converts "did someone remember?" into a build-enforced property; highest blast-radius finding.
+- **RECOMMENDATION:** **Pursue (C for child tables, A's registry for infrastructure)** — child-table policy is locked (see Decisions locked table); registry + conformance gate is the implementation vehicle.
 
 ### - [ ] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()`
 

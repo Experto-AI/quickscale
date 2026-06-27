@@ -6,8 +6,14 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { initializeAnalytics } from '@/lib/analytics'
+{% endraw -%}
+{% if selected_modules is none or 'social' in selected_modules %}
+{% raw -%}
 import { SocialEmbedsPublicPage } from '@/pages/SocialEmbedsPublicPage'
 import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
+{% endraw -%}
+{% endif %}
+{% raw -%}
 import type { PublicSocialSurface } from '@/hooks/useModules'
 
 const queryClient = new QueryClient({
@@ -19,6 +25,9 @@ const queryClient = new QueryClient({
   },
 })
 
+{% endraw -%}
+{% if selected_modules is none or 'social' in selected_modules %}
+{% raw -%}
 function renderQuickScaleRoot(surface?: PublicSocialSurface) {
   if (surface === 'link_tree') {
     return <SocialLinkTreePublicPage />
@@ -34,6 +43,20 @@ function renderQuickScaleRoot(surface?: PublicSocialSurface) {
     </BrowserRouter>
   )
 }
+{% endraw -%}
+{% else %}
+{% raw -%}
+function renderQuickScaleRoot(_surface?: PublicSocialSurface) {
+  void _surface
+  return (
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  )
+}
+{% endraw -%}
+{% endif %}
+{% raw -%}
 
 const rootElement = document.getElementById('root')
 

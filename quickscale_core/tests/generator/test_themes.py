@@ -550,7 +550,8 @@ class TestSelectedModulesReactTheme:
             )
 
         assert "crm: string" in module_paths_block
-        assert "billing: string" in module_paths_block
+        # D1 Option B: billing path removed from module paths until session-sync contract exists
+        assert "billing: string" not in module_paths_block
         assert "social: string" not in module_paths_block
 
     def test_app_tsx_routes_only_emit_selected_module_paths(
@@ -600,6 +601,69 @@ class TestSelectedModulesReactTheme:
             assert dropped not in sidebar, (
                 f"Sidebar should not include {dropped} when its module is unselected."
             )
+
+    def test_no_social_selected_modules_avoids_unused_param_and_omits_social_imports(
+        self, tmp_path: Path
+    ) -> None:
+        """No-social variant avoids noUnusedParameters and omits social page imports (D1-REV-005).
+
+        When ``selected_modules`` does not include ``social``:
+        - ``renderQuickScaleRoot()`` uses ``_surface`` prefixed param so
+          TypeScript's ``noUnusedParameters`` does not fire.
+        - Social page components (``SocialEmbedsPublicPage``,
+          ``SocialLinkTreePublicPage``) must NOT be imported — they would
+          be dead imports flagged by ``noUnusedLocals``.
+        - ``PublicSocialSurface`` type import stays unconditional because it
+          is referenced by both function signatures.
+        """
+        # --- No-social variant (selected_modules=[]) ---
+        empty_gen = ProjectGenerator(theme="showcase_react", selected_modules=[])
+        empty_out = tmp_path / "react_no_social_main"
+        empty_gen.generate("react_no_social_main", empty_out)
+
+        empty_main = (empty_out / "frontend" / "src" / "main.tsx").read_text()
+
+        # Must NOT import social page components (dead imports)
+        assert "SocialEmbedsPublicPage" not in empty_main, (
+            "No-social variant must not import SocialEmbedsPublicPage"
+        )
+        assert "SocialLinkTreePublicPage" not in empty_main, (
+            "No-social variant must not import SocialLinkTreePublicPage"
+        )
+
+        # Must use _surface prefixed param to suppress noUnusedParameters
+        assert (
+            "function renderQuickScaleRoot(_surface?: PublicSocialSurface)"
+            in empty_main
+        ), (
+            "No-social variant must define renderQuickScaleRoot with "
+            "_surface?: PublicSocialSurface"
+        )
+
+        # --- All-modules variant (default) must STILL have the social surface ---
+        all_gen = ProjectGenerator(theme="showcase_react")
+        all_out = tmp_path / "react_all_modules_main"
+        all_gen.generate("react_all_modules_main", all_out)
+
+        all_main = (all_out / "frontend" / "src" / "main.tsx").read_text()
+
+        # Must import the social type (unconditional)
+        assert "PublicSocialSurface" in all_main, (
+            "All-modules variant must import PublicSocialSurface"
+        )
+
+        # Social page imports should be present
+        assert "SocialEmbedsPublicPage" in all_main, (
+            "All-modules variant must import SocialEmbedsPublicPage"
+        )
+
+        # renderQuickScaleRoot must have surface parameter in all-modules variant
+        assert (
+            "function renderQuickScaleRoot(surface?: PublicSocialSurface)" in all_main
+        ), (
+            "All-modules variant must define renderQuickScaleRoot "
+            "with surface?: PublicSocialSurface"
+        )
 
     def test_window_module_config_matches_selected_modules(
         self, tmp_path: Path
