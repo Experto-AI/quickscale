@@ -167,6 +167,8 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 
 ## Finding 5 — `quickscale apply` is a 16-step, all-irreversible, cross-system mutation with no rollback and convention-based "idempotent-rerun" as the sole recovery
 
+**Status: RESOLVED — AF5 implemented 2026-06-27.** Per-step `is_satisfied()`/`apply()` contract, `ResumeCheckpoint`/`RecoveryLedger` post-step checkpointing, fault-injection harness, and destructive-phase confirmation gate. See CHANGELOG.md.
+
 **Time horizon: 6–18 months.**
 
 **Problem.** The apply pipeline executes 16 ordered steps, **every one tagged `reversible=False`**, that mutate five independent systems in sequence — git (subtree embedding makes commits), the filesystem (template generation), env files, Docker (`docker startup`), the **database (`database migrations`)**, and a **remote Railway deploy** — and only then writes authoritative state. There is no rollback and no compensation; the only recovery mechanism is that each step is *asserted by convention* to be idempotent on rerun, gated purely by the presence of an `apply-recovery.yml` file.
@@ -200,6 +202,8 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 ---
 
 ## Finding 6 — The generator's hottest logic is concentrated in god files that fight the project's own parallel-worktree workflow
+
+**Status: RESOLVED — AF6 implemented 2026-06-27.** `apply_command.py` 16 step bodies extracted to `quickscale_core/apply/steps/*.py`; `dr_engine/orchestration.py` split into `_lock.py`, `_paths.py`, `_sidecar.py`. See CHANGELOG.md.
 
 **Time horizon: now (development-time friction).**
 

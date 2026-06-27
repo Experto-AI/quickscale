@@ -77,29 +77,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ---
 
-## Open work
-
-### - [x] D1 — Generated `showcase_react` SaaS org-switch billing parity
-
-`**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track1` — after T1.19 merges to v87
-- **WHY:** Discovered during T1.17 stop-here closeout. In a generated SaaS project the React SPA performs org-switches client-side but the server session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before flat `/billing/...` and `/api/billing/...` calls fire. If a billing page loads before session persistence completes the billing views resolve the wrong org from the session.
-- **RESOLUTION:** Option B locked — removed generated SPA billing entry points (dashboard cards, sidebar navigation, org-dashboard billing cards/links, `modulePaths.billing` from the React hook contract) until a session-sync contract exists.
-- **SCOPE:**
-  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/` — removed billing from `templates/index.html.j2` (modulePaths), `src/hooks/useModules.ts.j2` (module path interface + defaults), `src/components/layout/Sidebar.tsx.j2` (nav entry + CreditCard icon), `src/pages/Dashboard.tsx.j2` (billing dashboard card), `src/pages/orgs/OrgDashboardPage.tsx.j2` (billing cards, links, useOrgBilling call)
-  - `lint_frontend.sh` repaired to use proper Jinja rendering (Python + Poetry entrypoint) instead of sed-based stripping
-  - `App.test.tsx.j2` and `PublicSocialPages.test.tsx.j2` updated to remove `billing: '/billing/pricing/'` from test fixtures
-  - Tests updated and documentation (`decisions.md`, `generated_project_structure.md`) refreshed
-- **ACCEPTANCE CRITERIA:** Generated `showcase_react` SPA has no billing nav entry, no billing dashboard card, no org-dashboard billing cards/links, and `modulePaths.billing` is absent from the React hook config. Module flags (`modules.billing`) remain present.
-- **VALIDATION PATH:** `poetry run pytest quickscale_core/tests/test_react_theme_integration.py -v`
-- **DEPENDS:** T1.19 merged to v87. Decision required before implementation starts.
-- **RECOMMENDATION:** **Pursue (B)** — completed and merged to `v87`. See CHANGELOG.md for merged status and validation results.
-- **FINDING:** The `useOrgs.ts` hook still exports `useOrgBilling` and `buildOrgBillingApiPath` — these remain available for future use when the session-sync contract ships (Option A). The generated project's `useOrgs.ts` is owned by the orgs/billing backend integration, not the `showcase_react` theme templates, and was left untouched by D1 Option B.
-
----
-
-## Autopsy follow-on — v87 structural findings (AF1–AF7)
+## Open work — v87 structural findings (AF1–AF7)
 
 Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). Two disjoint clusters; see the per-finding "Alternatives" + preferred option in findings.md before locking each decision.
 
@@ -107,11 +85,11 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **D1** ✅ → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 completed and merged to `v87`; AF1 must merge to `v87` before AF2/AF4 start |
+| `wt-track1` | **AF1** (foundation) → **AF3** | Runtime isolation | AF1 starts immediately; AF3 waits on AF1 + AF2 |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
-| `wt-track3` | **AF6** ✅ → **AF5** ✅ → **AF7** ⏸️ (partial, blocked) | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
+| `wt-track3` | **AF7** ⏸️ (partial, blocked) | Generator / CLI | AF6 + AF5 complete and merged; blocked on AF7-CR-003 |
 
-**Sequencing rationale.** Track 1 opened with **D1** (billing surgery in the generated React template; no AF dependencies; completed and merged to `v87`), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → AF5 → AF7` — decomposing the god files created the per-step/per-adapter seams AF5 and AF7 land on. AF6 and AF5 are complete. AF7 infrastructure and module-owned adapters landed but bundled-fallback parity is blocked; see AF7 entry for details. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
+**Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: AF6 → AF5 complete and merged. AF7 infrastructure and module-owned adapters landed but bundled-fallback parity is blocked; see AF7 entry for details. The two clusters touch disjoint file sets.
 
 ### QA hardening thread (cross-track)
 
@@ -121,7 +99,7 @@ Three findings share one root cause: **the suite tests the happy request path �
 |---|---|---|---|
 | **AF1** | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | response-level isolation tests on chosen endpoints (`tests_shared/isolation.py`) |
 | **AF2** | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | request-path-only scoping tests |
-| **AF5** | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | convention-asserted idempotent-rerun (no enforcing test) |
+| **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) — *complete* | convention-asserted idempotent-rerun (no enforcing test) |
 
 Land **AF1's conformance gate first** — it is read-only, surfaces today's true RLS coverage (including the `ContactNote`/`DealNote` gap), and is the evidence base the others build on. Detail: findings.md → "Cross-cutting QA / testing thread."
 
@@ -178,42 +156,6 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 - **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests.
 - **DEPENDS:** AF1, AF2 merged.
 - **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; do after AF1/AF2 so the seam lands on the hardened base.
-
-### - [x] AF6 — Decompose generator god files into per-concern packages (enabler) ✓ *implemented 2026-06-27*
-
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track3` — **generator-cluster enabler; do first.** Fully independent of tracks 1–2.
-- **WHY → Finding 6.** `apply_command.py` (3.1k), `dr_engine/orchestration.py` (3.7k), `module_config.py` (2.1k), `resolvers.py` (1.9k), `entry_point.py` (1.6k) are serial merge chokepoints that fight the 3-worktree workflow.
-- **OBJECTIVE:** Extract `apply_command.py`'s 16 step bodies into a `quickscale_core/apply/steps/<step>.py` package called by a thin orchestrator (maps onto the existing `apply/step.py` registry); split `dr_engine/orchestration.py` by concern (locking / upload / restore / verification). Behaviour-preserving.
-- **SCOPE:** `quickscale_cli/.../apply_command.py`, `quickscale_core/apply/`, `quickscale_core/dr_engine/orchestration.py`.
-- **ACCEPTANCE CRITERIA:** no behaviour change (full apply + DR test suites green); no single new file > ~800 lines; step bodies are independently importable.
-- **VALIDATION PATH:** full `quickscale_core` + `quickscale_cli` test suites; a real generate→apply smoke test.
-- **DEPENDS:** none. **Enables:** AF5, AF7.
-- **RECOMMENDATION:** **Pursue (A)** — creates the per-step/per-adapter seams AF5/AF7 need; mechanical and low-risk.
-- **FINDINGS / FOLLOW-UP:**
-  - Preserving shim/facade surfaces in `apply_command.py` and `orchestration.py` is required for in-repo callers/tests — intentional for AF6, not a cleanup gap.
-  - More DR concern groups (backup capture/restore/remote storage) remain extractable from `orchestration.py` as follow-up work.
-  - AF6 unblocks AF5 (step executor) and AF7 (manifest-adapter relocation).
-  - The core-safe `ApplyStepProtocol` and `StepContext`/`StepOutcome` types defined in Phase 1 are the boundary contract for future step bodies.
-
-### - [x] AF5 — Apply step executor: per-step `is_satisfied()` + post-step checkpoint + fault-injection harness ✓ *implemented 2026-06-27*
-
-`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track3` — after AF6 (lands on the extracted step package).
-- **WHY → Finding 5.** Apply is 16 all-irreversible cross-system steps (git/FS/Docker/migrations/**Railway**) with no rollback; recovery is convention-based, untested idempotent-rerun gated only by ledger-file presence.
-- **OBJECTIVE:** Give each extracted step an `is_satisfied()`/`apply()` contract; checkpoint state *after each* step so recovery resumes at the first unsatisfied step (not rerun-all); add a fault-injection test (kill after step N, rerun, assert convergence). Fence the remote/destructive steps (Railway, migrations) as a final separately-confirmable phase.
-- **SCOPE:** `quickscale_core/apply/steps/*`, `apply/step.py`, `apply/ledger.py`, `apply_command.py` orchestrator.
-- **ACCEPTANCE CRITERIA:** fault-injection harness proves rerun-convergence for all 16 steps; resume reads "first unsatisfied step", not file-presence-only; no half-applied state after an induced mid-pipeline failure.
-- **VALIDATION PATH:** new fault-injection suite + existing apply tests.
-- **DEPENDS:** AF6 merged.
-- **RECOMMENDATION:** **Pursue (A)** — keeps the idempotent-rerun philosophy but makes it tested and resumable; (C) test-only is insufficient.
-- **FINDINGS / FOLLOW-UP:**
-  - `_AF5_DESTRUCTIVE_CONFIRM_BYPASS` test-support flag (in `apply_command.py`) enables silent destructive-phase bypass in tests. The flag is currently scoped to `apply_command.py` only — if a test injects the bypass in a core-invoked path, the gate re-appears. This is intentional for now but should be reviewed if the executor is extracted further.
-  - AF6-era ledger compatibility is handled conservatively (`resume_checkpoint` preserved when present, treated as `None` when absent). Existing legacy-format ledgers with missing `resume_checkpoint` trigger a full rerun (same as pre-AF5 behavior). Consider adding an explicit one-shot migration path if legacy-ledger frequency becomes a concern.
-  - The `ApplyExecutor.find_first_unsatisfied_step()` checkpoint currently re-reads the ledger from disk each call. For recovery scenarios with many steps, this is acceptable but could be cached if recovery-latency feedback emerges.
-  - The destructive confirmation gate and checkpoint write are CLI-adapter-level responsibilities. If a future phase moves the executor into core, the gate location should be documented as an architectural seam.
 
 ### - [ ] AF7 — Push per-module manifest adapters out of core into the modules (PARTIAL — blocked by AF7-CR-003)
 
