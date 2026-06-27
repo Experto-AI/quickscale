@@ -1214,7 +1214,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
             organization=personal_org_user,
         )
 
-        before = ContactNote.objects.count()
+        before = ContactNote.all_objects.count()
         client.force_login(staff_user)
 
         staff_personal_org = Organization.objects.get(
@@ -1233,7 +1233,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "contact" in response.data
-        assert ContactNote.objects.count() == before
+        assert ContactNote.all_objects.count() == before
 
     # -- ContactNote: same-org contact accepted -------------------------------
 
@@ -1269,7 +1269,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["text"] == "Same-org solo note"
-        created = ContactNote.objects.get(pk=response.data["id"])
+        created = ContactNote.all_objects.get(pk=response.data["id"])
         assert created.contact_id == contact.id
 
     # -- DealNote: foreign-org deal rejected ----------------------------------
@@ -1313,7 +1313,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
             organization=personal_org_user,
         )
 
-        before = DealNote.objects.count()
+        before = DealNote.all_objects.count()
         client.force_login(staff_user)
 
         staff_personal_org = Organization.objects.get(
@@ -1332,7 +1332,7 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "deal" in response.data
-        assert DealNote.objects.count() == before
+        assert DealNote.all_objects.count() == before
 
     # -- DealNote: same-org deal accepted -------------------------------------
 
@@ -1386,5 +1386,5 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["text"] == "Same-org solo deal note"
-        created = DealNote.objects.get(pk=response.data["id"])
+        created = DealNote.all_objects.get(pk=response.data["id"])
         assert created.deal_id == deal.id
