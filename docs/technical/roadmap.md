@@ -164,7 +164,7 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 - **DEPENDS:** AF1, AF2 merged.
 - **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; do after AF1/AF2 so the seam lands on the hardened base.
 
-### - [ ] AF6 — Decompose generator god files into per-concern packages (enabler)
+### - [x] AF6 — Decompose generator god files into per-concern packages (enabler) ✓ *implemented 2026-06-27*
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -176,6 +176,11 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 - **VALIDATION PATH:** full `quickscale_core` + `quickscale_cli` test suites; a real generate→apply smoke test.
 - **DEPENDS:** none. **Enables:** AF5, AF7.
 - **RECOMMENDATION:** **Pursue (A)** — creates the per-step/per-adapter seams AF5/AF7 need; mechanical and low-risk.
+- **FINDINGS / FOLLOW-UP:**
+  - Preserving shim/facade surfaces in `apply_command.py` and `orchestration.py` is required for in-repo callers/tests — intentional for AF6, not a cleanup gap.
+  - More DR concern groups (backup capture/restore/remote storage) remain extractable from `orchestration.py` as follow-up work.
+  - AF6 unblocks AF5 (step executor) and AF7 (manifest-adapter relocation).
+  - The core-safe `ApplyStepProtocol` and `StepContext`/`StepOutcome` types defined in Phase 1 are the boundary contract for future step bodies.
 
 ### - [ ] AF5 — Apply step executor: per-step `is_satisfied()` + post-step checkpoint + fault-injection harness
 
