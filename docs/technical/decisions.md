@@ -1187,6 +1187,8 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ❌ DI frameworks or service registries (direct imports in production)
 - ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
+- ❌ Core fallback adapters for module-owned wiring — managed adapters (social, billing, CRM) must be importable from their module package; no compat shims in core; if the module package is not importable, raise `ImproperlyConfigured` and refuse to proceed
+- ❌ Backward-compat shims, graceful degradation paths, or silent fallbacks anywhere in the generator/CLI/manifest stack — fail hard and fast; the caller must fix the configuration
 - ❌ Ad hoc or undocumented module HTTP APIs beyond the documented module-owned routes and webhooks QuickScale wires today
 - ❌ Tight coupling themes to modules
 

@@ -55,6 +55,7 @@ git merge --no-ff wt-track{N}
 | F1 — RLS boot guard | Boot-time `rolbypassrls` assertion in orgs `AppConfig.ready()`; fail-fast in saas/prod if connected role has BYPASSRLS — **implemented T1.18** |
 | F2 — Unified org scope | Promote `_billing_org_db_context` to `orgs.current_org.org_scope()`; middleware + billing use the shared primitive; phase out manual `all_objects` + filter sites — **implemented T1.19** |
 | **AF1 — child-table policy** | **C** — denormalize `organization_id` onto every child table; every tenant-owned table carries the column and uses a direct FORCE-RLS policy; parent-join RLS policies are not used. This is the project default for all future child/detail tables. |
+| **AF7 — module adapter resolution** | **Fail-hard** — no core fallback adapters; `refresh_managed_adapters()` must raise `ImproperlyConfigured` if a managed module's adapter (`quickscale_modules_{name}.adapter`) is not importable; bundled/installed-without-module-source is not a supported context. Delete `_CORE_FALLBACK_ADAPTERS` and the three fallback functions. |
 
 **Global constraints:** no backward compatibility, no migration path, no existing users — every change is a clean break. Drop dead paths outright; squash/rewrite migrations rather than layering compat shims.
 
@@ -176,12 +177,15 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
   - **Refresh coordination:** `module_wiring_manager.py` calls `refresh_managed_adapters()` after `set_modules_base_path()` and after restoring the prior base path.
   - **Public API:** `build_generic_manifest_spec()` and `load_module_manifest()` made public (old private aliases preserved).
   - **Docs:** architecture section in `implementation_contract.md` added.
-- **BLOCKING — AF7-CR-003 (completeness, high):** Bundled/installed core fallbacks for social, billing, and CRM are now too thin and no longer preserve parity with the module-owned implementations. Bundled-context regression coverage is also missing. This means that in a packaged `quickscale-core` install (where only manifest yml files are shipped, not module Python source), the fallback adapters produce different wiring specs than the module-owned versions produce in the monorepo.
+- **BLOCKING — AF7-CR-003 (resolved by decision, not parity fix):** The core fallbacks (`_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback`) and the `_CORE_FALLBACK_ADAPTERS` dict are compat shims that violate the project's fail-hard principle (see decisions.md Prohibitions). The "bundled/installed-without-module-source" context is not a supported configuration. Decision locked: delete the fallbacks; fail hard (raise `ImproperlyConfigured`) if a managed adapter is not importable.
 - **NEXT STEP / REQUIRED:**
-  1. Restore parity-complete bundled fallbacks in `entry_point.py` so that bundled-context wiring matches module-owned wiring.
-  2. Add bundled-context regression tests that prove the fallback adapters produce identical specs to the module-owned versions.
-  3. Re-run `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
-  4. Only then mark AF7 complete and merge.
+  1. Delete `_CORE_FALLBACK_ADAPTERS` dict declaration from `entry_point.py`.
+  2. Delete `_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback` functions and their `_CORE_FALLBACK_ADAPTERS[name] = ...` registration lines from `entry_point.py`.
+  3. Rewrite `refresh_managed_adapters()` steps 2+3: replace the fallback lookup + silent removal with a hard `raise ImproperlyConfigured(f"Managed adapter for '{module_name}' not importable ...")`.
+  4. Update `entry_point.py` module docstring and `MANAGED_ADAPTER_ORIGINS` / `_CORE_FALLBACK_ADAPTERS` comments.
+  5. Delete the three fallback tests: `test_core_fallbacks_exist_for_bundled_context`, `test_core_fallback_source_is_core_not_module`, `test_core_fallback_and_module_owned_are_different_objects` from `test_manifest_entry_point.py`.
+  6. Re-run `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
+  7. Only then mark AF7 complete and merge.
 - **FINDINGS / FOLLOW-UP (on landed scope):**
   - Remaining import-time-registered modules (analytics, blog, listings, forms, backups, notifications, auth, orgs, storage) may also be migrated using the same pattern once AF7 is unblocked. No pressing need — the seam is proven with social + billing + crm.
 
