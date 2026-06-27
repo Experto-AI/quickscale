@@ -108,22 +108,25 @@ class TestNotifySubmission:
     def test_subject_without_name_field(self, form, db):
         """Subject falls back to generic when no name-type field is present"""
         # Create a submission with only a non-name field
-        sub = FormSubmission.objects.create(
+        sub = FormSubmission.all_objects.create(
             form=form,
+            organization=form.organization,
             ip_address="127.0.0.1",
         )
         from quickscale_modules_forms.models import FormField, FormFieldValue
 
         # A message field (no 'name' in its label)
-        field = FormField.objects.create(
+        field = FormField.all_objects.create(
             form=form,
+            organization=form.organization,
             field_type=FormField.FIELD_TYPE_TEXTAREA,
             label="Message",
             name="message",
             order=10,
         )
-        FormFieldValue.objects.create(
+        FormFieldValue.all_objects.create(
             submission=sub,
+            organization=sub.organization,
             field=field,
             field_name="message",
             field_label="Message",
