@@ -463,7 +463,7 @@ typecheck:
 
 # Lint React theme templates (renders to tmp dir, runs ESLint + TypeScript check)
 lint-frontend:
-	@scripts/lint_frontend.sh
+	@poetry run scripts/lint_frontend.sh
 
 # Render showcase_react and prove the generated frontend toolchain without Docker
 frontend-proof:

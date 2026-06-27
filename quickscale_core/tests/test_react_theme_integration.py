@@ -418,20 +418,10 @@ class TestReactThemeGeneration:
             "organization.role_label ?? (actor.is_owner_like ? 'Owner-like access' : null)"
             in org_dashboard
         )
-        assert "const modules = useModules()" in org_dashboard
-        assert (
-            "const billingEnabled = modules.billing && Boolean(currentOrgSlug)"
-            in org_dashboard
-        )
-        assert (
-            "const canReadBilling = billingEnabled && actor.is_owner_like"
-            in org_dashboard
-        )
-        assert "useOrgBilling(currentOrgSlug ?? '', canReadBilling)" in org_dashboard
-        assert (
-            "Billing links stay hidden until the billing module is installed."
-            in org_dashboard
-        )
+        # D1 Option B: billing entry points removed from org dashboard SPA
+        assert "const modules = useModules()" not in org_dashboard
+        assert "billingEnabled" not in org_dashboard
+        assert "useOrgBilling" not in org_dashboard
         assert "final owner cannot be removed or demoted" in org_members.lower()
 
     def test_react_theme_reserves_org_shell_routes_ahead_of_module_urls(self, tmp_path):
@@ -729,12 +719,9 @@ class TestReactThemeBaseTemplate:
         self, tmp_path
     ):
         """Generated settings/base.py must register the project-owned installed_modules
-        context processor so that modules.billing.url resolves in the index.html template.
+        context processor so that module URLs resolve in the index.html template.
 
-        Without this entry, modules is undefined in the Django template context,
-        window.__QUICKSCALE__.modulePaths.billing becomes an empty string, and
-        React Router's <Link to="" reloadDocument> navigates to / instead of the
-        billing page.
+        Without this entry, modules is undefined in the Django template context.
 
         The context processor must be the project-owned one (not quickscale_core),
         because quickscale_core is not a runtime dependency of the generated project.
@@ -749,7 +736,7 @@ class TestReactThemeBaseTemplate:
 
         assert f"{project_name}.context_processors.installed_modules" in base_py, (
             f"settings/base.py must include {project_name}.context_processors.installed_modules "
-            "in TEMPLATES context_processors so that modules.billing.url resolves in index.html"
+            "in TEMPLATES context_processors so that module URLs resolve in index.html"
         )
         assert "quickscale_core.context_processors" not in base_py, (
             "settings/base.py must not reference quickscale_core context processors — "
@@ -1010,7 +997,7 @@ class TestReactThemeModuleActivationMatrix:
         assert path_pattern.search(index_html) is not None
 
     def test_react_theme_billing_window_config_flag(self, tmp_path):
-        """Generated React index template should expose billing in window config."""
+        """Generated React index template should expose billing as a module flag only, not as a module path."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_billing_window_config"
         generator.generate("react_billing_window_config", output_path)
@@ -1024,11 +1011,37 @@ class TestReactThemeModuleActivationMatrix:
             "billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}"
             "true{% else %}false{% endif %},"
         ) in window_config
-        assert 'billing: "{{ modules.billing.url|escapejs }}"' in window_config
+        # D1 Option B: modulePaths.billing is removed until session-sync contract exists
+        module_paths_section = (
+            window_config.split("modulePaths: {", 1)[1].split("\n        }", 1)[0]
+            if "modulePaths: {" in window_config
+            else ""
+        )
+        assert "billing:" not in module_paths_section
         assert "/billing/dashboard/" not in window_config
 
+    def test_react_theme_billing_test_fixtures_no_module_path(self, tmp_path):
+        """Generated test fixtures must not include modulePaths.billing (D1-REV-001)."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_billing_test_fixtures"
+        generator.generate("react_billing_test_fixtures", output_path)
+
+        app_test = (
+            output_path / "frontend" / "src" / "test" / "App.test.tsx"
+        ).read_text()
+        social_test = (
+            output_path / "frontend" / "src" / "test" / "PublicSocialPages.test.tsx"
+        ).read_text()
+
+        # D1 Option B: modulePaths.billing removed from the QuickScaleModulePaths contract
+        assert "billing: '/billing/pricing/'" not in app_test
+        assert "billing: '/billing/pricing/'" not in social_test
+        # Module flag should still be present in both test fixtures
+        assert "billing: false" in app_test
+        assert "billing: false" in social_test
+
     def test_react_theme_billing_dashboard_card(self, tmp_path):
-        """Generated React dashboard should surface billing as a module-owned card."""
+        """Generated React dashboard should not surface a billing card (D1 Option B)."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_billing_dashboard_card"
         generator.generate("react_billing_dashboard_card", output_path)
@@ -1036,29 +1049,18 @@ class TestReactThemeModuleActivationMatrix:
         dashboard = (
             output_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
         ).read_text()
-        lucide_imports = self._extract_named_imports(dashboard, "lucide-react")
-        billing_card_match = re.search(
-            r"\{\n\s+key: 'billing',\n(?P<body>.*?)\n\s+\},",
-            dashboard,
-            re.DOTALL,
-        )
 
-        assert billing_card_match is not None
-        billing_card = billing_card_match.group("body")
-        assert "CreditCard" in lucide_imports
-        assert "name: 'Billing'" in billing_card
-        assert "icon: CreditCard" in billing_card
-        assert "modulePaths.billing" in billing_card
-        assert "reloadDocument: true" in billing_card
-        assert "actionLabel: 'Open billing'" in billing_card
-        assert re.search(
-            r"buildModuleInfo\(modulePaths\)",
-            dashboard,
-        )
+        # D1 Option B: billing card removed until session-sync contract exists
+        assert "key: 'billing'" not in dashboard
+        assert "name: 'Billing'" not in dashboard
+        assert "modulePaths.billing" not in dashboard
+        # buildModuleInfo still exists for remaining modules
+        assert "buildModuleInfo(" in dashboard
+        assert "modulePaths as unknown as Record<string, string>" in dashboard
         self._assert_no_hardcoded_billing_paths(dashboard)
 
     def test_react_theme_billing_sidebar_nav_entry(self, tmp_path):
-        """Generated React sidebar should link billing through the module path config."""
+        """Generated React sidebar should not include a billing nav entry (D1 Option B)."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_billing_sidebar_nav"
         generator.generate("react_billing_sidebar_nav", output_path)
@@ -1066,22 +1068,11 @@ class TestReactThemeModuleActivationMatrix:
         sidebar = (
             output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
         ).read_text()
-        lucide_imports = self._extract_named_imports(sidebar, "lucide-react")
-        billing_nav_match = re.search(
-            r"\{\n\s+name: 'Billing',\n(?P<body>.*?)\n\s+\},",
-            sidebar,
-            re.DOTALL,
-        )
 
-        assert billing_nav_match is not None
-        billing_nav = billing_nav_match.group("body")
-        assert "CreditCard" in lucide_imports
-        assert "billingPath" in sidebar
-        assert "buildOrgPath(" in sidebar
-        assert "href: billingPath" in billing_nav
-        assert "icon: CreditCard" in billing_nav
-        assert "show: modules.billing && (!isSaas || hasOrgContext)" in billing_nav
-        assert "reloadDocument: true" in billing_nav
+        # D1 Option B: billing nav entry removed until session-sync contract exists
+        assert "name: 'Billing'" not in sidebar
+        assert "billingPath" not in sidebar
+        assert "CreditCard" not in sidebar
         self._assert_no_hardcoded_billing_paths(sidebar)
 
     def test_react_theme_billing_no_spa_route(self, tmp_path):
@@ -1098,7 +1089,7 @@ class TestReactThemeModuleActivationMatrix:
         assert 'path="/billing/dashboard"' not in app_tsx
 
     def test_react_theme_billing_modules_hook_interface(self, tmp_path):
-        """Generated modules hook should expose billing through the shared config contract."""
+        """Generated modules hook should expose billing module flag without a module path (D1 Option B)."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_billing_modules_hook"
         generator.generate("react_billing_modules_hook", output_path)
@@ -1123,11 +1114,12 @@ class TestReactThemeModuleActivationMatrix:
         )[1].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
 
         assert "billing: boolean" in modules_interface
-        assert "billing: string" in module_paths_interface
+        # D1 Option B: billing path removed from module paths until session-sync contract exists
+        assert "billing: string" not in module_paths_interface
         assert "mode: QuickScaleOwnerMode" in owner_interface
         assert "currentOrgSlug: string | null" in owner_interface
         assert "billing: false" in default_config
-        assert "billing: '/billing/pricing/'" in default_config
+        assert "billing: '/billing/pricing/'" not in default_config
         assert "owner: {" in default_config
         assert "mode: 'solo'" in default_config
         assert "currentOrgSlug: null" in default_config
@@ -1188,7 +1180,8 @@ class TestReactThemeModuleActivationMatrix:
         assert "owner:" in use_modules
         assert "crm: string" in use_modules
         assert "crm: '/crm'" in use_modules
-        assert "billing: '/billing/pricing/'" in use_modules
+        # D1 Option B: billing path removed from module paths until session-sync contract exists
+        assert "billing: '/billing/pricing/'" not in use_modules
         assert "social: '/social'" in use_modules
         assert "QuickScaleOwnerMode" in use_modules
         assert (
@@ -1206,9 +1199,10 @@ class TestReactThemeModuleActivationMatrix:
         assert "key: 'social'" in dashboard
         assert "name: 'Social'" in dashboard
         assert "modulePaths.social" in dashboard
-        assert "key: 'billing'" in dashboard
-        assert "name: 'Billing'" in dashboard
-        assert "modulePaths.billing" in dashboard
+        # D1 Option B: billing dashboard card removed
+        assert "key: 'billing'" not in dashboard
+        assert "name: 'Billing'" not in dashboard
+        assert "modulePaths.billing" not in dashboard
         assert "modulePaths.crm" in dashboard
         assert "actionLabel: 'Open workspace'" in dashboard
         assert "key: 'teams'" not in dashboard
@@ -1222,8 +1216,9 @@ class TestReactThemeModuleActivationMatrix:
         assert "href: appPaths.crm" in sidebar
         assert "name: 'Social'" in sidebar
         assert "modulePaths.social" in sidebar
-        assert "name: 'Billing'" in sidebar
-        assert "billingPath" in sidebar
+        # D1 Option B: billing sidebar nav entry removed
+        assert "name: 'Billing'" not in sidebar
+        assert "billingPath" not in sidebar
         assert "name: 'Teams'" not in sidebar
         assert "name: 'Notifications'" not in sidebar
         assert "name: 'Backups'" not in sidebar

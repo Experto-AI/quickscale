@@ -19,9 +19,6 @@
   ('forms', 'Forms', 'ClipboardList',
    'Dynamic form builder with spam protection and submission management',
    '/forms/contact', None, None),
-  ('billing', 'Billing', 'CreditCard',
-   'Module-owned pricing and billing dashboard pages powered by the billing module.',
-   'modulePaths.billing', 'reload_and_action', "true|'Open billing'"),
   ('social', 'Social', 'Share2',
    'Managed social link-tree and embed feeds exposed through fixed public routes.',
    'modulePaths.social', 'reloadDocument', 'true'),
@@ -71,7 +68,7 @@ type ModuleCard = {
 }
 
 const buildModuleInfo = (
-  modulePaths: { crm?: string; social?: string; billing?: string; analytics?: string },
+  modulePaths: Record<string, string>,
 ): ModuleCard[] => [
 {% endraw -%}
 {%- for key, name, icon, desc, href, extra_key, extra_val in all_module_cards %}
@@ -108,8 +105,10 @@ const gettingStarted = [
 export function Dashboard() {
   const modules = useModules()
   const { modulePaths } = useProjectConfig()
-  const installedModules = buildModuleInfo(modulePaths).filter((m) => modules[m.key])
-  const hasModules = installedModules.length > 0
+  const installedModules = buildModuleInfo(modulePaths as unknown as Record<string, string>).filter((m) => modules[m.key])
+  // Use raw module installation state so billing-only generations don't falsely
+  // render "No Modules Installed" (billing has module flag but no starter card).
+  const hasModules = Object.values(modules).some(Boolean)
 
   return (
     <div className="space-y-8">

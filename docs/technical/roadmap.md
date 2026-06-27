@@ -78,21 +78,23 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work
 
-### - [ ] D1 — Generated `showcase_react` SaaS org-switch billing parity
+### - [x] D1 — Generated `showcase_react` SaaS org-switch billing parity
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track1` — after T1.19 merges to v87
 - **WHY:** Discovered during T1.17 stop-here closeout. In a generated SaaS project the React SPA performs org-switches client-side but the server session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before flat `/billing/...` and `/api/billing/...` calls fire. If a billing page loads before session persistence completes the billing views resolve the wrong org from the session.
-- **OBJECTIVE:** Decide between two implementation shapes — (A) add an explicit org-switch/session-sync endpoint (`POST /orgs/set-active/`) that the SPA must call and await before navigating to billing, plus billing query invalidation on org change; or (B) remove generated billing entry points from the SPA org dashboard until the session-sync contract exists. Record the choice as a locked decision and implement it in the generated template.
+- **RESOLUTION:** Option B locked — removed generated SPA billing entry points (dashboard cards, sidebar navigation, org-dashboard billing cards/links, `modulePaths.billing` from the React hook contract) until a session-sync contract exists.
 - **SCOPE:**
-  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/templates/index.html.j2` — SPA nav/routing section (lines 77–88); `currentOrgSlug` usage and billing URL construction
-  - `quickscale_modules/orgs/` — if Option A: add session-sync view + URL; update middleware/session to write `ACTIVE_ORG_SESSION_KEY` on org-switch POST
-  - `quickscale_modules/billing/` — if Option A: billing views validate session org matches request before serving
-- **ACCEPTANCE CRITERIA:** In a generated SaaS project, navigating billing pages after an org switch always resolves the correct org; no cross-tenant billing data is served. If Option B: billing link is absent from the SPA nav until the contract ships.
-- **VALIDATION PATH:** Manual test in a generated SaaS project — switch org, load billing dashboard, confirm correct org is active. `make MODULE=billing test -- --modules` + `make MODULE=orgs test -- --modules`.
+  - `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/` — removed billing from `templates/index.html.j2` (modulePaths), `src/hooks/useModules.ts.j2` (module path interface + defaults), `src/components/layout/Sidebar.tsx.j2` (nav entry + CreditCard icon), `src/pages/Dashboard.tsx.j2` (billing dashboard card), `src/pages/orgs/OrgDashboardPage.tsx.j2` (billing cards, links, useOrgBilling call)
+  - `lint_frontend.sh` repaired to use proper Jinja rendering (Python + Poetry entrypoint) instead of sed-based stripping
+  - `App.test.tsx.j2` and `PublicSocialPages.test.tsx.j2` updated to remove `billing: '/billing/pricing/'` from test fixtures
+  - Tests updated and documentation (`decisions.md`, `generated_project_structure.md`) refreshed
+- **ACCEPTANCE CRITERIA:** Generated `showcase_react` SPA has no billing nav entry, no billing dashboard card, no org-dashboard billing cards/links, and `modulePaths.billing` is absent from the React hook config. Module flags (`modules.billing`) remain present.
+- **VALIDATION PATH:** `poetry run pytest quickscale_core/tests/test_react_theme_integration.py -v`
 - **DEPENDS:** T1.19 merged to v87. Decision required before implementation starts.
-- **RECOMMENDATION:** **Pursue** — active functional gap in generated SaaS projects. Option B is the safer quick fix while a session-sync contract is designed.
+- **RECOMMENDATION:** **Pursue (B)** — completed and merged to `v87`. See CHANGELOG.md for merged status and validation results.
+- **FINDING:** The `useOrgs.ts` hook still exports `useOrgBilling` and `buildOrgBillingApiPath` — these remain available for future use when the session-sync contract ships (Option A). The generated project's `useOrgs.ts` is owned by the orgs/billing backend integration, not the `showcase_react` theme templates, and was left untouched by D1 Option B.
 
 ---
 
@@ -104,11 +106,11 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **D1** → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 ready now (T1.19 merged); AF1 must merge to `v87` before AF2/AF4 start |
+| `wt-track1` | **D1** ✅ → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 completed and merged to `v87`; AF1 must merge to `v87` before AF2/AF4 start |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
 | `wt-track3` | **AF6** (enabler) → **AF5**, **AF7** | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
 
-**Sequencing rationale.** Track 1 opens with **D1** (billing session-sync fix in the generated React template; no AF dependencies; ready now that T1.19 is merged), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
+**Sequencing rationale.** Track 1 opened with **D1** (billing surgery in the generated React template; no AF dependencies; completed and merged to `v87`), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
 
 ### QA hardening thread (cross-track)
 

@@ -13,7 +13,6 @@
 ] -%}
 {%- set optional_module_path_entries = [
   ('crm', "  crm: string\n"),
-  ('billing', "  billing: string\n"),
   ('social', "  social: string\n"),
   ('analytics', "  analytics: string\n"),
 ] -%}
@@ -42,7 +41,6 @@ interface QuickScaleModulePaths {
 {% endraw -%}
 {%- if selected_modules is none %}
 {% raw %}  crm: string
-  billing: string
   social: string
   analytics: string
 {% endraw %}{%- else %}
@@ -113,13 +111,10 @@ const defaultConfig: QuickScaleConfig = {
 {% endraw -%}
 {%- if selected_modules is none %}
 {% raw %}    crm: '/crm',
-    billing: '/billing/pricing/',
     social: '/social',
     analytics: '/analytics/',
 {% endraw %}{%- else %}
 {%- if 'crm' in selected_modules %}    crm: '/crm',
-{% endif -%}
-{%- if 'billing' in selected_modules %}    billing: '/billing/pricing/',
 {% endif -%}
 {%- if 'social' in selected_modules %}    social: '/social',
 {% endif -%}
@@ -139,8 +134,9 @@ function inferCurrentOrgSlug(config: QuickScaleConfig): string | null {
     return config.owner.currentOrgSlug
   }
 
-  for (const candidatePath of [config.modulePaths.billing, config.modulePaths.crm]) {
-    const match = candidatePath.match(/^\/orgs\/([^/]+)\/(billing|crm)(\/|$)/)
+  const crmPath = (config.modulePaths as { crm?: string }).crm
+  if (crmPath) {
+    const match = crmPath.match(/^\/orgs\/([^/]+)\/crm(\/|$)/)
     if (match) {
       return decodeURIComponent(match[1])
     }
