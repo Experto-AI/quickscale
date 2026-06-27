@@ -86,7 +86,7 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF1** (foundation) → **AF3** | Runtime isolation | AF1 starts immediately; AF3 waits on AF1 + AF2 |
+| `wt-track1` | **AF1** ⏸️ (partial, blocked) → **AF3** | Runtime isolation | AF1 fully implemented in `wt-track1` (uncommitted); blocked on AF1-CR-002 + AF1-CR-005 before merge to `v87`; AF3 waits on AF1 + AF2 |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
 | `wt-track3` | **AF7** ⏸️ (partial, blocked) → **AF8** | Generator / CLI | AF6 + AF5 complete and merged; AF7 blocked on AF7-CR-003; AF8 starts immediately (independent) |
 
@@ -106,18 +106,33 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 
 ---
 
-### - [ ] AF1 — Tenant-table isolation conformance gate + declarative RLS
+### - [ ] AF1 — Tenant-table isolation conformance gate + declarative RLS (PARTIAL — blocked by AF1-CR-002, AF1-CR-005)
 
 `**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track1` — **foundation; must merge to `v87` before AF2/AF4 begin.**
 - **WHY → Finding 1.** RLS is six hand-written `enable_rls` migrations with copy-pasted SQL and hardcoded table lists; child tables without `organization_id` (`ContactNote`/`DealNote`) sit outside *both* the Python manager and RLS, and nothing asserts coverage.
 - **OBJECTIVE:** (1) Land a CI **conformance test** that walks `apps.get_models()`, selects tenant-owned models, and asserts each has an `organization_id` column + a live FORCE-RLS policy in `pg_policies` — failing the build on any gap. Parent-join policies are not a valid exemption (child-table policy locked to Option C). (2) Introduce a reusable `EnableTenantRLS(model)` migration operation generating the policy from one source string; migrate the six modules onto it. (3) Add `organization_id` FK to `ContactNote` and `DealNote` (denormalize — **child-table policy locked to C**); add a DB constraint/trigger to keep child `organization_id` equal to the parent's; promote both to `TenantModel`; apply `EnableTenantRLS` on them.
-- **SCOPE:** new conformance test in `tests_shared/`; `orgs/.../tenancy.py` (registry/`TenantModel` marker); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`) — schema migration + FK + constraint.
+- **SCOPE:** conformance test in `quickscale_modules/orgs/tests/` (owns the registry); `orgs/.../tenancy.py` (registry + RLS/equality infrastructure); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`) — schema migration + FK + constraint; `forms` child tables (`FormField`/`FormSubmission`/`FormFieldValue`) — schema migration + FK + constraint.
 - **ACCEPTANCE CRITERIA:** conformance test is green and *fails* when a tenant table lacks a direct-column policy (prove with a temporary uncovered model); no duplicated policy SQL remains; `ContactNote` and `DealNote` each have `organization_id` and a live FORCE-RLS policy.
-- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, run conformance test on PostgreSQL.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, `make MODULE=forms test`; run conformance gate on PostgreSQL.
 - **DEPENDS:** none (starts immediately). **Blocks:** AF2, AF4.
 - **RECOMMENDATION:** **Pursue (C for child tables, A's registry for infrastructure)** — child-table policy is locked (see Decisions locked table); registry + conformance gate is the implementation vehicle.
+- **LANDED (wt-track1, uncommitted — 2026-06-27):**
+  - **Phase 1 — Registry + conformance gate:** `TenantTableStatus`, `TenantTableEntry`, `TENANT_TABLE_REGISTRY` in `tenancy.py`; `test_tenant_table_conformance.py` (structural + PostgreSQL-only RLS assertions; negative-detection tests).
+  - **Phase 2 — Shared RLS/equality infrastructure:** `apply_force_rls` / `revert_force_rls` helpers; child-parent equality trigger function + `enable_child_parent_equality` / `disable_child_parent_equality`; naming constants for the conformance gate — all in `tenancy.py`. Six `enable_rls` migrations refactored to use shared helpers (no copy-pasted SQL remains).
+  - **Phase 3 — CRM child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `ContactNote` and `DealNote`; `crm/0009_add_note_organization_ownership.py` (backfill → NOT NULL flip → equality triggers → FORCE RLS).
+  - **Phase 4 — Forms child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `FormField`, `FormSubmission`, `FormFieldValue`; `forms/0007_new_organization_ownership.py` (backfill → NOT NULL flip → equality triggers → conditional field-parity trigger → FORCE RLS).
+  - **Phase 5 — Enforcing gate:** `test_exactly_zero_pending_remediation_entries()` asserts the registry is fully enrolled; live equality-trigger verification in `pg_trigger`.
+  - **Downstream updates:** `purge_organization.py` delete specs updated to use direct `organization` FK for all promoted child tables; `test_tenancy.py` unit tests for registry/infrastructure.
+  - **Final validation passed.** Independent change-review gate hit review cap with two unresolved findings (below).
+- **BLOCKING — AF1-CR-002 (high):** Forms admin and views read child-table data (`FormField`, `FormSubmission`, `FormFieldValue`) without a DB-side RLS access seam. Under the intended `NOBYPASSRLS` runtime role these reads are not correctly gated. **Files:** `quickscale_modules/forms/src/quickscale_modules_forms/admin.py`, `.../views.py`. **Required:** route operator/admin child-data reads through the same `org_scope()` / `all_objects` seam used by the parent `Form` model.
+- **BLOCKING — AF1-CR-005 (high):** Public-submit notifications are rendered after `org_scope()` exits, so email field values and the submitter-name suffix sourced from the org context can be silently lost. **Files:** `quickscale_modules/forms/src/quickscale_modules_forms/views.py`, `.../notifications.py`. **Required:** render notification content (field value lookup, submitter-name suffix) inside the `org_scope()` block, before it exits.
+- **NEXT STEP / REQUIRED:**
+  1. Fix `forms/admin.py` + `forms/views.py` for AF1-CR-002 (operator/admin child-data RLS seam).
+  2. Fix `forms/views.py` + `forms/notifications.py` for AF1-CR-005 (notification render inside `org_scope()`).
+  3. Re-run `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
+  4. Only then commit wt-track1 and merge to `v87`.
 
 ### - [ ] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()`
 
