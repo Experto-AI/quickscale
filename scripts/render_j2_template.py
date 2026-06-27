@@ -36,13 +36,31 @@ def get_lint_context() -> dict:
         "social",
     ]
 
+    # Allow SELECTED_MODULES env var override so the lint pipeline can
+    # render a no-social variant for TypeScript validation coverage.
+    env_modules = os.environ.get("SELECTED_MODULES")
+    if env_modules is not None:
+        import json
+
+        try:
+            modules = json.loads(env_modules)
+        except json.JSONDecodeError as exc:
+            print(
+                f"Warning: SELECTED_MODULES is not valid JSON ({exc}), "
+                "falling back to all modules.",
+                file=sys.stderr,
+            )
+            modules = _all_modules
+    else:
+        modules = _all_modules
+
     return {
         "project_name": "MyApp",
         "package_name": "myapp",
         "project_description": "A QuickScale project",
         # Full module list so 'foo in selected_modules' is always True
         # and 'selected_modules is none' is False for maximal coverage.
-        "selected_modules": _all_modules,
+        "selected_modules": modules,
     }
 
 

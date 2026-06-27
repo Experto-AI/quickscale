@@ -50,7 +50,17 @@ interface NavItem {
 }
 
 export function Sidebar() {
+{%- endraw %}
+{% if selected_modules is none or 'social' in selected_modules %}
+{%- raw %}
   const { modules, modulePaths } = useProjectConfig()
+{%- endraw %}
+{% else %}
+{%- raw %}
+  const { modules } = useProjectConfig()
+{%- endraw %}
+{% endif %}
+{%- raw %}
   const { appPaths, hasOrgContext, isSaas } = useOrgNavigation()
 
   const navigation: NavItem[] = [

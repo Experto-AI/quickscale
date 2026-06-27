@@ -16,7 +16,9 @@ function applyRuntimeConfig(
 ) {
   window.__QUICKSCALE__ = {
     projectName: 'QuickScale Test Project',
-    modules: {
+{% endraw %}
+{%- if selected_modules is none %}
+{% raw %}    modules: {
       auth: false,
       blog: false,
       listings: false,
@@ -34,7 +36,43 @@ function applyRuntimeConfig(
       social: '/social',
       analytics: '/analytics/',
     },
-    owner: config.owner ?? {
+{% endraw %}{%- else %}
+{% raw %}    modules: {
+{% endraw %}
+{%- if 'auth' in selected_modules %}
+      auth: false,{%- endif %}
+{%- if 'blog' in selected_modules %}
+      blog: false,{%- endif %}
+{%- if 'listings' in selected_modules %}
+      listings: false,{%- endif %}
+{%- if 'crm' in selected_modules %}
+      crm: false,{%- endif %}
+{%- if 'forms' in selected_modules %}
+      forms: false,{%- endif %}
+{%- if 'storage' in selected_modules %}
+      storage: false,{%- endif %}
+{%- if 'backups' in selected_modules %}
+      backups: false,{%- endif %}
+{%- if 'notifications' in selected_modules %}
+      notifications: false,{%- endif %}
+{%- if 'analytics' in selected_modules %}
+      analytics: false,{%- endif %}
+{%- if 'billing' in selected_modules %}
+      billing: false,{%- endif %}
+{%- if 'social' in selected_modules %}
+      social: false,{%- endif %}
+{% raw %}    },
+    modulePaths: {
+{% endraw %}
+{%- if 'crm' in selected_modules %}
+      crm: '/crm',{%- endif %}
+{%- if 'social' in selected_modules %}
+      social: '/social',{%- endif %}
+{%- if 'analytics' in selected_modules %}
+      analytics: '/analytics/',{%- endif %}
+{% raw %}    },
+{% endraw %}{%- endif %}
+{% raw %}    owner: config.owner ?? {
       mode: 'solo',
       currentOrgSlug: null,
     },

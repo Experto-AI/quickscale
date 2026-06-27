@@ -78,7 +78,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work
 
-### - [~] D1 — Generated `showcase_react` SaaS org-switch billing parity (BLOCKED — see D1-REV-005)
+### - [x] D1 — Generated `showcase_react` SaaS org-switch billing parity
 
 `**Tier 2 — Medium | PLANNING TIER: medium | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -93,18 +93,8 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 - **ACCEPTANCE CRITERIA:** Generated `showcase_react` SPA has no billing nav entry, no billing dashboard card, no org-dashboard billing cards/links, and `modulePaths.billing` is absent from the React hook config. Module flags (`modules.billing`) remain present.
 - **VALIDATION PATH:** `poetry run pytest quickscale_core/tests/test_react_theme_integration.py -v`
 - **DEPENDS:** T1.19 merged to v87. Decision required before implementation starts.
-- **RECOMMENDATION:** **Pursue (B)** — implementation started but **not merge-ready** (see findings below).
+- **RECOMMENDATION:** **Pursue (B)** — completed and merged to `v87`. See CHANGELOG.md for merged status and validation results.
 - **FINDING:** The `useOrgs.ts` hook still exports `useOrgBilling` and `buildOrgBillingApiPath` — these remain available for future use when the session-sync contract ships (Option A). The generated project's `useOrgs.ts` is owned by the orgs/billing backend integration, not the `showcase_react` theme templates, and was left untouched by D1 Option B.
-
-> **🛑 D1-REV-005 — Blocking: empty/partial `selected_modules` variants not compile-safe.**
->
-> `main.tsx.j2` is **unchanged**: it unconditionally imports `SocialEmbedsPublicPage` and `SocialLinkTreePublicPage` from `@/pages/`, and `renderQuickScaleRoot()` always expects a `PublicSocialSurface` argument with social-page routes. The generated SPA will fail to compile if the `social` module is not selected.
->
-> `App.test.tsx.j2` still assumes all-module `modulePaths` shapes (`social`, `analytics`). `PublicSocialPages.test.tsx.j2` unconditionally imports social page components and types. Neither fixture is compile-safe for empty or partial `selected_modules`.
->
-> **Status:** Design approved, billing-surgery scope is complete, but the compile-safety gap blocks merge to `v87` until these three templates are hardened for arbitrary module selections.
->
-> **Next action:** Either (A) fix `main.tsx.j2` with conditional imports/lazy routes + harden test fixtures for partial module configurations, or (B) explicitly decide to defer compile-safety to a later phase and document the known gap in generated-project documentation.
 
 ---
 
@@ -116,11 +106,11 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **D1** → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 ready now (T1.19 merged); AF1 must merge to `v87` before AF2/AF4 start |
+| `wt-track1` | **D1** ✅ → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 completed and merged to `v87`; AF1 must merge to `v87` before AF2/AF4 start |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
 | `wt-track3` | **AF6** (enabler) → **AF5**, **AF7** | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
 
-**Sequencing rationale.** Track 1 opens with **D1** (billing session-sync fix in the generated React template; no AF dependencies; ready now that T1.19 is merged), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
+**Sequencing rationale.** Track 1 opened with **D1** (billing surgery in the generated React template; no AF dependencies; completed and merged to `v87`), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
 
 ### QA hardening thread (cross-track)
 
