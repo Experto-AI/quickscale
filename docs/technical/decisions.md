@@ -1140,13 +1140,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` | One-time M2 consolidation path: pre-M2 projects have `config.yml` + `file_hashes.yml` but lack consolidated `state.yml` fields; failing hard on stale legacy files would block the M2 migration. Failures are logged and import is skipped. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
 
-**Known violations to fix** (ordered by severity):
-
-| Violation | File | Fix |
-|-----------|------|-----|
-| `_CORE_FALLBACK_ADAPTERS` + three fallback adapters silently degrade managed module wiring when module package is not importable | `quickscale_core/manifest/entry_point.py` | Delete fallbacks; raise `ImproperlyConfigured` in `refresh_managed_adapters()` — see AF7 roadmap task |
-| `except Exception: pass` + "best-effort default" path returned when neither monorepo nor bundled manifests dir is found; callers "cope gracefully" with non-existent path | `quickscale_core/contracts/module_discovery.py:get_modules_base_path()` | Remove bundled-context branch (unsupported per AF7 decision); raise `ImproperlyConfigured` when monorepo path not found |
-| `Path.cwd().name` fallback when `project_name` is not provided to `get_railway_service_name()` | `quickscale_cli/utils/railway_utils.py` | Require project name explicitly; raise `ValueError` if absent |
+**Known violations:** See [findings.md §Finding-8](../../findings.md#finding-8) for the active violation list and [roadmap.md §AF8](./roadmap.md#af8) for remediation tasks.
 
 ---
 

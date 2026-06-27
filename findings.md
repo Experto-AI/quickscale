@@ -31,6 +31,7 @@
 | 5 | `quickscale apply` is a 16-step, **all-irreversible**, cross-system mutation (git + FS + Docker + DB migrations + **remote Railway deploy**) whose only recovery is convention-based "idempotent-rerun" — no rollback, no compensation, no per-step verification | **6–18 mo** | Half-applied project / failed remote deploy × medium |
 | 6 | The generator's hottest logic is concentrated in **god files** (`apply_command.py` 3.1k, `dr_engine/orchestration.py` 3.7k, `module_config.py` 2.1k, `resolvers.py` 1.9k, `entry_point.py` 1.6k) — serial merge chokepoints that directly fight the documented 3-worktree parallel workflow | **now** (dev) | Merge conflicts / Tier-3 risk concentration × high |
 | 7 | The "self-describing module" decision (D3) only half-landed: rich modules (billing, crm, social) still carry **hand-written imperative adapters keyed by module name inside `quickscale_core`** (`MANIFEST_ADAPTER_REGISTRY`), so adding a non-trivial module means editing core, not just shipping a module | **6–18 mo** | Per-module coordination tax × medium |
+| 8 | Three fail-hard principle violations in setup/discovery code: `except Exception: pass` in module-path discovery, best-effort path returned when the modules directory cannot be found, and `Path.cwd().name` fallback for a missing project name in Railway utils | **now** (active code paths) | Wrong configuration silently accepted instead of failing × medium |
 
 **These findings span two distinct domains.** Findings 1–4 sit on the **runtime multi-tenant isolation** seam (the `quickscale_modules/*` + `orgs` machinery that runs inside a generated app). Findings 5–7 sit on the **generator/CLI** seam (`quickscale_core` + `quickscale_cli` — the `plan`/`apply` engine itself) and were surfaced specifically by broadening the autopsy past the isolation pivot. The two domains share almost no files, which is what makes them parallelizable (see the roadmap track assignment).
 
@@ -263,12 +264,52 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 
 ---
 
+<a id="finding-8"></a>
+## Finding 8 — Fail-hard violations: silent fallbacks in module-path discovery, managed-adapter resolution, and Railway project-name inference
+
+**Time horizon: now (active code paths).**
+
+**Problem.** Three setup/discovery paths silently substitute a fallback value when a required resource is missing, violating the fail-hard principle (decisions.md §fail-hard-principle). Each one masks a configuration error rather than surfacing it immediately — deferring the failure to a harder-to-diagnose downstream point.
+
+**Violation 1 — Managed-adapter core fallbacks** *(tracked as AF7-CR-003; fix is the AF7 next-step block)*
+
+`refresh_managed_adapters()` catches `ImportError` silently (`except ImportError: pass`) when a managed module adapter is not importable, then falls through to `_CORE_FALLBACK_ADAPTERS` — three thin stubs (`_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback`) that lack post-hooks and managed-file rendering relative to the module-owned implementations. The bundled/installed-without-module-source context is not a supported configuration.
+
+**Violation 2 — Module-path best-effort default**
+
+When neither the monorepo path (`{repo_root}/quickscale_modules/`) nor the bundled package-data path resolves, `get_modules_base_path()` returns the monorepo path regardless of whether it exists on disk. The bundled-path branch is wrapped in `except Exception: pass`. Callers are documented to "cope gracefully when the directory does not exist (return empty lists/dicts)" — i.e., downstream discovery silently returns empty results with no error.
+
+**Violation 3 — Railway project-name directory fallback**
+
+When `project_name` is absent or falsy, `get_railway_service_name()` returns `Path.cwd().name`. The Railway service is then named after whichever directory the CLI was invoked from, which is unpredictable and may silently target the wrong Railway service.
+
+**Evidence.**
+- `entry_point.py:234` — `except ImportError: pass` in the managed-adapter import; `_billing_core_fallback` (:363), `_crm_core_fallback` (:515), `_social_core_fallback` (:1414).
+- `contracts/module_discovery.py:87-88,111-114` — docstring: "returns the monorepo path as a fallback (callers should handle gracefully)"; comment: "Both fallbacks failed — return the monorepo path as a best-effort default. Discovery functions cope gracefully when the path does not exist."
+- `cli/utils/railway_utils.py:486-492` — `if project_name: return project_name` else `return Path.cwd().name` with comment "Use current directory name as fallback."
+
+**Correct shape.** Each path must assert the required input is present and raise immediately:
+- `ImproperlyConfigured` when a managed module adapter is not importable (adapter is a configuration requirement, not optional).
+- `ImproperlyConfigured` when the modules directory cannot be located (setup-time invariant).
+- `ValueError` when project name is absent (CLI input contract violation).
+
+**Alternatives.** These are not design choices — the fail-hard principle is locked (decisions.md §fail-hard-principle). The only question is sequencing. Violation 1 is AF7's NEXT STEP block; violations 2 and 3 are new AF8 tasks.
+
+**Trigger for urgency.**
+- Violation 1: any deployment where a managed module's package is absent but a stub adapter silently wires billing/CRM/social with missing behavior.
+- Violation 2: any environment where the monorepo path is absent (e.g. installed wheel without module source), returning empty discovery results with no error.
+- Violation 3: an operator running the CLI from a directory whose name differs from the project slug, silently deploying to the wrong Railway service.
+
+**Detection signal.** Grep `except Exception: pass` and `except ImportError: pass` in setup/discovery paths; grep `"best-effort"`, `"gracefully"`, `"cwd().name"` in module-path discovery and CLI utils. All should return zero in these paths after AF7 and AF8 land.
+
+---
+
 ## Cross-finding note for roadmap planning
 
-The seven findings form **two independent clusters** that share almost no files, plus one internal dependency chain:
+The eight findings form **two independent clusters** that share almost no files, plus one internal dependency chain:
 
 - **Runtime isolation cluster (Findings 1–4)** — all touch `orgs/` + the tenant modules. They are *not* freely parallel among themselves: **Finding 1's conformance gate + `TenantModel` base is the prerequisite**, after which **Findings 2 and 4 share a single fix** (a connection-level GUC hook that both lets the base manager stop governing graph traversal *and* removes the request-long transaction), and **Finding 3** (operator seam) lands last on the hardened base. Sequence: **1 → (2 + 4) → 3.**
-- **Generator cluster (Findings 5–7)** — all touch `quickscale_core`/`quickscale_cli`. **Finding 6 (decompose the god files) is the enabler**: doing it first creates the per-step/per-adapter seams that **Finding 5 (apply executor)** and **Finding 7 (push adapters into modules)** then land on cleanly. Sequence: **6 → (5, 7).**
+- **Generator cluster (Findings 5–8)** — all touch `quickscale_core`/`quickscale_cli`. **Finding 6 (decompose the god files) is the enabler**: doing it first creates the per-step/per-adapter seams that **Finding 5 (apply executor)** and **Finding 7 (push adapters into modules)** then land on cleanly. **Finding 8 (fail-hard violations)** is independent — AF7's violation (Finding 8, V1) is the AF7 next-step block; the remaining two (V2/V3) are AF8 and start immediately with no prereqs. Sequence: **6 → (5, 7); 8 independent.**
 
 Because the two clusters touch disjoint file sets, they parallelize across worktrees with no merge contention. The roadmap below assigns the isolation cluster to track 1 (foundation) + track 2 (shared-fix seam) and the entire generator cluster to track 3.
 

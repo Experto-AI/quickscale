@@ -88,9 +88,9 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 |---|---|---|---|
 | `wt-track1` | **AF1** (foundation) → **AF3** | Runtime isolation | AF1 starts immediately; AF3 waits on AF1 + AF2 |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
-| `wt-track3` | **AF7** ⏸️ (partial, blocked) | Generator / CLI | AF6 + AF5 complete and merged; blocked on AF7-CR-003 |
+| `wt-track3` | **AF7** ⏸️ (partial, blocked) → **AF8** | Generator / CLI | AF6 + AF5 complete and merged; AF7 blocked on AF7-CR-003; AF8 starts immediately (independent) |
 
-**Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: AF6 → AF5 complete and merged. AF7 infrastructure and module-owned adapters landed but bundled-fallback parity is blocked; see AF7 entry for details. The two clusters touch disjoint file sets.
+**Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: AF6 → AF5 complete and merged. AF7 infrastructure and module-owned adapters landed but blocked on AF7-CR-003; see AF7 entry. **AF8 starts immediately** — no dependency on AF7; fixes two independent fail-hard violations in `module_discovery.py` and `railway_utils.py`. The two clusters touch disjoint file sets.
 
 ### QA hardening thread (cross-track)
 
@@ -188,6 +188,24 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
   7. Only then mark AF7 complete and merge.
 - **FINDINGS / FOLLOW-UP (on landed scope):**
   - Remaining import-time-registered modules (analytics, blog, listings, forms, backups, notifications, auth, orgs, storage) may also be migrated using the same pattern once AF7 is unblocked. No pressing need — the seam is proven with social + billing + crm.
+
+---
+
+<a id="af8"></a>
+### - [ ] AF8 — Fix fail-hard violations in module-path discovery and Railway project-name inference
+
+`**Tier 1 — Small | RISK LEVEL: low | EXECUTION PATH: full-path**`
+
+- **TRACK:** `wt-track3` — independent of AF7; starts immediately.
+- **WHY → Finding 8, violations 2–3.** Two setup paths silently substitute a fallback instead of failing hard: `get_modules_base_path()` returns a potentially-nonexistent path as a "best-effort default" when discovery fails (`except Exception: pass`), and `get_railway_service_name()` uses `Path.cwd().name` when project name is not provided.
+- **OBJECTIVE:**
+  1. **`contracts/module_discovery.py:get_modules_base_path()`** — Remove the bundled-context branch (unsupported per AF7 decision). Remove `except Exception: pass`. When the monorepo path does not exist raise `ImproperlyConfigured` with a message naming the expected path. Update callers that currently document "cope gracefully" behavior to expect the exception instead.
+  2. **`cli/utils/railway_utils.py:get_railway_service_name()`** — Remove the `Path.cwd().name` fallback. Raise `ValueError` when `project_name` is absent or empty, with a message directing the caller to pass an explicit project slug.
+- **SCOPE:** `quickscale_core/src/quickscale_core/contracts/module_discovery.py`; `quickscale_cli/src/quickscale_cli/utils/railway_utils.py`; callers that depend on the graceful-empty behavior of `get_modules_base_path()` (e.g. `discover_shipped_module_names()`).
+- **ACCEPTANCE CRITERIA:** both functions raise immediately on missing required input; `except Exception: pass` removed from module-path discovery; no `Path.cwd().name` fallback; grep for `"best-effort"` and `"gracefully"` in these files returns zero; `validate-and-review` passes.
+- **VALIDATION PATH:** `make MODULE=core test`; `make test`; confirm Railway deploy path still works when project name is supplied.
+- **DEPENDS:** none. **Blocks:** nothing.
+- **RECOMMENDATION:** Pursue — two contained, surgical fixes that close confirmed fail-hard violations with no design ambiguity.
 
 ---
 
