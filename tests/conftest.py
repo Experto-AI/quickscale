@@ -238,6 +238,7 @@ def contact_note(db, contact, user):
         contact=contact,
         created_by=user,
         text="Discussed pricing options",
+        organization=contact.organization,
     )
 
 
@@ -248,6 +249,7 @@ def deal_note(db, deal, user):
         deal=deal,
         created_by=user,
         text="Follow up next week",
+        organization=deal.organization,
     )
 
 

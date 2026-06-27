@@ -244,10 +244,12 @@ class TestContactNoteModel:
             contact=contact,
             created_by=user,
             text="Discussed pricing",
+            organization=contact.organization,
         )
         assert note.text == "Discussed pricing"
         assert note.contact == contact
         assert note.created_by == user
+        assert note.organization_id == contact.organization_id
 
     def test_contact_notes_relationship(self, contact_note, contact):
         """Test contact has notes"""
@@ -264,10 +266,12 @@ class TestDealNoteModel:
             deal=deal,
             created_by=user,
             text="Follow up required",
+            organization=deal.organization,
         )
         assert note.text == "Follow up required"
         assert note.deal == deal
         assert note.created_by == user
+        assert note.organization_id == deal.organization_id
 
     def test_deal_notes_relationship(self, deal_note, deal):
         """Test deal has notes"""
