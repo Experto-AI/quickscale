@@ -10,20 +10,19 @@ thin Django-facing wrappers where needed.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import shutil
 import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from io import StringIO
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import TYPE_CHECKING, Any, Callable, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import django
 from django.apps import apps
@@ -38,7 +37,6 @@ from quickscale_core.dr_engine.primitives import (
     BackupError,
     BackupPolicySnapshot,
     ShellCommandRunner,
-    _build_snapshot_child_descriptor,
     _compute_sha256,
     _database_engine_family,
     _dump_postgresql_database,
@@ -50,12 +48,9 @@ from quickscale_core.dr_engine.primitives import (
     _mint_snapshot_id,
     _PROMOTION_VERIFICATION_FILENAME,
     _RELEASE_METADATA_FILENAME,
-    _relative_snapshot_child_path,
     _REQUIRED_POSTGRESQL_MAJOR,
     _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES,
-    _SNAPSHOTS_DIRECTORY_NAME,
     _SNAPSHOT_DATABASE_DIRECTORY_NAME,
-    _write_json_file,
 )
 from quickscale_core.dr_engine.recovery import (
     ArtifactLike,
@@ -82,18 +77,52 @@ from quickscale_core.dr_engine.verification import (
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
-from quickscale_modules_backups.models import (  # noqa: E402  # isort:skip
+from quickscale_modules_backups.models import (  # type: ignore[import-untyped]
     BackupArtifact,
     BackupPolicy,
     BackupSnapshot,
+)  # noqa: E402  # isort:skip
+
+# AF6 Phase 3 — re-exports from concern-focused sibling modules.
+# These names are defined in the sibling modules and re-exported here so that
+# existing import paths (quickscale_core.dr_engine.orchestration.xxx) and test
+# patch targets continue to work unchanged.
+from quickscale_core.dr_engine._lock import (  # noqa: E402, F401
+    BackupLockError,
+    StagedAdminRestoreUpload,
+    _acquire_backup_lock,
+    _backup_creation_lock,
+    _cleanup_local_backup_file,
+    _clear_stale_backup_lock,
+    _release_backup_lock,
+)
+from quickscale_core.dr_engine._paths import (  # noqa: E402, F401
+    _build_snapshot_capture_resume_policy,
+    _build_snapshot_database_descriptor,
+    _build_snapshot_local_root,
+    _build_snapshot_lock_directory,
+    _build_snapshot_remote_root,
+    _get_snapshot_report_children,
+    _replace_policy_remote_prefix,
+    _snapshot_capture_is_complete,
+    _snapshot_sidecar_path,
+    _snapshot_uses_private_remote,
+    build_backup_filename,
+    get_local_backup_directory,
+)
+from quickscale_core.dr_engine._sidecar import (  # noqa: E402, F401
+    _build_env_var_manifest,
+    _build_media_sync_manifest,
+    _build_promotion_verification_placeholder,
+    _capture_snapshot_sidecars,
+    _load_snapshot_sidecar_payload,
+    _persist_snapshot_sidecar_payload,
 )
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-_LOCK_FILENAME = ".quickscale-backup-create.lock"
-_LOCK_TIMEOUT_SECONDS = 300
 _ROUTE_KIND_KEY = "ROUTE_KIND"
 
 # ---------------------------------------------------------------------------
@@ -151,7 +180,7 @@ def _get_project_slug() -> str:
     candidate = base_dir.name.strip()
     if candidate:
         return candidate
-    return settings.ROOT_URLCONF.split(".", maxsplit=1)[0]
+    return str(settings.ROOT_URLCONF.split(".", maxsplit=1)[0])
 
 
 def _collect_module_versions() -> dict[str, str]:
@@ -206,336 +235,15 @@ def _read_setting_value(
     return getattr(settings_obj, key, default)
 
 
-# ---------------------------------------------------------------------------
-# Lock management
-# ---------------------------------------------------------------------------
+# AF6 Phase 3 — extracted to quickscale_core.dr_engine._lock
 
 
-class BackupLockError(BackupError):
-    """Raised when a backup operation is already running."""
+# AF6 Phase 3 — extracted to quickscale_core.dr_engine._paths
 
 
-@dataclass(frozen=True)
-class StagedAdminRestoreUpload:
-    """Quarantined admin-uploaded restore input plus trusted-match metadata."""
-
-    local_path: Path
-    checksum_sha256: str
-    size_bytes: int
-
-
-@contextmanager
-def _backup_creation_lock(
-    local_directory: Path,
-    *,
-    now: datetime | None = None,
-) -> Iterator[None]:
-    """Acquire and release a cross-process filesystem lock for backup creation."""
-    lock_path = _acquire_backup_lock(local_directory, now=now)
-    try:
-        yield
-    finally:
-        _release_backup_lock(lock_path)
-
-
-def _acquire_backup_lock(
-    local_directory: Path,
-    *,
-    now: datetime | None = None,
-) -> Path:
-    """Create an exclusive lock file to prevent overlapping backup runs."""
-    local_directory.mkdir(parents=True, exist_ok=True)
-    lock_path = local_directory / _LOCK_FILENAME
-    lock_time = now or datetime.now(timezone.utc)
-
-    for _ in range(2):
-        try:
-            descriptor = os.open(
-                lock_path,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                0o600,
-            )
-        except FileExistsError:
-            if not _clear_stale_backup_lock(lock_path, now=lock_time):
-                raise BackupLockError(
-                    "A backup operation is already in progress. Wait for it to "
-                    "finish first."
-                )
-            continue
-        except OSError as exc:
-            raise BackupError(
-                f"Unable to create backup lock file at {lock_path}: {exc}"
-            ) from exc
-
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "pid": os.getpid(),
-                        "created_at": lock_time.astimezone(timezone.utc).isoformat(),
-                    },
-                    handle,
-                )
-                handle.flush()
-                os.fsync(handle.fileno())
-        except OSError as exc:
-            cleanup_error = _cleanup_local_backup_file(lock_path)
-            details = f"Unable to write backup lock file at {lock_path}: {exc}"
-            if cleanup_error is not None:
-                details += f"; cleanup failed: {cleanup_error}"
-            raise BackupError(details) from exc
-
-        return lock_path
-
-    raise BackupLockError(
-        "A backup operation is already in progress. Wait for it to finish first."
-    )
-
-
-def _clear_stale_backup_lock(lock_path: Path, *, now: datetime) -> bool:
-    """Remove an expired lock file so a new backup run can proceed."""
-    try:
-        lock_mtime = lock_path.stat().st_mtime
-    except FileNotFoundError:
-        return True
-
-    if (now.timestamp() - lock_mtime) <= _LOCK_TIMEOUT_SECONDS:
-        return False
-
-    try:
-        lock_path.unlink()
-    except FileNotFoundError:
-        return True
-    except OSError as exc:
-        raise BackupError(
-            f"Unable to clear stale backup lock file at {lock_path}: {exc}"
-        ) from exc
-    return True
-
-
-def _release_backup_lock(lock_path: Path) -> None:
-    """Remove the backup lock file after the operation finishes."""
-    try:
-        lock_path.unlink()
-    except FileNotFoundError:
-        return
-    except OSError as exc:
-        raise BackupError(
-            f"Unable to remove backup lock file at {lock_path}: {exc}"
-        ) from exc
-
-
-def _cleanup_local_backup_file(local_path: Path) -> str | None:
-    """Delete a local backup file and return an error message if cleanup fails."""
-    try:
-        local_path.unlink(missing_ok=True)
-    except OSError as exc:
-        return str(exc)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Snapshot path helpers
-# ---------------------------------------------------------------------------
-
-
-def build_backup_filename(
-    policy: BackupPolicySnapshot,
-    *,
-    now: datetime | None = None,
-    suffix: str | None = None,
-) -> str:
-    """Build a deterministic operator-friendly backup filename."""
-    timestamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    timestamp_text = timestamp.strftime("%Y%m%dT%H%M%SZ")
-    environment = os.getenv("QUICKSCALE_ENVIRONMENT", "local").strip() or "local"
-    project_slug = _get_project_slug()
-    resolved_suffix = suffix or "json"
-    return (
-        f"{policy.naming_prefix.strip()}-"
-        f"{project_slug}-{environment}-{timestamp_text}.{resolved_suffix}"
-    )
-
-
-def get_local_backup_directory(policy: BackupPolicySnapshot) -> Path:
-    """Resolve the configured private local backup directory."""
-    directory = Path(policy.local_directory)
-    if directory.is_absolute():
-        return directory
-
-    base_dir = Path(getattr(settings, "BASE_DIR", Path.cwd()))
-    return base_dir / directory
-
-
-def _build_snapshot_local_root(
-    policy: BackupPolicySnapshot,
-    snapshot_id: str,
-) -> Path:
-    """Resolve the private local root directory for one stored snapshot."""
-    return get_local_backup_directory(policy) / _SNAPSHOTS_DIRECTORY_NAME / snapshot_id
-
-
-def _build_snapshot_remote_root(
-    policy: BackupPolicySnapshot,
-    snapshot_id: str,
-) -> str:
-    """Return the matching private remote root key for one stored snapshot."""
-    remote_prefix = policy.remote_prefix.strip().strip("/")
-    snapshot_segment = f"{_SNAPSHOTS_DIRECTORY_NAME}/{snapshot_id}"
-    if remote_prefix:
-        return f"{remote_prefix}/{snapshot_segment}"
-    return snapshot_segment
-
-
-def _replace_policy_remote_prefix(
-    policy: BackupPolicySnapshot,
-    remote_prefix: str,
-) -> BackupPolicySnapshot:
-    """Return a copy of the policy scoped to a more specific remote prefix."""
-    return replace(policy, remote_prefix=remote_prefix)
-
-
-def _snapshot_sidecar_path(snapshot: BackupSnapshot, filename: str) -> Path:
-    """Resolve one sidecar file path under a snapshot root."""
-    return Path(snapshot.local_root_path) / filename
-
-
-# ---------------------------------------------------------------------------
-# Sidecar building
-# ---------------------------------------------------------------------------
-
-
-def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
-    """Capture private media inventory or fail with explicit provider metadata."""
-    base_payload: dict[str, Any] = {
-        "manifest_version": 1,
-        "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
-        "project_slug": _get_project_slug(),
-        "source_environment": _get_source_environment(),
-    }
-    try:
-        storage_helpers = _load_storage_helpers()
-        selection = storage_helpers.select_storage_backend(settings)
-    except Exception as exc:
-        return {
-            **base_payload,
-            "status": "unsupported",
-            "reason": "storage helper is unavailable in this runtime",
-            "error_type": exc.__class__.__name__,
-            "storage": {
-                "backend": (
-                    str(
-                        getattr(settings, "QUICKSCALE_STORAGE_BACKEND", "local")
-                    ).strip()
-                    or "local"
-                ),
-            },
-            "inventory": [],
-        }
-
-    storage_payload: dict[str, Any] = {
-        "backend": selection.backend,
-        "django_backend": selection.django_backend,
-        "use_s3_compatible": selection.use_s3_compatible,
-    }
-    if selection.use_s3_compatible:
-        storage_payload.update(
-            {
-                "bucket_name": str(selection.options.get("bucket_name", "")),
-                "endpoint_url": str(selection.options.get("endpoint_url", "")),
-                "region_name": str(selection.options.get("region_name", "")),
-                "querystring_auth": bool(
-                    selection.options.get("querystring_auth", False)
-                ),
-                "access_key_id_configured": bool(
-                    str(selection.options.get("access_key_id", ""))
-                ),
-                "secret_access_key_configured": bool(
-                    str(selection.options.get("secret_access_key", ""))
-                ),
-            }
-        )
-        try:
-            remote_inventory = storage_helpers.list_s3_compatible_media_inventory(
-                settings
-            )
-        except Exception as exc:
-            return {
-                **base_payload,
-                "status": "inventory_failed",
-                "reason": str(exc),
-                "error_type": exc.__class__.__name__,
-                "storage": storage_payload,
-                "inventory": [],
-            }
-        return {
-            **base_payload,
-            "status": "ready",
-            "storage": storage_payload,
-            "inventory": remote_inventory,
-        }
-
-    media_root_text = str(getattr(settings, "MEDIA_ROOT", "")).strip()
-    storage_payload["media_root"] = media_root_text
-    if not media_root_text:
-        return {
-            **base_payload,
-            "status": "missing_media_root",
-            "storage": storage_payload,
-            "inventory": [],
-        }
-
-    media_root = Path(media_root_text)
-    if not media_root.exists():
-        return {
-            **base_payload,
-            "status": "missing_local_root",
-            "storage": storage_payload,
-            "inventory": [],
-        }
-    if not media_root.is_dir():
-        return {
-            **base_payload,
-            "status": "invalid_local_root",
-            "storage": storage_payload,
-            "inventory": [],
-        }
-
-    local_inventory: list[dict[str, Any]] = []
-    for file_path in sorted(path for path in media_root.rglob("*") if path.is_file()):
-        file_stats = file_path.stat()
-        local_inventory.append(
-            {
-                "relative_path": file_path.relative_to(media_root).as_posix(),
-                "size_bytes": file_stats.st_size,
-                "checksum_sha256": _compute_sha256(file_path),
-                "modified_at": datetime.fromtimestamp(
-                    file_stats.st_mtime,
-                    tz=timezone.utc,
-                ).isoformat(),
-            }
-        )
-
-    return {
-        **base_payload,
-        "status": "ready",
-        "storage": storage_payload,
-        "inventory": local_inventory,
-    }
-
-
-def _build_env_var_manifest(*, captured_at: datetime) -> dict[str, Any]:
-    """Capture environment variable names only, never their values."""
-    variable_names = sorted(os.environ.keys())
-    return {
-        "manifest_version": 1,
-        "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
-        "project_slug": _get_project_slug(),
-        "source_environment": _get_source_environment(),
-        "status": "ready",
-        "count": len(variable_names),
-        "names": variable_names,
-    }
+# AF6 Phase 3 — _build_media_sync_manifest, _build_env_var_manifest,
+# _build_promotion_verification_placeholder, and sidecar lifecycle
+# extracted to quickscale_core.dr_engine._sidecar
 
 
 def _build_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
@@ -553,384 +261,7 @@ def _build_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
     }
 
 
-def _build_promotion_verification_placeholder(
-    *,
-    captured_at: datetime,
-) -> dict[str, Any]:
-    """Initialize the reserved promotion verification sidecar."""
-    return {
-        "manifest_version": 1,
-        "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
-        "project_slug": _get_project_slug(),
-        "source_environment": _get_source_environment(),
-        "status": "reserved",
-        "updated_at": captured_at.astimezone(timezone.utc).isoformat(),
-        "reports": [],
-        "notes": "Reserved for route-specific plan and execute reports.",
-        "rollback_pin": {"expires_at": None, "reason": ""},
-    }
-
-
-# ---------------------------------------------------------------------------
-# Sidecar lifecycle
-# ---------------------------------------------------------------------------
-
-
-def _load_snapshot_sidecar_payload(
-    snapshot: BackupSnapshot,
-    filename: str,
-) -> dict[str, Any]:
-    """Read and validate one JSON sidecar payload for a snapshot."""
-    local_path = _snapshot_sidecar_path(snapshot, filename)
-    if not local_path.exists():
-        raise BackupError(f"Snapshot sidecar not found: {filename}")
-
-    try:
-        payload = json.loads(local_path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise BackupError(
-            f"Unable to read snapshot sidecar '{filename}': {exc}"
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise BackupError(f"Snapshot sidecar '{filename}' is not valid JSON") from exc
-
-    if not isinstance(payload, dict):
-        raise BackupError(f"Snapshot sidecar '{filename}' must contain a JSON object")
-    return payload
-
-
-def _persist_snapshot_sidecar_payload(
-    snapshot: BackupSnapshot,
-    *,
-    filename: str,
-    kind: str,
-    payload: dict[str, Any],
-    policy: BackupPolicySnapshot | None = None,
-    remote_uploader: _RemoteUploader | None = None,
-) -> dict[str, Any]:
-    """Write one sidecar payload and refresh its snapshot descriptor."""
-    local_path = _snapshot_sidecar_path(snapshot, filename)
-    _write_json_file(local_path, payload)
-
-    child_descriptors_json = deepcopy(
-        snapshot.child_descriptors_json
-        if isinstance(snapshot.child_descriptors_json, dict)
-        else {}
-    )
-    sidecars = child_descriptors_json.setdefault("sidecars", {})
-    if not isinstance(sidecars, dict):
-        sidecars = {}
-        child_descriptors_json["sidecars"] = sidecars
-
-    relative_path = _relative_snapshot_child_path(
-        Path(snapshot.local_root_path), local_path
-    )
-    descriptor = _build_snapshot_child_descriptor(
-        kind=kind,
-        status=BackupSnapshot.STATUS_READY,
-        relative_path=relative_path,
-        local_path=local_path,
-        size_bytes=local_path.stat().st_size,
-        checksum_sha256=_compute_sha256(local_path),
-        metadata={"manifest_status": str(payload.get("status", "")).strip()},
-    )
-
-    existing_descriptor = sidecars.get(filename)
-    if isinstance(existing_descriptor, dict):
-        existing_remote_key = str(existing_descriptor.get("remote_key", "")).strip()
-        if existing_remote_key:
-            descriptor["remote_key"] = existing_remote_key
-
-    resolved_policy = policy or _load_active_policy_snapshot()
-    if (
-        snapshot.remote_root_key
-        and resolved_policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
-    ):
-        uploader = remote_uploader or _upload_to_private_remote
-        try:
-            descriptor["remote_key"] = _upload_snapshot_child_to_private_remote(
-                local_path,
-                policy=resolved_policy,
-                snapshot_remote_root=snapshot.remote_root_key,
-                relative_path=relative_path,
-                remote_uploader=uploader,
-            )
-        except BackupError as exc:
-            descriptor["status"] = BackupSnapshot.STATUS_FAILED
-            descriptor["error"] = str(exc)
-            sidecars[filename] = descriptor
-            snapshot.child_descriptors_json = child_descriptors_json
-            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
-            raise
-        except Exception as exc:
-            error_message = f"Private remote upload failed for {filename}: {exc}"
-            descriptor["status"] = BackupSnapshot.STATUS_FAILED
-            descriptor["error"] = error_message
-            sidecars[filename] = descriptor
-            snapshot.child_descriptors_json = child_descriptors_json
-            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
-            raise BackupError(error_message) from exc
-
-    sidecars[filename] = descriptor
-    snapshot.child_descriptors_json = child_descriptors_json
-    snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
-    return descriptor
-
-
-def _capture_snapshot_sidecars(
-    *,
-    snapshot: BackupSnapshot,
-    policy: BackupPolicySnapshot,
-    captured_at: datetime,
-    remote_uploader: _RemoteUploader | None,
-) -> tuple[dict[str, Any], list[str]]:
-    """Capture private sidecar manifests without breaking the dump-first contract."""
-    snapshot_root = Path(snapshot.local_root_path)
-    child_descriptors_json = deepcopy(
-        snapshot.child_descriptors_json
-        if isinstance(snapshot.child_descriptors_json, dict)
-        else {}
-    )
-    sidecar_descriptors = child_descriptors_json.setdefault("sidecars", {})
-    if not isinstance(sidecar_descriptors, dict):
-        sidecar_descriptors = {}
-        child_descriptors_json["sidecars"] = sidecar_descriptors
-
-    failures: list[str] = []
-    uploader = remote_uploader or _upload_to_private_remote
-    sidecar_builders: tuple[
-        tuple[str, str, Callable[[], dict[str, Any]]],
-        ...,
-    ] = (
-        (
-            _MEDIA_SYNC_MANIFEST_FILENAME,
-            "media_sync_manifest",
-            lambda: _build_media_sync_manifest(captured_at=captured_at),
-        ),
-        (
-            _ENV_VAR_MANIFEST_FILENAME,
-            "env_var_manifest",
-            lambda: _build_env_var_manifest(captured_at=captured_at),
-        ),
-        (
-            _RELEASE_METADATA_FILENAME,
-            "release_metadata",
-            lambda: _build_release_metadata(captured_at=captured_at),
-        ),
-        (
-            _PROMOTION_VERIFICATION_FILENAME,
-            "promotion_verification",
-            lambda: _build_promotion_verification_placeholder(
-                captured_at=captured_at,
-            ),
-        ),
-    )
-
-    for filename, kind, payload_builder in sidecar_builders:
-        local_path = snapshot_root / filename
-        relative_path = _relative_snapshot_child_path(snapshot_root, local_path)
-        try:
-            payload = payload_builder()
-            manifest_status = str(payload.get("status", "")).strip()
-            metadata = {"manifest_status": manifest_status} if manifest_status else None
-            _write_json_file(local_path, payload)
-            descriptor = _build_snapshot_child_descriptor(
-                kind=kind,
-                status=BackupSnapshot.STATUS_READY,
-                relative_path=relative_path,
-                local_path=local_path,
-                size_bytes=local_path.stat().st_size,
-                checksum_sha256=_compute_sha256(local_path),
-                metadata=metadata,
-            )
-            if policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE:
-                try:
-                    remote_key = _upload_snapshot_child_to_private_remote(
-                        local_path,
-                        policy=policy,
-                        snapshot_remote_root=snapshot.remote_root_key,
-                        relative_path=relative_path,
-                        remote_uploader=uploader,
-                    )
-                except BackupError as exc:
-                    descriptor["status"] = BackupSnapshot.STATUS_FAILED
-                    descriptor["error"] = str(exc)
-                    failures.append(f"{filename}: {exc}")
-                except Exception as exc:
-                    error_message = (
-                        f"Private remote upload failed for {filename}: {exc}"
-                    )
-                    descriptor["status"] = BackupSnapshot.STATUS_FAILED
-                    descriptor["error"] = error_message
-                    failures.append(f"{filename}: {error_message}")
-                else:
-                    descriptor["remote_key"] = remote_key
-            sidecar_descriptors[filename] = descriptor
-        except Exception as exc:
-            cleanup_error = _cleanup_local_backup_file(local_path)
-            error_message = str(exc)
-            if cleanup_error is not None:
-                error_message += f"; cleanup failed: {cleanup_error}"
-            sidecar_descriptors[filename] = _build_snapshot_child_descriptor(
-                kind=kind,
-                status=BackupSnapshot.STATUS_FAILED,
-                relative_path=relative_path,
-                local_path=local_path,
-                error=error_message,
-            )
-            failures.append(f"{filename}: {error_message}")
-
-    child_descriptors_json["sidecars"] = sidecar_descriptors
-    return child_descriptors_json, failures
-
-
-# ---------------------------------------------------------------------------
-# Snapshot descriptor helpers
-# ---------------------------------------------------------------------------
-
-
-def _build_snapshot_database_descriptor(
-    snapshot: BackupSnapshot,
-    artifact: BackupArtifact,
-) -> dict[str, Any]:
-    """Build the authoritative dump descriptor stored on a snapshot row."""
-    local_path = Path(artifact.local_path) if artifact.local_path else None
-    snapshot_root = Path(snapshot.local_root_path)
-    relative_path = f"{_SNAPSHOT_DATABASE_DIRECTORY_NAME}/{artifact.filename}"
-    if local_path is not None:
-        try:
-            relative_path = _relative_snapshot_child_path(snapshot_root, local_path)
-        except ValueError:
-            relative_path = f"{_SNAPSHOT_DATABASE_DIRECTORY_NAME}/{artifact.filename}"
-
-    return _build_snapshot_child_descriptor(
-        kind="database_dump",
-        status=BackupSnapshot.STATUS_READY,
-        relative_path=relative_path,
-        local_path=local_path,
-        remote_key=artifact.remote_key,
-        size_bytes=artifact.size_bytes,
-        checksum_sha256=artifact.checksum_sha256,
-        metadata={"backup_format": artifact.backup_format},
-    )
-
-
-def _get_snapshot_report_children(
-    snapshot: BackupSnapshot,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """Return normalized child descriptors used by snapshot reporting."""
-    child_descriptors_json = (
-        snapshot.child_descriptors_json
-        if isinstance(snapshot.child_descriptors_json, dict)
-        else {}
-    )
-    database_descriptor = child_descriptors_json.get("database")
-    if not isinstance(database_descriptor, dict):
-        database_descriptor = {}
-
-    sidecars = child_descriptors_json.get("sidecars")
-    if not isinstance(sidecars, dict):
-        sidecars = {}
-
-    return child_descriptors_json, database_descriptor, sidecars
-
-
-def _build_snapshot_capture_resume_policy(
-    snapshot: BackupSnapshot,
-    policy: BackupPolicySnapshot,
-) -> BackupPolicySnapshot:
-    """Align the active policy with the stored snapshot topology for resume."""
-    resolved_policy = replace(
-        policy,
-        target_mode=(
-            BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
-            if _snapshot_uses_private_remote(snapshot)
-            else BackupPolicy.TARGET_MODE_LOCAL
-        ),
-    )
-
-    if resolved_policy.target_mode != BackupPolicy.TARGET_MODE_PRIVATE_REMOTE:
-        return resolved_policy
-
-    artifact = snapshot.authoritative_dump
-    if artifact is None:
-        return resolved_policy
-
-    return _resolve_artifact_remote_policy(artifact, resolved_policy)
-
-
-def _snapshot_uses_private_remote(snapshot: BackupSnapshot) -> bool:
-    """Return whether the stored snapshot topology expects private remote upload."""
-    if snapshot.remote_root_key.strip():
-        return True
-
-    artifact = snapshot.authoritative_dump
-    return artifact is not None and (
-        artifact.storage_target == BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
-    )
-
-
-def _build_snapshot_lock_directory(snapshot: BackupSnapshot) -> Path:
-    """Resolve the filesystem directory used for snapshot-scoped capture locking."""
-    snapshot_root = Path(snapshot.local_root_path)
-    if snapshot_root.parent.name == _SNAPSHOTS_DIRECTORY_NAME:
-        return snapshot_root.parent.parent
-    return snapshot_root.parent
-
-
-def _snapshot_capture_is_complete(snapshot: BackupSnapshot) -> bool:
-    """Return whether a stored snapshot already has a complete capture payload."""
-    if snapshot.status != BackupSnapshot.STATUS_READY:
-        return False
-
-    artifact = snapshot.authoritative_dump
-    if artifact is None or artifact.status == BackupArtifact.STATUS_DELETED:
-        return False
-
-    child_descriptors_json = (
-        snapshot.child_descriptors_json
-        if isinstance(snapshot.child_descriptors_json, dict)
-        else {}
-    )
-    database_descriptor = child_descriptors_json.get("database")
-    if not isinstance(database_descriptor, dict):
-        return False
-    if (
-        str(database_descriptor.get("status", "")).strip()
-        != BackupSnapshot.STATUS_READY
-    ):
-        return False
-
-    local_dump_available = bool(
-        artifact.local_path and Path(artifact.local_path).exists()
-    )
-    if not local_dump_available and not artifact.remote_key:
-        return False
-
-    sidecars = child_descriptors_json.get("sidecars")
-    if not isinstance(sidecars, dict):
-        return False
-
-    for filename in _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES:
-        descriptor = sidecars.get(filename)
-        if not isinstance(descriptor, dict):
-            return False
-        if str(descriptor.get("status", "")).strip() != BackupSnapshot.STATUS_READY:
-            return False
-
-        local_path_text = str(descriptor.get("local_path", "")).strip()
-        local_path = (
-            Path(local_path_text)
-            if local_path_text
-            else _snapshot_sidecar_path(snapshot, filename)
-        )
-        if (
-            not local_path.exists()
-            and not str(descriptor.get("remote_key", "")).strip()
-        ):
-            return False
-
-    return True
+# AF6 Phase 3 — snapshot descriptor helpers extracted to quickscale_core.dr_engine._paths
 
 
 # ---------------------------------------------------------------------------
@@ -1281,11 +612,11 @@ def _resolve_snapshot_database_local_path(
 ) -> Path:
     """Resolve the authoritative local dump path for a stored snapshot."""
     if artifact.local_path:
-        return Path(artifact.local_path)
+        return Path(str(artifact.local_path))
     return (
-        Path(snapshot.local_root_path)
+        Path(str(snapshot.local_root_path))
         / _SNAPSHOT_DATABASE_DIRECTORY_NAME
-        / artifact.filename
+        / str(artifact.filename)
     )
 
 
@@ -1419,7 +750,7 @@ def _materialize_private_remote_key(
     policy: BackupPolicySnapshot,
     destination: Path,
 ) -> None:
-    from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
+    from storages.backends.s3 import S3Storage
 
     access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
@@ -1450,7 +781,7 @@ def _materialize_private_remote_key(
 
 
 def _delete_private_remote_key(remote_key: str, policy: BackupPolicySnapshot) -> None:
-    from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
+    from storages.backends.s3 import S3Storage
 
     access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
@@ -2552,7 +1883,7 @@ def prune_expired_backups(
 
 def _build_s3_storage_from_selection(selection: Any) -> Any:
     """Construct an s3-compatible storage object from one backend selection."""
-    from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
+    from storages.backends.s3 import S3Storage
 
     options: dict[str, Any] = {
         "bucket_name": str(selection.options.get("bucket_name", "")).strip(),
@@ -3025,7 +2356,7 @@ def _resolve_restore_source(
     snapshot_id: str | None = None,
     resolution_mode: RestoreSourceResolutionMode = RestoreSourceResolutionMode.REMOTE_FALLBACK,
     policy: BackupPolicySnapshot | None = None,
-    remote_materializer: _RemoteDeleter | None = None,
+    remote_materializer: RemoteMaterializer | None = None,
 ) -> Iterator[ResolvedRestoreSource]:
     """Resolve one restore source — Django-backed wrapper around core."""
     resolved_policy: BackupPolicySnapshot | None = policy
@@ -3033,7 +2364,7 @@ def _resolve_restore_source(
     def _policy_resolver(art: ArtifactLike) -> Any:
         nonlocal resolved_policy
         resolved_policy = _resolve_artifact_remote_policy(
-            art,  # type: ignore[arg-type]
+            art,
             resolved_policy or _load_active_policy_snapshot(),
         )
         return resolved_policy
