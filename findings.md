@@ -267,3 +267,21 @@ The seven findings form **two independent clusters** that share almost no files,
 - **Generator cluster (Findings 5–7)** — all touch `quickscale_core`/`quickscale_cli`. **Finding 6 (decompose the god files) is the enabler**: doing it first creates the per-step/per-adapter seams that **Finding 5 (apply executor)** and **Finding 7 (push adapters into modules)** then land on cleanly. Sequence: **6 → (5, 7).**
 
 Because the two clusters touch disjoint file sets, they parallelize across worktrees with no merge contention. The roadmap below assigns the isolation cluster to track 1 (foundation) + track 2 (shared-fix seam) and the entire generator cluster to track 3.
+
+---
+
+## Cross-cutting QA / testing thread
+
+The autopsy folded template **Section VIII (Testing)** into the findings rather than reporting it separately, because the testing gap is not a standalone weakness — it is the *mechanism* by which three of the structural findings stay invisible. They share one failure mode:
+
+**The test suite exercises the happy request path — which is exactly the path on which the broken mechanism still appears to work.** A forgotten RLS migration still scopes reads in the Python happy path (Finding 1); the ambient-context base manager still resolves FKs inside a request (Finding 2); a non-idempotent apply step still succeeds on a clean first run (Finding 5). So example-based, happy-path tests pass and give *false confidence*; the defect only surfaces off the tested path — an `all_objects`/operator read, a management command, a non-request webhook, or a mid-pipeline crash.
+
+The structural remedy in each case is the same shape — a **property / conformance test (enumerate-and-assert or fault-inject-and-assert)**, not another example-path test:
+
+| Finding | Today's test reality | The property test that closes it |
+|---|---|---|
+| **1** | `tests_shared/isolation.py:19-57` asserts a *response-level* property for chosen endpoints only — no table-level coverage check | Walk `apps.get_models()`, select tenant tables, assert each has a live FORCE-RLS policy in `pg_policies` (build-time conformance gate) |
+| **2** | Request-path scoping is covered; non-request FK traversal is not | Regression test: forward-FK traversal + `refresh_from_db()` with **no** org context set must succeed (not raise `DoesNotExist`) |
+| **5** | Idempotent-rerun is asserted by convention (`apply/ledger.py:10-19`), with no enforcing test | Fault-injection harness: kill after step N, rerun, assert convergence for all 16 steps |
+
+These map to roadmap tasks **AF1** (conformance gate), **AF2** (no-context FK regression test), and **AF5** (fault-injection harness) — split across tracks 1 and 3, but one QA-hardening spine. Tracked together, they convert a silently-passing happy-path suite into a build that *fails* when the structural guarantee is actually absent. Land **AF1's conformance gate first**: it is read-only, surfaces today's true RLS coverage (including the `ContactNote`/`DealNote` child-table gap), and is the evidence base the others build on.

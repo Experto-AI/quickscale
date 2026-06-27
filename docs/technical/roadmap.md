@@ -102,13 +102,25 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 ### Track assignment & parallelization
 
-| Track | Findings | Cluster | Parallel? |
+| Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF1** (foundation) → **AF3** | Runtime isolation | AF1 must merge to `v87` before AF2/AF4 start |
-| `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Starts after AF1's `TenantModel` base lands |
+| `wt-track1` | **D1** → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 ready now (T1.19 merged); AF1 must merge to `v87` before AF2/AF4 start |
+| `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
 | `wt-track3` | **AF6** (enabler) → **AF5**, **AF7** | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
 
-**Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
+**Sequencing rationale.** Track 1 opens with **D1** (billing session-sync fix in the generated React template; no AF dependencies; ready now that T1.19 is merged), then the isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: `AF6 → (AF5, AF7)` — decomposing the god files creates the per-step/per-adapter seams AF5 and AF7 land on. The two clusters touch disjoint file sets, so track 3 runs start-to-finish alongside tracks 1–2.
+
+### QA hardening thread (cross-track)
+
+Three findings share one root cause: **the suite tests the happy request path — the one path where the broken mechanism still appears to work** — so coverage gaps, ambient-context breakage, and non-idempotent steps all pass silently and give false confidence. The fix in each is a *property* test (enumerate-and-assert or fault-inject-and-assert), not another example-path test. These live in different tasks/tracks but are one QA-hardening spine — sequence and review them as a thread:
+
+| Task | Track | Property test it adds | Replaces the false confidence of |
+|---|---|---|---|
+| **AF1** | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | response-level isolation tests on chosen endpoints (`tests_shared/isolation.py`) |
+| **AF2** | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | request-path-only scoping tests |
+| **AF5** | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | convention-asserted idempotent-rerun (no enforcing test) |
+
+Land **AF1's conformance gate first** — it is read-only, surfaces today's true RLS coverage (including the `ContactNote`/`DealNote` gap), and is the evidence base the others build on. Detail: findings.md → "Cross-cutting QA / testing thread."
 
 ---
 
