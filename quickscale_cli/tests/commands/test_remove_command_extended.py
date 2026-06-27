@@ -433,3 +433,66 @@ class TestRemoveCommandIntegration:
         assert "blog" in rewritten.get("modules", {})
         # The checkpoint must be preserved byte-identical.
         assert rewritten["git_index_checkpoint"] == _CHECKPOINT
+
+    def test_remove_preserves_resume_checkpoint_in_surviving_recovery(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Partial remove must preserve the resume_checkpoint in the
+        surviving apply-recovery.yml (AF5 Phase 1 caller parity)."""
+        _write_valid_remove_project(tmp_path)
+        # Write a recovery ledger with a resume_checkpoint.
+        recovery_path = tmp_path / ".quickscale" / "apply-recovery.yml"
+        recovery_path.write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myproject",
+                        "package": "myproject",
+                        "theme": "showcase_html",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-01-02T00:00:00",
+                    },
+                    "modules": {
+                        "auth": {
+                            "version": "0.71.0",
+                            "commit_sha": "abc123",
+                            "embedded_at": "2025-01-01T00:00:00",
+                            "options": {},
+                        },
+                        "blog": {
+                            "version": "0.71.0",
+                            "commit_sha": "def456",
+                            "embedded_at": "2025-01-01T00:00:00",
+                            "options": {},
+                        },
+                    },
+                    "resume_checkpoint": {
+                        "resume_step_id": "module embedding",
+                        "suspend_after_step_id": "post-embed state snapshot",
+                        "checkpoint_tree_id": "deadbeefcafebabedeadbeefcafebabedeadbeef",
+                    },
+                    "git_index_checkpoint": "deadbeefcafebabedeadbeefcafebabedeadbeef",
+                },
+                sort_keys=False,
+            )
+        )
+
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0
+        rewritten = yaml.safe_load(recovery_path.read_text())
+        assert "auth" not in rewritten.get("modules", {})
+        assert "blog" in rewritten.get("modules", {})
+        # resume_checkpoint must be preserved in the surviving file.
+        rc = rewritten.get("resume_checkpoint")
+        assert rc is not None, "resume_checkpoint was dropped during remove"
+        assert rc["resume_step_id"] == "module embedding"
+        assert rc["suspend_after_step_id"] == "post-embed state snapshot"

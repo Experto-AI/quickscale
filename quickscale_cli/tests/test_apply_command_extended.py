@@ -1,4 +1,5 @@
 """Extended tests for apply_command.py - covering helper functions and edge cases."""
+# ruff: noqa: E402 — AF5 Phase 4: module-level bypass set before imports
 
 from pathlib import Path
 import subprocess
@@ -17,6 +18,14 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_LINK_TREE_PATH,
 )
 from quickscale_core.contracts.resolvers import default_notifications_module_options
+
+# AF5 Phase 4: Bypass the late destructive/remote confirmation gate in
+# all tests so test output assertions remain stable.  Each test function
+# sets this at module-load time; individual tests may override.
+import quickscale_cli.commands.apply_command as _apply_command_mod
+
+_apply_command_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
+
 from quickscale_cli.commands.apply_command import (
     ApplyContext,
     EmbedModulesResult,
@@ -2305,21 +2314,26 @@ class TestRunPostGenerationSteps:
     @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_poetry_install")
-    def test_migrations_fail(self, mock_poetry, mock_migrate, mock_lock):
-        """Test when migrations fail"""
+    def test_migrations_not_run_in_step_10_anymore(
+        self, mock_poetry, mock_migrate, mock_lock
+    ):
+        """AF5 Phase 4: Step 10 no longer runs migrations (deferred to step 13).
+        Even if _run_migrations would fail, _run_post_generation_steps
+        succeeds because migration execution was removed from this step."""
         mock_lock.return_value = True
         mock_poetry.return_value = True
-        mock_migrate.return_value = False
-        assert _run_post_generation_steps(Path("/tmp")) is False
+        mock_migrate.return_value = False  # Would fail if called — but won't be
+        assert _run_post_generation_steps(Path("/tmp")) is True
+        mock_migrate.assert_not_called()
 
     @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
     @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_poetry_install")
-    def test_skip_migrations(self, mock_poetry, mock_migrate, mock_lock):
-        """Test migration step can be deferred."""
+    def test_migrations_not_run_in_step_10(self, mock_poetry, mock_migrate, mock_lock):
+        """AF5 Phase 4: Step 10 does not run migrations (deferred to step 13)."""
         mock_lock.return_value = True
         mock_poetry.return_value = True
-        assert _run_post_generation_steps(Path("/tmp"), run_migrations=False) is True
+        assert _run_post_generation_steps(Path("/tmp")) is True
         mock_migrate.assert_not_called()
 
 
@@ -3285,7 +3299,7 @@ class TestExecuteApplySteps:
                     verbose_docker=False,
                 )
 
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_post.assert_called_once_with(ctx.output_path)
         mock_save_state.assert_not_called()
         mock_save_recovery.assert_called_once()
         assert mock_save_recovery.call_args.args == (
@@ -3690,7 +3704,7 @@ class TestExecuteApplySteps:
             ctx.output_path,
             ctx.qs_config,
         )
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_post.assert_called_once_with(ctx.output_path)
         mock_start_docker.assert_called_once_with(ctx.output_path, True, False)
         mock_run_migrations_in_docker.assert_called_once_with(ctx.output_path)
         mock_display_next_steps.assert_called_once_with(
@@ -3762,7 +3776,7 @@ class TestExecuteApplySteps:
             ctx.output_path,
             ctx.qs_config,
         )
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_post.assert_called_once_with(ctx.output_path)
         mock_start_docker.assert_not_called()
         mock_run_migrations_in_docker.assert_not_called()
 
@@ -3824,7 +3838,7 @@ class TestExecuteApplySteps:
             verbose_docker=False,
         )
 
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_post.assert_called_once_with(ctx.output_path)
         mock_start_docker.assert_not_called()
         mock_run_migrations_in_docker.assert_not_called()
         mock_display_next_steps.assert_called_once_with(
@@ -3998,7 +4012,7 @@ class TestExecuteApplySteps:
                     verbose_docker=False,
                 )
 
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_post.assert_called_once_with(ctx.output_path)
         mock_run_migrations_in_docker.assert_not_called()
         mock_run_migrations.assert_not_called()
         mock_save_state.assert_not_called()
@@ -4078,7 +4092,7 @@ class TestExecuteApplySteps:
                     verbose_docker=False,
                 )
 
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_post.assert_called_once_with(ctx.output_path)
         mock_run_migrations_in_docker.assert_called_once_with(ctx.output_path)
         mock_run_migrations.assert_not_called()
         mock_save_state.assert_not_called()
@@ -5414,6 +5428,7 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_migrations")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
     @patch(
         "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
@@ -5442,6 +5457,7 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
         mock_analytics_env_sync,
         mock_sync_module_dependencies,
         mock_run_post,
+        mock_run_migrations,
         mock_save_state,
         mock_display_next_steps,
     ):
@@ -5519,8 +5535,8 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
 
         # The migration gate must re-evaluate with the post-refresh
         # context: existing_state is populated → existing_project=True →
-        # should_run_local_migrations=True → run_migrations=True.
-        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
+        # Local migrations are now deferred to step 13 (AF5 Phase 4).
+        mock_run_post.assert_called_once_with(ctx.output_path)
 
 
 # ============================================================================
@@ -6469,7 +6485,7 @@ _F12_1C_UNIQUE_FAILED_STEP_LABELS: list[tuple[str, str]] = [
     ("module dependency sync", "unable to reconcile module deps"),
     (
         "post-generation dependency and migration setup",
-        "poetry lock/install/migrations failed",
+        "poetry lock/install failed",
     ),
     ("docker startup", "Docker auto-start failed"),
     ("database migrations", "migrations failed inside Docker"),
@@ -6478,7 +6494,12 @@ _F12_1C_UNIQUE_FAILED_STEP_LABELS: list[tuple[str, str]] = [
 
 
 def _expected_failure_summary_lines(failed_step: str, reason: str) -> list[str]:
-    """Return the expected output lines from _print_apply_failure_summary."""
+    """Return the expected output lines from _print_apply_failure_summary.
+
+    AF5 Phase 4: Updated skipped-steps list to reflect the new destructive/
+    remote phase boundary.  Migrations are now grouped with Docker startup
+    and Railway deploy in the late confirmable phase.
+    """
     sep = "=" * 50
     return [
         "",
@@ -6491,8 +6512,8 @@ def _expected_failure_summary_lines(failed_step: str, reason: str) -> list[str]:
         "",
         "Skipped downstream steps:",
         "  • poetry install",
-        "  • migrations",
         "  • docker start",
+        "  • database migrations",
         "  • railway deploy",
         "  • success completion output",
     ]
@@ -6546,8 +6567,8 @@ class TestApplyFailureSummaryParity:
         assert "❌ Apply failed" in output
         assert "Skipped downstream steps:" in output
         assert "  • poetry install" in output
-        assert "  • migrations" in output
         assert "  • docker start" in output
+        assert "  • database migrations" in output
         assert "  • railway deploy" in output
         assert "  • success completion output" in output
 
@@ -7547,8 +7568,8 @@ class TestApplyFailureSummaryParity:
         lines = captured.out.splitlines()
         expected = _expected_failure_summary_lines(
             "post-generation dependency and migration setup",
-            "Poetry lock refresh, dependency installation, or local "
-            "migrations failed after module dependency sync.",
+            "Poetry lock refresh or dependency installation failed after "
+            "module dependency sync.",
         )
         assert lines == expected, (
             "Byte-identical mismatch for non-auth caller: post-gen steps"

@@ -91,12 +91,19 @@ def step_run_migrations(
     should_auto_start_docker: bool,
     docker_started: bool | None,
     run_migrations_in_docker_fn: Callable[..., bool],
+    should_run_local_migrations: bool = False,
+    run_local_migrations_fn: Callable[..., bool] | None = None,
 ) -> StepOutcome:
     """Step 13: Run database migrations.
 
+    AF5 Phase 4: This step handles **all** migration paths — Docker,
+    existing-project local, and ``--no-docker`` — in a single late
+    confirmable phase.
+
     For Docker-first projects, migrations run inside the backend container.
-    For non-Docker projects, local migrations were already handled in
-    step 10 and this step is skipped.
+    For non-Docker projects (existing-project without Docker or with
+    ``--no-docker``), local migrations run directly with ``manage.py
+    migrate``.  When neither path applies, the step is skipped.
 
     Args:
         ctx: Core-safe step context.
@@ -105,24 +112,47 @@ def step_run_migrations(
             ``False``, or ``None`` if not attempted).
         run_migrations_in_docker_fn: Callable that runs migrations inside
             the Docker container and returns ``True`` on success.
+        should_run_local_migrations: Whether to run local migrations
+            (existing-project or ``--no-docker`` path).
+        run_local_migrations_fn: Callable that runs local migrations and
+            returns ``True`` on success.  Required when
+            *should_run_local_migrations* is ``True``.
 
     Returns:
         :class:`StepOutcome` with ``failed_step_label`` set to
         ``"database migrations"`` on failure.
     """
-    if not should_auto_start_docker or not docker_started:
+    if should_auto_start_docker and docker_started:
+        if not run_migrations_in_docker_fn(ctx.output_path):
+            return StepOutcome(
+                success=False,
+                message="Migrations failed inside Docker backend container",
+                failed_step_label="database migrations",
+            )
         return StepOutcome(
-            success=True, message="Migrations step skipped (not running in Docker)"
+            success=True, message="Database migrations completed in Docker"
         )
 
-    if not run_migrations_in_docker_fn(ctx.output_path):
+    if should_run_local_migrations:
+        if run_local_migrations_fn is None:
+            return StepOutcome(
+                success=False,
+                message="Local migrations requested but no callback provided",
+                failed_step_label="database migrations",
+            )
+        if not run_local_migrations_fn(ctx.output_path):
+            return StepOutcome(
+                success=False,
+                message="Local database migrations failed",
+                failed_step_label="database migrations",
+            )
         return StepOutcome(
-            success=False,
-            message="Migrations failed inside Docker backend container",
-            failed_step_label="database migrations",
+            success=True, message="Database migrations completed (local)"
         )
 
-    return StepOutcome(success=True, message="Database migrations completed in Docker")
+    return StepOutcome(
+        success=True, message="Migrations step skipped (no migration path configured)"
+    )
 
 
 __all__ = [

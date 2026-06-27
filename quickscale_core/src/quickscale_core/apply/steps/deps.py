@@ -55,44 +55,43 @@ def step_sync_dependencies(
 def step_post_generation_setup(
     ctx: StepContext,
     *,
-    should_auto_start_docker: bool,
-    should_run_local_migrations: bool,
+    should_auto_start_docker: bool = False,
+    should_run_local_migrations: bool = False,
     run_post_gen_steps_fn: Callable[..., bool],
 ) -> StepOutcome:
-    """Step 10: Refresh lockfile, install dependencies, run local migrations.
+    """Step 10: Refresh lockfile and install dependencies.
 
-    The *should_run_local_migrations* flag controls whether local migrations
-    are executed.  For Docker-first projects, migrations run inside the
-    container (step 13) instead.
+    AF5 Phase 4: Migrations are no longer executed in this step.  Local
+    migrations for existing projects and non-Docker paths are deferred to
+    step 13 (the late confirmable phase), matching the same phase boundary
+    used for Docker migrations.
 
     Args:
         ctx: Core-safe step context.
-        should_auto_start_docker: Whether Docker auto-start is configured.
-        should_run_local_migrations: Whether to run local migrations.
+        should_auto_start_docker: Unused (kept for signature compatibility
+            with Phase 2-3 callers).
+        should_run_local_migrations: Unused (kept for signature compatibility
+            with Phase 2-3 callers).
         run_post_gen_steps_fn: Callable that runs the post-generation steps
-            (poetry lock, install, optional migrations).  Returns ``True``
-            on success.
+            (poetry lock, install).  Returns ``True`` on success.
 
     Returns:
         :class:`StepOutcome` with ``failed_step_label`` set to
         ``"post-generation dependency and migration setup"`` on failure.
     """
-    if not run_post_gen_steps_fn(
-        ctx.output_path,
-        run_migrations=should_run_local_migrations,
-    ):
+    if not run_post_gen_steps_fn(ctx.output_path):
         return StepOutcome(
             success=False,
             message=(
-                "Poetry lock refresh, dependency installation, or local "
-                "migrations failed after module dependency sync"
+                "Poetry lock refresh or dependency installation failed "
+                "after module dependency sync"
             ),
             failed_step_label="post-generation dependency and migration setup",
         )
 
     return StepOutcome(
         success=True,
-        message="Post-generation dependencies and migrations completed",
+        message="Post-generation dependencies completed",
     )
 
 

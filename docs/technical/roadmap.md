@@ -197,7 +197,7 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
   - AF6 unblocks AF5 (step executor) and AF7 (manifest-adapter relocation).
   - The core-safe `ApplyStepProtocol` and `StepContext`/`StepOutcome` types defined in Phase 1 are the boundary contract for future step bodies.
 
-### - [ ] AF5 — Apply step executor: per-step `is_satisfied()` + post-step checkpoint + fault-injection harness
+### - [x] AF5 — Apply step executor: per-step `is_satisfied()` + post-step checkpoint + fault-injection harness ✓ *implemented 2026-06-27*
 
 `**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -209,6 +209,11 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 - **VALIDATION PATH:** new fault-injection suite + existing apply tests.
 - **DEPENDS:** AF6 merged.
 - **RECOMMENDATION:** **Pursue (A)** — keeps the idempotent-rerun philosophy but makes it tested and resumable; (C) test-only is insufficient.
+- **FINDINGS / FOLLOW-UP:**
+  - `_AF5_DESTRUCTIVE_CONFIRM_BYPASS` test-support flag (in `apply_command.py`) enables silent destructive-phase bypass in tests. The flag is currently scoped to `apply_command.py` only — if a test injects the bypass in a core-invoked path, the gate re-appears. This is intentional for now but should be reviewed if the executor is extracted further.
+  - AF6-era ledger compatibility is handled conservatively (`resume_checkpoint` preserved when present, treated as `None` when absent). Existing legacy-format ledgers with missing `resume_checkpoint` trigger a full rerun (same as pre-AF5 behavior). Consider adding an explicit one-shot migration path if legacy-ledger frequency becomes a concern.
+  - The `ApplyExecutor.find_first_unsatisfied_step()` checkpoint currently re-reads the ledger from disk each call. For recovery scenarios with many steps, this is acceptable but could be cached if recovery-latency feedback emerges.
+  - The destructive confirmation gate and checkpoint write are CLI-adapter-level responsibilities. If a future phase moves the executor into core, the gate location should be documented as an architectural seam.
 
 ### - [ ] AF7 — Push per-module manifest adapters out of core into the modules
 

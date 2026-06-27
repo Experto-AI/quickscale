@@ -25,10 +25,16 @@ AF6 Phase 2 extracts the 16 apply step bodies into
 re-exported here for Phase 3 callers that need them from the package root.
 """
 
+from quickscale_core.apply.executor import (
+    ApplyExecutor,
+    advance_resume_checkpoint,
+    resolve_resume_step,
+)
 from quickscale_core.apply.ledger import (
     LedgerError,
     LedgerManager,
     RecoveryLedger,
+    ResumeCheckpoint,
     StepProgress,
 )
 from quickscale_core.apply.step import APPLY_STEPS, ApplyStep, step_by_id
@@ -60,6 +66,7 @@ from quickscale_core.apply.steps import (
 
 __all__ = [
     "APPLY_STEPS",
+    "ApplyExecutor",
     "ApplyStep",
     "ApplyStepProtocol",
     "EmbedModulesResult",
@@ -67,11 +74,14 @@ __all__ = [
     "LedgerError",
     "LedgerManager",
     "RecoveryLedger",
+    "ResumeCheckpoint",
     "StepContext",
     "StepHook",
     "StepOutcome",
     "StepProgress",
     "StepReporter",
+    "advance_resume_checkpoint",
+    "resolve_resume_step",
     "step_analytics_env_sync",
     "step_apply_mutable_config",
     "step_backups_gitignore",

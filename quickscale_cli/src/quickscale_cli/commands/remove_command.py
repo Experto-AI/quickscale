@@ -382,6 +382,11 @@ def _update_apply_recovery_state(
     absent, malformed, or missing the checkpoint, the operation fails hard
     (``LedgerError`` / ``RuntimeError``) — present recovery ledgers must
     always carry a valid ``git_index_checkpoint``.
+
+    AF5 Phase 1: The ``resume_checkpoint`` field is carried forward from
+    the existing ledger so that AF5-era checkpoint metadata is preserved
+    across removal-triggered recovery rewrites.  AF6-era ledgers without
+    the field are handled conservatively (``None``).
     """
     if updated_state is None:
         return
@@ -395,6 +400,7 @@ def _update_apply_recovery_state(
         )
     ledger = RecoveryLedger(
         applied_state=updated_state,
+        resume_checkpoint=existing_ledger.resume_checkpoint,
         step_progress=None,
         git_index_checkpoint=existing_ledger.git_index_checkpoint,
     )

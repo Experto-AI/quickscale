@@ -454,7 +454,7 @@ docker:
             result = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result.exit_code == 0
@@ -481,7 +481,7 @@ docker:
             result = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             # Should show progress indicators
@@ -512,7 +512,7 @@ docker:
             result = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-docker", "--no-modules"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             # Docker operations should be skipped
@@ -540,7 +540,7 @@ docker:
             result = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             # Module embedding should be skipped
@@ -633,7 +633,7 @@ docker:
             result = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result.exit_code == 0
@@ -665,7 +665,7 @@ docker:
             result = runner.invoke(
                 apply,
                 ["--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             # Should find and use quickscale.yml
@@ -709,11 +709,41 @@ docker:
             result = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result.exit_code == 0
             assert os.path.exists("testapp/.quickscale/state.yml")
+
+    def test_apply_leaves_no_recovery_file(self):
+        """AF5-CR-001: a successful apply must leave no apply-recovery.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(
+                apply,
+                ["quickscale.yml", "--no-modules", "--no-docker"],
+                input="y\ny\n",
+            )
+
+            assert result.exit_code == 0
+            recovery_file = Path("testapp/.quickscale/apply-recovery.yml")
+            assert not recovery_file.exists(), (
+                f"Recovery file {recovery_file} should not exist after "
+                f"successful apply, but it does"
+            )
 
     def test_apply_second_apply_is_idempotent(self):
         """Test that second apply with same config shows 'nothing to do'"""
@@ -736,7 +766,7 @@ docker:
             result1 = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result1.exit_code == 0
@@ -755,19 +785,18 @@ docker:
 """
                 )
 
-            # Second apply should detect no changes
+            # Second apply with identical config: no pending recovery
+            # (AF5-CR-001 removed the leftover step-16 checkpoint) and
+            # no changes.  The no-op gate emits "Nothing to do" and
+            # aborts cleanly — correct idempotent behavior.
             result2 = runner.invoke(
                 apply,
                 ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result2.exit_code != 0
-            assert (
-                "Nothing to do" in result2.output
-                or "No changes detected" in result2.output
-                or "matches applied state" in result2.output
-            )
+            assert "Nothing to do" in result2.output
 
     def test_apply_shows_delta_for_existing_project(self):
         """Test that apply shows delta when applying to existing project"""
@@ -790,7 +819,7 @@ docker:
             result1 = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result1.exit_code == 0
@@ -850,7 +879,7 @@ docker:
             result1 = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result1.exit_code == 0
@@ -941,7 +970,7 @@ docker:
             result = runner.invoke(
                 apply,
                 ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
+                input="y\ny\n",
             )
 
             assert result.exit_code != 0
@@ -1001,7 +1030,7 @@ git_index_checkpoint: "deadbeefcafebabedeadbeefcafebabedeadbeef"
                 result = runner.invoke(
                     apply,
                     ["testapp/quickscale.yml", "--no-docker"],
-                    input="y\n",
+                    input="y\ny\n",
                 )
 
         assert result.exit_code == 0
@@ -1266,3 +1295,188 @@ class TestApplyDriftDetection:
         assert "myapp/settings/modules.py" in paths
         assert "myapp/urls_modules.py" in paths
         assert all("\\" not in p for p in paths)
+
+
+# ============================================================================
+# AF5 Phase 1 — Recovery-ledger preserve resume_checkpoint through apply path
+# ============================================================================
+
+
+class TestApplyAF5ResumeCheckpointPreserved:
+    """AF5 Phase 1: _save_apply_recovery_state must carry forward an existing
+    resume_checkpoint from the on-disk ledger."""
+
+    def test_save_recovery_preserves_existing_resume_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """When a recovery ledger already has resume_checkpoint, saving a new
+        recover state must preserve it."""
+        from quickscale_core.schema.state_schema import (
+            ProjectState,
+            QuickScaleState,
+        )
+        from quickscale_cli.commands.apply_command import (
+            _save_apply_recovery_state,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+
+        # Create a minimal QuickScaleState for the project
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-06-01T00:00:00",
+            ),
+        )
+
+        # Write an initial recovery ledger with a resume_checkpoint
+        ledger_path = project / ".quickscale" / "apply-recovery.yml"
+        ledger_path.parent.mkdir(parents=True)
+        ledger_path.write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_html",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-06-01T00:00:00",
+                    },
+                    "resume_checkpoint": {
+                        "resume_step_id": "module embedding",
+                        "suspend_after_step_id": "post-embed state snapshot",
+                    },
+                    "git_index_checkpoint": (
+                        "deadbeefcafebabedeadbeefcafebabedeadbeef"
+                    ),
+                },
+                sort_keys=False,
+            )
+        )
+
+        # Create a config-like namespace for _save_apply_recovery_state
+        from types import SimpleNamespace
+
+        config = SimpleNamespace(
+            project=SimpleNamespace(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={},
+        )
+
+        # Save a recovery state via _save_apply_recovery_state.
+        # This should preserve the existing resume_checkpoint.
+        result = _save_apply_recovery_state(
+            project,
+            config,
+            existing_state=None,
+            embedded_modules=[],
+            delta=SimpleNamespace(
+                has_changes=False,
+                modules_to_remove=[],
+                theme_changed=False,
+                config_deltas={},
+            ),
+            checkpoint_tree_id="deadbeefcafebabedeadbeefcafebabedeadbeef",
+            state_snapshot=state,
+        )
+
+        assert result is True
+
+        # Verify resume_checkpoint was preserved in the rewritten ledger.
+        rewritten = yaml.safe_load(ledger_path.read_text())
+        rc = rewritten.get("resume_checkpoint")
+        assert rc is not None, "resume_checkpoint was dropped during save"
+        assert rc["resume_step_id"] == "module embedding"
+        assert rc["suspend_after_step_id"] == "post-embed state snapshot"
+
+    def test_save_recovery_preserves_af6_era_ledger_without_resume_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """An AF6-era ledger (no resume_checkpoint) must round-trip without
+        introducing one."""
+        from quickscale_core.schema.state_schema import (
+            ProjectState,
+            QuickScaleState,
+        )
+        from quickscale_cli.commands.apply_command import (
+            _save_apply_recovery_state,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-06-01T00:00:00",
+            ),
+        )
+
+        # Write an AF6-era recovery ledger (without resume_checkpoint).
+        ledger_path = project / ".quickscale" / "apply-recovery.yml"
+        ledger_path.parent.mkdir(parents=True)
+        ledger_path.write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_html",
+                        "created_at": "2025-01-01T00:00:00",
+                        "last_applied": "2025-06-01T00:00:00",
+                    },
+                    "git_index_checkpoint": (
+                        "deadbeefcafebabedeadbeefcafebabedeadbeef"
+                    ),
+                },
+                sort_keys=False,
+            )
+        )
+
+        from types import SimpleNamespace
+
+        config = SimpleNamespace(
+            project=SimpleNamespace(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+            ),
+            modules={},
+        )
+
+        result = _save_apply_recovery_state(
+            project,
+            config,
+            existing_state=None,
+            embedded_modules=[],
+            delta=SimpleNamespace(
+                has_changes=False,
+                modules_to_remove=[],
+                theme_changed=False,
+                config_deltas={},
+            ),
+            checkpoint_tree_id="deadbeefcafebabedeadbeefcafebabedeadbeef",
+            state_snapshot=state,
+        )
+
+        assert result is True
+
+        rewritten = yaml.safe_load(ledger_path.read_text())
+        # Must not contain resume_checkpoint (AF6-era backward compat).
+        assert "resume_checkpoint" not in rewritten, (
+            "resume_checkpoint was incorrectly introduced during save"
+        )
