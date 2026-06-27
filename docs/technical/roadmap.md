@@ -107,7 +107,7 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **D1** ✅ → **AF1** (foundation) → **AF3** | Runtime isolation + billing | D1 completed and merged to `v87`; AF1 must merge to `v87` before AF2/AF4 start |
+| `wt-track1` | **D1** ✅ → **AF1** ✅ (foundation) → **AF3** | Runtime isolation + billing | D1 and AF1 completed on `wt-track1`, pending merge to `v87`; AF1 must merge before AF2/AF4 start |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
 | `wt-track3` | **AF6** (enabler) → **AF5**, **AF7** | Generator / CLI | Fully independent of track 1/2 — disjoint files, no merge contention |
 
@@ -127,18 +127,24 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 
 ---
 
-### - [ ] AF1 — Tenant-table isolation conformance gate + declarative RLS
+### - [x] AF1 — Tenant-table isolation conformance gate + declarative RLS ✓ *implemented 2026-06-27*
 
 `**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track1` — **foundation; must merge to `v87` before AF2/AF4 begin.**
 - **WHY → Finding 1.** RLS is six hand-written `enable_rls` migrations with copy-pasted SQL and hardcoded table lists; child tables without `organization_id` (`ContactNote`/`DealNote`) sit outside *both* the Python manager and RLS, and nothing asserts coverage.
 - **OBJECTIVE:** (1) Land a CI **conformance test** that walks `apps.get_models()`, selects tenant-owned models, and asserts each has an `organization_id` column + a live FORCE-RLS policy in `pg_policies` — failing the build on any gap. Parent-join policies are not a valid exemption (child-table policy locked to Option C). (2) Introduce a reusable `EnableTenantRLS(model)` migration operation generating the policy from one source string; migrate the six modules onto it. (3) Add `organization_id` FK to `ContactNote` and `DealNote` (denormalize — **child-table policy locked to C**); add a DB constraint/trigger to keep child `organization_id` equal to the parent's; promote both to `TenantModel`; apply `EnableTenantRLS` on them.
-- **SCOPE:** new conformance test in `tests_shared/`; `orgs/.../tenancy.py` (registry/`TenantModel` marker); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`) — schema migration + FK + constraint.
+- **SCOPE:** conformance test in `quickscale_modules/orgs/tests/` (not `tests_shared/` — lives with the orgs module, which owns the registry); `orgs/.../tenancy.py` (registry/`TenantModel` marker + RLS/equality infrastructure); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`) — schema migration + FK + constraint; `forms` child tables (`FormField`/`FormSubmission`/`FormFieldValue`) — schema migration + FK + constraint.
 - **ACCEPTANCE CRITERIA:** conformance test is green and *fails* when a tenant table lacks a direct-column policy (prove with a temporary uncovered model); no duplicated policy SQL remains; `ContactNote` and `DealNote` each have `organization_id` and a live FORCE-RLS policy.
-- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, run conformance test on PostgreSQL.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, `make MODULE=forms test`; run conformance gate on PostgreSQL.
 - **DEPENDS:** none (starts immediately). **Blocks:** AF2, AF4.
 - **RECOMMENDATION:** **Pursue (C for child tables, A's registry for infrastructure)** — child-table policy is locked (see Decisions locked table); registry + conformance gate is the implementation vehicle.
+- **FINDINGS / FOLLOW-UP:**
+  - The conformance gate lives in `quickscale_modules/orgs/tests/` (not `tests_shared/`) because the registry and tenancy helpers are owned by the orgs module — this is intentional, not a scope drift.
+  - Copy-pasted RLS SQL was replaced by shared `apply_force_rls`/`revert_force_rls` helpers in `tenancy.py` rather than a reusable `EnableTenantRLS(model)` migration operation. The shared-helpers approach avoids a custom migration operation class and its serialisation contract; it is the local equivalent.
+  - Equality triggers (child-parent `organization_id` constraint) are deployed via per-module `enable_child_parent_equality()` calls in the schema migrations for ContactNote/DealNote (crm/0009) and FormField/FormSubmission/FormFieldValue (forms/0007), not through a generic migration operation. The conformance gate now verifies live trigger presence in `pg_trigger` (Phase 5).
+  - The conformance gate's `test_exactly_zero_pending_remediation_entries()` enforces the final zero-pending state; the former PENDING_REMEDIATION equality-footprint parametrized tests are now no-ops (empty parametrize list) but kept as future-proofing.
+  - Forms child-table promotion (Phase 4) extended the original AF1 scope beyond the initially scoped CRM child tables only; this was a correct scope expansion approved in the phased plan.
 
 ### - [ ] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()`
 

@@ -6,6 +6,7 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.forms import ModelForm
+from django.forms.models import BaseInlineFormSet
 
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 
@@ -193,6 +194,19 @@ class _CrmOrgAwareAdminMixin:
 
         M2M fields (tags) require a PK and are handled in ``save_related``.
         """
+        # Auto-set created_by from the current user for note models
+        # (ContactNote, DealNote) when the form excludes the field.
+        # NOTE: Use ``created_by_id`` (the FK column attribute) instead of
+        # ``created_by`` (the FK descriptor) because the descriptor raises
+        # ``RelatedObjectDoesNotExist`` when the FK is NULL, making
+        # ``hasattr(obj, "created_by")`` return ``False``.
+        if (
+            hasattr(obj, "created_by_id")
+            and obj.created_by_id is None
+            and request.user.is_authenticated
+        ):
+            obj.created_by = request.user
+
         org_id = getattr(obj, "organization_id", None)
         if org_id is not None:
             # Only process FK fields — M2M requires a PK and is handled
@@ -273,10 +287,21 @@ class CompanyAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
     contact_count.short_description = "Contacts"  # type: ignore
 
 
+class ContactNoteFormSet(BaseInlineFormSet):
+    """Inline formset that bypasses TenantManager for cross-tenant operator path."""
+
+    def get_queryset(self) -> models.QuerySet:
+        """Use all_objects to avoid TenantManager scoping on the operator path."""
+        if not self.instance or not self.instance.pk:
+            return ContactNote.all_objects.none()
+        return ContactNote.all_objects.filter(**{self.fk.attname: self.instance.pk})
+
+
 class ContactNoteInline(admin.TabularInline):
     """Inline admin for ContactNote"""
 
     model = ContactNote
+    formset = ContactNoteFormSet
     extra = 1
     readonly_fields = ["created_at", "created_by"]
     fields = ["text", "created_by", "created_at"]
@@ -316,6 +341,27 @@ class ContactAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         """Operator path: use all_objects for cross-tenant visibility."""
         return Contact.all_objects.all()
 
+    def save_formset(  # type: ignore[override]
+        self,
+        request: Any,
+        form: Any,
+        formset: Any,
+        change: bool,
+    ) -> None:
+        """Stamp organization from the parent Contact on inline ContactNote creates."""
+        instances = formset.save(commit=False)
+        parent_org_id = getattr(form.instance, "organization_id", None)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for instance in instances:
+            if (
+                hasattr(instance, "organization_id")
+                and getattr(instance, "organization_id", None) is None
+            ):
+                instance.organization_id = parent_org_id
+            instance.save()
+        formset.save_m2m()
+
 
 @admin.register(Stage)
 class StageAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
@@ -351,10 +397,21 @@ class StageAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         return form_class
 
 
+class DealNoteFormSet(BaseInlineFormSet):
+    """Inline formset that bypasses TenantManager for cross-tenant operator path."""
+
+    def get_queryset(self) -> models.QuerySet:
+        """Use all_objects to avoid TenantManager scoping on the operator path."""
+        if not self.instance or not self.instance.pk:
+            return DealNote.all_objects.none()
+        return DealNote.all_objects.filter(**{self.fk.attname: self.instance.pk})
+
+
 class DealNoteInline(admin.TabularInline):
     """Inline admin for DealNote"""
 
     model = DealNote
+    formset = DealNoteFormSet
     extra = 1
     readonly_fields = ["created_at", "created_by"]
     fields = ["text", "created_by", "created_at"]
@@ -401,16 +458,38 @@ class DealAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         """Operator path: use all_objects for cross-tenant visibility."""
         return Deal.all_objects.all()
 
+    def save_formset(  # type: ignore[override]
+        self,
+        request: Any,
+        form: Any,
+        formset: Any,
+        change: bool,
+    ) -> None:
+        """Stamp organization from the parent Deal on inline DealNote creates."""
+        instances = formset.save(commit=False)
+        parent_org_id = getattr(form.instance, "organization_id", None)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for instance in instances:
+            if (
+                hasattr(instance, "organization_id")
+                and getattr(instance, "organization_id", None) is None
+            ):
+                instance.organization_id = parent_org_id
+            instance.save()
+        formset.save_m2m()
+
 
 @admin.register(ContactNote)
-class ContactNoteAdmin(admin.ModelAdmin):
+class ContactNoteAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
     """Admin configuration for ContactNote model"""
 
-    list_display = ["contact", "created_by", "short_text", "created_at"]
-    list_filter = ["created_at"]
+    list_display = ["contact", "created_by", "short_text", "organization", "created_at"]
+    list_filter = ["organization", "created_at"]
     search_fields = ["contact__first_name", "contact__last_name", "text"]
-    readonly_fields = ["created_at"]
+    readonly_fields = ["created_at", "created_by"]
     raw_id_fields = ["contact"]
+    _org_related_fields: list[str] = ["contact"]
 
     def short_text(self, obj: ContactNote) -> str:
         """Return truncated note text"""
@@ -418,19 +497,28 @@ class ContactNoteAdmin(admin.ModelAdmin):
 
     short_text.short_description = "Text"  # type: ignore
 
+    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
+        """Operator path: use all_objects for cross-tenant visibility."""
+        return ContactNote.all_objects.all()
+
 
 @admin.register(DealNote)
-class DealNoteAdmin(admin.ModelAdmin):
+class DealNoteAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
     """Admin configuration for DealNote model"""
 
-    list_display = ["deal", "created_by", "short_text", "created_at"]
-    list_filter = ["created_at"]
+    list_display = ["deal", "created_by", "short_text", "organization", "created_at"]
+    list_filter = ["organization", "created_at"]
     search_fields = ["deal__title", "text"]
-    readonly_fields = ["created_at"]
+    readonly_fields = ["created_at", "created_by"]
     raw_id_fields = ["deal"]
+    _org_related_fields: list[str] = ["deal"]
 
     def short_text(self, obj: DealNote) -> str:
         """Return truncated note text"""
         return obj.text[:50] + "..." if len(obj.text) > 50 else obj.text
 
     short_text.short_description = "Text"  # type: ignore
+
+    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
+        """Operator path: use all_objects for cross-tenant visibility."""
+        return DealNote.all_objects.all()

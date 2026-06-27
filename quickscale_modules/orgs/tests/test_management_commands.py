@@ -1305,6 +1305,8 @@ def test_purge_delete_specs_are_complete() -> None:
     expected_models = {
         "SocialLink",
         "SocialEmbed",
+        "FormFieldValue",
+        "FormField",
         "FormSubmission",
         "Form",
         "Listing",
@@ -1408,7 +1410,10 @@ def test_purge_organization_deletes_forms_rows() -> None:
 
     org = Organization.objects.create(name="Forms Purge", slug="forms-purge")
     form = Form.objects.create(organization=org, title="Test Form", slug="test-form")
-    FormSubmission.objects.create(form=form)
+    FormSubmission.all_objects.create(
+        form=form,
+        organization=form.organization,
+    )
     org_id = org.pk
 
     call_command(
@@ -1420,7 +1425,7 @@ def test_purge_organization_deletes_forms_rows() -> None:
     )
     assert not Organization.objects.filter(pk=org_id).exists()
     assert Form.all_objects.filter(organization_id=org_id).count() == 0
-    assert FormSubmission.objects.filter(form__organization=org).count() == 0
+    assert FormSubmission.all_objects.filter(organization_id=org_id).count() == 0
     assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
 
 

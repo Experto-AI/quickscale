@@ -260,9 +260,7 @@ class OrgScopedReadMixin(CRMModelViewSet):
     via the unified ``_resolve_active_org`` seam.  No NULL/global fallback.
 
     Subclasses set ``_org_scope_field`` to the FK field used for filtering:
-    - ``"organization"`` for direct-org models (Tag, Company, Contact, Stage, Deal)
-    - ``"contact__organization"`` for ContactNote (parent-derived)
-    - ``"deal__organization"`` for DealNote (parent-derived)
+    - ``"organization"`` for direct-org models (Tag, Company, Contact, Stage, Deal, ContactNote, DealNote)
     """
 
     _org_scope_field: str = "organization"
@@ -484,7 +482,7 @@ class DealViewSet(OrgScopedReadMixin):
 class ContactNoteViewSet(OrgScopedReadMixin):
     """Standalone ViewSet for ContactNote model"""
 
-    _org_scope_field = "contact__organization"
+    _org_scope_field = "organization"
 
     queryset = ContactNote.objects.select_related("contact", "created_by")
     serializer_class = ContactNoteSerializer
@@ -497,7 +495,7 @@ class ContactNoteViewSet(OrgScopedReadMixin):
 class DealNoteViewSet(OrgScopedReadMixin):
     """Standalone ViewSet for DealNote model"""
 
-    _org_scope_field = "deal__organization"
+    _org_scope_field = "organization"
 
     queryset = DealNote.objects.select_related("deal", "created_by")
     serializer_class = DealNoteSerializer

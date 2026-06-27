@@ -32,10 +32,13 @@ class TestMigration0002Seed:
 
     @pytest.fixture(autouse=True)
     def _system_org(self, db):
-        """Ensure System org exists for preset creation."""
+        """Ensure System org exists and set org context for scoped managers."""
+        from quickscale_modules_orgs.current_org import set_current_org_id
         from quickscale_modules_orgs.models import Organization
 
-        return Organization.objects.get_system_org()
+        system_org = Organization.objects.get_system_org()
+        set_current_org_id(system_org.pk)
+        return system_org
 
     @pytest.fixture(autouse=True)
     def _clean_presets(self, _system_org):
@@ -69,7 +72,8 @@ class TestMigration0002Seed:
                 field_defaults.setdefault("placeholder", "")
                 field_defaults.setdefault("options", [])
                 field_defaults.setdefault("validation_rules", {})
-                FormField.objects.get_or_create(
+                field_defaults["organization"] = form.organization
+                FormField.all_objects.get_or_create(
                     form=form,
                     name=field_data["name"],
                     defaults=field_defaults,
@@ -125,7 +129,9 @@ class TestMigration0002Seed:
         """Support preset has a priority select with three options."""
         self._create_test_presets(_system_org)
 
-        priority_field = FormField.objects.get(form__slug="support", name="priority")
+        priority_field = FormField.all_objects.get(
+            form__slug="support", name="priority"
+        )
         assert priority_field.field_type == FormField.FIELD_TYPE_SELECT
         assert len(priority_field.options) == 3
 

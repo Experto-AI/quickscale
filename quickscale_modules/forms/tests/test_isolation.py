@@ -39,8 +39,9 @@ def test_admin_can_see_cross_tenant_submissions(
         organization=org_b,
     )
 
-    submission_a = FormSubmission.objects.create(
+    submission_a = FormSubmission.all_objects.create(
         form=form_a,
+        organization=form_a.organization,
         ip_address="192.168.1.1",
         user_agent="TestAgent/1.0",
     )

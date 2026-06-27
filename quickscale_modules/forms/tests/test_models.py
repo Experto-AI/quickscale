@@ -102,23 +102,43 @@ class TestFormFieldModel:
 
     def test_formfield_ordering_by_order(self, form):
         """Fields are ordered by the 'order' field"""
-        FormField.objects.create(
-            form=form, field_type="text", label="B", name="field_b", order=2
+        FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type="text",
+            label="B",
+            name="field_b",
+            order=2,
         )
-        FormField.objects.create(
-            form=form, field_type="text", label="A", name="field_a", order=1
+        FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type="text",
+            label="A",
+            name="field_a",
+            order=1,
         )
         names = list(form.fields.values_list("name", flat=True))
         assert names == ["field_a", "field_b"]
 
     def test_formfield_unique_together_form_and_name(self, form):
         """Two fields on the same form cannot share the same name"""
-        FormField.objects.create(
-            form=form, field_type="text", label="First", name="dup", order=1
+        FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type="text",
+            label="First",
+            name="dup",
+            order=1,
         )
         with pytest.raises(IntegrityError):
-            FormField.objects.create(
-                form=form, field_type="email", label="Second", name="dup", order=2
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type="email",
+                label="Second",
+                name="dup",
+                order=2,
             )
 
     def test_formfield_str(self, form, form_field):
@@ -128,8 +148,13 @@ class TestFormFieldModel:
 
     def test_formfield_is_active_defaults_to_true(self, form):
         """is_active defaults to True"""
-        field = FormField.objects.create(
-            form=form, field_type="text", label="X", name="x_field", order=1
+        field = FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type="text",
+            label="X",
+            name="x_field",
+            order=1,
         )
         assert field.is_active is True
 
@@ -140,12 +165,16 @@ class TestFormSubmissionModel:
 
     def test_formsubmission_default_status_is_pending(self, form):
         """status defaults to 'pending'"""
-        submission = FormSubmission.objects.create(form=form)
+        submission = FormSubmission.all_objects.create(
+            form=form, organization=form.organization
+        )
         assert submission.status == FormSubmission.STATUS_PENDING
 
     def test_formsubmission_is_spam_defaults_to_false(self, form):
         """is_spam defaults to False"""
-        submission = FormSubmission.objects.create(form=form)
+        submission = FormSubmission.all_objects.create(
+            form=form, organization=form.organization
+        )
         assert submission.is_spam is False
 
     def test_formsubmission_str(self, submission):

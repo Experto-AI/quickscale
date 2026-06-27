@@ -107,6 +107,7 @@ class TestContactNoteAdmin:
             contact=contact,
             created_by=user,
             text="Short",
+            organization=contact.organization,
         )
         note_admin = ContactNoteAdmin(ContactNote, admin.site)
         result = note_admin.short_text(note)
@@ -698,9 +699,223 @@ class TestCRT15001ContactNoteTimestampAdminRegression:
             contact=contact,
             created_by=operator,
             text="Regression test for CR-T15-001 — no contextvar",
+            organization=contact.organization,
         )
 
         contact.refresh_from_db()
         assert contact.last_contacted_at is not None, (
             "last_contacted_at must be updated via all_objects bypass"
         )
+
+
+# ---------------------------------------------------------------------------
+# AF1-CR-004: Standalone ContactNoteAdmin/DealNoteAdmin parent/org validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestContactNoteAdminSameOrgValidation:
+    """AF1-CR-004: ContactNoteAdmin add form must validate contact/org membership."""
+
+    def test_add_form_rejects_cross_org_contact(self, admin_client, org_a, org_b):
+        """ContactNoteAdmin add form rejects a contact from a different organization."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        contact_b = Contact.objects.create(
+            first_name="Foreign",
+            last_name="Contact",
+            email="foreign@org-b.com",
+            company=company_b,
+            organization=org_b,
+        )
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/contactnote/add/",
+            data={
+                "contact": contact_b.id,
+                "text": "Cross-org note",
+                "organization": org_a.id,
+                "_save": "Save",
+            },
+        )
+
+        # Form re-rendered with errors (200), not a redirect (302)
+        assert response.status_code == 200
+        content = response.content.decode("utf-8")
+        assert "contact must belong to the same organization" in content
+
+    def test_add_form_accepts_same_org_contact(self, admin_client, org_a):
+        """ContactNoteAdmin add form accepts a contact from the same organization."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Same",
+            last_name="Org",
+            email="same@org-a.com",
+            company=company_a,
+            organization=org_a,
+        )
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/contactnote/add/",
+            data={
+                "contact": contact_a.id,
+                "text": "Same-org note",
+                "organization": org_a.id,
+                "_save": "Save",
+            },
+        )
+
+        # Successful create redirects to changelist
+        assert response.status_code == 302
+
+    def test_add_form_requires_organization(self, admin_client, org_a):
+        """ContactNoteAdmin add form requires organization to be set."""
+        from quickscale_modules_crm.models import Company, Contact
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Require",
+            last_name="OrgTest",
+            email="require-org@org-a.com",
+            company=company_a,
+            organization=org_a,
+        )
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/contactnote/add/",
+            data={
+                "contact": contact_a.id,
+                "text": "Missing org note",
+                "_save": "Save",
+            },
+        )
+
+        # Form re-rendered with errors (missing required organization)
+        assert response.status_code == 200
+
+
+@pytest.mark.django_db
+class TestDealNoteAdminSameOrgValidation:
+    """AF1-CR-004: DealNoteAdmin add form must validate deal/org membership."""
+
+    def test_add_form_rejects_cross_org_deal(self, admin_client, org_a, org_b):
+        """DealNoteAdmin add form rejects a deal from a different organization."""
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            Stage,
+        )
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Contact",
+            last_name="A",
+            email="contact-a@org-a.com",
+            company=company_a,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Stage A", order=1, organization=org_a)
+        deal_b = Deal.objects.create(
+            title="Foreign Deal",
+            contact=contact_a,
+            amount=1000,
+            stage=stage_a,
+            organization=org_b,
+        )
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/dealnote/add/",
+            data={
+                "deal": deal_b.id,
+                "text": "Cross-org deal note",
+                "organization": org_a.id,
+                "_save": "Save",
+            },
+        )
+
+        # Form re-rendered with errors (200), not a redirect (302)
+        assert response.status_code == 200
+        content = response.content.decode("utf-8")
+        assert "deal must belong to the same organization" in content
+
+    def test_add_form_accepts_same_org_deal(self, admin_client, org_a):
+        """DealNoteAdmin add form accepts a deal from the same organization."""
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            Stage,
+        )
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Contact",
+            last_name="A",
+            email="contact-a-same@org-a.com",
+            company=company_a,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(name="Stage A Same", order=2, organization=org_a)
+        deal_a = Deal.objects.create(
+            title="Same-Org Deal",
+            contact=contact_a,
+            amount=2000,
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/dealnote/add/",
+            data={
+                "deal": deal_a.id,
+                "text": "Same-org deal note",
+                "organization": org_a.id,
+                "_save": "Save",
+            },
+        )
+        # Successful create redirects to changelist
+        assert response.status_code == 302
+
+    def test_add_form_requires_organization(self, admin_client, org_a):
+        """DealNoteAdmin add form requires organization to be set."""
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            Stage,
+        )
+
+        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        contact_a = Contact.objects.create(
+            first_name="Require",
+            last_name="OrgTest",
+            email="dealnote-req-org@org-a.com",
+            company=company_a,
+            organization=org_a,
+        )
+        stage_a = Stage.objects.create(
+            name="Stage Req Org", order=3, organization=org_a
+        )
+        deal_a = Deal.objects.create(
+            title="Deal Require Org",
+            contact=contact_a,
+            amount=3000,
+            stage=stage_a,
+            organization=org_a,
+        )
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/dealnote/add/",
+            data={
+                "deal": deal_a.id,
+                "text": "Missing org deal note",
+                "_save": "Save",
+            },
+        )
+
+        # Form re-rendered with errors (missing required organization)
+        assert response.status_code == 200

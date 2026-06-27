@@ -211,8 +211,11 @@ class ContactNoteSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data: dict) -> ContactNote:
-        """Set created_by to the current user"""
+        """Set created_by to the current user and stamp organization."""
         validated_data["created_by"] = self.context["request"].user
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
         return super().create(validated_data)
 
 
@@ -471,8 +474,11 @@ class DealNoteSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data: dict) -> DealNote:
-        """Set created_by to the current user"""
+        """Set created_by to the current user and stamp organization."""
         validated_data["created_by"] = self.context["request"].user
+        org_id = _request_org_id(self)
+        if org_id is not None:
+            validated_data.setdefault("organization_id", org_id)
         return super().create(validated_data)
 
 

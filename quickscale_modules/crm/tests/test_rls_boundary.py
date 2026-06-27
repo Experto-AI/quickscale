@@ -29,6 +29,8 @@ _CRM_TABLES = (
     "quickscale_modules_crm_contact",
     "quickscale_modules_crm_stage",
     "quickscale_modules_crm_deal",
+    "quickscale_modules_crm_contactnote",
+    "quickscale_modules_crm_dealnote",
 )
 
 

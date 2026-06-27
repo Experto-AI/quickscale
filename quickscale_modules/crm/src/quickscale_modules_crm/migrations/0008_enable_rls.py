@@ -3,25 +3,13 @@
 T1.11 — Add DB-level RLS for CRM tables as a defense-in-depth layer
 below the Django-level TenantManager.
 
-Forward:
-    1. ENABLE ROW LEVEL SECURITY + FORCE ROW LEVEL SECURITY on every
-       org-owned CRM table so that RLS applies to every role including
-       the table owner (Django connection).
-    2. CREATE POLICY that uses ``current_setting('app.current_org_id', true)::uuid``
-       for SELECT, INSERT, UPDATE, and DELETE.
-
-Reverse:
-    1. DROP the per-table policies.
-    2. ALTER TABLE … NO FORCE ROW LEVEL SECURITY.
-    3. ALTER TABLE … DISABLE ROW LEVEL SECURITY.
-
 ContactNote and DealNote have no direct ``organization_id`` column — they are
 scoped through their parent (Contact/Deal) FKs.  FORCE RLS on those tables is
 therefore not applied here; the parent-derived scoping through Contact/Deal RLS
 is the isolation boundary.  See T1.11 plan-review notes.
 
-All admin reads/mutations on CRM tables must set ``app.current_org_id``
-(and the ContextVar) inside a transaction before querying.
+Uses the shared ``apply_force_rls`` / ``revert_force_rls`` helpers from
+``quickscale_modules_orgs.tenancy`` instead of duplicating SQL.
 
 This is a no-op on non-PostgreSQL databases (SQLite during tests).
 """
@@ -29,6 +17,8 @@ This is a no-op on non-PostgreSQL databases (SQLite during tests).
 from typing import Any
 
 from django.db import migrations
+
+from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
 
 # ---------------------------------------------------------------------------
 # Policy names
@@ -59,48 +49,13 @@ _CRM_RLS_TARGETS = (
     (CRM_DEAL_TABLE, CRM_DEAL_RLS_POLICY),
 )
 
-# ---------------------------------------------------------------------------
-# Forward
-# ---------------------------------------------------------------------------
-
-_FORWARD_SQL = """
-ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
-ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY {policy_name} ON {table}
-    FOR ALL
-    USING (current_setting('app.current_org_id', true)::uuid = organization_id)
-    WITH CHECK (current_setting('app.current_org_id', true)::uuid = organization_id);
-"""
-
 
 def _forward(apps: Any, schema_editor: Any) -> None:
-    if schema_editor.connection.vendor != "postgresql":
-        return
-    for table, policy in _CRM_RLS_TARGETS:
-        schema_editor.execute(
-            _FORWARD_SQL.format(table=table, policy_name=policy),
-        )
-
-
-# ---------------------------------------------------------------------------
-# Reverse
-# ---------------------------------------------------------------------------
-
-_REVERSE_SQL = """
-DROP POLICY IF EXISTS {policy_name} ON {table};
-ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY;
-ALTER TABLE {table} DISABLE ROW LEVEL SECURITY;
-"""
+    apply_force_rls(schema_editor, _CRM_RLS_TARGETS)
 
 
 def _reverse(apps: Any, schema_editor: Any) -> None:
-    if schema_editor.connection.vendor != "postgresql":
-        return
-    for table, policy in _CRM_RLS_TARGETS:
-        schema_editor.execute(
-            _REVERSE_SQL.format(table=table, policy_name=policy),
-        )
+    revert_force_rls(schema_editor, _CRM_RLS_TARGETS)
 
 
 # ---------------------------------------------------------------------------

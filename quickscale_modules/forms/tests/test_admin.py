@@ -129,7 +129,7 @@ class TestFormSubmissionAdminActions:
         request.user = User.objects.create_superuser(
             "spamadmin", "spam@example.com", "adminpass"
         )
-        queryset = FormSubmission.objects.filter(pk=submission.pk)
+        queryset = FormSubmission.all_objects.filter(pk=submission.pk)
         sub_admin_instance.mark_as_spam(request, queryset)
         submission.refresh_from_db()
         assert submission.is_spam is True
@@ -142,7 +142,7 @@ class TestFormSubmissionAdminActions:
         request.user = User.objects.create_superuser(
             "readadmin", "read@example.com", "adminpass"
         )
-        queryset = FormSubmission.objects.filter(pk=submission.pk)
+        queryset = FormSubmission.all_objects.filter(pk=submission.pk)
         sub_admin_instance.mark_as_read(request, queryset)
         submission.refresh_from_db()
         assert submission.status == FormSubmission.STATUS_READ
@@ -235,3 +235,181 @@ class TestFormAdminOperatorQueryset:
             )
             admin_instance.get_queryset(request)
             mock_mgr.all.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# AF1-CR-002: Operator/admin child-data reads use all_objects-backed querysets
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestFormFieldInlineOperatorQueryset:
+    """AF1-CR-002: FormFieldInline must use all_objects for cross-tenant visibility."""
+
+    def test_form_field_formset_uses_all_objects(self):
+        """FormFieldFormSet.get_queryset() must use FormField.all_objects."""
+        from quickscale_modules_forms.admin import FormFieldFormSet
+        from quickscale_modules_forms.models import Form
+        from quickscale_modules_orgs.models import Organization
+        from django.forms.models import inlineformset_factory
+
+        org = Organization.objects.get_system_org()
+        form = Form.all_objects.create(
+            slug="test-fset-form",
+            title="Test Formset Form",
+            organization=org,
+        )
+
+        FactoryFormSet = inlineformset_factory(
+            Form, FormField, formset=FormFieldFormSet, fields="__all__"
+        )
+
+        with patch.object(FormField, "all_objects") as mock_mgr:
+            mock_mgr.none.return_value = FormField.objects.none()
+            mock_mgr.filter.return_value = FormField.all_objects.none()
+            formset = FactoryFormSet(instance=form)
+            formset.get_queryset()
+            mock_mgr.filter.assert_called_once_with(form_id=form.pk)
+
+    def test_form_field_inline_registers_all_objects_formset(self):
+        """FormFieldInline should use the all_objects-backed FormFieldFormSet."""
+        from quickscale_modules_forms.admin import FormFieldFormSet, FormFieldInline
+
+        assert FormFieldInline.formset is FormFieldFormSet, (
+            "FormFieldInline must use FormFieldFormSet"
+        )
+
+
+@pytest.mark.django_db
+class TestFormFieldValueInlineOperatorQueryset:
+    """AF1-CR-002: FormFieldValueInline must use all_objects for cross-tenant visibility."""
+
+    def test_form_field_value_formset_uses_all_objects(self):
+        """FormFieldValueFormSet.get_queryset() must use FormFieldValue.all_objects."""
+        from quickscale_modules_forms.admin import FormFieldValueFormSet
+        from quickscale_modules_forms.models import Form
+        from quickscale_modules_orgs.models import Organization
+        from django.forms.models import inlineformset_factory
+
+        org = Organization.objects.get_system_org()
+        form = Form.all_objects.create(
+            slug="test-fv-fset-form",
+            title="Test FV Formset Form",
+            organization=org,
+        )
+        submission = FormSubmission.all_objects.create(
+            form=form,
+            organization=org,
+        )
+
+        FactoryFormSet = inlineformset_factory(
+            FormSubmission,
+            FormFieldValue,
+            formset=FormFieldValueFormSet,
+            fields="__all__",
+        )
+
+        with patch.object(FormFieldValue, "all_objects") as mock_mgr:
+            mock_mgr.none.return_value = FormFieldValue.objects.none()
+            mock_mgr.filter.return_value = FormFieldValue.all_objects.none()
+            formset = FactoryFormSet(instance=submission)
+            formset.get_queryset()
+            mock_mgr.filter.assert_called_once_with(submission_id=submission.pk)
+
+    def test_form_field_value_inline_registers_all_objects_formset(self):
+        """FormFieldValueInline should use the all_objects-backed FormFieldValueFormSet."""
+        from quickscale_modules_forms.admin import (
+            FormFieldValueFormSet,
+            FormFieldValueInline,
+        )
+
+        assert FormFieldValueInline.formset is FormFieldValueFormSet, (
+            "FormFieldValueInline must use FormFieldValueFormSet"
+        )
+
+
+@pytest.mark.django_db
+class TestAdminSubmissionAPIPrefetch:
+    """AF1-CR-002: Admin submission API views must use all_objects-backed Prefetch
+    for child FormFieldValue reads."""
+
+    def test_admin_submission_list_prefetch_uses_all_objects(
+        self, staff_client, form, submission, field_value
+    ):
+        """AdminSubmissionListAPIView must use FormFieldValue.all_objects for prefetch."""
+        from quickscale_modules_forms.views import AdminSubmissionListAPIView
+        from rest_framework.test import APIRequestFactory
+        from rest_framework.request import Request as DRF_Request
+
+        rf = APIRequestFactory()
+        wsgi_request = rf.get("/admin/")
+        wsgi_request.user = User.objects.create_superuser(
+            "prefetch-spy", "prefetch-spy@example.com", "adminpass"
+        )
+        view = AdminSubmissionListAPIView()
+        view.request = DRF_Request(wsgi_request)
+        view.kwargs = {"pk": form.pk}
+
+        qs = view.get_queryset()
+        # Verify the queryset has a prefetch_related lookup for FormFieldValue.
+        # Prefetch queries are not inlined in the main SQL; check the
+        # _prefetch_related_lookups instead.
+        prefetch_lookups = qs._prefetch_related_lookups
+        assert len(prefetch_lookups) >= 1, (
+            "Queryset must have at least one prefetch_related lookup"
+        )
+        prefetch_through = [
+            getattr(lk, "prefetch_through", str(lk)) for lk in prefetch_lookups
+        ]
+        assert any("values" in name for name in prefetch_through), (
+            f"Expected a Prefetch for 'values', got {prefetch_through}"
+        )
+
+    def test_admin_submission_detail_prefetch_uses_all_objects(
+        self, staff_client, form, submission, field_value
+    ):
+        """Verify admin submission detail returns values (proves prefetch works)."""
+        url = reverse(
+            "quickscale_forms:admin-submission-detail",
+            kwargs={"pk": form.pk, "sub_pk": submission.pk},
+        )
+        response = staff_client.get(url)
+        assert response.status_code == 200
+        assert "values" in response.data, (
+            "Response must include values through the all_objects-backed prefetch"
+        )
+        assert len(response.data["values"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# AF1-CR-003: FormAdmin organization read-only on change
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestFormAdminOrganizationReadonly:
+    """AF1-CR-003: FormAdmin must prevent ad-hoc org changes that desync descendants."""
+
+    def test_organization_readonly_on_change(self, form):
+        """FormAdmin.get_readonly_fields must include organization when obj exists."""
+        form_admin_instance = admin.site._registry[Form]
+        rf = RequestFactory()
+        request = rf.get("/admin/")
+        request.user = User.objects.create_superuser(
+            "readonly-admin", "readonly@example.com", "adminpass"
+        )
+        readonly = form_admin_instance.get_readonly_fields(request, obj=form)
+        assert "organization" in readonly, (
+            "organization must be read-only on change to prevent parent/child desync"
+        )
+
+    def test_organization_not_readonly_on_add(self):
+        """FormAdmin.get_readonly_fields must NOT include organization when no obj."""
+        form_admin_instance = admin.site._registry[Form]
+        rf = RequestFactory()
+        request = rf.get("/admin/")
+        request.user = User.objects.create_superuser(
+            "add-admin", "add@example.com", "adminpass"
+        )
+        readonly = form_admin_instance.get_readonly_fields(request, obj=None)
+        assert "organization" not in readonly, "organization must be editable on add"

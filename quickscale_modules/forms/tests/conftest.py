@@ -51,9 +51,11 @@ def staff_client(api_client, staff_user):
 @pytest.fixture
 def form(db):
     """Active form with notify email set"""
+    from quickscale_modules_orgs.current_org import set_current_org_id
     from quickscale_modules_orgs.models import Organization
 
     system_org = Organization.objects.get_system_org()
+    set_current_org_id(system_org.pk)
     form, _ = Form.all_objects.update_or_create(
         slug="test-contact",
         defaults={
@@ -85,8 +87,9 @@ def inactive_form(db):
 @pytest.fixture
 def form_field(db, form):
     """Text field on the contact form"""
-    return FormField.objects.create(
+    return FormField.all_objects.create(
         form=form,
+        organization=form.organization,
         field_type=FormField.FIELD_TYPE_TEXT,
         label="Name",
         name="full_name",
@@ -98,8 +101,9 @@ def form_field(db, form):
 @pytest.fixture
 def email_field(db, form):
     """Email field on the contact form"""
-    return FormField.objects.create(
+    return FormField.all_objects.create(
         form=form,
+        organization=form.organization,
         field_type=FormField.FIELD_TYPE_EMAIL,
         label="Email",
         name="email",
@@ -111,8 +115,9 @@ def email_field(db, form):
 @pytest.fixture
 def optional_field(db, form):
     """Optional text field on the contact form"""
-    return FormField.objects.create(
+    return FormField.all_objects.create(
         form=form,
+        organization=form.organization,
         field_type=FormField.FIELD_TYPE_TEXT,
         label="Company",
         name="company",
@@ -124,8 +129,9 @@ def optional_field(db, form):
 @pytest.fixture
 def submission(db, form):
     """A form submission for the contact form"""
-    return FormSubmission.objects.create(
+    return FormSubmission.all_objects.create(
         form=form,
+        organization=form.organization,
         ip_address="127.0.0.1",
         user_agent="TestBrowser/1.0",
     )
@@ -134,8 +140,9 @@ def submission(db, form):
 @pytest.fixture
 def field_value(db, submission, form_field):
     """A field value snapshot attached to the submission"""
-    return FormFieldValue.objects.create(
+    return FormFieldValue.all_objects.create(
         submission=submission,
+        organization=submission.organization,
         field=form_field,
         field_name="full_name",
         field_label="Name",
@@ -159,6 +166,9 @@ def org(db):
 @pytest.fixture
 def org_form(db, org):
     """Active form owned by an organization."""
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    set_current_org_id(org.pk)
     form, _ = Form.all_objects.update_or_create(
         slug="org-contact",
         defaults={
