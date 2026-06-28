@@ -248,3 +248,131 @@ class TestManifestAdapterRegistryCompleteness:
         assert module_name in MANIFEST_ADAPTER_REGISTRY, (
             f"Module '{module_name}' has no manifest adapter registered"
         )
+
+
+class TestRegenerateManagedWiringEmbeddedNoMonorepo:
+    """Embedded-project context: regenerate_managed_wiring succeeds outside the
+    maintainer monorepo when embedded module manifests are available.
+    Regression coverage for AF8-CR-002."""
+
+    def test_outside_monorepo_with_embedded_manifests(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """regenerate_managed_wiring succeeds when get_modules_base_path raises
+        ImproperlyConfigured but the project has real embedded manifests."""
+        from django.core.exceptions import ImproperlyConfigured
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Create an embedded analytics module with a real module.yml
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
+
+        # Clear the modules base path override so get_modules_base_path
+        # attempts the monorepo path.
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+
+        try:
+            # Make the monorepo path appear non-existent so
+            # get_modules_base_path raises ImproperlyConfigured.
+            monorepo_path = (
+                Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
+            )
+            _real_is_dir = Path.is_dir
+
+            def _selective_is_dir(self: Path) -> bool:
+                if str(self.resolve()) == str(monorepo_path.resolve()):
+                    return False
+                return _real_is_dir(self)
+
+            monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
+
+            # Verify the pre-condition: no base path available
+            with pytest.raises(ImproperlyConfigured):
+                _md.get_modules_base_path()
+
+            # Now call regenerate_managed_wiring — it should succeed by
+            # detecting the embedded manifests and setting the base path
+            # itself.
+            success, message = regenerate_managed_wiring(project)
+            assert success, f"regenerate_managed_wiring failed: {message}"
+            assert "regenerated" in message.lower()
+
+            # Verify managed wiring was actually written
+            settings_modules = project / "myapp" / "settings" / "modules.py"
+            assert settings_modules.exists()
+            content = settings_modules.read_text()
+            assert "quickscale_modules_analytics" in content
+
+        finally:
+            _md._modules_base_path = original_override
+
+
+class TestRegenerateManagedWiringAdapterFailure:
+    """regenerate_managed_wiring catches ImproperlyConfigured from adapter
+    failures and returns (False, message) instead of propagating the exception.
+    Regression coverage for AF7-CR-REV-001 and AF7-CR-REV-002."""
+
+    def test_improperly_configured_caught_and_returned_as_failure(
+        self, tmp_path: Path
+    ) -> None:
+        """When refresh_managed_adapters raises ImproperlyConfigured at
+        the embedded modules base path, regenerate_managed_wiring returns
+        (False, message), preserving the tuple[bool, str] return type."""
+        from quickscale_core.manifest.entry_point import (
+            MANIFEST_ADAPTER_REGISTRY as REGISTRY,
+            MANAGED_ADAPTER_ORIGINS as ORIGINS,
+        )
+
+        # Save state before this test.
+        _orig_registry = dict(REGISTRY)
+        _orig_origins = set(ORIGINS)
+
+        try:
+            # Clear registry and origins, then add only a module name
+            # whose Python package does not exist so that
+            # refresh_managed_adapters raises ImproperlyConfigured
+            # when trying to import it.
+            REGISTRY.clear()
+            ORIGINS.clear()
+            ORIGINS.add("_test_missing_adapter")
+
+            project = tmp_path / "myapp"
+            _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+            # Create an embedded module.yml for the missing module so
+            # _has_real_manifests is True and refresh_managed_adapters
+            # is called with _test_missing_adapter's module.yml at the
+            # base path.
+            (project / "modules" / "_test_missing_adapter").mkdir(parents=True)
+            (project / "modules" / "_test_missing_adapter" / "module.yml").write_text(
+                "version: '1'\nname: _test_missing_adapter\n"
+            )
+
+            # The call to refresh_managed_adapters inside
+            # regenerate_managed_wiring should raise
+            # ImproperlyConfigured because
+            # quickscale_modules__test_missing_adapter is not
+            # importable. Our except ImproperlyConfigured handler
+            # converts it to (False, message).
+            success, message = regenerate_managed_wiring(project)
+
+            assert success is False
+            assert "Managed adapter wiring failed" in message
+            assert "_test_missing_adapter" in message
+        finally:
+            REGISTRY.clear()
+            REGISTRY.update(_orig_registry)
+            ORIGINS.clear()
+            ORIGINS.update(_orig_origins)

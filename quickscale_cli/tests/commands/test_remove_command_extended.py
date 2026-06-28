@@ -179,6 +179,31 @@ class TestRemoveHelpers:
             project_package="myproject",
         )
 
+    @patch("quickscale_cli.commands.remove_command.regenerate_managed_wiring")
+    def test_regenerate_handles_adapter_failure(
+        self,
+        mock_regenerate,
+        tmp_path: Path,
+    ) -> None:
+        """_regenerate_managed_wiring_after_removal returns (False, message)
+        when regenerate_managed_wiring returns a managed-adapter failure."""
+        mock_regenerate.return_value = (
+            False,
+            "Managed adapter for 'billing' not importable: "
+            "quickscale_modules_billing.adapter could not be loaded",
+        )
+
+        success, message = _regenerate_managed_wiring_after_removal(
+            tmp_path,
+            ["billing"],
+            "myproject",
+        )
+
+        assert success is False
+        assert "Failed to regenerate managed wiring files" in message
+        assert "billing" in message
+        assert "not importable" in message
+
 
 class TestRemoveTransactionalFailures:
     def test_preflight_abort_on_malformed_quickscale(

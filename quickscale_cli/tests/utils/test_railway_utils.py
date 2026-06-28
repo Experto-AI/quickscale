@@ -711,16 +711,10 @@ class TestGetAppServiceName:
 
         assert result == "myproject"
 
-    def test_returns_current_directory_name_as_fallback(self, tmp_path, monkeypatch):
-        """Test that function returns current directory name when no project name."""
-        # Create directory first, then change to it
-        test_dir = tmp_path / "test_project"
-        test_dir.mkdir()
-        monkeypatch.chdir(test_dir)
-
-        result = get_app_service_name()
-
-        assert result == "test_project"
+    def test_raises_value_error_when_no_project_name(self):
+        """Test that function raises ValueError when no project name provided."""
+        with pytest.raises(ValueError, match="project_name is required"):
+            get_app_service_name()
 
 
 class TestIsNpmInstalled:

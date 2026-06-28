@@ -78,37 +78,40 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ---
 
-## Open work — v87 structural findings (AF1–AF7)
+## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). Two disjoint clusters; see the per-finding "Alternatives" + preferred option in findings.md before locking each decision.
+Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). Generator cluster (AF5–AF8) complete. Remaining: runtime isolation cluster — AF1-CR follow-ups (Track 1), AF2+AF4 (Track 2), then AF3 (Track 1).
 
 ### Track assignment & parallelization
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF1** ✅ → **AF1-CR follow-up** ✅ → **AF3** | Runtime isolation | AF1 merged to `v87`; AF1-CR-002 + AF1-CR-005 completed (forms-only fixes — see AF1 entry); AF3 waits on AF2 also merging |
-| `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
-| `wt-track3` | **AF7** ⏸️ (partial, blocked) → **AF8** | Generator / CLI | AF6 + AF5 complete and merged; AF7 blocked on AF7-CR-003; AF8 starts immediately (independent) |
+| `wt-track1` | **AF1-CR-002** ✅ → **AF1-CR-005** ✅ → **AF3** | Runtime isolation | AF1 merged ✅; AF1-CR forms follow-up completed; AF3 waits on AF2 merging |
+| `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | AF1 merged — **ready to start**; AF2+AF4 share a connection-level GUC fix |
+| `wt-track3` | — | Generator / CLI | **All tasks complete.** AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ |
 
-**Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: AF6 → AF5 complete and merged. AF7 infrastructure and module-owned adapters landed but blocked on AF7-CR-003; see AF7 entry. **AF8 starts immediately** — no dependency on AF7; fixes two independent fail-hard violations in `module_discovery.py` and `railway_utils.py`. The two clusters touch disjoint file sets.
+**Sequencing rationale.** Isolation cluster: `AF1 ✅ → (AF2 + AF4) → AF3` — AF1 merged to `v87`; AF2/AF4 share a connection-level GUC hook and are now unblocked; AF3 hardens the operator seam after AF2 merges. Track 1 completes AF1-CR-002 and AF1-CR-005 (forms-only) before AF3 starts. Generator cluster: AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ — Track 3 complete.
 
 ### QA hardening thread (cross-track)
 
 Three findings share one root cause: **the suite tests the happy request path — the one path where the broken mechanism still appears to work** — so coverage gaps, ambient-context breakage, and non-idempotent steps all pass silently and give false confidence. The fix in each is a *property* test (enumerate-and-assert or fault-inject-and-assert), not another example-path test. These live in different tasks/tracks but are one QA-hardening spine — sequence and review them as a thread:
 
-| Task | Track | Property test it adds | Replaces the false confidence of |
+| Task | Track | Property test it adds | Status |
 |---|---|---|---|
-| **AF1** | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | response-level isolation tests on chosen endpoints (`tests_shared/isolation.py`) |
-| **AF2** | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | request-path-only scoping tests |
-| **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) — *complete* | convention-asserted idempotent-rerun (no enforcing test) |
-
-Land **AF1's conformance gate first** — it is read-only, surfaces today's true RLS coverage (including the `ContactNote`/`DealNote` gap), and is the evidence base the others build on. Detail: findings.md → "Cross-cutting QA / testing thread."
+| **AF1** ✅ | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | complete |
+| **AF2** | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | open |
+| **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
 
 ---
 
-### - [x] AF1 — Tenant-table isolation conformance gate + declarative RLS ✓ *merged 2026-06-27*
+### - [ ] AF1-CR-002 — Forms child-table reads missing `org_scope()` in admin and views
 
-`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+- **TRACK:** `wt-track1` — first task this cycle; complete before AF1-CR-005 and AF3.
+- **WHY → AF1 code review.** Forms admin and views read child-table rows (`FormField`, `FormSubmission`, `FormFieldValue`) without an `org_scope()` / `all_objects` seam. Under the `NOBYPASSRLS` runtime role these reads are not correctly gated.
+- **SCOPE:** `forms/admin.py`, `forms/views.py`.
+- **ACCEPTANCE CRITERIA:** all child-table reads in forms admin and views go through `org_scope()` or use `all_objects` with an explicit operator seam; conformance gate still green.
+- **VALIDATION PATH:** `make MODULE=forms test`.
+- **DEPENDS:** AF1 merged ✅. **Blocks:** AF3 (via AF1-CR sequence).
 
 - **TRACK:** `wt-track1` — **foundation; must merge to `v87` before AF2/AF4 begin.**
 - **WHY → Finding 1.** RLS is six hand-written `enable_rls` migrations with copy-pasted SQL and hardcoded table lists; child tables without `organization_id` (`ContactNote`/`DealNote`) sit outside *both* the Python manager and RLS, and nothing asserts coverage.
@@ -168,55 +171,6 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 - **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests.
 - **DEPENDS:** AF1, AF2 merged.
 - **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; do after AF1/AF2 so the seam lands on the hardened base.
-
-### - [ ] AF7 — Push per-module manifest adapters out of core into the modules (PARTIAL — blocked by AF7-CR-003)
-
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track3` — after AF6 (lands on the decomposed manifest surface).
-- **WHY → Finding 7.** D3 ("self-describing modules") half-landed: `MANIFEST_ADAPTER_REGISTRY` holds hand-written `billing`/`crm`/`social` adapters in core (`entry_point.py`, 110 module-name refs) plus `social_manifest.py` — adding a rich module means editing core.
-- **OBJECTIVE:** Relocate each module's adapter into its own package and have core discover adapters via the manifest/entry-point mechanism (core keeps only the protocol). Start with `social` (move `_social_manifest_adapter` + `social_manifest.py`), then `billing`, `crm`.
-- **SCOPE:** `quickscale_core/manifest/entry_point.py`, `manifest/social_manifest.py`, `quickscale_modules/{social,billing,crm}/`, discovery in `contracts/module_discovery.py`.
-- **ACCEPTANCE CRITERIA:** adding/repointing a rich module touches zero core files; concrete module-name literal count in `quickscale_core` drops; `entry_point.py` shrinks.
-- **VALIDATION PATH:** generate a project with social+billing+crm and apply; module test suites.
-- **DEPENDS:** AF6 merged.
-- **RECOMMENDATION:** **Pursue (A)** — finishes the D3 decision the code drifted from; makes subtree-distributed modules actually self-contained.
-- **LANDED (track 3, wt-track3):**
-  - **Infrastructure seam:** `MANAGED_ADAPTER_ORIGINS`, `_CORE_FALLBACK_ADAPTERS`, `refresh_managed_adapters()` with base-path-aware discovery via `discover_shipped_module_names()`.
-  - **Module-owned primary adapters:** social, billing, and CRM each ship an `adapter.py` in their own package with the real rich adapter implementation (post-hooks, option resolution, settings assembly, managed-file rendering). These are used in monorepo/embedded contexts where the module package is importable.
-  - **Provenance-sensitive tests:** 9 tests in `TestManagedAdapterProvenance` verify module-owned vs core-fallback selection, distinct function objects, source provenance, origin-set correctness, and custom-entry preservation.
-  - **Refresh coordination:** `module_wiring_manager.py` calls `refresh_managed_adapters()` after `set_modules_base_path()` and after restoring the prior base path.
-  - **Public API:** `build_generic_manifest_spec()` and `load_module_manifest()` made public (old private aliases preserved).
-  - **Docs:** architecture section in `implementation_contract.md` added.
-- **BLOCKING — AF7-CR-003 (resolved by decision, not parity fix):** The core fallbacks (`_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback`) and the `_CORE_FALLBACK_ADAPTERS` dict are compat shims that violate the project's fail-hard principle (see decisions.md Prohibitions). The "bundled/installed-without-module-source" context is not a supported configuration. Decision locked: delete the fallbacks; fail hard (raise `ImproperlyConfigured`) if a managed adapter is not importable.
-- **NEXT STEP / REQUIRED:**
-  1. Delete `_CORE_FALLBACK_ADAPTERS` dict declaration from `entry_point.py`.
-  2. Delete `_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback` functions and their `_CORE_FALLBACK_ADAPTERS[name] = ...` registration lines from `entry_point.py`.
-  3. Rewrite `refresh_managed_adapters()` steps 2+3: replace the fallback lookup + silent removal with a hard `raise ImproperlyConfigured(f"Managed adapter for '{module_name}' not importable ...")`.
-  4. Update `entry_point.py` module docstring and `MANAGED_ADAPTER_ORIGINS` / `_CORE_FALLBACK_ADAPTERS` comments.
-  5. Delete the three fallback tests: `test_core_fallbacks_exist_for_bundled_context`, `test_core_fallback_source_is_core_not_module`, `test_core_fallback_and_module_owned_are_different_objects` from `test_manifest_entry_point.py`.
-  6. Re-run `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
-  7. Only then mark AF7 complete and merge.
-- **FINDINGS / FOLLOW-UP (on landed scope):**
-  - Remaining import-time-registered modules (analytics, blog, listings, forms, backups, notifications, auth, orgs, storage) may also be migrated using the same pattern once AF7 is unblocked. No pressing need — the seam is proven with social + billing + crm.
-
----
-
-<a id="af8"></a>
-### - [ ] AF8 — Fix fail-hard violations in module-path discovery and Railway project-name inference
-
-`**Tier 1 — Small | RISK LEVEL: low | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track3` — independent of AF7; starts immediately.
-- **WHY → Finding 8, violations 2–3.** Two setup paths silently substitute a fallback instead of failing hard: `get_modules_base_path()` returns a potentially-nonexistent path as a "best-effort default" when discovery fails (`except Exception: pass`), and `get_railway_service_name()` uses `Path.cwd().name` when project name is not provided.
-- **OBJECTIVE:**
-  1. **`contracts/module_discovery.py:get_modules_base_path()`** — Remove the bundled-context branch (unsupported per AF7 decision). Remove `except Exception: pass`. When the monorepo path does not exist raise `ImproperlyConfigured` with a message naming the expected path. Update callers that currently document "cope gracefully" behavior to expect the exception instead.
-  2. **`cli/utils/railway_utils.py:get_railway_service_name()`** — Remove the `Path.cwd().name` fallback. Raise `ValueError` when `project_name` is absent or empty, with a message directing the caller to pass an explicit project slug.
-- **SCOPE:** `quickscale_core/src/quickscale_core/contracts/module_discovery.py`; `quickscale_cli/src/quickscale_cli/utils/railway_utils.py`; callers that depend on the graceful-empty behavior of `get_modules_base_path()` (e.g. `discover_shipped_module_names()`).
-- **ACCEPTANCE CRITERIA:** both functions raise immediately on missing required input; `except Exception: pass` removed from module-path discovery; no `Path.cwd().name` fallback; grep for `"best-effort"` and `"gracefully"` in these files returns zero; `validate-and-review` passes.
-- **VALIDATION PATH:** `make MODULE=core test`; `make test`; confirm Railway deploy path still works when project name is supplied.
-- **DEPENDS:** none. **Blocks:** nothing.
-- **RECOMMENDATION:** Pursue — two contained, surgical fixes that close confirmed fail-hard violations with no design ambiguity.
 
 ---
 

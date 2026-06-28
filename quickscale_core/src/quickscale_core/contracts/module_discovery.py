@@ -21,6 +21,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
+from django.core.exceptions import ImproperlyConfigured
+
 # ---------------------------------------------------------------------------
 # Known placeholder module names
 # ---------------------------------------------------------------------------
@@ -51,7 +53,7 @@ _PLACEHOLDER_REASON_TEMPLATE: Final[str] = (
 _modules_base_path: Path | None = None
 
 
-def set_modules_base_path(path: str | Path) -> None:
+def set_modules_base_path(path: str | Path | None) -> None:
     """Override the modules base path for packaged/embedded-project contexts.
 
     Call this once at application startup to point manifest discovery at
@@ -60,58 +62,52 @@ def set_modules_base_path(path: str | Path) -> None:
 
     Args:
         path: Absolute path to the directory containing module
-            subdirectories (each with a ``module.yml``).
+            subdirectories (each with a ``module.yml``).  Pass ``None`` to
+            clear any previous override (restoring the monorepo default
+            or ``ImproperlyConfigured`` on the next call to
+            :func:`get_modules_base_path`).
     """
     global _modules_base_path
-    _modules_base_path = Path(path)
+    _modules_base_path = Path(path) if path is not None else None
 
 
 def get_modules_base_path() -> Path:
     """Return the modules base path, with runtime override support.
 
     When :func:`set_modules_base_path` has been called, returns the
-    overridden path.  Otherwise tries the following locations in order:
+    overridden path.  Otherwise resolves the maintainer-monorepo
+    ``quickscale_modules/`` directory relative to this file's location
+    in the package tree::
 
-    1. The maintainer-monorepo ``quickscale_modules/`` directory relative
-       to this file's location in the package tree::
+        quickscale_core/src/quickscale_core/contracts/module_discovery.py
+        parents[4] -> repository root -> quickscale_modules/
 
-           quickscale_core/src/quickscale_core/contracts/module_discovery.py
-           parents[4] -> repository root -> quickscale_modules/
-
-    2. Bundled manifest data shipped with the installed ``quickscale_core``
-       package, discovered via :func:`importlib.resources.files`:
-
-           quickscale_core/data/manifests/
-
-    The first path that exists is returned.  If neither location is found
-    the function returns the monorepo path as a fallback (callers should
-    handle gracefully when the directory does not exist).
+    Raises ``ImproperlyConfigured`` if the monorepo path does not exist
+    and no runtime override has been set.  The bundled/installed-package
+    context is not a supported fallback — see AF7 decision.
 
     Returns:
         Absolute ``Path`` to the modules base directory.
+
+    Raises:
+        ImproperlyConfigured: If the monorepo ``quickscale_modules/``
+            directory does not exist and no runtime override is set.
     """
     if _modules_base_path is not None:
         return _modules_base_path
 
-    # 1. Monorepo checkout (development / CI).
+    # Monorepo checkout (development / CI).
     monorepo_path = Path(__file__).resolve().parents[4] / "quickscale_modules"
     if monorepo_path.is_dir():
         return monorepo_path
 
-    # 2. Bundled package data (installed ``quickscale-core`` wheel).
-    try:
-        from importlib.resources import files as _pkg_files  # noqa: PLC0415
-
-        pkg_path = Path(str(_pkg_files("quickscale_core") / "data" / "manifests"))
-        if pkg_path.is_dir():
-            return pkg_path
-    except Exception:
-        pass
-
-    # Both fallbacks failed — return the monorepo path as a best-effort
-    # default.  Discovery functions cope gracefully when the path does
-    # not exist (return empty lists/dicts).
-    return monorepo_path
+    # Bundled/installed-package context is not a supported fallback
+    # (AF7 decision — fail hard when the module source is not available).
+    raise ImproperlyConfigured(
+        f"Modules base path not found: expected '{monorepo_path}' to exist. "
+        "Set a runtime override via set_modules_base_path() when running "
+        "outside the maintainer monorepo."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -125,11 +121,14 @@ def discover_shipped_module_names() -> list[str]:
 
     Only directories that contain a valid ``module.yml`` are included.
     Placeholder directories (e.g. ``teams``) with no ``module.yml`` are
-    silently excluded.  Returns an empty list when the workspace directory
-    does not exist or contains no valid manifests.
+    silently excluded.  Returns an empty list when the workspace contains
+    no valid manifests.
 
     The modules base path is configurable at runtime via
     :func:`set_modules_base_path` — see :func:`get_modules_base_path`.
+
+    Raises ``ImproperlyConfigured`` if no modules base path can be
+    determined (see :func:`get_modules_base_path`).
 
     Returns:
         Sorted list of shipped module names.
@@ -157,9 +156,12 @@ def discover_shipped_module_paths() -> dict[str, Path]:
     The modules base path is configurable at runtime via
     :func:`set_modules_base_path` — see :func:`get_modules_base_path`.
 
+    Raises ``ImproperlyConfigured`` if no modules base path can be
+    determined (see :func:`get_modules_base_path`).
+
     Returns:
         Dict mapping module name to its absolute ``Path``.  Empty when the
-        workspace directory does not exist or contains no valid manifests.
+        workspace contains no valid manifests.
     """
     modules_base = get_modules_base_path()
     if not modules_base.is_dir():

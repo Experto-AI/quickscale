@@ -493,7 +493,8 @@ def _display_summary(
 
 @deploy.command()
 @click.option(
-    "--project-name", help="Railway project name (auto-detected if not provided)"
+    "--project-name",
+    help="Railway project name (derived from directory name if not provided)",
 )
 def railway(project_name: str | None) -> None:
     """
@@ -506,6 +507,8 @@ def railway(project_name: str | None) -> None:
     """
     click.echo("🚀 Deploying to Railway...")
 
+    if project_name is None:
+        project_name = Path.cwd().name
     app_service = get_app_service_name(project_name)
 
     # Step 0: Pre-flight checks
