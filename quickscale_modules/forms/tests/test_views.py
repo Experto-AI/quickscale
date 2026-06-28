@@ -164,8 +164,8 @@ class TestFormSubmitAPIView:
         sub = FormSubmission.all_objects.filter(form=form).first()
         assert sub is not None
         # NOTE: sub.values uses TenantManager which scopes to the org contextvar.
-        # The org_scope() context manager in the view restores the contextvar to
-        # None after the request, so use all_objects for the assertion.
+        # The tenant_context() context manager in the view restores the contextvar
+        # to None after the request, so use all_objects for the assertion.
         assert FormFieldValue.all_objects.filter(
             submission=sub, field_name="full_name"
         ).exists()
@@ -595,13 +595,13 @@ class TestAdminSubmissionDetailNotFound:
 @pytest.mark.django_db
 class TestPublicViewsDbOrgScope:
     """AF1-CR-001: Verify FormSchemaAPIView and FormSubmitAPIView establish
-    DB-side app.current_org_id via org_scope(), not just ContextVar state."""
+    DB-side app.current_org_id via tenant_context(), not just ContextVar state."""
 
     def test_form_schema_view_sets_db_current_org_id(
         self, api_client, form, monkeypatch
     ):
         """FormSchemaAPIView.get_object() must call set_db_current_org_id
-        (proving org_scope is entered for the DB side)."""
+        (proving tenant_context is entered for the DB side)."""
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
@@ -630,7 +630,7 @@ class TestPublicViewsDbOrgScope:
         self, api_client, form, form_field, email_field, monkeypatch
     ):
         """FormSubmitAPIView.create() must call set_db_current_org_id
-        (proving org_scope is entered for the DB side)."""
+        (proving tenant_context is entered for the DB side)."""
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
@@ -654,4 +654,283 @@ class TestPublicViewsDbOrgScope:
         )
         assert str(called_with) == str(system_org.pk), (
             "DB-side org must be set to the resolved org (System org for anonymous)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# CR-P3-004: Forms caller-parity — authenticated-session and anonymous
+# public-request coverage with exact POST response-field assertions.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestFormCallerParity:
+    """Exact POST response-field assertions for the public forms endpoints.
+
+    CR-P3-004: verifies that tenant_context() + transaction.atomic() work
+    correctly for both authenticated (session org) and anonymous (System org)
+    requests.
+    """
+
+    def test_anonymous_submit_returns_exact_201_fields(
+        self, api_client, form, form_field, email_field
+    ):
+        """Anonymous form submission returns 201 with message, redirect_url,
+        and notification_status fields."""
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        assert "message" in response.data
+        assert "redirect_url" in response.data
+        assert "notification_status" in response.data
+        assert response.data["redirect_url"] is None
+        assert response.data["message"] == form.success_message
+
+    def test_anonymous_submit_creates_submission_under_system_org(
+        self, api_client, form, form_field, email_field
+    ):
+        """Anonymous submissions should be associated with the System org."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        api_client.post(url, data=data, format="json")
+
+        sub = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        assert sub.organization == system_org, (
+            "Anonymous submission must be scoped to the System org"
+        )
+
+    def test_authenticated_submit_uses_session_org(self, api_client):
+        """Authenticated requests with an active session org scope the
+        submission to that org."""
+        from quickscale_modules_orgs.models import (
+            OrganizationMembership,
+            OrgRole,
+            Organization,
+        )
+        from django.contrib.auth import get_user_model
+        from quickscale_modules_forms.models import Form, FormField
+
+        user = get_user_model().objects.create_user(
+            username="auth-form-user",
+            email="auth-form@example.com",
+            password="secret123",
+        )
+        org = Organization.objects.create(name="AuthFormOrg", slug="auth-form-org")
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org,
+            role=OrgRole.MEMBER,
+        )
+
+        # Create a form and field under the authenticated user's org
+        org_form = Form.all_objects.create(
+            organization=org,
+            title="Auth Contact",
+            slug="auth-contact",
+            success_message="Thanks!",
+            is_active=True,
+        )
+        FormField.all_objects.create(
+            form=org_form,
+            name="full_name",
+            label="Full Name",
+            field_type="text",
+            required=True,
+            order=1,
+            organization=org,
+        )
+        FormField.all_objects.create(
+            form=org_form,
+            name="email",
+            label="Email",
+            field_type="email",
+            required=True,
+            order=2,
+            organization=org,
+        )
+
+        api_client.force_login(user)
+        session = api_client.session
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+
+        session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
+        session.save()
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "auth-contact"})
+        data = {"full_name": "Bob", "email": "bob@example.com"}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        sub = FormSubmission.all_objects.filter(form=org_form).latest("submitted_at")
+        assert sub.organization == org, (
+            "Authenticated submission must be scoped to the session org"
+        )
+
+    def test_authenticated_schema_returns_org_scoped_form(
+        self, api_client, form, form_field
+    ):
+        """Authenticated requests get forms scoped to their session org."""
+        from quickscale_modules_orgs.models import (
+            OrganizationMembership,
+            OrgRole,
+            Organization,
+        )
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_user(
+            username="auth-schema-user",
+            email="auth-schema@example.com",
+            password="secret123",
+        )
+        org = Organization.objects.create(name="SchemaOrg", slug="schema-org")
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org,
+            role=OrgRole.MEMBER,
+        )
+
+        # Move the test form to the authenticated user's org
+        form.organization = org
+        form.slug = "org-specific-form"
+        form.save(update_fields=["organization", "slug"])
+
+        api_client.force_login(user)
+        session = api_client.session
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+
+        session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
+        session.save()
+
+        url = reverse(
+            "quickscale_forms:form-schema", kwargs={"slug": "org-specific-form"}
+        )
+        response = api_client.get(url)
+
+        assert response.status_code == 200
+        assert response.data["slug"] == "org-specific-form"
+
+    def test_anonymous_submit_preserves_redirect_url_when_set(
+        self, api_client, form, form_field, email_field
+    ):
+        """When a form has a redirect_url, anonymous submissions return it."""
+        form.redirect_url = "/thank-you"
+        form.save(update_fields=["redirect_url"])
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        assert response.data["redirect_url"] == "/thank-you"
+
+    def test_anonymous_honeypot_submit_returns_201_with_message(
+        self, api_client, form, form_field, email_field
+    ):
+        """Honeypot-triggered anonymous submissions return 201 with message
+        and redirect_url (silent spam acceptance). notification_status is
+        intentionally absent in the honeypot fast-path response."""
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {
+            "full_name": "Bot",
+            "email": "bot@spam.com",
+            "_hp_name": "I am a bot",
+        }
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        assert "message" in response.data
+        assert "redirect_url" in response.data
+        assert response.data["message"] == form.success_message
+        sub = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        assert sub.is_spam is True
+
+    def test_side_effects_dispatch_after_submission_committed(
+        self, api_client, form, form_field, email_field, monkeypatch
+    ):
+        """CR-P3-006: notify_submission and analytics run AFTER the outer
+        atomic commits.  If they were inside the atomic, a notification
+        failure would roll back the submission transaction, or the response
+        would be delayed until side effects complete.
+
+        This test monkeypatches notify_submission to verify it runs at all,
+        and that the submission already exists when notification fires.
+        """
+        notified_submission_pk = [None]
+
+        def _track_notification(submission):
+            notified_submission_pk[0] = submission.pk
+            return "queued"
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.notify_submission",
+            _track_notification,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        assert notified_submission_pk[0] is not None, (
+            "notify_submission must be called after the submission is persisted"
+        )
+        # Verify the persisted submission exists in the DB
+        assert FormSubmission.all_objects.filter(
+            pk=notified_submission_pk[0]
+        ).exists(), "The submission must exist in the DB before notify_submission runs"
+
+
+# ---------------------------------------------------------------------------
+# CR-P3-006 regression: notification content carries field values after
+# post-commit dispatch on the anonymous public submit path.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestNotificationContentAfterPostCommit:
+    """Regression: public submit notifications must include submitted field
+    values after tenant_context() exits on the anonymous path."""
+
+    def test_anonymous_notification_includes_field_values_in_email(
+        self, api_client, form, form_field, email_field
+    ):
+        """Anonymous public submit dispatches a notification email that
+        includes the submitted field label and value — proving that
+        _build_submission_notification_content reads field values via
+        FormFieldValue.all_objects (not the TenantManager) after the
+        tenant_context() window has closed."""
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201
+        # The notification email should contain the submitted field content
+        assert len(mail.outbox) >= 1, "Notification email should be sent"
+        email_body = mail.outbox[0].body
+        # Field labels from fixture — check their values are present
+        assert "Alice" in email_body, (
+            "Notification email must include the submitted field value"
+        )
+        assert "alice@example.com" in email_body, (
+            "Notification email must include the email field value"
+        )
+        # Field labels and values in field_pairs format
+        assert "Name:" in email_body, (
+            "Notification email must include the field label from field_pairs"
+        )
+        assert "Email:" in email_body, (
+            "Notification email must include the email field label"
         )

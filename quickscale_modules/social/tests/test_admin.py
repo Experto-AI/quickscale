@@ -410,7 +410,7 @@ class TestPerOrgHelpers:
         )
 
         with patch(
-            "quickscale_modules_social.admin.set_db_current_org_id"
+            "quickscale_modules_orgs.current_org.set_db_current_org_id"
         ) as mock_set_db:
             with _org_db_context(mock_request):
                 pass

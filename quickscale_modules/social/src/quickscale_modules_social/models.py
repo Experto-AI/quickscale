@@ -69,6 +69,7 @@ class BaseSocialItem(models.Model):
     class Meta:
         abstract = True
         ordering = ["display_order", "title", "pk"]
+        base_manager_name = "all_objects"
 
     def __str__(self) -> str:
         return self.title

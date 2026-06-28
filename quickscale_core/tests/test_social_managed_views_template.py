@@ -46,37 +46,39 @@ def test_generated_social_embeds_view_drops_organization_id_kwarg() -> None:
     )
 
 
-def test_generated_views_use_set_current_org_id() -> None:
-    """The generated views must set the ambient org context via set_current_org_id."""
+def test_generated_views_use_tenant_context() -> None:
+    """The generated views must activate tenant context via tenant_context()."""
     content = _render()
-    assert "set_current_org_id" in content
+    assert "tenant_context" in content
 
 
 def test_generated_views_preserve_and_restore_prior_context() -> None:
-    """The generated views must capture prior context and restore in try/finally.
+    """The generated views delegate context save/restore to tenant_context().
 
-    CR-T1-9-003: the views must use get_current_org_id() to capture the
-    prior org context before overriding it, and must restore it in a
-    finally block so the restoration is exception-safe.
+    Phase 3: tenant_context() handles prior-context capture, ContextVar set,
+    DB SET LOCAL, and prior-context restore internally — no manual
+    try/finally is needed in the generated view code.
     """
     content = _render()
 
-    # The prior context is captured before the override.
-    assert "get_current_org_id()" in content
-    assert "_prior_org_id" in content
+    # tenant_context is the unified activation helper.
+    assert "tenant_context(resolved_org_id)" in content
 
-    # The override + restore must be in a try/finally.
-    assert "try:" in content
-    assert "finally:" in content
+    # Manual prior-context management should be absent since tenant_context
+    # owns the save/restore contract.
+    assert "_prior_org_id" not in content, (
+        "Phase 3: tenant_context() handles prior-context save/restore "
+        "internally. Manual _prior_org_id management is no longer needed."
+    )
+    assert "get_current_org_id()" not in content, (
+        "Phase 3: get_current_org_id() is not needed in the generated "
+        "views — tenant_context() manages the ContextVar lifecycle."
+    )
 
-    # The restore must reference the captured prior value, not a blind None.
-    assert "_prior_org_id is not None" in content
-    assert "set_current_org_id(_prior_org_id)" in content
-
-    # The old bare reset_current_org_id() must not appear.
+    # No bare reset_current_org_id remains.
     assert "reset_current_org_id" not in content, (
-        "The bare reset_current_org_id() has been replaced by the "
-        "preserve-and-restore pattern in CR-T1-9-003."
+        "reset_current_org_id() is not needed — tenant_context() handles "
+        "context lifecycle."
     )
 
 
@@ -115,10 +117,10 @@ def test_generated_views_import_transaction() -> None:
     assert "from django.db import transaction" in content
 
 
-def test_generated_views_import_set_db_current_org_id() -> None:
-    """The generated views must import the shared DB activation helper."""
+def test_generated_views_import_tenant_context() -> None:
+    """The generated views must import tenant_context for the unified activation."""
     content = _render()
-    assert "set_db_current_org_id" in content
+    assert "from quickscale_modules_orgs.current_org import tenant_context" in content
 
 
 def test_generated_views_use_transaction_atomic() -> None:
@@ -127,18 +129,32 @@ def test_generated_views_use_transaction_atomic() -> None:
     assert "transaction.atomic()" in content
 
 
-def test_generated_views_call_set_db_current_org_id() -> None:
-    """The generated views must call set_db_current_org_id for PostgreSQL SET LOCAL."""
+def test_generated_views_call_tenant_context() -> None:
+    """The generated views must call tenant_context(resolved_org_id) for unified activation.
+
+    Phase 3: tenant_context() sets both the ContextVar and DB app.current_org_id
+    (via SET LOCAL) inside the caller's transaction.atomic() block.
+    """
     content = _render()
-    assert "set_db_current_org_id(resolved_org_id)" in content
+    assert "tenant_context(resolved_org_id)" in content
 
 
 def test_generated_views_set_both_contextvar_and_db() -> None:
-    """The generated views must set both ContextVar and DB org id in the same scope.
+    """The generated views use tenant_context() which sets both ContextVar and DB.
 
-    Inside the transaction.atomic() block, both set_current_org_id and
-    set_db_current_org_id must be called with the same resolved_org_id.
+    Phase 3: tenant_context(resolved_org_id) is the unified seam that
+    handles both Python-level ContextVar and DB-level SET LOCAL
+    app.current_org_id — no manual set_current_org_id/set_db_current_org_id
+    calls are needed in generated view code.
     """
     content = _render()
-    assert "set_current_org_id(resolved_org_id)" in content
-    assert "set_db_current_org_id(resolved_org_id)" in content
+    assert "tenant_context(resolved_org_id)" in content
+    # Manual calls should not appear — tenant_context() handles both.
+    assert "set_current_org_id(resolved_org_id)" not in content, (
+        "Phase 3: tenant_context() handles ContextVar internally; "
+        "manual set_current_org_id is no longer needed."
+    )
+    assert "set_db_current_org_id(resolved_org_id)" not in content, (
+        "Phase 3: tenant_context() handles DB SET LOCAL internally; "
+        "manual set_db_current_org_id is no longer needed."
+    )

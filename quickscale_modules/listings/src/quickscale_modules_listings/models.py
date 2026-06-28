@@ -128,6 +128,7 @@ class Listing(AbstractListing):
         abstract = False
         verbose_name = "Listing"
         verbose_name_plural = "Listings"
+        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],

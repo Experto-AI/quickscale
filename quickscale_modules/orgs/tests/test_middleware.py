@@ -58,8 +58,9 @@ def test_solo_mode_auto_creates_personal_org_and_sets_request_org(
     ).exists()
 
 
-@pytest.mark.django_db(transaction=True)
-def test_solo_mode_sets_current_org_id_for_request_org(settings) -> None:
+@pytest.mark.django_db
+def test_solo_mode_sets_current_org_id_in_contextvar(settings) -> None:
+    """Solo mode sets the ContextVar (no DB-level SET LOCAL)."""
     settings.QUICKSCALE_MODE = "solo"
     user = get_user_model().objects.create_user(
         username="solo-current-org",
@@ -71,14 +72,9 @@ def test_solo_mode_sets_current_org_id_for_request_org(settings) -> None:
 
     response = TenantMiddleware(home_view)(request)
     organization = Organization.objects.get(is_personal=True, memberships__user=user)
-    expected_current_org_id = (
-        str(organization.id) if connection.vendor == "postgresql" else "none"
-    )
 
     assert response.status_code == 200
-    assert response.content.decode() == (
-        f"{organization.slug}|{expected_current_org_id}"
-    )
+    assert response.content.decode() == (f"{organization.slug}|{str(organization.id)}")
 
 
 @pytest.mark.django_db
@@ -393,7 +389,7 @@ def test_saas_content_route_resolves_org_from_session(
     response = TenantMiddleware(home_view)(request)
 
     assert response.status_code == 200
-    expected = str(organization.id) if connection.vendor == "postgresql" else "none"
+    expected = str(organization.id)
     assert response.content.decode() == f"{organization.slug}|{expected}"
 
 
@@ -498,15 +494,19 @@ def test_switching_mode_changes_route_behaviour_without_model_changes(
     assert solo_response.status_code == 200
     assert "Organization dashboard" in solo_response.content.decode()
     assert saas_response.status_code == 200
-    expected = str(organization.id) if connection.vendor == "postgresql" else "none"
-    assert saas_response.content.decode() == f"{organization.slug}|{expected}"
+    assert (
+        saas_response.content.decode() == f"{organization.slug}|{str(organization.id)}"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
-def test_postgres_content_route_sets_current_org_id_from_session(
+def test_postgres_content_route_does_not_set_db_current_org_id(
     settings,
 ) -> None:
-    """Content routes set SET LOCAL app.current_org_id from the session org."""
+    """Phase 3: content routes set the ContextVar but do NOT issue
+    SET LOCAL app.current_org_id at the middleware level.  The DB
+    parameter remains NULL after a middleware-processed request,
+    proving no request-long atomic holds a SET LOCAL open."""
     if connection.vendor != "postgresql":
         pytest.skip("current_setting validation requires PostgreSQL")
 
@@ -529,14 +529,25 @@ def test_postgres_content_route_sets_current_org_id_from_session(
 
     org_response = TenantMiddleware(home_view)(request)
 
-    request_hc = RequestFactory().get("/healthcheck/")
-    request_hc.user = user
-    healthcheck_response = TenantMiddleware(home_view)(request_hc)
-
+    # ContextVar is set during the request (verified via home_view)
     assert org_response.status_code == 200
     assert (
         org_response.content.decode() == f"{organization.slug}|{str(organization.id)}"
     )
+
+    # DB-level app.current_org_id is NOT set — no request-long atomic.
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_setting('app.current_org_id', true)")
+        (db_value,) = cursor.fetchone()
+    assert db_value is None, (
+        "Phase 3: middleware must NOT leave app.current_org_id set. "
+        "No request-long atomic/SET LOCAL at the middleware level."
+    )
+
+    # Exempt paths still leave ContextVar as None.
+    request_hc = RequestFactory().get("/healthcheck/")
+    request_hc.user = user
+    healthcheck_response = TenantMiddleware(home_view)(request_hc)
     assert healthcheck_response.content.decode() == "none|none"
 
 
@@ -680,6 +691,200 @@ def test_current_org_id_context_isolation() -> None:
     assert get_current_org_id() != id_a
 
     reset_current_org_id()
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — tenant_context contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_tenant_context_sets_contextvar() -> None:
+    """tenant_context() sets the ContextVar to org_id on entry."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    reset_current_org_id()
+    org_id = uuid.uuid4()
+    with tenant_context(org_id):
+        assert get_current_org_id() == org_id
+    assert get_current_org_id() is None
+
+
+def test_tenant_context_restores_prior_value() -> None:
+    """tenant_context() restores the prior ContextVar on exit."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        set_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    prior = uuid.uuid4()
+    set_current_org_id(prior)
+    org_id = uuid.uuid4()
+    with tenant_context(org_id):
+        assert get_current_org_id() == org_id
+    assert get_current_org_id() == prior
+
+
+def test_tenant_context_none_clears_contextvar() -> None:
+    """tenant_context(None) clears the ContextVar (fail-closed)."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        set_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    prior = uuid.uuid4()
+    set_current_org_id(prior)
+    with tenant_context(None):
+        assert get_current_org_id() is None
+    assert get_current_org_id() == prior
+
+
+def test_tenant_context_restores_on_exception() -> None:
+    """tenant_context() restores the prior ContextVar on exception."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        set_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    import pytest
+
+    prior = uuid.uuid4()
+    set_current_org_id(prior)
+    with pytest.raises(RuntimeError):
+        with tenant_context(uuid.uuid4()):
+            raise RuntimeError("simulated error")
+    assert get_current_org_id() == prior
+
+
+def test_tenant_context_none_restores_on_exception() -> None:
+    """tenant_context(None) restores the prior ContextVar on exception."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        set_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    import pytest
+
+    prior = uuid.uuid4()
+    set_current_org_id(prior)
+    with pytest.raises(RuntimeError):
+        with tenant_context(None):
+            raise RuntimeError("simulated error")
+    assert get_current_org_id() == prior
+
+
+def test_tenant_context_nested_restores_outer_value() -> None:
+    """Nested tenant_context() restores the outer value on inner exit."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    outer_id = uuid.uuid4()
+    inner_id = uuid.uuid4()
+    prior = get_current_org_id()
+    with tenant_context(outer_id):
+        assert get_current_org_id() == outer_id
+        with tenant_context(inner_id):
+            assert get_current_org_id() == inner_id
+        assert get_current_org_id() == outer_id
+    assert get_current_org_id() == prior
+
+
+def test_tenant_context_none_inside_non_none_resets_and_restores() -> None:
+    """tenant_context(None) inside tenant_context(org) temporarily clears
+    the ContextVar (fail-closed) and restores on inner exit."""
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    org_id = uuid.uuid4()
+    prior = get_current_org_id()
+    with tenant_context(org_id):
+        assert get_current_org_id() == org_id
+        with tenant_context(None):
+            assert get_current_org_id() is None
+        assert get_current_org_id() == org_id
+    assert get_current_org_id() == prior
+
+
+@pytest.mark.django_db(transaction=True)
+def test_tenant_context_sets_db_current_org_id_on_postgres() -> None:
+    """tenant_context() issues SET LOCAL on PostgreSQL."""
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        pytest.skip("SET LOCAL validation requires PostgreSQL")
+
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    org_id = uuid.uuid4()
+    with tenant_context(org_id):
+        assert get_current_org_id() == org_id
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (raw,) = cursor.fetchone()
+            assert raw == str(org_id)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_tenant_context_none_resets_db_current_org_id_on_postgres() -> None:
+    """tenant_context(None) resets the DB GUC on PostgreSQL."""
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        pytest.skip("SET LOCAL validation requires PostgreSQL")
+
+    from quickscale_modules_orgs.current_org import (
+        set_current_org_id,
+        set_db_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    org_id = uuid.uuid4()
+    set_current_org_id(org_id)
+    set_db_current_org_id(org_id)
+
+    # Confirm DB GUC is set before entering tenant_context(None).
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_setting('app.current_org_id', true)")
+        (raw,) = cursor.fetchone()
+        assert raw == str(org_id), "DB GUC must be set before None test"
+
+    with tenant_context(None):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (raw,) = cursor.fetchone()
+            assert raw is None, "DB GUC must be None inside tenant_context(None)"
 
 
 # ---------------------------------------------------------------------------
@@ -836,12 +1041,7 @@ def test_saas_content_route_with_active_session_org(settings) -> None:
     response = TenantMiddleware(home_view)(request)
 
     assert response.status_code == 200
-    expected = (
-        f"{organization.slug}|{str(organization.id)}"
-        if connection.vendor == "postgresql"
-        else f"{organization.slug}|none"
-    )
-    assert response.content.decode() == expected
+    assert response.content.decode() == (f"{organization.slug}|{str(organization.id)}")
 
 
 @pytest.mark.django_db
@@ -924,12 +1124,7 @@ def test_saas_content_route_superuser_without_membership(settings) -> None:
     response = TenantMiddleware(home_view)(request)
 
     assert response.status_code == 200
-    expected = (
-        f"{organization.slug}|{str(organization.id)}"
-        if connection.vendor == "postgresql"
-        else f"{organization.slug}|none"
-    )
-    assert response.content.decode() == expected
+    assert response.content.decode() == (f"{organization.slug}|{str(organization.id)}")
 
 
 @pytest.mark.django_db
@@ -1107,12 +1302,7 @@ def test_downstream_module_path_resolves_from_session_when_org_set(
     response = TenantMiddleware(home_view)(request)
 
     assert response.status_code == 200
-    expected = (
-        f"{organization.slug}|{str(organization.id)}"
-        if connection.vendor == "postgresql"
-        else f"{organization.slug}|none"
-    )
-    assert response.content.decode() == expected
+    assert response.content.decode() == (f"{organization.slug}|{str(organization.id)}")
 
 
 # ---------------------------------------------------------------------------
@@ -1190,9 +1380,81 @@ def test_saas_unknown_org_segment_resolves_org_with_session(
     response = TenantMiddleware(home_view)(request)
 
     assert response.status_code == 200
-    expected = (
-        f"{organization.slug}|{str(organization.id)}"
-        if connection.vendor == "postgresql"
-        else f"{organization.slug}|none"
+    assert response.content.decode() == (f"{organization.slug}|{str(organization.id)}")
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — middleware sets ContextVar without request-long atomic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_middleware_sets_contextvar_without_request_long_atomic(
+    settings,
+) -> None:
+    """The middleware sets the ContextVar via set_current_org_id() without
+    holding a request-long transaction. No org_scope() or tenant_context()
+    at the middleware level — those belong in individual callers.
+
+    This test verifies by inspecting _call_with_org source.
+    """
+    import quickscale_modules_orgs.middleware as middleware_mod
+    import inspect
+
+    source = inspect.getsource(middleware_mod.TenantMiddleware._call_with_org)
+    # Middleware must use set_current_org_id (no transaction needed).
+    assert "set_current_org_id" in source, (
+        "_call_with_org must set the ContextVar via set_current_org_id()"
     )
-    assert response.content.decode() == expected
+    # Must NOT use org_scope, tenant_context, or transaction.atomic.
+    assert "org_scope" not in source, (
+        "_call_with_org must NOT use org_scope() — no request-long atomic"
+    )
+    assert "tenant_context" not in source, (
+        "_call_with_org must NOT use tenant_context() — "
+        "tenant_context requires an active transaction for SET LOCAL"
+    )
+    assert "transaction.atomic" not in source, (
+        "_call_with_org must NOT wrap in transaction.atomic() — "
+        "no request-long transaction"
+    )
+
+
+@pytest.mark.django_db
+def test_middleware_context_activation_does_not_require_request_long_atomic(
+    settings,
+) -> None:
+    """After middleware context activation, views can manage their own
+    transaction boundaries. The middleware sets the ContextVar without
+    any transaction wrapper. This test verifies the request completes
+    successfully through the middleware with no org-context leak.
+    """
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="phase3-no-atomic-leak",
+        email="phase3-no-atomic@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Phase3NoAtomic", slug="phase3-no-atomic"
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+
+    request = RequestFactory().get("/")
+    request.user = user
+    request.session = {ACTIVE_ORG_SESSION_KEY: str(organization.pk)}
+
+    response = TenantMiddleware(home_view)(request)
+
+    assert response.status_code == 200
+    assert response.content.decode() == (f"{organization.slug}|{str(organization.id)}")
+    # ContextVar must be cleaned up after the request completes
+    from quickscale_modules_orgs.current_org import get_current_org_id
+
+    assert get_current_org_id() is None, (
+        "Middleware must not leak org context after the request completes"
+    )

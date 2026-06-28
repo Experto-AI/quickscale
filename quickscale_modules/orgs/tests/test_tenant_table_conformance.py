@@ -221,6 +221,59 @@ def test_enrolled_model_has_all_objects_bypass(entry: Any) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "entry",
+    [e for e in TENANT_TABLE_REGISTRY if e.status == TenantTableStatus.ENROLLED],
+    ids=lambda e: f"{e.app_label}.{e.model_name}",
+)
+def test_enrolled_model_has_base_manager_name(entry: Any) -> None:
+    """Every ENROLLED model must have ``base_manager_name = 'all_objects'``.
+
+    AF2 Phase 1 gate: the unfiltered manager must be the Django base
+    manager so that ``refresh_from_db()``, forward FK traversal, and
+    other internal Django operations bypass tenant scoping.
+    """
+    model = apps.get_model(entry.app_label, entry.model_name)
+    assert model is not None
+
+    assert model._meta.base_manager_name == "all_objects", (
+        f"ENROLLED model {entry.app_label}.{entry.model_name} "
+        f"has base_manager_name={model._meta.base_manager_name!r}, "
+        f"expected 'all_objects'. The unfiltered manager must be "
+        f"the Django base manager (AF2 Phase 1)."
+    )
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [e for e in TENANT_TABLE_REGISTRY if e.status == TenantTableStatus.ENROLLED],
+    ids=lambda e: f"{e.app_label}.{e.model_name}",
+)
+def test_enrolled_model_base_manager_is_unfiltered(entry: Any) -> None:
+    """The ``_base_manager`` of every ENROLLED model must be the unfiltered manager.
+
+    AF2 Phase 1 gate: verifies that the resolved base manager is the
+    ``all_objects`` (super_scope=True) manager, not a scoped manager.
+    """
+    model = apps.get_model(entry.app_label, entry.model_name)
+    assert model is not None
+
+    base_manager = model._base_manager
+    msg = (
+        f"ENROLLED model {entry.app_label}.{entry.model_name} "
+        f"_base_manager={base_manager!r}"
+    )
+    assert isinstance(base_manager, TenantManager), (
+        f"{msg} is not a TenantManager instance."
+    )
+    assert base_manager._super_scope, (
+        f"{msg} is not super-scoped. "
+        f"The base manager must be all_objects (super_scope=True) "
+        f"to bypass tenant scoping for refresh_from_db() and "
+        f"forward FK traversal."
+    )
+
+
 # ---------------------------------------------------------------------------
 # EXCLUDED_REVIEWED — structural assertions
 # ---------------------------------------------------------------------------
@@ -624,7 +677,7 @@ def test_abstract_registry_entries_are_abstract() -> None:
     registered as EXCLUDED_REVIEWED because they are not concrete.  This
     test confirms they are indeed abstract via direct import.
     """
-    from quickscale_modules_listings.models import AbstractListing  # type: ignore[import-untyped]
+    from quickscale_modules_listings.models import AbstractListing
     from quickscale_modules_orgs.models import TenantModel
     from quickscale_modules_social.models import BaseSocialItem
 
