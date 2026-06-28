@@ -86,7 +86,7 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF1-CR-002** → **AF1-CR-005** → **AF3** | Runtime isolation | AF1 merged ✅; AF1-CR fixes are next (forms child-table `org_scope()` gaps); AF3 waits on AF2 merging |
+| `wt-track1` | **AF1-CR-002** ✅ → **AF1-CR-005** ✅ → **AF3** | Runtime isolation | AF1 merged ✅; AF1-CR forms follow-up completed; AF3 waits on AF2 merging |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | AF1 merged — **ready to start**; AF2+AF4 share a connection-level GUC fix |
 | `wt-track3` | — | Generator / CLI | **All tasks complete.** AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ |
 
@@ -113,14 +113,25 @@ Three findings share one root cause: **the suite tests the happy request path �
 - **VALIDATION PATH:** `make MODULE=forms test`.
 - **DEPENDS:** AF1 merged ✅. **Blocks:** AF3 (via AF1-CR sequence).
 
-### - [ ] AF1-CR-005 — Public-submit notification rendered outside `org_scope()` context
-
-- **TRACK:** `wt-track1` — after AF1-CR-002.
-- **WHY → AF1 code review.** Public-submit notification content (email field values, submitter-name suffix) is rendered after `org_scope()` exits, losing the org context.
-- **SCOPE:** `forms/views.py`, `forms/notifications.py`.
-- **ACCEPTANCE CRITERIA:** notification content rendered inside the `org_scope()` block before it exits; no org-context loss on public form submission emails.
-- **VALIDATION PATH:** `make MODULE=forms test`.
-- **DEPENDS:** AF1-CR-002. **Blocks:** AF3 (via AF1-CR sequence).
+- **TRACK:** `wt-track1` — **foundation; must merge to `v87` before AF2/AF4 begin.**
+- **WHY → Finding 1.** RLS is six hand-written `enable_rls` migrations with copy-pasted SQL and hardcoded table lists; child tables without `organization_id` (`ContactNote`/`DealNote`) sit outside *both* the Python manager and RLS, and nothing asserts coverage.
+- **OBJECTIVE:** (1) Land a CI **conformance test** that walks `apps.get_models()`, selects tenant-owned models, and asserts each has an `organization_id` column + a live FORCE-RLS policy in `pg_policies` — failing the build on any gap. Parent-join policies are not a valid exemption (child-table policy locked to Option C). (2) Introduce a reusable `EnableTenantRLS(model)` migration operation generating the policy from one source string; migrate the six modules onto it. (3) Add `organization_id` FK to `ContactNote` and `DealNote` (denormalize — **child-table policy locked to C**); add a DB constraint/trigger to keep child `organization_id` equal to the parent's; promote both to `TenantModel`; apply `EnableTenantRLS` on them.
+- **SCOPE:** conformance test in `quickscale_modules/orgs/tests/` (owns the registry — not `tests_shared/`); `orgs/.../tenancy.py` (registry + RLS/equality infrastructure); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`) — schema migration + FK + constraint; `forms` child tables (`FormField`/`FormSubmission`/`FormFieldValue`) — schema migration + FK + constraint.
+- **ACCEPTANCE CRITERIA:** conformance test is green and *fails* when a tenant table lacks a direct-column policy (prove with a temporary uncovered model); no duplicated policy SQL remains; `ContactNote` and `DealNote` each have `organization_id` and a live FORCE-RLS policy.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, `make MODULE=forms test`; run conformance gate on PostgreSQL.
+- **DEPENDS:** none (starts immediately). **Blocks:** AF2, AF4.
+- **RECOMMENDATION:** **Pursue (C for child tables, A's registry for infrastructure)** — child-table policy is locked (see Decisions locked table); registry + conformance gate is the implementation vehicle.
+- **LANDED (wt-track1, merged 2026-06-27):**
+  - **Phase 1 — Registry + conformance gate:** `TenantTableStatus`, `TenantTableEntry`, `TENANT_TABLE_REGISTRY` in `tenancy.py`; `test_tenant_table_conformance.py` (structural + PostgreSQL-only RLS assertions; negative-detection tests).
+  - **Phase 2 — Shared RLS/equality infrastructure:** `apply_force_rls` / `revert_force_rls` helpers; child-parent equality trigger function + `enable_child_parent_equality` / `disable_child_parent_equality` — all in `tenancy.py`. Six `enable_rls` migrations refactored onto shared helpers (no copy-pasted SQL remains).
+  - **Phase 3 — CRM child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `ContactNote` and `DealNote`; `crm/0009_add_note_organization_ownership.py`.
+  - **Phase 4 — Forms child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `FormField`, `FormSubmission`, `FormFieldValue`; `forms/0007_new_organization_ownership.py` (includes conditional field-parity trigger).
+  - **Phase 5 — Enforcing gate:** `test_exactly_zero_pending_remediation_entries()` + live trigger verification in `pg_trigger`. `purge_organization.py` delete specs updated to direct `organization` FK for all promoted tables.
+- **COMPLETED — AF1-CR-002 + AF1-CR-005 (forms-only hardening, merged 2026-06-28):**
+  - **AF1-CR-002:** `AdminSubmissionExportView` uses a fragile FK traversal (`submission.values.all()`) that depends on the Prefetch cache and the default (RLS-scoped) manager. **Fix:** replaced the per-submission FK traversal with an explicit `all_objects` batch query that builds a `values_by_submission` lookup dict — avoids implicit RLS filtering and does not depend on Prefetch cache. Added cross-org regression test (`TestAdminSubmissionExportViewAllObjects`). **Files changed:** `forms/views.py`, `forms/tests/test_admin.py`.
+  - **AF1-CR-005:** `notify_submission()` is already called inside the `org_scope()` block in `FormSubmitAPIView.create()`, and notification content is built synchronously before the async dispatch. Added regression tests (`TestNotifySubmissionOrgScope`) proving the FK traversal for field values and the submitter-name suffix resolution work correctly within `org_scope()`. **Files changed:** `forms/tests/test_notifications.py`.
+  - **Validation:** `make MODULE=forms lint`, `make MODULE=forms typecheck`, `make MODULE=forms test` — all pass. `wt-track1` ready for AF3 (waits on AF2 from `wt-track2`).
+  - **Pending / blocking (closeout tooling only):** delegated Adaptive independent-review / quality-gate calls began failing at the platform layer with `no such column: replacement_seq` during final closeout. Local validation is green, and the current `test_admin.py` mismatched-org proof harness now includes the session-authenticated `ACTIVE_ORG_SESSION_KEY` seam, reversed `FormFieldValue` creation order, and an extra active no-value field so the regression fails unless the `FormField.all_objects` path is used. No open product/design decision remains; rerun delegated closeout later only if strict subagent review evidence is required.
 
 ### - [ ] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()`
 
