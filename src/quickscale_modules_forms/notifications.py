@@ -109,9 +109,17 @@ def _build_submission_notification_content(
     submission: "FormSubmission",
 ) -> dict[str, Any]:
     form = submission.form
+    # CR-P3-006: use all_objects to bypass TenantManager scoping.
+    # This function can be called after tenant_context() exits (post-commit),
+    # so the ContextVar may be None — the TenantManager would return zero
+    # rows, causing notification emails to lose field values.
+    from quickscale_modules_forms.models import FormFieldValue
+
     field_pairs = [
         (fv.field_label, fv.value)
-        for fv in submission.values.all().order_by("field__order", "field_name")
+        for fv in FormFieldValue.all_objects.filter(submission=submission).order_by(
+            "field__order", "field_name"
+        )
     ]
     submitter_name = next(
         (value for label, value in field_pairs if "name" in label.lower()),
