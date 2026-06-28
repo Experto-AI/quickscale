@@ -248,3 +248,72 @@ class TestManifestAdapterRegistryCompleteness:
         assert module_name in MANIFEST_ADAPTER_REGISTRY, (
             f"Module '{module_name}' has no manifest adapter registered"
         )
+
+
+class TestRegenerateManagedWiringEmbeddedNoMonorepo:
+    """Embedded-project context: regenerate_managed_wiring succeeds outside the
+    maintainer monorepo when embedded module manifests are available.
+    Regression coverage for AF8-CR-002."""
+
+    def test_outside_monorepo_with_embedded_manifests(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """regenerate_managed_wiring succeeds when get_modules_base_path raises
+        ImproperlyConfigured but the project has real embedded manifests."""
+        from django.core.exceptions import ImproperlyConfigured
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Create an embedded analytics module with a real module.yml
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
+
+        # Clear the modules base path override so get_modules_base_path
+        # attempts the monorepo path.
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+
+        try:
+            # Make the monorepo path appear non-existent so
+            # get_modules_base_path raises ImproperlyConfigured.
+            monorepo_path = (
+                Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
+            )
+            _real_is_dir = Path.is_dir
+
+            def _selective_is_dir(self: Path) -> bool:
+                if str(self.resolve()) == str(monorepo_path.resolve()):
+                    return False
+                return _real_is_dir(self)
+
+            monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
+
+            # Verify the pre-condition: no base path available
+            with pytest.raises(ImproperlyConfigured):
+                _md.get_modules_base_path()
+
+            # Now call regenerate_managed_wiring — it should succeed by
+            # detecting the embedded manifests and setting the base path
+            # itself.
+            success, message = regenerate_managed_wiring(project)
+            assert success, f"regenerate_managed_wiring failed: {message}"
+            assert "regenerated" in message.lower()
+
+            # Verify managed wiring was actually written
+            settings_modules = project / "myapp" / "settings" / "modules.py"
+            assert settings_modules.exists()
+            content = settings_modules.read_text()
+            assert "quickscale_modules_analytics" in content
+
+        finally:
+            _md._modules_base_path = original_override

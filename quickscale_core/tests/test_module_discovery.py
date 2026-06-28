@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from django.core.exceptions import ImproperlyConfigured
+
 from quickscale_core.contracts.module_discovery import (
     PLACEHOLDER_MODULE_NAMES,
     discover_shipped_module_names,
@@ -79,68 +81,13 @@ class TestGetModulesBasePath:
                 f"Shipped module '{shipped}' missing from bundled manifests"
             )
 
-    def test_bundled_fallback_code_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """``get_modules_base_path`` falls through to the bundled manifests
-        path when the monorepo ``quickscale_modules/`` directory does not
-        exist, proving the installed/planner fallback is structurally sound.
-        """
-        from quickscale_core.contracts import module_discovery as _md
-
-        # Reset any prior override so the full fallback chain is exercised.
-        original_override = _md._modules_base_path
-        _md._modules_base_path = None
-
-        try:
-            # Verify the bundled path is reachable before attempting the
-            # monkeypatch — this skips cleanly in environments where the
-            # package is not installed normally (namespace packages, etc.).
-            from importlib.resources import files as _pkg_files
-
-            bundled_ref = _pkg_files("quickscale_core") / "data" / "manifests"
-            bundled_path = Path(str(bundled_ref))
-        except Exception:
-            pytest.skip("Cannot resolve importlib.resources bundled path")
-            return  # pragma: no cover — pytest.skip raises, unreachable.
-
-        if not bundled_path.is_dir():
-            pytest.skip("Bundled manifests directory not found on disk")
-            return  # pragma: no cover
-
-        # Calculate the monorepo path that ``get_modules_base_path`` checks
-        # first so we can make it appear non-existent.
-        monorepo_path = Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
-
-        # Monkeypatch ``Path.is_dir`` to return ``False`` only for the
-        # monorepo path, forcing the function to continue to the bundled
-        # fallback.
-        _real_is_dir = Path.is_dir
-
-        def _selective_is_dir(self: Path) -> bool:
-            if str(self.resolve()) == str(monorepo_path.resolve()):
-                return False
-            return _real_is_dir(self)
-
-        monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
-
-        result = _md.get_modules_base_path()
-        assert result.resolve() == bundled_path.resolve(), (
-            f"Expected bundled fallback path {bundled_path}, got {result}"
-        )
-
-        # Also verify the override path still wins when set.
-        try:
-            _md.set_modules_base_path(monorepo_path)
-            overridden = _md.get_modules_base_path()
-            assert overridden.resolve() == monorepo_path.resolve()
-        finally:
-            _md.set_modules_base_path(original_override)
-
-    def test_get_modules_base_path_returns_path_when_all_fallbacks_fail(
+    def test_bundled_manifests_path_not_fallback(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``get_modules_base_path`` returns a ``Path`` even when both the
-        monorepo path and the bundled path are unavailable — callers always
-        get a ``Path``, never an exception.
+        """``get_modules_base_path`` does **not** fall through to the bundled
+        manifests path — the bundled context is not a supported fallback
+        (AF7 decision).  Raises ``ImproperlyConfigured`` even when the
+        bundled manifests directory exists.
         """
         from quickscale_core.contracts import module_discovery as _md
 
@@ -148,12 +95,51 @@ class TestGetModulesBasePath:
         _md._modules_base_path = None
 
         try:
-            # Make every ``Path.is_dir`` return ``False`` so neither
-            # fallback succeeds.
+            # Calculate the monorepo path that ``get_modules_base_path``
+            # checks first so we can make it appear non-existent.
+            monorepo_path = (
+                Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
+            )
+
+            # Monkeypatch ``Path.is_dir`` to return ``False`` only for the
+            # monorepo path, proving the function raises rather than falling
+            # through to any bundled path.
+            _real_is_dir = Path.is_dir
+
+            def _selective_is_dir(self: Path) -> bool:
+                if str(self.resolve()) == str(monorepo_path.resolve()):
+                    return False
+                return _real_is_dir(self)
+
+            monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
+
+            with pytest.raises(
+                ImproperlyConfigured, match="Modules base path not found"
+            ):
+                _md.get_modules_base_path()
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_get_modules_base_path_raises_when_no_path_found(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``get_modules_base_path`` raises ``ImproperlyConfigured`` when
+        no runtime override is set and the monorepo path does not exist.
+        """
+        from quickscale_core.contracts import module_discovery as _md
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+
+        try:
+            # Make ``Path.is_dir`` return ``False`` so the monorepo
+            # path check fails.
             monkeypatch.setattr(Path, "is_dir", lambda _self: False)
 
-            result = _md.get_modules_base_path()
-            assert isinstance(result, Path)
+            with pytest.raises(
+                ImproperlyConfigured, match="Modules base path not found"
+            ):
+                _md.get_modules_base_path()
         finally:
             _md._modules_base_path = original_override
 

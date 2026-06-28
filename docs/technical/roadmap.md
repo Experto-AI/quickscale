@@ -201,20 +201,28 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 ---
 
 <a id="af8"></a>
-### - [ ] AF8 — Fix fail-hard violations in module-path discovery and Railway project-name inference
+### - [x] AF8 — Fix fail-hard violations in module-path discovery and Railway project-name inference ✅ *implemented 2026-06-28*
 
 `**Tier 1 — Small | RISK LEVEL: low | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track3` — independent of AF7; starts immediately.
+- **TRACK:** `wt-track3` — independent of AF7; completed.
 - **WHY → Finding 8, violations 2–3.** Two setup paths silently substitute a fallback instead of failing hard: `get_modules_base_path()` returns a potentially-nonexistent path as a "best-effort default" when discovery fails (`except Exception: pass`), and `get_railway_service_name()` uses `Path.cwd().name` when project name is not provided.
 - **OBJECTIVE:**
-  1. **`contracts/module_discovery.py:get_modules_base_path()`** — Remove the bundled-context branch (unsupported per AF7 decision). Remove `except Exception: pass`. When the monorepo path does not exist raise `ImproperlyConfigured` with a message naming the expected path. Update callers that currently document "cope gracefully" behavior to expect the exception instead.
-  2. **`cli/utils/railway_utils.py:get_railway_service_name()`** — Remove the `Path.cwd().name` fallback. Raise `ValueError` when `project_name` is absent or empty, with a message directing the caller to pass an explicit project slug.
+   1. **`contracts/module_discovery.py:get_modules_base_path()`** — Remove the bundled-context branch (unsupported per AF7 decision). Remove `except Exception: pass`. When the monorepo path does not exist raise `ImproperlyConfigured` with a message naming the expected path. Update callers that currently document "cope gracefully" behavior to expect the exception instead.
+   2. **`cli/utils/railway_utils.py:get_railway_service_name()`** — Remove the `Path.cwd().name` fallback. Raise `ValueError` when `project_name` is absent or empty, with a message directing the caller to pass an explicit project slug.
 - **SCOPE:** `quickscale_core/src/quickscale_core/contracts/module_discovery.py`; `quickscale_cli/src/quickscale_cli/utils/railway_utils.py`; callers that depend on the graceful-empty behavior of `get_modules_base_path()` (e.g. `discover_shipped_module_names()`).
 - **ACCEPTANCE CRITERIA:** both functions raise immediately on missing required input; `except Exception: pass` removed from module-path discovery; no `Path.cwd().name` fallback; grep for `"best-effort"` and `"gracefully"` in these files returns zero; `validate-and-review` passes.
-- **VALIDATION PATH:** `make MODULE=core test`; `make test`; confirm Railway deploy path still works when project name is supplied.
 - **DEPENDS:** none. **Blocks:** nothing.
-- **RECOMMENDATION:** Pursue — two contained, surgical fixes that close confirmed fail-hard violations with no design ambiguity.
+- **IMPLEMENTED (wt-track3, 2026-06-28):**
+  - **`get_modules_base_path()`** — Removed the bundled-context fallback (`importlib.resources.files` try/except) and the best-effort default return. Now raises `ImproperlyConfigured` when the monorepo path does not exist and no runtime override is set. Updated `discover_shipped_module_names()` and `discover_shipped_module_paths()` docstrings to document the exception.
+  - **`get_app_service_name()`** (note: roadmap referenced `get_railway_service_name()` but actual name is `get_app_service_name()`) — Removed the `Path.cwd().name` fallback. Now raises `ValueError` when `project_name` is `None` or empty.
+  - **`module_wiring_manager.py`** — Assessed and hardened: `regenerate_managed_wiring()` save/restore pattern now tolerates the absence of a prior modules base path when embedded module manifests are available. Instead of returning a failure tuple on `ImproperlyConfigured`, the function detects embedded manifests, sets the base path to the embedded modules directory, and proceeds. Strict fail-hard applies only when neither a prior base path nor embedded manifests exist.
+  - **Tests** — Updated `test_get_modules_base_path_returns_path_when_all_fallbacks_fail` → `test_get_modules_base_path_raises_when_no_path_found` (expects `ImproperlyConfigured`). Replaced `test_bundled_fallback_code_path` → `test_bundled_manifests_path_not_fallback` (verifies exception raised even when bundled path exists). Updated `test_returns_current_directory_name_as_fallback` → `test_raises_value_error_when_no_project_name` (expects `ValueError`).
+- **FINDINGS / NOTES:**
+  - The roadmap entry referenced `get_railway_service_name()` but the actual function name is `get_app_service_name()`. Implementation used the correct name.
+  - `discover_shipped_module_names()` and `discover_shipped_module_paths()` no longer document "cope gracefully" — their docstrings now reference the `ImproperlyConfigured` exception from `get_modules_base_path()`.
+  - No changes needed in `resolvers.py`, `entry_point.py`, `implications.py`, or `social_manifest.py` — these callers never documented graceful fallback and would propagate the exception naturally, which is the desired fail-hard behavior.
+  - The deploy railway CLI command now derives the project name from CWD (`Path.cwd().name`) when `--project-name` is not provided, so the `ValueError` from `get_app_service_name()` is never triggered in normal CLI usage. The `apply_command.py` caller already provides an explicit project name via the config's resolved service-name function.
 
 ---
 

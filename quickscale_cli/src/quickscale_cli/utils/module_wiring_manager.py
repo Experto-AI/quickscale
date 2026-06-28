@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
+from django.core.exceptions import ImproperlyConfigured
+
 from quickscale_core.contracts.module_discovery import (
     get_modules_base_path,
     set_modules_base_path,
@@ -132,16 +134,34 @@ def regenerate_managed_wiring(
     # available.
     # Save/restore the global base path so the override does not leak
     # across callers running in the same process.
-    _prior_base_path = get_modules_base_path()
-    modules_dir = project_path / "modules"
-    _has_real_manifests = modules_dir.is_dir() and any(
-        (modules_dir / entry.name / "module.yml").exists()
-        for entry in modules_dir.iterdir()
-    )
+    _prior_base_path: Path | None = None
+    _has_real_manifests = False
     try:
+        try:
+            _prior_base_path = get_modules_base_path()
+        except ImproperlyConfigured:
+            # Absence of a prior base path is acceptable when embedded
+            # modules are available — we override it below.  Set to
+            # ``None`` so the finally block restores correctly.
+            _prior_base_path = None
+
+        modules_dir = project_path / "modules"
+        _has_real_manifests = modules_dir.is_dir() and any(
+            (modules_dir / entry.name / "module.yml").exists()
+            for entry in modules_dir.iterdir()
+        )
+
         if _has_real_manifests:
             set_modules_base_path(modules_dir)
             refresh_managed_adapters()
+        elif _prior_base_path is None:
+            return (
+                False,
+                "Modules base path not configured and no embedded module "
+                "manifests found. Run inside the maintainer monorepo, call "
+                "set_modules_base_path(), or embed at least one module with "
+                "a module.yml file.",
+            )
 
         selected_options = {
             module_name: module_options.get(module_name, {})
@@ -187,4 +207,5 @@ def regenerate_managed_wiring(
         return True, "Managed wiring files regenerated"
     finally:
         set_modules_base_path(_prior_base_path)
-        refresh_managed_adapters()
+        if _prior_base_path is not None:
+            refresh_managed_adapters()

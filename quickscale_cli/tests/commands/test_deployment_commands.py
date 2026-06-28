@@ -1,6 +1,7 @@
 """Tests for deployment commands."""
 
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
@@ -26,29 +27,32 @@ def mock_preflight_checks(has_changes=False, all_valid=True):
                     with patch(
                         "quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency"
                     ) as mock_poetry_lock:
-                        # Configure defaults
-                        mock_git.return_value = (has_changes, "")
-                        mock_railway_json.return_value = (
-                            all_valid,
-                            "" if all_valid else "Error",
-                        )
-                        mock_dockerfile.return_value = (
-                            all_valid,
-                            "" if all_valid else "Error",
-                        )
-                        mock_deps.return_value = (
-                            all_valid,
-                            [] if all_valid else ["missing"],
-                        )
-                        mock_poetry_lock.return_value = (True, "consistent")
+                        with patch.object(
+                            Path, "cwd", return_value=Path("/tmp/quickscale-test/myapp")
+                        ):
+                            # Configure defaults
+                            mock_git.return_value = (has_changes, "")
+                            mock_railway_json.return_value = (
+                                all_valid,
+                                "" if all_valid else "Error",
+                            )
+                            mock_dockerfile.return_value = (
+                                all_valid,
+                                "" if all_valid else "Error",
+                            )
+                            mock_deps.return_value = (
+                                all_valid,
+                                [] if all_valid else ["missing"],
+                            )
+                            mock_poetry_lock.return_value = (True, "consistent")
 
-                        yield {
-                            "git": mock_git,
-                            "railway_json": mock_railway_json,
-                            "dockerfile": mock_dockerfile,
-                            "deps": mock_deps,
-                            "poetry_lock": mock_poetry_lock,
-                        }
+                            yield {
+                                "git": mock_git,
+                                "railway_json": mock_railway_json,
+                                "dockerfile": mock_dockerfile,
+                                "deps": mock_deps,
+                                "poetry_lock": mock_poetry_lock,
+                            }
 
 
 class TestRailwayCommand:
@@ -565,7 +569,7 @@ class TestRailwayCommand:
         ) as mock_git:
             mock_git.return_value = (True, "M some_file.py")
 
-            result = runner.invoke(railway, input="n\n")
+            result = runner.invoke(railway, ["--project-name", "myapp"], input="n\n")
 
             assert result.exit_code == 0
             assert "You have uncommitted changes" in result.output
@@ -587,7 +591,7 @@ class TestRailwayCommand:
                     "railway.json not found in project root",
                 )
 
-                result = runner.invoke(railway)
+                result = runner.invoke(railway, ["--project-name", "myapp"])
 
                 assert result.exit_code == 1
                 assert "railway.json not found in project root" in result.output
@@ -612,7 +616,7 @@ class TestRailwayCommand:
                         "Dockerfile not found in project root",
                     )
 
-                    result = runner.invoke(railway)
+                    result = runner.invoke(railway, ["--project-name", "myapp"])
 
                     assert result.exit_code == 1
                     assert "Dockerfile not found in project root" in result.output
@@ -641,7 +645,9 @@ class TestRailwayCommand:
                             ["gunicorn", "psycopg2-binary"],
                         )
 
-                        result = runner.invoke(railway, input="n\n")
+                        result = runner.invoke(
+                            railway, ["--project-name", "myapp"], input="n\n"
+                        )
 
                         assert result.exit_code == 0
                         assert "Missing required Railway dependencies" in result.output
@@ -1212,3 +1218,65 @@ class TestRailwayCommand:
                                                     "link DATABASE_URL manually"
                                                     in result.output
                                                 )
+
+    def test_railway_derives_project_name_from_cwd(self):
+        """Without --project-name, railway derives service name from CWD."""
+        runner = CliRunner()
+
+        with mock_preflight_checks():
+            with patch(
+                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+            ) as mock_installed:
+                with patch(
+                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                ) as mock_auth:
+                    with patch(
+                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                    ) as mock_project_init:
+                        with patch(
+                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                        ) as mock_run:
+                            with patch(
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
+                                with patch(
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
+                                    with patch(
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
+
+                                            # No --project-name — should fall back to CWD name
+                                            with patch.object(
+                                                Path,
+                                                "cwd",
+                                                return_value=Path(
+                                                    "/tmp/quickscale-test/cwd-derived-app"
+                                                ),
+                                            ):
+                                                result = runner.invoke(railway)
+
+                                            assert result.exit_code == 0
+                                            assert (
+                                                "Deployment process completed successfully!"
+                                                in result.output
+                                            )
