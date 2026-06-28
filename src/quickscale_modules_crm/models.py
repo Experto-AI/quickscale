@@ -43,6 +43,7 @@ class Tag(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_crm"
+        base_manager_name = "all_objects"
         ordering = ["name"]
         constraints = [
             # Block duplicate names within the NULL-owned bucket.
@@ -83,6 +84,7 @@ class Company(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_crm"
+        base_manager_name = "all_objects"
         ordering = ["name"]
         verbose_name_plural = "Companies"
 
@@ -136,6 +138,7 @@ class Contact(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_crm"
+        base_manager_name = "all_objects"
         ordering = ["last_name", "first_name"]
 
     def __str__(self) -> str:
@@ -178,6 +181,7 @@ class Stage(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_crm"
+        base_manager_name = "all_objects"
         ordering = ["order", "name"]
         constraints = [
             # Block duplicate terminal semantics within the NULL-owned bucket.
@@ -246,6 +250,7 @@ class Deal(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_crm"
+        base_manager_name = "all_objects"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -282,6 +287,7 @@ class ContactNote(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_crm"
+        base_manager_name = "all_objects"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -331,6 +337,7 @@ class DealNote(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_crm"
+        base_manager_name = "all_objects"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
