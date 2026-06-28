@@ -88,7 +88,7 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 |---|---|---|---|
 | `wt-track1` | **AF1** ✅ → **AF1-CR follow-up** ⏸️ → **AF3** | Runtime isolation | AF1 merged to `v87`; next cycle: AF1-CR-002 + AF1-CR-005 (forms-only fixes, see AF1 entry); AF3 waits on AF2 also merging |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
-| `wt-track3` | **AF7** ⏸️ (partial, blocked) → **AF8** | Generator / CLI | AF6 + AF5 complete and merged; AF7 blocked on AF7-CR-003; AF8 starts immediately (independent) |
+| `wt-track3` | **AF7** ✅ → **AF8** ✅ | Generator / CLI | AF6 + AF5 complete and merged; AF7 fail-hard cleanup complete; AF8 complete and merged |
 
 **Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share a connection-level GUC hook; AF3 hardens the operator seam last. Generator cluster: AF6 → AF5 complete and merged. AF7 infrastructure and module-owned adapters landed but blocked on AF7-CR-003; see AF7 entry. **AF8 starts immediately** — no dependency on AF7; fixes two independent fail-hard violations in `module_discovery.py` and `railway_utils.py`. The two clusters touch disjoint file sets.
 
@@ -167,7 +167,7 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 - **DEPENDS:** AF1, AF2 merged.
 - **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; do after AF1/AF2 so the seam lands on the hardened base.
 
-### - [ ] AF7 — Push per-module manifest adapters out of core into the modules (PARTIAL — blocked by AF7-CR-003)
+### - [x] AF7 — Push per-module manifest adapters out of core into the modules ✅ *implemented 2026-06-28*
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -179,24 +179,12 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 - **VALIDATION PATH:** generate a project with social+billing+crm and apply; module test suites.
 - **DEPENDS:** AF6 merged.
 - **RECOMMENDATION:** **Pursue (A)** — finishes the D3 decision the code drifted from; makes subtree-distributed modules actually self-contained.
-- **LANDED (track 3, wt-track3):**
-  - **Infrastructure seam:** `MANAGED_ADAPTER_ORIGINS`, `_CORE_FALLBACK_ADAPTERS`, `refresh_managed_adapters()` with base-path-aware discovery via `discover_shipped_module_names()`.
-  - **Module-owned primary adapters:** social, billing, and CRM each ship an `adapter.py` in their own package with the real rich adapter implementation (post-hooks, option resolution, settings assembly, managed-file rendering). These are used in monorepo/embedded contexts where the module package is importable.
-  - **Provenance-sensitive tests:** 9 tests in `TestManagedAdapterProvenance` verify module-owned vs core-fallback selection, distinct function objects, source provenance, origin-set correctness, and custom-entry preservation.
-  - **Refresh coordination:** `module_wiring_manager.py` calls `refresh_managed_adapters()` after `set_modules_base_path()` and after restoring the prior base path.
-  - **Public API:** `build_generic_manifest_spec()` and `load_module_manifest()` made public (old private aliases preserved).
-  - **Docs:** architecture section in `implementation_contract.md` added.
-- **BLOCKING — AF7-CR-003 (resolved by decision, not parity fix):** The core fallbacks (`_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback`) and the `_CORE_FALLBACK_ADAPTERS` dict are compat shims that violate the project's fail-hard principle (see decisions.md Prohibitions). The "bundled/installed-without-module-source" context is not a supported configuration. Decision locked: delete the fallbacks; fail hard (raise `ImproperlyConfigured`) if a managed adapter is not importable.
-- **NEXT STEP / REQUIRED:**
-  1. Delete `_CORE_FALLBACK_ADAPTERS` dict declaration from `entry_point.py`.
-  2. Delete `_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback` functions and their `_CORE_FALLBACK_ADAPTERS[name] = ...` registration lines from `entry_point.py`.
-  3. Rewrite `refresh_managed_adapters()` steps 2+3: replace the fallback lookup + silent removal with a hard `raise ImproperlyConfigured(f"Managed adapter for '{module_name}' not importable ...")`.
-  4. Update `entry_point.py` module docstring and `MANAGED_ADAPTER_ORIGINS` / `_CORE_FALLBACK_ADAPTERS` comments.
-  5. Delete the three fallback tests: `test_core_fallbacks_exist_for_bundled_context`, `test_core_fallback_source_is_core_not_module`, `test_core_fallback_and_module_owned_are_different_objects` from `test_manifest_entry_point.py`.
-  6. Re-run `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
-  7. Only then mark AF7 complete and merge.
-- **FINDINGS / FOLLOW-UP (on landed scope):**
-  - Remaining import-time-registered modules (analytics, blog, listings, forms, backups, notifications, auth, orgs, storage) may also be migrated using the same pattern once AF7 is unblocked. No pressing need — the seam is proven with social + billing + crm.
+- **IMPLEMENTED (track 3, wt-track3, two phases):**
+  - **Phase 1 — Infrastructure seam + module-owned adapters:** `MANAGED_ADAPTER_ORIGINS`, `_CORE_FALLBACK_ADAPTERS`, `refresh_managed_adapters()` with base-path-aware discovery via `discover_shipped_module_names()`. Social, billing, and CRM each ship an `adapter.py` in their own package with the real rich adapter implementation (post-hooks, option resolution, settings assembly, managed-file rendering). Provenance-sensitive tests (9 tests in `TestManagedAdapterProvenance`) verify module-owned vs core-fallback selection. `module_wiring_manager.py` coordinates refresh around `set_modules_base_path()`. Public API: `build_generic_manifest_spec()` and `load_module_manifest()` made public. Docs: architecture section in `implementation_contract.md` added.
+  - **Phase 2 — Fail-hard cleanup (AF7-CR-003 resolution):** Deleted `_CORE_FALLBACK_ADAPTERS` dict, `_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback` function definitions and their `_CORE_FALLBACK_ADAPTERS[...] = ...` registrations. Rewrote `refresh_managed_adapters()` steps 2+3: removed the fallback lookup and silent removal; now raises `ImproperlyConfigured` when a managed module's adapter (`quickscale_modules_{name}.adapter`) is not importable at the active base path. Updated module docstring and `MANAGED_ADAPTER_ORIGINS` comments to reflect fail-hard behavior. Deleted three fallback-provenance tests (`test_core_fallbacks_exist_for_bundled_context`, `test_core_fallback_source_is_core_not_module`, `test_core_fallback_and_module_owned_are_different_objects`). Bundle-installed-without-module-source is no longer a supported context.
+- **FINDINGS / NOTES:**
+  - When a managed module is not present at the active base path (e.g. embedded project without social/billing/crm), `refresh_managed_adapters()` removes it from `MANIFEST_ADAPTER_REGISTRY` but keeps it in `MANAGED_ADAPTER_ORIGINS` so re-evaluation occurs on the next base-path change.
+  - Remaining import-time-registered modules (analytics, blog, listings, forms, backups, notifications, auth, orgs, storage) may also be migrated using the same pattern. No pressing need — the seam is proven with social + billing + crm.
 
 ---
 

@@ -153,7 +153,13 @@ def regenerate_managed_wiring(
 
         if _has_real_manifests:
             set_modules_base_path(modules_dir)
-            refresh_managed_adapters()
+            try:
+                refresh_managed_adapters()
+            except ImproperlyConfigured as error:
+                return (
+                    False,
+                    f"Managed adapter wiring failed: {error}",
+                )
         elif _prior_base_path is None:
             return (
                 False,
@@ -191,6 +197,11 @@ def regenerate_managed_wiring(
                 continue
             except ValueError as error:
                 return False, f"Unable to build managed wiring specs: {error}"
+            except ImproperlyConfigured as error:
+                return (
+                    False,
+                    f"Managed adapter wiring failed: {error}",
+                )
 
         package_dir = project_path / package_name
         if not package_dir.exists():
@@ -208,4 +219,11 @@ def regenerate_managed_wiring(
     finally:
         set_modules_base_path(_prior_base_path)
         if _prior_base_path is not None:
-            refresh_managed_adapters()
+            try:
+                refresh_managed_adapters()
+            except ImproperlyConfigured:
+                # Best-effort restoration of the adapter registry.
+                # If the prior base path no longer has importable
+                # managed adapters there is no meaningful recovery
+                # from the finally block.
+                pass
