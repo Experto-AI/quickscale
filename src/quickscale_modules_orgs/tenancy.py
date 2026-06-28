@@ -310,6 +310,14 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
         reason="Test-only model defined in test_models.py for "
         "TenantManager behaviour tests; not a real tenant table.",
     ),
+    TenantTableEntry(
+        app_label="quickscale_modules_orgs",
+        model_name="ForwardFKChild",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Test-only model defined in test_models.py for "
+        "AF2 Phase 1 forward-FK traversal regression tests; "
+        "not a real tenant table.",
+    ),
     # ====== PENDING REMEDIATION ==========================================
     # Known child/detail tables that lack direct ``organization_id``
     # and FORCE-RLS.  Tracked with equality-footprint metadata naming

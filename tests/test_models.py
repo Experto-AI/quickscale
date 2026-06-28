@@ -1,6 +1,8 @@
 """Model contract tests for the QuickScale organizations module."""
 
+from typing import Any, Generator
 from unittest.mock import patch
+from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -17,7 +19,13 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     TenantModel,
 )
+from quickscale_modules_orgs.managers import TenantManager
 from quickscale_modules_orgs.tenancy import tenant_org_fk
+
+
+def _create_user(**kwargs: str) -> Any:
+    """Create a test user, working around mypy-django stub limitations."""
+    return get_user_model().objects.create_user(**kwargs)  # type: ignore[attr-defined]
 
 
 def test_org_role_preserves_expected_hierarchy_order() -> None:
@@ -34,7 +42,7 @@ def test_org_role_preserves_expected_hierarchy_order() -> None:
 @pytest.mark.django_db
 def test_create_personal_for_is_idempotent() -> None:
     """create_personal_for should return the same personal org on repeat calls."""
-    user = get_user_model().objects.create_user(
+    user = _create_user(
         username="alice",
         email="alice@example.com",
         password="secret123",
@@ -58,7 +66,7 @@ def test_create_personal_for_is_idempotent() -> None:
 @pytest.mark.django_db
 def test_duplicate_membership_hits_database_constraint() -> None:
     """The user/org pair should be unique at the database layer."""
-    user = get_user_model().objects.create_user(
+    user = _create_user(
         username="bob",
         email="bob@example.com",
         password="secret123",
@@ -83,7 +91,7 @@ def test_duplicate_membership_hits_database_constraint() -> None:
 def test_last_owner_cannot_be_demoted_via_model_save() -> None:
     """Direct ORM role changes should not allow an org to lose its last owner."""
 
-    user = get_user_model().objects.create_user(
+    user = _create_user(
         username="owner",
         email="owner@example.com",
         password="secret123",
@@ -111,7 +119,7 @@ def test_last_owner_cannot_be_demoted_via_model_save() -> None:
 def test_last_owner_cannot_be_removed_via_model_delete() -> None:
     """Direct ORM deletes should not remove an organization's final owner."""
 
-    user = get_user_model().objects.create_user(
+    user = _create_user(
         username="remove-owner",
         email="remove-owner@example.com",
         password="secret123",
@@ -136,12 +144,12 @@ def test_last_owner_cannot_be_removed_via_model_delete() -> None:
 def test_last_owner_save_uses_locked_persisted_role_for_stale_instances() -> None:
     """Stale membership saves should validate against the locked persisted role."""
 
-    first_owner = get_user_model().objects.create_user(
+    first_owner = _create_user(
         username="save-first-owner",
         email="save-first-owner@example.com",
         password="secret123",
     )
-    promoted_user = get_user_model().objects.create_user(
+    promoted_user = _create_user(
         username="save-promoted-owner",
         email="save-promoted-owner@example.com",
         password="secret123",
@@ -199,12 +207,12 @@ def test_last_owner_save_uses_locked_persisted_role_for_stale_instances() -> Non
 def test_last_owner_delete_uses_persisted_role_for_stale_instances() -> None:
     """Stale membership instances should still respect the persisted owner guard."""
 
-    first_owner = get_user_model().objects.create_user(
+    first_owner = _create_user(
         username="first-owner",
         email="first-owner@example.com",
         password="secret123",
     )
-    promoted_user = get_user_model().objects.create_user(
+    promoted_user = _create_user(
         username="promoted-owner",
         email="promoted-owner@example.com",
         password="secret123",
@@ -241,7 +249,7 @@ def test_last_owner_delete_uses_persisted_role_for_stale_instances() -> None:
 @pytest.mark.django_db
 def test_create_personal_for_retries_when_username_slug_is_taken() -> None:
     """Personal org creation should fall back when the username slug already exists."""
-    user = get_user_model().objects.create_user(
+    user = _create_user(
         username="acme",
         email="acme@example.com",
         password="secret123",
@@ -257,7 +265,7 @@ def test_create_personal_for_retries_when_username_slug_is_taken() -> None:
 @pytest.mark.django_db
 def test_create_personal_for_uses_suffixed_slug_after_multiple_collisions() -> None:
     """Personal org creation should keep trying deterministic suffixes after base collisions."""
-    user = get_user_model().objects.create_user(
+    user = _create_user(
         username="omega",
         email="omega@example.com",
         password="secret123",
@@ -277,7 +285,7 @@ def test_organization_invitation_save_rejects_owner_role() -> None:
     """Direct invitation saves should fail closed for unsupported owner role."""
 
     organization = Organization.objects.create(name="Atlas", slug="atlas")
-    inviter = get_user_model().objects.create_user(
+    inviter = _create_user(
         username="atlas-owner",
         email="atlas-owner@example.com",
         password="secret123",
@@ -304,7 +312,7 @@ def test_organization_invitation_save_rejects_duplicate_active_email() -> None:
     """Direct invitation saves should reject a second live invite by normalized email."""
 
     organization = Organization.objects.create(name="Atlas", slug="atlas")
-    inviter = get_user_model().objects.create_user(
+    inviter = _create_user(
         username="atlas-owner",
         email="atlas-owner@example.com",
         password="secret123",
@@ -314,7 +322,7 @@ def test_organization_invitation_save_rejects_duplicate_active_email() -> None:
         email="invitee@example.com",
         role=OrgRole.ADMIN,
         invited_by=inviter,
-        expires_at=timezone.now() + timezone.timedelta(days=1),
+        expires_at=timezone.now() + timedelta(days=1),
     )
 
     duplicate = OrganizationInvitation(
@@ -322,7 +330,7 @@ def test_organization_invitation_save_rejects_duplicate_active_email() -> None:
         email="INVITEE@example.com",
         role=OrgRole.MEMBER,
         invited_by=inviter,
-        expires_at=timezone.now() + timezone.timedelta(days=1),
+        expires_at=timezone.now() + timedelta(days=1),
     )
 
     with pytest.raises(ValidationError) as exc_info:
@@ -339,7 +347,7 @@ def test_organization_invitation_save_revalidates_after_prior_clean() -> None:
     """Direct saves should relock and revalidate if the world changed after clean."""
 
     organization = Organization.objects.create(name="Atlas", slug="atlas")
-    inviter = get_user_model().objects.create_user(
+    inviter = _create_user(
         username="atlas-owner",
         email="atlas-owner@example.com",
         password="secret123",
@@ -349,7 +357,7 @@ def test_organization_invitation_save_revalidates_after_prior_clean() -> None:
         email="INVITEE@example.com",
         role=OrgRole.MEMBER,
         invited_by=inviter,
-        expires_at=timezone.now() + timezone.timedelta(days=1),
+        expires_at=timezone.now() + timedelta(days=1),
     )
 
     invitation.full_clean()
@@ -359,7 +367,7 @@ def test_organization_invitation_save_revalidates_after_prior_clean() -> None:
         email="invitee@example.com",
         role=OrgRole.ADMIN,
         invited_by=inviter,
-        expires_at=timezone.now() + timezone.timedelta(days=1),
+        expires_at=timezone.now() + timedelta(days=1),
     )
 
     with patch.object(
@@ -382,7 +390,7 @@ def test_organization_invitation_admin_form_excludes_owner_role() -> None:
     """The admin form should not offer owner as a valid invitation role."""
 
     organization = Organization.objects.create(name="Nova", slug="nova")
-    inviter = get_user_model().objects.create_user(
+    inviter = _create_user(
         username="nova-owner",
         email="nova-owner@example.com",
         password="secret123",
@@ -390,7 +398,8 @@ def test_organization_invitation_admin_form_excludes_owner_role() -> None:
     blank_form = OrganizationInvitationAdminForm()
 
     assert OrgRole.OWNER not in {
-        role_value for role_value, _label in blank_form.fields["role"].choices
+        role_value
+        for role_value, _label in blank_form.fields["role"].choices  # type: ignore[attr-defined]
     }
 
     form = OrganizationInvitationAdminForm(
@@ -621,14 +630,14 @@ def test_tenant_org_fk_produces_protect_contract() -> None:
     assert fk.null is False
     # The FK is not yet contributed to a concrete model, so remote_field.model
     # is stored as the lazy string reference.
-    assert fk.remote_field.model == "quickscale_modules_orgs.Organization"
+    assert fk.remote_field.model == "quickscale_modules_orgs.Organization"  # type: ignore[comparison-overlap]
 
 
 def test_tenant_org_fk_defaults_db_index_to_true() -> None:
     """tenant_org_fk() should default to indexed for query performance."""
     fk = tenant_org_fk(related_name="test_indexed")
 
-    assert fk.db_index is True
+    assert fk.db_index is True  # type: ignore[attr-defined]
 
 
 def test_tenant_org_fk_supports_custom_related_name() -> None:
@@ -648,14 +657,14 @@ def test_tenant_model_declares_org_foreign_key() -> None:
     organization_field = TenantModel._meta.get_field("organization")
 
     assert TenantModel._meta.abstract is True
-    assert organization_field.db_index is True
+    assert organization_field.db_index is True  # type: ignore[union-attr]
     # tenant_org_fk uses a lazy string reference; abstract models
     # do not resolve it until a concrete subclass is prepared.
     assert organization_field.related_model in (
         Organization,
         "quickscale_modules_orgs.Organization",
     )
-    assert organization_field.remote_field.on_delete == models.PROTECT
+    assert organization_field.remote_field.on_delete == models.PROTECT  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------
@@ -666,10 +675,32 @@ def test_tenant_model_declares_org_foreign_key() -> None:
 class ConcreteTenantResource(TenantModel):
     """Concrete tenant model used exclusively for manager behaviour tests."""
 
-    name = models.CharField(max_length=100)
+    name: models.CharField = models.CharField(max_length=100)
 
     class Meta:
         app_label = "quickscale_modules_orgs"
+
+
+class ForwardFKChild(models.Model):
+    """Test-only model with a FK to ConcreteTenantResource for FK traversal tests."""
+
+    organization: models.ForeignKey = models.ForeignKey(
+        "quickscale_modules_orgs.Organization",
+        on_delete=models.PROTECT,
+    )
+    parent: models.ForeignKey = models.ForeignKey(
+        ConcreteTenantResource,
+        on_delete=models.CASCADE,
+        related_name="fk_children",
+    )
+    name: models.CharField = models.CharField(max_length=100)
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
+
+    class Meta:
+        app_label = "quickscale_modules_orgs"
+        base_manager_name = "all_objects"
 
 
 def test_concrete_tenant_model_has_scoped_default_manager() -> None:
@@ -689,7 +720,7 @@ def test_concrete_tenant_model_has_unfiltered_all_objects_manager() -> None:
 
 
 @pytest.fixture
-def _tenant_resource_db() -> None:
+def _tenant_resource_db() -> Generator[None, None, None]:
     """Create/drop the ConcreteTenantResource table for the duration of the test."""
     from django.db import connection
 
@@ -797,3 +828,92 @@ def test_tenant_manager_cross_org_isolation() -> None:
 
     # With no org set, nothing is visible.
     assert ConcreteTenantResource.objects.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# AF2 Phase 1 — no-context ORM regression coverage
+# ---------------------------------------------------------------------------
+# These tests prove that ``base_manager_name = "all_objects"`` prevents
+# the scoped manager's fail-closed ``.none()`` from breaking internal
+# Django operations when no tenant context is set.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_refresh_from_db_without_org_context() -> None:
+    """refresh_from_db() should work when no tenant context is set (AF2 Phase 1).
+
+    This regression test proves that ``_base_manager`` returns the
+    unfiltered queryset (via ``all_objects``) so that internal Django
+    refresh logic bypasses the scoped manager's fail-closed .none().
+    """
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    org = Organization.objects.create(name="RefreshTest", slug="refresh-test")
+    reset_current_org_id()
+    assert get_current_org_id() is None
+
+    # Create using all_objects (bypass scoping when no context is set).
+    resource = ConcreteTenantResource.all_objects.create(
+        organization=org,
+        name="original",
+    )
+
+    # Mutate behind the instance's back.
+    ConcreteTenantResource.all_objects.filter(pk=resource.pk).update(name="updated")
+
+    # refresh_from_db uses _base_manager (should be all_objects, unfiltered).
+    resource.refresh_from_db()
+    assert resource.name == "updated"
+
+
+@pytest.mark.usefixtures("_tenant_resource_db")
+@pytest.mark.django_db(transaction=True)
+def test_forward_fk_traversal_without_org_context() -> None:
+    """Forward FK traversal should work when no tenant context is set (AF2 Phase 1).
+
+    Django uses the related model's ``_base_manager`` to fetch FK targets.
+    This test proves that ``ConcreteTenantResource._base_manager`` is the
+    unfiltered ``all_objects`` manager, allowing FK access without a
+    tenant context.
+    """
+    from django.db import connection
+
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+    )
+
+    # Create ForwardFKChild table for the duration of this test.
+    with connection.schema_editor() as schema_editor:
+        schema_editor.create_model(ForwardFKChild)
+
+    try:
+        org = Organization.objects.create(name="FKTest", slug="fk-test")
+        reset_current_org_id()
+        assert get_current_org_id() is None
+
+        parent = ConcreteTenantResource.all_objects.create(
+            organization=org,
+            name="parent-resource",
+        )
+        child = ForwardFKChild.all_objects.create(
+            organization=org,
+            parent=parent,
+            name="child",
+        )
+
+        reset_current_org_id()
+
+        # Forward FK traversal: accessing child.parent uses
+        # ConcreteTenantResource._base_manager which must be
+        # all_objects (unfiltered).
+        fetched_parent = child.parent
+        assert fetched_parent.name == "parent-resource"
+    finally:
+        with connection.schema_editor() as schema_editor:
+            schema_editor.delete_model(ForwardFKChild)

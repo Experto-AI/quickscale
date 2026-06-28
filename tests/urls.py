@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from django.contrib import admin
-from django.db import connection
 from django.http import HttpResponse
 from django.urls import include, path
 from django.views import View
@@ -17,12 +16,17 @@ from quickscale_modules_orgs.permissions import (
 
 
 def _current_org_id() -> str:
-    if connection.vendor != "postgresql":
-        return "none"
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT current_setting('app.current_org_id', true)")
-        value = cursor.fetchone()[0]
-    return value or "none"
+    """Read the current org ID from the ContextVar.
+
+    Phase 3: middleware no longer does SET LOCAL, so test views read
+    the ContextVar instead of the DB-level current_setting. Callers
+    that need DB-level RLS manage their own transaction.atomic() +
+    tenant_context().
+    """
+    from quickscale_modules_orgs.current_org import get_current_org_id
+
+    org_id = get_current_org_id()
+    return str(org_id) if org_id is not None else "none"
 
 
 def _current_org_slug(request) -> str:
