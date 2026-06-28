@@ -78,93 +78,72 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ---
 
-## Open work — v87 structural findings (AF1–AF7)
+## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). Two disjoint clusters; see the per-finding "Alternatives" + preferred option in findings.md before locking each decision.
+Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). Generator / CLI structural work (AF5–AF8) is complete. Runtime-isolation hardening now has one remaining open task: **AF3**.
 
 ### Track assignment & parallelization
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF1** ✅ → **AF1-CR follow-up** ⏸️ → **AF3** | Runtime isolation | AF1 merged to `v87`; next cycle: AF1-CR-002 + AF1-CR-005 (forms-only fixes, see AF1 entry); AF3 waits on AF2 also merging |
-| `wt-track2` | **AF2 + AF4** ✅ | Runtime isolation | Track 2 implementation complete on wt-track2; merge-back closes the lane and unblocks AF3 |
-| `wt-track3` | **AF7** ⏸️ (partial, blocked) → **AF8** | Generator / CLI | AF6 + AF5 complete and merged; AF7 blocked on AF7-CR-003; AF8 starts immediately (independent) |
+| `wt-track1` | **AF1** ✅ → **AF1-CR-002** ✅ → **AF1-CR-005** ✅ → **AF3** | Runtime isolation | AF1 and both forms-only follow-ups are merged; AF3 is the next pending runtime-isolation task |
+| `wt-track2` | **AF2 + AF4** ✅ | Runtime isolation | Track 2 implementation complete; this merge-back closes the lane and unblocks AF3 |
+| `wt-track3` | **AF5** ✅ → **AF6** ✅ → **AF7** ✅ → **AF8** ✅ | Generator / CLI | All generator / CLI structural findings complete and merged |
 
-**Sequencing rationale.** Isolation cluster: `AF1 → (AF2 + AF4) → AF3` — the conformance gate + `TenantModel` base is the prerequisite; AF2/AF4 share the tenant-context + short-transaction seam; AF3 hardens the operator seam last. **Track 2 stop-point:** AF2 + AF4 are implemented on wt-track2, and AF3 is the next pending runtime-isolation task once merge-back lands on `v87`. Generator cluster: AF6 → AF5 complete and merged. AF7 infrastructure and module-owned adapters landed but blocked on AF7-CR-003; see AF7 entry. **AF8 starts immediately** — no dependency on AF7; fixes two independent fail-hard violations in `module_discovery.py` and `railway_utils.py`. The two clusters touch disjoint file sets.
+**Sequencing rationale.** Isolation cluster: `AF1 ✅ → AF1-CR ✅ → (AF2 + AF4) ✅ → AF3` — the tenant-model conformance gate landed first, the forms-only follow-ups closed next, and this Track 2 stop-point closes the shared tenant-context / short-transaction seam. After this merge-back, **AF3** is the only remaining runtime-isolation task. Generator cluster: **AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅** — complete.
 
 ### QA hardening thread (cross-track)
 
-Three findings share one root cause: **the suite tests the happy request path — the one path where the broken mechanism still appears to work** — so coverage gaps, ambient-context breakage, and non-idempotent steps all pass silently and give false confidence. The fix in each is a *property* test (enumerate-and-assert or fault-inject-and-assert), not another example-path test. These live in different tasks/tracks but are one QA-hardening spine — sequence and review them as a thread:
+Three findings shared one root cause: **the suite tested the happy request path — the one path where the broken mechanism still appeared to work** — so coverage gaps, ambient-context breakage, and non-idempotent steps all passed silently and gave false confidence. Each fix was a *property* test (enumerate-and-assert or fault-inject-and-assert), not another example-path test.
 
-| Task | Track | Property test it adds | Replaces the false confidence of |
+| Task | Track | Property test it adds | Status |
 |---|---|---|---|
-| **AF1** | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | response-level isolation tests on chosen endpoints (`tests_shared/isolation.py`) |
-| **AF2** ✅ | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | request-path-only scoping tests |
-| **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) — *complete* | convention-asserted idempotent-rerun (no enforcing test) |
+| **AF1** ✅ | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | complete |
+| **AF2** ✅ | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | complete |
+| **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
 
-Land **AF1's conformance gate first** — it is read-only, surfaces today's true RLS coverage (including the `ContactNote`/`DealNote` gap), and is the evidence base the others build on. Detail: findings.md → "Cross-cutting QA / testing thread."
+### Completed dependency snapshots
 
----
+- **AF1 + AF1-CR follow-ups (Track 1) — complete / merged.** Tenant-table conformance, declarative RLS, and the forms-only AF1-CR-002 / AF1-CR-005 hardening passes are merged. No remaining product/design blocker from that lane; AF3 is now waiting only on this Track 2 merge-back.
 
-### - [x] AF1 — Tenant-table isolation conformance gate + declarative RLS ✓ *merged 2026-06-27*
-
-`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track1` — **foundation; must merge to `v87` before AF2/AF4 begin.**
-- **WHY → Finding 1.** RLS is six hand-written `enable_rls` migrations with copy-pasted SQL and hardcoded table lists; child tables without `organization_id` (`ContactNote`/`DealNote`) sit outside *both* the Python manager and RLS, and nothing asserts coverage.
-- **OBJECTIVE:** (1) Land a CI **conformance test** that walks `apps.get_models()`, selects tenant-owned models, and asserts each has an `organization_id` column + a live FORCE-RLS policy in `pg_policies` — failing the build on any gap. Parent-join policies are not a valid exemption (child-table policy locked to Option C). (2) Introduce a reusable `EnableTenantRLS(model)` migration operation generating the policy from one source string; migrate the six modules onto it. (3) Add `organization_id` FK to `ContactNote` and `DealNote` (denormalize — **child-table policy locked to C**); add a DB constraint/trigger to keep child `organization_id` equal to the parent's; promote both to `TenantModel`; apply `EnableTenantRLS` on them.
-- **SCOPE:** conformance test in `quickscale_modules/orgs/tests/` (owns the registry — not `tests_shared/`); `orgs/.../tenancy.py` (registry + RLS/equality infrastructure); the six `*/migrations/000*_enable_rls.py`; `crm` child tables (`ContactNote`/`DealNote`) — schema migration + FK + constraint; `forms` child tables (`FormField`/`FormSubmission`/`FormFieldValue`) — schema migration + FK + constraint.
-- **ACCEPTANCE CRITERIA:** conformance test is green and *fails* when a tenant table lacks a direct-column policy (prove with a temporary uncovered model); no duplicated policy SQL remains; `ContactNote` and `DealNote` each have `organization_id` and a live FORCE-RLS policy.
-- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=crm test`, `make MODULE=forms test`; run conformance gate on PostgreSQL.
-- **DEPENDS:** none (starts immediately). **Blocks:** AF2, AF4.
-- **RECOMMENDATION:** **Pursue (C for child tables, A's registry for infrastructure)** — child-table policy is locked (see Decisions locked table); registry + conformance gate is the implementation vehicle.
-- **LANDED (wt-track1, merged 2026-06-27):**
-  - **Phase 1 — Registry + conformance gate:** `TenantTableStatus`, `TenantTableEntry`, `TENANT_TABLE_REGISTRY` in `tenancy.py`; `test_tenant_table_conformance.py` (structural + PostgreSQL-only RLS assertions; negative-detection tests).
-  - **Phase 2 — Shared RLS/equality infrastructure:** `apply_force_rls` / `revert_force_rls` helpers; child-parent equality trigger function + `enable_child_parent_equality` / `disable_child_parent_equality` — all in `tenancy.py`. Six `enable_rls` migrations refactored onto shared helpers (no copy-pasted SQL remains).
-  - **Phase 3 — CRM child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `ContactNote` and `DealNote`; `crm/0009_add_note_organization_ownership.py`.
-  - **Phase 4 — Forms child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `FormField`, `FormSubmission`, `FormFieldValue`; `forms/0007_new_organization_ownership.py` (includes conditional field-parity trigger).
-  - **Phase 5 — Enforcing gate:** `test_exactly_zero_pending_remediation_entries()` + live trigger verification in `pg_trigger`. `purge_organization.py` delete specs updated to direct `organization` FK for all promoted tables.
-- **DEFERRED — next wt-track1 cycle (before AF3, forms-only):**
-  - **AF1-CR-002:** Forms admin and views read child-table rows (`FormField`, `FormSubmission`, `FormFieldValue`) without an `org_scope()` / `all_objects` seam. Under the `NOBYPASSRLS` runtime role these reads are not correctly gated. **Files:** `forms/admin.py`, `forms/views.py`.
-  - **AF1-CR-005:** Public-submit notification content (email field values, submitter-name suffix) is rendered after `org_scope()` exits, losing the org context. **Files:** `forms/views.py`, `forms/notifications.py`. **Fix:** render notification content inside the `org_scope()` block before it exits.
-
-### - [x] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()` ✓ *implemented on wt-track2; merge-back closes Track 2 and unblocks AF3*
+### - [x] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()` ✓ *implemented on wt-track2; this merge-back closes Track 2 and unblocks AF3*
 
 `**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track2` — pairs with AF4 (shared connection-init GUC).
+- **TRACK:** `wt-track2` — pairs with AF4 (shared runtime-isolation seam).
 - **WHY → Finding 2.** `objects = TenantManager()` with no `base_manager_name` makes the auto-scoping manager Django's `_base_manager`, so all ORM graph traversal (forward FK, `refresh_from_db`, cascade collector, admin inlines) silently depends on an ambient contextvar; three modules already re-implement the context wrapper.
-- **OBJECTIVE:** Set `base_manager_name` to an unfiltered base on the shared `TenantModel`; collapse `_billing_org_db_context`, social `_org_db_context`, and `set_current_org_for_context` into one shared `orgs.current_org.tenant_context()`; keep `objects` auto-scoping for views.
-- **SCOPE:** `orgs/.../models.py` (`TenantModel` base + `base_manager_name`), `orgs/.../current_org.py` (single primitive), `billing/.../services.py:912`, `social/.../admin.py`, every tenant model's manager block.
-- **ACCEPTANCE CRITERIA:** forward-FK traversal and `refresh_from_db` work with no org context set; only one context-manager implementation remains; no behavior change in request-path scoping.
-- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`, `make MODULE=social test`; add a regression test for FK traversal under no context.
-- **DEPENDS:** AF1 merged (uses the `TenantModel` base). Shares fix-seam with AF4.
+- **OBJECTIVE:** Set `base_manager_name` to an unfiltered base on the shared `TenantModel`; converge request-scoped callers on one shared `orgs.current_org.tenant_context()` primitive while preserving the transactional/non-request helper seams; keep `objects` auto-scoping for views.
+- **SCOPE:** `orgs/.../models.py`, `orgs/.../current_org.py`, `billing/.../services.py`, `social/.../admin.py`, forms public views, generated social views, and every tenant model's manager block.
+- **ACCEPTANCE CRITERIA:** forward-FK traversal and `refresh_from_db` work with no org context set; one shared request-scoped activation primitive exists; no behavior drift in request-path scoping.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`, `make MODULE=social test`; add regression tests for FK traversal under no context and the shared activation contract.
+- **DEPENDS:** AF1 merged ✅. Shared fix-seam with AF4.
 - **RECOMMENDATION:** **Pursue (A)** — removes a whole class of silent `DoesNotExist`/empty-result bugs and deletes duplicated context code.
-- **LANDED (wt-track2 stop-point):**
+- **LANDED (Track 2 stop-point):**
   - **Phase 1 — Base manager demotion:** `TenantModel` sets `base_manager_name = "all_objects"` on the model base. Every tenant-model `class Meta` across orgs, billing, crm, blog, forms, listings, and social carries the explicit `base_manager_name` declaration — eliminating silent FK-traversal `DoesNotExist` bugs when no org contextvar is set.
   - **Phase 2 — Shared activation primitive:** Request-scoped callers now use `orgs.current_org.tenant_context()` as the shared activation primitive. `org_scope()` remains the transactional/non-request helper, and `set_current_org_for_context()` stays available as the compatibility bridge for command-style callers.
   - **Phase 3 — Explicit DB-scope ownership (shared with AF4):** Middleware now carries `request.org` + the ContextVar only; callers that need DB-side `app.current_org_id` open their own short `transaction.atomic()` + `tenant_context()` windows (public forms endpoints, generated social views, billing webhook mutation phases).
   - **Phase 4 — Generator note + rendering proof:** `production.py.j2` documents connection-pooling and runtime-role expectations, and targeted render tests prove the note survives generation.
   - **Regression tests:** FK traversal / `refresh_from_db()` under no org context, `tenant_context()` contract tests (contextvar set/restore, nested, exception safety, DB GUC propagation), and the ENROLLED-model conformance gate for `base_manager_name = "all_objects"`.
+  - **OPEN DECISIONS / BLOCKERS:** none at this stop-point.
 
-### - [x] AF4 — Connection-level org GUC; views open short transactions only around writes ✓ *implemented on wt-track2; merge-back closes Track 2 and unblocks AF3*
+### - [x] AF4 — Connection-level org GUC; views open short transactions only around writes ✓ *implemented on wt-track2; this merge-back closes Track 2 and unblocks AF3*
 
 `**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track2` — **same fix-seam as AF2; implement together.**
-- **WHY → Finding 4.** `SET LOCAL` requires a transaction, so `TenantMiddleware._call_with_org` wraps the whole view in `transaction.atomic()`; since T1.20 every authenticated org-scoped request holds a connection idle-in-transaction across template render and in-view Stripe calls.
-- **OBJECTIVE:** Apply `app.current_org_id` via a `connection_created`/checkout hook keyed to the resolved org (re-applied at transaction start), so RLS is satisfied without a request-long transaction; move external API calls outside DB transactions (commit writes before/after the round-trip, or outbox).
-- **SCOPE:** `orgs/.../middleware.py:164-177` (`_call_with_org`), connection-init hook in orgs, `billing/.../services.py` checkout (`:511-564`) + webhook (`_billing_org_db_context`), generator `production.py.j2` (pooling note).
-- **ACCEPTANCE CRITERIA:** RLS still enforced (cross-org boundary tests pass); no org-scoped request holds an open transaction across a Stripe call; `idle in transaction` count flat under induced Stripe latency.
-- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`; manual `pg_stat_activity` check under a slow-Stripe stub.
-- **DEPENDS:** AF1 merged; co-developed with AF2.
-- **RECOMMENDATION:** **Pursue (A)** — the connection-init hook is the same primitive AF2 needs; one change closes both.
-- **LANDED (wt-track2 stop-point):**
+- **TRACK:** `wt-track2` — **same fix-seam as AF2; implemented together.**
+- **WHY → Finding 4.** `SET LOCAL` required a transaction, so `TenantMiddleware._call_with_org` wrapped the whole view in `transaction.atomic()`; every authenticated org-scoped request could then hold a connection idle-in-transaction across template render and in-view Stripe calls.
+- **OBJECTIVE:** Remove request-long transaction ownership from middleware, move external API calls outside DB transactions, and make every RLS-sensitive caller own only the short `transaction.atomic()` + org-context window it actually needs.
+- **SCOPE:** `orgs/.../middleware.py`, `orgs/.../current_org.py`, forms public views, generated social managed views, billing webhook paths, and generator `production.py.j2` (pooling/runtime-role note).
+- **ACCEPTANCE CRITERIA:** no org-scoped request holds an open transaction across a Stripe call; RLS still enforces via explicit local activation windows; generated runtime docs explain the pooling/runtime-role pattern.
+- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`, `make MODULE=forms test`, plus generated-view / template regression coverage.
+- **DEPENDS:** AF1 merged ✅; co-developed with AF2.
+- **RECOMMENDATION:** **Pursue (A)** — one shared seam closes both the manager/base-manager bug class and the request-long transaction bug class.
+- **LANDED (Track 2 stop-point):**
   - **Phase 1 — Request-boundary cleanup:** `TenantMiddleware._call_with_org` no longer opens a request-long `transaction.atomic()` or issues `SET LOCAL` itself. The middleware sets `request.org` + the ContextVar only; RLS-sensitive callers own explicit local `transaction.atomic()` + `tenant_context()` windows.
   - **Phase 2 — Billing webhook transaction slicing:** `_billing_org_db_context` is gone. Billing webhook handlers re-enter short `transaction.atomic()` + `tenant_context()` windows only for local DB mutation, while remote Stripe lookups/backfill happen outside those windows.
   - **Phase 3 — Public/managed caller parity:** Public forms GET/POST, generated social managed views, and social admin now open explicit local atomic + `tenant_context()` windows where DB-level org scope is required. Public-submit side effects run after commit, and notification content reads `FormFieldValue.all_objects` so anonymous post-commit emails keep field/value content.
   - **Phase 4 — Generator template note:** Connection pooling + runtime-role note added to `production.py.j2`. The generated note documents `CONN_MAX_AGE`, `CONN_HEALTH_CHECKS`, and the `RUNTIME_DATABASE_URL` runtime-role pattern.
-  - **NEXT / PENDING:** `AF3` on `wt-track1` is now the next pending runtime-isolation task once this merge-back lands on `v87`.
+  - **NEXT / PENDING:** `AF3` on `wt-track1` is now the next pending runtime-isolation task.
   - **OPEN DECISIONS / BLOCKERS:** none for AF2/AF4 at this stop-point.
   - **Regression tests:** Middleware no-request-long-atomic checks, forms caller-parity coverage for anonymous/System-org and authenticated/session-org public paths, billing webhook transaction-boundary regressions, managed social-view regeneration tests, and post-commit notification-content coverage.
 
@@ -172,63 +151,14 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track1` — after AF1 (and after AF2 lands the base-manager change).
+- **TRACK:** `wt-track1` — next runtime-isolation task after AF2/AF4 merge-back.
 - **WHY → Finding 3.** Cross-tenant reach is governed by two ambient, unaudited switches — per-model `all_objects` and the connected DB role's `BYPASSRLS` — with no logged boundary.
 - **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager that is the only path to the unfiltered queryset / privileged role and emits a structured audit record; route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`) through it; begin tightening `all_objects` out of model declarations.
 - **SCOPE:** new seam in `orgs/`; `*/management/commands/*`; `all_objects` callsites in `*/admin.py`, `*/services.py`.
 - **ACCEPTANCE CRITERIA:** every cross-tenant operator read goes through the seam and logs who/which-orgs/why; conformance test counts `all_objects` entrypoints trending toward the seam.
 - **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests.
-- **DEPENDS:** AF1, AF2 merged.
-- **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; do after AF1/AF2 so the seam lands on the hardened base.
-
-### - [ ] AF7 — Push per-module manifest adapters out of core into the modules (PARTIAL — blocked by AF7-CR-003)
-
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track3` — after AF6 (lands on the decomposed manifest surface).
-- **WHY → Finding 7.** D3 ("self-describing modules") half-landed: `MANIFEST_ADAPTER_REGISTRY` holds hand-written `billing`/`crm`/`social` adapters in core (`entry_point.py`, 110 module-name refs) plus `social_manifest.py` — adding a rich module means editing core.
-- **OBJECTIVE:** Relocate each module's adapter into its own package and have core discover adapters via the manifest/entry-point mechanism (core keeps only the protocol). Start with `social` (move `_social_manifest_adapter` + `social_manifest.py`), then `billing`, `crm`.
-- **SCOPE:** `quickscale_core/manifest/entry_point.py`, `manifest/social_manifest.py`, `quickscale_modules/{social,billing,crm}/`, discovery in `contracts/module_discovery.py`.
-- **ACCEPTANCE CRITERIA:** adding/repointing a rich module touches zero core files; concrete module-name literal count in `quickscale_core` drops; `entry_point.py` shrinks.
-- **VALIDATION PATH:** generate a project with social+billing+crm and apply; module test suites.
-- **DEPENDS:** AF6 merged.
-- **RECOMMENDATION:** **Pursue (A)** — finishes the D3 decision the code drifted from; makes subtree-distributed modules actually self-contained.
-- **LANDED (track 3, wt-track3):**
-  - **Infrastructure seam:** `MANAGED_ADAPTER_ORIGINS`, `_CORE_FALLBACK_ADAPTERS`, `refresh_managed_adapters()` with base-path-aware discovery via `discover_shipped_module_names()`.
-  - **Module-owned primary adapters:** social, billing, and CRM each ship an `adapter.py` in their own package with the real rich adapter implementation (post-hooks, option resolution, settings assembly, managed-file rendering). These are used in monorepo/embedded contexts where the module package is importable.
-  - **Provenance-sensitive tests:** 9 tests in `TestManagedAdapterProvenance` verify module-owned vs core-fallback selection, distinct function objects, source provenance, origin-set correctness, and custom-entry preservation.
-  - **Refresh coordination:** `module_wiring_manager.py` calls `refresh_managed_adapters()` after `set_modules_base_path()` and after restoring the prior base path.
-  - **Public API:** `build_generic_manifest_spec()` and `load_module_manifest()` made public (old private aliases preserved).
-  - **Docs:** architecture section in `implementation_contract.md` added.
-- **BLOCKING — AF7-CR-003 (resolved by decision, not parity fix):** The core fallbacks (`_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback`) and the `_CORE_FALLBACK_ADAPTERS` dict are compat shims that violate the project's fail-hard principle (see decisions.md Prohibitions). The "bundled/installed-without-module-source" context is not a supported configuration. Decision locked: delete the fallbacks; fail hard (raise `ImproperlyConfigured`) if a managed adapter is not importable.
-- **NEXT STEP / REQUIRED:**
-  1. Delete `_CORE_FALLBACK_ADAPTERS` dict declaration from `entry_point.py`.
-  2. Delete `_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback` functions and their `_CORE_FALLBACK_ADAPTERS[name] = ...` registration lines from `entry_point.py`.
-  3. Rewrite `refresh_managed_adapters()` steps 2+3: replace the fallback lookup + silent removal with a hard `raise ImproperlyConfigured(f"Managed adapter for '{module_name}' not importable ...")`.
-  4. Update `entry_point.py` module docstring and `MANAGED_ADAPTER_ORIGINS` / `_CORE_FALLBACK_ADAPTERS` comments.
-  5. Delete the three fallback tests: `test_core_fallbacks_exist_for_bundled_context`, `test_core_fallback_source_is_core_not_module`, `test_core_fallback_and_module_owned_are_different_objects` from `test_manifest_entry_point.py`.
-  6. Re-run `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
-  7. Only then mark AF7 complete and merge.
-- **FINDINGS / FOLLOW-UP (on landed scope):**
-  - Remaining import-time-registered modules (analytics, blog, listings, forms, backups, notifications, auth, orgs, storage) may also be migrated using the same pattern once AF7 is unblocked. No pressing need — the seam is proven with social + billing + crm.
-
----
-
-<a id="af8"></a>
-### - [ ] AF8 — Fix fail-hard violations in module-path discovery and Railway project-name inference
-
-`**Tier 1 — Small | RISK LEVEL: low | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track3` — independent of AF7; starts immediately.
-- **WHY → Finding 8, violations 2–3.** Two setup paths silently substitute a fallback instead of failing hard: `get_modules_base_path()` returns a potentially-nonexistent path as a "best-effort default" when discovery fails (`except Exception: pass`), and `get_railway_service_name()` uses `Path.cwd().name` when project name is not provided.
-- **OBJECTIVE:**
-  1. **`contracts/module_discovery.py:get_modules_base_path()`** — Remove the bundled-context branch (unsupported per AF7 decision). Remove `except Exception: pass`. When the monorepo path does not exist raise `ImproperlyConfigured` with a message naming the expected path. Update callers that currently document "cope gracefully" behavior to expect the exception instead.
-  2. **`cli/utils/railway_utils.py:get_railway_service_name()`** — Remove the `Path.cwd().name` fallback. Raise `ValueError` when `project_name` is absent or empty, with a message directing the caller to pass an explicit project slug.
-- **SCOPE:** `quickscale_core/src/quickscale_core/contracts/module_discovery.py`; `quickscale_cli/src/quickscale_cli/utils/railway_utils.py`; callers that depend on the graceful-empty behavior of `get_modules_base_path()` (e.g. `discover_shipped_module_names()`).
-- **ACCEPTANCE CRITERIA:** both functions raise immediately on missing required input; `except Exception: pass` removed from module-path discovery; no `Path.cwd().name` fallback; grep for `"best-effort"` and `"gracefully"` in these files returns zero; `validate-and-review` passes.
-- **VALIDATION PATH:** `make MODULE=core test`; `make test`; confirm Railway deploy path still works when project name is supplied.
-- **DEPENDS:** none. **Blocks:** nothing.
-- **RECOMMENDATION:** Pursue — two contained, surgical fixes that close confirmed fail-hard violations with no design ambiguity.
+- **DEPENDS:** AF1 and AF2 merged ✅.
+- **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; land it on the hardened AF1/AF2 base.
 
 ---
 

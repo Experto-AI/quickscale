@@ -28,12 +28,12 @@
 | 2 | The auto-scoping contextvar `TenantManager` is the **default *and* base manager**, so every non-request code path must re-establish ambient org context — already re-implemented 3× | **now** | Broken operator/job paths + leak-via-bypass × high |
 | 3 | The operator escape hatch is a **dual, ambient, unaudited bypass** (`all_objects` *and* the connected DB role's `BYPASSRLS`) with no single authorized seam | **6–18 mo** | Silent cross-tenant operator leak × medium |
 | 4 | Wrapping the whole request in one transaction (to carry `SET LOCAL`) couples DB connection-hold time to in-view external I/O (Stripe) — *carryover, broadened by T1.20* | **6–18 mo** | Connection/lock exhaustion × medium-high under traffic |
-| 5 | `quickscale apply` is a 16-step, **all-irreversible**, cross-system mutation (git + FS + Docker + DB migrations + **remote Railway deploy**) whose only recovery is convention-based "idempotent-rerun" — no rollback, no compensation, no per-step verification | **6–18 mo** | Half-applied project / failed remote deploy × medium |
-| 6 | The generator's hottest logic is concentrated in **god files** (`apply_command.py` 3.1k, `dr_engine/orchestration.py` 3.7k, `module_config.py` 2.1k, `resolvers.py` 1.9k, `entry_point.py` 1.6k) — serial merge chokepoints that directly fight the documented 3-worktree parallel workflow | **now** (dev) | Merge conflicts / Tier-3 risk concentration × high |
-| 7 | The "self-describing module" decision (D3) only half-landed: rich modules (billing, crm, social) still carry **hand-written imperative adapters keyed by module name inside `quickscale_core`** (`MANIFEST_ADAPTER_REGISTRY`), so adding a non-trivial module means editing core, not just shipping a module | **6–18 mo** | Per-module coordination tax × medium |
-| 8 | Three fail-hard principle violations in setup/discovery code: `except Exception: pass` in module-path discovery, best-effort path returned when the modules directory cannot be found, and `Path.cwd().name` fallback for a missing project name in Railway utils | **now** (active code paths) | Wrong configuration silently accepted instead of failing × medium |
+| 5 | `quickscale apply` step checkpointing + fault-injection harness | **RESOLVED** | AF5, 2026-06-27 — see CHANGELOG |
+| 6 | God files fighting parallel-worktree workflow | **RESOLVED** | AF6, 2026-06-27 — see CHANGELOG |
+| 7 | Rich-module adapters living in core instead of module packages | **RESOLVED** | AF7, 2026-06-28 — see CHANGELOG |
+| 8 | Silent fallbacks in module-path discovery and Railway project-name inference | **RESOLVED** | AF8, 2026-06-28 — see CHANGELOG |
 
-**These findings span two distinct domains.** Findings 1–4 sit on the **runtime multi-tenant isolation** seam (the `quickscale_modules/*` + `orgs` machinery that runs inside a generated app). Findings 5–7 sit on the **generator/CLI** seam (`quickscale_core` + `quickscale_cli` — the `plan`/`apply` engine itself) and were surfaced specifically by broadening the autopsy past the isolation pivot. The two domains share almost no files, which is what makes them parallelizable (see the roadmap track assignment).
+**These findings span two distinct domains.** Findings 1–4 sit on the **runtime multi-tenant isolation** seam (the `quickscale_modules/*` + `orgs` machinery that runs inside a generated app). Findings 5–8 sit on the **generator/CLI** seam (`quickscale_core` + `quickscale_cli` — the `plan`/`apply` engine itself) and were surfaced specifically by broadening the autopsy past the isolation pivot. The two domains share almost no files, which is what makes them parallelizable (see the roadmap track assignment). Findings 5–8 are fully resolved — see CHANGELOG.md.
 
 Sections of the autopsy template with **nothing new to report** for this codebase: VI (Observability — already on the Deferred list), VII (external API/Contract versioning — already owned). They are omitted rather than padded.
 
@@ -164,41 +164,9 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 
 ---
 
----
-
 ## Finding 5 — `quickscale apply` is a 16-step, all-irreversible, cross-system mutation with no rollback and convention-based "idempotent-rerun" as the sole recovery
 
 **Status: RESOLVED — AF5 implemented 2026-06-27.** Per-step `is_satisfied()`/`apply()` contract, `ResumeCheckpoint`/`RecoveryLedger` post-step checkpointing, fault-injection harness, and destructive-phase confirmation gate. See CHANGELOG.md.
-
-**Time horizon: 6–18 months.**
-
-**Problem.** The apply pipeline executes 16 ordered steps, **every one tagged `reversible=False`**, that mutate five independent systems in sequence — git (subtree embedding makes commits), the filesystem (template generation), env files, Docker (`docker startup`), the **database (`database migrations`)**, and a **remote Railway deploy** — and only then writes authoritative state. There is no rollback and no compensation; the only recovery mechanism is that each step is *asserted by convention* to be idempotent on rerun, gated purely by the presence of an `apply-recovery.yml` file.
-
-**Why it compounds.** The pipeline reaches further into irreversible and *remote* territory as it grows, while the recovery model stays "rerun the whole thing and trust every step is idempotent":
-- A crash between the post-embed snapshot (step 2) and authoritative state persistence (step 15) leaves git commits, generated files, a started container, applied DB migrations, and possibly a *triggered Railway deploy* on disk/remote that the canonical `state.yml` does not record — reconciliation depends entirely on every intervening step being correctly re-runnable.
-- Idempotency is a per-step property maintained by hand with no enforcing harness: there is no test that injects a failure at step N and asserts a clean rerun converges. Each new step (the registry already grew to 16) adds another hand-verified idempotency obligation.
-- The destructive/remote steps (DB migrations, Railway deploy) sit *inside* the same linear script as cheap local steps, so a transient failure in a late step re-runs early irreversible steps' idempotency logic every retry.
-
-**Evidence.**
-- `quickscale_core/.../apply/step.py:64-193` — `APPLY_STEPS`, 16 entries, **all `reversible=False`**; the docstring (`:39-46`) states "There is no rollback today; all irreversible steps use `idempotent-rerun`."
-- Cross-system steps: `step.py` step 12 `docker startup`, step 13 `database migrations`, step 14 `railway deploy`, step 15 `authoritative state persistence` (state written *after* all mutations).
-- Railway deploy is in-pipeline, gated only on link presence: `apply_command.py:2982-3012` (`if (ctx.output_path / ".railway").is_dir(): … failed_step=_FAILED_STEP["railway deploy"]`).
-- Recovery is presence-gated and explicitly diagnostic-only: `apply/ledger.py:10-19` ("Resume gating is driven purely by whether the ledger file *exists* … `step_progress` … must never be used as a resume gate").
-
-**Correct shape.** Apply should be a step framework with an explicit per-step contract — `is_satisfied()` (already-done check), `apply()`, and `compensate()`/forward-fix — and a checkpoint written *after each* step, not only at the end, so recovery is "resume at the first unsatisfied step" rather than "rerun all 16 and hope." Remote/destructive steps (Railway deploy, migrations) should be the last, separately-confirmable phase, fenced off from local scaffolding, so a failure in cheap local steps never risks a half-finished remote.
-
-**Alternatives.**
-- **(A — preferred) Promote the implicit step list into an executor with per-step `is_satisfied()` + post-step checkpointing + a fault-injection test harness.** Keep "no rollback" for genuinely irreparable steps, but make "resume at first unsatisfied step" structural and *tested*. *Preferred: it keeps the team's deliberate idempotent-rerun philosophy while removing its weakest assumption (untested, all-or-nothing rerun) and makes adding step 17 a matter of implementing a contract, not extending a 3k-line script.*
-- **(B) Split apply into two phases: local scaffolding (idempotent, safe to rerun) and a separate `deploy` phase (Railway/migrations) the operator runs explicitly.** Removes the remote/destructive steps from the auto-run pipeline — smaller blast radius per `apply` — but changes the one-command UX and doesn't fix per-step recovery for the local phase.
-- **(C) Leave the pipeline; add only the fault-injection test suite that proves rerun-convergence for each step.** Lowest effort, real confidence gain, but it's the additive-only option the autopsy explicitly discounts — it documents the current shape's safety without changing the all-or-nothing recovery model.
-
-**Trigger for urgency.** The first `quickscale apply` that fails mid-`railway deploy` or mid-`migrations` on a real linked project — leaving a half-deployed remote with no recorded state — or adding apply steps 17+ that reach a new external system (e.g. DNS, object storage).
-
-**Compounding factor.** The recovery ledger, the 16-step registry, the `_FAILED_STEP` sentinels, and every existing step's ad-hoc idempotency logic are all built on the current linear-script shape.
-
-**Migration path.** First cut: add the fault-injection harness (run apply, kill after step N, rerun, assert convergence) for the existing 16 steps — it's read-mostly, surfaces which steps are *not* actually idempotent today, and is the evidence base for introducing the per-step `is_satisfied()` contract.
-
-**Detection signal.** Count `quickscale apply` invocations that re-enter via the recovery ledger (resume rate) and the rate of applies that abort with a `_FAILED_STEP` sentinel at steps 12–14; a rising resume/abort rate at the remote/destructive steps is this finding firing.
 
 ---
 
@@ -206,127 +174,37 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 
 **Status: RESOLVED — AF6 implemented 2026-06-27.** `apply_command.py` 16 step bodies extracted to `quickscale_core/apply/steps/*.py`; `dr_engine/orchestration.py` split into `_lock.py`, `_paths.py`, `_sidecar.py`. See CHANGELOG.md.
 
-**Time horizon: now (development-time friction).**
+---
 
-**Problem.** The decision-dense core of the generator lives in a handful of multi-thousand-line files — `apply_command.py` (3,136), `dr_engine/orchestration.py` (3,682), `module_config.py` (2,098), `contracts/resolvers.py` (1,903), `manifest/entry_point.py` (1,564) — each owning many unrelated concerns. The project's stated development model is three git worktrees developing *in parallel* and merging to `v87`, but the work that milestones actually require routes through these same few files, making them serial chokepoints.
+## Finding 7 — "Self-describing modules" only half-landed: rich modules carry hand-written adapters inside core
 
-**Why it compounds.** This is "wrong for where the team is now": the team has explicitly committed to a parallel-track workflow (`roadmap.md:17-43`, the `wt-track1/2/3` merge dance), so the cost of the monolith is paid as merge conflicts and coordination overhead on *every* milestone that touches apply, manifest resolution, or DR — which is most of them. As more modules and apply steps are added, these files grow, more tracks need them simultaneously, and the conflict surface widens. The roadmap's own "keep tasks out of Tier 3" discipline (`roadmap.md:68-70`) is undermined when the single-concern task still has to edit a 3k-line shared file.
-
-**Evidence.**
-- File sizes (lines, non-migration): `dr_engine/orchestration.py` 3,682; `apply_command.py` 3,136; `cli/.../module_config.py` 2,098; `core/.../contracts/resolvers.py` 1,903; `manifest/entry_point.py` 1,564; `cli/.../module_commands.py` 1,563.
-- `dr_engine/orchestration.py` mixes ~20+ top-level classes/protocols (`_RemoteUploader`, `StagedAdminRestoreUpload`, lock errors, backend selection, …) in one module.
-- The already-open roadmap task (D1) lists scope across generator templates **+** `orgs` **+** `billing` simultaneously — a concrete instance of one task fanning across files multiple tracks share.
-
-**Correct shape.** The apply pipeline, the manifest/adapter resolution, and the DR engine should each be a package of small single-responsibility modules behind a thin orchestrator — so a given milestone's change lands in a leaf file owned by one concern, and two tracks editing "apply" usually edit different leaves. The orchestrator stays small and changes rarely; the volume lives in independently-evolvable parts.
-
-**Alternatives.**
-- **(A — preferred) Extract the step bodies of `apply_command.py` into a `quickscale_core/apply/steps/` package (one module per step), leaving a thin CLI orchestrator; do the same split for `dr_engine/orchestration.py` by concern (locking, upload, restore, verification).** *Preferred: it directly converts the merge chokepoint into per-concern leaf files that map onto the step registry that already exists (`apply/step.py`), so the decomposition has a ready-made seam and pairs naturally with Finding 5's executor.*
-- **(B) Leave file structure; enforce module ownership via CODEOWNERS + assign each god file to a single track per milestone.** Process fix, zero code risk — but it serializes work by fiat (only one track may touch apply per milestone), which throttles the parallelism the worktree model exists to provide.
-- **(C) Split only the worst offender (`dr_engine/orchestration.py`) now, defer the rest.** Pragmatic triage; reduces the single largest conflict surface. But it leaves `apply_command.py`/`entry_point.py` as chokepoints exactly where Findings 5 and 7 are about to add work.
-
-**Trigger for urgency.** Already active: any milestone where two tracks both need apply or manifest changes (the isolation work in Findings 1–4 touches module wiring while generator work in Findings 5/7 touches the same apply/manifest core). The next multi-track milestone pays this in merge conflicts.
-
-**Compounding factor.** Findings 5 (apply executor) and 7 (adapter registry) both land in these exact files; doing them without decomposition deepens the monolith.
-
-**Migration path.** First cut: extract `apply_command.py`'s 16 step bodies into `apply/steps/<step>.py` modules called by a thin loop — mechanical, behaviour-preserving, and it creates the per-step seam Finding 5 needs.
-
-**Detection signal.** Track merge-conflict frequency per file across the `wt-track*` merges (git can report conflict hotspots); a small set of files dominating conflict resolution time is the measurable symptom.
+**Status: RESOLVED (AF7, 2026-06-28).** Module-owned adapters shipped for social, billing, CRM; core fallbacks deleted; `refresh_managed_adapters()` now raises `ImproperlyConfigured` on missing adapters. See [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
-## Finding 7 — "Self-describing modules" only half-landed: rich modules still carry hand-written adapters keyed by name inside core
+## Finding 8 — Fail-hard violations in module-path discovery, managed-adapter resolution, and Railway project-name inference
 
-**Time horizon: 6–18 months.**
-
-**Problem.** Decision D3 chose "self-describing manifests + a generic resolver; delete the `if`-ladder" (`roadmap.md:53`). In practice the `if`-ladder became a `MANIFEST_ADAPTER_REGISTRY` of **hand-written, per-module imperative adapter functions living in `quickscale_core`** (`_billing_manifest_adapter`, `_crm_manifest_adapter`, `_social_manifest_adapter`), plus a whole module-specific file (`manifest/social_manifest.py`). So a module is only "self-describing" if its needs fit the manifest schema; the moment it needs real wiring, the logic goes back into core, keyed by the module's name.
-
-**Why it compounds.** The generator's core value proposition is "add a module." But adding a *non-trivial* one is an N-place coordinated edit in core, not a self-contained module drop: a `module.yml`, a `ModuleCatalogEntry` in `contracts/module_catalog.py`, discovery in `contracts/module_discovery.py`, and — for anything beyond the schema — a bespoke adapter function registered in the 1,564-line `entry_point.py`. Every new rich module grows `entry_point.py` and re-couples core to that module's specifics, eroding the "generic resolver" the decision was meant to buy. It also means a module's behavior is split across two repos-worth of mental model (the module package *and* its core adapter), so the subtree-distributed module is not actually the whole module.
-
-**Evidence.**
-- `manifest/entry_point.py` — `MANIFEST_ADAPTER_REGISTRY["billing"]` (`:307`), `["crm"]` (`:483`), `["social"]` (`:1511`); 110 occurrences of concrete module names in a "generic" resolver.
-- `manifest/social_manifest.py` — an entire module-specific adapter module inside the generic `manifest/` package (provider catalog, URL helpers, renderers for social only).
-- Module-add touch points spread across `contracts/module_catalog.py`, `contracts/module_discovery.py`, `manifest/entry_point.py` — the catalog still ships a static `MODULE_CATALOG` tuple for UX labels alongside manifest discovery.
-
-**Correct shape.** Whatever a module needs to wire itself should be expressible *by the module* — either declaratively in its `module.yml`/manifest schema, or via an adapter that ships *inside the module package* and is discovered (entry-point / registered hook), not hand-written into core keyed by name. Core owns the generic resolver and the contract; modules own their own wiring. Adding a module then touches zero core files.
-
-**Alternatives.**
-- **(A — preferred) Move each module's adapter into the module package and discover adapters via the manifest/entry-point mechanism (core holds only the protocol).** Relocate `_billing/_crm/_social` adapters and `social_manifest.py` next to their modules; core's registry is populated by discovery, not literals. *Preferred: it finishes the D3 decision the code drifted from, makes a module genuinely self-contained for subtree distribution, and removes core edits from the "add a module" path.*
-- **(B) Extend the manifest *schema* until billing/crm/social fit it declaratively, deleting the adapters.** The purest "data-driven" end state. But the three modules need imperative behavior (OAuth provider URL building, Stripe wiring) that is awkward-to-impossible to express as static data, so this risks an over-rich, leaky schema — partial at best.
-- **(C) Accept core-side adapters; just relocate them out of `entry_point.py` into one file per module under `manifest/adapters/`.** Improves the god-file problem (Finding 6) and readability without changing the boundary. Lowest risk, but core still changes whenever a rich module is added — the coordination tax remains.
-
-**Trigger for urgency.** The next rich first-party module (the `teams` placeholder is already stubbed, or any client-specific module an agency wants to add) forces another core adapter and another `entry_point.py` growth spurt; a third-party/client module that "should" be droppable cannot be, because its wiring must live in core.
-
-**Compounding factor.** The three existing adapters, `social_manifest.py`, the static `MODULE_CATALOG`, and `entry_point.py`'s size are all built on the core-owns-module-wiring assumption.
-
-**Migration path.** First cut: relocate one adapter (`_social_manifest_adapter` + `social_manifest.py`) into the social module package and have core discover it — proving the entry-point discovery path before moving billing/crm.
-
-**Detection signal.** Count concrete module-name literals in `quickscale_core` (grep) and `entry_point.py` line count over time; both should fall, not rise, as modules are added.
-
----
-
-<a id="finding-8"></a>
-## Finding 8 — Fail-hard violations: silent fallbacks in module-path discovery, managed-adapter resolution, and Railway project-name inference
-
-**Time horizon: now (active code paths).**
-
-**Problem.** Three setup/discovery paths silently substitute a fallback value when a required resource is missing, violating the fail-hard principle (decisions.md §fail-hard-principle). Each one masks a configuration error rather than surfacing it immediately — deferring the failure to a harder-to-diagnose downstream point.
-
-**Violation 1 — Managed-adapter core fallbacks** *(tracked as AF7-CR-003; fix is the AF7 next-step block)*
-
-`refresh_managed_adapters()` catches `ImportError` silently (`except ImportError: pass`) when a managed module adapter is not importable, then falls through to `_CORE_FALLBACK_ADAPTERS` — three thin stubs (`_billing_core_fallback`, `_crm_core_fallback`, `_social_core_fallback`) that lack post-hooks and managed-file rendering relative to the module-owned implementations. The bundled/installed-without-module-source context is not a supported configuration.
-
-**Violation 2 — Module-path best-effort default**
-
-When neither the monorepo path (`{repo_root}/quickscale_modules/`) nor the bundled package-data path resolves, `get_modules_base_path()` returns the monorepo path regardless of whether it exists on disk. The bundled-path branch is wrapped in `except Exception: pass`. Callers are documented to "cope gracefully when the directory does not exist (return empty lists/dicts)" — i.e., downstream discovery silently returns empty results with no error.
-
-**Violation 3 — Railway project-name directory fallback**
-
-When `project_name` is absent or falsy, `get_railway_service_name()` returns `Path.cwd().name`. The Railway service is then named after whichever directory the CLI was invoked from, which is unpredictable and may silently target the wrong Railway service.
-
-**Evidence.**
-- `entry_point.py:234` — `except ImportError: pass` in the managed-adapter import; `_billing_core_fallback` (:363), `_crm_core_fallback` (:515), `_social_core_fallback` (:1414).
-- `contracts/module_discovery.py:87-88,111-114` — docstring: "returns the monorepo path as a fallback (callers should handle gracefully)"; comment: "Both fallbacks failed — return the monorepo path as a best-effort default. Discovery functions cope gracefully when the path does not exist."
-- `cli/utils/railway_utils.py:486-492` — `if project_name: return project_name` else `return Path.cwd().name` with comment "Use current directory name as fallback."
-
-**Correct shape.** Each path must assert the required input is present and raise immediately:
-- `ImproperlyConfigured` when a managed module adapter is not importable (adapter is a configuration requirement, not optional).
-- `ImproperlyConfigured` when the modules directory cannot be located (setup-time invariant).
-- `ValueError` when project name is absent (CLI input contract violation).
-
-**Alternatives.** These are not design choices — the fail-hard principle is locked (decisions.md §fail-hard-principle). The only question is sequencing. Violation 1 is AF7's NEXT STEP block; violations 2 and 3 are new AF8 tasks.
-
-**Trigger for urgency.**
-- Violation 1: any deployment where a managed module's package is absent but a stub adapter silently wires billing/CRM/social with missing behavior.
-- Violation 2: any environment where the monorepo path is absent (e.g. installed wheel without module source), returning empty discovery results with no error.
-- Violation 3: an operator running the CLI from a directory whose name differs from the project slug, silently deploying to the wrong Railway service.
-
-**Detection signal.** Grep `except Exception: pass` and `except ImportError: pass` in setup/discovery paths; grep `"best-effort"`, `"gracefully"`, `"cwd().name"` in module-path discovery and CLI utils. All should return zero in these paths after AF7 and AF8 land.
+**Status: RESOLVED (AF7-CR-003 + AF8, 2026-06-28).** All three violations closed: managed-adapter fallbacks deleted (AF7); `get_modules_base_path()` raises `ImproperlyConfigured` on missing path; `get_app_service_name()` raises `ValueError` on missing project name (AF8). See [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
 ## Cross-finding note for roadmap planning
 
-The eight findings form **two independent clusters** that share almost no files, plus one internal dependency chain:
+The eight findings form **two independent clusters** that share almost no files:
 
-- **Runtime isolation cluster (Findings 1–4)** — all touch `orgs/` + the tenant modules. They are *not* freely parallel among themselves: **Finding 1's conformance gate + `TenantModel` base is the prerequisite**, after which **Findings 2 and 4 share a single fix** (a connection-level GUC hook that both lets the base manager stop governing graph traversal *and* removes the request-long transaction), and **Finding 3** (operator seam) lands last on the hardened base. Sequence: **1 → (2 + 4) → 3.**
-- **Generator cluster (Findings 5–8)** — all touch `quickscale_core`/`quickscale_cli`. **Finding 6 (decompose the god files) is the enabler**: doing it first creates the per-step/per-adapter seams that **Finding 5 (apply executor)** and **Finding 7 (push adapters into modules)** then land on cleanly. **Finding 8 (fail-hard violations)** is independent — AF7's violation (Finding 8, V1) is the AF7 next-step block; the remaining two (V2/V3) are AF8 and start immediately with no prereqs. Sequence: **6 → (5, 7); 8 independent.**
-
-Because the two clusters touch disjoint file sets, they parallelize across worktrees with no merge contention. The roadmap below assigns the isolation cluster to track 1 (foundation) + track 2 (shared-fix seam) and the entire generator cluster to track 3.
+- **Runtime isolation cluster (Findings 1–4)** — all touch `orgs/` + the tenant modules. **Open.** AF1 ✅ merged; sequence: `(AF2 + AF4) → AF3`. Findings 2 and 4 share a connection-level GUC fix; Finding 3 (operator seam) lands last.
+- **Generator cluster (Findings 5–8)** — all touch `quickscale_core`/`quickscale_cli`. **All resolved.** AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ — see [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
 ## Cross-cutting QA / testing thread
 
-The autopsy folded template **Section VIII (Testing)** into the findings rather than reporting it separately, because the testing gap is not a standalone weakness — it is the *mechanism* by which three of the structural findings stay invisible. They share one failure mode:
+Three structural findings shared a common failure mode: the test suite exercises the happy request path — the one path on which the broken mechanism still appears to work — so coverage gaps, ambient-context breakage, and non-idempotent steps all pass silently and give false confidence. The fix in each case is a **property / conformance test (enumerate-and-assert or fault-inject-and-assert)**, not another example-path test.
 
-**The test suite exercises the happy request path — which is exactly the path on which the broken mechanism still appears to work.** A forgotten RLS migration still scopes reads in the Python happy path (Finding 1); the ambient-context base manager still resolves FKs inside a request (Finding 2); a non-idempotent apply step still succeeds on a clean first run (Finding 5). So example-based, happy-path tests pass and give *false confidence*; the defect only surfaces off the tested path — an `all_objects`/operator read, a management command, a non-request webhook, or a mid-pipeline crash.
-
-The structural remedy in each case is the same shape — a **property / conformance test (enumerate-and-assert or fault-inject-and-assert)**, not another example-path test:
-
-| Finding | Today's test reality | The property test that closes it |
+| Finding | Property test | Status |
 |---|---|---|
-| **1** | `tests_shared/isolation.py:19-57` asserts a *response-level* property for chosen endpoints only — no table-level coverage check | Walk `apps.get_models()`, select tenant tables, assert each has a live FORCE-RLS policy in `pg_policies` (build-time conformance gate) |
-| **2** | Request-path scoping is covered; non-request FK traversal is not | Regression test: forward-FK traversal + `refresh_from_db()` with **no** org context set must succeed (not raise `DoesNotExist`) |
-| **5** | Idempotent-rerun is asserted by convention (`apply/ledger.py:10-19`), with no enforcing test | Fault-injection harness: kill after step N, rerun, assert convergence for all 16 steps |
+| **1** | Walk `apps.get_models()`, select tenant tables, assert each has a live FORCE-RLS policy in `pg_policies` (conformance gate) | **complete — AF1 ✅** |
+| **2** | Regression test: forward-FK traversal + `refresh_from_db()` with **no** org context set must succeed | open — AF2 |
+| **5** | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | **complete — AF5 ✅** |
 
-These map to roadmap tasks **AF1** (conformance gate), **AF2** (no-context FK regression test), and **AF5** (fault-injection harness) — split across tracks 1 and 3, but one QA-hardening spine. Tracked together, they convert a silently-passing happy-path suite into a build that *fails* when the structural guarantee is actually absent. Land **AF1's conformance gate first**: it is read-only, surfaces today's true RLS coverage (including the `ContactNote`/`DealNote` child-table gap), and is the evidence base the others build on.
+**AF2** is the remaining open item: add a regression test for FK traversal under no org context, as part of the Track 2 AF2+AF4 work.

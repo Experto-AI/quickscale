@@ -387,6 +387,385 @@ class TestAdminSubmissionAPIPrefetch:
 
 
 @pytest.mark.django_db
+class TestAdminSubmissionExportViewAllObjects:
+    """AF1-CR-002: AdminSubmissionExportView must use all_objects for child field values."""
+
+    def test_export_uses_all_objects_for_field_values(
+        self, staff_client, form, submission, field_value
+    ):
+        """Export view builds CSV field values via all_objects (proven by cross-org access)."""
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+        )
+        response = staff_client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        # The field value fixture uses all_objects and explicit org assignment.
+        # If the export view relied on the default (RLS-scoped) manager, the
+        # contextvar would be None in the admin context and the value would
+        # be filtered out.  We assert the value is present — this proves
+        # the export uses all_objects explicitly.
+        assert "full_name" in content, (
+            "Field name must appear in CSV header — proves all_objects path"
+        )
+        assert "Alice" in content, (
+            "Field value must appear in CSV data — proves all_objects path"
+        )
+
+    def test_export_cross_org_field_values(self, staff_client, org_a, org_b):
+        """Export includes field values from submissions across orgs (all_objects path)."""
+        from quickscale_modules_forms.models import (
+            Form,
+            FormField,
+            FormFieldValue,
+            FormSubmission,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        # A system-org form (visible to all admin)
+        xform = Form.all_objects.create(
+            title="Cross Org Form",
+            slug="cross-org-form",
+            organization=system_org,
+            notify_emails="admin@example.com",
+        )
+        field = FormField.all_objects.create(
+            form=xform,
+            organization=system_org,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Department",
+            name="department",
+            order=1,
+        )
+        # Submission from org_a
+        sub_a = FormSubmission.all_objects.create(
+            form=xform, organization=org_a, ip_address="10.0.0.1"
+        )
+        FormFieldValue.all_objects.create(
+            submission=sub_a,
+            organization=org_a,
+            field=field,
+            field_name="department",
+            field_label="Department",
+            value="Engineering",
+        )
+        # Submission from org_b
+        sub_b = FormSubmission.all_objects.create(
+            form=xform, organization=org_b, ip_address="10.0.0.2"
+        )
+        FormFieldValue.all_objects.create(
+            submission=sub_b,
+            organization=org_b,
+            field=field,
+            field_name="department",
+            field_label="Department",
+            value="Marketing",
+        )
+
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": xform.pk}
+        )
+        response = staff_client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Engineering" in content, (
+            "Must see org_a's field value — proves all_objects path"
+        )
+        assert "Marketing" in content, (
+            "Must see org_b's field value — proves all_objects path"
+        )
+
+    def test_csv_export_column_order_matches_form_field_order(
+        self, staff_client, form, form_field, email_field, optional_field
+    ):
+        """CSV column order follows form field definition order (AF1-CR-REV-001)."""
+        submission = FormSubmission.all_objects.create(
+            form=form,
+            organization=form.organization,
+            ip_address="127.0.0.1",
+        )
+
+        # Form field order: full_name(1), email(2), company(3)
+        # Alphabetical would be: company, email, full_name
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=submission.organization,
+            field=form_field,
+            field_name="full_name",
+            field_label="Name",
+            value="Alice",
+        )
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=submission.organization,
+            field=email_field,
+            field_name="email",
+            field_label="Email",
+            value="alice@example.com",
+        )
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=submission.organization,
+            field=optional_field,
+            field_name="company",
+            field_label="Company",
+            value="Acme Corp",
+        )
+
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+        )
+        response = staff_client.get(url)
+        assert response.status_code == 200, "CSV export should return 200"
+
+        rows = list(csv.reader(response.content.decode().splitlines()))
+        assert len(rows) >= 2, "Expected at least header + one data row"
+
+        header = rows[0]
+        expected_header = [
+            "id",
+            "submitted_at",
+            "status",
+            "is_spam",
+            "ip_address",
+            "full_name",
+            "email",
+            "company",
+        ]
+        assert header == expected_header, (
+            f"CSV header {header} should follow form field order, "
+            f"not alphabetical: {expected_header}"
+        )
+
+        # Verify data values align with correct columns
+        col = {name: idx for idx, name in enumerate(header)}
+        data = rows[1]
+        assert data[col["full_name"]] == "Alice"
+        assert data[col["email"]] == "alice@example.com"
+        assert data[col["company"]] == "Acme Corp"
+
+        # Also verify the alphabetically-reordered case would NOT match
+        alphabetical = ["company", "email", "full_name"]
+        assert header[5:] != alphabetical, "Columns must NOT be in alphabetical order"
+
+    def test_csv_export_column_order_no_org_context(
+        self, staff_client, form, form_field, email_field, optional_field
+    ):
+        """Operator path preserves column order when no current org context is set.
+
+        Regression for AF1-CR-REV-001: a staff user without org affinity must
+        still see form-designer field ordering.  If the view used the default
+        (RLS-scoped) ``form.fields`` manager, a missing org context would
+        return ``.none()`` and columns would collapse to only extras — or be
+        empty.  This test proves ``FormField.all_objects`` is used on the
+        operator path.
+        """
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            set_current_org_id,
+        )
+
+        # explicitly clear org context so TenantManager.default falls to .none()
+        prev_org_id = get_current_org_id()
+        set_current_org_id(None)
+
+        submission = FormSubmission.all_objects.create(
+            form=form,
+            organization=form.organization,
+            ip_address="127.0.0.1",
+        )
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=form.organization,
+            field=form_field,
+            field_name="full_name",
+            field_label="Name",
+            value="Alice",
+        )
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=form.organization,
+            field=email_field,
+            field_name="email",
+            field_label="Email",
+            value="alice@example.com",
+        )
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=form.organization,
+            field=optional_field,
+            field_name="company",
+            field_label="Company",
+            value="Acme Corp",
+        )
+
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+        )
+        response = staff_client.get(url)
+        # Restore org context before assertions so failure diagnostics
+        # are not masked by a stale None context in later test cleanup.
+        set_current_org_id(prev_org_id)
+
+        assert response.status_code == 200, "CSV export should return 200 with no org"
+
+        rows = list(csv.reader(response.content.decode().splitlines()))
+        assert len(rows) >= 2, "Expected at least header + one data row"
+
+        header = rows[0]
+        expected_header = [
+            "id",
+            "submitted_at",
+            "status",
+            "is_spam",
+            "ip_address",
+            "full_name",
+            "email",
+            "company",
+        ]
+        assert header == expected_header, (
+            f"CSV header {header} must follow form field order even with "
+            f"no org context — expected {expected_header}"
+        )
+
+    def test_csv_export_column_order_mismatched_org_context(
+        self,
+        staff_client,
+        staff_user,
+        form,
+        form_field,
+        email_field,
+        optional_field,
+        org_b,
+    ):
+        """Operator path preserves column order when current org does not match form org.
+
+        Regression for AF1-CR-REV-001: a staff user whose active org differs
+        from the form's owning org must still see the correct column order.
+        If the view used the default (RLS-scoped) ``form.fields`` manager, a
+        mismatched org would filter fields to the wrong tenant — returning
+        no columns.  This test proves ``FormField.all_objects`` is used on
+        the operator path.
+
+        Unlike the earlier
+        :meth:`test_csv_export_column_order_no_org_context` test which
+        verifies the operator path without any org context, this test
+        exercises a *mismatched* org seam: the ``TenantMiddleware`` resolves
+        ``ACTIVE_ORG_SESSION_KEY`` from the session and sets the ContextVar
+        to ``org_b.pk``, while the form and its fields are owned by
+        ``system_org``.  The export view must still return the correct
+        designer-ordered columns because it uses ``FormField.all_objects``
+        instead of the RLS-scoped default manager.
+        """
+        from django.urls import reverse
+
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            OrganizationMembership,
+        )
+
+        # Make staff_user a member of org_b so that TenantMiddleware does
+        # not reject the mismatched-org session context with a 403.
+        OrganizationMembership.objects.create(
+            user=staff_user,
+            organization=org_b,
+            role=OrgRole.ADMIN,
+        )
+
+        # Use session-based login so the user is authenticated at the
+        # middleware level (force_authenticate bypasses middleware auth
+        # checks, which would cause TenantMiddleware to skip org resolution).
+        staff_client.force_login(user=staff_user)
+
+        # Set the active org to org_b in the session so TenantMiddleware
+        # resolves it and populates the ContextVar with org_b.pk.
+        session = staff_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(org_b.pk)
+        session.save()
+
+        # Create an active field with no submitted value — can only appear in
+        # header via FormField.all_objects, never via extra_field_names fallback.
+        _phone_field = FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Phone",
+            name="phone",
+            required=False,
+            order=4,
+            is_active=True,
+        )
+
+        submission = FormSubmission.all_objects.create(
+            form=form,
+            organization=form.organization,
+            ip_address="127.0.0.1",
+        )
+
+        # Create FormFieldValues in deliberately different order than designer
+        # field order.  If the export view falls back to extra_field_names
+        # (because RLS-filtered form.fields returns empty), the header would
+        # mirror this creation order instead of the designer order, causing the
+        # assertion below to fail.  Only the FormField.all_objects query can
+        # produce the correct designer ordering.
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=form.organization,
+            field=optional_field,
+            field_name="company",
+            field_label="Company",
+            value="Acme Corp",
+        )
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=form.organization,
+            field=email_field,
+            field_name="email",
+            field_label="Email",
+            value="alice@example.com",
+        )
+        FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=form.organization,
+            field=form_field,
+            field_name="full_name",
+            field_label="Name",
+            value="Alice",
+        )
+
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+        )
+        response = staff_client.get(url)
+
+        assert response.status_code == 200, (
+            "CSV export should return 200 even with mismatched org"
+        )
+
+        rows = list(csv.reader(response.content.decode().splitlines()))
+        assert len(rows) >= 2, "Expected at least header + one data row"
+
+        header = rows[0]
+        expected_header = [
+            "id",
+            "submitted_at",
+            "status",
+            "is_spam",
+            "ip_address",
+            "full_name",
+            "email",
+            "company",
+            "phone",
+        ]
+        assert header == expected_header, (
+            f"CSV header {header} must follow form field order even with "
+            f"mismatched org — expected {expected_header}"
+        )
+
+
+@pytest.mark.django_db
 class TestFormAdminOrganizationReadonly:
     """AF1-CR-003: FormAdmin must prevent ad-hoc org changes that desync descendants."""
 

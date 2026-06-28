@@ -476,20 +476,24 @@ def get_app_service_name(project_name: str | None = None) -> str:
 
     Args:
     ----
-        project_name: Project name (defaults to current directory name)
+        project_name: Project name (must be provided)
 
     Returns:
     -------
         Service name to use for the app
 
+    Raises:
+    ------
+        ValueError: If *project_name* is ``None`` or empty
+
     """
     if project_name:
         return project_name
 
-    # Use current directory name as fallback
-    from pathlib import Path
-
-    return Path.cwd().name
+    raise ValueError(
+        "project_name is required for get_app_service_name(). "
+        "Pass an explicit project slug instead of relying on CWD."
+    )
 
 
 def generate_railway_domain(service: str) -> str | None:

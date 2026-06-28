@@ -11,10 +11,11 @@ of two paths:
 
 1. **Managed origin** (AF7) — modules whose adapter is owned by the module
    package (social, billing, CRM).  The registry entry is established by
-   :func:`refresh_managed_adapters`, which first attempts to import a
-   module-owned adapter from ``quickscale_modules_{name}.adapter`` and falls
-   back to a core compatibility adapter when the module package is not
-   importable (bundled/installed context).
+   :func:`refresh_managed_adapters`, which imports the module-owned adapter
+   from ``quickscale_modules_{name}.adapter`` and fails hard (raises
+   :class:`~django.core.exceptions.ImproperlyConfigured`) when the module
+   package is not importable.  Bundled/installed-without-module-source is
+   not a supported context.
 
 2. **Import-time** — modules registered directly at module load time
    (analytics, blog, listings, forms, backups, notifications, auth, orgs,
@@ -169,40 +170,34 @@ MANIFEST_ADAPTER_REGISTRY: dict[
 ] = {}
 
 #: Set of module names whose registry entry is "managed" — auto-registered
-#: by the system from module-owned adapters or core fallback adapters.
-#: Custom entries added by end users (or by extensions that are not part of
-#: the shipped catalog) are **not** tracked here and survive
-#: :func:`refresh_managed_adapters` unchanged.
+#: by the system from module-owned adapters.  Custom entries added by end
+#: users (or by extensions that are not part of the shipped catalog) are
+#: **not** tracked here and survive :func:`refresh_managed_adapters` unchanged.
 MANAGED_ADAPTER_ORIGINS: set[str] = set()
-
-#: Core fallback adapters keyed by module name.  These are used when the
-#: module-owned adapter cannot be imported (bundled/installed contexts where
-#: the module package source is not available, e.g. ``quickscale_core/data/manifests/``).
-_CORE_FALLBACK_ADAPTERS: dict[str, Callable[..., ModuleWiringSpec]] = {}
 
 
 def refresh_managed_adapters() -> None:
     """Refresh managed adapter entries in :data:`MANIFEST_ADAPTER_REGISTRY`
     based on the current modules base path.
 
-    Decisions are made per module name in :data:`MANAGED_ADAPTER_ORIGINS`:
+    For each module name in :data:`MANAGED_ADAPTER_ORIGINS`:
 
-    1. **Monorepo / embedded context** — if the module has a ``module.yml``
-       at the active base path **and** the module package is importable, the
-       module-owned adapter (``quickscale_modules_{name}.adapter``) is used.
-       This is the primary path for monorepo development and embedded
-       project ``modules/<name>/`` directories.
+    * If the module has a ``module.yml`` at the active base path **and** the
+      module-owned adapter package (``quickscale_modules_{name}.adapter``) is
+      importable, the adapter is registered.  This is the primary path for
+      monorepo development and embedded project ``modules/<name>/``
+      directories.
 
-    2. **Bundled / installed context** — if the module's ``module.yml`` is
-       **not** at the active base path, or the module package is not
-       importable, the core fallback adapter from
-       :data:`_CORE_FALLBACK_ADAPTERS` is used.  This is the fallback for
-       installed ``quickscale-core`` where only manifest yml files are
-       shipped.
+    * If the module's ``module.yml`` is at the active base path but the
+      module-owned adapter **cannot** be imported, an
+      :class:`~django.core.exceptions.ImproperlyConfigured` exception is
+      raised — bundled/installed-without-module-source is not a supported
+      context.
 
-    3. **No adapter available** — if neither the module-owned adapter nor a
-       core fallback is available, the module is removed from the registry
-       and from :data:`MANAGED_ADAPTER_ORIGINS`.
+    * If the module is **not** present at the active base path, it is
+      removed from :data:`MANIFEST_ADAPTER_REGISTRY` to avoid stale entries,
+      but kept in :data:`MANAGED_ADAPTER_ORIGINS` so it is re-evaluated
+      when the base path changes.
 
     The :data:`MANIFEST_ADAPTER_REGISTRY` dict identity is preserved across
     refreshes so that existing references remain valid.  Custom entries
@@ -210,8 +205,14 @@ def refresh_managed_adapters() -> None:
 
     Call this after :func:`~quickscale_core.contracts.module_discovery.set_modules_base_path`
     to keep the registry consistent with the current path context.
+
+    Raises:
+        ImproperlyConfigured: If a managed module's manifest is found at the
+            active base path but its Python adapter package is not importable.
     """
     import importlib  # noqa: PLC0415
+
+    from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
 
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
         discover_shipped_module_names,
@@ -220,39 +221,38 @@ def refresh_managed_adapters() -> None:
     shipped_at_base = set(discover_shipped_module_names())
 
     for module_name in list(MANAGED_ADAPTER_ORIGINS):
-        # Step 1: If the module has a manifest at the active base path,
-        # try the module-owned adapter (monorepo / embedded context).
-        owned_adapter: Callable[..., ModuleWiringSpec] | None = None
-        if module_name in shipped_at_base:
-            try:
-                adapter_module = importlib.import_module(
-                    f"quickscale_modules_{module_name}.adapter"
-                )
-                sentinel = getattr(adapter_module, "get_manifest_adapter", None)
-                if sentinel is not None:
-                    owned_adapter = sentinel()
-            except ImportError:
-                pass
-
-        if owned_adapter is not None:
-            MANIFEST_ADAPTER_REGISTRY[module_name] = owned_adapter
+        if module_name not in shipped_at_base:
+            # Module is not available at the current base path — remove
+            # from the registry so stale entries don't persist.  Keep the
+            # name in MANAGED_ADAPTER_ORIGINS so it gets re-evaluated on
+            # the next refresh (e.g. when base path changes to a context
+            # where the module-owned adapter is available).
+            MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
             continue
 
-        # Step 2: Fall back to core compatibility adapter (bundled context).
-        fallback = _CORE_FALLBACK_ADAPTERS.get(module_name)
-        if fallback is not None:
-            MANIFEST_ADAPTER_REGISTRY[module_name] = fallback
-            # Keep the module in MANAGED_ADAPTER_ORIGINS so it gets
-            # re-evaluated on the next refresh (e.g. when base path
-            # changes to a context where the module-owned adapter is
-            # available).
+        # Module has a manifest at the active base path — the module-owned
+        # adapter MUST be importable.  Fail hard if it is not.
+        try:
+            adapter_module = importlib.import_module(
+                f"quickscale_modules_{module_name}.adapter"
+            )
+        except ImportError:
+            raise ImproperlyConfigured(
+                f"Managed adapter for '{module_name}' not importable: "
+                f"quickscale_modules_{module_name}.adapter could not be loaded. "
+                f"The module package must be installed and importable."
+            )
+
+        sentinel = getattr(adapter_module, "get_manifest_adapter", None)
+        if sentinel is not None:
+            MANIFEST_ADAPTER_REGISTRY[module_name] = sentinel()
             continue
 
-        # Step 3: Neither fallback nor owned adapter is available — remove
-        # from registry and origins so subsequent calls don't retry the
-        # same dead entry.
-        MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
-        MANAGED_ADAPTER_ORIGINS.discard(module_name)
+        raise ImproperlyConfigured(
+            f"Managed adapter for '{module_name}' not importable: "
+            f"quickscale_modules_{module_name}.adapter has no "
+            f"get_manifest_adapter function."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -352,33 +352,11 @@ MANIFEST_ADAPTER_REGISTRY["analytics"] = _analytics_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Billing adapter — core fallback (bundled/installed contexts)
+# Billing — managed adapter
 # ---------------------------------------------------------------------------
-# The primary billing adapter lives in
-# ``quickscale_modules_billing.adapter``.  This core fallback is a thin
-# compatibility wrapper used when the module package is not importable
-# (bundled/installed fallback).
+# The billing adapter lives in ``quickscale_modules_billing.adapter`` and is
+# auto-registered by :func:`refresh_managed_adapters`.
 
-
-def _billing_core_fallback(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
-) -> ModuleWiringSpec:
-    """Core fallback billing adapter (bundled/installed context).
-
-    Thin compatibility wrapper that delegates to the generic manifest path.
-    The primary implementation lives in ``quickscale_modules_billing.adapter``.
-    """
-    return build_generic_manifest_spec("billing", options)
-
-
-# Register billing as a managed adapter.  The module-owned adapter
-# (quickscale_modules_billing.adapter) is used when available (monorepo /
-# embedded context).  When it is not available (bundled/installed context
-# where only manifest yml files are shipped), this core fallback adapter
-# is used instead.
-_CORE_FALLBACK_ADAPTERS["billing"] = _billing_core_fallback
 MANAGED_ADAPTER_ORIGINS.add("billing")
 
 
@@ -505,32 +483,11 @@ MANIFEST_ADAPTER_REGISTRY["listings"] = _listings_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# CRM adapter — core fallback (bundled/installed contexts)
+# CRM — managed adapter
 # ---------------------------------------------------------------------------
-# The primary CRM adapter lives in ``quickscale_modules_crm.adapter``.
-# This core fallback is a thin compatibility wrapper used when the module
-# package is not importable (bundled/installed fallback).
+# The CRM adapter lives in ``quickscale_modules_crm.adapter`` and is
+# auto-registered by :func:`refresh_managed_adapters`.
 
-
-def _crm_core_fallback(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
-) -> ModuleWiringSpec:
-    """Core fallback CRM adapter (bundled/installed context).
-
-    Thin compatibility wrapper that delegates to the generic manifest path.
-    The primary implementation lives in ``quickscale_modules_crm.adapter``.
-    """
-    return build_generic_manifest_spec("crm", options)
-
-
-# Register CRM as a managed adapter.  The module-owned adapter
-# (quickscale_modules_crm.adapter) is used when available (monorepo /
-# embedded context).  When it is not available (bundled/installed context
-# where only manifest yml files are shipped), this core fallback adapter
-# is used instead.
-_CORE_FALLBACK_ADAPTERS["crm"] = _crm_core_fallback
 MANAGED_ADAPTER_ORIGINS.add("crm")
 
 
@@ -1403,61 +1360,47 @@ MANIFEST_ADAPTER_REGISTRY["storage"] = _storage_manifest_adapter
 
 
 # ---------------------------------------------------------------------------
-# Social adapter — core fallback (bundled/installed contexts)
+# Social — managed adapter
 # ---------------------------------------------------------------------------
-# The primary social adapter lives in
-# ``quickscale_modules_social.adapter``.  This core fallback is a thin
-# compatibility wrapper used when the module package is not importable
-# (bundled/installed fallback).
+# The social adapter lives in ``quickscale_modules_social.adapter`` and is
+# auto-registered by :func:`refresh_managed_adapters`.
 
-
-def _social_core_fallback(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
-) -> ModuleWiringSpec:
-    """Core fallback social adapter (bundled/installed context).
-
-    Thin compatibility adapter that provides the social wiring spec via
-    the generic manifest path when the module-owned adapter is not
-    available (bundled context where only manifest yml files are shipped).
-
-    The primary implementation lives in ``quickscale_modules_social.adapter``.
-    """
-    if project_package is None:
-        raise ValueError("project_package is required for managed social wiring")
-
-    # For the bundled fallback, load the manifest from the active base
-    # path and build a spec with minimal settings.  The rich managed-file
-    # rendering is handled by the module-owned adapter when available.
-    manifest = load_module_manifest("social")
-    schema = build_schema_from_manifest(
-        manifest_name="social",
-        wiring_projections=manifest.wiring_projections,
-        derived_settings=manifest.derived_settings,
-        option_derivations=manifest.option_derivations,
-        version="1",
-    )
-    from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
-        resolve_social_module_options,
-    )
-
-    resolved = resolve_social_module_options(dict(options))
-    result = resolve_module_config(manifest, schema, overrides=resolved)
-    return assemble_wiring_spec(result)
-
-
-# Register social as a managed adapter.  The module-owned adapter
-# (quickscale_modules_social.adapter) is used when available (monorepo /
-# embedded context).  When it is not available (bundled/installed context
-# where only manifest yml files are shipped), this core fallback adapter
-# is used instead.
-_CORE_FALLBACK_ADAPTERS["social"] = _social_core_fallback
 MANAGED_ADAPTER_ORIGINS.add("social")
 
+# ---------------------------------------------------------------------------
+# Lazy initialisation guard
+# ---------------------------------------------------------------------------
+# The import-time refresh_managed_adapters() call below can fail due to a
+# circular import when the import chain goes through contracts.resolvers
+# before that module has finished loading (e.g. via module_wiring_manager).
+# If it fails, the adapters are registered lazily on first use.
+
+_ADAPTERS_INITIALIZED: bool = False
+
+
+def _ensure_adapters_initialized() -> None:
+    """One-time lazy initialisation of managed adapters.
+
+    Called by :func:`build_manifest_wiring_spec` when the import-time
+    refresh failed (circular import during module initialisation).
+    """
+    global _ADAPTERS_INITIALIZED
+    if not _ADAPTERS_INITIALIZED:
+        _ADAPTERS_INITIALIZED = True
+        refresh_managed_adapters()
+
+
 # Initialise all managed adapters (social, billing, CRM) in one pass so
-# the registry is consistent at import time.
-refresh_managed_adapters()
+# the registry is consistent at import time.  Gracefully handle circular
+# imports during module initialisation (ImportError raised from adapter
+# package imports, then re-raised as ImproperlyConfigured by
+# refresh_managed_adapters) — the adapters are lazily initialised on the
+# first call to :func:`build_manifest_wiring_spec`.
+try:
+    refresh_managed_adapters()
+    _ADAPTERS_INITIALIZED = True
+except Exception:
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -1496,6 +1439,7 @@ def build_manifest_wiring_spec(
             *module_name*.  The caller should fall back to the legacy builder
             or handle the error.
     """
+    _ensure_adapters_initialized()
     adapter = MANIFEST_ADAPTER_REGISTRY.get(module_name)
     if adapter is None:
         raise ManifestAdapterNotFound(

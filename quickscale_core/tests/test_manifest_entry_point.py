@@ -8,6 +8,7 @@ quickscale_core without a quickscale_cli dependency:
 - Custom adapter registration and unregistration.
 - Public exports from quickscale_core.manifest.
 - Provenance-sensitive checks for module-owned vs core fallback adapters.
+- Managed-adapter import/factory failure at an active base path.
 
 Integration tests that call build_manifest_wiring_spec('analytics', ...)
 live in quickscale_cli/tests/test_manifest_entry_point_integration.py,
@@ -17,6 +18,7 @@ where both packages are on sys.path.
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -389,19 +391,20 @@ class TestRegisteredAdapterPaths:
 
 
 # ---------------------------------------------------------------------------
-# Provenance-sensitive tests (AF7-CR-002): verify that
-# module-owned adapters are selected in monorepo/embedded contexts
-# and that core fallbacks exist for bundled/installed contexts.
+# Provenance-sensitive tests (AF7): verify that module-owned adapters
+# are selected in monorepo/embedded contexts and that no core fallback
+# adapters remain (fail-hard decision).
 # ---------------------------------------------------------------------------
 
 
 class TestManagedAdapterProvenance:
-    """Verify the AF7 hybrid discovery contract.
+    """Verify the AF7 fail-hard discovery contract.
 
     In monorepo / embedded contexts the module-owned adapter (from
     ``quickscale_modules_{name}.adapter``) should be the active
-    registry entry.  In bundled / installed contexts the core
-    fallback adapter should be used instead.
+    registry entry.  Core fallback adapters have been deleted — the
+    module package must be importable or :func:`refresh_managed_adapters`
+    raises ``ImproperlyConfigured``.
     """
 
     _MANAGED_MODULES = frozenset({"social", "billing", "crm"})
@@ -455,50 +458,6 @@ class TestManagedAdapterProvenance:
                 assert "quickscale_modules_crm" in spec.apps
                 assert "CRM_DEALS_PER_PAGE" in spec.settings
 
-    def test_core_fallbacks_exist_for_bundled_context(self) -> None:
-        """Core fallback adapters are registered in _CORE_FALLBACK_ADAPTERS
-        for every managed module, so that bundled/installed contexts (where
-        module packages are not importable) still work."""
-        from quickscale_core.manifest.entry_point import (
-            _CORE_FALLBACK_ADAPTERS,
-        )
-
-        for name in self._MANAGED_MODULES:
-            assert name in _CORE_FALLBACK_ADAPTERS, (
-                f"Core fallback for {name} not registered"
-            )
-            assert callable(_CORE_FALLBACK_ADAPTERS[name]), (
-                f"Core fallback for {name} is not callable"
-            )
-
-    def test_core_fallback_source_is_core_not_module(self) -> None:
-        """Core fallback adapters are defined in entry_point.py, not in
-        module packages."""
-        from quickscale_core.manifest.entry_point import (
-            _CORE_FALLBACK_ADAPTERS,
-        )
-
-        for name in self._MANAGED_MODULES:
-            fn_file = inspect.getfile(_CORE_FALLBACK_ADAPTERS[name])
-            assert "quickscale_core" in fn_file, (
-                f"Core fallback for {name} should be in core, got {fn_file}"
-            )
-
-    def test_core_fallback_and_module_owned_are_different_objects(self) -> None:
-        """Module-owned adapters and core fallbacks are distinct function
-        objects, proving the adapter logic truly lives in the module."""
-        from quickscale_core.manifest.entry_point import (
-            _CORE_FALLBACK_ADAPTERS,
-        )
-
-        for name in self._MANAGED_MODULES:
-            module_owned = MANIFEST_ADAPTER_REGISTRY[name]
-            core_fallback = _CORE_FALLBACK_ADAPTERS[name]
-            assert module_owned is not core_fallback, (
-                f"{name} module-owned and core fallback are the same object — "
-                f"the adapter logic is NOT truly in the module package"
-            )
-
     def test_managed_adapter_origins_refect_registered_modules(self) -> None:
         """MANAGED_ADAPTER_ORIGINS contains exactly the managed modules."""
         assert MANAGED_ADAPTER_ORIGINS == self._MANAGED_MODULES, (
@@ -538,3 +497,65 @@ class TestManagedAdapterProvenance:
 
         assert _build_generic_manifest_spec is build_generic_manifest_spec
         assert _load_module_manifest is load_module_manifest
+
+
+# ---------------------------------------------------------------------------
+# ImproperlyConfigured regression (AF7-CR-REV-002): verify that
+# refresh_managed_adapters raises ImproperlyConfigured when a managed
+# module has a manifest at the active base path but its Python adapter
+# package is not importable.
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshManagedAdaptersFailure:
+    """Managed-adapter import/factory failure at an active base path raises
+    ImproperlyConfigured (AF7 fail-hard decision)."""
+
+    def test_raises_improperly_configured_when_adapter_not_importable(
+        self, tmp_path: Path
+    ) -> None:
+        """refresh_managed_adapters raises ImproperlyConfigured when a managed
+        module has a module.yml at the active base path but its Python adapter
+        package cannot be imported."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        from quickscale_core.contracts.module_discovery import (
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        # Save and restore the full registry / origins so this test does not
+        # leak state to siblings.
+        _orig_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        _orig_origins = set(MANAGED_ADAPTER_ORIGINS)
+
+        try:
+            # Clear the registry so we start fresh, then register only
+            # billing as a managed origin.
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.add("_test_missing_adapter")
+
+            # Set up a temp base path with a module.yml for a module whose
+            # Python package does not exist (so import raises ImportError).
+            modules_dir = tmp_path / "modules"
+            (modules_dir / "_test_missing_adapter").mkdir(parents=True)
+            (modules_dir / "_test_missing_adapter" / "module.yml").write_text(
+                "version: '1'\nname: _test_missing_adapter\n"
+            )
+
+            original_base = get_modules_base_path()
+            set_modules_base_path(modules_dir)
+            try:
+                with pytest.raises(
+                    ImproperlyConfigured,
+                    match="quickscale_modules__test_missing_adapter",
+                ):
+                    refresh_managed_adapters()
+            finally:
+                set_modules_base_path(original_base)
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
