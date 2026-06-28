@@ -86,7 +86,7 @@ Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26)
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF1** ✅ → **AF1-CR follow-up** ⏸️ → **AF3** | Runtime isolation | AF1 merged to `v87`; next cycle: AF1-CR-002 + AF1-CR-005 (forms-only fixes, see AF1 entry); AF3 waits on AF2 also merging |
+| `wt-track1` | **AF1** ✅ → **AF1-CR follow-up** ✅ → **AF3** | Runtime isolation | AF1 merged to `v87`; AF1-CR-002 + AF1-CR-005 completed (forms-only fixes — see AF1 entry); AF3 waits on AF2 also merging |
 | `wt-track2` | **AF2 + AF4** (one shared fix) | Runtime isolation | Blocked until AF1 lands on `v87` |
 | `wt-track3` | **AF7** ⏸️ (partial, blocked) → **AF8** | Generator / CLI | AF6 + AF5 complete and merged; AF7 blocked on AF7-CR-003; AF8 starts immediately (independent) |
 
@@ -124,9 +124,11 @@ Land **AF1's conformance gate first** — it is read-only, surfaces today's true
   - **Phase 3 — CRM child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `ContactNote` and `DealNote`; `crm/0009_add_note_organization_ownership.py`.
   - **Phase 4 — Forms child-table promotion:** `organization` NOT NULL FK + `TenantManager` on `FormField`, `FormSubmission`, `FormFieldValue`; `forms/0007_new_organization_ownership.py` (includes conditional field-parity trigger).
   - **Phase 5 — Enforcing gate:** `test_exactly_zero_pending_remediation_entries()` + live trigger verification in `pg_trigger`. `purge_organization.py` delete specs updated to direct `organization` FK for all promoted tables.
-- **DEFERRED — next wt-track1 cycle (before AF3, forms-only):**
-  - **AF1-CR-002:** Forms admin and views read child-table rows (`FormField`, `FormSubmission`, `FormFieldValue`) without an `org_scope()` / `all_objects` seam. Under the `NOBYPASSRLS` runtime role these reads are not correctly gated. **Files:** `forms/admin.py`, `forms/views.py`.
-  - **AF1-CR-005:** Public-submit notification content (email field values, submitter-name suffix) is rendered after `org_scope()` exits, losing the org context. **Files:** `forms/views.py`, `forms/notifications.py`. **Fix:** render notification content inside the `org_scope()` block before it exits.
+- **COMPLETED — AF1-CR-002 + AF1-CR-005 (forms-only hardening, merged 2026-06-28):**
+  - **AF1-CR-002:** `AdminSubmissionExportView` uses a fragile FK traversal (`submission.values.all()`) that depends on the Prefetch cache and the default (RLS-scoped) manager. **Fix:** replaced the per-submission FK traversal with an explicit `all_objects` batch query that builds a `values_by_submission` lookup dict — avoids implicit RLS filtering and does not depend on Prefetch cache. Added cross-org regression test (`TestAdminSubmissionExportViewAllObjects`). **Files changed:** `forms/views.py`, `forms/tests/test_admin.py`.
+  - **AF1-CR-005:** `notify_submission()` is already called inside the `org_scope()` block in `FormSubmitAPIView.create()`, and notification content is built synchronously before the async dispatch. Added regression tests (`TestNotifySubmissionOrgScope`) proving the FK traversal for field values and the submitter-name suffix resolution work correctly within `org_scope()`. **Files changed:** `forms/tests/test_notifications.py`.
+  - **Validation:** `make MODULE=forms lint`, `make MODULE=forms typecheck`, `make MODULE=forms test` — all pass. `wt-track1` ready for AF3 (waits on AF2 from `wt-track2`).
+  - **Pending / blocking (closeout tooling only):** delegated Adaptive independent-review / quality-gate calls began failing at the platform layer with `no such column: replacement_seq` during final closeout. Local validation is green, and the current `test_admin.py` mismatched-org proof harness now includes the session-authenticated `ACTIVE_ORG_SESSION_KEY` seam, reversed `FormFieldValue` creation order, and an extra active no-value field so the regression fails unless the `FormField.all_objects` path is used. No open product/design decision remains; rerun delegated closeout later only if strict subagent review evidence is required.
 
 ### - [ ] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()`
 

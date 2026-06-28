@@ -36,6 +36,7 @@ from rest_framework.views import APIView
 
 from quickscale_modules_forms.models import (
     Form,
+    FormField,
     FormFieldValue,
     FormSubmission,
     HONEYPOT_FIELD_NAME,
@@ -372,24 +373,42 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
         if form is None:
             raise Http404
 
-        submissions = (
-            FormSubmission.all_objects.filter(form=form)
-            .prefetch_related(
-                Prefetch(
-                    "values",
-                    queryset=FormFieldValue.all_objects.filter(submission__form=form),
-                )
-            )
-            .order_by("-submitted_at")
+        submissions = FormSubmission.all_objects.filter(form=form).order_by(
+            "-submitted_at"
         )
 
-        # Collect all unique field names across submissions to build CSV header
-        all_field_names: list[str] = list(
-            FormFieldValue.all_objects.filter(submission__form=form)
-            .values_list("field_name", flat=True)
-            .distinct()
-            .order_by("field_name")
+        # Harden AF1-CR-002: batch-load all field values via all_objects to avoid
+        # implicit FK traversal through the default (RLS-scoped) manager.
+        all_values = list(
+            FormFieldValue.all_objects.filter(submission__form=form).values(
+                "submission_id", "field_name", "value"
+            )
         )
+
+        # CSV column order follows form field definition order, not alphabetical
+        # by field_name — preserves form-designer ordering (AF1-CR-REV-001).
+        # Use all_objects on the operator path to bypass RLS — a staff user with
+        # no org context or a mismatched org must still see the correct columns.
+        form_field_names: list[str] = list(
+            FormField.all_objects.filter(form=form, is_active=True)
+            .order_by("order")
+            .values_list("name", flat=True)
+        )
+        seen: set[str] = set(form_field_names)
+        extra_field_names: list[str] = []
+        for item in all_values:
+            name = item["field_name"]
+            if name not in seen:
+                seen.add(name)
+                extra_field_names.append(name)
+        all_field_names = form_field_names + extra_field_names
+
+        values_by_submission: dict[int, dict[str, str]] = {}
+        for item in all_values:
+            sub_id = item["submission_id"]
+            values_by_submission.setdefault(sub_id, {})[item["field_name"]] = item[
+                "value"
+            ]
 
         output = io.StringIO()
         writer = csv.writer(output)
@@ -406,7 +425,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
 
         # Write data rows
         for submission in submissions:
-            values_by_name = {fv.field_name: fv.value for fv in submission.values.all()}
+            values_by_name = values_by_submission.get(submission.pk, {})
             row = [
                 submission.pk,
                 submission.submitted_at.isoformat(),
