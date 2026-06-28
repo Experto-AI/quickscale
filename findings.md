@@ -14,7 +14,7 @@
 - F4 (two routing models) → T1.20 deleted slug-routing fallback; middleware is now session-only (`orgs/middleware.py`).
 - F5 (static `MODULE_CATALOG`) → D2 manifest-backed discovery.
 
-**What this pass found.** Track 1 made isolation a *data-layer* guarantee in principle, but the guarantee is assembled from three mechanisms that must independently agree — the Django `TenantManager`, the Postgres FORCE-RLS policy, and a hand-set `app.current_org_id` GUC — and **the structural glue that would keep them in sync does not exist**. There is no conformance gate proving every tenant table is actually covered; the auto-scoping manager is wired as Django's *base* manager so all ORM graph traversal silently depends on an ambient contextvar; and the operator escape hatch is a dual, ambient bypass with no audited seam. The previous round's open carryover (request-long transaction around external I/O) is re-confirmed and has **broadened** since T1.20 removed the per-route gating.
+**What this pass found.** Track 1 made isolation a *data-layer* guarantee in principle, but the guarantee was assembled from three mechanisms that must independently agree — the Django `TenantManager`, the Postgres FORCE-RLS policy, and a hand-set `app.current_org_id` GUC — and the structural glue was missing. Findings 1 (AF1 ✅), 2 (AF2 ✅), and 4 (AF4 ✅) are resolved. **Finding 3 (AF3)** — the unaudited operator-access seam — is the one remaining open item.
 
 **Already acknowledged, not re-reported.** The roadmap's Deferred/Monitor list owns: no structured logging/correlation IDs (D9a is a baseline only), no versioned public API, no webhook payload-boundary validation. The module-upgrade story (subtree pull + "Module Extension Contract", `docs/technical/module-extension.md`) is **deliberate, documented design** — excluded. Single-PR items (Stripe `api_version` pin, per-admin `select_related`, the personal-org-create-per-request micro-cost) are out of scope by the autopsy's own rules.
 
@@ -25,9 +25,9 @@
 | # | Finding | Horizon | Blast radius × likelihood |
 |---|---------|---------|---------------------------|
 | 1 | Tenant-table isolation is per-table hand-written SQL with **no conformance gate**; child tables without `organization_id` sit outside *both* isolation layers | **now** (dev) → **6–18 mo** (first cross-tenant prod leak) | Cross-tenant data leak × high (recurs every model/table added) |
-| 2 | The auto-scoping contextvar `TenantManager` is the **default *and* base manager**, so every non-request code path must re-establish ambient org context — already re-implemented 3× | **now** | Broken operator/job paths + leak-via-bypass × high |
+| 2 | The auto-scoping contextvar `TenantManager` is the **default *and* base manager**, so every non-request code path must re-establish ambient org context — already re-implemented 3× | **RESOLVED** | AF2, 2026-06-28 — see CHANGELOG |
 | 3 | The operator escape hatch is a **dual, ambient, unaudited bypass** (`all_objects` *and* the connected DB role's `BYPASSRLS`) with no single authorized seam | **6–18 mo** | Silent cross-tenant operator leak × medium |
-| 4 | Wrapping the whole request in one transaction (to carry `SET LOCAL`) couples DB connection-hold time to in-view external I/O (Stripe) — *carryover, broadened by T1.20* | **6–18 mo** | Connection/lock exhaustion × medium-high under traffic |
+| 4 | Wrapping the whole request in one transaction (to carry `SET LOCAL`) couples DB connection-hold time to in-view external I/O (Stripe) — *carryover, broadened by T1.20* | **RESOLVED** | AF4, 2026-06-28 — see CHANGELOG |
 | 5 | `quickscale apply` step checkpointing + fault-injection harness | **RESOLVED** | AF5, 2026-06-27 — see CHANGELOG |
 | 6 | God files fighting parallel-worktree workflow | **RESOLVED** | AF6, 2026-06-27 — see CHANGELOG |
 | 7 | Rich-module adapters living in core instead of module packages | **RESOLVED** | AF7, 2026-06-28 — see CHANGELOG |
@@ -75,33 +75,7 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 
 ## Finding 2 — The auto-scoping contextvar manager is wired as the *base* manager, so every non-request code path silently depends on an ambient org context
 
-**Time horizon: now (already causing pain).**
-
-**Problem.** Every tenant model declares `objects = TenantManager()` first and sets no `Meta.base_manager_name`. `TenantManager.get_queryset()` filters on a request-scoped `ContextVar` and returns `.none()` when it is unset. Because the first-declared manager is also Django's `_base_manager`, **forward-FK access, `refresh_from_db()`, the cascade-delete collector, admin inlines, and serializer relations all traverse the object graph through the auto-scoping manager** — so any code running outside the request cycle (management commands, the Stripe webhook, admin, DR/backups, signals, shell) gets empty results or `DoesNotExist` unless it first re-establishes the ambient context by hand.
-
-**Why it compounds.** The "ambient context" requirement leaks into every surface that isn't an ordinary request, and each surface re-solves it locally:
-- There are already **three independent re-implementations** of "set the contextvar + `SET LOCAL` for non-middleware code": `orgs.current_org.set_current_org_for_context` (T1.17), billing's `_billing_org_db_context` (`billing/.../services.py:912`, used at `:1075,:1173,:1325,:1461`), and social admin's `_org_db_context` (`social/.../admin.py`, wraps *every* admin view in `atomic()` + `SET LOCAL`). Each is the same capture-set-restore dance, written three times.
-- The escape hatch doesn't escape: `all_objects` bypasses scoping on the *queried* model, but related-object traversal still goes through the *related* model's base manager. So `deal.contact` under no context raises `DoesNotExist` even when fetched via `all_objects` — which is exactly why `crm/.../models.py:282-298` (`ContactNote.save`) has to reach for `Contact.all_objects.filter(...).update(...)` with a comment explaining the contextvar is unset on operator/inline paths.
-- Every new management command, async job, webhook, or admin surface must independently remember to wrap itself in org context (and, if it spans orgs, loop and re-set per org) — the precise "every callsite must remember" procedural burden that the contextvar manager was introduced to remove. The burden simply moved from "remember to filter" to "remember to set context."
-
-**Evidence.**
-- `orgs/.../managers.py:38-48` — `TenantManager.get_queryset()` reads the contextvar and returns `qs.none()` when `org_id is None`.
-- No `base_manager_name`/`default_manager_name` anywhere under `quickscale_modules/*/src` (grep returns nothing), so `objects = TenantManager()` (declared first on every tenant model, e.g. `crm/.../models.py:41-42`, `blog/.../models.py:127-128`) is the `_base_manager`.
-- The three duplicated context wrappers cited above; the `ContactNote.save` workaround at `crm/.../models.py:282-298`.
-- `_resolve_active_org` (the *read* side of the same missing boundary) is itself re-implemented per module: `crm/.../views.py:43-74`, `blog/.../views.py`, `billing/.../services.py`, `social/.../admin.py` — each with its own personal-org fallback.
-
-**Correct shape.** There should be exactly one owned "tenant context" boundary, and the auto-scoping manager must **not** be the base manager. Concretely: set `Meta.base_manager_name = "all_objects"` (or an unfiltered base) so Django internals never silently scope; expose a single `tenant_context(org_id)` context manager (the one already half-built as `set_current_org_for_context`) that all non-request callers use; and — to remove the burden entirely — apply the GUC at the connection level (a `connection_created`/checkout hook keyed to the resolved org) so RLS is satisfied without each surface re-deriving it. The contextvar manager stays as the *default* (`objects`) for ergonomic request-time scoping, but it stops governing the framework's own graph traversal.
-
-**Alternatives.**
-- **(A — preferred) Demote the scoping manager from base + one shared `tenant_context()` used everywhere.** Set `base_manager_name` to an unfiltered manager on `TenantModel`; collapse the three wrappers into the single `orgs` primitive; keep `objects` auto-scoping for views. *Preferred: it removes the silent `DoesNotExist`/empty-result class of bugs from all framework-internal paths at once, deletes duplicated context code, and is a contained change (one base class + delete two wrappers) because the shared primitive already exists.*
-- **(B) Stop auto-scoping in the manager; require explicit `.for_org()` + lean entirely on RLS.** Matches what `organizations.md` §F11.13b actually documents (a `.for_org()` contract that the code no longer implements). Makes scoping explicit and removes the ambient-context dependency from Django internals. But it surrenders the "manager catches a forgotten filter" safety at the Python layer and makes RLS the *sole* guard — which is only safe once Finding 1's coverage gate exists, so this should follow (A), not replace it.
-- **(C) Connection-level GUC via a pool/checkout hook; leave managers as-is.** Apply `app.current_org_id` when a connection is checked out for a resolved org, so RLS is satisfied without per-surface wrappers. Solves the *DB* half cleanly (and dovetails with Finding 4), but the Python base-manager traversal still scopes on the contextvar, so it must be combined with (A) to fix the `DoesNotExist` class.
-
-**Trigger for urgency.** The next batch operation that touches tenant data across orgs — a billing reconciliation command, a DR restore, an analytics rollup, or any Celery/Django-Q job the roadmap adds — will either silently no-op (contextvar unset → `.none()`) or be written with a fourth copy of the context wrapper. It is already biting at admin/inline/webhook scope today.
-
-**Compounding factor.** Billing services, social admin, the `orgs` helper, every `all_objects` callsite, and `purge_organization`/`migrate_billing_to_orgs` are all written against the current ambient-context assumption and will be touched when the base manager is corrected.
-
-**Detection signal.** Grep-able proxy now: count of `all_objects` references and of bespoke `*_db_context`/`set_current_org_*` wrappers (rising = the tax compounding). Runtime: log `CurrentOrgError` and unexpected `RelatedObjectDoesNotExist` from non-request entrypoints (management commands, webhook handlers) — a nonzero rate there is this finding firing.
+**Status: RESOLVED — AF2 implemented 2026-06-28.** `TenantModel.base_manager_name` set to `"all_objects"`; duplicate context wrappers (`_billing_org_db_context`, social admin `_org_db_context`) deleted; request-scoped callers converged on `orgs.current_org.tenant_context()`. Regression tests added for FK traversal and `refresh_from_db()` under no org context. See [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -137,30 +111,7 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 
 ## Finding 4 — Wrapping the whole request in one transaction (to carry `SET LOCAL`) couples DB connection-hold time to in-view external I/O *(carryover, broadened by T1.20)*
 
-**Time horizon: 6–18 months.**
-
-**Problem.** Because `app.current_org_id` is set with `SET LOCAL`, which only survives inside a transaction, `TenantMiddleware._call_with_org` wraps the *entire* downstream view in a single `transaction.atomic()` — so every org-scoped request holds an open transaction (and its DB connection) for its full duration, including template rendering and any synchronous external API calls the view makes. Since T1.20 removed the per-route gating (`_SOLO_ROUTE_PREFIXES` no longer exists), this now applies to **every authenticated org-scoped request**, not just billing routes.
-
-**Why it compounds.** Billing checkout/portal views make 2–4 sequential Stripe calls *inside* that request transaction; the webhook path holds its own transaction across Stripe `retrieve_*` calls via `_billing_org_db_context`. As traffic grows and as more views add external calls (email, more Stripe, future providers), the number of connections sitting `idle in transaction` during third-party latency grows linearly, and Postgres `max_connections` (not CPU) becomes the ceiling. Row locks held across network calls also lengthen lock-wait chains on contended rows (credit balance, subscription).
-
-**Evidence.**
-- `orgs/.../middleware.py:171-177` — `try: with transaction.atomic(): self._set_current_org_id(...); return self.get_response(request)` wraps the whole view; reached by every authenticated, non-exempt request (`EXEMPT_PATH_PREFIXES` is only `/accounts/`, `/admin/`, `/healthcheck/` — `middleware.py:43`), so `/billing/...` is included.
-- `billing/.../services.py:511,525` (`create_checkout_session`) and `:564` (`create_subscription_checkout_session`) issue `retrieve_price` → `create_checkout_session` sequentially inside the request transaction.
-- `billing/.../services.py:912` (`_billing_org_db_context`) wraps webhook handling in `atomic()` + `SET LOCAL`, holding it across `retrieve_subscription` (`:1284`) / `retrieve_payment_intent` (`:1788`).
-- `production.py.j2:114,132` — `conn_max_age=600` (persistent connections), so each worker pins a connection that can sit idle-in-transaction.
-
-**Correct shape.** Org context for reads should not require holding a transaction across view I/O. Set the tenant GUC at connection acquisition (a `connection_created`/checkout hook re-applying `set_config(..., is_local := true)` at transaction start — the same hook Finding 2(C) wants) so RLS is enforced without a request-long transaction; external API calls live *outside* any DB transaction, with DB writes committed before/after the network round-trip (or via an outbox), never around it.
-
-**Alternatives.**
-- **(A — preferred) Connection-init hook sets the GUC; views open short transactions only around writes.** A thin pool/`connection_created` hook applies `app.current_org_id` when the org is resolved, decoupled from request-long `atomic()`; external calls run outside transactions. *Preferred: it keeps RLS enforcement while removing the structural "transaction = request" coupling that turns third-party latency into connection exhaustion — and it is the same seam Finding 2 needs, so the two findings share one fix.*
-- **(B) Keep the request transaction but move all external I/O out of views** into pre/post hooks or deferred/async flows. Smaller routing change, but pushes complexity into every external-calling view and does nothing for template-render hold time.
-- **(C) Accept it; cap blast radius operationally** — `idle_in_transaction_session_timeout`, PgBouncer, more workers. Buys headroom without a design change, but PgBouncer *transaction* pooling is incompatible with session-level `SET`, so it interacts badly with the very mechanism RLS depends on.
-
-**Trigger for urgency.** A Stripe latency incident, a traffic step-change, or raising `WEB_CONCURRENCY` — any of which turns "connection held during network call" into pool/`max_connections` exhaustion and cascading 5xxs.
-
-**Compounding factor.** Every billing view and webhook handler, plus any future module that calls an external service from within a request, is already written assuming the ambient request transaction.
-
-**Detection signal.** Watch Postgres `state = 'idle in transaction'` connection count and `pg_stat_activity` transaction age; alert on idle-in-transaction duration p95 climbing with Stripe API latency.
+**Status: RESOLVED — AF4 implemented 2026-06-28.** `TenantMiddleware._call_with_org` no longer opens a request-long `transaction.atomic()`; middleware sets `request.org` + ContextVar only. Public forms, generated social views, and billing webhooks open explicit short `transaction.atomic()` + `tenant_context()` windows only where DB-level org scope is required. Stripe retrieval/backfill runs outside local mutation transactions. `production.py.j2` documents `CONN_MAX_AGE`, `CONN_HEALTH_CHECKS`, and the `RUNTIME_DATABASE_URL` runtime-role pattern. See [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -192,7 +143,7 @@ Sections of the autopsy template with **nothing new to report** for this codebas
 
 The eight findings form **two independent clusters** that share almost no files:
 
-- **Runtime isolation cluster (Findings 1–4)** — all touch `orgs/` + the tenant modules. **Open.** AF1 ✅ merged; sequence: `(AF2 + AF4) → AF3`. Findings 2 and 4 share a connection-level GUC fix; Finding 3 (operator seam) lands last.
+- **Runtime isolation cluster (Findings 1–4)** — Findings 1 ✅ (AF1), 2 ✅ (AF2), 4 ✅ (AF4) resolved. **Finding 3 (AF3) is the only remaining open item** — single audited operator-access seam on `wt-track1`.
 - **Generator cluster (Findings 5–8)** — all touch `quickscale_core`/`quickscale_cli`. **All resolved.** AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ — see [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
@@ -204,7 +155,5 @@ Three structural findings shared a common failure mode: the test suite exercises
 | Finding | Property test | Status |
 |---|---|---|
 | **1** | Walk `apps.get_models()`, select tenant tables, assert each has a live FORCE-RLS policy in `pg_policies` (conformance gate) | **complete — AF1 ✅** |
-| **2** | Regression test: forward-FK traversal + `refresh_from_db()` with **no** org context set must succeed | open — AF2 |
+| **2** | Regression test: forward-FK traversal + `refresh_from_db()` with **no** org context set must succeed | **complete — AF2 ✅** |
 | **5** | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | **complete — AF5 ✅** |
-
-**AF2** is the remaining open item: add a regression test for FK traversal under no org context, as part of the Track 2 AF2+AF4 work.

@@ -80,17 +80,17 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). Generator / CLI structural work (AF5–AF8) is complete. Runtime-isolation hardening now has one remaining open task: **AF3**.
+Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). All generator/CLI work (AF5–AF8) and all runtime-isolation prerequisites (AF1, AF1-CR, AF2, AF4) are complete and merged. **AF3** is the only remaining open task.
 
 ### Track assignment & parallelization
 
 | Track | Tasks | Cluster | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF1** ✅ → **AF1-CR-002** ✅ → **AF1-CR-005** ✅ → **AF3** | Runtime isolation | AF1 and both forms-only follow-ups are merged; AF3 is the next pending runtime-isolation task |
-| `wt-track2` | **AF2 + AF4** ✅ | Runtime isolation | Track 2 implementation complete; this merge-back closes the lane and unblocks AF3 |
-| `wt-track3` | **AF5** ✅ → **AF6** ✅ → **AF7** ✅ → **AF8** ✅ | Generator / CLI | All generator / CLI structural findings complete and merged |
+| `wt-track1` | **AF3** | Runtime isolation | AF1, AF1-CR-002, AF1-CR-005, AF2, AF4 all merged; AF3 is the only remaining open task |
+| `wt-track2` | *(complete)* | — | AF2 + AF4 merged; lane closed |
+| `wt-track3` | *(complete)* | — | AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ merged; lane closed |
 
-**Sequencing rationale.** Isolation cluster: `AF1 ✅ → AF1-CR ✅ → (AF2 + AF4) ✅ → AF3` — the tenant-model conformance gate landed first, the forms-only follow-ups closed next, and this Track 2 stop-point closes the shared tenant-context / short-transaction seam. After this merge-back, **AF3** is the only remaining runtime-isolation task. Generator cluster: **AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅** — complete.
+**Sequencing rationale.** Only **AF3** remains open. All prerequisite isolation work (`AF1 → AF1-CR → AF2+AF4`) is merged. AF3 can proceed immediately on `wt-track1`.
 
 ### QA hardening thread (cross-track)
 
@@ -101,51 +101,6 @@ Three findings shared one root cause: **the suite tested the happy request path 
 | **AF1** ✅ | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | complete |
 | **AF2** ✅ | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | complete |
 | **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
-
-### Completed dependency snapshots
-
-- **AF1 + AF1-CR follow-ups (Track 1) — complete / merged.** Tenant-table conformance, declarative RLS, and the forms-only AF1-CR-002 / AF1-CR-005 hardening passes are merged. No remaining product/design blocker from that lane; AF3 is now waiting only on this Track 2 merge-back.
-
-### - [x] AF2 — Demote the auto-scoping manager from base manager + single `tenant_context()` ✓ *implemented on wt-track2; this merge-back closes Track 2 and unblocks AF3*
-
-`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track2` — pairs with AF4 (shared runtime-isolation seam).
-- **WHY → Finding 2.** `objects = TenantManager()` with no `base_manager_name` makes the auto-scoping manager Django's `_base_manager`, so all ORM graph traversal (forward FK, `refresh_from_db`, cascade collector, admin inlines) silently depends on an ambient contextvar; three modules already re-implement the context wrapper.
-- **OBJECTIVE:** Set `base_manager_name` to an unfiltered base on the shared `TenantModel`; converge request-scoped callers on one shared `orgs.current_org.tenant_context()` primitive while preserving the transactional/non-request helper seams; keep `objects` auto-scoping for views.
-- **SCOPE:** `orgs/.../models.py`, `orgs/.../current_org.py`, `billing/.../services.py`, `social/.../admin.py`, forms public views, generated social views, and every tenant model's manager block.
-- **ACCEPTANCE CRITERIA:** forward-FK traversal and `refresh_from_db` work with no org context set; one shared request-scoped activation primitive exists; no behavior drift in request-path scoping.
-- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`, `make MODULE=social test`; add regression tests for FK traversal under no context and the shared activation contract.
-- **DEPENDS:** AF1 merged ✅. Shared fix-seam with AF4.
-- **RECOMMENDATION:** **Pursue (A)** — removes a whole class of silent `DoesNotExist`/empty-result bugs and deletes duplicated context code.
-- **LANDED (Track 2 stop-point):**
-  - **Phase 1 — Base manager demotion:** `TenantModel` sets `base_manager_name = "all_objects"` on the model base. Every tenant-model `class Meta` across orgs, billing, crm, blog, forms, listings, and social carries the explicit `base_manager_name` declaration — eliminating silent FK-traversal `DoesNotExist` bugs when no org contextvar is set.
-  - **Phase 2 — Shared activation primitive:** Request-scoped callers now use `orgs.current_org.tenant_context()` as the shared activation primitive. `org_scope()` remains the transactional/non-request helper, and `set_current_org_for_context()` stays available as the compatibility bridge for command-style callers.
-  - **Phase 3 — Explicit DB-scope ownership (shared with AF4):** Middleware now carries `request.org` + the ContextVar only; callers that need DB-side `app.current_org_id` open their own short `transaction.atomic()` + `tenant_context()` windows (public forms endpoints, generated social views, billing webhook mutation phases).
-  - **Phase 4 — Generator note + rendering proof:** `production.py.j2` documents connection-pooling and runtime-role expectations, and targeted render tests prove the note survives generation.
-  - **Regression tests:** FK traversal / `refresh_from_db()` under no org context, `tenant_context()` contract tests (contextvar set/restore, nested, exception safety, DB GUC propagation), and the ENROLLED-model conformance gate for `base_manager_name = "all_objects"`.
-  - **OPEN DECISIONS / BLOCKERS:** none at this stop-point.
-
-### - [x] AF4 — Connection-level org GUC; views open short transactions only around writes ✓ *implemented on wt-track2; this merge-back closes Track 2 and unblocks AF3*
-
-`**Tier 2 — Medium | PLANNING TIER: high (mandatory plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track2` — **same fix-seam as AF2; implemented together.**
-- **WHY → Finding 4.** `SET LOCAL` required a transaction, so `TenantMiddleware._call_with_org` wrapped the whole view in `transaction.atomic()`; every authenticated org-scoped request could then hold a connection idle-in-transaction across template render and in-view Stripe calls.
-- **OBJECTIVE:** Remove request-long transaction ownership from middleware, move external API calls outside DB transactions, and make every RLS-sensitive caller own only the short `transaction.atomic()` + org-context window it actually needs.
-- **SCOPE:** `orgs/.../middleware.py`, `orgs/.../current_org.py`, forms public views, generated social managed views, billing webhook paths, and generator `production.py.j2` (pooling/runtime-role note).
-- **ACCEPTANCE CRITERIA:** no org-scoped request holds an open transaction across a Stripe call; RLS still enforces via explicit local activation windows; generated runtime docs explain the pooling/runtime-role pattern.
-- **VALIDATION PATH:** `make MODULE=orgs test`, `make MODULE=billing test`, `make MODULE=forms test`, plus generated-view / template regression coverage.
-- **DEPENDS:** AF1 merged ✅; co-developed with AF2.
-- **RECOMMENDATION:** **Pursue (A)** — one shared seam closes both the manager/base-manager bug class and the request-long transaction bug class.
-- **LANDED (Track 2 stop-point):**
-  - **Phase 1 — Request-boundary cleanup:** `TenantMiddleware._call_with_org` no longer opens a request-long `transaction.atomic()` or issues `SET LOCAL` itself. The middleware sets `request.org` + the ContextVar only; RLS-sensitive callers own explicit local `transaction.atomic()` + `tenant_context()` windows.
-  - **Phase 2 — Billing webhook transaction slicing:** `_billing_org_db_context` is gone. Billing webhook handlers re-enter short `transaction.atomic()` + `tenant_context()` windows only for local DB mutation, while remote Stripe lookups/backfill happen outside those windows.
-  - **Phase 3 — Public/managed caller parity:** Public forms GET/POST, generated social managed views, and social admin now open explicit local atomic + `tenant_context()` windows where DB-level org scope is required. Public-submit side effects run after commit, and notification content reads `FormFieldValue.all_objects` so anonymous post-commit emails keep field/value content.
-  - **Phase 4 — Generator template note:** Connection pooling + runtime-role note added to `production.py.j2`. The generated note documents `CONN_MAX_AGE`, `CONN_HEALTH_CHECKS`, and the `RUNTIME_DATABASE_URL` runtime-role pattern.
-  - **NEXT / PENDING:** `AF3` on `wt-track1` is now the next pending runtime-isolation task.
-  - **OPEN DECISIONS / BLOCKERS:** none for AF2/AF4 at this stop-point.
-  - **Regression tests:** Middleware no-request-long-atomic checks, forms caller-parity coverage for anonymous/System-org and authenticated/session-org public paths, billing webhook transaction-boundary regressions, managed social-view regeneration tests, and post-commit notification-content coverage.
 
 ### - [ ] AF3 — Single audited operator-access seam
 
