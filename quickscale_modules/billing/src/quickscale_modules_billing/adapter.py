@@ -1,14 +1,14 @@
 """Module-owned billing manifest adapter.
 
-This is the **primary** billing adapter for monorepo and embedded
+This is the **sole** billing adapter for monorepo and embedded
 ``modules/`` contexts.  It is registered dynamically by
 :func:`quickscale_core.manifest.entry_point.refresh_managed_adapters`
 when the module package is importable.
 
-When the module package is **not** available (bundled/installed context
-where only manifest ``yml`` files are shipped), the core fallback adapter
-(:func:`quickscale_core.manifest.entry_point._billing_core_fallback`)
-takes over instead.
+When the module package is **not** importable,
+:func:`refresh_managed_adapters` raises
+:class:`~django.core.exceptions.ImproperlyConfigured` — bundled/installed
+without module source is not a supported context (AF7 fail-hard decision).
 """
 
 from __future__ import annotations

@@ -317,3 +317,62 @@ class TestRegenerateManagedWiringEmbeddedNoMonorepo:
 
         finally:
             _md._modules_base_path = original_override
+
+
+class TestRegenerateManagedWiringAdapterFailure:
+    """regenerate_managed_wiring catches ImproperlyConfigured from adapter
+    failures and returns (False, message) instead of propagating the exception.
+    Regression coverage for AF7-CR-REV-001 and AF7-CR-REV-002."""
+
+    def test_improperly_configured_caught_and_returned_as_failure(
+        self, tmp_path: Path
+    ) -> None:
+        """When refresh_managed_adapters raises ImproperlyConfigured at
+        the embedded modules base path, regenerate_managed_wiring returns
+        (False, message), preserving the tuple[bool, str] return type."""
+        from quickscale_core.manifest.entry_point import (
+            MANIFEST_ADAPTER_REGISTRY as REGISTRY,
+            MANAGED_ADAPTER_ORIGINS as ORIGINS,
+        )
+
+        # Save state before this test.
+        _orig_registry = dict(REGISTRY)
+        _orig_origins = set(ORIGINS)
+
+        try:
+            # Clear registry and origins, then add only a module name
+            # whose Python package does not exist so that
+            # refresh_managed_adapters raises ImproperlyConfigured
+            # when trying to import it.
+            REGISTRY.clear()
+            ORIGINS.clear()
+            ORIGINS.add("_test_missing_adapter")
+
+            project = tmp_path / "myapp"
+            _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+            # Create an embedded module.yml for the missing module so
+            # _has_real_manifests is True and refresh_managed_adapters
+            # is called with _test_missing_adapter's module.yml at the
+            # base path.
+            (project / "modules" / "_test_missing_adapter").mkdir(parents=True)
+            (project / "modules" / "_test_missing_adapter" / "module.yml").write_text(
+                "version: '1'\nname: _test_missing_adapter\n"
+            )
+
+            # The call to refresh_managed_adapters inside
+            # regenerate_managed_wiring should raise
+            # ImproperlyConfigured because
+            # quickscale_modules__test_missing_adapter is not
+            # importable. Our except ImproperlyConfigured handler
+            # converts it to (False, message).
+            success, message = regenerate_managed_wiring(project)
+
+            assert success is False
+            assert "Managed adapter wiring failed" in message
+            assert "_test_missing_adapter" in message
+        finally:
+            REGISTRY.clear()
+            REGISTRY.update(_orig_registry)
+            ORIGINS.clear()
+            ORIGINS.update(_orig_origins)

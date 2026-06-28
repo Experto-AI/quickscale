@@ -230,6 +230,39 @@ class TestAuthModuleConfig:
         assert "Managed wiring regeneration failed" in error_output
         assert "Unable to resolve project identity" in error_output
 
+    @patch(
+        "quickscale_cli.commands.module_config.regenerate_managed_wiring",
+        return_value=(
+            False,
+            "Managed adapter for 'billing' not importable: "
+            "quickscale_modules_billing.adapter could not be loaded",
+        ),
+    )
+    def test_regenerate_wiring_for_module_handles_adapter_failure(
+        self, mock_regenerate, tmp_path, capsys
+    ):
+        """CLI-facing handler raises click.Abort with user-friendly message
+        when regenerate_managed_wiring returns an adapter failure."""
+        project = tmp_path / "myproject"
+        project.mkdir()
+        (project / "myproject").mkdir()  # package directory
+        (project / "quickscale.yml").write_text(
+            'version: "1"\nproject: {slug: myproject, package: myproject, theme: showcase_html}\n'
+            "modules: {}\ndocker: {start: false}\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _regenerate_wiring_for_module(
+                project,
+                "auth",
+                get_default_auth_config(),
+            )
+
+        error_output = capsys.readouterr().err
+        assert "Managed wiring regeneration failed" in error_output
+        assert "billing" in error_output
+        assert "not importable" in error_output
+
 
 class TestBlogModuleConfig:
     """Tests for blog module configuration functions."""
