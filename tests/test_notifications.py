@@ -139,3 +139,126 @@ class TestNotifySubmission:
             "from" not in mail.outbox[0].subject.lower()
             or "Contact" in mail.outbox[0].subject
         )
+
+
+# ---------------------------------------------------------------------------
+# AF1-CR-005: Notification content rendered inside org_scope
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestNotifySubmissionOrgScope:
+    """AF1-CR-005: Notification content must render org-scoped field values correctly.
+
+    notify_submission is called inside the view's org_scope() block in
+    production. The FK traversal submission.values.all() inside
+    _build_submission_notification_content must resolve with the active org
+    context to pass RLS filtering on the child FormFieldValue table.
+    """
+
+    def test_notification_body_contains_org_scoped_field_values(self, db):
+        """Calling notify_submission inside org_scope() renders field values."""
+        from quickscale_modules_forms.models import (
+            Form,
+            FormField,
+            FormFieldValue,
+            FormSubmission,
+        )
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        org = Organization.objects.create(name="Tenant Org", slug="tenant-org")
+        form = Form.all_objects.create(
+            title="Tenant Form",
+            slug="tenant-form",
+            organization=org,
+            notify_emails="tenant@example.com",
+        )
+        field = FormField.all_objects.create(
+            form=form,
+            organization=org,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Message",
+            name="message",
+            order=1,
+        )
+        sub = FormSubmission.all_objects.create(
+            form=form,
+            organization=org,
+            ip_address="10.0.0.1",
+        )
+        FormFieldValue.all_objects.create(
+            submission=sub,
+            organization=org,
+            field=field,
+            field_name="message",
+            field_label="Message",
+            value="Tenant-scoped content",
+        )
+
+        # Call notify_submission inside the org_scope block — this is the
+        # production path; without the active scope the FK traversal through
+        # TenantManager would RLS-filter and produce empty content.
+        with org_scope(org):
+            notify_submission(sub)
+
+        assert len(mail.outbox) == 1, "Notification email must be sent"
+        body = mail.outbox[0].body
+        assert "Tenant-scoped content" in body, (
+            "Field value must appear in email body — proves org-scoped FK"
+            " traversal works inside org_scope()"
+        )
+        assert "Message: Tenant-scoped content" in body, (
+            "Label-value pair must be rendered in the email"
+        )
+
+    def test_notification_subject_includes_name_within_org_scope(self, db):
+        """Submitter-name suffix in subject is resolved within org_scope."""
+        from quickscale_modules_forms.models import (
+            Form,
+            FormField,
+            FormFieldValue,
+            FormSubmission,
+        )
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        org = Organization.objects.create(name="Name Org", slug="name-org")
+        form = Form.all_objects.create(
+            title="Name Form",
+            slug="name-form",
+            organization=org,
+            notify_emails="name@example.com",
+        )
+        field = FormField.all_objects.create(
+            form=form,
+            organization=org,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Full Name",
+            name="full_name",
+            order=1,
+        )
+        sub = FormSubmission.all_objects.create(
+            form=form,
+            organization=org,
+            ip_address="10.0.0.2",
+        )
+        FormFieldValue.all_objects.create(
+            submission=sub,
+            organization=org,
+            field=field,
+            field_name="full_name",
+            field_label="Full Name",
+            value="Alice Tenant",
+        )
+
+        with org_scope(org):
+            notify_submission(sub)
+
+        assert len(mail.outbox) == 1
+        # Subject should include "from Alice Tenant" — this proves the
+        # submitter_name resolution via FK traversal works within org_scope.
+        assert "from Alice Tenant" in mail.outbox[0].subject, (
+            "Subject must include the submitter name resolved from child"
+            " field values inside org_scope"
+        )
