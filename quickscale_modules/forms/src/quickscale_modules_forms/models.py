@@ -72,6 +72,7 @@ class Form(models.Model):
         app_label = "quickscale_modules_forms"
         db_table = "quickscale_modules_forms_form"
         ordering = ["title"]
+        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],
@@ -148,6 +149,7 @@ class FormField(models.Model):
         app_label = "quickscale_modules_forms"
         db_table = "quickscale_modules_forms_formfield"
         ordering = ["order"]
+        base_manager_name = "all_objects"
         unique_together = [["form", "name"]]
 
     def __str__(self) -> str:
@@ -188,6 +190,7 @@ class FormSubmission(models.Model):
         app_label = "quickscale_modules_forms"
         db_table = "quickscale_modules_forms_formsubmission"
         ordering = ["-submitted_at"]
+        base_manager_name = "all_objects"
 
     def __str__(self) -> str:
         return f"Submission #{self.pk} for {self.form.title} ({self.status})"
@@ -221,6 +224,7 @@ class FormFieldValue(models.Model):
     class Meta:
         app_label = "quickscale_modules_forms"
         db_table = "quickscale_modules_forms_formfieldvalue"
+        base_manager_name = "all_objects"
 
     def __str__(self) -> str:
         return f"{self.field_label}: {self.value[:50]}"

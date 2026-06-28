@@ -90,6 +90,17 @@ X_FRAME_OPTIONS = "DENY"
 
 # Database - PostgreSQL for production
 # Use DATABASE_URL environment variable for Railway deployment
+#
+# Connection pooling: CONN_MAX_AGE=600 keeps persistent connections alive
+# across requests, reducing per-request connection setup overhead.
+# CONN_HEALTH_CHECKS=True validates connections before use, preventing
+# errors from stale connections terminated by the database proxy or by a
+# database or container restart.
+#
+# Runtime role pattern: When RUNTIME_DATABASE_URL is set (see below), the
+# deployment uses the restricted NOSUPERUSER/NOBYPASSRLS role for the
+# default database connection. The deployment script unsets this env var
+# during migrations so the superuser DATABASE_URL is used instead.
 # Validate DATABASE_URL is set in production
 database_url = config("DATABASE_URL", default=None)
 

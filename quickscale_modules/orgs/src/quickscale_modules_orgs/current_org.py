@@ -170,6 +170,67 @@ def set_current_org_for_context(*, org_id: uuid.UUID) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2 — request-scoped tenant_context (no atomic wrapper)
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
+    """Request-scoped activation: set ContextVar + DB ``app.current_org_id``.
+
+    Unlike :func:`org_scope`, this does **not** wrap in
+    ``transaction.atomic()`` — the caller is responsible for managing
+    database transaction boundaries.  An active transaction is required
+    for the ``SET LOCAL`` commands to succeed.
+
+    Intended for request-scoped callers (admin views, endpoints) that
+    already manage their own transaction lifecycle or run inside a
+    middleware atomic block.
+
+    On entry:
+    * Captures the prior ContextVar value.
+    * Sets the ContextVar to *org_id* (or ``None`` for fail-closed).
+    * Issues ``SET LOCAL app.current_org_id`` (or ``RESET`` when *org_id*
+      is ``None``) so that FORCE RLS on PostgreSQL allows or denies queries.
+
+    On exit: restores the prior ContextVar value.
+    DB-side ``app.current_org_id`` is automatically cleaned up when the
+    caller's transaction commits or rolls back (``SET LOCAL`` is
+    transaction-scoped).
+
+    Examples
+    --------
+    Inside an admin view with explicit transaction management::
+
+        with transaction.atomic():
+            with tenant_context(org_id):
+                # ... queries run with ContextVar and DB GUC set ...
+
+    Inside middleware (which wraps the entire request in ``org_scope``
+    or an equivalent atomic block)::
+
+        with tenant_context(organization.pk):
+            response = self.get_response(request)
+    """
+    prior = get_current_org_id()
+    if org_id is None:
+        set_current_org_id(None)
+        reset_db_current_org_id()
+        try:
+            yield
+        finally:
+            set_current_org_id(prior)
+        return
+
+    set_current_org_id(org_id)
+    set_db_current_org_id(org_id)
+    try:
+        yield
+    finally:
+        set_current_org_id(prior)
+
+
+# ---------------------------------------------------------------------------
 # T1.19 — unified org_scope context manager
 # ---------------------------------------------------------------------------
 

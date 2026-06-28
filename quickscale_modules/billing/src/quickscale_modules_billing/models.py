@@ -82,6 +82,7 @@ class CreditBalance(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_billing"
+        base_manager_name = "all_objects"
 
     @classmethod
     def get_or_create_for_org(cls, organization: Any) -> tuple["CreditBalance", bool]:
@@ -133,6 +134,7 @@ class CreditTransaction(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_billing"
+        base_manager_name = "all_objects"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -205,6 +207,7 @@ class Subscription(models.Model):
 
     class Meta:
         app_label = "quickscale_modules_billing"
+        base_manager_name = "all_objects"
         ordering = ["-id"]
         constraints = [
             models.UniqueConstraint(

@@ -37,9 +37,8 @@ from django.db import models, transaction
 
 from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
-    get_current_org_id,
     set_current_org_id,
-    set_db_current_org_id,
+    tenant_context,
 )
 
 from quickscale_modules_social.models import SocialEmbed, SocialLink
@@ -115,29 +114,22 @@ def _resolve_active_org_id(request: Any) -> uuid.UUID | None:
 def _org_db_context(request: Any) -> Iterator[None]:
     """Context manager setting ContextVar and DB ``app.current_org_id``.
 
-    On entry:
-    * Captures the prior ContextVar value.
-    * Resolves the active org (see :func:`_resolve_active_org_id`).
-    * If valid: sets the ContextVar and runs ``SET LOCAL
-      app.current_org_id`` inside a transaction for FORCE RLS.
-    * If invalid/fail-closed: clears the ContextVar to ``None``.
+    Resolves the active org for *request* and delegates to
+    :func:`~quickscale_modules_orgs.current_org.tenant_context`
+    inside ``transaction.atomic()`` so that ``SET LOCAL`` has
+    an active transaction and RLS-protected tables are visible.
 
-    On exit: restores the prior ContextVar value so stale context never
-    leaks across request boundaries (T1.15 fail-closed contract).
+    See :func:`~quickscale_modules_orgs.current_org.tenant_context`
+    for ContextVar save/restore contract.
     """
-    prior = get_current_org_id()
-    try:
-        org_id = _resolve_active_org_id(request)
-        if org_id is None:
-            set_current_org_id(None)
+    org_id = _resolve_active_org_id(request)
+    if org_id is None:
+        with tenant_context(None):
             yield
-            return
-        set_current_org_id(org_id)
-        with transaction.atomic():
-            set_db_current_org_id(org_id)
+        return
+    with transaction.atomic():
+        with tenant_context(org_id):
             yield
-    finally:
-        set_current_org_id(prior)
 
 
 # ---------------------------------------------------------------------------

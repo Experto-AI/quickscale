@@ -6,8 +6,11 @@ T1.20 — single-URL session-based middleware contract without slug fallback.
 
 **Saas mode** — org is resolved from ``request.session[ACTIVE_ORG_SESSION_KEY]``:
 
-* **Session org present and valid** — ``request.org``, the contextvar, and
-  ``SET LOCAL app.current_org_id`` are populated from the session.
+* **Session org present and valid** — ``request.org`` and the ContextVar
+  are populated from the session.  The middleware does NOT hold a
+  request-long transaction or issue ``SET LOCAL``; callers that require
+  DB-level RLS manage their own ``transaction.atomic()`` +
+  ``tenant_context()``.
 * **No session org** — the request is redirected to ``/orgs/``. Unknown org
   subpaths fail closed (go through org resolution) rather than bypassing.
 
@@ -30,11 +33,12 @@ from django.http import (
 from django.shortcuts import redirect
 
 from .constants import ACTIVE_ORG_SESSION_KEY
+
 from .current_org import (
     clear_current_org,
-    org_scope,
     reset_current_org_id,
     set_current_org,
+    set_current_org_id,
 )
 from .models import Organization, OrganizationMembership
 
@@ -51,15 +55,20 @@ class OrganizationRequest(HttpRequest):
 
 
 class TenantMiddleware:
-    """Attach request.org and database tenant context for org-scoped requests.
+    """Attach request.org and set the ContextVar for org-scoped requests.
+
+    Phase 3: the middleware sets ``request.org`` and the ContextVar but
+    does NOT hold a request-long transaction or issue SET LOCAL.  Callers
+    that need DB-level ``app.current_org_id`` (e.g. RLS-protected queries)
+    must wrap their operations in ``transaction.atomic()`` +
+    ``tenant_context()`` explicitly.
 
     **Solo mode** — each authenticated user gets their personal org.
 
     **Saas mode** — org is resolved from ``request.session[ACTIVE_ORG_SESSION_KEY]``:
 
     * **No active org** — redirect to ``/orgs/``.
-    * **Valid member org** — ``request.org``, the contextvar, and
-      ``SET LOCAL app.current_org_id`` are populated.
+    * **Valid member org** — ``request.org`` and the ContextVar are set.
     * **Non-member org in session** — the session key is cleared and a 403
       is returned.
 
@@ -165,11 +174,12 @@ class TenantMiddleware:
         organization: Organization,
     ) -> HttpResponse:
         set_current_org(request, organization)
+        set_current_org_id(organization.pk)
         try:
-            with org_scope(organization):
-                return self.get_response(request)
+            return self.get_response(request)
         finally:
             clear_current_org(request)
+            reset_current_org_id()
 
     @staticmethod
     def _is_authenticated_user(request: HttpRequest) -> bool:

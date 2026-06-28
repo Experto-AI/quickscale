@@ -17,7 +17,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from quickscale_modules_orgs.current_org import org_scope
+from quickscale_modules_orgs.current_org import tenant_context
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -946,65 +946,70 @@ def handle_stripe_event(
         },
     )
 
-    try:
-        with transaction.atomic():
-            locked_event = WebhookEvent.objects.select_for_update().get(
-                pk=webhook_event.pk
-            )
-            if locked_event.processed:
-                return StripeWebhookResult(
-                    duplicate=True,
-                    event_type=locked_event.event_type,
-                    status="duplicate",
-                )
-
-            locked_event.event_type = event_type
-            locked_event.payload = event_payload
-            locked_event.processing_error = ""
-            locked_event.save(
-                update_fields=["event_type", "payload", "processing_error"]
-            )
-
-            if event_type == STRIPE_EVENT_TYPE_CHECKOUT_SESSION_COMPLETED:
-                _handle_checkout_session_completed_event(
-                    event_payload,
-                    stripe_client=resolved_client,
-                )
-                processing_status = "processed"
-            elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAID:
-                _handle_invoice_paid_event(
-                    event_payload,
-                    stripe_client=resolved_client,
-                )
-                processing_status = "processed"
-            elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
-                _handle_invoice_payment_failed_event(event_payload)
-                processing_status = "processed"
-            elif event_type in {
-                STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_CREATED,
-                STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED,
-                STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED,
-            }:
-                _handle_subscription_event(event_payload, event_type=event_type)
-                processing_status = "processed"
-            else:
-                processing_status = "ignored"
-            locked_event.processed = True
-            locked_event.processing_error = ""
-            locked_event.save(update_fields=["processed", "processing_error"])
+    # Phase 3: slice the outer atomic into short-lived transactions so Stripe
+    # round-trips happen outside the atomic/org-context window used for DB
+    # mutations. Only locking/duplicate-check and final result-persistence
+    # use atomic blocks; the processing logic runs outside them.
+    with transaction.atomic():
+        locked_event = WebhookEvent.objects.select_for_update().get(pk=webhook_event.pk)
+        if locked_event.processed:
             return StripeWebhookResult(
-                duplicate=False,
-                event_type=event_type,
-                status=processing_status,
+                duplicate=True,
+                event_type=locked_event.event_type,
+                status="duplicate",
             )
+
+    # Process event OUTSIDE the long atomic. Stripe API calls (retrieve
+    # payment intent, retrieve subscription, etc.) happen here, not inside
+    # a DB transaction window. Each handler wraps its own local DB mutations
+    # in transaction.atomic() + tenant_context() for SET LOCAL support.
+    processing_status = "ignored"
+    processing_error_message = ""
+    try:
+        if event_type == STRIPE_EVENT_TYPE_CHECKOUT_SESSION_COMPLETED:
+            _handle_checkout_session_completed_event(
+                event_payload,
+                stripe_client=resolved_client,
+            )
+            processing_status = "processed"
+        elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAID:
+            _handle_invoice_paid_event(
+                event_payload,
+                stripe_client=resolved_client,
+            )
+            processing_status = "processed"
+        elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
+            _handle_invoice_payment_failed_event(event_payload)
+            processing_status = "processed"
+        elif event_type in {
+            STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_CREATED,
+            STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED,
+            STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED,
+        }:
+            _handle_subscription_event(event_payload, event_type=event_type)
+            processing_status = "processed"
+        else:
+            processing_status = "ignored"
     except BillingError as exc:
+        processing_error_message = str(exc)
+
+    # Persist result (short atomic, no Stripe round-trips)
+    with transaction.atomic():
         WebhookEvent.objects.filter(pk=webhook_event.pk).update(
             event_type=event_type,
             payload=event_payload,
-            processed=False,
-            processing_error=str(exc),
+            processed=(not processing_error_message),
+            processing_error=processing_error_message,
         )
-        raise
+
+    if processing_error_message:
+        raise BillingWebhookError(processing_error_message)
+
+    return StripeWebhookResult(
+        duplicate=False,
+        event_type=event_type,
+        status=processing_status,
+    )
 
 
 def _ensure_billing_enabled(settings_snapshot: BillingSettingsSnapshot) -> None:
@@ -1034,91 +1039,118 @@ def _handle_invoice_paid_event(
     resolved_organization = _resolve_organization_for_invoice(
         invoice_payload=invoice_payload,
     )
-    with org_scope(resolved_organization):
-        resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
-        subscription_id = str(invoice_payload.get("subscription") or "").strip()
-        customer_id = str(invoice_payload.get("customer") or "").strip()
-        subscription = _resolve_subscription_for_runtime_event(
-            stripe_subscription_id=subscription_id,
-            customer_id=customer_id,
-            organization=resolved_organization,
-            user=resolved_user,
-            for_update=True,
-        )
 
-        if subscription is None:
-            subscription = _backfill_missing_subscription_for_paid_invoice(
-                invoice_payload=invoice_payload,
-                stripe_client=stripe_client,
-                fallback_user=resolved_user,
-                fallback_organization=resolved_organization,
-                expected_plan=plan,
-            )
-        elif subscription.status in {
-            Subscription.Status.INCOMPLETE,
-            Subscription.Status.PAST_DUE,
-        } or (
-            subscription_id
-            and not str(subscription.stripe_subscription_id or "").strip()
+    # Phase 1: resolve user + subscription in a short atomic+tenant_context.
+    with transaction.atomic():
+        with tenant_context(
+            resolved_organization.pk if resolved_organization else None
         ):
-            subscription = _activate_subscription_for_paid_invoice(
-                subscription=subscription,
-                plan=plan,
+            resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
+            subscription_id = str(invoice_payload.get("subscription") or "").strip()
+            customer_id = str(invoice_payload.get("customer") or "").strip()
+            subscription = _resolve_subscription_for_runtime_event(
+                stripe_subscription_id=subscription_id,
+                customer_id=customer_id,
                 organization=resolved_organization,
                 user=resolved_user,
-                customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
+                for_update=True,
             )
-        else:
-            update_fields: list[str] = []
-            if (
-                customer_id.strip()
-                and subscription.stripe_customer_id != customer_id.strip()
-            ):
-                subscription.stripe_customer_id = customer_id.strip()
-                update_fields.append("stripe_customer_id")
-            if (
-                subscription_id.strip()
-                and subscription.stripe_subscription_id != subscription_id.strip()
-            ):
-                subscription.stripe_subscription_id = subscription_id.strip()
-                update_fields.append("stripe_subscription_id")
-            if update_fields:
-                subscription.save(update_fields=update_fields)
-            if customer_id.strip():
-                _sync_organization_customer_id(
-                    resolved_organization or subscription.organization,
-                    customer_id.strip(),
+
+    # Phase 2: backfill subscription via Stripe (OUTSIDE the mutation atomic).
+    # CR-P3-003: the remote subscription fetch happens here, before any local
+    # DB mutation transaction.  _backfill_missing_subscription_for_paid_invoice
+    # calls stripe_client.retrieve_subscription() first, then delegates to
+    # _upsert_subscription_from_payload (which has its own atomic+tenant_context).
+    if subscription is None:
+        subscription = _backfill_missing_subscription_for_paid_invoice(
+            invoice_payload=invoice_payload,
+            stripe_client=stripe_client,
+            fallback_user=resolved_user,
+            fallback_organization=resolved_organization,
+            expected_plan=plan,
+        )
+
+    # Phase 3: remaining processing + credit_user in a new atomic+tenant_context.
+    with transaction.atomic():
+        with tenant_context(
+            resolved_organization.pk if resolved_organization else None
+        ):
+            # Re-resolve user if backfill resolved the subscription.
+            if resolved_user is None:
+                resolved_user = _resolve_user_for_invoice(
+                    invoice_payload=invoice_payload
                 )
 
-        organization = subscription.organization
+            if subscription is None:
+                raise BillingWebhookError(
+                    "Could not resolve or backfill a subscription for the invoice."
+                )
 
-        user = resolved_user
-        if user is None and subscription is not None:
-            user = subscription.user
-        if user is None:
-            raise BillingWebhookError(
-                "Could not resolve a local user for the Stripe invoice."
+            if subscription.status in {
+                Subscription.Status.INCOMPLETE,
+                Subscription.Status.PAST_DUE,
+            } or (
+                subscription_id
+                and not str(subscription.stripe_subscription_id or "").strip()
+            ):
+                subscription = _activate_subscription_for_paid_invoice(
+                    subscription=subscription,
+                    plan=plan,
+                    organization=resolved_organization,
+                    user=resolved_user,
+                    customer_id=customer_id,
+                    stripe_subscription_id=subscription_id,
+                )
+            else:
+                update_fields: list[str] = []
+                if (
+                    customer_id.strip()
+                    and subscription.stripe_customer_id != customer_id.strip()
+                ):
+                    subscription.stripe_customer_id = customer_id.strip()
+                    update_fields.append("stripe_customer_id")
+                if (
+                    subscription_id.strip()
+                    and subscription.stripe_subscription_id != subscription_id.strip()
+                ):
+                    subscription.stripe_subscription_id = subscription_id.strip()
+                    update_fields.append("stripe_subscription_id")
+                if update_fields:
+                    subscription.save(update_fields=update_fields)
+                if customer_id.strip():
+                    _sync_organization_customer_id(
+                        resolved_organization or subscription.organization,
+                        customer_id.strip(),
+                    )
+
+            organization = subscription.organization
+
+            user = resolved_user
+            if user is None and subscription is not None:
+                user = subscription.user
+            if user is None:
+                raise BillingWebhookError(
+                    "Could not resolve a local user for the Stripe invoice."
+                )
+
+            reference_data: dict[str, Any] = {
+                "invoice_id": invoice_id,
+                "stripe_customer_id": customer_id,
+                "stripe_price_id": price_id,
+            }
+            if subscription_id:
+                reference_data["stripe_subscription_id"] = subscription_id
+
+            return credit_user(
+                user,
+                organization=organization,
+                amount=plan.credits_per_period,
+                transaction_type=CreditTransaction.TransactionType.PLAN,
+                description=f"{plan.name} credits from Stripe invoice {invoice_id}",
+                stripe_event_id=str(event_payload.get("id") or "").strip(),
+                stripe_object_id=invoice_id,
+                stripe_reference_data=reference_data,
             )
-
-        reference_data: dict[str, Any] = {
-            "invoice_id": invoice_id,
-            "stripe_customer_id": customer_id,
-            "stripe_price_id": price_id,
-        }
-        if subscription_id:
-            reference_data["stripe_subscription_id"] = subscription_id
-
-        return credit_user(
-            user,
-            organization=organization,
-            amount=plan.credits_per_period,
-            transaction_type=CreditTransaction.TransactionType.PLAN,
-            description=f"{plan.name} credits from Stripe invoice {invoice_id}",
-            stripe_event_id=str(event_payload.get("id") or "").strip(),
-            stripe_object_id=invoice_id,
-            stripe_reference_data=reference_data,
-        )
 
 
 def _handle_invoice_payment_failed_event(
@@ -1132,56 +1164,65 @@ def _handle_invoice_payment_failed_event(
     resolved_organization = _resolve_organization_for_invoice(
         invoice_payload=invoice_payload,
     )
-    with org_scope(resolved_organization):
-        resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
-        subscription = _resolve_subscription_for_runtime_event(
-            stripe_subscription_id=str(
-                invoice_payload.get("subscription") or ""
-            ).strip(),
-            customer_id=str(invoice_payload.get("customer") or "").strip(),
-            organization=resolved_organization,
-            user=resolved_user,
-            for_update=True,
-        )
-
-        if subscription is None:
-            if resolved_user is None and resolved_organization is None:
-                raise BillingWebhookError(
-                    "Could not resolve a local user for the Stripe invoice."
-                )
-            price_id = _extract_price_id(invoice_payload)
-            plan = Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
-            if plan is None:
-                raise BillingWebhookError(
-                    f"No billing plan matches Stripe price {price_id}."
-                )
-            subscription = Subscription(
-                user=resolved_user,
+    # Phase 3: each handler owns its atomic for SET LOCAL support.
+    with transaction.atomic():
+        with tenant_context(
+            resolved_organization.pk if resolved_organization else None
+        ):
+            resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
+            subscription = _resolve_subscription_for_runtime_event(
+                stripe_subscription_id=str(
+                    invoice_payload.get("subscription") or ""
+                ).strip(),
+                customer_id=str(invoice_payload.get("customer") or "").strip(),
                 organization=resolved_organization,
-                plan=plan,
+                user=resolved_user,
+                for_update=True,
             )
 
-        subscription.status = Subscription.Status.PAST_DUE
-        update_fields: list[str] = ["status"]
-        customer_id = str(invoice_payload.get("customer") or "").strip()
-        subscription_id = str(invoice_payload.get("subscription") or "").strip()
-        if customer_id and subscription.stripe_customer_id != customer_id:
-            subscription.stripe_customer_id = customer_id
-            update_fields.append("stripe_customer_id")
-        if subscription_id and subscription.stripe_subscription_id != subscription_id:
-            subscription.stripe_subscription_id = subscription_id
-            update_fields.append("stripe_subscription_id")
-        if (
-            resolved_organization is not None
-            and subscription.organization_id != resolved_organization.pk
-        ):
-            subscription.organization = resolved_organization
-            update_fields.append("organization")
-        if resolved_user is not None and subscription.user_id != resolved_user.pk:
-            subscription.user = resolved_user
-            update_fields.append("user")
-        subscription.save(update_fields=update_fields)
-        return subscription
+            if subscription is None:
+                if resolved_user is None and resolved_organization is None:
+                    raise BillingWebhookError(
+                        "Could not resolve a local user for the Stripe invoice."
+                    )
+                price_id = _extract_price_id(invoice_payload)
+                plan = (
+                    Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
+                )
+                if plan is None:
+                    raise BillingWebhookError(
+                        f"No billing plan matches Stripe price {price_id}."
+                    )
+                subscription = Subscription(
+                    user=resolved_user,
+                    organization=resolved_organization,
+                    plan=plan,
+                )
+
+            subscription.status = Subscription.Status.PAST_DUE
+            update_fields: list[str] = ["status"]
+            customer_id = str(invoice_payload.get("customer") or "").strip()
+            subscription_id = str(invoice_payload.get("subscription") or "").strip()
+            if customer_id and subscription.stripe_customer_id != customer_id:
+                subscription.stripe_customer_id = customer_id
+                update_fields.append("stripe_customer_id")
+            if (
+                subscription_id
+                and subscription.stripe_subscription_id != subscription_id
+            ):
+                subscription.stripe_subscription_id = subscription_id
+                update_fields.append("stripe_subscription_id")
+            if (
+                resolved_organization is not None
+                and subscription.organization_id != resolved_organization.pk
+            ):
+                subscription.organization = resolved_organization
+                update_fields.append("organization")
+            if resolved_user is not None and subscription.user_id != resolved_user.pk:
+                subscription.user = resolved_user
+                update_fields.append("user")
+            subscription.save(update_fields=update_fields)
+            return subscription
 
 
 def _activate_subscription_for_paid_invoice(
@@ -1232,6 +1273,10 @@ def _backfill_missing_subscription_for_paid_invoice(
     fallback_organization: Any | None,
     expected_plan: Plan,
 ) -> Subscription:
+    # CR-P3-003: the remote Stripe call (retrieve_subscription) happens first,
+    # then _upsert_subscription_from_payload manages its own atomic+tenant_context.
+    # Neither belongs inside the caller's mutation atomic — the caller should
+    # invoke this function between short-lived atomic windows.
     stripe_subscription_id = str(invoice_payload.get("subscription") or "").strip()
     if not stripe_subscription_id:
         raise BillingWebhookError(
@@ -1284,66 +1329,75 @@ def _upsert_subscription_from_payload(
     if organization is None:
         organization = fallback_organization
 
-    with org_scope(organization):
-        user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
-        if user is None:
-            user = fallback_user
-        if user is None and organization is None:
-            raise BillingWebhookError(
-                "Could not resolve a local user for the Stripe subscription."
+    # Phase 3: each handler owns its atomic for SET LOCAL support.
+    with transaction.atomic():
+        with tenant_context(organization.pk if organization else None):
+            user = _resolve_user_for_subscription(
+                subscription_payload=subscription_payload
             )
+            if user is None:
+                user = fallback_user
+            if user is None and organization is None:
+                raise BillingWebhookError(
+                    "Could not resolve a local user for the Stripe subscription."
+                )
 
-        subscription = _resolve_subscription_for_runtime_event(
-            stripe_subscription_id=stripe_subscription_id,
-            customer_id=str(subscription_payload.get("customer") or "").strip(),
-            organization=organization,
-            user=user,
-            for_update=True,
-        )
-        if subscription is None:
-            subscription = Subscription(user=user, organization=organization, plan=plan)
+            subscription = _resolve_subscription_for_runtime_event(
+                stripe_subscription_id=stripe_subscription_id,
+                customer_id=str(subscription_payload.get("customer") or "").strip(),
+                organization=organization,
+                user=user,
+                for_update=True,
+            )
+            if subscription is None:
+                subscription = Subscription(
+                    user=user, organization=organization, plan=plan
+                )
 
-        subscription.plan = plan
-        subscription.status = local_status
-        update_fields: list[str] = ["plan", "status"]
-        customer_id = str(subscription_payload.get("customer") or "").strip()
-        if customer_id and subscription.stripe_customer_id != customer_id:
-            subscription.stripe_customer_id = customer_id
-            update_fields.append("stripe_customer_id")
-        if (
-            stripe_subscription_id
-            and subscription.stripe_subscription_id != stripe_subscription_id
-        ):
-            subscription.stripe_subscription_id = stripe_subscription_id
-            update_fields.append("stripe_subscription_id")
-        if organization is not None and subscription.organization_id != organization.pk:
-            subscription.organization = organization
-            update_fields.append("organization")
-        if user is not None and subscription.user_id is None:
-            subscription.user = user
-            update_fields.append("user")
-        unique_fields = list(dict.fromkeys(update_fields))
-        if subscription.pk is None:
-            subscription.save()
-        elif unique_fields:
-            subscription.save(update_fields=unique_fields)
-        if organization is not None and customer_id:
-            _sync_organization_customer_id(organization, customer_id)
-        subscription.current_period_start = _stripe_timestamp_to_datetime(
-            subscription_payload.get("current_period_start")
-        )
-        subscription.current_period_end = _stripe_timestamp_to_datetime(
-            subscription_payload.get("current_period_end")
-        )
-        subscription.save(
-            update_fields=[
-                "current_period_start",
-                "current_period_end",
-            ]
-            if subscription.pk is not None
-            else None
-        )
-        return subscription
+            subscription.plan = plan
+            subscription.status = local_status
+            update_fields: list[str] = ["plan", "status"]
+            customer_id = str(subscription_payload.get("customer") or "").strip()
+            if customer_id and subscription.stripe_customer_id != customer_id:
+                subscription.stripe_customer_id = customer_id
+                update_fields.append("stripe_customer_id")
+            if (
+                stripe_subscription_id
+                and subscription.stripe_subscription_id != stripe_subscription_id
+            ):
+                subscription.stripe_subscription_id = stripe_subscription_id
+                update_fields.append("stripe_subscription_id")
+            if (
+                organization is not None
+                and subscription.organization_id != organization.pk
+            ):
+                subscription.organization = organization
+                update_fields.append("organization")
+            if user is not None and subscription.user_id is None:
+                subscription.user = user
+                update_fields.append("user")
+            unique_fields = list(dict.fromkeys(update_fields))
+            if subscription.pk is None:
+                subscription.save()
+            elif unique_fields:
+                subscription.save(update_fields=unique_fields)
+            if organization is not None and customer_id:
+                _sync_organization_customer_id(organization, customer_id)
+            subscription.current_period_start = _stripe_timestamp_to_datetime(
+                subscription_payload.get("current_period_start")
+            )
+            subscription.current_period_end = _stripe_timestamp_to_datetime(
+                subscription_payload.get("current_period_end")
+            )
+            subscription.save(
+                update_fields=[
+                    "current_period_start",
+                    "current_period_end",
+                ]
+                if subscription.pk is not None
+                else None
+            )
+            return subscription
 
 
 def _handle_subscription_event(
@@ -1420,17 +1474,19 @@ def _handle_checkout_session_completed_event(
     if payment_intent_id:
         reference_data["payment_intent_id"] = payment_intent_id
 
-    with org_scope(organization):
-        return credit_user(
-            user,
-            organization=organization,
-            amount=credited_amount,
-            transaction_type=CreditTransaction.TransactionType.PURCHASE,
-            description=f"{plan.name} credits from Stripe checkout session {checkout_session_id}",
-            stripe_event_id=str(event_payload.get("id") or "").strip(),
-            stripe_object_id=checkout_session_id,
-            stripe_reference_data=reference_data,
-        )
+    # Phase 3: each handler owns its atomic for SET LOCAL support.
+    with transaction.atomic():
+        with tenant_context(organization.pk if organization else None):
+            return credit_user(
+                user,
+                organization=organization,
+                amount=credited_amount,
+                transaction_type=CreditTransaction.TransactionType.PURCHASE,
+                description=f"{plan.name} credits from Stripe checkout session {checkout_session_id}",
+                stripe_event_id=str(event_payload.get("id") or "").strip(),
+                stripe_object_id=checkout_session_id,
+                stripe_reference_data=reference_data,
+            )
 
 
 def _extract_event_object(event_payload: Mapping[str, Any]) -> dict[str, Any]:

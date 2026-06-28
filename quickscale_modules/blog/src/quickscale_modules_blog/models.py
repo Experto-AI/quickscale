@@ -130,6 +130,7 @@ class Category(models.Model):
     class Meta:
         verbose_name_plural = "Categories"
         ordering = ["name"]
+        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "organization"],
@@ -171,6 +172,7 @@ class Tag(models.Model):
 
     class Meta:
         ordering = ["name"]
+        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "organization"],
@@ -267,6 +269,7 @@ class BlogMediaAsset(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        base_manager_name = "all_objects"
 
     def __str__(self) -> str:
         return self.original_filename
@@ -329,6 +332,7 @@ class Post(models.Model):
 
     class Meta:
         ordering = ["-published_date", "-created_at"]
+        base_manager_name = "all_objects"
         indexes = [
             models.Index(fields=["-published_date"]),
             models.Index(fields=["status"]),

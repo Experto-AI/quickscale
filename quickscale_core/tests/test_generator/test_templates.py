@@ -1138,6 +1138,28 @@ class TestProductionReadyFeatures:
         assert 'if "DEFAULT_FROM_EMAIL" not in globals():' in output
         assert 'if "SERVER_EMAIL" not in globals():' in output
 
+    def test_production_database_pooling_and_runtime_role_note_survives_rendering(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The connection pooling and runtime-role note survives Jinja rendering.
+
+        AF4 scope requires a visible note in the generated production settings
+        explaining the CONN_MAX_AGE/CONN_HEALTH_CHECKS pooling strategy and
+        the RUNTIME_DATABASE_URL runtime-role pattern.
+        """
+        template = jinja_env.get_template("project_name/settings/production.py.j2")
+        output = template.render(test_context)
+
+        # Pooling note must survive rendering
+        assert "Connection pooling" in output
+        assert "CONN_MAX_AGE=600" in output
+        assert "CONN_HEALTH_CHECKS=True" in output
+
+        # Runtime-role pattern note must survive rendering
+        assert "Runtime role pattern" in output
+        assert "RUNTIME_DATABASE_URL" in output
+        assert "NOSUPERUSER" in output or "NOBYPASSRLS" in output
+
 
 class TestCorrelationIdFilterRuntime:
     """Verify CorrelationIdFilter actually sources correlation_id from middleware.
