@@ -86,7 +86,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified. **AF3 was subsequently implemented and merged** (see Recently completed below). The remaining five findings require two phases of parallel work before the isolation guarantee is correct and CI-verified.
+Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified. **AF3 and AF11 were subsequently implemented and merged** (see Recently completed below). The remaining four findings require two phases of parallel work before the isolation guarantee is correct and CI-verified.
 
 ### Track assignment & parallelization
 
@@ -117,7 +117,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 | **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
 | **AF3** ✅ | 1 | AST-level positive-proof guard: management-command import+invocation of `operator_access(...)`; zero-direct-`.all_objects.` management-command guard; deferred `.all_objects.` manifest set-equality | complete |
 | **AF10** | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A |
-| **AF11** | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A |
+| **AF11** ✅ | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A |
 | **AF9** | 1 | Authenticated list view under restricted role returns owner's rows (not zero) | Phase A |
 
 ---
@@ -153,7 +153,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ---
 
-#### - [ ] AF11 — NULLIF empty-string guard in RLS policy template
+#### - [x] AF11 — NULLIF empty-string guard in RLS policy template ✅
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -165,6 +165,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **VALIDATION PATH:** `make MODULE=orgs test` (policy conformance); each module's `test_rls_boundary.py` under Postgres (now unblocked by AF13/AF10).
 - **DEPENDS:** nothing (independent of AF9, AF13, AF10 — touches a different seam).
 - **NOTE:** fixes the policy template at the source; caller behavior (SET LOCAL / RESET) does not affect correctness after this lands.
+- **IMPLEMENTATION:** Phase 1 (`_FORCE_RLS_FORWARD_SQL` template fix in `tenancy.py`), Phase 2 (six module sweep migrations dropping/recreating RLS policies from corrected template), Phase 3 (baseline conformance gate extended — existing `test_enrolled_model_has_force_rls_policy` continues to verify FORCE-RLS on each table), Phase 4 (restricted-role conformance proof — `test_restricted_role_returns_zero_rows_under_null_and_empty_guc` seeds all 21 enrolled tables and proves both `RESET app.current_org_id` and `SET app.current_org_id = ''` yield zero rows without raising).
 
 ---
 
@@ -198,6 +199,20 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 ---
 
 ### Recently completed
+
+#### - [x] AF11 — NULLIF empty-string guard in RLS policy template ✅
+
+`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+
+- **TRACK:** `wt-track2`
+- **WHY → Finding AF11.** `''::uuid` raises `invalid input syntax` instead of returning zero rows; every pooled connection that has served any `SET LOCAL` request rests at `''`, turning tenant page loads into non-deterministic 500s.
+- **OBJECTIVE:** Change `_FORCE_RLS_FORWARD_SQL` from bare `current_setting(...)::uuid` to `NULLIF(current_setting(...),'')::uuid`. Ship one migration per module dropping/recreating policies from the corrected template. Extend conformance gate to assert NULL/''-GUC → 0 rows.
+- **SCOPE:** `orgs/tenancy.py` (template fix); six module sweep migrations (`crm`, `blog`, `listings`, `forms`, `social`, `billing`); `orgs/tests/test_tenant_table_conformance.py` (restricted-role conformance proof).
+- **ACCEPTANCE CRITERIA:** `''` GUC returns 0 rows on every enrolled table; `invalid input syntax for type uuid` never appears in Postgres logs.
+- **VALIDATION PATH:** `make MODULE=orgs test` (policy conformance); final validation stack: lint + typecheck + explicit Postgres orgs-suite.
+- **DEPENDS:** nothing (independent of AF9, AF13, AF10).
+- **FINDINGS:** Plan-review accepted without findings. Change-review accepted without findings.
+- **IMPLEMENTATION:** Phase 1 (`_FORCE_RLS_FORWARD_SQL` NULLIF template fix in `tenancy.py`), Phase 2 (six module sweep migrations), Phase 3 (baseline conformance gate consistency), Phase 4 (PostgreSQL-only restricted-role proof: seeds 21 enrolled tables, asserts `RESET` and `''` return zero rows).
 
 #### - [x] AF3 — Single audited operator-access seam ✅
 

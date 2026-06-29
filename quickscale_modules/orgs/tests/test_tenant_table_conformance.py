@@ -708,3 +708,335 @@ def test_exactly_zero_pending_remediation_entries() -> None:
         f"but found {len(pending)}. "
         f"Entries: {[(e.app_label, e.model_name) for e in pending]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Restricted-role helper for the AF11 Phase 4 conformance proof
+# ---------------------------------------------------------------------------
+
+_RESTRICTED_ROLE = "quickscale_rls_test_role"
+
+
+def _ensure_rls_test_role() -> None:
+    """Create a non-superuser role for RLS boundary testing.
+
+    Connects via psycopg2 directly because ``CREATE ROLE`` is DDL and
+    cannot run inside a Django test transaction.  Idempotent.
+    Grants SELECT on every ENROLLED tenant table so the restricted role
+    can verify RLS policy enforcement.
+    """
+    import psycopg2  # type: ignore[import-untyped]
+
+    from django.db import connection
+
+    db = connection.settings_dict
+    conn = psycopg2.connect(
+        dbname=db["NAME"],
+        user=db["USER"],
+        password=db["PASSWORD"],
+        host=db.get("HOST", "localhost"),
+        port=db.get("PORT", "5432"),
+    )
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                DO $$
+                BEGIN
+                    CREATE ROLE {_RESTRICTED_ROLE};
+                EXCEPTION WHEN duplicate_object THEN NULL;
+                END $$;
+            """)
+            cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
+            # Grant SELECT on every enrolled tenant table.
+            for entry in TENANT_TABLE_REGISTRY:
+                if entry.status == TenantTableStatus.ENROLLED:
+                    model = apps.get_model(entry.app_label, entry.model_name)
+                    if model is not None:
+                        cur.execute(
+                            f"GRANT SELECT ON {model._meta.db_table} "
+                            f"TO {_RESTRICTED_ROLE}"
+                        )
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# AF11 Phase 4 — Restricted-role conformance proof
+# ---------------------------------------------------------------------------
+# Seeds one representative row per enrolled policy table, then proves that
+# both RESET app.current_org_id (NULL GUC) and SET app.current_org_id = ''
+# yield zero rows without raising.  PostgreSQL only.
+#
+# This is the AF11 conformance extension: the ``NULLIF`` guard in the
+# FORCE-RLS policy template ensures that a pooled connection that has
+# served a ``SET LOCAL`` request and now sits at ``''`` returns zero rows
+# instead of raising ``invalid input syntax for type uuid``.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.skipif(
+    not _is_postgres,
+    reason="Restricted-role conformance proof requires PostgreSQL.",
+)
+def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
+    """Prove every enrolled table returns 0 rows under RESET and '' GUC.
+
+    Seeds one representative row per enrolled table, then for each table:
+    1. SET app.current_org_id = <org-uuid> → rows exist (proves policy works).
+    2. RESET app.current_org_id            → 0 rows (NULL GUC is safe).
+    3. SET app.current_org_id = ''          → 0 rows (no ``invalid input
+       syntax for type uuid`` — the AF11 fix).
+    """
+    import tempfile
+
+    from django.contrib.auth import get_user_model
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from django.db import connection
+    from django.test import override_settings
+
+    from quickscale_modules_billing.models import (
+        CreditBalance,
+        CreditTransaction,
+        Plan,
+        Subscription,
+    )
+    from quickscale_modules_blog.models import (
+        BlogMediaAsset,
+        Category,
+        Post,
+        Tag as BlogTag,
+    )
+    from quickscale_modules_crm.models import (
+        Company,
+        Contact,
+        ContactNote,
+        Deal,
+        DealNote,
+        Stage,
+        Tag as CrmTag,
+    )
+    from quickscale_modules_forms.models import (
+        Form,
+        FormField,
+        FormFieldValue,
+        FormSubmission,
+    )
+    from quickscale_modules_listings.models import Listing
+    from quickscale_modules_social.models import SocialEmbed, SocialLink
+    from quickscale_modules_orgs.models import Organization
+
+    # Collect enrolled table metadata from the registry.
+    enrolled_tables: list[tuple[str, str, str]] = []
+    for entry in TENANT_TABLE_REGISTRY:
+        if entry.status == TenantTableStatus.ENROLLED:
+            model = apps.get_model(entry.app_label, entry.model_name)
+            assert model is not None, (
+                f"Model {entry.app_label}.{entry.model_name} not found"
+            )
+            enrolled_tables.append(
+                (entry.app_label, entry.model_name, model._meta.db_table)
+            )
+
+    assert len(enrolled_tables) == 21, (
+        f"Expected 21 enrolled policy tables for AF11 proof, "
+        f"got {len(enrolled_tables)}. Has the registry changed?"
+    )
+
+    UserModel = get_user_model()
+
+    # Seed reference data (control-plane, not tenant-scoped).
+    org = Organization.objects.create(
+        name="AF11 Proof Org",
+        slug="af11-proof-org",
+        is_system=False,
+        is_personal=False,
+    )
+    user = UserModel.objects.create_user(
+        username="af11_proof_user",
+        password="af11_proof_pass",
+    )
+    plan = Plan.objects.create(
+        name="AF11 Proof Plan",
+        slug="af11-proof-plan",
+        stripe_price_id="price_af11_proof",
+        credits_per_period=0,
+        price_cents=0,
+    )
+
+    # Seed one representative row per enrolled table.
+    # -- CRM --
+    CrmTag.all_objects.create(organization=org, name="AF11 CRM Tag")
+    company = Company.all_objects.create(
+        organization=org,
+        name="AF11 Company",
+    )
+    contact = Contact.all_objects.create(
+        organization=org,
+        first_name="AF11",
+        last_name="Contact",
+        email="af11_contact@test.com",
+        company=company,
+    )
+    stage = Stage.all_objects.create(
+        organization=org,
+        name="AF11 Stage",
+        order=1,
+    )
+    deal = Deal.all_objects.create(
+        organization=org,
+        title="AF11 Deal",
+        contact=contact,
+        stage=stage,
+        amount=100,
+    )
+    ContactNote.all_objects.create(
+        organization=org,
+        contact=contact,
+        created_by=user,
+        text="AF11 contact note.",
+    )
+    DealNote.all_objects.create(
+        organization=org,
+        deal=deal,
+        created_by=user,
+        text="AF11 deal note.",
+    )
+
+    # -- Billing --
+    CreditBalance.all_objects.create(organization=org)
+    CreditTransaction.all_objects.create(
+        organization=org,
+        amount=0,
+        transaction_type=CreditTransaction.TransactionType.ADJUSTMENT,
+        balance_after=0,
+        description="AF11 proof",
+    )
+    Subscription.all_objects.create(
+        organization=org,
+        plan=plan,
+        status=Subscription.Status.CANCELED,
+    )
+
+    # -- Blog --
+    BlogTag.all_objects.create(organization=org, name="AF11 Blog Tag")
+    category = Category.all_objects.create(
+        organization=org,
+        name="AF11 Category",
+        slug="af11-category",
+    )
+
+    with tempfile.TemporaryDirectory() as tmp_media:
+        with override_settings(MEDIA_ROOT=tmp_media):
+            gif = SimpleUploadedFile(
+                "af11_proof.gif",
+                b"AF11 proof GIF content",
+                content_type="image/gif",
+            )
+            BlogMediaAsset.all_objects.create(
+                organization=org,
+                file=gif,
+                original_filename="af11_proof.gif",
+            )
+
+    Post.all_objects.create(
+        organization=org,
+        title="AF11 Blog Post",
+        content="# AF11 Proof Post\n\nThis post exists for the restricted-role conformance proof.",
+        slug="af11-blog-post",
+        author=user,
+        category=category,
+    )
+
+    # -- Listings --
+    Listing.all_objects.create(
+        organization=org,
+        title="AF11 Listing",
+        slug="af11-listing",
+    )
+
+    # -- Forms --
+    form = Form.all_objects.create(
+        organization=org,
+        title="AF11 Form",
+        slug="af11-form",
+    )
+    FormField.all_objects.create(
+        organization=org,
+        form=form,
+        field_type=FormField.FIELD_TYPE_TEXT,
+        label="Name",
+        name="name",
+        order=1,
+    )
+    submission = FormSubmission.all_objects.create(
+        organization=org,
+        form=form,
+    )
+    FormFieldValue.all_objects.create(
+        organization=org,
+        submission=submission,
+        field_name="name",
+        field_label="Name",
+        value="AF11 proof value",
+    )
+
+    # -- Social (URL parsing only, no external calls) --
+    SocialLink.all_objects.create(
+        organization=org,
+        title="AF11 X Link",
+        url="https://x.com/af11proof",
+    )
+    SocialEmbed.all_objects.create(
+        organization=org,
+        title="AF11 YouTube Embed",
+        url="https://www.youtube.com/watch?v=af11proof",
+    )
+
+    # Ensure the restricted PostgreSQL role exists for RLS-boundary verification.
+    _ensure_rls_test_role()
+
+    # Verify rows under each GUC state.
+    org_id_str = str(org.pk)
+    n_enrolled = len(enrolled_tables)
+
+    with connection.cursor() as cursor:
+        # Switch to restricted role so RLS policies are enforced.
+        cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
+        try:
+            # Phase 1 — SET to seeded org UUID → rows must exist.
+            cursor.execute("SET app.current_org_id = %s", [org_id_str])
+            for idx, (al, mn, dt) in enumerate(enrolled_tables, 1):
+                quoted = connection.ops.quote_name(dt)
+                cursor.execute(f"SELECT COUNT(*) FROM {quoted}")
+                count = cursor.fetchone()[0]
+                assert count > 0, (
+                    f"[{idx}/{n_enrolled}] Table {dt} ({al}.{mn}) should have "
+                    f"rows when app.current_org_id = <org>, but got {count}."
+                )
+
+            # Phase 2 — RESET → NULL GUC → zero rows.
+            cursor.execute("RESET app.current_org_id")
+            for idx, (al, mn, dt) in enumerate(enrolled_tables, 1):
+                quoted = connection.ops.quote_name(dt)
+                cursor.execute(f"SELECT COUNT(*) FROM {quoted}")
+                count = cursor.fetchone()[0]
+                assert count == 0, (
+                    f"[{idx}/{n_enrolled}] Table {dt} ({al}.{mn}) should return "
+                    f"0 rows under RESET (NULL GUC), but got {count}."
+                )
+
+            # Phase 3 — SET app.current_org_id = '' → zero rows (no error).
+            cursor.execute("SET app.current_org_id = ''")
+            for idx, (al, mn, dt) in enumerate(enrolled_tables, 1):
+                quoted = connection.ops.quote_name(dt)
+                cursor.execute(f"SELECT COUNT(*) FROM {quoted}")
+                count = cursor.fetchone()[0]
+                assert count == 0, (
+                    f"[{idx}/{n_enrolled}] Table {dt} ({al}.{mn}) should return "
+                    f"0 rows under SET app.current_org_id = '' (empty GUC), "
+                    f"but got {count}."
+                )
+        finally:
+            cursor.execute("RESET ROLE")
