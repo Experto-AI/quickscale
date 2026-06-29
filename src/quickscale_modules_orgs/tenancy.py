@@ -656,6 +656,190 @@ def disable_child_parent_equality(
 
 
 # ---------------------------------------------------------------------------
+# Composite-FK child-parent ``organization_id`` equality infrastructure
+# (AF12 Phase 1)
+# ---------------------------------------------------------------------------
+# DB-enforced composite foreign keys that replace the old trigger-based
+# child-parent org equality (AF1 Phase 2 approach).  Each parent table
+# receives a UNIQUE constraint on ``(id, organization_id)``, and each
+# child table receives a composite FOREIGN KEY referencing that pair.
+#
+# This approach gives PostgreSQL direct responsibility for enforcing:
+#
+#     child.parent_fk = parent.id
+#     AND child.organization_id = parent.organization_id
+#
+# Usage from a data-migration on a child table::
+#
+#     from quickscale_modules_orgs.tenancy import (
+#         add_parent_unique_constraint,
+#         remove_parent_unique_constraint,
+#         add_composite_child_fk,
+#         remove_composite_child_fk,
+#     )
+#
+#     PARENT_TABLE = "quickscale_modules_crm_contact"
+#     PARENT_UNIQUE = "crm_contact_id_org_unique"
+#     CHILD_TABLE = "quickscale_modules_crm_contactnote"
+#     CHILD_FK = "crm_contactnote_contact_org_fk"
+#
+#     def forward(apps, schema_editor):
+#         add_parent_unique_constraint(
+#             schema_editor, PARENT_TABLE, PARENT_UNIQUE,
+#         )
+#         add_composite_child_fk(
+#             schema_editor,
+#             child_table=CHILD_TABLE,
+#             constraint_name=CHILD_FK,
+#             child_fk_column="contact_id",
+#             parent_table=PARENT_TABLE,
+#             on_delete="CASCADE",
+#         )
+#
+#     def reverse(apps, schema_editor):
+#         remove_composite_child_fk(schema_editor, CHILD_TABLE, CHILD_FK)
+#         remove_parent_unique_constraint(
+#             schema_editor, PARENT_TABLE, PARENT_UNIQUE,
+#         )
+# ---------------------------------------------------------------------------
+
+_ADD_PARENT_UNIQUE_SQL = """
+ALTER TABLE {table} ADD CONSTRAINT {constraint}
+    UNIQUE (id, organization_id);
+"""
+
+_REMOVE_PARENT_UNIQUE_SQL = """
+ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {constraint};
+"""
+
+_ADD_COMPOSITE_FK_SQL = """
+ALTER TABLE {child_table} ADD CONSTRAINT {constraint}
+    FOREIGN KEY ({child_fk_column}, organization_id)
+    REFERENCES {parent_table}(id, organization_id)
+    ON DELETE {on_delete}
+    DEFERRABLE INITIALLY DEFERRED;
+"""
+
+_REMOVE_COMPOSITE_FK_SQL = """
+ALTER TABLE {child_table} DROP CONSTRAINT IF EXISTS {constraint};
+"""
+
+
+def add_parent_unique_constraint(
+    schema_editor: Any,
+    table: str,
+    constraint_name: str,
+) -> None:
+    """Add a UNIQUE (id, organization_id) constraint on a parent table.
+
+    No-op on non-PostgreSQL databases.
+
+    Args:
+        schema_editor: The Django schema editor from a migration.
+        table: The parent table name.
+        constraint_name: Constraint name for the UNIQUE index.
+    """
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    schema_editor.execute(
+        _ADD_PARENT_UNIQUE_SQL.format(
+            table=table,
+            constraint=constraint_name,
+        ),
+    )
+
+
+def remove_parent_unique_constraint(
+    schema_editor: Any,
+    table: str,
+    constraint_name: str,
+) -> None:
+    """Drop a UNIQUE (id, organization_id) constraint from a parent table.
+
+    No-op on non-PostgreSQL databases.
+
+    Args:
+        schema_editor: The Django schema editor from a migration.
+        table: The parent table name.
+        constraint_name: Constraint name to drop.
+    """
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    schema_editor.execute(
+        _REMOVE_PARENT_UNIQUE_SQL.format(
+            table=table,
+            constraint=constraint_name,
+        ),
+    )
+
+
+def add_composite_child_fk(
+    schema_editor: Any,
+    *,
+    child_table: str,
+    constraint_name: str,
+    child_fk_column: str,
+    parent_table: str,
+    on_delete: str = "CASCADE",
+) -> None:
+    """Add a composite FK ``(child_fk_column, organization_id)`` referencing
+    ``parent_table(id, organization_id)``.
+
+    The FK uses ``MATCH SIMPLE`` (PostgreSQL default): if
+    ``child_fk_column`` is NULL the constraint is not enforced,
+    which preserves SET_NULL contracts on nullable parent FKs.
+
+    No-op on non-PostgreSQL databases.
+
+    Args:
+        schema_editor: The Django schema editor from a migration.
+        child_table: The child table name.
+        constraint_name: Constraint name for the composite FK.
+        child_fk_column: The FK column on the child pointing to the
+            parent's ``id`` (e.g. ``contact_id``).
+        parent_table: The parent table name.
+        on_delete: ``CASCADE``, ``RESTRICT``, ``SET NULL``, or
+            ``SET NULL (child_fk_column)``.  Default ``CASCADE``.
+    """
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    schema_editor.execute(
+        _ADD_COMPOSITE_FK_SQL.format(
+            child_table=child_table,
+            constraint=constraint_name,
+            child_fk_column=child_fk_column,
+            parent_table=parent_table,
+            on_delete=on_delete,
+        ),
+    )
+
+
+def remove_composite_child_fk(
+    schema_editor: Any,
+    *,
+    child_table: str,
+    constraint_name: str,
+) -> None:
+    """Drop a composite FK constraint from a child table.
+
+    No-op on non-PostgreSQL databases.
+
+    Args:
+        schema_editor: The Django schema editor from a migration.
+        child_table: The child table name.
+        constraint_name: Constraint name to drop.
+    """
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    schema_editor.execute(
+        _REMOVE_COMPOSITE_FK_SQL.format(
+            child_table=child_table,
+            constraint=constraint_name,
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Naming constants for the conformance gate
 # ---------------------------------------------------------------------------
 # The orgs-side conformance gate inspects PostgreSQL catalogs for these

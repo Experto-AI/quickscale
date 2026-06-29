@@ -19,16 +19,24 @@ from quickscale_modules_orgs.tenancy import (
     CHILD_PARENT_EQUALITY_FUNC_NAME,
     CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX,
     ORG_ID_COLUMN,
-    _FORCE_RLS_FORWARD_SQL,
-    _FORCE_RLS_REVERSE_SQL,
+    _ADD_COMPOSITE_FK_SQL,
+    _ADD_PARENT_UNIQUE_SQL,
     _EQUALITY_TRIGGER_FUNC_SQL,
     _EQUALITY_TRIGGER_SQL,
     _EQUALITY_TRIGGER_DROP_SQL,
+    _FORCE_RLS_FORWARD_SQL,
+    _FORCE_RLS_REVERSE_SQL,
+    _REMOVE_COMPOSITE_FK_SQL,
+    _REMOVE_PARENT_UNIQUE_SQL,
     _child_equality_trigger_name,
+    add_composite_child_fk,
+    add_parent_unique_constraint,
     apply_force_rls,
     disable_child_parent_equality,
     enable_child_parent_equality,
     install_equality_trigger_function,
+    remove_composite_child_fk,
+    remove_parent_unique_constraint,
     revert_force_rls,
 )
 
@@ -383,3 +391,459 @@ class TestEnableDisableChildParentEquality:
         )
         sql = schema_editor.execute.call_args[0][0]
         assert "custom_org_id" in sql
+
+
+# =========================================================================
+# Composite FK — SQL template content (AF12 Phase 1)
+# =========================================================================
+
+
+class TestCompositeFkSqlTemplates:
+    """Verify the composite-FK SQL templates are coherent."""
+
+    def test_add_parent_unique_contains_alter_table(self) -> None:
+        assert "ALTER TABLE" in _ADD_PARENT_UNIQUE_SQL
+
+    def test_add_parent_unique_contains_unique(self) -> None:
+        assert "UNIQUE" in _ADD_PARENT_UNIQUE_SQL
+
+    def test_add_parent_unique_has_placeholders(self) -> None:
+        assert "{table}" in _ADD_PARENT_UNIQUE_SQL
+        assert "{constraint}" in _ADD_PARENT_UNIQUE_SQL
+
+    def test_remove_parent_unique_contains_drop_constraint(self) -> None:
+        assert "DROP CONSTRAINT IF EXISTS" in _REMOVE_PARENT_UNIQUE_SQL
+
+    def test_remove_parent_unique_has_placeholders(self) -> None:
+        assert "{table}" in _REMOVE_PARENT_UNIQUE_SQL
+        assert "{constraint}" in _REMOVE_PARENT_UNIQUE_SQL
+
+    def test_add_composite_fk_contains_foreign_key(self) -> None:
+        assert "FOREIGN KEY" in _ADD_COMPOSITE_FK_SQL
+
+    def test_add_composite_fk_contains_references(self) -> None:
+        assert "REFERENCES" in _ADD_COMPOSITE_FK_SQL
+
+    def test_add_composite_fk_contains_on_delete(self) -> None:
+        assert "ON DELETE" in _ADD_COMPOSITE_FK_SQL
+
+    def test_add_composite_fk_has_all_placeholders(self) -> None:
+        assert "{child_table}" in _ADD_COMPOSITE_FK_SQL
+        assert "{constraint}" in _ADD_COMPOSITE_FK_SQL
+        assert "{child_fk_column}" in _ADD_COMPOSITE_FK_SQL
+        assert "{parent_table}" in _ADD_COMPOSITE_FK_SQL
+        assert "{on_delete}" in _ADD_COMPOSITE_FK_SQL
+
+    def test_remove_composite_fk_contains_drop_constraint(self) -> None:
+        assert "DROP CONSTRAINT IF EXISTS" in _REMOVE_COMPOSITE_FK_SQL
+
+    def test_remove_composite_fk_has_placeholders(self) -> None:
+        assert "{child_table}" in _REMOVE_COMPOSITE_FK_SQL
+        assert "{constraint}" in _REMOVE_COMPOSITE_FK_SQL
+
+    def test_add_composite_fk_org_column_is_organization_id(self) -> None:
+        """The composite FK always references organization_id on both sides."""
+        assert "organization_id" in _ADD_COMPOSITE_FK_SQL
+
+    def test_add_parent_unique_org_column_is_organization_id(self) -> None:
+        """The parent unique constraint always uses organization_id."""
+        assert "organization_id" in _ADD_PARENT_UNIQUE_SQL
+
+
+# =========================================================================
+# add_parent_unique_constraint / remove_parent_unique_constraint
+# =========================================================================
+
+
+class TestAddRemoveParentUniqueConstraint:
+    """Tests for ``add_parent_unique_constraint`` and its reverse."""
+
+    TABLE = "quickscale_modules_crm_contact"
+    CONSTRAINT = "crm_contact_id_org_unique"
+
+    def test_add_creates_unique_on_postgres(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+        add_parent_unique_constraint(
+            schema_editor,
+            table=self.TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        schema_editor.execute.assert_called_once()
+        sql = schema_editor.execute.call_args[0][0]
+        assert "ALTER TABLE" in sql
+        assert "UNIQUE" in sql
+        assert self.TABLE in sql
+        assert self.CONSTRAINT in sql
+        assert "id" in sql
+        assert "organization_id" in sql
+
+    def test_remove_drops_constraint_on_postgres(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+        remove_parent_unique_constraint(
+            schema_editor,
+            table=self.TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        schema_editor.execute.assert_called_once()
+        sql = schema_editor.execute.call_args[0][0]
+        assert "DROP CONSTRAINT IF EXISTS" in sql
+        assert self.TABLE in sql
+        assert self.CONSTRAINT in sql
+
+    def test_add_noop_on_sqlite(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "sqlite"
+        add_parent_unique_constraint(
+            schema_editor,
+            table=self.TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        schema_editor.execute.assert_not_called()
+
+    def test_remove_noop_on_sqlite(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "sqlite"
+        remove_parent_unique_constraint(
+            schema_editor,
+            table=self.TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        schema_editor.execute.assert_not_called()
+
+    def test_add_reverse_round_trip(self) -> None:
+        """Applying then removing should produce complementary SQL."""
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+
+        add_parent_unique_constraint(
+            schema_editor,
+            table=self.TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        schema_editor.reset_mock()
+
+        remove_parent_unique_constraint(
+            schema_editor,
+            table=self.TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        sql = schema_editor.execute.call_args[0][0]
+        assert "DROP CONSTRAINT IF EXISTS" in sql
+        assert self.CONSTRAINT in sql
+
+    def test_formats_crm_contact_constraint(self) -> None:
+        """The constraint name follows the AF12 naming contract."""
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+
+        add_parent_unique_constraint(
+            schema_editor,
+            table="quickscale_modules_crm_contact",
+            constraint_name="crm_contact_id_org_unique",
+        )
+        sql = schema_editor.execute.call_args[0][0]
+        assert "crm_contact_id_org_unique" in sql
+        assert "quickscale_modules_crm_contact" in sql
+
+
+# =========================================================================
+# add_composite_child_fk / remove_composite_child_fk
+# =========================================================================
+
+
+class TestAddRemoveCompositeChildFk:
+    """Tests for ``add_composite_child_fk`` and its reverse."""
+
+    CHILD_TABLE = "quickscale_modules_crm_contactnote"
+    PARENT_TABLE = "quickscale_modules_crm_contact"
+    FK_COLUMN = "contact_id"
+    CONSTRAINT = "crm_contactnote_contact_org_fk"
+
+    def test_add_creates_fk_on_postgres(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+        add_composite_child_fk(
+            schema_editor,
+            child_table=self.CHILD_TABLE,
+            constraint_name=self.CONSTRAINT,
+            child_fk_column=self.FK_COLUMN,
+            parent_table=self.PARENT_TABLE,
+            on_delete="CASCADE",
+        )
+        schema_editor.execute.assert_called_once()
+        sql = schema_editor.execute.call_args[0][0]
+        assert "FOREIGN KEY" in sql
+        assert self.CHILD_TABLE in sql
+        assert self.PARENT_TABLE in sql
+        assert self.FK_COLUMN in sql
+        assert self.CONSTRAINT in sql
+        assert "CASCADE" in sql
+
+    def test_add_with_restrict(self) -> None:
+        """on_delete=RESTRICT propagates into SQL (PostgreSQL equivalent of PROTECT)."""
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+        add_composite_child_fk(
+            schema_editor,
+            child_table=self.CHILD_TABLE,
+            constraint_name=self.CONSTRAINT,
+            child_fk_column=self.FK_COLUMN,
+            parent_table=self.PARENT_TABLE,
+            on_delete="RESTRICT",
+        )
+        sql = schema_editor.execute.call_args[0][0]
+        assert "RESTRICT" in sql
+        assert "CASCADE" not in sql
+
+    def test_add_with_partial_set_null(self) -> None:
+        """on_delete='SET NULL (field_id)' — PG15+ partial-column SET NULL."""
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+        add_composite_child_fk(
+            schema_editor,
+            child_table="quickscale_modules_forms_formfieldvalue",
+            constraint_name="forms_formfieldvalue_field_org_fk",
+            child_fk_column="field_id",
+            parent_table="quickscale_modules_forms_formfield",
+            on_delete="SET NULL (field_id)",
+        )
+        sql = schema_editor.execute.call_args[0][0]
+        assert "SET NULL (field_id)" in sql
+        assert "field_id" in sql
+
+    def test_remove_drops_fk_on_postgres(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "postgresql"
+        remove_composite_child_fk(
+            schema_editor,
+            child_table=self.CHILD_TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        schema_editor.execute.assert_called_once()
+        sql = schema_editor.execute.call_args[0][0]
+        assert "DROP CONSTRAINT IF EXISTS" in sql
+        assert self.CHILD_TABLE in sql
+        assert self.CONSTRAINT in sql
+
+    def test_add_noop_on_sqlite(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "sqlite"
+        add_composite_child_fk(
+            schema_editor,
+            child_table=self.CHILD_TABLE,
+            constraint_name=self.CONSTRAINT,
+            child_fk_column=self.FK_COLUMN,
+            parent_table=self.PARENT_TABLE,
+        )
+        schema_editor.execute.assert_not_called()
+
+    def test_remove_noop_on_sqlite(self) -> None:
+        schema_editor = MagicMock()
+        schema_editor.connection.vendor = "sqlite"
+        remove_composite_child_fk(
+            schema_editor,
+            child_table=self.CHILD_TABLE,
+            constraint_name=self.CONSTRAINT,
+        )
+        schema_editor.execute.assert_not_called()
+
+
+# =========================================================================
+# FormFieldValue.field delete-path proof — PostgreSQL only (AF12 Phase 2)
+# =========================================================================
+# Proves that the DB-level composite FK ``forms_formfieldvalue_field_org_fk``
+# with ``ON DELETE SET NULL (field_id)`` correctly sets only ``field_id``
+# to NULL when the parent ``FormField`` is deleted, while ``organization_id``
+# remains NOT NULL.
+# ---------------------------------------------------------------------------
+
+try:
+    from django.db import connection as _dj_connection
+
+    _IS_POSTGRES = _dj_connection.vendor == "postgresql"
+except Exception:
+    _IS_POSTGRES = False
+
+
+@pytest.mark.django_db
+@pytest.mark.skipif(
+    not _IS_POSTGRES,
+    reason="Composite FK delete-path proof requires PostgreSQL.",
+)
+class TestCompositeFkFormFieldValueDeletePath:
+    """Verify ON DELETE SET NULL (field_id) partial-column behavior."""
+
+    def test_delete_formfield_sets_field_id_null_keeps_org(self) -> None:
+        """Deleting a FormField via raw SQL sets field_id to NULL on
+        referencing FormFieldValue rows while organization_id stays intact.
+
+        This proves the ``ON DELETE SET NULL (field_id)`` clause works
+        correctly: only the FK column (field_id) is nulled, and the
+        NOT NULL organization_id column is preserved.
+        """
+        from django.db import connection
+
+        from quickscale_modules_forms.models import (
+            Form,
+            FormField,
+            FormFieldValue,
+            FormSubmission,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        org = Organization.objects.create(
+            name="AF12 Delete Proof Org",
+            slug="af12-del-proof",
+        )
+
+        form = Form.all_objects.create(
+            organization=org,
+            title="Delete Proof Form",
+            slug="del-proof-form",
+        )
+        field = FormField.all_objects.create(
+            organization=org,
+            form=form,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Name",
+            name="name",
+            order=1,
+        )
+        submission = FormSubmission.all_objects.create(
+            organization=org,
+            form=form,
+        )
+        fv = FormFieldValue.all_objects.create(
+            organization=org,
+            submission=submission,
+            field=field,
+            field_name="name",
+            field_label="Name",
+            value="Test Value",
+        )
+
+        fv_pk = fv.pk
+        org_pk = org.pk
+
+        # Verify pre-delete state.
+        fv.refresh_from_db()
+        assert fv.field_id == field.pk
+        assert fv.organization_id == org_pk
+
+        # Delete the FormField via raw SQL (bypass Django ORM SET_NULL
+        # handler) so the DB-level ON DELETE SET NULL fires.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM quickscale_modules_forms_formfield WHERE id = %s",
+                [field.pk],
+            )
+
+        # Refresh the FormFieldValue and verify.
+        fv = FormFieldValue.all_objects.get(pk=fv_pk)
+        assert fv.field_id is None, (
+            "field_id should be NULL after parent FormField is deleted "
+            "(ON DELETE SET NULL (field_id))"
+        )
+        assert fv.organization_id == org_pk, (
+            "organization_id must remain NOT NULL even after parent "
+            "FormField deletion (partial-column SET NULL)"
+        )
+        # Verify the historical snapshots are preserved.
+        assert fv.field_name == "name"
+        assert fv.field_label == "Name"
+        assert fv.value == "Test Value"
+
+    def test_delete_formfield_preserves_other_field_values(self) -> None:
+        """Deleting one FormField does not affect FormFieldValues
+        referencing a different FormField."""
+        from django.db import connection
+
+        from quickscale_modules_forms.models import (
+            Form,
+            FormField,
+            FormFieldValue,
+            FormSubmission,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        org = Organization.objects.create(
+            name="AF12 Delete Proof Org 2",
+            slug="af12-del-proof-2",
+        )
+
+        form = Form.all_objects.create(
+            organization=org,
+            title="Delete Proof Form 2",
+            slug="del-proof-form-2",
+        )
+        field_a = FormField.all_objects.create(
+            organization=org,
+            form=form,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Name",
+            name="name",
+            order=1,
+        )
+        field_b = FormField.all_objects.create(
+            organization=org,
+            form=form,
+            field_type=FormField.FIELD_TYPE_EMAIL,
+            label="Email",
+            name="email",
+            order=2,
+        )
+        submission = FormSubmission.all_objects.create(
+            organization=org,
+            form=form,
+        )
+        fv_a = FormFieldValue.all_objects.create(
+            organization=org,
+            submission=submission,
+            field=field_a,
+            field_name="name",
+            field_label="Name",
+            value="Alice",
+        )
+        fv_b = FormFieldValue.all_objects.create(
+            organization=org,
+            submission=submission,
+            field=field_b,
+            field_name="email",
+            field_label="Email",
+            value="alice@test.com",
+        )
+
+        fv_b_pk = fv_b.pk
+
+        # Delete field_a (the "name" field) via raw SQL.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM quickscale_modules_forms_formfield WHERE id = %s",
+                [field_a.pk],
+            )
+
+        # fv_a should have field_id = NULL
+        fv_a = FormFieldValue.all_objects.get(pk=fv_a.pk)
+        assert fv_a.field_id is None
+        assert fv_a.organization_id == org.pk
+        assert fv_a.value == "Alice"
+
+        # fv_b should be completely untouched.
+        fv_b = FormFieldValue.all_objects.get(pk=fv_b_pk)
+        assert fv_b.field_id == field_b.pk
+        assert fv_b.organization_id == org.pk
+        assert fv_b.value == "alice@test.com"
+
+
+# =========================================================================
+# Composite FK — naming constants (AF12 Phase 1)
+# =========================================================================
+
+
+class TestCompositeFkNamingConstants:
+    """Verify naming constants for the composite-FK infrastructure."""
+
+    def test_org_id_column_is_organization_id(self) -> None:
+        assert ORG_ID_COLUMN == "organization_id"
