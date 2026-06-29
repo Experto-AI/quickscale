@@ -78,6 +78,10 @@ class Form(models.Model):
                 fields=["slug", "organization"],
                 name="quickscale_modules_forms_form_slug_organization_unique",
             ),
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="forms_form_id_org_unique",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -151,6 +155,12 @@ class FormField(models.Model):
         ordering = ["order"]
         base_manager_name = "all_objects"
         unique_together = [["form", "name"]]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="forms_formfield_id_org_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.form.title} — {self.label}"
@@ -191,6 +201,12 @@ class FormSubmission(models.Model):
         db_table = "quickscale_modules_forms_formsubmission"
         ordering = ["-submitted_at"]
         base_manager_name = "all_objects"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="forms_formsubmission_id_org_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"Submission #{self.pk} for {self.form.title} ({self.status})"

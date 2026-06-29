@@ -26,7 +26,6 @@ from django.db import models
 
 from quickscale_modules_orgs.managers import TenantManager
 from quickscale_modules_orgs.tenancy import (
-    CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX,
     TENANT_TABLE_REGISTRY,
     TenantTableStatus,
 )
@@ -101,15 +100,20 @@ def test_registry_covers_all_concrete_qs_models() -> None:
     stale = registered - installed
     # Filter out abstract/non-concrete entries; they are intentionally
     # listed as EXCLUDED_REVIEWED but never returned by get_models().
-    abstract_registry_keys: set[tuple[str, str]] = set()
+    # Also filter out test-only models (reason starts with "Test-only")
+    # which are defined in test_models.py and only registered when that
+    # module is imported.
+    exempt_keys: set[tuple[str, str]] = set()
     for entry in TENANT_TABLE_REGISTRY:
         if entry.model_name in (
             "TenantModel",
             "AbstractListing",
             "BaseSocialItem",
         ):
-            abstract_registry_keys.add((entry.app_label, entry.model_name))
-    stale -= abstract_registry_keys
+            exempt_keys.add((entry.app_label, entry.model_name))
+        if entry.reason.startswith("Test-only"):
+            exempt_keys.add((entry.app_label, entry.model_name))
+    stale -= exempt_keys
     assert not stale, (
         f"TENANT_TABLE_REGISTRY entries with no installed model: {sorted(stale)}"
     )
@@ -581,64 +585,195 @@ def test_enrolled_model_has_force_rls_policy(entry: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Equality trigger coverage — PostgreSQL only
+# Composite FK conformance — PostgreSQL only (AF12 Phase 1)
 # ---------------------------------------------------------------------------
-# Enrolled child/detail tables must have a live child-parent equality trigger
-# in pg_trigger. This verifies that the DB-level constraint ensuring
-# ``child.organization_id = parent.organization_id`` is in place (AF1 Phase 2+
-# contract).  Skipped on SQLite (the default test database).
+# Enrolled child/detail tables must have a live composite FOREIGN KEY
+# constraint in ``pg_constraint`` enforcing child-parent ``organization_id``
+# equality.  Each constraint references the parent table's
+# ``(id, organization_id)`` unique pair, replacing the old trigger-based
+# equality approach (AF1 Phase 2).
 # ---------------------------------------------------------------------------
 
-_ENROLLED_CHILD_TABLES: tuple[str, ...] = (
-    "quickscale_modules_crm_contactnote",
-    "quickscale_modules_crm_dealnote",
-    "quickscale_modules_forms_formfield",
-    "quickscale_modules_forms_formsubmission",
-    "quickscale_modules_forms_formfieldvalue",
+#: (child_table, constraint_name, parent_table) for every AF12 composite FK.
+_AF12_COMPOSITE_FK_PAIRS: tuple[tuple[str, str, str], ...] = (
+    (
+        "quickscale_modules_crm_contactnote",
+        "crm_contactnote_contact_org_fk",
+        "quickscale_modules_crm_contact",
+    ),
+    (
+        "quickscale_modules_crm_dealnote",
+        "crm_dealnote_deal_org_fk",
+        "quickscale_modules_crm_deal",
+    ),
+    (
+        "quickscale_modules_forms_formfield",
+        "forms_formfield_form_org_fk",
+        "quickscale_modules_forms_form",
+    ),
+    (
+        "quickscale_modules_forms_formsubmission",
+        "forms_formsubmission_form_org_fk",
+        "quickscale_modules_forms_form",
+    ),
+    (
+        "quickscale_modules_forms_formfieldvalue",
+        "forms_formfieldvalue_submission_org_fk",
+        "quickscale_modules_forms_formsubmission",
+    ),
+    (
+        "quickscale_modules_forms_formfieldvalue",
+        "forms_formfieldvalue_field_org_fk",
+        "quickscale_modules_forms_formfield",
+    ),
 )
 
 
 @pytest.mark.django_db
 @pytest.mark.skipif(
     not _is_postgres,
-    reason="Child-parent equality trigger check requires PostgreSQL.",
+    reason="Composite FK conformance check requires PostgreSQL.",
 )
 @pytest.mark.parametrize(
-    "db_table",
-    _ENROLLED_CHILD_TABLES,
-    ids=_ENROLLED_CHILD_TABLES,
+    "fk_pair",
+    _AF12_COMPOSITE_FK_PAIRS,
+    ids=lambda p: p[1],
 )
-def test_enrolled_child_table_has_equality_trigger(db_table: str) -> None:
-    """Every enrolled child/detail table must have a child-parent equality trigger.
+def test_enrolled_child_table_has_composite_fk(fk_pair: tuple[str, str, str]) -> None:
+    """Every enrolled child/detail table must have a composite FK constraint
+    in ``pg_constraint``.
 
-    Verifies that a trigger matching the naming convention
-    ``qs_{db_table}_org_equality`` exists in ``pg_trigger``.  This proves the
-    DB-level child-parent ``organization_id`` equality constraint is in place,
-    replacing the PENDING_REMEDIATION equality-footprint checks that applied
-    before the table was promoted to ENROLLED.
+    Verifies that a constraint matching the AF12 naming contract exists in
+    ``pg_constraint``, proving the DB-level child-parent ``organization_id``
+    equality is enforced through a composite FOREIGN KEY rather than the old
+    trigger-based approach.
     """
     from django.db import connection
 
-    trigger_name = f"{CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX}{db_table}_org_equality"
+    child_table, constraint_name, parent_table = fk_pair
 
     with connection.cursor() as cursor:
         cursor.execute(
             """
             SELECT 1
-            FROM pg_trigger t
-            JOIN pg_class c ON c.oid = t.tgrelid
-            WHERE c.relname = %s AND t.tgname = %s
+            FROM pg_constraint pc
+            JOIN pg_class child_cls ON child_cls.oid = pc.conrelid
+            JOIN pg_class parent_cls ON parent_cls.oid = pc.confrelid
+            WHERE pc.contype = 'f'
+              AND pc.conname = %s
+              AND child_cls.relname = %s
+              AND parent_cls.relname = %s
             """,
-            [db_table, trigger_name],
+            [constraint_name, child_table, parent_table],
         )
         row = cursor.fetchone()
         assert row is not None, (
-            f"ENROLLED child/detail table {db_table} is missing the expected "
-            f"child-parent equality trigger '{trigger_name}'. "
-            f"The trigger must be installed by the module's schema migration. "
-            f"Check that the migration has been run, or verify the trigger "
-            f"naming convention matches tenancy._child_equality_trigger_name."
+            f"Child table {child_table} is missing the expected "
+            f"composite FK '{constraint_name}' referencing "
+            f"{parent_table}(id, organization_id). "
+            f"The constraint must be added by the module's AF12 Phase 1 migration."
         )
+
+
+# ---------------------------------------------------------------------------
+# Negative parent-organization mutation proof — PostgreSQL only (AF12 Phase 2)
+# ---------------------------------------------------------------------------
+# Proves that the composite FK ``crm_contactnote_contact_org_fk`` rejects
+# assignments where ``ContactNote.organization_id`` does not match
+# ``Contact.organization_id``.  The composite FK enforces:
+#     (contactnote.contact_id, contactnote.organization_id) = (contact.id, contact.organization_id)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.skipif(
+    not _is_postgres,
+    reason="Negative FK mutation proof requires PostgreSQL.",
+)
+class TestNegativeCompositeFkRejectsWrongOrg:
+    """Verify the composite FK rejects child-parent org mismatches."""
+
+    def test_contactnote_wrong_org_is_rejected(self) -> None:
+        """Creating a ContactNote with a contact from org A but
+        organization set to org B must raise a foreign key violation."""
+        from django.db import IntegrityError, transaction
+
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+        from quickscale_modules_orgs.models import Organization
+
+        org_a = Organization.objects.create(name="Org A", slug="neg-org-a")
+        org_b = Organization.objects.create(name="Org B", slug="neg-org-b")
+
+        company = Company.all_objects.create(
+            organization=org_a,
+            name="Cross-Org Company",
+        )
+        contact = Contact.all_objects.create(
+            organization=org_a,
+            first_name="Cross-Org",
+            last_name="Contact",
+            email="cross@test.com",
+            company=company,
+        )
+
+        # Attempt to create a ContactNote with org_b while the parent
+        # contact belongs to org_a. This should fail with a foreign key
+        # violation because the composite FK enforces:
+        #   (contactnote.contact_id, contactnote.organization_id) =
+        #   (contact.id, contact.organization_id)
+        with pytest.raises(IntegrityError), transaction.atomic():
+            ContactNote.all_objects.create(
+                contact=contact,
+                organization=org_b,
+                text="Wrong org note.",
+            )
+
+    def test_dealnote_wrong_org_is_rejected(self) -> None:
+        """Creating a DealNote with a deal from org A but
+        organization set to org B must raise a foreign key violation."""
+        from django.db import IntegrityError, transaction
+
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            DealNote,
+            Stage,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        org_a = Organization.objects.create(name="Org A", slug="neg-org-c")
+        org_b = Organization.objects.create(name="Org B", slug="neg-org-d")
+
+        company = Company.all_objects.create(
+            organization=org_a,
+            name="Cross-Org Company",
+        )
+        contact = Contact.all_objects.create(
+            organization=org_a,
+            first_name="Cross-Org",
+            last_name="DealOwner",
+            email="cross-deal@test.com",
+            company=company,
+        )
+        stage = Stage.all_objects.create(
+            organization=org_a,
+            name="Cross-Org Stage",
+            order=1,
+        )
+        deal = Deal.all_objects.create(
+            organization=org_a,
+            title="Cross-Org Deal",
+            contact=contact,
+            stage=stage,
+        )
+
+        with pytest.raises(IntegrityError), transaction.atomic():
+            DealNote.all_objects.create(
+                deal=deal,
+                organization=org_b,
+                text="Wrong org deal note.",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -657,11 +792,18 @@ def test_enrolled_child_table_has_equality_trigger(db_table: str) -> None:
         e
         for e in TENANT_TABLE_REGISTRY
         if e.model_name not in ("TenantModel", "AbstractListing", "BaseSocialItem")
+        and not e.reason.startswith("Test-only")
     ],
     ids=lambda e: f"{e.app_label}.{e.model_name}",
 )
 def test_registry_entry_model_exists(entry: Any) -> None:
-    """Every non-abstract registry entry must resolve to an installed model."""
+    """Every non-abstract, non-test-only registry entry must resolve to an installed model.
+
+    Test-only models (defined in ``test_models.py``) are excluded because
+    they are only registered when that module is imported during full-suite
+    test runs.  Their existence is verified by ``test_registry_covers_all_concrete_qs_models``
+    (stale-entry check) and ``test_excluded_model_lacks_tenant_manager`` instead.
+    """
     model = apps.get_model(entry.app_label, entry.model_name)
     assert model is not None, (
         f"Registry entry {entry.app_label}.{entry.model_name} does not "
