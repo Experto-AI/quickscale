@@ -1064,91 +1064,117 @@ def test_0009_to_0010_migration_chain() -> None:
     not _CRM_IS_POSTGRES,
     reason="Parent-org mutation rejection proof requires PostgreSQL FK enforcement.",
 )
-@pytest.mark.skip(
-    reason="FORCE RLS (installed by CRM migration 0008 on parent tables) "
-    "blocks parent org mutations before the composite FK check can "
-    "run. The FK contract is independently validated via the migration "
-    "executor tests (forward/reverse/replay) and constraint existence "
-    "checks in the same file, plus the orgs conformance suite.",
-)
 class TestCrmParentOrgMutationRejection:
     """Prove that parent org_id mutations are rejected by the composite FK."""
 
     def test_contact_org_id_mutation_rejected_when_contactnote_exists(self) -> None:
         """Updating Contact.organization_id fails when a ContactNote
         references the old (contact_id, organization_id) pair."""
-        from quickscale_modules_crm.models import Contact, ContactNote
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
         from quickscale_modules_orgs.models import Organization
+
+        User = get_user_model()
 
         org_a = Organization.objects.create(name="Org A", slug="crm-mut-a")
         org_b = Organization.objects.create(name="Org B", slug="crm-mut-b")
+        company = Company.objects.create(name="Acme Corp", organization=org_a)
+        user = User.objects.create_user(username="testuser", password="testpass")
 
         contact = Contact.all_objects.create(
             organization=org_a,
             first_name="Mutation",
             last_name="Target",
             email="mut@test.com",
+            company=company,
         )
         ContactNote.all_objects.create(
             contact=contact,
             organization=org_a,
             text="Child row locking the parent org.",
+            created_by=user,
         )
 
         # Attempt to reassign the parent contact to a different org.
         # The composite FK (contactnote.contact_id, contactnote.organization_id)
         # → (contact.id, contact.organization_id) should reject this because
         # the ContactNote still references (contact.id, org_a).
+        #
+        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
+        # IMMEDIATE inside the atomic block to catch the violation inline.
         with pytest.raises(IntegrityError), transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SET CONSTRAINTS crm_contactnote_contact_org_fk IMMEDIATE"
+                )
             Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
 
     def test_deal_org_id_mutation_rejected_when_dealnote_exists(self) -> None:
         """Updating Deal.organization_id fails when a DealNote
         references the old (deal_id, organization_id) pair."""
+        from django.contrib.auth import get_user_model
+
         from quickscale_modules_crm.models import (
+            Company,
             Contact,
             Deal,
             DealNote,
+            Stage,
         )
         from quickscale_modules_orgs.models import Organization
 
+        User = get_user_model()
+
         org_a = Organization.objects.create(name="Org A", slug="crm-mut-c")
         org_b = Organization.objects.create(name="Org B", slug="crm-mut-d")
+        company = Company.objects.create(name="Acme Corp", organization=org_a)
+        user = User.objects.create_user(username="testuser2", password="testpass")
+        stage = Stage.objects.create(name="Test Stage", order=1, organization=org_a)
 
         contact = Contact.all_objects.create(
             organization=org_a,
             first_name="DealMut",
             last_name="Target",
             email="dealmut@test.com",
+            company=company,
         )
         deal = Deal.all_objects.create(
             organization=org_a,
             title="Mutation target deal",
             contact=contact,
+            stage=stage,
         )
         DealNote.all_objects.create(
             deal=deal,
             organization=org_a,
             text="Child row locking the deal org.",
+            created_by=user,
         )
 
+        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
+        # IMMEDIATE inside the atomic block to catch the violation inline.
         with pytest.raises(IntegrityError), transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("SET CONSTRAINTS crm_dealnote_deal_org_fk IMMEDIATE")
             Deal.all_objects.filter(pk=deal.pk).update(organization=org_b)
 
     def test_contact_org_id_mutation_without_children_succeeds(self) -> None:
         """Updating Contact.organization_id succeeds when NO child
         ContactNote rows reference the old pair — positive control."""
-        from quickscale_modules_crm.models import Contact
+        from quickscale_modules_crm.models import Company, Contact
         from quickscale_modules_orgs.models import Organization
 
         org_a = Organization.objects.create(name="Org A", slug="crm-mut-e")
         org_b = Organization.objects.create(name="Org B", slug="crm-mut-f")
+        company = Company.objects.create(name="Acme Corp", organization=org_a)
 
         contact = Contact.all_objects.create(
             organization=org_a,
             first_name="NoChild",
             last_name="Contact",
             email="nochild@test.com",
+            company=company,
         )
 
         # No ContactNote referencing this contact — mutation should succeed.
