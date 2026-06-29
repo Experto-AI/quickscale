@@ -140,6 +140,12 @@ class Contact(models.Model):
         app_label = "quickscale_modules_crm"
         base_manager_name = "all_objects"
         ordering = ["last_name", "first_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="crm_contact_id_org_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.first_name} {self.last_name}"
@@ -252,6 +258,12 @@ class Deal(models.Model):
         app_label = "quickscale_modules_crm"
         base_manager_name = "all_objects"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="crm_deal_id_org_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.title
