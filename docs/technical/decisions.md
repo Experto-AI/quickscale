@@ -1176,8 +1176,15 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ❌ **Per-client Railway deployment** — linear operational overhead per tenant; not a SaaS platform
 - ❌ **App-layer-only filtering without RLS** — no defence-in-depth; a single missed filter leaks cross-tenant data
 - ❌ **PostgreSQL schema-per-tenant isolation** — schema metadata bloat, migration complexity with many tenants
+- ❌ **Supabase as the database provider** — valid for teams that want managed infrastructure, but introduces vendor lock-in and changes the cost/operational model; our self-hosted Railway approach is equivalent in security model once AF9 is fixed (both use a GUC parameter set per-transaction as the tenant context carrier)
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (open implementation tasks D1, AF1–AF7) | [findings.md](../../findings.md) (current risk posture)
+**Supabase architecture parity note (2026-06-29):**
+QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supabase's multi-tenant architecture. Both use a PostgreSQL GUC parameter as the per-transaction tenant context carrier; both use `FORCE ROW LEVEL SECURITY`; both use a NOBYPASSRLS runtime role for application queries and a BYPASSRLS role for operator/admin access. The key difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query; QuickScale's AF9 fix (execute_wrapper deriving GUC from ContextVar at transaction start) achieves the same guarantee. After AF9 merges, the two models are equivalent. Supabase also ships a dashboard "Impersonate User" button — QuickScale's VIEW-AS task (see roadmap.md §Phase C) closes that parity gap.
+
+**Operator debug mode — locked design (VIEW-AS, 2026-06-29):**
+Django superusers may activate a debug session that scopes the entire request to a selected organization — allowing them to see the app exactly as that org's members see it. Design: session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when key is present; `OrganizationAdmin` action activates it; debug banner rendered in base template while active; every activation audit-logged (who, which org, timestamp). No BYPASSRLS — debug session runs under the same restricted runtime role as all other tenant paths (RLS remains fully enforced). See roadmap.md §Phase C for the implementation task.
+
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (open implementation tasks D1, AF1–AF7, Phase C) | [findings.md](../../findings.md) (current risk posture)
 
 ---
 
