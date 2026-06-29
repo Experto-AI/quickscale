@@ -2014,19 +2014,23 @@ def test_af3_command_imports_and_invokes_operator_access(rel_path: str) -> None:
         "Every AF3 command must route privileged access through the shared seam."
     )
 
-    # 2. Structural invocation check — look for an ast.Call targeting
-    #    the name ``operator_access`` at the expression level (not inside
-    #    docstrings or comments, which AST naturally excludes).
-    has_call = any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "operator_access"
+    # 2. Structural invocation check — require ``operator_access(...)``
+    #    as the context expression of a ``with`` statement.  Bare calls or
+    #    stored contextmanager references are not sufficient — every AF3
+    #    command must use ``with operator_access(reason=...) as record:``.
+    has_with = any(isinstance(node, ast.With) for node in ast.walk(tree)) and any(
+        isinstance(item.context_expr, ast.Call)
+        and isinstance(item.context_expr.func, ast.Name)
+        and item.context_expr.func.id == "operator_access"
         for node in ast.walk(tree)
+        if isinstance(node, ast.With)
+        for item in node.items
     )
-    assert has_call, (
-        f"{rel_path} imports operator_access but no AST-level call to "
-        "operator_access() was found. "
-        "Every AF3 command must use operator_access(reason=...) as a context manager."
+    assert has_with, (
+        f"{rel_path} imports operator_access but no AST-level "
+        "'with operator_access(...):' statement was found. "
+        "Every AF3 command must use "
+        "'with operator_access(reason=...) as record:'."
     )
 
 
