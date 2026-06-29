@@ -172,11 +172,13 @@ def _assert_no_null_org(apps: Any, schema_editor: Any) -> None:
 def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
     """Add parent unique constraints, composite child FKs, and enable FORCE RLS.
 
-    Composite FKs use ``NOT VALID`` so existing rows are not re-checked.
-    This is necessary because the migration state for child tables
-    (FormField etc.) may reference parent rows whose ``organization_id``
-    was set at a different migration step.  New and modified rows after
-    the migration are still validated normally.
+    Composite FKs are added with NOT VALID (skipping the validation scan
+    during creation) and then explicitly validated with VALIDATE CONSTRAINT
+    after each FK is installed.  The backfill has already completed in an
+    earlier migration step, so all existing rows carry a valid
+    organization_id.  This two-step pattern avoids blocking table scans
+    during FK creation while guaranteeing the constraint holds across all
+    existing data.
     """
     del apps
 
@@ -197,10 +199,9 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
         constraint_name=FORMS_FORMSUBMISSION_ID_ORG_UNIQUE,
     )
 
-    # 2. Add composite child FKs with NOT VALID so existing rows are not
-    #    checked against the parent UNIQUE constraint.  Future INSERTs and
-    #    UPDATEs ARE still validated, so the integrity contract is preserved
-    #    for all non-history data.
+    # 2. Add composite child FKs with NOT VALID, then validate each one.
+    #    Backfill is complete (steps 2–3 above), so validation guarantees
+    #    the constraint holds across all existing data.
     def _add_fk_not_valid(
         child_table: str,
         constraint: str,
@@ -213,7 +214,16 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
             f"FOREIGN KEY ({child_fk_column}, organization_id) "
             f"REFERENCES {parent_table}(id, organization_id) "
             f"ON DELETE {on_delete} "
+            f"DEFERRABLE INITIALLY DEFERRED "
             f"NOT VALID"
+        )
+
+    def _validate_fk(
+        child_table: str,
+        constraint: str,
+    ) -> None:
+        schema_editor.execute(
+            f"ALTER TABLE {child_table} VALIDATE CONSTRAINT {constraint}"
         )
 
     #    FormField → Form (ON DELETE CASCADE matches Django FK)
@@ -224,6 +234,10 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
         parent_table=FORMS_FORM_TABLE,
         on_delete="CASCADE",
     )
+    _validate_fk(
+        child_table=FORMS_FORMFIELD_TABLE,
+        constraint=FORMS_FORMFIELD_FORM_ORG_FK,
+    )
     #    FormSubmission → Form (ON DELETE RESTRICT matches Django FK PROTECT)
     _add_fk_not_valid(
         child_table=FORMS_FORMSUBMISSION_TABLE,
@@ -231,6 +245,10 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
         child_fk_column="form_id",
         parent_table=FORMS_FORM_TABLE,
         on_delete="RESTRICT",
+    )
+    _validate_fk(
+        child_table=FORMS_FORMSUBMISSION_TABLE,
+        constraint=FORMS_FORMSUBMISSION_FORM_ORG_FK,
     )
     #    FormFieldValue → FormSubmission (ON DELETE CASCADE matches Django FK)
     _add_fk_not_valid(
@@ -240,6 +258,10 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
         parent_table=FORMS_FORMSUBMISSION_TABLE,
         on_delete="CASCADE",
     )
+    _validate_fk(
+        child_table=FORMS_FORMFIELDVALUE_TABLE,
+        constraint=FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK,
+    )
 
     # 3. FormFieldValue → FormField: special partial-column SET NULL.
     _add_fk_not_valid(
@@ -248,6 +270,10 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
         child_fk_column="field_id",
         parent_table=FORMS_FORMFIELD_TABLE,
         on_delete="SET NULL (field_id)",
+    )
+    _validate_fk(
+        child_table=FORMS_FORMFIELDVALUE_TABLE,
+        constraint=FORMS_FORMFIELDVALUE_FIELD_ORG_FK,
     )
 
     # 4. Enable FORCE RLS on all three tables.

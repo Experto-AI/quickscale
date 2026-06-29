@@ -447,6 +447,67 @@ class TestFormsMigration0007CompositeFK:
         field = FormField._meta.get_field("organization")
         assert field.null is False
 
+    @pytest.mark.skipif(
+        not _FORMS_IS_POSTGRES,
+        reason="Deferrability check requires PostgreSQL pg_constraint.",
+    )
+    def test_0007_composite_fks_are_deferrable_initially_deferred(self) -> None:
+        """Each composite FK created by 0007 is DEFERRABLE INITIALLY DEFERRED.
+
+        Regression for CR-AF12-005: the AF12 shared contract requires
+        that composite FKs carry the ``DEFERRABLE INITIALLY DEFERRED``
+        property so that bulk operations (data migrations, backfills)
+        can temporarily defer FK checking when needed.
+        """
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([(self.APP_LABEL, self.MIG_0007)])
+
+        composite_fk_constraints = [
+            ("forms_formfield_form_org_fk", "quickscale_modules_forms_formfield"),
+            (
+                "forms_formsubmission_form_org_fk",
+                "quickscale_modules_forms_formsubmission",
+            ),
+            (
+                "forms_formfieldvalue_submission_org_fk",
+                "quickscale_modules_forms_formfieldvalue",
+            ),
+            (
+                "forms_formfieldvalue_field_org_fk",
+                "quickscale_modules_forms_formfieldvalue",
+            ),
+        ]
+
+        with connection.cursor() as cursor:
+            for constraint_name, child_table in composite_fk_constraints:
+                cursor.execute(
+                    """
+                    SELECT pc.condeferrable, pc.condeferred
+                    FROM pg_constraint pc
+                    JOIN pg_class c ON c.oid = pc.conrelid
+                    WHERE pc.conname = %s
+                      AND c.relname = %s
+                      AND pc.contype = 'f'
+                    """,
+                    [constraint_name, child_table],
+                )
+                row = cursor.fetchone()
+                assert row is not None, (
+                    f"Composite FK '{constraint_name}' on {child_table} not found."
+                )
+                condeferrable, condeferred = row
+                assert condeferrable is True, (
+                    f"'{constraint_name}' on {child_table} must be DEFERRABLE, "
+                    f"got condeferrable={condeferrable}"
+                )
+                assert condeferred is True, (
+                    f"'{constraint_name}' on {child_table} must be INITIALLY DEFERRED, "
+                    f"got condeferred={condeferred}"
+                )
+
     def test_0007_to_0008_migration_chain(self) -> None:
         """Forward through 0007→0008 succeeds (AF11 compatibility)."""
         from django.db import connection
@@ -497,21 +558,13 @@ class TestFormsMigration0007CompositeFK:
     not _FORMS_IS_POSTGRES,
     reason="Parent-org mutation rejection proof requires PostgreSQL FK enforcement.",
 )
-@pytest.mark.skip(
-    reason="FORCE RLS (installed by migration 0007) blocks parent org "
-    "mutations before the composite FK check can run. The FK "
-    "contract is independently validated via the migration "
-    "executor tests (forward/reverse/replay) and constraint "
-    "existence checks in TestFormsMigration0007CompositeFK, "
-    "plus the CRM + orgs conformance suite (CR-AF12-002).",
-)
 class TestFormsParentOrgMutationRejection:
     """Prove that parent org_id mutations are rejected by the composite FK."""
 
     def test_form_org_id_mutation_rejected_when_formfield_exists(self) -> None:
         """Updating Form.organization_id fails when a FormField
         references the old (form_id, organization_id) pair."""
-        from django.db import IntegrityError, transaction
+        from django.db import IntegrityError, connection, transaction
 
         from quickscale_modules_forms.models import Form, FormField
         from quickscale_modules_orgs.models import Organization
@@ -536,13 +589,18 @@ class TestFormsParentOrgMutationRejection:
         # Attempt to reassign the parent form to a different org.
         # The composite FK (formfield.form_id, formfield.organization_id)
         # → (form.id, form.organization_id) should reject this.
+        #
+        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
+        # IMMEDIATE inside the atomic block to catch the violation inline.
         with pytest.raises(IntegrityError), transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("SET CONSTRAINTS forms_formfield_form_org_fk IMMEDIATE")
             Form.all_objects.filter(pk=form.pk).update(organization=org_b)
 
     def test_formsubmission_org_id_mutation_rejected_when_values_exist(self) -> None:
         """Updating FormSubmission.organization_id fails when a
         FormFieldValue references the old (submission_id, organization_id)."""
-        from django.db import IntegrityError, transaction
+        from django.db import IntegrityError, connection, transaction
 
         from quickscale_modules_forms.models import (
             Form,
@@ -571,7 +629,13 @@ class TestFormsParentOrgMutationRejection:
             value="test@test.com",
         )
 
+        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
+        # IMMEDIATE inside the atomic block to catch the violation inline.
         with pytest.raises(IntegrityError), transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SET CONSTRAINTS forms_formfieldvalue_submission_org_fk IMMEDIATE"
+                )
             FormSubmission.all_objects.filter(pk=submission.pk).update(
                 organization=org_b
             )
@@ -582,7 +646,7 @@ class TestFormsParentOrgMutationRejection:
         """Updating FormField.organization_id fails when a FormFieldValue
         has a non-null field_id referencing the old (field_id, organization_id)
         pair."""
-        from django.db import IntegrityError, transaction
+        from django.db import IntegrityError, connection, transaction
 
         from quickscale_modules_forms.models import (
             Form,
@@ -621,7 +685,13 @@ class TestFormsParentOrgMutationRejection:
             value="Locked value",
         )
 
+        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
+        # IMMEDIATE inside the atomic block to catch the violation inline.
         with pytest.raises(IntegrityError), transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SET CONSTRAINTS forms_formfieldvalue_field_org_fk IMMEDIATE"
+                )
             FormField.all_objects.filter(pk=field.pk).update(organization=org_b)
 
     def test_form_org_id_mutation_without_children_succeeds(self) -> None:

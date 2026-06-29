@@ -775,10 +775,14 @@ class TestFormCallerParity:
             "Authenticated submission must be scoped to the session org"
         )
 
-    def test_authenticated_schema_returns_org_scoped_form(
-        self, api_client, form, form_field
-    ):
-        """Authenticated requests get forms scoped to their session org."""
+    def test_authenticated_schema_returns_org_scoped_form(self, api_client):
+        """Authenticated requests get forms scoped to their session org.
+
+        Creates the test form under the target org from the start instead
+        of reassigning the fixture form's org (which AF12 composite FKs
+        prevent when child FormField rows already reference the old org).
+        """
+        from quickscale_modules_forms.models import Form, FormField
         from quickscale_modules_orgs.models import (
             OrganizationMembership,
             OrgRole,
@@ -798,10 +802,23 @@ class TestFormCallerParity:
             role=OrgRole.MEMBER,
         )
 
-        # Move the test form to the authenticated user's org
-        form.organization = org
-        form.slug = "org-specific-form"
-        form.save(update_fields=["organization", "slug"])
+        # Create form under the target org directly (no reassignment needed).
+        new_form = Form.all_objects.create(
+            organization=org,
+            title="Org Contact",
+            slug="org-specific-form",
+            success_message="Thanks!",
+            is_active=True,
+        )
+        FormField.all_objects.create(
+            form=new_form,
+            name="full_name",
+            label="Full Name",
+            field_type="text",
+            required=True,
+            order=1,
+            organization=org,
+        )
 
         api_client.force_login(user)
         session = api_client.session
