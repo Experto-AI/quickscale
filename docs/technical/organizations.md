@@ -188,6 +188,24 @@ For each RLS migration, the `true` second argument to `current_setting` returns 
 - **Operational simplicity**: One backup covers all tenants. One migration covers all tenants. One deploy upgrades all tenants simultaneously.
 - **Proven pattern**: Supabase, Stripe, and Slack all use shared-database isolation at scale. Detailed code examples are in [`docs/legacy/tenancy-isolation-strategies.md`](../legacy/tenancy-isolation-strategies.md) — that document is the reference implementation; this document does not duplicate it.
 
+### Supabase Architecture Comparison
+
+QuickScale's isolation model is structurally equivalent to Supabase's. Both are shared-schema PostgreSQL with FORCE RLS.
+
+| Dimension | Supabase | QuickScale |
+|---|---|---|
+| Isolation unit | User (`auth.uid()`) or custom JWT claim | Organization (`app.current_org_id`) |
+| Context carrier | JWT claim, injected per-transaction by PostgREST | PostgreSQL GUC, derived from ContextVar by execute_wrapper (AF9) |
+| Policy syntax | `USING (auth.uid() = user_id)` | `USING (organization_id = NULLIF(current_setting('app.current_org_id',true),'')::uuid)` (after AF11) |
+| Admin bypass | `service_role` (BYPASSRLS) | `operator_access(reason=…)` seam + BYPASSRLS superuser role (boot-guarded) |
+| Debug impersonation | Dashboard "Impersonate User" button | VIEW-AS feature (roadmap Phase C) |
+| Policy tester | Dashboard UI | `isolation-conformance` CI job (AF10) |
+| Deployment | Supabase managed cloud | Self-hosted Railway (one app + one Postgres service) |
+
+The primary engineering difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query (automatic); QuickScale's AF9 fix installs a Django `execute_wrapper` that derives the GUC from the ContextVar at every transaction start (equivalent guarantee, different wiring). After AF9 merges, the two models are equivalent in security posture.
+
+QuickScale adds the Solo/SaaS deployment mode distinction that Supabase (as a per-project service) does not need to model.
+
 ### Known Constraints
 
 - **Operator access must stay explicit**: the current admin/operator surface is outside the tenant-scoped runtime path. Now that RLS is active for the social module, operator access is implemented deliberately per the per-org runtime-role admin contract — explicit per-org selection via the session, fail-closed when unresolved, with no `BYPASSRLS` or automatic cross-tenant bypass. Django `is_superuser` does not infer database-level access.
@@ -575,6 +593,41 @@ The current organizations foundation keeps Django `/admin/` as the primary opera
 
 ---
 
+## Operator Debug Mode (View-As)
+
+**Status: planned — see roadmap.md §Phase C.**
+
+Supabase ships a dashboard "Impersonate User" button so operators can see the app exactly as a specific user sees it — essential for debugging silent RLS row-filtering. QuickScale will ship an equivalent "view app as this org" feature for Django superusers.
+
+### How It Works
+
+1. In Django Admin (`/admin/`), an operator selects an `Organization` row and uses the **"View app as this org"** action.
+2. The action sets the session key `quickscale_modules_orgs.debug_as_org_id` to the org's UUID and redirects to `/`.
+3. `TenantMiddleware` detects the session key (superusers only) and resolves the org from it instead of the normal Solo/SaaS path.
+4. A persistent debug banner renders at the top of every page:
+   `⚠ DEBUG MODE — viewing as org "Acme Corp" [Exit debug mode]`
+5. The operator uses the app normally; all RLS policies and tenant filters apply exactly as they would for an Acme Corp member — no BYPASSRLS.
+6. Clicking "Exit debug mode" clears the session key and restores normal resolution.
+
+### Security Properties
+
+- Only `is_superuser=True` users can set the session key; the middleware ignores it for non-superusers.
+- The debug session uses the same restricted runtime role (`NOBYPASSRLS`) as all other tenant paths — RLS remains fully enforced. The operator sees exactly what an Acme Corp member sees.
+- Every debug activation is audit-logged: who activated it, which org, when, from which path.
+- Depends on AF9 (GUC/ContextVar wiring) being merged — otherwise the debug session would return 0 rows under the restricted role.
+
+### Implementation Scope
+
+| File | Change |
+|---|---|
+| `orgs/middleware.py` | Add `_resolve_debug_org()` called before Solo/SaaS path |
+| `orgs/admin.py` | Add `view_as_org` and `exit_debug_mode` actions to `OrganizationAdmin` |
+| `orgs/views.py` | Add `DebugAsOrgView`, `ExitDebugModeView` (superuser-only) |
+| `orgs/urls.py` | Two new URL patterns for activate/exit |
+| Base template | Debug banner conditional on session key + `is_superuser` |
+
+---
+
 ## Decisions
 
 All open questions from the original design were resolved before implementation began.
@@ -620,7 +673,8 @@ This section records the current repository slice, not the eventual end-state de
 | Subdomain routing | ❌ future-ready (middleware decoupled; DNS/NGINX config deferred) |
 | Hard seat-count enforcement at DB layer | ❌ deferred |
 | Per-tenant analytics | ❌ deferred |
-| Cross-org admin tooling beyond basic `/admin/` | ❌ deferred |
+| Operator debug mode: "view app as this org" (VIEW-AS) | ❌ planned — see roadmap.md §Phase C |
+| Cross-org admin tooling beyond VIEW-AS | ❌ deferred |
 
 ---
 
