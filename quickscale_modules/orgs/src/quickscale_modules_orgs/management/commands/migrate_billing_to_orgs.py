@@ -45,7 +45,13 @@ def _existing_personal_org(*, user: object) -> Organization | None:
 
 def _resolve_authoritative_organization(
     user: object,
-) -> tuple[Organization, bool]:
+) -> tuple[Organization | None, bool]:
+    """Resolve the authoritative organisation for *user*.
+
+    Returns ``(org, created)`` where *org* is the resolved organization or
+    ``None`` when a personal organisation needs to be created (deferred to
+    the caller's transactional block — see CR-AF3-FINAL-002).
+    """
     personal_org = _existing_personal_org(user=user)
     if personal_org is not None:
         return personal_org, False
@@ -58,7 +64,9 @@ def _resolve_authoritative_organization(
     if len(membership_org_ids) == 1:
         return Organization.objects.get(pk=membership_org_ids[0]), False
     if not membership_org_ids:
-        return Organization.objects.create_personal_for(user), True
+        # Defer personal org creation to the transaction block so it is
+        # rolled back if the command later fails (CR-AF3-FINAL-002).
+        return None, True
 
     raise CommandError(
         "Billing org migration requires manual resolution: "
@@ -198,6 +206,9 @@ class Command(BaseCommand):
             # Collect all org IDs seen across billing rows for failure-stable
             # audit metadata even when org resolution fails for some users.
             all_billing_org_ids: set[object] = set()
+            # Track users whose personal org creation is deferred to the
+            # transactional block (CR-AF3-FINAL-002).
+            pending_personal_org_users: list[object] = []
 
             for user_id in user_ids:
                 user = User.objects.get(pk=user_id)
@@ -222,6 +233,29 @@ class Command(BaseCommand):
                     )
                 except CommandError as exc:
                     ambiguity_messages.append(str(exc))
+                    continue
+
+                if organization is None:
+                    # Personal org creation deferred to transaction block.
+                    pending_personal_org_users.append(user)
+                    # Collect candidate customer IDs under the billing rows'
+                    # existing org as a stand-in for planning purposes.
+                    standin_org_ids = {
+                        *operator_queryset(Subscription)
+                        .filter(user_id=user_id, organization_id__isnull=False)
+                        .values_list("organization_id", flat=True),
+                        *operator_queryset(CreditBalance)
+                        .filter(user_id=user_id, organization_id__isnull=False)
+                        .values_list("organization_id", flat=True),
+                        *operator_queryset(CreditTransaction)
+                        .filter(user_id=user_id, organization_id__isnull=False)
+                        .values_list("organization_id", flat=True),
+                    }
+                    if len(standin_org_ids) == 1:
+                        standin_pk = next(iter(standin_org_ids))
+                        candidate_customer_ids_by_org[standin_pk].update(
+                            _candidate_customer_ids_for_user(user_id=user_id)
+                        )
                     continue
 
                 existing_org_ids = {
@@ -315,8 +349,10 @@ class Command(BaseCommand):
                 organization_id,
                 candidate_customer_ids,
             ) in candidate_customer_ids_by_org.items():
-                organization = Organization.objects.get(pk=organization_id)
-                existing_customer_id = _normalized_text(organization.stripe_customer_id)
+                organization_obj = Organization.objects.get(pk=organization_id)
+                existing_customer_id = _normalized_text(
+                    organization_obj.stripe_customer_id
+                )
                 if existing_customer_id:
                     conflicting_customer_ids = sorted(
                         candidate_customer_id
@@ -353,6 +389,42 @@ class Command(BaseCommand):
 
             synchronized_customer_org_ids: set[object] = set()
             with transaction.atomic():
+                # First, create deferred personal orgs and reassign billing
+                # rows (CR-AF3-FINAL-002).
+                for deferred_user in pending_personal_org_users:
+                    personal_org = Organization.objects.create_personal_for(
+                        deferred_user
+                    )
+                    # Reassign billing rows to the new personal org.
+                    operator_queryset(Subscription).filter(
+                        user_id=deferred_user.pk,
+                    ).update(organization_id=personal_org.pk)
+                    operator_queryset(CreditBalance).filter(
+                        user_id=deferred_user.pk,
+                    ).update(organization_id=personal_org.pk)
+                    operator_queryset(CreditTransaction).filter(
+                        user_id=deferred_user.pk,
+                    ).update(organization_id=personal_org.pk)
+                    # Sync stripe_customer_id if blank.
+                    candidate_ids = sorted(
+                        _candidate_customer_ids_for_user(user_id=deferred_user.pk)
+                    )
+                    if len(candidate_ids) == 1 and not _normalized_text(
+                        personal_org.stripe_customer_id
+                    ):
+                        personal_org.stripe_customer_id = candidate_ids[0]
+                        personal_org.save(update_fields=["stripe_customer_id"])
+                    self.stdout.write(
+                        "user="
+                        f"{getattr(deferred_user, 'username', deferred_user.pk)} "
+                        f"organization={personal_org.slug} "
+                        f"created_personal_org=yes "
+                        f"subscriptions_updated=... "
+                        f"balances_updated=... "
+                        f"transactions_updated=... "
+                        f"stripe_customer_id={_normalized_text(personal_org.stripe_customer_id) or '<unchanged>'}"
+                    )
+
                 for plan_entry in migration_plan:
                     user = plan_entry["user"]
                     organization = plan_entry["organization"]

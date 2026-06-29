@@ -2377,3 +2377,211 @@ def test_af3_all_non_management_all_objects_set_equality() -> None:
         "an AST-level .all_objects. reference:\n"
         + "\n".join(f"  - {p}" for p in sorted(missing))
     )
+
+
+# ---------------------------------------------------------------------------
+# CR-AF3-FINAL-001 — purge_organization preflight and dry-run operator_access
+# audit coverage (non-destructive branches).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_purge_organization_slug_preflight_audit_log(caplog) -> None:
+    """--slug preflight must emit a ``succeeded`` operator_access audit log."""
+    caplog.set_level(logging.INFO)
+    org = Organization.objects.create(name="Preflight Audit", slug="preflight-audit")
+    owner = get_user_model().objects.create_user(
+        username="preflight-audit-owner",
+        email="preflight-audit-owner@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=org,
+        role=OrgRole.OWNER,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "purge_organization",
+        slug="preflight-audit",
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    msgs = [r.getMessage() for r in caplog.records]
+    matching = [
+        m for m in msgs if "operator_access:" in m and "command=purge_organization" in m
+    ]
+    assert len(matching) >= 1, f"No audit log found in: {msgs}"
+    msg = matching[-1]
+    assert "status=succeeded" in msg
+    assert "scope=single_org_preflight" in msg
+    assert str(org.pk) in msg
+
+
+@pytest.mark.django_db
+def test_purge_organization_dry_run_audit_log(caplog) -> None:
+    """--dry-run with --organization-id must emit a ``succeeded`` audit log."""
+    caplog.set_level(logging.INFO)
+    org = Organization.objects.create(name="DryRun Audit", slug="dryrun-audit")
+    owner = get_user_model().objects.create_user(
+        username="dryrun-audit-owner",
+        email="dryrun-audit-owner@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=org,
+        role=OrgRole.OWNER,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "purge_organization",
+        organization_id=str(org.pk),
+        dry_run=True,
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    msgs = [r.getMessage() for r in caplog.records]
+    matching = [
+        m for m in msgs if "operator_access:" in m and "command=purge_organization" in m
+    ]
+    assert len(matching) >= 1, f"No audit log found in: {msgs}"
+    msg = matching[-1]
+    assert "status=succeeded" in msg
+    assert "scope=single_org_dry_run" in msg
+    assert str(org.pk) in msg
+
+
+# ---------------------------------------------------------------------------
+# CR-AF3-FINAL-002 — migrate_billing_to_orgs must not leak personal orgs/
+# memberships when the command fails during planning.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_migrate_billing_to_orgs_failure_no_orphan_personal_org() -> None:
+    """When ``migrate_billing_to_orgs`` fails on ambiguity, no personal
+    organisation or membership created during planning should remain.
+
+    Regression for CR-AF3-FINAL-002: one user who needs a personal org
+    is queued via ``pending_personal_org_users`` during planning, but the
+    command then fails for another user before reaching the transactional
+    block.  Both personal-org creation and billing-row reassignment must
+    be rolled back.
+    """
+    UserModel = get_user_model()
+
+    # User A — has billing rows but no org memberships, so the command
+    # must queue them for deferred personal-org creation.
+    user_a = UserModel.objects.create_user(
+        username="needs-org-a",
+        email="needs-org-a@example.com",
+        password="secret123",
+    )
+    plan = _create_plan(slug="growth-needs-org", price_id="price_growth_needs_org")
+    # User A's billing rows must already belong to an org (NOT NULL schema).
+    user_a_org = Organization.objects.create(
+        name="Needs Org A Existing", slug="needs-org-a-existing"
+    )
+    sub_a = Subscription.objects.create(
+        user=user_a,
+        organization=user_a_org,
+        plan=plan,
+        stripe_subscription_id="sub_needs_org_a",
+        stripe_customer_id="cus_needs_org_a",
+        status=Subscription.Status.ACTIVE,
+    )
+    balance_a = CreditBalance.objects.create(
+        user=user_a,
+        organization=user_a_org,
+        balance=100,
+    )
+    txn_a = CreditTransaction.objects.create(
+        user=user_a,
+        organization=user_a_org,
+        amount=25,
+        transaction_type=CreditTransaction.TransactionType.PURCHASE,
+        description="Orphan regression",
+        balance_after=100,
+    )
+
+    # User B — has ambiguous memberships which will cause the CommandError.
+    user_b = UserModel.objects.create_user(
+        username="ambiguous-b",
+        email="ambiguous-b@example.com",
+        password="secret123",
+    )
+    org_b1 = Organization.objects.create(name="Ambiguous B One", slug="ambiguous-b1")
+    org_b2 = Organization.objects.create(name="Ambiguous B Two", slug="ambiguous-b2")
+    OrganizationMembership.objects.create(
+        user=user_b,
+        organization=org_b1,
+        role=OrgRole.MEMBER,
+    )
+    OrganizationMembership.objects.create(
+        user=user_b,
+        organization=org_b2,
+        role=OrgRole.MEMBER,
+    )
+    Subscription.objects.create(
+        user=user_b,
+        organization=org_b1,
+        plan=plan,
+        stripe_subscription_id="sub_ambiguous_b",
+        stripe_customer_id="cus_ambiguous_b",
+        status=Subscription.Status.ACTIVE,
+    )
+
+    stdout = StringIO()
+    stderr = StringIO()
+    with pytest.raises(CommandError, match="ambiguous organization memberships"):
+        call_command(
+            "migrate_billing_to_orgs",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    # --- Prove no leaked personal org for User A ---
+    #
+    # 1. Direct orphan check: scan ALL personal-org rows (not just those
+    #    reachable via a membership query) to catch a membershipless
+    #    orphan.  The System org is the only expected personal org in
+    #    this test (the System org is NOT personal), so any personal-org
+    #    row would be a leak.
+    personal_orgs = list(Organization.objects.filter(is_personal=True))
+    assert not personal_orgs, (
+        f"Found {len(personal_orgs)} personal organisation(s) after a "
+        f"failed migration: {[(o.name, o.slug) for o in personal_orgs]}. "
+        "No personal org should exist — the transactional block was never "
+        "reached."
+    )
+
+    # 2. No membership should exist for User A.
+    assert not OrganizationMembership.objects.filter(user=user_a).exists(), (
+        "A membership for User A was created despite the command failing."
+    )
+
+    # --- Prove billing rows are unchanged ---
+    # 3. All three billing models must still point at the original org.
+    sub_a.refresh_from_db()
+    assert sub_a.organization_id == user_a_org.pk, (
+        f"User A's subscription was reassigned from {user_a_org.pk} "
+        f"to {sub_a.organization_id} despite the command failing."
+    )
+    balance_a.refresh_from_db()
+    assert balance_a.organization_id == user_a_org.pk, (
+        f"User A's credit balance was reassigned from {user_a_org.pk} "
+        f"to {balance_a.organization_id} despite the command failing."
+    )
+    txn_a.refresh_from_db()
+    assert txn_a.organization_id == user_a_org.pk, (
+        f"User A's credit transaction was reassigned from {user_a_org.pk} "
+        f"to {txn_a.organization_id} despite the command failing."
+    )
