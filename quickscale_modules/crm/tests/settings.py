@@ -3,6 +3,7 @@
 import os
 
 SECRET_KEY = "test-secret-key-for-crm-module"
+DEBUG = True
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
