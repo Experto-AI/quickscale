@@ -1,9 +1,9 @@
-"""Docker-free generated-project runtime smoke test.
+"""Generated-project runtime smoke test.
 
 Validates that a generated project with an embedded auth module can boot,
 migrate, and serve an HTTP route with a successful outcome (2xx/3xx) —
-proving generator fidelity without requiring Docker, PostgreSQL, or browser
-automation.
+proving generator fidelity without requiring Docker or browser automation.
+Requires a running PostgreSQL instance (see AF13 roadmap note).
 
 This test is collected by the default CI path (``pytest quickscale_core/tests/
 -m "not e2e"``) so generator regressions surface in daily PR feedback.
@@ -120,15 +120,25 @@ def _install_project_dependencies(project_path: Path) -> None:
     )
 
 
-def _write_sqlite_test_settings(project_path: Path, project_name: str) -> None:
-    """Write a test settings module that uses SQLite instead of PostgreSQL."""
-    settings_content = '''"""Runtime smoke test settings — uses SQLite (no Docker required)."""
+def _write_postgres_test_settings(project_path: Path, project_name: str) -> None:
+    """Write a test settings module that uses PostgreSQL.
+
+    Requires a running PostgreSQL instance reachable via the env vars below.
+    This replaces the former SQLite fallback — see AF13 in the roadmap.
+    """
+    settings_content = '''"""Runtime smoke test settings — uses PostgreSQL."""
+import os
+
 from .base import *  # noqa: F401, F403
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "test_smoke.db",  # noqa: F405
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke"),
+        "USER": os.environ.get("QS_SMOKE_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_SMOKE_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_SMOKE_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_SMOKE_DB_PORT", "5432"),
     }
 }
 
@@ -190,7 +200,7 @@ LOGGING = {
 
 
 def _run_migrations(project_path: Path, project_name: str) -> None:
-    """Run database migrations against the SQLite test database."""
+    """Run database migrations against the PostgreSQL test database."""
     result = subprocess.run(
         ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
         cwd=project_path,
@@ -209,7 +219,7 @@ def _run_migrations(project_path: Path, project_name: str) -> None:
 def _start_dev_server(
     project_path: Path, project_name: str, port: int
 ) -> subprocess.Popen[str]:
-    """Start Django development server in background with SQLite settings."""
+    """Start Django development server in background with PostgreSQL settings."""
     return subprocess.Popen(
         [
             "poetry",
@@ -327,14 +337,14 @@ def _stop_server(server_process: subprocess.Popen[str]) -> None:
 
 
 class TestGeneratedProjectRuntimeSmoke:
-    """Docker-free runtime smoke test for generated projects with embedded modules.
+    """Runtime smoke test for generated projects with embedded modules.
 
     Validates that an embedded-module generated project can:
     1. Generate project scaffold
     2. Embed the auth module
     3. Wire declarative config + managed settings/URLs
     4. Install dependencies via Poetry
-    5. Run migrations against SQLite
+    5. Run migrations against PostgreSQL
     6. Boot a development server
     7. Serve an auth-module route (/accounts/profile/) with a successful outcome
        (2xx/3xx) — proving the embedded module's URL routing is wired AND the
@@ -408,8 +418,8 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 5: Install dependencies.
         _install_project_dependencies(project_path)
 
-        # Phase 6: Write SQLite test settings and run migrations.
-        _write_sqlite_test_settings(project_path, project_name)
+        # Phase 6: Write PostgreSQL test settings and run migrations.
+        _write_postgres_test_settings(project_path, project_name)
         _run_migrations(project_path, project_name)
 
         # Phase 7: Boot development server and assert HTTP route.

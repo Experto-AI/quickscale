@@ -1,5 +1,7 @@
 """Django settings for QuickScale notifications module tests."""
 
+import os
+
 SECRET_KEY = "test-secret-key-for-notifications-module"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
@@ -56,8 +58,14 @@ TEMPLATES = [
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get(
+            "QS_NOTIFICATIONS_DB_NAME", "test_quickscale_notifications"
+        ),
+        "USER": os.environ.get("QS_NOTIFICATIONS_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_NOTIFICATIONS_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_NOTIFICATIONS_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_NOTIFICATIONS_DB_PORT", "5432"),
     }
 }
 

@@ -95,6 +95,18 @@ jobs:
     name: Run Tests (Unit + Integration)
     needs: [backups-validation, module-manifest-contract]
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     strategy:
       matrix:
         python-version: ["3.14"]
@@ -162,6 +174,26 @@ jobs:
     - name: Run type checking (mypy)
       run: |
         make typecheck -- --core --cli --modules
+
+    - name: Create test databases in PostgreSQL
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq --no-install-recommends postgresql-client
+        for db in \
+          test_quickscale_smoke \
+          test_quickscale_analytics \
+          test_quickscale_auth \
+          test_quickscale_billing \
+          test_quickscale_blog \
+          test_quickscale_crm \
+          test_quickscale_forms \
+          test_quickscale_listings \
+          test_quickscale_notifications \
+          test_quickscale_orgs \
+          test_quickscale_social \
+          test_quickscale_storage; do
+          createdb -h localhost -U postgres "$db" 2>/dev/null || echo "Database $db already exists"
+        done
 
     - name: Run repository coverage gate
       run: |

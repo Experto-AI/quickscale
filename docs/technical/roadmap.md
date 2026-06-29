@@ -125,7 +125,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ### Phase A tasks
 
-#### - [ ] AF13 — Delete SQLite fallback from all module test-settings files
+#### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
 
 `**Tier 1 — Low | PLANNING TIER: low (no plan-review) | RISK LEVEL: low | EXECUTION PATH: direct**`
 
@@ -134,7 +134,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **OBJECTIVE:** Delete the `QUICKSCALE_TEST_DB` env-var branch and the `else: sqlite3` fallback block from all 11 module `tests/settings.py` files. Replace with a single unconditional `django.db.backends.postgresql` block reading `QS_*_DB_*` env vars with sensible defaults (`localhost:5432`). Update the Module Implementation Checklist template so new modules start Postgres-only.
 - **SCOPE:** `quickscale_modules/{orgs,crm,billing,blog,listings,forms,social,auth,notifications,storage,analytics}/tests/settings.py` (11 files); `decisions.md` Module Implementation Checklist template section.
 - **ADDITIONAL VIOLATIONS:** `quickscale_core/tests/test_generated_project_runtime.py:123-133` (SQLite smoke test — replace with Postgres-backed job note); migration comments in `crm/migrations/0005_tag_owner_bucket_unique.py:11` and `0007_stage_terminal_semantic_bucket_unique.py:12` referencing SQLite portability (remove obsolete comments).
-- **ACCEPTANCE CRITERIA:** `grep -r "sqlite3" quickscale_modules/*/tests/settings.py` returns 0 hits; every module test run unconditionally targets Postgres.
+- **ACCEPTANCE CRITERIA:** `grep -r "sqlite3" $(ls -d quickscale_modules/*/tests/settings.py | grep -v backups)` returns 0 hits for the 11 in-scope modules (backups is out of AF13 scope — its continued SQLite test settings are a separate pending policy-violation/follow-up item, not an approved exception); every in-scope module test run unconditionally targets Postgres.
 - **VALIDATION PATH:** `make MODULE=orgs test` (must connect to Postgres or fail with a connection error — not silently skip).
 - **DEPENDS:** nothing.
 
@@ -265,6 +265,15 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **ACCEPTANCE CRITERIA:** superuser selects org in admin → redirected to `/` with debug banner showing org name → CRM/blog/listings data shows only that org's rows → Exit clears banner and restores normal resolution; non-superuser cannot set or read `debug_as_org_id` in session; each activation appears in audit log.
 - **VALIDATION PATH:** manual smoke test — log in as superuser, use admin action, verify banner + data scoping + Exit; write a test asserting non-superuser request cannot set the session key.
 - **DEPENDS:** AF9 merged (GUC/ContextVar wiring must be live; otherwise debug session shows 0 rows under the restricted runtime role).
+
+#### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
+
+`**Tier 1 — Low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** `wt-track3` — first in Track 3; unblocks AF10.
+- **IMPLEMENTATION:** Deleted the `QUICKSCALE_TEST_DB` env-var branch and SQLite `:memory:` fallback from all 11 module `tests/settings.py` files (orgs, crm, billing, blog, listings, forms, social, auth, notifications, storage, analytics). Each now uses unconditional `django.db.backends.postgresql` reading module-specific `QS_*_DB_*` env vars with sensible defaults (`localhost:5432`, user `postgres`, empty password). Ancillary cleanup: replaced SQLite smoke-test helper in `quickscale_core/tests/test_generated_project_runtime.py` with PostgreSQL-backed settings (`_write_postgres_test_settings`); removed obsolete SQLite-portability comments from CRM migrations `0005_tag_owner_bucket_unique.py` and `0007_stage_terminal_semantic_bucket_unique.py`.
+- **FINDINGS:** No blockers within the 11-module scope. The `backups` module also uses SQLite in its test settings — that is a separate policy-violation/follow-up item outside AF13 scope, not an approved exception. The `decisions.md` Module Implementation Checklist template update was completed in a follow-up phase (Postgres-only test settings checklist item added to Section 6).
+- **VALIDATION:** `grep -r "sqlite3" $(ls -d quickscale_modules/*/tests/settings.py | grep -v backups)` returns 0 hits for the 11 in-scope modules (backups is out of AF13 scope — its SQLite test settings remain a separate pending policy-violation/follow-up item).
 
 ---
 

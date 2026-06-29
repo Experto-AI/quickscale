@@ -1,5 +1,6 @@
 """Django settings for listings module tests"""
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,8 +60,12 @@ TEMPLATES = [
 # Database
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("QS_LISTINGS_DB_NAME", "test_quickscale_listings"),
+        "USER": os.environ.get("QS_LISTINGS_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_LISTINGS_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_LISTINGS_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_LISTINGS_DB_PORT", "5432"),
     }
 }
 

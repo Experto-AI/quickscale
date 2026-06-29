@@ -8,8 +8,6 @@ implement owner-bucket uniqueness:
 
 This preserves legacy NULL-owned duplicate blocking while allowing
 same-name tags across different orgs and NULL-owned + org-owned coexistence.
-The partial-index approach is portable across SQLite (test) and PostgreSQL
-(production).
 """
 
 from django.db import migrations, models

@@ -8,9 +8,7 @@ that together implement per-org owner-bucket uniqueness:
     organization IS NOT NULL
 
 Post-0006, all Stage rows have organization set (NOT NULL, PROTECT), so the
-NULL-owned bucket is a complete safety net rather than an active path. The
-partial-index approach is portable across SQLite (test) and PostgreSQL
-(production).
+NULL-owned bucket is a complete safety net rather than an active path.
 """
 
 from django.db import migrations, models

@@ -698,6 +698,7 @@ def test_current_org_id_context_isolation() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.django_db
 def test_tenant_context_sets_contextvar() -> None:
     """tenant_context() sets the ContextVar to org_id on entry."""
     from quickscale_modules_orgs.current_org import (
@@ -715,6 +716,7 @@ def test_tenant_context_sets_contextvar() -> None:
     assert get_current_org_id() is None
 
 
+@pytest.mark.django_db
 def test_tenant_context_restores_prior_value() -> None:
     """tenant_context() restores the prior ContextVar on exit."""
     from quickscale_modules_orgs.current_org import (
@@ -733,6 +735,7 @@ def test_tenant_context_restores_prior_value() -> None:
     assert get_current_org_id() == prior
 
 
+@pytest.mark.django_db
 def test_tenant_context_none_clears_contextvar() -> None:
     """tenant_context(None) clears the ContextVar (fail-closed)."""
     from quickscale_modules_orgs.current_org import (
@@ -750,6 +753,7 @@ def test_tenant_context_none_clears_contextvar() -> None:
     assert get_current_org_id() == prior
 
 
+@pytest.mark.django_db
 def test_tenant_context_restores_on_exception() -> None:
     """tenant_context() restores the prior ContextVar on exception."""
     from quickscale_modules_orgs.current_org import (
@@ -770,6 +774,7 @@ def test_tenant_context_restores_on_exception() -> None:
     assert get_current_org_id() == prior
 
 
+@pytest.mark.django_db
 def test_tenant_context_none_restores_on_exception() -> None:
     """tenant_context(None) restores the prior ContextVar on exception."""
     from quickscale_modules_orgs.current_org import (
@@ -790,6 +795,7 @@ def test_tenant_context_none_restores_on_exception() -> None:
     assert get_current_org_id() == prior
 
 
+@pytest.mark.django_db
 def test_tenant_context_nested_restores_outer_value() -> None:
     """Nested tenant_context() restores the outer value on inner exit."""
     from quickscale_modules_orgs.current_org import (
@@ -810,6 +816,7 @@ def test_tenant_context_nested_restores_outer_value() -> None:
     assert get_current_org_id() == prior
 
 
+@pytest.mark.django_db
 def test_tenant_context_none_inside_non_none_resets_and_restores() -> None:
     """tenant_context(None) inside tenant_context(org) temporarily clears
     the ContextVar (fail-closed) and restores on inner exit."""
@@ -830,7 +837,7 @@ def test_tenant_context_none_inside_non_none_resets_and_restores() -> None:
     assert get_current_org_id() == prior
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db
 def test_tenant_context_sets_db_current_org_id_on_postgres() -> None:
     """tenant_context() issues SET LOCAL on PostgreSQL."""
     from django.db import connection
@@ -854,7 +861,7 @@ def test_tenant_context_sets_db_current_org_id_on_postgres() -> None:
             assert raw == str(org_id)
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db
 def test_tenant_context_none_resets_db_current_org_id_on_postgres() -> None:
     """tenant_context(None) resets the DB GUC on PostgreSQL."""
     from django.db import connection
@@ -884,7 +891,9 @@ def test_tenant_context_none_resets_db_current_org_id_on_postgres() -> None:
         with connection.cursor() as cursor:
             cursor.execute("SELECT current_setting('app.current_org_id', true)")
             (raw,) = cursor.fetchone()
-            assert raw is None, "DB GUC must be None inside tenant_context(None)"
+            assert raw == "", (
+                "DB GUC must be empty (default) inside tenant_context(None)"
+            )
 
 
 # ---------------------------------------------------------------------------

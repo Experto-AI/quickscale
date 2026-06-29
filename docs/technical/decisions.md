@@ -834,6 +834,7 @@ disable_error_code = var-annotated
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
 - [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
+- [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**
 - [ ] Run `./scripts/publish_module.sh <name>` after implementation

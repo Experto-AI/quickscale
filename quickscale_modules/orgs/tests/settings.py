@@ -1,8 +1,6 @@
 """Django settings for QuickScale organizations module tests.
 
-Default database is SQLite (``:memory:``).  Set the environment variable
-``QUICKSCALE_TEST_DB=postgres`` to run the full test suite against
-PostgreSQL — the following env vars configure the connection:
+Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 
 * ``QS_ORGS_DB_NAME`` (default: ``test_quickscale_orgs``)
 * ``QS_ORGS_DB_USER`` (default: ``postgres``)
@@ -65,24 +63,16 @@ TEMPLATES = [
     }
 ]
 
-if os.environ.get("QUICKSCALE_TEST_DB") == "postgres":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("QS_ORGS_DB_NAME", "test_quickscale_orgs"),
-            "USER": os.environ.get("QS_ORGS_DB_USER", "postgres"),
-            "PASSWORD": os.environ.get("QS_ORGS_DB_PASSWORD", ""),
-            "HOST": os.environ.get("QS_ORGS_DB_HOST", "localhost"),
-            "PORT": os.environ.get("QS_ORGS_DB_PORT", "5432"),
-        }
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("QS_ORGS_DB_NAME", "test_quickscale_orgs"),
+        "USER": os.environ.get("QS_ORGS_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_ORGS_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_ORGS_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_ORGS_DB_PORT", "5432"),
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": ":memory:",
-        }
-    }
+}
 
 USE_TZ = True
 TIME_ZONE = "UTC"
