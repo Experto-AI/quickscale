@@ -95,9 +95,9 @@ Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF
 
 | Track | Tasks | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF9** | GUC/ContextVar desync — connection-layer fix; highest urgency (app-wide data outage in secure posture) |
-| `wt-track2` | **AF11** ✅ → **AF12** | Policy SQL safety first, then composite FK; AF11 complete; AF12 schema+proof tests landed, change-review at cap |
-| `wt-track3` | **AF13** ✅ → **AF10** ✅ | Test infra: Postgres unconditional settings first, then CI isolation job — **Track 3 complete** |
+| `wt-track1` | **AF9** | GUC/ContextVar desync — connection-layer fix; highest urgency (app-wide data outage in secure posture) — **BLOCKED at plan-review cap; 2 open proof-harness decisions (PR-AF9-003, PR-AF9-005)** |
+| `wt-track2` | **AF11** ✅ → **AF12** | Policy SQL safety first, then composite FK; AF11 complete; AF12 schema+proof tests landed — **BLOCKED at change-review cap; 2 open decisions (CR-AF12-001 test harness, CR-AF12-004 VALIDATE CONSTRAINT)** |
+| `wt-track3` | **AF13** ✅ → **AF10** ✅ | Test infra: Postgres unconditional settings first, then CI isolation job — **COMPLETE** ✅ |
 
 #### Phase B — after all Phase A tasks merged to `v87`
 
@@ -118,7 +118,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 | **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
 | **AF3** ✅ | 1 | AST-level positive-proof guard: management-command import+invocation of `operator_access(...)`; zero-direct-`.all_objects.` management-command guard; deferred `.all_objects.` manifest set-equality | complete |
 | **AF10** ✅ | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A (complete) |
-| **AF11** ✅ | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A |
+| **AF11** ✅ | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A (complete) |
 | **AF9** | 1 | Authenticated list view under restricted role returns owner's rows (not zero) | Phase A |
 
 ---
@@ -127,47 +127,19 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 #### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
 
-`**Tier 1 — Low | PLANNING TIER: low (no plan-review) | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track3` — first in Track 3; AF10 depends on this.
-- **WHY → Finding AF13.** Every `tests/settings.py` defaults to SQLite `:memory:`, violating the Postgres-only policy (`decisions.md §Database Policy`) and structurally causing AF10: tests skip because the settings select a DB that cannot run them.
-- **OBJECTIVE:** Delete the `QUICKSCALE_TEST_DB` env-var branch and the `else: sqlite3` fallback block from all 11 module `tests/settings.py` files. Replace with a single unconditional `django.db.backends.postgresql` block reading `QS_*_DB_*` env vars with sensible defaults (`localhost:5432`). Update the Module Implementation Checklist template so new modules start Postgres-only.
-- **SCOPE:** `quickscale_modules/{orgs,crm,billing,blog,listings,forms,social,auth,notifications,storage,analytics}/tests/settings.py` (11 files); `decisions.md` Module Implementation Checklist template section.
-- **ADDITIONAL VIOLATIONS:** `quickscale_core/tests/test_generated_project_runtime.py:123-133` (SQLite smoke test — replace with Postgres-backed job note); migration comments in `crm/migrations/0005_tag_owner_bucket_unique.py:11` and `0007_stage_terminal_semantic_bucket_unique.py:12` referencing SQLite portability (remove obsolete comments).
-- **ACCEPTANCE CRITERIA:** `grep -r "sqlite3" $(ls -d quickscale_modules/*/tests/settings.py | grep -v backups)` returns 0 hits for the 11 in-scope modules (backups is out of AF13 scope — its continued SQLite test settings are a separate pending policy-violation/follow-up item, not an approved exception); every in-scope module test run unconditionally targets Postgres.
-- **VALIDATION PATH:** `make MODULE=orgs test` (must connect to Postgres or fail with a connection error — not silently skip).
-- **DEPENDS:** nothing.
+**TRACK: `wt-track3`** — Completed 2026-06-29. See [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
 #### - [x] AF10 — Dedicated isolation-conformance CI job ✅
 
-`**Tier 2 — Medium | PLANNING TIER: low (no-plan-review) | RISK LEVEL: medium | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track3` — after AF13 merged on this track.
-- **WHY → Finding AF10.** No CI job exercises the app under a NOBYPASSRLS role against FORCE-RLS tables — the exact configuration the isolation effort exists for. AF9 is an app-wide defect that a single restricted-role Postgres run would have caught at the AF4 commit. Green CI currently certifies only the Python wiring.
-- **OBJECTIVE:** Add a dedicated `isolation-conformance` CI job to `.github/workflows/ci.yml` (or a new workflow file): Postgres 18 service, `migrate` applied, NOBYPASSRLS runtime role created, runs the conformance gate + all `test_rls_boundary.py` + one full authenticated-request integration test under that role. Add a CI step that fails if any isolation test is skipped (so the gate can never again "pass" by skipping).
-- **SCOPE:** `.github/workflows/` (new job or new file); no application code changes.
-- **ACCEPTANCE CRITERIA:** `isolation-conformance` job is green only when policies are live and a restricted-role authenticated list view returns the owner's rows; the job turns red immediately with AF9 unfixed (used as the red-green verification step for AF9).
-- **VALIDATION PATH:** run the workflow locally with `act` or push a test branch.
-- **DEPENDS:** AF13 merged ✅ (test settings must be Postgres-unconditional before the CI job adds the Postgres service).
-- **IMPLEMENTATION:** Added `isolation-conformance` job to `.github/workflows/ci.yml` — Postgres 18 service, Poetry-managed Python 3.14, creates test databases and the `quickscale_rls_test_role` (NOBYPASSRLS). Runs `scripts/test_isolation_conformance.sh` which executes: (1) orgs conformance gate (`test_tenant_table_conformance.py` PostgreSQL-only tests), (2) all module `test_rls_boundary.py` suites (billing, blog, crm, forms, listings), (3) CRM authenticated-request isolation test including `test_restricted_role_authenticated_list_view` under `SET ROLE` — no manual GUC presetting, so the test stays RED on v87 until AF9 lands. Post-run JUnit XML parsing fails the build if any isolation test was skipped. The repo-local runner script improves parity between CI and local validation. CR-AF10-001 (2026-06-29): removed the manual `SET app.current_org_id` that bypassed AF9's execute_wrapper seam; the test now exercises the real AF9 seam. CR-AF10-002 (2026-06-29): narrowed runner header to localhost-only (the `_PSQL` helper does not use module-specific `QS_*_DB_HOST`/`PORT` vars). Roadmap and changelog updated.
+**TRACK: `wt-track3`** — Completed 2026-06-29. See [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
 #### - [x] AF11 — NULLIF empty-string guard in RLS policy template ✅
 
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track2` — first in Track 2; AF12 follows on the same track.
-- **WHY → Finding AF11.** `''::uuid` raises `invalid input syntax` instead of returning zero rows; every pooled connection that has served any `SET LOCAL` request rests at `''`, turning tenant page loads into non-deterministic 500s. The defect lives in one shared template but is embedded in every enrolled table's policy.
-- **OBJECTIVE:** Change `_FORCE_RLS_FORWARD_SQL` in `orgs/tenancy.py:395-403` from `current_setting('app.current_org_id', true)::uuid` to `NULLIF(current_setting('app.current_org_id', true),'')::uuid`. Ship one migration per module that drops and recreates each table's policy from the corrected template. Extend the conformance gate to assert both `NULL`-GUC → 0 rows and `''`-GUC → 0 rows (not error).
-- **SCOPE:** `orgs/tenancy.py` (template); one migration per module that has FORCE-RLS enrolled tables (`crm`, `blog`, `listings`, `forms`, `social`, `billing`); `orgs/tests/test_tenant_table_conformance.py` (conformance assertion).
-- **ACCEPTANCE CRITERIA:** `''` GUC returns 0 rows on every enrolled table; the conformance gate asserts this; `invalid input syntax for type uuid` never appears in Postgres logs for tenant queries.
-- **VALIDATION PATH:** `make MODULE=orgs test` (policy conformance); each module's `test_rls_boundary.py` under Postgres (now unblocked by AF13/AF10).
-- **DEPENDS:** nothing (independent of AF9, AF13, AF10 — touches a different seam).
-- **NOTE:** fixes the policy template at the source; caller behavior (SET LOCAL / RESET) does not affect correctness after this lands.
-- **IMPLEMENTATION:** Phase 1 (`_FORCE_RLS_FORWARD_SQL` template fix in `tenancy.py`), Phase 2 (six module sweep migrations dropping/recreating RLS policies from corrected template), Phase 3 (baseline conformance gate extended — existing `test_enrolled_model_has_force_rls_policy` continues to verify FORCE-RLS on each table), Phase 4 (restricted-role conformance proof — `test_restricted_role_returns_zero_rows_under_null_and_empty_guc` seeds all 21 enrolled tables and proves both `RESET app.current_org_id` and `SET app.current_org_id = ''` yield zero rows without raising).
+**TRACK: `wt-track2`** — Completed 2026-06-29. See [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -223,34 +195,12 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ### Recently completed
 
-#### - [x] AF11 — NULLIF empty-string guard in RLS policy template ✅
-
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track2`
-- **WHY → Finding AF11.** `''::uuid` raises `invalid input syntax` instead of returning zero rows; every pooled connection that has served any `SET LOCAL` request rests at `''`, turning tenant page loads into non-deterministic 500s.
-- **OBJECTIVE:** Change `_FORCE_RLS_FORWARD_SQL` from bare `current_setting(...)::uuid` to `NULLIF(current_setting(...),'')::uuid`. Ship one migration per module dropping/recreating policies from the corrected template. Extend conformance gate to assert NULL/''-GUC → 0 rows.
-- **SCOPE:** `orgs/tenancy.py` (template fix); six module sweep migrations (`crm`, `blog`, `listings`, `forms`, `social`, `billing`); `orgs/tests/test_tenant_table_conformance.py` (restricted-role conformance proof).
-- **ACCEPTANCE CRITERIA:** `''` GUC returns 0 rows on every enrolled table; `invalid input syntax for type uuid` never appears in Postgres logs.
-- **VALIDATION PATH:** `make MODULE=orgs test` (policy conformance); final validation stack: lint + typecheck + explicit Postgres orgs-suite.
-- **DEPENDS:** nothing (independent of AF9, AF13, AF10).
-- **FINDINGS:** Plan-review accepted without findings. Change-review accepted without findings.
-- **IMPLEMENTATION:** Phase 1 (`_FORCE_RLS_FORWARD_SQL` NULLIF template fix in `tenancy.py`), Phase 2 (six module sweep migrations), Phase 3 (baseline conformance gate consistency), Phase 4 (PostgreSQL-only restricted-role proof: seeds 21 enrolled tables, asserts `RESET` and `''` return zero rows).
-
-#### - [x] AF3 — Single audited operator-access seam ✅
-
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-- **TRACK:** `wt-track1`
-- **WHY → Finding 3.** Cross-tenant reach is governed by two ambient, unaudited switches — per-model `all_objects` and the connected DB role's `BYPASSRLS` — with no logged boundary.
-- **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager that is the only path to the unfiltered queryset / privileged role and emits a structured audit record; route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`, `forms_seed_presets`) through it; begin tightening `all_objects` out of model declarations.
-- **SCOPE:** new seam in `orgs/`; `*/management/commands/*`; `all_objects` callsites in `*/admin.py`, `*/services.py`.
-- **ACCEPTANCE CRITERIA:** every cross-tenant operator read goes through the seam and logs who/which-orgs/why; conformance test counts `all_objects` entrypoints trending toward the seam.
-- **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests.
-- **DEPENDS:** AF1 and AF2 merged ✅.
-- **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; land it on the hardened AF1/AF2 base.
-- **FINDINGS:** CR-AF3-001 (purge `all_objects` fallback), CR-AF3-002 (schema scope), CR-AF3-003 (failure-stable audit metadata) — all resolved in review cycles.
-- **IMPLEMENTATION:** Phases 1+2 (seam + purge_organization + forms commands), Phase 3 (migrate_billing_to_orgs + all_objects cross-org visibility), Phase 4 (AST-level positive-proof guard with import+invocation check, full-management-command zero-direct-all_objects guard, deferred manifest for 16 non-management sites across forms/billing/crm/blog/social/orgs.permissions, `operator_queryset()` as the single centralized direct-`.all_objects.` exception — used by `migrate_billing_to_orgs` where an unfiltered queryset is required; the other three commands avoid `.all_objects.` via `operator_access()` plus scoped/default managers without `operator_queryset()`).
-- **SCOPE DECISION (resolved 2026-06-29):** AF9 remains scoped to `execute_wrapper` GUC wiring only — do not integrate `operator_access()` in this phase. The AF3 seam stays as a structured-logging-only layer; full RLS bypass under the restricted runtime role (i.e., `operator_access()` setting `app.current_org_id` + using `NOBYPASSRLS`-bypass DB credentials) is deferred to a later task outside Phase A. Consequently: (1) `operator_access()` does not set `app.current_org_id` — operator reads under NOBYPASSRLS will still return zero rows until a future task provides the privileged-role path. (2) The `all_objects` bypass in `operator_access()` only skips the Python-side tenant filter; under NOBYPASSRLS, RLS still gates the read. (3) AF3 conformance tests that require Postgres RLS run only after AF10/AF13 provide the CI isolation job — those conformance assertions remain deferred.
+| Task | Track | Completed | Summary |
+|---|---|---|---|
+| **AF3** ✅ | `wt-track1` | 2026-06-29 | Single audited `operator_access(reason=...)` seam; 4 management commands routed through it; AST-level conformance proof — see CHANGELOG |
+| **AF11** ✅ | `wt-track2` | 2026-06-29 | NULLIF empty-string guard in RLS policy template; 6 sweep migrations; restricted-role conformance proof — see CHANGELOG |
+| **AF13** ✅ | `wt-track3` | 2026-06-29 | Postgres-only test settings in all 11 modules; SQLite smoke-test helper replaced — see CHANGELOG |
+| **AF10** ✅ | `wt-track3` | 2026-06-29 | Isolation-conformance CI job (Postgres 18 + NOBYPASSRLS role); stays RED until AF9 lands — see CHANGELOG |
 
 ---
 
@@ -273,17 +223,6 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **ACCEPTANCE CRITERIA:** superuser selects org in admin → redirected to `/` with debug banner showing org name → CRM/blog/listings data shows only that org's rows → Exit clears banner and restores normal resolution; non-superuser cannot set or read `debug_as_org_id` in session; each activation appears in audit log.
 - **VALIDATION PATH:** manual smoke test — log in as superuser, use admin action, verify banner + data scoping + Exit; write a test asserting non-superuser request cannot set the session key.
 - **DEPENDS:** AF9 merged (GUC/ContextVar wiring must be live; otherwise debug session shows 0 rows under the restricted runtime role).
-
----
-
-#### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
-
-`**Tier 1 — Low | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** `wt-track3` — first in Track 3; unblocks AF10.
-- **IMPLEMENTATION:** Deleted the `QUICKSCALE_TEST_DB` env-var branch and SQLite `:memory:` fallback from all 11 module `tests/settings.py` files (orgs, crm, billing, blog, listings, forms, social, auth, notifications, storage, analytics). Each now uses unconditional `django.db.backends.postgresql` reading module-specific `QS_*_DB_*` env vars with sensible defaults (`localhost:5432`, user `postgres`, empty password). Ancillary cleanup: replaced SQLite smoke-test helper in `quickscale_core/tests/test_generated_project_runtime.py` with PostgreSQL-backed settings (`_write_postgres_test_settings`); removed obsolete SQLite-portability comments from CRM migrations `0005_tag_owner_bucket_unique.py` and `0007_stage_terminal_semantic_bucket_unique.py`.
-- **FINDINGS:** No blockers within the 11-module scope. The `backups` module also uses SQLite in its test settings — that is a separate policy-violation/follow-up item outside AF13 scope, not an approved exception. The `decisions.md` Module Implementation Checklist template update was completed in a follow-up phase (Postgres-only test settings checklist item added to Section 6).
-- **VALIDATION:** `grep -r "sqlite3" $(ls -d quickscale_modules/*/tests/settings.py | grep -v backups)` returns 0 hits for the 11 in-scope modules (backups is out of AF13 scope — its SQLite test settings remain a separate pending policy-violation/follow-up item).
 
 ---
 
