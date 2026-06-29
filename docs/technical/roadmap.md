@@ -87,7 +87,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified. **AF3 was subsequently implemented and merged** (see Recently completed below). The remaining five findings require two phases of parallel work before the isolation guarantee is correct and CI-verified.
+Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, originally spanning Phase A + Phase B. **AF3/Phase B has been implemented and merged** (see Recently completed below). Only the five Phase A findings remain open for the isolation guarantee to be correct and CI-verified.
 
 ### Track assignment & parallelization
 
@@ -195,6 +195,13 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **VALIDATION PATH:** the red/green test introduced by AF10's CI job; `make MODULE=orgs test`; `make MODULE=crm test` under Postgres.
 - **DEPENDS:** AF10/AF13 can land in parallel (the CI job is the verification vehicle, not a code dependency); AF11 can land in parallel (policy safety is independent of GUC wiring).
 - **NOTE:** fixes the `admin/` path too: `/admin/` is an `EXEMPT_PATH_PREFIX` so the middleware sets neither ContextVar nor GUC there; the execute_wrapper handles admin reads from the ContextVar (which the admin itself must set).
+- **STATUS (docs-only handoff, 2026-06-29):** Plan-review completed; hit the `plan_review_cycles=2` cap with one remaining **blocking** finding.
+  - **Scope decision (locked):** AF9 stays `execute_wrapper`-only. `operator_access()` + RLS integration is deferred to a later task outside Phase A (see AF3 SCOPE DECISION above).
+  - **What was done this turn:** Dependency check (AF9 is independent of AF11/AF13/AF10; AF3 dependency is resolved by the scope decision). Scope boundary confirmed (execute_wrapper GUC wiring only). Plan-review initiated; PR-AF9-001 (blocking, scope/design) resolved during re-planning; PR-AF9-002 (blocking, test-gap) unresolved at cap.
+  - **Remaining blocker — PR-AF9-002 (high, blocking, test-gap):** The restricted-role authenticated-request proof for `/crm/api/companies/` is under-specified because that seam traverses org resolution and `ensure_org_default_stages()`. The next implementation phase must:
+    1. Define the exact proof harness — full Django `Client` authenticated request vs narrower `RequestFactory`/view-seam invocation.
+    2. Grant the restricted runtime role `SELECT` on every non-CRM table that harness touches (orgs, auth User, groups, content types, etc.).
+    3. Pre-seed default-stage state (or provide an equivalent read-only setup fixture) so the test isolates AF9's ContextVar → GUC wiring and does not depend on an existing org's CRM data.
 
 ---
 
@@ -203,7 +210,6 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 #### - [x] AF3 — Single audited operator-access seam ✅
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
 - **TRACK:** `wt-track1`
 - **WHY → Finding 3.** Cross-tenant reach is governed by two ambient, unaudited switches — per-model `all_objects` and the connected DB role's `BYPASSRLS` — with no logged boundary.
 - **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager that is the only path to the unfiltered queryset / privileged role and emits a structured audit record; route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`, `forms_seed_presets`) through it; begin tightening `all_objects` out of model declarations.
@@ -214,7 +220,29 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; land it on the hardened AF1/AF2 base.
 - **FINDINGS:** CR-AF3-001 (purge `all_objects` fallback), CR-AF3-002 (schema scope), CR-AF3-003 (failure-stable audit metadata) — all resolved in review cycles.
 - **IMPLEMENTATION:** Phases 1+2 (seam + purge_organization + forms commands), Phase 3 (migrate_billing_to_orgs + all_objects cross-org visibility), Phase 4 (AST-level positive-proof guard with import+invocation check, full-management-command zero-direct-all_objects guard, deferred manifest for 16 non-management sites across forms/billing/crm/blog/social/orgs.permissions, `operator_queryset()` as the single centralized direct-`.all_objects.` exception — used by `migrate_billing_to_orgs` where an unfiltered queryset is required; the other three commands avoid `.all_objects.` via `operator_access()` plus scoped/default managers without `operator_queryset()`).
-- **PENDING / BLOCKING:** AF9, AF11, AF10 remain as prerequisites for a full RLS-integrated operator path under the restricted runtime role. The current seam uses structured logging (not a DB model) and does not yet integrate with the `SET LOCAL` GUC path that AF9 will establish. Specifically: (1) `operator_access()` cannot currently set `app.current_org_id` because the GUC-wiring fix is not yet landed — operator reads under the NOBYPASSRLS role will return zero rows until AF9 is done. (2) The `all_objects` bypass in `operator_access()` only skips the Python-side tenant filter; under NOBYPASSRLS, RLS still gates the read. (3) The AF3 conformance tests that require Postgres RLS will run only after AF10/AF13 provide the CI isolation job. **Decision needed:** whether to integrate the AF3 seam with the AF9 GUC wiring once it lands, or leave the seam as a structured-logging-only layer and treat full RLS bypass as a separate future concern.
+- **SCOPE DECISION (resolved 2026-06-29):** AF9 remains scoped to `execute_wrapper` GUC wiring only — do not integrate `operator_access()` in this phase. The AF3 seam stays as a structured-logging-only layer; full RLS bypass under the restricted runtime role (i.e., `operator_access()` setting `app.current_org_id` + using `NOBYPASSRLS`-bypass DB credentials) is deferred to a later task outside Phase A. Consequently: (1) `operator_access()` does not set `app.current_org_id` — operator reads under NOBYPASSRLS will still return zero rows until a future task provides the privileged-role path. (2) The `all_objects` bypass in `operator_access()` only skips the Python-side tenant filter; under NOBYPASSRLS, RLS still gates the read. (3) AF3 conformance tests that require Postgres RLS run only after AF10/AF13 provide the CI isolation job — those conformance assertions remain deferred.
+
+---
+
+### Phase C — Operator & Debug Tools
+
+#### - [ ] VIEW-AS — Operator org-impersonation debug mode
+
+`**Tier 1 — Low | PLANNING TIER: low (no plan-review) | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** standalone task; any track after all Phase A tasks merged to `v87`.
+- **WHY → RLS Strategy Review (2026-06-29).** Supabase ships an "Impersonate User" button in its dashboard so operators can see the app exactly as a specific tenant sees it — essential for debugging silent RLS row-filtering and data-visibility issues. QuickScale has no equivalent; operators currently need raw DB console access (which bypasses the application layer and the restricted runtime role entirely). This feature closes that parity gap.
+- **OBJECTIVE:** Allow Django superusers to select any `Organization` in Django Admin and "view app as this org" — activates an RLS-scoped session that uses that org's context, shows a persistent debug banner, and logs every debug activation.
+- **DESIGN:**
+  - **Session key**: `quickscale_modules_orgs.debug_as_org_id` (UUID string, set only by `is_superuser`)
+  - **Middleware hook**: `TenantMiddleware._resolve_debug_org()` — if `request.user.is_superuser` and session key present, use that org instead of normal Solo/SaaS resolution. Logs every resolved use (who, which org, timestamp, path) to Python audit logger.
+  - **Admin action**: `OrganizationAdmin` action `"View app as this org"` → sets session key → redirect to `/`; second action `"Exit debug mode"` clears it. Both actions gate on `is_superuser`.
+  - **Debug banner**: base template renders a top-bar strip `"DEBUG MODE — viewing as org '{name}' [Exit]"` when session key is present and user is superuser.
+  - **Security**: non-superusers cannot set the session key; admin actions blocked for non-superusers; no BYPASSRLS — debug session uses the same restricted runtime role as all other tenant paths (so RLS is still active and the operator sees exactly what the org members see).
+- **SCOPE:** `orgs/middleware.py` (`_resolve_debug_org`); `orgs/admin.py` (two actions on `OrganizationAdmin`); `orgs/views.py` (`DebugAsOrgView`, `ExitDebugModeView`); `orgs/urls.py` (two new endpoints); base/layout template (debug banner).
+- **ACCEPTANCE CRITERIA:** superuser selects org in admin → redirected to `/` with debug banner showing org name → CRM/blog/listings data shows only that org's rows → Exit clears banner and restores normal resolution; non-superuser cannot set or read `debug_as_org_id` in session; each activation appears in audit log.
+- **VALIDATION PATH:** manual smoke test — log in as superuser, use admin action, verify banner + data scoping + Exit; write a test asserting non-superuser request cannot set the session key.
+- **DEPENDS:** AF9 merged (GUC/ContextVar wiring must be live; otherwise debug session shows 0 rows under the restricted runtime role).
 
 ---
 
