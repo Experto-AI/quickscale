@@ -1,5 +1,7 @@
 """Django settings for testing CRM module"""
 
+import os
+
 SECRET_KEY = "test-secret-key-for-crm-module"
 
 INSTALLED_APPS = [
@@ -27,8 +29,12 @@ MIDDLEWARE = [
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("QS_CRM_DB_NAME", "test_quickscale_crm"),
+        "USER": os.environ.get("QS_CRM_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_CRM_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_CRM_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_CRM_DB_PORT", "5432"),
     }
 }
 

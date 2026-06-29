@@ -124,7 +124,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ### Phase A tasks
 
-#### - [ ] AF13 — Delete SQLite fallback from all module test-settings files
+#### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
 
 `**Tier 1 — Low | PLANNING TIER: low (no plan-review) | RISK LEVEL: low | EXECUTION PATH: direct**`
 
@@ -133,7 +133,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **OBJECTIVE:** Delete the `QUICKSCALE_TEST_DB` env-var branch and the `else: sqlite3` fallback block from all 11 module `tests/settings.py` files. Replace with a single unconditional `django.db.backends.postgresql` block reading `QS_*_DB_*` env vars with sensible defaults (`localhost:5432`). Update the Module Implementation Checklist template so new modules start Postgres-only.
 - **SCOPE:** `quickscale_modules/{orgs,crm,billing,blog,listings,forms,social,auth,notifications,storage,analytics}/tests/settings.py` (11 files); `decisions.md` Module Implementation Checklist template section.
 - **ADDITIONAL VIOLATIONS:** `quickscale_core/tests/test_generated_project_runtime.py:123-133` (SQLite smoke test — replace with Postgres-backed job note); migration comments in `crm/migrations/0005_tag_owner_bucket_unique.py:11` and `0007_stage_terminal_semantic_bucket_unique.py:12` referencing SQLite portability (remove obsolete comments).
-- **ACCEPTANCE CRITERIA:** `grep -r "sqlite3" quickscale_modules/*/tests/settings.py` returns 0 hits; every module test run unconditionally targets Postgres.
+- **ACCEPTANCE CRITERIA:** `grep -r "sqlite3" $(ls -d quickscale_modules/*/tests/settings.py | grep -v backups)` returns 0 hits for the 11 in-scope modules (backups is out of AF13 scope — its continued SQLite test settings are a separate pending policy-violation/follow-up item, not an approved exception); every in-scope module test run unconditionally targets Postgres.
 - **VALIDATION PATH:** `make MODULE=orgs test` (must connect to Postgres or fail with a connection error — not silently skip).
 - **DEPENDS:** nothing.
 
@@ -214,6 +214,15 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **FINDINGS:** CR-AF3-001 (purge `all_objects` fallback), CR-AF3-002 (schema scope), CR-AF3-003 (failure-stable audit metadata) — all resolved in review cycles.
 - **IMPLEMENTATION:** Phases 1+2 (seam + purge_organization + forms commands), Phase 3 (migrate_billing_to_orgs + all_objects cross-org visibility), Phase 4 (AST-level positive-proof guard with import+invocation check, full-management-command zero-direct-all_objects guard, deferred manifest for 16 non-management sites across forms/billing/crm/blog/social/orgs.permissions, `operator_queryset()` as the single centralized direct-`.all_objects.` exception — used by `migrate_billing_to_orgs` where an unfiltered queryset is required; the other three commands avoid `.all_objects.` via `operator_access()` plus scoped/default managers without `operator_queryset()`).
 - **PENDING / BLOCKING:** AF9, AF11, AF10 remain as prerequisites for a full RLS-integrated operator path under the restricted runtime role. The current seam uses structured logging (not a DB model) and does not yet integrate with the `SET LOCAL` GUC path that AF9 will establish. Specifically: (1) `operator_access()` cannot currently set `app.current_org_id` because the GUC-wiring fix is not yet landed — operator reads under the NOBYPASSRLS role will return zero rows until AF9 is done. (2) The `all_objects` bypass in `operator_access()` only skips the Python-side tenant filter; under NOBYPASSRLS, RLS still gates the read. (3) The AF3 conformance tests that require Postgres RLS will run only after AF10/AF13 provide the CI isolation job. **Decision needed:** whether to integrate the AF3 seam with the AF9 GUC wiring once it lands, or leave the seam as a structured-logging-only layer and treat full RLS bypass as a separate future concern.
+
+#### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
+
+`**Tier 1 — Low | RISK LEVEL: low | EXECUTION PATH: direct**`
+
+- **TRACK:** `wt-track3` — first in Track 3; unblocks AF10.
+- **IMPLEMENTATION:** Deleted the `QUICKSCALE_TEST_DB` env-var branch and SQLite `:memory:` fallback from all 11 module `tests/settings.py` files (orgs, crm, billing, blog, listings, forms, social, auth, notifications, storage, analytics). Each now uses unconditional `django.db.backends.postgresql` reading module-specific `QS_*_DB_*` env vars with sensible defaults (`localhost:5432`, user `postgres`, empty password). Ancillary cleanup: replaced SQLite smoke-test helper in `quickscale_core/tests/test_generated_project_runtime.py` with PostgreSQL-backed settings (`_write_postgres_test_settings`); removed obsolete SQLite-portability comments from CRM migrations `0005_tag_owner_bucket_unique.py` and `0007_stage_terminal_semantic_bucket_unique.py`.
+- **FINDINGS:** No blockers within the 11-module scope. The `backups` module also uses SQLite in its test settings — that is a separate policy-violation/follow-up item outside AF13 scope, not an approved exception. The `decisions.md` Module Implementation Checklist template update was completed in a follow-up phase (Postgres-only test settings checklist item added to Section 6).
+- **VALIDATION:** `grep -r "sqlite3" $(ls -d quickscale_modules/*/tests/settings.py | grep -v backups)` returns 0 hits for the 11 in-scope modules (backups is out of AF13 scope — its SQLite test settings remain a separate pending policy-violation/follow-up item).
 
 ---
 

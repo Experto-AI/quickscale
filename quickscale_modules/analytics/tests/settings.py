@@ -1,5 +1,6 @@
 """Django settings for QuickScale analytics module tests."""
 
+import os
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -41,8 +42,12 @@ TEMPLATES = [
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("QS_ANALYTICS_DB_NAME", "test_quickscale_analytics"),
+        "USER": os.environ.get("QS_ANALYTICS_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_ANALYTICS_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_ANALYTICS_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_ANALYTICS_DB_PORT", "5432"),
     }
 }
 

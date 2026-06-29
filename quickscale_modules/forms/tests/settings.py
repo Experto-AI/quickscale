@@ -1,5 +1,7 @@
 """Django settings for testing Forms module"""
 
+import os
+
 SECRET_KEY = "test-secret-key-for-forms-module"
 
 QUICKSCALE_MODE = "saas"
@@ -29,8 +31,12 @@ MIDDLEWARE = [
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("QS_FORMS_DB_NAME", "test_quickscale_forms"),
+        "USER": os.environ.get("QS_FORMS_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_FORMS_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_FORMS_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_FORMS_DB_PORT", "5432"),
     }
 }
 
