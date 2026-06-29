@@ -1,5 +1,6 @@
 """Tests for Forms module management commands"""
 
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -238,13 +239,11 @@ class TestFormsAnonymizeSubmissions:
 
 @pytest.mark.django_db
 class TestFormsAnonymizeSubmissionsOperatorPath:
-    """Phase F11.12a: verify management command uses the operator manager."""
+    """AF3: verify management command iterates via org-scoped operator seam."""
 
     def test_command_iterates_all_forms_including_system_org(self):
-        """Command uses all_objects so it visits all forms including System-org."""
+        """Command visits all forms via org-scoped iteration including System-org."""
         from datetime import timedelta
-
-        from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
 
@@ -268,12 +267,204 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
         assert sub.ip_address is None
         assert sub.user_agent == ""
 
-    def test_command_iterates_via_all_objects(self):
-        """Command iterates Form.all_objects.all() (operator manager)."""
-        with patch.object(Form, "all_objects") as mock_mgr:
-            mock_mgr.all.return_value = Form.objects.none()
+    def test_command_iterates_via_organization_iteration(self):
+        """Command iterates Organization.objects (org-scoped), not all_objects."""
+        with patch.object(Organization.objects, "iterator") as mock_iter:
+            mock_iter.return_value = Organization.objects.none()
             call_command("forms_anonymize_submissions", verbosity=0)
-            mock_mgr.all.assert_called_once()
+            mock_iter.assert_called_once()
+
+    def test_command_operator_access_success(self, caplog):
+        """Command produces a succeeded operator_access audit log."""
+        caplog.set_level(logging.INFO)
+
+        system_org = Organization.objects.get_system_org()
+
+        Form.objects.create(
+            title="Audit Anonymize Form",
+            slug="audit-anonymize",
+            data_retention_days=30,
+            organization=system_org,
+        )
+
+        call_command("forms_anonymize_submissions", verbosity=0)
+
+        msgs = [r.getMessage() for r in caplog.records]
+        matching = [
+            m
+            for m in msgs
+            if "operator_access:" in m and "command=forms_anonymize_submissions" in m
+        ]
+        assert len(matching) >= 1, f"No audit log found in: {msgs}"
+        msg = matching[-1]
+        assert "status=succeeded" in msg
+        assert "scope=all_orgs" in msg
+        assert "error_class=" in msg
+
+    def test_command_operator_access_failure(self, caplog):
+        """When anonymize body raises, audit log must have status='failed',
+        error_class, and the pre-populated target_org_ids."""
+        caplog.set_level(logging.INFO)
+
+        system_org = Organization.objects.get_system_org()
+
+        Form.objects.create(
+            title="Fail Anonymize Form",
+            slug="fail-anonymize",
+            data_retention_days=30,
+            organization=system_org,
+        )
+
+        # Patch Organization.objects.iterator to raise mid-way.
+        original_iterator = Organization.objects.iterator
+
+        def failing_iterator():
+            yield from original_iterator()
+            raise RuntimeError("Simulated anonymize failure")
+
+        with patch.object(
+            Organization.objects, "iterator", side_effect=failing_iterator
+        ):
+            with pytest.raises(RuntimeError, match="Simulated anonymize failure"):
+                call_command("forms_anonymize_submissions", verbosity=0)
+
+        msgs = [r.getMessage() for r in caplog.records]
+        matching = [
+            m
+            for m in msgs
+            if "operator_access:" in m and "command=forms_anonymize_submissions" in m
+        ]
+        assert len(matching) >= 1, f"No audit log found in: {msgs}"
+        msg = matching[-1]
+        assert "status=failed" in msg
+        assert "error_class=RuntimeError" in msg
+        # target_org_ids is pre-populated before iteration so must appear
+        # even on failure.  touched_org_ids may be partial or empty.
+        assert "target_orgs=" in msg
+        assert str(system_org.pk) in msg
+
+
+# ---------------------------------------------------------------------------
+# AF3 — forms_seed_presets operator-access seam tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestFormsSeedPresetsOperatorSeam:
+    """AF3: forms_seed_presets must produce an operator_access audit log."""
+
+    def test_seed_presets_operator_access_success(self, caplog):
+        """forms_seed_presets produces a succeeded audit log."""
+        caplog.set_level(logging.INFO)
+
+        call_command("forms_seed_presets", verbosity=0)
+
+        msgs = [r.getMessage() for r in caplog.records]
+        matching = [
+            m
+            for m in msgs
+            if "operator_access:" in m and "command=forms_seed_presets" in m
+        ]
+        assert len(matching) >= 1, f"No audit log found in: {msgs}"
+        msg = matching[-1]
+        assert "status=succeeded" in msg
+        assert "scope=system_org" in msg
+        assert "error_class=" in msg
+
+    def test_seed_presets_operator_access_target_org(self, caplog):
+        """forms_seed_presets must log the System org in target_orgs and touched_orgs."""
+        caplog.set_level(logging.INFO)
+
+        system_org = Organization.objects.get_system_org()
+
+        call_command("forms_seed_presets", verbosity=0)
+
+        msgs = [r.getMessage() for r in caplog.records]
+        matching = [
+            m
+            for m in msgs
+            if "operator_access:" in m and "command=forms_seed_presets" in m
+        ]
+        assert len(matching) >= 1
+        msg = matching[-1]
+        assert str(system_org.pk) in msg
+        # Both target_orgs and touched_orgs should contain the system org pk.
+        assert "target_orgs" in msg
+        assert "touched_orgs" in msg
+
+    def test_seed_presets_operator_access_failure(self, caplog):
+        """When seed body raises, audit log must have status='failed',
+        error_class, and target/touched org IDs (set before the risky work)."""
+        caplog.set_level(logging.INFO)
+
+        system_org = Organization.objects.get_system_org()
+
+        # Patch Form.objects.get_or_create to raise midway — the core
+        # audit fields (including target_org_ids/touched_org_ids) are set
+        # before get_or_create is called.
+        with patch.object(
+            Form.objects,
+            "get_or_create",
+            side_effect=RuntimeError("Simulated seed failure"),
+        ):
+            with pytest.raises(RuntimeError, match="Simulated seed failure"):
+                call_command("forms_seed_presets", verbosity=0)
+
+        msgs = [r.getMessage() for r in caplog.records]
+        matching = [
+            m
+            for m in msgs
+            if "operator_access:" in m and "command=forms_seed_presets" in m
+        ]
+        assert len(matching) >= 1, f"No audit log found in: {msgs}"
+        msg = matching[-1]
+        assert "status=failed" in msg
+        assert "error_class=RuntimeError" in msg
+        # Extract exact field-delimited values so that extra IDs or suffixes
+        # after the expected value cause a failure.
+        target_orgs_value = msg.split("target_orgs=")[1].split(" ")[0]
+        assert target_orgs_value == str(system_org.pk), (
+            f"Expected target_orgs={system_org.pk}, "
+            f"got target_orgs={target_orgs_value!r} in: {msg}"
+        )
+        touched_orgs_value = msg.split("touched_orgs=")[1].split(" ")[0]
+        assert touched_orgs_value == str(system_org.pk), (
+            f"Expected touched_orgs={system_org.pk}, "
+            f"got touched_orgs={touched_orgs_value!r} in: {msg}"
+        )
+
+    def test_seed_presets_operator_access_early_failure(self, caplog):
+        """When get_system_org fails, command actor/scope are still logged,
+        and target_orgs/touched_orgs show the expected empty-field shape."""
+        caplog.set_level(logging.INFO)
+
+        with patch.object(
+            Organization.objects,
+            "get_system_org",
+            side_effect=RuntimeError("Seed early failure"),
+        ):
+            with pytest.raises(RuntimeError, match="Seed early failure"):
+                call_command("forms_seed_presets", verbosity=0)
+
+        msgs = [r.getMessage() for r in caplog.records]
+        matching = [
+            m
+            for m in msgs
+            if "operator_access:" in m and "command=forms_seed_presets" in m
+        ]
+        assert len(matching) >= 1, f"No audit log found in: {msgs}"
+        msg = matching[-1]
+        assert "status=failed" in msg
+        assert "error_class=RuntimeError" in msg
+        # Static audit fields set before get_system_org must appear.
+        assert "command=forms_seed_presets" in msg
+        assert "scope=system_org" in msg
+        assert "actor=cli:forms_seed_presets" in msg
+        # target_org_ids/touched_org_ids depend on get_system_org result
+        # and will be empty defaults — show the exact empty-field shape.
+        assert "target_orgs= touched_orgs=" in msg, (
+            f"Expected empty target_orgs/touched_orgs in: {msg}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1,16 +1,16 @@
 # QuickScale Development Roadmap
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work Only)
+> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work, plus brief recently-completed handoff)
 > **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Changelog](../../CHANGELOG.md) | [Release Summary Template](release_summary_template.md) | [Start Here](../../START_HERE.md)
 
 ## Purpose
 
-Tracks only pending roadmap work. Completed history is in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as Adaptive Tier 1–2; split before implementing if a checklist item is Tier 3.
+Tracks pending roadmap work and, when all open items are resolved, a brief recently-completed handoff section with a completed-task marker. Detailed completed implementation history remains in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as Adaptive Tier 1–2; split before implementing if a checklist item is Tier 3.
 
 **Rules:**
-- Keep only open todo items here.
-- Move completed implementation history to CHANGELOG.md in concise form.
-- Each phase links back (`why →`) to the finding that justifies it.
+- Keep open todo items here, plus optionally a brief recently-completed handoff when no open items remain.
+- Move detailed completed implementation history to CHANGELOG.md.
+- Each open phase links back (`why →`) to the finding that justifies it.
 
 ---
 
@@ -80,17 +80,13 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–Track-1 pass, 2026-06-26). All generator/CLI work (AF5–AF8) and all runtime-isolation prerequisites (AF1, AF1-CR, AF2, AF4) are complete and merged. **AF3** is the only remaining open task.
+All structural-autopsy findings (AF1–AF8) are resolved and merged. **No open work remains.** See [CHANGELOG.md](../../CHANGELOG.md) for the completed implementation history.
 
-### Track assignment & parallelization
-
-| Track | Tasks | Cluster | Notes |
+| Track | Tasks | Status |
 |---|---|---|---|
-| `wt-track1` | **AF3** | Runtime isolation | AF1, AF1-CR-002, AF1-CR-005, AF2, AF4 all merged; AF3 is the only remaining open task |
-| `wt-track2` | *(complete)* | — | AF2 + AF4 merged; lane closed |
-| `wt-track3` | *(complete)* | — | AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ merged; lane closed |
-
-**Sequencing rationale.** Only **AF3** remains open. All prerequisite isolation work (`AF1 → AF1-CR → AF2+AF4`) is merged. AF3 can proceed immediately on `wt-track1`.
+| `wt-track1` | AF1, AF1-CR, AF2, AF4, **AF3** ✅ | complete, merged |
+| `wt-track2` | AF2 + AF4 | complete, merged |
+| `wt-track3` | AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ | complete, merged |
 
 ### QA hardening thread (cross-track)
 
@@ -102,18 +98,22 @@ Three findings shared one root cause: **the suite tested the happy request path 
 | **AF2** ✅ | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | complete |
 | **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
 
-### - [ ] AF3 — Single audited operator-access seam
+## Recently completed
+
+### - [x] AF3 — Single audited operator-access seam ✅
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track1` — next runtime-isolation task after AF2/AF4 merge-back.
+- **TRACK:** `wt-track1`
 - **WHY → Finding 3.** Cross-tenant reach is governed by two ambient, unaudited switches — per-model `all_objects` and the connected DB role's `BYPASSRLS` — with no logged boundary.
-- **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager that is the only path to the unfiltered queryset / privileged role and emits a structured audit record; route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`) through it; begin tightening `all_objects` out of model declarations.
+- **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager that is the only path to the unfiltered queryset / privileged role and emits a structured audit record; route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`, `forms_seed_presets`) through it; begin tightening `all_objects` out of model declarations.
 - **SCOPE:** new seam in `orgs/`; `*/management/commands/*`; `all_objects` callsites in `*/admin.py`, `*/services.py`.
 - **ACCEPTANCE CRITERIA:** every cross-tenant operator read goes through the seam and logs who/which-orgs/why; conformance test counts `all_objects` entrypoints trending toward the seam.
 - **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests.
 - **DEPENDS:** AF1 and AF2 merged ✅.
 - **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; land it on the hardened AF1/AF2 base.
+- **FINDINGS:** CR-AF3-001 (purge `all_objects` fallback), CR-AF3-002 (schema scope), CR-AF3-003 (failure-stable audit metadata) — all resolved in review cycles.
+- **IMPLEMENTATION:** Phases 1+2 (seam + purge_organization + forms commands), Phase 3 (migrate_billing_to_orgs + all_objects cross-org visibility), Phase 4 (AST-level positive-proof guard with import+invocation check, full-management-command zero-direct-all_objects guard, deferred manifest for 16 non-management sites across forms/billing/crm/blog/social/orgs.permissions, `operator_queryset()` as the single centralized direct-`.all_objects.` exception — used by `migrate_billing_to_orgs` where an unfiltered queryset is required; the other three commands avoid `.all_objects.` via `operator_access()` plus scoped/default managers without `operator_queryset()`).
 
 ---
 
