@@ -79,9 +79,29 @@ class TestForceRlsSqlTemplates:
     def test_forward_sql_contains_create_policy(self) -> None:
         assert "CREATE POLICY" in _FORCE_RLS_FORWARD_SQL
 
-    def test_forward_sql_contains_org_id_predicate(self) -> None:
-        assert "organization_id" in _FORCE_RLS_FORWARD_SQL
-        assert "current_setting" in _FORCE_RLS_FORWARD_SQL
+    def test_forward_sql_contains_guarded_org_id_predicate(self) -> None:
+        """The RLS policy predicates use the NULLIF-guarded cast to
+        safely handle unset ``app.current_org_id`` runtime parameters."""
+        guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
+        assert guarded_cast in _FORCE_RLS_FORWARD_SQL
+
+    def test_forward_sql_guarded_cast_appears_exactly_twice(self) -> None:
+        """The guarded cast must appear exactly twice: once in the
+        USING clause and once in the WITH CHECK clause."""
+        guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
+        assert _FORCE_RLS_FORWARD_SQL.count(guarded_cast) == 2
+
+    def test_forward_sql_guarded_cast_in_using_clause(self) -> None:
+        """The guarded cast appears specifically in the USING clause."""
+        guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
+        assert f"USING ({guarded_cast} = organization_id)" in _FORCE_RLS_FORWARD_SQL
+
+    def test_forward_sql_guarded_cast_in_with_check_clause(self) -> None:
+        """The guarded cast appears specifically in the WITH CHECK clause."""
+        guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
+        assert (
+            f"WITH CHECK ({guarded_cast} = organization_id)" in _FORCE_RLS_FORWARD_SQL
+        )
 
     def test_forward_sql_has_format_placeholders(self) -> None:
         assert "{table}" in _FORCE_RLS_FORWARD_SQL

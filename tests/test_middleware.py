@@ -891,8 +891,111 @@ def test_tenant_context_none_resets_db_current_org_id_on_postgres() -> None:
         with connection.cursor() as cursor:
             cursor.execute("SELECT current_setting('app.current_org_id', true)")
             (raw,) = cursor.fetchone()
-            assert raw == "", (
-                "DB GUC must be empty (default) inside tenant_context(None)"
+            assert raw is None or raw == "", (
+                "DB GUC must be None (or empty string after RESET to default) "
+                "inside tenant_context(None)"
+            )
+
+
+@pytest.mark.django_db
+def test_tenant_context_nested_restores_db_guc_on_postgres() -> None:
+    """Nested tenant_context() restores the outer DB GUC on inner exit."""
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        pytest.skip("SET LOCAL nested restoration requires PostgreSQL")
+
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    outer_id = uuid.uuid4()
+    inner_id = uuid.uuid4()
+
+    # Ensure clean ContextVar + DB GUC start regardless of prior test leakage
+    # (the Python ContextVar persists across tests on the same thread).
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    set_current_org_id(None)
+    with connection.cursor() as cursor:
+        cursor.execute("RESET app.current_org_id")
+
+    with tenant_context(outer_id):
+        assert get_current_org_id() == outer_id
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (raw,) = cursor.fetchone()
+            assert raw == str(outer_id), "DB GUC must be outer_id inside outer scope"
+
+        with tenant_context(inner_id):
+            assert get_current_org_id() == inner_id
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                (raw,) = cursor.fetchone()
+                assert raw == str(inner_id), (
+                    "DB GUC must be inner_id inside inner scope"
+                )
+
+        # After inner exit: DB GUC restored to outer_id.
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (raw,) = cursor.fetchone()
+            assert raw == str(outer_id), (
+                "DB GUC must be restored to outer_id after inner exit — CR-AF11-001"
+            )
+
+    # After outer exit: DB GUC restored to prior (empty).
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_setting('app.current_org_id', true)")
+        (raw,) = cursor.fetchone()
+        assert raw is None or raw == "", (
+            "DB GUC must return to empty/default after outer exit — CR-AF11-001"
+        )
+
+
+@pytest.mark.django_db
+def test_tenant_context_nested_none_inner_restores_db_guc_on_postgres() -> None:
+    """Nested tenant_context(None) inside tenant_context(org) restores
+    the outer DB GUC on inner exit."""
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        pytest.skip("SET LOCAL nested None restoration requires PostgreSQL")
+
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        tenant_context,
+    )
+
+    import uuid
+
+    org_id = uuid.uuid4()
+
+    with tenant_context(org_id):
+        assert get_current_org_id() == org_id
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (raw,) = cursor.fetchone()
+            assert raw == str(org_id), "DB GUC must be org_id before inner None"
+
+        with tenant_context(None):
+            assert get_current_org_id() is None
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                (raw,) = cursor.fetchone()
+                assert raw is None or raw == "", (
+                    "DB GUC must be empty inside tenant_context(None)"
+                )
+
+        # After inner None exit: DB GUC restored to org_id.
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (raw,) = cursor.fetchone()
+            assert raw == str(org_id), (
+                "DB GUC must be restored to org_id after inner None exit — CR-AF11-001"
             )
 
 

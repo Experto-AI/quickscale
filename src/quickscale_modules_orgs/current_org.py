@@ -110,8 +110,8 @@ def set_db_current_org_id(org_id: uuid.UUID | str) -> None:
     this inside a ``transaction.atomic()`` block alongside
     :func:`set_current_org_id`.
 
-    Uses the authoritative DB-side form documented in ``organizations.md``:
-      ``current_setting('app.current_org_id', true)::uuid``
+    Uses the shipped NULLIF-guarded contract documented in ``organizations.md``:
+      ``NULLIF(current_setting('app.current_org_id', true), '')::uuid``
 
     Does nothing when the database backend is not PostgreSQL.
     This is the same ``SET LOCAL`` primitive used by
@@ -128,8 +128,10 @@ def set_db_current_org_id(org_id: uuid.UUID | str) -> None:
 def reset_db_current_org_id() -> None:
     """Reset PostgreSQL ``app.current_org_id`` to the default (cleared).
 
-    After calling this, ``current_setting('app.current_org_id', true)::uuid``
-    returns ``NULL``, which is the "no org" RLS fail-closed state.
+    After calling this, ``current_setting('app.current_org_id', true)``
+    returns the GUC default (``''`` on this PostgreSQL version), which the
+    RLS policy converts to ``NULL::uuid`` via
+    ``NULLIF(current_setting(...), '')::uuid`` — the "no org" fail-closed state.
 
     Must be called inside an active ``transaction.atomic()`` block because
     ``RESET`` (like ``SET LOCAL``) is transaction-scoped.
@@ -174,6 +176,25 @@ def set_current_org_for_context(*, org_id: uuid.UUID) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _restore_current_org_id(prior: uuid.UUID | None) -> None:
+    """Restore the DB GUC after a tenant_context() scope exits.
+
+    Issues ``SET LOCAL`` (transaction-scoped) to restore *prior* or to clear
+    the GUC to its default (empty string) when *prior* was ``None``.  Using
+    ``SET LOCAL`` instead of ``RESET`` avoids session-level side effects that
+    can leak across test transactions (CR-AF11-001).
+    """
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        return
+    with connection.cursor() as cursor:
+        if prior is None:
+            cursor.execute("SET LOCAL app.current_org_id = ''")
+        else:
+            cursor.execute("SET LOCAL app.current_org_id = %s", [str(prior)])
+
+
 @contextlib.contextmanager
 def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
     """Request-scoped activation: set ContextVar + DB ``app.current_org_id``.
@@ -193,10 +214,9 @@ def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
     * Issues ``SET LOCAL app.current_org_id`` (or ``RESET`` when *org_id*
       is ``None``) so that FORCE RLS on PostgreSQL allows or denies queries.
 
-    On exit: restores the prior ContextVar value.
-    DB-side ``app.current_org_id`` is automatically cleaned up when the
-    caller's transaction commits or rolls back (``SET LOCAL`` is
-    transaction-scoped).
+    On exit: restores the prior ContextVar **and** the prior DB GUC
+    so that nested ``tenant_context()`` use never leaves the DB
+    ``app.current_org_id`` desynchronized from the Python-level scope.
 
     Examples
     --------
@@ -215,19 +235,30 @@ def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
     prior = get_current_org_id()
     if org_id is None:
         set_current_org_id(None)
-        reset_db_current_org_id()
         try:
+            reset_db_current_org_id()
             yield
         finally:
             set_current_org_id(prior)
+            # Restore the DB GUC so nested tenant_context() stays in sync.
+            if prior is None:
+                reset_db_current_org_id()
+            else:
+                set_db_current_org_id(prior)
         return
 
     set_current_org_id(org_id)
-    set_db_current_org_id(org_id)
     try:
+        set_db_current_org_id(org_id)
         yield
     finally:
         set_current_org_id(prior)
+        # Restore the DB GUC so nested tenant_context() stays in sync.
+        # Use SET LOCAL with DEFAULT when prior was None so we reset the
+        # transaction-scoped GUC without affecting the session default
+        # (CR-AF11-001 regression: RESET is session-scoped and can
+        # interact unexpectedly with connection-level state).
+        _restore_current_org_id(prior)
 
 
 # ---------------------------------------------------------------------------

@@ -398,8 +398,8 @@ ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY {policy_name} ON {table}
     FOR ALL
-    USING (current_setting('app.current_org_id', true)::uuid = organization_id)
-    WITH CHECK (current_setting('app.current_org_id', true)::uuid = organization_id);
+    USING (NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id)
+    WITH CHECK (NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id);
 """
 
 _FORCE_RLS_REVERSE_SQL = """
