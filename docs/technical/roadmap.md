@@ -196,13 +196,35 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **VALIDATION PATH:** the red/green test introduced by AF10's CI job; `make MODULE=orgs test`; `make MODULE=crm test` under Postgres.
 - **DEPENDS:** AF10/AF13 can land in parallel (the CI job is the verification vehicle, not a code dependency); AF11 can land in parallel (policy safety is independent of GUC wiring).
 - **NOTE:** fixes the `admin/` path too: `/admin/` is an `EXEMPT_PATH_PREFIX` so the middleware sets neither ContextVar nor GUC there; the execute_wrapper handles admin reads from the ContextVar (which the admin itself must set).
-- **STATUS (docs-only handoff, 2026-06-29):** Plan-review completed; hit the `plan_review_cycles=2` cap with one remaining **blocking** finding.
+- **STATUS (docs-only handoff, 2026-06-29, updated 2026-06-29):** Plan-review completed. PR-AF9-001 resolved. PR-AF9-002 now fully resolved — all three sub-items locked below. Track 1 is **unblocked for implementation**.
   - **Scope decision (locked):** AF9 stays `execute_wrapper`-only. `operator_access()` + RLS integration is deferred to a later task outside Phase A (see AF3 SCOPE DECISION above).
-  - **What was done this turn:** Dependency check (AF9 is independent of AF11/AF13/AF10; AF3 dependency is resolved by the scope decision). Scope boundary confirmed (execute_wrapper GUC wiring only). Plan-review initiated; PR-AF9-001 (blocking, scope/design) resolved during re-planning; PR-AF9-002 (blocking, test-gap) unresolved at cap.
-  - **Remaining blocker — PR-AF9-002 (high, blocking, test-gap):** The restricted-role authenticated-request proof for `/crm/api/companies/` is under-specified because that seam traverses org resolution and `ensure_org_default_stages()`. The next implementation phase must:
-    1. Define the exact proof harness — full Django `Client` authenticated request vs narrower `RequestFactory`/view-seam invocation.
-    2. Grant the restricted runtime role `SELECT` on every non-CRM table that harness touches (orgs, auth User, groups, content types, etc.).
-    3. Pre-seed default-stage state (or provide an equivalent read-only setup fixture) so the test isolates AF9's ContextVar → GUC wiring and does not depend on an existing org's CRM data.
+  - **PR-AF9-002 resolution — proof harness (locked):** Use the **`SET ROLE` + Django cursor pattern**, identical to the AF11 conformance proof (`test_tenant_table_conformance.py:1004`). Do **not** use a full Django `Client` authenticated request — that is AF10's CI job's responsibility. The AF9 in-suite proof is narrower: prove the execute_wrapper mechanism fires and derives `SET LOCAL` from the ContextVar. The cursor approach works because (a) the Django test transaction is visible within the same connection, (b) `SET ROLE restricted_role` on the cursor enforces RLS, and (c) `cursor.execute()` goes through Django's execute_wrapper hook.
+  - **PR-AF9-002 resolution — grant list (locked):** No change to `_ensure_rls_test_role()`. The existing helper already grants `SELECT` on every enrolled tenant table, which is all the cursor-based proof touches. AF10 is responsible for enumerating broader grants (`auth_user`, `django_session`, `orgs_organization`, etc.) for the full-app CI job.
+  - **PR-AF9-002 resolution — `ensure_org_default_stages()` (locked):** Pre-seed in setUp under the default (unrestricted) connection — call `ensure_org_default_stages(org)` explicitly before the `SET ROLE` block. The restricted-role cursor section is read-only; `ensure_org_default_stages()` never runs under the restricted role. No stub needed. Consistent with the no-mock / real-Postgres policy.
+  - **Proof harness structure (implement exactly this pattern):**
+    ```python
+    # setUp (default connection / test transaction):
+    org = Organization.objects.create(...)
+    user = User.objects.create_user(...)
+    ensure_org_default_stages(org)        # pre-seed — idempotent no-op under restricted role
+    Company.all_objects.create(organization=org, ...)
+    _ensure_rls_test_role()               # existing helper — SELECT on enrolled tables
+
+    # proof (same connection, restricted role):
+    with connection.cursor() as cursor:
+        cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
+        try:
+            set_current_org_id(org.id)    # ContextVar → execute_wrapper must pick this up
+            cursor.execute("SELECT COUNT(*) FROM crm_company")  # wrapper fires SET LOCAL
+            assert cursor.fetchone()[0] == 1   # RLS returns org's rows
+
+            set_current_org_id(None)
+            cursor.execute("SELECT COUNT(*) FROM crm_company")  # wrapper fires RESET/NULL
+            assert cursor.fetchone()[0] == 0   # RLS returns nothing
+        finally:
+            cursor.execute("RESET ROLE")
+            set_current_org_id(None)
+    ```
 
 ---
 
