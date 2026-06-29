@@ -1,16 +1,16 @@
 # QuickScale Development Roadmap
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work Only)
+> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work, plus recently-completed handoff)
 > **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Changelog](../../CHANGELOG.md) | [Release Summary Template](release_summary_template.md) | [Start Here](../../START_HERE.md)
 
 ## Purpose
 
-Tracks only pending roadmap work. Completed history is in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as Adaptive Tier 1–2; split before implementing if a checklist item is Tier 3.
+Tracks pending roadmap work and, when open items are resolved, a brief recently-completed handoff section. Detailed completed implementation history remains in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as Adaptive Tier 1–2; split before implementing if a checklist item is Tier 3.
 
 **Rules:**
-- Keep only open todo items here.
-- Move completed implementation history to CHANGELOG.md in concise form.
-- Each phase links back (`why →`) to the finding that justifies it.
+- Keep open todo items here, plus optionally a recently-completed handoff section.
+- Move detailed completed implementation history to CHANGELOG.md.
+- Each open phase links back (`why →`) to the finding that justifies it.
 
 ---
 
@@ -61,7 +61,7 @@ git merge --no-ff wt-track{N}
 | **AF12 — child-parent equality trigger asymmetry** | **A** — composite FK `(parent_id, organization_id)` on child tables referencing `(parent.id, parent.organization_id)` with a unique constraint on the parent; the database makes a divergent pair structurally impossible; drop the child-only equality trigger. |
 | **AF13 — SQLite fallback in test settings** | Delete the `QUICKSCALE_TEST_DB` branch and SQLite `:memory:` default from all 11 `tests/settings.py` files; replace with an unconditional `django.db.backends.postgresql` block reading env vars with sensible defaults; update the Module Implementation Checklist template so new modules start Postgres-only. |
 | **AF10 — isolation tests skipped in CI** | **B** — dedicated `isolation-conformance` CI job: Postgres 18 service, NOBYPASSRLS runtime role, `migrate` applied, runs the conformance gate + all `test_rls_boundary.py` + one authenticated-request integration test under the restricted role; fail if any isolation test is skipped. |
-| **AF3 — operator escape hatch unaudited** | **A** — single `operator_access(reason=...)` context manager in `orgs/`; the only path to the unfiltered queryset and the privileged role; emits structured audit records; management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`) routed through it; `all_objects` removed from model declarations. |
+| **AF3 — operator escape hatch unaudited** | **A** — single `operator_access(reason=...)` context manager in `orgs/`; the only path to the unfiltered queryset and the privileged role; emits structured audit records; management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`) routed through it; `all_objects` removed from model declarations — **implemented wt-track1** |
 
 **Global constraints:** no backward compatibility, no migration path, no existing users — every change is a clean break. Drop dead paths outright; squash/rewrite migrations rather than layering compat shims.
 
@@ -86,7 +86,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six new findings (AF9, AF10, AF11, AF12, AF13, plus AF3 re-confirmed) require two phases of parallel work before the isolation guarantee is correct and CI-verified.
+Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified. **AF3 was subsequently implemented and merged** (see Recently completed below). The remaining five findings require two phases of parallel work before the isolation guarantee is correct and CI-verified.
 
 ### Track assignment & parallelization
 
@@ -100,12 +100,10 @@ Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF
 
 #### Phase B — after all Phase A tasks merged to `v87`
 
-| Track | Tasks | Notes |
-|---|---|---|
-| `wt-track1` | **AF3** | Operator seam — requires AF9+AF11+AF10 all landed so the seam is built on correct wiring and CI-verified |
+Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See recently-completed section below.
 
 **Sequencing rationale.**
-- AF3 is gated on AF9 (the seam must not inherit the zero-row GUC bug), AF11 (policies must not crash on `''` when the seam reads), and AF10 (the seam's own tests must run under the restricted role).
+- AF3 was originally gated on AF9/AF11/AF10 but was implemented on the hardened AF1/AF2 base with a structured-logging-only seam (no schema). The AF9/AF11/AF10 dependencies remain valid for a full RLS-integrated operator path but are not required for the current audit-seam contract.
 - Within Track 2: AF12 is independent of AF11 but shares migration authorship; land AF11 first to keep migrations coherent.
 - Within Track 3: AF13 is a prerequisite for AF10 — CI cannot add a Postgres service if the test settings still default to SQLite.
 - AF9 (Track 1) and AF13→AF10 (Track 3) are independent; they run in parallel without sequencing risk.
@@ -117,6 +115,7 @@ Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF
 | **AF1** ✅ | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | complete |
 | **AF2** ✅ | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | complete |
 | **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
+| **AF3** ✅ | 1 | AST-level positive-proof guard: management-command import+invocation of `operator_access(...)`; zero-direct-`.all_objects.` management-command guard; deferred `.all_objects.` manifest set-equality | complete |
 | **AF10** | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A |
 | **AF11** | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A |
 | **AF9** | 1 | Authenticated list view under restricted role returns owner's rows (not zero) | Phase A |
@@ -194,24 +193,27 @@ Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF
 - **ACCEPTANCE CRITERIA:** under the NOBYPASSRLS runtime role, an authenticated list view for an org with data returns that org's rows (not zero); the AF10 `isolation-conformance` CI job (Track 3) turns green for this case; no view-level `tenant_context()` call is needed for normal authenticated reads.
 - **VALIDATION PATH:** the red/green test introduced by AF10's CI job; `make MODULE=orgs test`; `make MODULE=crm test` under Postgres.
 - **DEPENDS:** AF10/AF13 can land in parallel (the CI job is the verification vehicle, not a code dependency); AF11 can land in parallel (policy safety is independent of GUC wiring).
-- **NOTE:** fixes the `admin/` path too: `/admin/` is an `EXEMPT_PATH_PREFIX` so the middleware sets neither ContextVar nor GUC there; the execute_wrapper handles admin reads from the ContextVar (which the admin itself must set). Admin's `get_queryset → all_objects` pattern is a separate concern addressed in AF3.
+- **NOTE:** fixes the `admin/` path too: `/admin/` is an `EXEMPT_PATH_PREFIX` so the middleware sets neither ContextVar nor GUC there; the execute_wrapper handles admin reads from the ContextVar (which the admin itself must set).
 
 ---
 
-### Phase B tasks (after all Phase A tasks merged to `v87`)
+### Recently completed
 
-#### - [ ] AF3 — Single audited operator-access seam
+#### - [x] AF3 — Single audited operator-access seam ✅
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track1` — Phase B; begins after AF9 (Track 1), AF11 (Track 2), AF10 (Track 3) all merged.
-- **WHY → Finding AF3 / Finding 3.** Cross-tenant reach is governed by two ambient, unaudited switches — per-model `all_objects = TenantManager(super_scope=True)` and the connected DB role's `BYPASSRLS` — with no logged boundary. AF9's mechanics add a new nuance: under the runtime NOBYPASSRLS role, `all_objects` only bypasses the Python filter; RLS (GUC unset) still fail-closes the read to zero rows. Operator code that "works" today does so only because operator tooling runs under the superuser `DATABASE_URL`. This makes consolidating both switches into one explicit, logged seam more urgent.
-- **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager in `orgs/` that is the only path to the unfiltered queryset and the privileged role and emits a structured audit record (who, which orgs, why). Route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`) through it. Begin tightening `all_objects` out of model declarations — replace scattered `*/admin.py`, `*/services.py`, and `*/views.py` callsites with the seam.
-- **SCOPE:** new `orgs/operator.py` (or `orgs/current_org.py` extension); `*/management/commands/*`; `all_objects` callsites in `*/admin.py`, `*/services.py`; conformance test counting `all_objects` entrypoints.
-- **ACCEPTANCE CRITERIA:** every cross-tenant operator read goes through `operator_access()`; every use emits a structured audit log entry with who/which-orgs/why; `grep -r "all_objects" quickscale_modules/*/src` returns only the `all_objects` declaration in `orgs/managers.py` (all callsites routed through the seam); conformance test asserts this.
-- **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests; `isolation-conformance` CI job.
-- **DEPENDS:** AF9 ✅ (seam must not inherit the zero-row GUC bug on its own reads); AF11 ✅ (policies must not crash on `''` when the seam reads across tenants); AF10 ✅ (the seam's tests must run under the restricted role).
-- **RECOMMENDATION:** **Pursue (A)** — collapses two ambient switches into one authorized, logged decision; gives compliance a real audit trail; makes "where can we cross tenants?" a finite, reviewable list.
+- **TRACK:** `wt-track1`
+- **WHY → Finding 3.** Cross-tenant reach is governed by two ambient, unaudited switches — per-model `all_objects` and the connected DB role's `BYPASSRLS` — with no logged boundary.
+- **OBJECTIVE:** Introduce one `operator_access(reason=...)` context manager that is the only path to the unfiltered queryset / privileged role and emits a structured audit record; route the management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`, `forms_seed_presets`) through it; begin tightening `all_objects` out of model declarations.
+- **SCOPE:** new seam in `orgs/`; `*/management/commands/*`; `all_objects` callsites in `*/admin.py`, `*/services.py`.
+- **ACCEPTANCE CRITERIA:** every cross-tenant operator read goes through the seam and logs who/which-orgs/why; conformance test counts `all_objects` entrypoints trending toward the seam.
+- **VALIDATION PATH:** `make MODULE=orgs test` + each module's command tests.
+- **DEPENDS:** AF1 and AF2 merged ✅.
+- **RECOMMENDATION:** **Pursue (A)** — gives compliance a real audit trail; land it on the hardened AF1/AF2 base.
+- **FINDINGS:** CR-AF3-001 (purge `all_objects` fallback), CR-AF3-002 (schema scope), CR-AF3-003 (failure-stable audit metadata) — all resolved in review cycles.
+- **IMPLEMENTATION:** Phases 1+2 (seam + purge_organization + forms commands), Phase 3 (migrate_billing_to_orgs + all_objects cross-org visibility), Phase 4 (AST-level positive-proof guard with import+invocation check, full-management-command zero-direct-all_objects guard, deferred manifest for 16 non-management sites across forms/billing/crm/blog/social/orgs.permissions, `operator_queryset()` as the single centralized direct-`.all_objects.` exception — used by `migrate_billing_to_orgs` where an unfiltered queryset is required; the other three commands avoid `.all_objects.` via `operator_access()` plus scoped/default managers without `operator_queryset()`).
+- **PENDING / BLOCKING:** AF9, AF11, AF10 remain as prerequisites for a full RLS-integrated operator path under the restricted runtime role. The current seam uses structured logging (not a DB model) and does not yet integrate with the `SET LOCAL` GUC path that AF9 will establish. Specifically: (1) `operator_access()` cannot currently set `app.current_org_id` because the GUC-wiring fix is not yet landed — operator reads under the NOBYPASSRLS role will return zero rows until AF9 is done. (2) The `all_objects` bypass in `operator_access()` only skips the Python-side tenant filter; under NOBYPASSRLS, RLS still gates the read. (3) The AF3 conformance tests that require Postgres RLS will run only after AF10/AF13 provide the CI isolation job. **Decision needed:** whether to integrate the AF3 seam with the AF9 GUC wiring once it lands, or leave the seam as a structured-logging-only layer and treat full RLS bypass as a separate future concern.
 
 ---
 
