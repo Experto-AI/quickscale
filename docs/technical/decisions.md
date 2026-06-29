@@ -903,9 +903,10 @@ Keep this anchor in place for compatibility. Update the companion doc when the s
 - ❌ NO Flake8 (use Ruff check)
 
 **Database Policy (Breaking):**
-- ✅ PostgreSQL-only across dev and production
+- ✅ PostgreSQL-only — dev, CI testing, and production; no exceptions
 - ✅ `DATABASE_URL` is required for local DB configuration
-- ❌ SQLite is unsupported
+- ❌ SQLite is prohibited for any purpose, **including test databases** — `django.db.backends.sqlite3` in any `tests/settings.py` is a policy violation
+- ❌ `skipif(not postgres)` / `QUICKSCALE_TEST_DB` env-var guards on isolation tests are prohibited — isolation tests must run against PostgreSQL unconditionally; a job that cannot provision Postgres is misconfigured, not a valid reason to skip
 - ❌ No backward compatibility layer, migration shim, or fallback mode for SQLite-based setups
 
 **Validation and Automation Entry Points:** See [validation_policy.md](./validation_policy.md#repository-command-reference) for the authoritative repository command baseline and assistant guidance.
@@ -1194,6 +1195,10 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ❌ Advanced configuration layers beyond the shipped `quickscale.yml` + `.quickscale/state.yml` workflow
 
 ## Prohibitions (Critical - DO NOT)
+
+**Database:**
+- ❌ SQLite for any purpose — dev, test, or production (see §Database Policy above); `django.db.backends.sqlite3` in any test settings file is a policy violation that must be resolved before merge
+- ❌ `skipif(not postgres)` guards that allow isolation tests to be silently skipped rather than failing the build when Postgres is unavailable
 
 **Multi-tenant / Tenant Isolation:**
 - ❌ Per-client Railway deployment (linear overhead per tenant — not a SaaS platform)
