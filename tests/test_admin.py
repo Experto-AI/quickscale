@@ -413,58 +413,76 @@ class TestAdminSubmissionExportViewAllObjects:
         )
 
     def test_export_cross_org_field_values(self, staff_client, org_a, org_b):
-        """Export includes field values from submissions across orgs (all_objects path)."""
+        """Export includes field values from submissions across orgs (all_objects path).
+
+        Each submission now belongs to the same org as its parent form, respecting
+        the AF12 composite FK invariant.  The cross-org proof uses separate forms
+        per org.
+        """
         from quickscale_modules_forms.models import (
             Form,
             FormField,
             FormFieldValue,
             FormSubmission,
         )
-        from quickscale_modules_orgs.models import Organization
 
-        system_org = Organization.objects.get_system_org()
-        # A system-org form (visible to all admin)
-        xform = Form.all_objects.create(
-            title="Cross Org Form",
-            slug="cross-org-form",
-            organization=system_org,
+        # Form + submission under org_a
+        form_a = Form.all_objects.create(
+            title="Form A",
+            slug="cross-org-form-a",
+            organization=org_a,
             notify_emails="admin@example.com",
         )
-        field = FormField.all_objects.create(
-            form=xform,
-            organization=system_org,
+        field_a = FormField.all_objects.create(
+            form=form_a,
+            organization=org_a,
             field_type=FormField.FIELD_TYPE_TEXT,
             label="Department",
             name="department",
             order=1,
         )
-        # Submission from org_a
         sub_a = FormSubmission.all_objects.create(
-            form=xform, organization=org_a, ip_address="10.0.0.1"
+            form=form_a, organization=org_a, ip_address="10.0.0.1"
         )
         FormFieldValue.all_objects.create(
             submission=sub_a,
             organization=org_a,
-            field=field,
+            field=field_a,
             field_name="department",
             field_label="Department",
             value="Engineering",
         )
-        # Submission from org_b
+
+        # Form + submission under org_b
+        form_b = Form.all_objects.create(
+            title="Form B",
+            slug="cross-org-form-b",
+            organization=org_b,
+            notify_emails="admin@example.com",
+        )
+        field_b = FormField.all_objects.create(
+            form=form_b,
+            organization=org_b,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Department",
+            name="department",
+            order=1,
+        )
         sub_b = FormSubmission.all_objects.create(
-            form=xform, organization=org_b, ip_address="10.0.0.2"
+            form=form_b, organization=org_b, ip_address="10.0.0.2"
         )
         FormFieldValue.all_objects.create(
             submission=sub_b,
             organization=org_b,
-            field=field,
+            field=field_b,
             field_name="department",
             field_label="Department",
             value="Marketing",
         )
 
+        # Export form_a — should see Engineering
         url = reverse(
-            "quickscale_forms:admin-submission-export", kwargs={"pk": xform.pk}
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form_a.pk}
         )
         response = staff_client.get(url)
         assert response.status_code == 200
@@ -472,6 +490,14 @@ class TestAdminSubmissionExportViewAllObjects:
         assert "Engineering" in content, (
             "Must see org_a's field value — proves all_objects path"
         )
+
+        # Export form_b — should see Marketing
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form_b.pk}
+        )
+        response = staff_client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
         assert "Marketing" in content, (
             "Must see org_b's field value — proves all_objects path"
         )
