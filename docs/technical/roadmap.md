@@ -87,7 +87,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF11 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). The remaining three findings (AF9, AF10, AF12) require continued parallel work before the isolation guarantee is correct and CI-verified.
+Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF11 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). The remaining three findings (AF9, AF10, AF12) require continued parallel work before the isolation guarantee is correct and CI-verified. AF12 composite-FK schema and proof tests have landed but the change-review reached its iteration cap with blocking findings unresolved (see AF12 STATUS below).
 
 ### Track assignment & parallelization
 
@@ -96,7 +96,7 @@ Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF
 | Track | Tasks | Notes |
 |---|---|---|
 | `wt-track1` | **AF9** | GUC/ContextVar desync — connection-layer fix; highest urgency (app-wide data outage in secure posture) |
-| `wt-track2` | **AF11** → **AF12** | Policy SQL safety first, then composite FK; both touch schema/migrations |
+| `wt-track2` | **AF11** → **AF12** | Policy SQL safety first, then composite FK; AF11 complete; AF12 schema+proof tests landed, change-review at cap |
 | `wt-track3` | **AF13** → **AF10** | Test infra: Postgres unconditional settings first, then CI isolation job |
 
 #### Phase B — after all Phase A tasks merged to `v87`
@@ -105,7 +105,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 **Sequencing rationale.**
 - AF3 was originally gated on AF9/AF11/AF10 but was implemented on the hardened AF1/AF2 base with a structured-logging-only seam (no schema). The AF9/AF11/AF10 dependencies remain valid for a full RLS-integrated operator path but are not required for the current audit-seam contract.
-- Within Track 2: AF12 is independent of AF11 but shares migration authorship; land AF11 first to keep migrations coherent.
+- Within Track 2: AF12 was independent of AF11 but shared migration authorship; AF11 landed first to keep migrations coherent. AF12 composite-FK schema, helpers, and proof tests have been implemented; the change-review reached its iteration cap with blocking findings still open (see AF12 STATUS).
 - Within Track 3: AF13 is a prerequisite for AF10 — CI cannot add a Postgres service if the test settings still default to SQLite.
 - AF9 (Track 1) and AF13→AF10 (Track 3) are independent; they run in parallel without sequencing risk.
 
@@ -170,17 +170,24 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ---
 
-#### - [ ] AF12 — Composite FK for child-parent org equality
+#### - [ ] AF12 — Composite FK for child-parent org equality (composite-FK schema + proof tests landed; change-review at cap)
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
 - **TRACK:** `wt-track2` — after AF11 merged on this track.
 - **WHY → Finding AF12.** The `_EQUALITY_TRIGGER_SQL` only fires on child writes; a parent's `organization_id` mutation (operator action, data migration) silently orphans children outside the tenant boundary with no DB-level rejection. The trigger exists to be the backstop for the privileged/operator path, and it only covers half of it.
-- **OBJECTIVE:** Add a `UNIQUE (id, organization_id)` constraint to each enrolled parent table. Redefine each child table's parent FK as a composite `(parent_id, organization_id)` FK referencing `(parent.id, parent.organization_id)`. Drop the child-only equality trigger once the composite FK makes the invariant structurally unrepresentable. Enrolled parents: `Contact`, `Deal` (crm); enrolled children: `ContactNote`, `DealNote` (crm); `forms` child tables (`FormField`, `FormSubmission`, `FieldValue`).
-- **SCOPE:** `crm/` and `forms/` models + migrations; `orgs/tenancy.py` (`EnableTenantChildRLS` helper, drop trigger installer); conformance gate (check composite FK instead of trigger presence).
+- **OBJECTIVE:** Add a `UNIQUE (id, organization_id)` constraint to each enrolled parent table. Redefine each child table's parent FK as a composite `(parent_id, organization_id)` FK referencing `(parent.id, parent.organization_id)`. Drop the child-only equality trigger once the composite FK makes the invariant structurally unrepresentable. Enrolled parents: `Contact`, `Deal` (crm); `Form`, `FormField`, `FormSubmission` (forms). Enrolled children: `ContactNote`, `DealNote` (crm); `FormField`, `FormSubmission`, `FormFieldValue` (forms).
+- **SCOPE:** `crm/` and `forms/` models + migrations; `orgs/tenancy.py` (add composite-FK helpers to replace trigger installer); conformance gate (check composite FK in pg_constraint instead of trigger presence in pg_trigger).
 - **ACCEPTANCE CRITERIA:** a parent `organization_id` mutation is rejected by the FK constraint; the conformance gate verifies the composite FK is live; no equality trigger needed.
 - **VALIDATION PATH:** `make MODULE=crm test` + `make MODULE=forms test` (FK constraint test); `make MODULE=orgs test` (conformance gate).
 - **DEPENDS:** AF11 merged on this track (keep migrations coherent; AF12 is logically independent of AF11 but shares Track 2 to avoid migration conflicts).
+- **WHAT WAS IMPLEMENTED:** Phase 1 (schema/migration changes — added `UNIQUE (id, organization_id)` constraints on Contact, Deal, Form, FormField, FormSubmission; added 6 composite child FKs replacing trigger-based equality helpers in `tenancy.py`; rewrote CRM 0009 and Forms 0007 migrations to install constraints instead of triggers; FormFieldValue.field special case uses PG15+ partial-column `ON DELETE SET NULL (field_id)`), Phase 2 (targeted proof tests — 31 helper/conformance/delete-path tests in orgs suite, 5 MigrationExecutor tests in CRM, 6 in Forms; pg_constraint-based conformance replacing pg_trigger check; negative parent-org mutation proofs; FormFieldValue.field raw-DELETE delete-path proof), Phase 3 (docs — this entry).
+- **STATUS (stop-at-cap, 2026-06-29):** Schema, helpers, migration rewrites, conformance gate update, and proof tests are implemented and lint-clean. Change-review reached `review_cycles=2` cap with three **blocking** findings unresolved.
+  - **CR-AF12-001 (high, blocking, test-gap):** Executable parent-`organization_id` mutation rejection proof is missing. The added `TestCrmParentOrgMutationRejection` and `TestFormsParentOrgMutationRejection` test classes exist but carry `@pytest.mark.skipif(not _IS_POSTGRES)` and no PostgreSQL-backed harness has been connected to actually execute them. The proof must run under the FORCE-RLS runtime role to demonstrate that updating a parent's `organization_id` is structurally rejected by the composite FK constraint.
+  - **CR-AF12-004 (high, blocking, validation):** Forms migration `0007` adds composite FKs with `NOT VALID`, leaving them structurally unvalidated against any existing rows that may violate the constraint. The migration must finish with `VALIDATE CONSTRAINT` after the backfill step to guarantee the constraint holds across all existing data.
+  - **CR-AF12-003 (medium, blocking, consistency):** Docs and changelog must not overclaim proof coverage or completion status while blocking findings remain open. (This entry addresses that finding.)
+  - **Open question (test harness ownership):** Which privileged test harness should own the executable parent-org mutation rejection proof under FORCE RLS? Options: the existing `_ensure_rls_test_role()` restricted-role pattern in `test_tenant_table_conformance.py`, a dedicated PostgreSQL-backed DB fixture in the migration test suite, or a module-level conftest fixture.
+  - **Open question (Forms 0007 VALIDATE):** Should Forms migration `0007` finish with `ALTER TABLE ... VALIDATE CONSTRAINT` after the backfill step, replacing the current permanent `NOT VALID` composite FK? This would add a blocking validation step during migration that fails the deploy if constraint-violating rows exist, which is the correct production-safety posture but adds deploy-time risk if any pre-existing data violates the constraint.
 
 ---
 

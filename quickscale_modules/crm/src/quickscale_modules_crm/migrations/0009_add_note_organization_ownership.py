@@ -1,19 +1,19 @@
-"""Add direct organization ownership to ContactNote and DealNote (AF1 Phase 3).
+"""Add direct organization ownership to ContactNote and DealNote (AF1 Phase 3 / AF12 Phase 1).
 
 Schema changes:
   - Add NOT NULL ``organization`` FK (PROTECT) to both ContactNote and DealNote.
   - Backfill existing rows from the parent Contact/Deal.
-  - Install/ensure the shared child-parent equality trigger function.
-  - Enable BEFORE INSERT OR UPDATE triggers that enforce
-    ContactNote.organization_id = Contact.organization_id and
-    DealNote.organization_id = Deal.organization_id.
+  - Add UNIQUE (id, organization_id) constraints on Contact and Deal (parent tables).
+  - Add DB-only composite FOREIGN KEYs enforcing child-parent org equality:
+      ContactNote(contact_id, organization_id) → Contact(id, organization_id)
+      DealNote(deal_id, organization_id) → Deal(id, organization_id)
   - Enable and FORCE PostgreSQL Row-Level Security on both note tables.
 
 After this migration, ContactNote and DealNote are direct-owned tenant tables:
   - ``objects`` = TenantManager()
   - ``all_objects`` = TenantManager(super_scope=True)
   - live FORCE-RLS policy on ``organization_id``
-  - DB-level child-parent equality trigger against the parent table.
+  - DB-level composite FK enforcing child-parent ``organization_id`` equality.
 """
 
 from __future__ import annotations
@@ -24,16 +24,19 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 from quickscale_modules_orgs.tenancy import (
+    add_composite_child_fk,
+    add_parent_unique_constraint,
     apply_force_rls,
-    enable_child_parent_equality,
-    install_equality_trigger_function,
+    remove_composite_child_fk,
+    remove_parent_unique_constraint,
     revert_force_rls,
-    disable_child_parent_equality,
 )
 
 # ---------------------------------------------------------------------------
 # Table names
 # ---------------------------------------------------------------------------
+CRM_CONTACT_TABLE = "quickscale_modules_crm_contact"
+CRM_DEAL_TABLE = "quickscale_modules_crm_deal"
 CRM_CONTACTNOTE_TABLE = "quickscale_modules_crm_contactnote"
 CRM_DEALNOTE_TABLE = "quickscale_modules_crm_dealnote"
 
@@ -44,6 +47,14 @@ _CONTACTNOTE_RLS_TARGETS = (
     (CRM_CONTACTNOTE_TABLE, CRM_CONTACTNOTE_RLS_POLICY),
     (CRM_DEALNOTE_TABLE, CRM_DEALNOTE_RLS_POLICY),
 )
+
+# ---------------------------------------------------------------------------
+# Constraint names (AF12 Phase 1 naming contract)
+# ---------------------------------------------------------------------------
+CRM_CONTACT_ID_ORG_UNIQUE = "crm_contact_id_org_unique"
+CRM_DEAL_ID_ORG_UNIQUE = "crm_deal_id_org_unique"
+CRM_CONTACTNOTE_CONTACT_ORG_FK = "crm_contactnote_contact_org_fk"
+CRM_DEALNOTE_DEAL_ORG_FK = "crm_dealnote_deal_org_fk"
 
 # ---------------------------------------------------------------------------
 # Backfill helpers
@@ -104,49 +115,79 @@ def _assert_no_null_org_notes(apps: Any, schema_editor: Any) -> None:
         )
 
 
-def _install_equality_and_rls(apps: Any, schema_editor: Any) -> None:
-    """Install equality trigger function, enable triggers, and enable FORCE RLS."""
+# ---------------------------------------------------------------------------
+# Composite FK + RLS helpers (AF12 Phase 1)
+# ---------------------------------------------------------------------------
+
+
+def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
+    """Add parent unique constraints, composite child FKs, and enable FORCE RLS."""
     del apps
 
-    # 1. Install/refresh the shared trigger function (idempotent).
-    install_equality_trigger_function(schema_editor)
+    # 1. Add UNIQUE (id, organization_id) on parent tables Contact and Deal.
+    add_parent_unique_constraint(
+        schema_editor,
+        table=CRM_CONTACT_TABLE,
+        constraint_name=CRM_CONTACT_ID_ORG_UNIQUE,
+    )
+    add_parent_unique_constraint(
+        schema_editor,
+        table=CRM_DEAL_TABLE,
+        constraint_name=CRM_DEAL_ID_ORG_UNIQUE,
+    )
 
-    # 2. Enable child-parent equality triggers.
-    enable_child_parent_equality(
+    # 2. Add composite child FKs.
+    add_composite_child_fk(
         schema_editor,
         child_table=CRM_CONTACTNOTE_TABLE,
-        parent_table="quickscale_modules_crm_contact",
+        constraint_name=CRM_CONTACTNOTE_CONTACT_ORG_FK,
         child_fk_column="contact_id",
+        parent_table=CRM_CONTACT_TABLE,
+        on_delete="CASCADE",
     )
-    enable_child_parent_equality(
+    add_composite_child_fk(
         schema_editor,
         child_table=CRM_DEALNOTE_TABLE,
-        parent_table="quickscale_modules_crm_deal",
+        constraint_name=CRM_DEALNOTE_DEAL_ORG_FK,
         child_fk_column="deal_id",
+        parent_table=CRM_DEAL_TABLE,
+        on_delete="CASCADE",
     )
 
     # 3. Enable FORCE RLS on both note tables.
     apply_force_rls(schema_editor, _CONTACTNOTE_RLS_TARGETS)
 
 
-def _uninstall_equality_and_rls(apps: Any, schema_editor: Any) -> None:
-    """Reverse: drop RLS policies, drop triggers (function is kept)."""
+def _uninstall_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
+    """Reverse: drop RLS policies, drop composite FKs, drop parent unique constraints."""
     del apps
 
     # 1. Revert FORCE RLS (drop policies, disable RLS).
     revert_force_rls(schema_editor, _CONTACTNOTE_RLS_TARGETS)
 
-    # 2. Drop equality triggers.
-    disable_child_parent_equality(
+    # 2. Drop composite child FKs.
+    remove_composite_child_fk(
         schema_editor,
         child_table=CRM_CONTACTNOTE_TABLE,
+        constraint_name=CRM_CONTACTNOTE_CONTACT_ORG_FK,
     )
-    disable_child_parent_equality(
+    remove_composite_child_fk(
         schema_editor,
         child_table=CRM_DEALNOTE_TABLE,
+        constraint_name=CRM_DEALNOTE_DEAL_ORG_FK,
     )
-    # Note: the shared trigger function is left in place — it may be
-    # used by other tables and is simply kept as a no-op function.
+
+    # 3. Drop parent unique constraints.
+    remove_parent_unique_constraint(
+        schema_editor,
+        table=CRM_CONTACT_TABLE,
+        constraint_name=CRM_CONTACT_ID_ORG_UNIQUE,
+    )
+    remove_parent_unique_constraint(
+        schema_editor,
+        table=CRM_DEAL_TABLE,
+        constraint_name=CRM_DEAL_ID_ORG_UNIQUE,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -219,10 +260,10 @@ class Migration(migrations.Migration):
                 to="quickscale_modules_orgs.organization",
             ),
         ),
-        # ---- Step 5: Install equality triggers and enable RLS ----
+        # ---- Step 5: Add parent unique constraints, composite FKs, enable RLS ----
         migrations.RunPython(
-            code=_install_equality_and_rls,
-            reverse_code=_uninstall_equality_and_rls,
+            code=_install_composite_fks_and_rls,
+            reverse_code=_uninstall_composite_fks_and_rls,
             hints={"target_db": "default"},
         ),
     ]
