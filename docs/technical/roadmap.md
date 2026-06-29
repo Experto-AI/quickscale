@@ -84,8 +84,8 @@ All structural-autopsy findings (AF1–AF8) are resolved and merged. **No open w
 
 | Track | Tasks | Status |
 |---|---|---|---|
-| `wt-track1` | AF1, AF1-CR, AF2, AF4, **AF3** ✅ | complete, merged |
-| `wt-track2` | AF2 + AF4 | complete, merged |
+| `wt-track1` | AF1, AF1-CR, **AF3** ✅ | complete, merged |
+| `wt-track2` | AF2, AF4 | complete, merged |
 | `wt-track3` | AF5 ✅ AF6 ✅ AF7 ✅ AF8 ✅ | complete, merged |
 
 ### QA hardening thread (cross-track)
