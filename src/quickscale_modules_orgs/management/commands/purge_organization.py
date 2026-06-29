@@ -361,24 +361,33 @@ class Command(BaseCommand):
 
     def _preflight_by_slug(self, slug: str) -> str | None:
         """Look up an organization by slug and print its state (non-destructive)."""
-        try:
-            organization = Organization.objects.get(slug=slug)
-        except Organization.DoesNotExist:
-            raise CommandError(
-                f"No organization found with slug {slug!r}. "
-                "Use --organization-id <uuid> to search by UUID or check the slug."
-            )
+        with operator_access(reason="purge_organization slug preflight") as ctx:
+            ctx.command = "purge_organization"
+            ctx.actor_identifier = "cli:purge_organization"
+            ctx.target_scope = "single_org_preflight"
 
-        self._guard_reserved_org(organization)
-        self._print_ownership_summary(
-            organization, self._build_ownership_map_guarded(organization)
-        )
-        self.stdout.write(
-            self.style.WARNING(
-                "Preflight only — no changes were made. "
-                "Use --organization-id <uuid> for destructive execution."
+            try:
+                organization = Organization.objects.get(slug=slug)
+            except Organization.DoesNotExist:
+                raise CommandError(
+                    f"No organization found with slug {slug!r}. "
+                    "Use --organization-id <uuid> to search by UUID "
+                    "or check the slug."
+                )
+
+            ctx.target_org_ids = [str(organization.pk)]
+            ctx.touched_org_ids = [str(organization.pk)]
+
+            self._guard_reserved_org(organization)
+            self._print_ownership_summary(
+                organization, self._build_ownership_map_guarded(organization)
             )
-        )
+            self.stdout.write(
+                self.style.WARNING(
+                    "Preflight only — no changes were made. "
+                    "Use --organization-id <uuid> for destructive execution."
+                )
+            )
         return None
 
     # ------------------------------------------------------------------
@@ -387,25 +396,32 @@ class Command(BaseCommand):
 
     def _dry_run_by_uuid(self, org_id: uuid.UUID) -> str | None:
         """Show ownership counts for an organization without deleting."""
-        try:
-            organization = Organization.objects.get(pk=org_id)
-        except Organization.DoesNotExist:
-            self._check_tombstone(org_id)
-            raise CommandError(
-                f"No organization found with UUID {org_id}. "
-                "No tombstone exists for this UUID either."
-            )
+        with operator_access(reason="purge_organization dry run") as ctx:
+            ctx.command = "purge_organization"
+            ctx.actor_identifier = "cli:purge_organization"
+            ctx.target_scope = "single_org_dry_run"
+            ctx.target_org_ids = [str(org_id)]
+            ctx.touched_org_ids = [str(org_id)]
 
-        self._guard_reserved_org(organization)
-        self._print_ownership_summary(
-            organization, self._build_ownership_map_guarded(organization)
-        )
-        self.stdout.write(
-            self.style.WARNING(
-                "Dry run — no changes were made. "
-                "Re-run without --dry-run to execute the purge."
+            try:
+                organization = Organization.objects.get(pk=org_id)
+            except Organization.DoesNotExist:
+                self._check_tombstone(org_id)
+                raise CommandError(
+                    f"No organization found with UUID {org_id}. "
+                    "No tombstone exists for this UUID either."
+                )
+
+            self._guard_reserved_org(organization)
+            self._print_ownership_summary(
+                organization, self._build_ownership_map_guarded(organization)
             )
-        )
+            self.stdout.write(
+                self.style.WARNING(
+                    "Dry run — no changes were made. "
+                    "Re-run without --dry-run to execute the purge."
+                )
+            )
         return None
 
     # ------------------------------------------------------------------
