@@ -1,10 +1,20 @@
-"""Management command to seed built-in form presets"""
+"""Management command to seed built-in form presets.
+
+AF3 phase 1+2: wraps the operation in ``operator_access()`` for audit trail,
+enters explicit System-org scope via ``org_scope()``, and replaces direct
+``.all_objects.`` usage with the default tenant-scoped manager.
+"""
+
+from __future__ import annotations
 
 from typing import Any
 
 from django.core.management.base import BaseCommand
 
 from quickscale_modules_forms.models import Form, FormField
+from quickscale_modules_orgs.current_org import org_scope
+from quickscale_modules_orgs.models import Organization
+from quickscale_modules_orgs.operator_access import operator_access
 
 
 class Command(BaseCommand):
@@ -193,38 +203,48 @@ class Command(BaseCommand):
     ]
 
     def handle(self, *args: Any, **options: Any) -> None:
-        from quickscale_modules_orgs.models import Organization
+        with operator_access(reason="seed built-in form presets") as log:
+            # Set static audit fields before any risky work so a failure
+            # during get_system_org() still produces a meaningful log.
+            log.command = "forms_seed_presets"
+            log.actor_identifier = "cli:forms_seed_presets"
+            log.target_scope = "system_org"
 
-        system_org = Organization.objects.get_system_org()
-        for preset in self.PRESETS:
-            # Use all_objects (operator path) so that get_or_create can find
-            # existing rows regardless of the current org context. Scope the
-            # lookup to System org (D2) so tenant-owned rows with the same
-            # slug are not mistaken for presets.
-            form, created = Form.all_objects.get_or_create(
-                slug=preset["slug"],
-                organization=system_org,
-                defaults={
-                    "title": preset["title"],
-                    "description": preset["description"],
-                    "success_message": preset["success_message"],
-                    "notify_emails": preset["notify_emails"],
-                    "organization": system_org,
-                },
-            )
-            status_label = "Created" if created else "Already exists"
-            self.stdout.write(f"  {status_label}: {form.slug}")
+            system_org = Organization.objects.get_system_org()
+            log.target_org_ids = [str(system_org.pk)]
+            log.touched_org_ids = [str(system_org.pk)]
 
-            for field_data in preset["fields"]:
-                field_defaults = {k: v for k, v in field_data.items() if k != "name"}
-                field_defaults.setdefault("placeholder", "")
-                field_defaults.setdefault("options", [])
-                field_defaults.setdefault("validation_rules", {})
-                field_defaults["organization"] = form.organization
-                FormField.all_objects.get_or_create(
-                    form=form,
-                    name=field_data["name"],
-                    defaults=field_defaults,
-                )
+            with org_scope(system_org):
+                for preset in self.PRESETS:
+                    # Use the default tenant-scoped manager inside
+                    # org_scope (System org) so the lookup is explicitly
+                    # scoped to the System org.  No raw ``all_objects``
+                    # is needed.
+                    form, created = Form.objects.get_or_create(
+                        slug=preset["slug"],
+                        defaults={
+                            "title": preset["title"],
+                            "description": preset["description"],
+                            "success_message": preset["success_message"],
+                            "notify_emails": preset["notify_emails"],
+                            "organization": system_org,
+                        },
+                    )
+                    status_label = "Created" if created else "Already exists"
+                    self.stdout.write(f"  {status_label}: {form.slug}")
+
+                    for field_data in preset["fields"]:
+                        field_defaults = {
+                            k: v for k, v in field_data.items() if k != "name"
+                        }
+                        field_defaults.setdefault("placeholder", "")
+                        field_defaults.setdefault("options", [])
+                        field_defaults.setdefault("validation_rules", {})
+                        field_defaults["organization"] = form.organization
+                        FormField.objects.get_or_create(
+                            form=form,
+                            name=field_data["name"],
+                            defaults=field_defaults,
+                        )
 
         self.stdout.write(self.style.SUCCESS("Form presets seeded successfully."))
