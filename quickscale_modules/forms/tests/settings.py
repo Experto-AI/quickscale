@@ -3,6 +3,7 @@
 import os
 
 SECRET_KEY = "test-secret-key-for-forms-module"
+DEBUG = True
 
 QUICKSCALE_MODE = "saas"
 

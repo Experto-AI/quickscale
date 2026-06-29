@@ -87,17 +87,17 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF11 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). The remaining three findings (AF9, AF10, AF12) require continued parallel work before the isolation guarantee is correct and CI-verified.
+Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF10 (Phase A, Track 3), AF11 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). The remaining two findings (AF9, AF12) require continued parallel work before the isolation guarantee is correct and CI-verified.
 
 ### Track assignment & parallelization
 
 #### Phase A — all three tracks run in parallel; merge to `v87` before Phase B
 
 | Track | Tasks | Notes |
-|---|---|---|
+|---|---|---|---|
 | `wt-track1` | **AF9** | GUC/ContextVar desync — connection-layer fix; highest urgency (app-wide data outage in secure posture) |
 | `wt-track2` | **AF11** → **AF12** | Policy SQL safety first, then composite FK; both touch schema/migrations |
-| `wt-track3` | **AF13** → **AF10** | Test infra: Postgres unconditional settings first, then CI isolation job |
+| `wt-track3` | **AF13** ✅ → **AF10** ✅ | Test infra: Postgres unconditional settings first, then CI isolation job — **Track 3 complete** |
 
 #### Phase B — after all Phase A tasks merged to `v87`
 
@@ -117,7 +117,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 | **AF2** ✅ | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | complete |
 | **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
 | **AF3** ✅ | 1 | AST-level positive-proof guard: management-command import+invocation of `operator_access(...)`; zero-direct-`.all_objects.` management-command guard; deferred `.all_objects.` manifest set-equality | complete |
-| **AF10** | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A |
+| **AF10** ✅ | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A (complete) |
 | **AF11** ✅ | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A |
 | **AF9** | 1 | Authenticated list view under restricted role returns owner's rows (not zero) | Phase A |
 
@@ -140,9 +140,9 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ---
 
-#### - [ ] AF10 — Dedicated isolation-conformance CI job
+#### - [x] AF10 — Dedicated isolation-conformance CI job ✅
 
-`**Tier 2 — Medium | PLANNING TIER: low (no plan-review) | RISK LEVEL: medium | EXECUTION PATH: direct**`
+`**Tier 2 — Medium | PLANNING TIER: low (no-plan-review) | RISK LEVEL: medium | EXECUTION PATH: direct**`
 
 - **TRACK:** `wt-track3` — after AF13 merged on this track.
 - **WHY → Finding AF10.** No CI job exercises the app under a NOBYPASSRLS role against FORCE-RLS tables — the exact configuration the isolation effort exists for. AF9 is an app-wide defect that a single restricted-role Postgres run would have caught at the AF4 commit. Green CI currently certifies only the Python wiring.
@@ -151,6 +151,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **ACCEPTANCE CRITERIA:** `isolation-conformance` job is green only when policies are live and a restricted-role authenticated list view returns the owner's rows; the job turns red immediately with AF9 unfixed (used as the red-green verification step for AF9).
 - **VALIDATION PATH:** run the workflow locally with `act` or push a test branch.
 - **DEPENDS:** AF13 merged ✅ (test settings must be Postgres-unconditional before the CI job adds the Postgres service).
+- **IMPLEMENTATION:** Added `isolation-conformance` job to `.github/workflows/ci.yml` — Postgres 18 service, Poetry-managed Python 3.14, creates test databases and the `quickscale_rls_test_role` (NOBYPASSRLS). Runs `scripts/test_isolation_conformance.sh` which executes: (1) orgs conformance gate (`test_tenant_table_conformance.py` PostgreSQL-only tests), (2) all module `test_rls_boundary.py` suites (billing, blog, crm, forms, listings), (3) CRM authenticated-request isolation test including `test_restricted_role_authenticated_list_view` under `SET ROLE` — no manual GUC presetting, so the test stays RED on v87 until AF9 lands. Post-run JUnit XML parsing fails the build if any isolation test was skipped. The repo-local runner script improves parity between CI and local validation. CR-AF10-001 (2026-06-29): removed the manual `SET app.current_org_id` that bypassed AF9's execute_wrapper seam; the test now exercises the real AF9 seam. CR-AF10-002 (2026-06-29): narrowed runner header to localhost-only (the `_PSQL` helper does not use module-specific `QS_*_DB_HOST`/`PORT` vars). Roadmap and changelog updated.
 
 ---
 
