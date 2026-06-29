@@ -1,8 +1,9 @@
-"""Focused tests for org billing bridge management commands."""
+"""Focused tests for org management commands including AF3 operator-access seam."""
 
 from __future__ import annotations
 
 import uuid as uuid_lib
+import logging
 from io import StringIO
 
 import pytest
@@ -219,6 +220,162 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
         Organization.objects.filter(is_personal=True, memberships__user=user).count()
         == 0
     )
+
+
+# ---------------------------------------------------------------------------
+# AF3 phase 3 — migrate_billing_to_orgs current-schema seam tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_migrate_billing_to_orgs_current_schema_success(caplog) -> None:
+    """migrate_billing_to_orgs succeeds when billing rows already have orgs.
+
+    Current schema organisation_id is NOT NULL.  Billing rows already carry
+    an organisation FK.  The command should still run without errors, report
+    zero ``*_updated``, sync the ``stripe_customer_id`` from billing rows,
+    and emit a ``succeeded`` audit record.
+    """
+    caplog.set_level(logging.INFO)
+
+    user = get_user_model().objects.create_user(
+        username="current-schema",
+        email="current-schema@example.com",
+        password="secret123",
+    )
+    org = Organization.objects.create(name="Current Schema", slug="current-schema")
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=org,
+        role=OrgRole.OWNER,
+    )
+    plan = _create_plan(
+        slug="growth-current-schema", price_id="price_growth_current_schema"
+    )
+    Subscription.objects.create(
+        user=user,
+        organization=org,
+        plan=plan,
+        stripe_subscription_id="sub_current_schema",
+        stripe_customer_id="cus_current_schema",
+        status=Subscription.Status.ACTIVE,
+    )
+    CreditBalance.objects.create(user=user, organization=org, balance=50)
+    CreditTransaction.objects.create(
+        user=user,
+        organization=org,
+        amount=50,
+        transaction_type=CreditTransaction.TransactionType.PURCHASE,
+        description="Current schema test",
+        balance_after=50,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "migrate_billing_to_orgs",
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    output = stdout.getvalue()
+    assert "subscriptions_updated=0" in output
+    assert "balances_updated=0" in output
+    assert "transactions_updated=0" in output
+    assert "current-schema" in output
+    assert "completed" in output
+
+    # stripe_customer_id should be synced since the org had none.
+    org.refresh_from_db()
+    assert org.stripe_customer_id == "cus_current_schema"
+
+    # Verify the operator-access audit log.
+    msgs = [r.getMessage() for r in caplog.records]
+    matching = [
+        m
+        for m in msgs
+        if "operator_access:" in m and "command=migrate_billing_to_orgs" in m
+    ]
+    assert len(matching) >= 1, f"No audit log found in: {msgs}"
+    msg = matching[-1]
+    assert "status=succeeded" in msg
+    assert "scope=all_billing_users" in msg
+    assert "error_class=" in msg
+    assert str(org.pk) in msg
+
+
+@pytest.mark.django_db
+def test_migrate_billing_to_orgs_current_schema_failure(caplog) -> None:
+    """When billing users have ambiguous org memberships, the command raises
+    ``CommandError``, leaves associations unchanged, and records
+    ``status="failed"`` with ``error_class``."""
+    caplog.set_level(logging.INFO)
+
+    user = get_user_model().objects.create_user(
+        username="ambiguous-current",
+        email="ambiguous-current@example.com",
+        password="secret123",
+    )
+    first_org = Organization.objects.create(name="First Current", slug="first-current")
+    second_org = Organization.objects.create(
+        name="Second Current", slug="second-current"
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=first_org,
+        role=OrgRole.MEMBER,
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=second_org,
+        role=OrgRole.MEMBER,
+    )
+    plan = _create_plan(
+        slug="growth-current-fail", price_id="price_growth_current_fail"
+    )
+    Subscription.objects.create(
+        user=user,
+        organization=first_org,
+        plan=plan,
+        stripe_subscription_id="sub_current_fail",
+        stripe_customer_id="cus_current_fail",
+        status=Subscription.Status.ACTIVE,
+    )
+
+    stdout = StringIO()
+    stderr = StringIO()
+    with pytest.raises(CommandError, match="ambiguous organization memberships"):
+        call_command(
+            "migrate_billing_to_orgs",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    # Verify billing ownership is unchanged after the failure.
+    sub = Subscription.all_objects.get(stripe_subscription_id="sub_current_fail")
+    assert sub.organization_id == first_org.pk, (
+        "Subscription must still point at first_org after failed migration"
+    )
+
+    # Verify the operator-access audit log records the failure with
+    # non-empty org attribution (pre-populated before the ambiguity check).
+    msgs = [r.getMessage() for r in caplog.records]
+    matching = [
+        m
+        for m in msgs
+        if "operator_access:" in m and "command=migrate_billing_to_orgs" in m
+    ]
+    assert len(matching) >= 1, f"No audit log found in: {msgs}"
+    msg = matching[-1]
+    assert "status=failed" in msg
+    assert "error_class=CommandError" in msg
+    # At least the ambiguous user's billing org should appear in
+    # target_orgs since it was set before the CommandError.
+    assert f"target_orgs={first_org.pk}" in msg, (
+        f"Expected target_orgs to contain first_org PK in: {msg}"
+    )
+    assert "touched_orgs=" in msg
 
 
 @pytest.mark.django_db
@@ -1628,3 +1785,591 @@ def test_purge_organization_clears_social_cache() -> None:
     assert cache.get(link_key) is None
     assert cache.get(SOCIAL_EMBEDS_CACHE_KEY) is None
     assert cache.get(embed_key) is None
+
+
+# ---------------------------------------------------------------------------
+# AF3 phase 2 — operator_access helper tests (success + failure paths)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_operator_access_success_path_creates_audit_log(caplog) -> None:
+    """operator_access must emit a succeeded structured log with stable fields."""
+    caplog.set_level(logging.INFO)
+    from quickscale_modules_orgs.operator_access import operator_access
+
+    with operator_access(reason="test success") as log:
+        log.command = "test_command"
+        log.actor_identifier = "test_suite"
+        log.target_scope = "all_orgs"
+        log.target_org_ids = ["org-1", "org-2"]
+        log.touched_org_ids = ["org-1"]
+
+    # Verify the audit log message has all stable fields.
+    msg = caplog.records[-1].getMessage()
+    assert "operator_access:" in msg
+    assert "status=succeeded" in msg
+    assert "command=test_command" in msg
+    assert "scope=all_orgs" in msg
+    assert "reason=test success" in msg
+    assert "actor=test_suite" in msg
+    assert "target_orgs=org-1,org-2" in msg
+    assert "touched_orgs=org-1" in msg
+    assert "error_class=" in msg
+
+
+@pytest.mark.django_db
+def test_operator_access_failure_path_records_error_class(caplog) -> None:
+    """When the body raises, operator_access must log status='failed' and error_class."""
+    caplog.set_level(logging.INFO)
+    from quickscale_modules_orgs.operator_access import operator_access
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        with operator_access(reason="test failure") as log:
+            log.command = "test_command"
+            log.actor_identifier = "test_suite"
+            log.target_scope = "single_org"
+            log.target_org_ids = ["org-1"]
+            log.touched_org_ids = ["org-1"]
+            raise RuntimeError("simulated failure")
+
+    # Verify the audit log captures the failure.
+    msg = caplog.records[-1].getMessage()
+    assert "operator_access:" in msg
+    assert "status=failed" in msg
+    assert "error_class=RuntimeError" in msg
+
+
+@pytest.mark.django_db
+def test_operator_access_without_optional_fields(caplog) -> None:
+    """operator_access must handle a bare yield without field population."""
+    caplog.set_level(logging.INFO)
+    from quickscale_modules_orgs.operator_access import operator_access
+
+    with operator_access(reason="bare test") as log:
+        log.command = "bare_command"
+
+    msg = caplog.records[-1].getMessage()
+    assert "operator_access:" in msg
+    assert "status=succeeded" in msg
+    assert "command=bare_command" in msg
+    # Optional fields should appear with empty defaults.
+    assert "target_orgs=" in msg
+    assert "touched_orgs=" in msg
+
+
+# ---------------------------------------------------------------------------
+# AF3 phase 2 — purge_organization seam audit tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_purge_organization_success_audit_record(caplog) -> None:
+    """A successful purge must log a 'succeeded' audit record with stable fields."""
+    caplog.set_level(logging.INFO)
+    owner = get_user_model().objects.create_user(
+        username="audit-success-owner",
+        email="audit-success-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Audit Success Test", slug="audit-success-test"
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    org_id = organization.pk
+
+    stdout = StringIO()
+    call_command(
+        "purge_organization",
+        organization_id=str(org_id),
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    output = stdout.getvalue()
+    assert "has been purged" in output
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+    # Verify the operator-access audit log message.
+    msgs = [r.getMessage() for r in caplog.records]
+    matching = [
+        m for m in msgs if "operator_access:" in m and "command=purge_organization" in m
+    ]
+    assert len(matching) >= 1, f"No purge audit log found in: {msgs}"
+    msg = matching[-1]
+    assert "status=succeeded" in msg
+    assert "scope=single_org" in msg
+    assert str(org_id) in msg
+    assert "error_class=" in msg
+
+
+@pytest.mark.django_db
+def test_purge_organization_failure_audit_record(caplog) -> None:
+    """When purge fails, the audit log must have status='failed' and error_class."""
+    caplog.set_level(logging.INFO)
+    from unittest.mock import patch
+
+    owner = get_user_model().objects.create_user(
+        username="audit-fail-owner",
+        email="audit-fail-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="Audit Failure Test", slug="audit-failure-test"
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    org_id = organization.pk
+
+    # Force a failure during the operator_access body by patching
+    # _delete_owned_rows to raise an error.
+    from quickscale_modules_orgs.management.commands.purge_organization import Command
+
+    original_delete_owned = Command._delete_owned_rows
+
+    def failing_delete(self, org):
+        original_delete_owned(self, org)
+        raise RuntimeError("Simulated purge audit failure")
+
+    stdout = StringIO()
+    stderr = StringIO()
+    with (
+        pytest.raises(RuntimeError, match="Simulated purge audit failure"),
+        patch.object(Command, "_delete_owned_rows", new=failing_delete),
+    ):
+        call_command(
+            "purge_organization",
+            organization_id=str(org_id),
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    # The audit log must have status='failed' with error_class.
+    msgs = [r.getMessage() for r in caplog.records]
+    matching = [
+        m for m in msgs if "operator_access:" in m and "command=purge_organization" in m
+    ]
+    assert len(matching) >= 1, f"No purge audit log found in: {msgs}"
+    msg = matching[-1]
+    assert "status=failed" in msg
+    assert "error_class=RuntimeError" in msg
+
+    # The database must be rolled back (original purge safeguard).
+    assert Organization.objects.filter(pk=org_id).exists()
+    assert not OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
+# ---------------------------------------------------------------------------
+# AF3 phase 4 — positive-proof manifest: every in-scope management command
+# must import AND invoke operator_access from the shared seam.
+# ---------------------------------------------------------------------------
+
+# These are the exact four management-command files adopted into the seam.
+# Paths are relative to the repo root, using the src/ layout.
+_AF3_COMMAND_PATHS: list[str] = [
+    "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py",
+    "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/migrate_billing_to_orgs.py",
+    "quickscale_modules/forms/src/quickscale_modules_forms/management/commands/forms_anonymize_submissions.py",
+    "quickscale_modules/forms/src/quickscale_modules_forms/management/commands/forms_seed_presets.py",
+]
+
+
+@pytest.mark.parametrize("rel_path", _AF3_COMMAND_PATHS)
+def test_af3_command_imports_and_invokes_operator_access(rel_path: str) -> None:
+    """Every AF3-adopted management command must import AND invoke
+    ``operator_access()`` — not just carry the import statement.
+
+    Uses AST parsing so that docstring or comment references to
+    ``operator_access`` do not false-pass the invocation check.
+    """
+    import ast
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    full_path = repo_root / rel_path
+    assert full_path.exists(), f"Command file not found: {full_path}"
+
+    source = full_path.read_text()
+    tree = ast.parse(source)
+
+    # 1. Structural import check — look for an ImportFrom node that
+    #    imports operator_access from the seam.
+    has_import = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "quickscale_modules_orgs.operator_access"
+        and any(alias.name == "operator_access" for alias in node.names)
+        for node in ast.walk(tree)
+    )
+    assert has_import, (
+        f"{rel_path} does not import operator_access. "
+        "Every AF3 command must route privileged access through the shared seam."
+    )
+
+    # 2. Structural invocation check — look for an ast.Call targeting
+    #    the name ``operator_access`` at the expression level (not inside
+    #    docstrings or comments, which AST naturally excludes).
+    has_call = any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "operator_access"
+        for node in ast.walk(tree)
+    )
+    assert has_call, (
+        f"{rel_path} imports operator_access but no AST-level call to "
+        "operator_access() was found. "
+        "Every AF3 command must use operator_access(reason=...) as a context manager."
+    )
+
+
+# ---------------------------------------------------------------------------
+# AF3 phase 4 — zero-direct-.all_objects. guard for the full management-
+# command surface (all modules, not just the four AF3 files).
+#
+# The single centralized exception is ``operator_queryset()`` in
+# ``operator_access.py`` itself — that file is NOT a management command.
+# Every other management command file must route operator-level reads
+# through ``operator_queryset()``.
+# ---------------------------------------------------------------------------
+
+
+def _all_management_command_paths(repo_root: object) -> list[str]:
+    """Glob all management command *.py files across all modules."""
+    import pathlib
+
+    repo = pathlib.Path(repo_root)
+    base = repo / "quickscale_modules"
+    paths: list[str] = []
+    for module_dir in sorted(base.iterdir()):
+        src_dir = module_dir / "src"
+        if not src_dir.is_dir():
+            continue
+        for pkg_dir in src_dir.iterdir():
+            if pkg_dir.name == "__pycache__":
+                continue
+            commands_dir = pkg_dir / "management" / "commands"
+            if not commands_dir.is_dir():
+                continue
+            for f in sorted(commands_dir.iterdir()):
+                if f.suffix == ".py" and f.name != "__init__.py":
+                    paths.append(str(f.relative_to(repo)))
+    return paths
+
+
+def _ast_has_direct_all_objects(source: str) -> list[int]:
+    """Return line numbers of AST-level ``.all_objects.`` attribute accesses.
+
+    Uses Python's ``ast`` module so that references inside string literals
+    (docstrings, comments) are naturally excluded — only real attribute
+    access expressions count.
+    """
+    import ast
+
+    lines: list[int] = []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    for node in ast.walk(tree):
+        # Look for Attribute nodes where attr is 'all_objects' and the
+        # parent is another Attribute (meaning it's chained: .all_objects.
+        # rather than just `all_objects` as a standalone name).
+        if isinstance(node, ast.Attribute) and node.attr == "all_objects":
+            lines.append(node.lineno)
+    return sorted(set(lines))
+
+
+def test_af3_all_commands_no_direct_all_objects() -> None:
+    """No management command file across any module may reference
+    ``.all_objects.`` directly.  The single centralized exception is
+    ``operator_queryset()`` in ``operator_access.py`` itself.
+
+    Operator-scoped queries in management commands must go through
+    ``operator_queryset()`` or ``operator_access()`` from the shared seam.
+
+    This test reports all violations together in a single assertion.
+    """
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    violations: list[str] = []
+    for rel_path in _all_management_command_paths(repo_root):
+        full_path = repo_root / rel_path
+        if not full_path.exists():
+            violations.append(f"{rel_path} (file not found)")
+            continue
+        source = full_path.read_text()
+        bad_lines = _ast_has_direct_all_objects(source)
+        if bad_lines:
+            violations.append(f"{rel_path}: line(s) {bad_lines}")
+    assert not violations, (
+        "Direct .all_objects. references found in management command files "
+        f"(expected zero outside {_AF3_COMMAND_PATHS[0]}):\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression: AST-based parser must detect .all_objects. inside real code
+# even when the file has a one-line docstring containing that pattern.
+# ---------------------------------------------------------------------------
+
+
+def test_ast_detects_all_objects_in_one_line_docstring_file() -> None:
+    """A file with a one-line docstring containing ``.all_objects.``
+    followed by real code with ``.all_objects.`` must have the real-code
+    reference detected."""
+    source = (
+        '"""A one-line docstring with .all_objects. reference."""\n'
+        "x = Model.all_objects.filter(pk=1)  # real code\n"
+    )
+    lines = _ast_has_direct_all_objects(source)
+    assert lines == [2], f"Expected line 2 (real code) detected, got {lines}"
+
+
+def test_ast_ignores_all_objects_in_docstring_only() -> None:
+    """A file with only a one-line docstring containing ``.all_objects.``
+    and no real-code reference must report zero violations."""
+    source = '"""A docstring with .all_objects. but no real code."""\n'
+    lines = _ast_has_direct_all_objects(source)
+    assert lines == [], f"Expected zero lines detected, got {lines}"
+
+
+# ---------------------------------------------------------------------------
+# AF3 phase 4 — deferred non-management runtime .all_objects. manifest.
+#
+# These entrypoints still reference ``.all_objects.`` for operator-level
+# reads outside management commands.  Each is tracked for a future phase;
+# none block the management-command seam rollout.
+#
+# This manifest is tested structurally: every listed path must contain at
+# least one non-comment ``.all_objects.`` reference (proving the entrypoint
+# still exists) and is annotated with its deferred-remediation label.
+#
+# The single centralized seam exception (``operator_queryset()`` in
+# ``quickscale_modules_orgs/operator_access.py``) is *not* listed here
+# because it is the intended design — the only place outside deferred
+# files where ``.all_objects.`` may appear.
+# ---------------------------------------------------------------------------
+
+# (app_label, location, deferred phase, reason)
+_AF3_DEFERRED_ALL_OBJECTS: list[tuple[str, str, str, str]] = [
+    (
+        "quickscale_modules_orgs",
+        "permissions.py",
+        "AF3 deferred",
+        "Permission checks use all_objects to discover org resources across tenant boundaries.",
+    ),
+    (
+        "quickscale_modules_forms",
+        "admin.py",
+        "AF3 deferred",
+        "Admin list views use all_objects for cross-org visibility.",
+    ),
+    (
+        "quickscale_modules_forms",
+        "notifications.py",
+        "AF3 deferred",
+        "Notification dispatch queries submissions across org boundaries.",
+    ),
+    (
+        "quickscale_modules_forms",
+        "views.py",
+        "AF3 deferred",
+        "Public-facing endpoints read forms across org boundaries via all_objects.",
+    ),
+    (
+        "quickscale_modules_billing",
+        "admin.py",
+        "AF3 deferred",
+        "Admin list views use all_objects for cross-org billing visibility.",
+    ),
+    (
+        "quickscale_modules_billing",
+        "services.py",
+        "AF3 deferred",
+        "Stripe webhook handlers query billing rows across org boundaries.",
+    ),
+    (
+        "quickscale_modules_billing",
+        "views.py",
+        "AF3 deferred",
+        "Billing dashboard views may reference all_objects for cross-org data.",
+    ),
+    (
+        "quickscale_modules_crm",
+        "admin.py",
+        "AF3 deferred",
+        "Admin list views use all_objects for cross-org CRM visibility.",
+    ),
+    (
+        "quickscale_modules_crm",
+        "models.py",
+        "AF3 deferred",
+        "Model-level lookups reference all_objects for operator-level access.",
+    ),
+    (
+        "quickscale_modules_crm",
+        "serializers.py",
+        "AF3 deferred",
+        "Serializer queries may use all_objects for cross-org reads.",
+    ),
+    (
+        "quickscale_modules_crm",
+        "services.py",
+        "AF3 deferred",
+        "CRM service functions query across org boundaries.",
+    ),
+    (
+        "quickscale_modules_crm",
+        "views.py",
+        "AF3 deferred",
+        "CRM view queries may reference all_objects.",
+    ),
+    (
+        "quickscale_modules_blog",
+        "admin.py",
+        "AF3 deferred",
+        "Admin list views use all_objects for cross-org blog visibility.",
+    ),
+    (
+        "quickscale_modules_blog",
+        "feeds.py",
+        "AF3 deferred",
+        "RSS/Atom feeds fetch public posts across org boundaries.",
+    ),
+    (
+        "quickscale_modules_blog",
+        "views.py",
+        "AF3 deferred",
+        "Blog views may query across org boundaries.",
+    ),
+    (
+        "quickscale_modules_social",
+        "models.py",
+        "AF3 deferred",
+        "Social model methods reference all_objects for operator-level cache operations.",
+    ),
+]
+
+
+def test_af3_deferred_all_objects_manifest_remains_accurate() -> None:
+    """Every entry in the deferred manifest must still contain a non-comment
+    ``.all_objects.`` reference — proving the entrypoint has not been
+    inadvertently removed without updating the manifest.
+
+    The centralized seam exception (``operator_queryset()`` in
+    ``operator_access.py``) is excluded from this manifest because it is
+    the intended single bypass for management commands.
+    """
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    missing: list[str] = []
+    for app_label, location, phase, reason in _AF3_DEFERRED_ALL_OBJECTS:
+        module_name = app_label.replace("quickscale_modules_", "")
+        full_path = (
+            repo_root
+            / "quickscale_modules"
+            / module_name
+            / "src"
+            / app_label
+            / location
+        )
+        if not full_path.exists():
+            missing.append(f"{app_label}/{location} (file not found at {full_path})")
+            continue
+
+        source = full_path.read_text()
+        has_all_objects = any(
+            ".all_objects." in line and not line.strip().startswith("#")
+            for line in source.splitlines()
+        )
+        if not has_all_objects:
+            missing.append(
+                f"{app_label}/{location} has no non-comment .all_objects. reference"
+            )
+
+    assert not missing, "Deferred manifest entries missing or stale:\n" + "\n".join(
+        f"  - {m}" for m in missing
+    )
+
+
+def _all_non_management_module_paths(repo_root: object) -> list[str]:
+    """Glob all non-management, non-__init__ Python files under
+    ``quickscale_modules/*/src/*/``, excluding management/commands/."""
+    import pathlib
+
+    repo = pathlib.Path(repo_root)
+    base = repo / "quickscale_modules"
+    paths: list[str] = []
+    for module_dir in sorted(base.iterdir()):
+        src_dir = module_dir / "src"
+        if not src_dir.is_dir():
+            continue
+        for pkg_dir in src_dir.iterdir():
+            if pkg_dir.name == "__pycache__":
+                continue
+            for f in sorted(pkg_dir.rglob("*.py")):
+                if f.name == "__init__.py":
+                    continue
+                if "management" in f.parts:
+                    continue
+                paths.append(str(f.relative_to(repo)))
+    return paths
+
+
+def test_af3_all_non_management_all_objects_set_equality() -> None:
+    """Assert that the set of non-management files with AST-level
+    ``.all_objects.`` references matches the 16-entry deferred manifest
+    plus the centralized ``operator_access.py`` exception exactly.
+
+    Any extra file outside the manifest means a new callsite was introduced
+    without updating the manifest.  Any missing file means a manifest entry
+    no longer has an AST-level reference.
+    """
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+
+    # Build the expected set: 16 deferred manifest files + operator_access.py
+    expected: set[str] = set()
+    for app_label, location, phase, reason in _AF3_DEFERRED_ALL_OBJECTS:
+        module_name = app_label.replace("quickscale_modules_", "")
+        expected.add(f"quickscale_modules/{module_name}/src/{app_label}/{location}")
+    # Centralized seam exception.
+    expected.add(
+        "quickscale_modules/orgs/src/quickscale_modules_orgs/operator_access.py"
+    )
+
+    # Build the actual set: all non-management files with AST-level
+    # .all_objects. references.
+    actual: set[str] = set()
+    for rel_path in _all_non_management_module_paths(repo_root):
+        full_path = repo_root / rel_path
+        source = full_path.read_text(encoding="utf-8")
+        if _ast_has_direct_all_objects(source):
+            actual.add(rel_path)
+
+    # Assert set equality.
+    extraneous = actual - expected
+    missing = expected - actual
+
+    assert not extraneous, (
+        f"{len(extraneous)} file(s) contain AST-level .all_objects. references "
+        "but are not in the deferred manifest or operator_access.py exception:\n"
+        + "\n".join(f"  + {p}" for p in sorted(extraneous))
+    )
+    assert not missing, (
+        f"{len(missing)} deferred-manifest entry/entries no longer contain "
+        "an AST-level .all_objects. reference:\n"
+        + "\n".join(f"  - {p}" for p in sorted(missing))
+    )

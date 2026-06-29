@@ -42,6 +42,7 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     OrganizationTombstone,
 )
+from quickscale_modules_orgs.operator_access import operator_access
 
 # ---------------------------------------------------------------------------
 # Cross-module delete registry
@@ -247,13 +248,23 @@ def _get_filter_for_org(
 def _get_qs(model: object, filter_kwargs: dict[str, object]) -> object:
     """Get a QuerySet for *model* filtered by *filter_kwargs*.
 
-    Tries ``all_objects`` first (TenantManager super-scope bypass), then
-    falls back to the default ``objects`` manager.
+    The caller MUST have established org context (via
+    ``set_current_org_for_context`` or ``org_scope``) before calling this
+    function.  The default ``objects`` manager (``TenantManager``) scopes
+    to that org automatically — no direct ``all_objects`` bypass is needed.
+
+    Fails closed if the model does not expose a standard ``objects``
+    manager — a bare ``AttributeError`` means the model cannot participate
+    in org-scoped queries through this path.
     """
     try:
-        return model.all_objects.filter(**filter_kwargs)  # type: ignore[union-attr]
-    except AttributeError:
         return model.objects.filter(**filter_kwargs)  # type: ignore[union-attr]
+    except AttributeError:
+        raise TypeError(
+            f"Model {model!r} does not expose a standard 'objects' manager. "
+            "All delete-spec models must support operator-scoped queries "
+            "through the default manager."
+        ) from None
 
 
 class Command(BaseCommand):
@@ -415,40 +426,50 @@ class Command(BaseCommand):
         self._guard_reserved_org(organization)
 
         ownership_map: dict[str, int] = {}
-        with transaction.atomic():
-            # Establish consistent org context for RLS-protected tables
-            # BEFORE counting or deleting.  Under PostgreSQL FORCE-RLS the
-            # runtime role cannot see rows without app.current_org_id set.
-            set_current_org_for_context(org_id=organization.pk)
-            try:
-                # Build the map inside the atomic block so counts match
-                # the pre-delete snapshot with org context already active.
-                ownership_map = self._build_ownership_map(organization)
+        with operator_access(reason="purge_organization destructive purge") as ctx:
+            # Set audit fields early so failure-path tests can assert
+            # them even when the operation fails.
+            ctx.command = "purge_organization"
+            ctx.target_scope = "single_org"
+            ctx.target_org_ids = [str(org_id)]
+            ctx.touched_org_ids = [str(org_id)]
+            ctx.actor_identifier = "cli:purge_organization"
 
-                # Cross-module owned rows (FK-safe delete order).
-                self._delete_owned_rows(organization)
+            with transaction.atomic():
+                # Establish consistent org context for RLS-protected tables
+                # BEFORE counting or deleting.  Under PostgreSQL FORCE-RLS
+                # the runtime role cannot see rows without app.current_org_id
+                # set.
+                set_current_org_for_context(org_id=organization.pk)
+                try:
+                    # Build the map inside the atomic block so counts match
+                    # the pre-delete snapshot with org context already active.
+                    ownership_map = self._build_ownership_map(organization)
 
-                # Org-level rows.
-                OrganizationInvitation.objects.filter(
-                    organization=organization
-                ).delete()
-                OrganizationMembership.objects.filter(
-                    organization=organization
-                ).delete()
+                    # Cross-module owned rows (FK-safe delete order).
+                    self._delete_owned_rows(organization)
 
-                # Org row — use _raw_delete to bypass Django's cascade
-                # collector, which queries all FK-referencing model tables
-                # (including test-only models whose backing tables may not
-                # exist).  All known FK-referencing rows are already deleted.
-                Organization.objects.filter(pk=organization.pk)._raw_delete(
-                    Organization.objects.db
-                )
+                    # Org-level rows.
+                    OrganizationInvitation.objects.filter(
+                        organization=organization
+                    ).delete()
+                    OrganizationMembership.objects.filter(
+                        organization=organization
+                    ).delete()
 
-                OrganizationTombstone.objects.create(
-                    organization_id=org_id,
-                )
-            finally:
-                reset_current_org_id()
+                    # Org row — use _raw_delete to bypass Django's cascade
+                    # collector, which queries all FK-referencing model tables
+                    # (including test-only models whose backing tables may not
+                    # exist).  All known FK-referencing rows are already deleted.
+                    Organization.objects.filter(pk=organization.pk)._raw_delete(
+                        Organization.objects.db
+                    )
+
+                    OrganizationTombstone.objects.create(
+                        organization_id=org_id,
+                    )
+                finally:
+                    reset_current_org_id()
 
         self._print_purge_summary(organization, ownership_map)
         return None
