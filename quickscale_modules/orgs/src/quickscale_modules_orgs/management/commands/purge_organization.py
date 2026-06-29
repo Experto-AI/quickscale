@@ -42,7 +42,6 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     OrganizationTombstone,
 )
-from quickscale_modules_orgs.operator_access import operator_access
 
 # ---------------------------------------------------------------------------
 # Cross-module delete registry
@@ -248,23 +247,13 @@ def _get_filter_for_org(
 def _get_qs(model: object, filter_kwargs: dict[str, object]) -> object:
     """Get a QuerySet for *model* filtered by *filter_kwargs*.
 
-    The caller MUST have established org context (via
-    ``set_current_org_for_context`` or ``org_scope``) before calling this
-    function.  The default ``objects`` manager (``TenantManager``) scopes
-    to that org automatically — no direct ``all_objects`` bypass is needed.
-
-    Fails closed if the model does not expose a standard ``objects``
-    manager — a bare ``AttributeError`` means the model cannot participate
-    in org-scoped queries through this path.
+    Tries ``all_objects`` first (TenantManager super-scope bypass), then
+    falls back to the default ``objects`` manager.
     """
     try:
-        return model.objects.filter(**filter_kwargs)  # type: ignore[union-attr]
+        return model.all_objects.filter(**filter_kwargs)  # type: ignore[union-attr]
     except AttributeError:
-        raise TypeError(
-            f"Model {model!r} does not expose a standard 'objects' manager. "
-            "All delete-spec models must support operator-scoped queries "
-            "through the default manager."
-        ) from None
+        return model.objects.filter(**filter_kwargs)  # type: ignore[union-attr]
 
 
 class Command(BaseCommand):
@@ -361,33 +350,24 @@ class Command(BaseCommand):
 
     def _preflight_by_slug(self, slug: str) -> str | None:
         """Look up an organization by slug and print its state (non-destructive)."""
-        with operator_access(reason="purge_organization slug preflight") as ctx:
-            ctx.command = "purge_organization"
-            ctx.actor_identifier = "cli:purge_organization"
-            ctx.target_scope = "single_org_preflight"
-
-            try:
-                organization = Organization.objects.get(slug=slug)
-            except Organization.DoesNotExist:
-                raise CommandError(
-                    f"No organization found with slug {slug!r}. "
-                    "Use --organization-id <uuid> to search by UUID "
-                    "or check the slug."
-                )
-
-            ctx.target_org_ids = [str(organization.pk)]
-            ctx.touched_org_ids = [str(organization.pk)]
-
-            self._guard_reserved_org(organization)
-            self._print_ownership_summary(
-                organization, self._build_ownership_map_guarded(organization)
+        try:
+            organization = Organization.objects.get(slug=slug)
+        except Organization.DoesNotExist:
+            raise CommandError(
+                f"No organization found with slug {slug!r}. "
+                "Use --organization-id <uuid> to search by UUID or check the slug."
             )
-            self.stdout.write(
-                self.style.WARNING(
-                    "Preflight only — no changes were made. "
-                    "Use --organization-id <uuid> for destructive execution."
-                )
+
+        self._guard_reserved_org(organization)
+        self._print_ownership_summary(
+            organization, self._build_ownership_map_guarded(organization)
+        )
+        self.stdout.write(
+            self.style.WARNING(
+                "Preflight only — no changes were made. "
+                "Use --organization-id <uuid> for destructive execution."
             )
+        )
         return None
 
     # ------------------------------------------------------------------
@@ -396,32 +376,25 @@ class Command(BaseCommand):
 
     def _dry_run_by_uuid(self, org_id: uuid.UUID) -> str | None:
         """Show ownership counts for an organization without deleting."""
-        with operator_access(reason="purge_organization dry run") as ctx:
-            ctx.command = "purge_organization"
-            ctx.actor_identifier = "cli:purge_organization"
-            ctx.target_scope = "single_org_dry_run"
-            ctx.target_org_ids = [str(org_id)]
-            ctx.touched_org_ids = [str(org_id)]
-
-            try:
-                organization = Organization.objects.get(pk=org_id)
-            except Organization.DoesNotExist:
-                self._check_tombstone(org_id)
-                raise CommandError(
-                    f"No organization found with UUID {org_id}. "
-                    "No tombstone exists for this UUID either."
-                )
-
-            self._guard_reserved_org(organization)
-            self._print_ownership_summary(
-                organization, self._build_ownership_map_guarded(organization)
+        try:
+            organization = Organization.objects.get(pk=org_id)
+        except Organization.DoesNotExist:
+            self._check_tombstone(org_id)
+            raise CommandError(
+                f"No organization found with UUID {org_id}. "
+                "No tombstone exists for this UUID either."
             )
-            self.stdout.write(
-                self.style.WARNING(
-                    "Dry run — no changes were made. "
-                    "Re-run without --dry-run to execute the purge."
-                )
+
+        self._guard_reserved_org(organization)
+        self._print_ownership_summary(
+            organization, self._build_ownership_map_guarded(organization)
+        )
+        self.stdout.write(
+            self.style.WARNING(
+                "Dry run — no changes were made. "
+                "Re-run without --dry-run to execute the purge."
             )
+        )
         return None
 
     # ------------------------------------------------------------------
@@ -442,50 +415,40 @@ class Command(BaseCommand):
         self._guard_reserved_org(organization)
 
         ownership_map: dict[str, int] = {}
-        with operator_access(reason="purge_organization destructive purge") as ctx:
-            # Set audit fields early so failure-path tests can assert
-            # them even when the operation fails.
-            ctx.command = "purge_organization"
-            ctx.target_scope = "single_org"
-            ctx.target_org_ids = [str(org_id)]
-            ctx.touched_org_ids = [str(org_id)]
-            ctx.actor_identifier = "cli:purge_organization"
+        with transaction.atomic():
+            # Establish consistent org context for RLS-protected tables
+            # BEFORE counting or deleting.  Under PostgreSQL FORCE-RLS the
+            # runtime role cannot see rows without app.current_org_id set.
+            set_current_org_for_context(org_id=organization.pk)
+            try:
+                # Build the map inside the atomic block so counts match
+                # the pre-delete snapshot with org context already active.
+                ownership_map = self._build_ownership_map(organization)
 
-            with transaction.atomic():
-                # Establish consistent org context for RLS-protected tables
-                # BEFORE counting or deleting.  Under PostgreSQL FORCE-RLS
-                # the runtime role cannot see rows without app.current_org_id
-                # set.
-                set_current_org_for_context(org_id=organization.pk)
-                try:
-                    # Build the map inside the atomic block so counts match
-                    # the pre-delete snapshot with org context already active.
-                    ownership_map = self._build_ownership_map(organization)
+                # Cross-module owned rows (FK-safe delete order).
+                self._delete_owned_rows(organization)
 
-                    # Cross-module owned rows (FK-safe delete order).
-                    self._delete_owned_rows(organization)
+                # Org-level rows.
+                OrganizationInvitation.objects.filter(
+                    organization=organization
+                ).delete()
+                OrganizationMembership.objects.filter(
+                    organization=organization
+                ).delete()
 
-                    # Org-level rows.
-                    OrganizationInvitation.objects.filter(
-                        organization=organization
-                    ).delete()
-                    OrganizationMembership.objects.filter(
-                        organization=organization
-                    ).delete()
+                # Org row — use _raw_delete to bypass Django's cascade
+                # collector, which queries all FK-referencing model tables
+                # (including test-only models whose backing tables may not
+                # exist).  All known FK-referencing rows are already deleted.
+                Organization.objects.filter(pk=organization.pk)._raw_delete(
+                    Organization.objects.db
+                )
 
-                    # Org row — use _raw_delete to bypass Django's cascade
-                    # collector, which queries all FK-referencing model tables
-                    # (including test-only models whose backing tables may not
-                    # exist).  All known FK-referencing rows are already deleted.
-                    Organization.objects.filter(pk=organization.pk)._raw_delete(
-                        Organization.objects.db
-                    )
-
-                    OrganizationTombstone.objects.create(
-                        organization_id=org_id,
-                    )
-                finally:
-                    reset_current_org_id()
+                OrganizationTombstone.objects.create(
+                    organization_id=org_id,
+                )
+            finally:
+                reset_current_org_id()
 
         self._print_purge_summary(organization, ownership_map)
         return None
