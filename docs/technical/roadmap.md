@@ -87,7 +87,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, originally spanning Phase A + Phase B. **AF3/Phase B has been implemented and merged** (see Recently completed below). Only the five Phase A findings remain open for the isolation guarantee to be correct and CI-verified.
+Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF11 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). The remaining three findings (AF9, AF10, AF12) require continued parallel work before the isolation guarantee is correct and CI-verified.
 
 ### Track assignment & parallelization
 
@@ -118,7 +118,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 | **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
 | **AF3** ✅ | 1 | AST-level positive-proof guard: management-command import+invocation of `operator_access(...)`; zero-direct-`.all_objects.` management-command guard; deferred `.all_objects.` manifest set-equality | complete |
 | **AF10** | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A |
-| **AF11** | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A |
+| **AF11** ✅ | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A |
 | **AF9** | 1 | Authenticated list view under restricted role returns owner's rows (not zero) | Phase A |
 
 ---
@@ -154,7 +154,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ---
 
-#### - [ ] AF11 — NULLIF empty-string guard in RLS policy template
+#### - [x] AF11 — NULLIF empty-string guard in RLS policy template ✅
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
 
@@ -166,6 +166,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **VALIDATION PATH:** `make MODULE=orgs test` (policy conformance); each module's `test_rls_boundary.py` under Postgres (now unblocked by AF13/AF10).
 - **DEPENDS:** nothing (independent of AF9, AF13, AF10 — touches a different seam).
 - **NOTE:** fixes the policy template at the source; caller behavior (SET LOCAL / RESET) does not affect correctness after this lands.
+- **IMPLEMENTATION:** Phase 1 (`_FORCE_RLS_FORWARD_SQL` template fix in `tenancy.py`), Phase 2 (six module sweep migrations dropping/recreating RLS policies from corrected template), Phase 3 (baseline conformance gate extended — existing `test_enrolled_model_has_force_rls_policy` continues to verify FORCE-RLS on each table), Phase 4 (restricted-role conformance proof — `test_restricted_role_returns_zero_rows_under_null_and_empty_guc` seeds all 21 enrolled tables and proves both `RESET app.current_org_id` and `SET app.current_org_id = ''` yield zero rows without raising).
 
 ---
 
@@ -207,6 +208,20 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ### Recently completed
 
+#### - [x] AF11 — NULLIF empty-string guard in RLS policy template ✅
+
+`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
+
+- **TRACK:** `wt-track2`
+- **WHY → Finding AF11.** `''::uuid` raises `invalid input syntax` instead of returning zero rows; every pooled connection that has served any `SET LOCAL` request rests at `''`, turning tenant page loads into non-deterministic 500s.
+- **OBJECTIVE:** Change `_FORCE_RLS_FORWARD_SQL` from bare `current_setting(...)::uuid` to `NULLIF(current_setting(...),'')::uuid`. Ship one migration per module dropping/recreating policies from the corrected template. Extend conformance gate to assert NULL/''-GUC → 0 rows.
+- **SCOPE:** `orgs/tenancy.py` (template fix); six module sweep migrations (`crm`, `blog`, `listings`, `forms`, `social`, `billing`); `orgs/tests/test_tenant_table_conformance.py` (restricted-role conformance proof).
+- **ACCEPTANCE CRITERIA:** `''` GUC returns 0 rows on every enrolled table; `invalid input syntax for type uuid` never appears in Postgres logs.
+- **VALIDATION PATH:** `make MODULE=orgs test` (policy conformance); final validation stack: lint + typecheck + explicit Postgres orgs-suite.
+- **DEPENDS:** nothing (independent of AF9, AF13, AF10).
+- **FINDINGS:** Plan-review accepted without findings. Change-review accepted without findings.
+- **IMPLEMENTATION:** Phase 1 (`_FORCE_RLS_FORWARD_SQL` NULLIF template fix in `tenancy.py`), Phase 2 (six module sweep migrations), Phase 3 (baseline conformance gate consistency), Phase 4 (PostgreSQL-only restricted-role proof: seeds 21 enrolled tables, asserts `RESET` and `''` return zero rows).
+
 #### - [x] AF3 — Single audited operator-access seam ✅
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
@@ -245,26 +260,6 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **DEPENDS:** AF9 merged (GUC/ContextVar wiring must be live; otherwise debug session shows 0 rows under the restricted runtime role).
 
 ---
-
-### Phase C — Operator & Debug Tools
-
-#### - [ ] VIEW-AS — Operator org-impersonation debug mode
-
-`**Tier 1 — Low | PLANNING TIER: low (no plan-review) | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** standalone task; any track after all Phase A tasks merged to `v87`.
-- **WHY → RLS Strategy Review (2026-06-29).** Supabase ships an "Impersonate User" button in its dashboard so operators can see the app exactly as a specific tenant sees it — essential for debugging silent RLS row-filtering and data-visibility issues. QuickScale has no equivalent; operators currently need raw DB console access (which bypasses the application layer and the restricted runtime role entirely). This feature closes that parity gap.
-- **OBJECTIVE:** Allow Django superusers to select any `Organization` in Django Admin and "view app as this org" — activates an RLS-scoped session that uses that org's context, shows a persistent debug banner, and logs every debug activation.
-- **DESIGN:**
-  - **Session key**: `quickscale_modules_orgs.debug_as_org_id` (UUID string, set only by `is_superuser`)
-  - **Middleware hook**: `TenantMiddleware._resolve_debug_org()` — if `request.user.is_superuser` and session key present, use that org instead of normal Solo/SaaS resolution. Logs every resolved use (who, which org, timestamp, path) to Python audit logger.
-  - **Admin action**: `OrganizationAdmin` action `"View app as this org"` → sets session key → redirect to `/`; second action `"Exit debug mode"` clears it. Both actions gate on `is_superuser`.
-  - **Debug banner**: base template renders a top-bar strip `"DEBUG MODE — viewing as org '{name}' [Exit]"` when session key is present and user is superuser.
-  - **Security**: non-superusers cannot set the session key; admin actions blocked for non-superusers; no BYPASSRLS — debug session uses the same restricted runtime role as all other tenant paths (so RLS is still active and the operator sees exactly what the org members see).
-- **SCOPE:** `orgs/middleware.py` (`_resolve_debug_org`); `orgs/admin.py` (two actions on `OrganizationAdmin`); `orgs/views.py` (`DebugAsOrgView`, `ExitDebugModeView`); `orgs/urls.py` (two new endpoints); base/layout template (debug banner).
-- **ACCEPTANCE CRITERIA:** superuser selects org in admin → redirected to `/` with debug banner showing org name → CRM/blog/listings data shows only that org's rows → Exit clears banner and restores normal resolution; non-superuser cannot set or read `debug_as_org_id` in session; each activation appears in audit log.
-- **VALIDATION PATH:** manual smoke test — log in as superuser, use admin action, verify banner + data scoping + Exit; write a test asserting non-superuser request cannot set the session key.
-- **DEPENDS:** AF9 merged (GUC/ContextVar wiring must be live; otherwise debug session shows 0 rows under the restricted runtime role).
 
 #### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
 
