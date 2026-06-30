@@ -212,6 +212,66 @@ class TestCrmRlsBoundaryRestrictedRole:
             finally:
                 cursor.execute("RESET ROLE")
 
+    # ------------------------------------------------------------------
+    # AF9 Phase 3 — Restricted-role cursor proof (PR-AF9-003)
+    # ------------------------------------------------------------------
+
+    def test_af9_priming_proof_restricted_role_cursor(self, org_a) -> None:
+        """PR-AF9-003: The AF9 execute wrapper primes the GUC from the
+        ContextVar under a restricted PostgreSQL role.
+
+        Unlike the existing T1.11 tests that manually issue
+        ``SET app.current_org_id`` on the cursor, this test calls
+        ``set_current_org_id(org.pk)`` and lets the AF9 execute wrapper
+        derive the GUC.  Under the restricted role, a SELECT on an
+        RLS-protected table must return the expected rows — proving
+        the wrapper correctly issues ``SET LOCAL`` on the live cursor
+        before tenant SQL executes.
+
+        Steps:
+        1. Pre-seed CRM data under the superuser connection.
+        2. Call ``set_current_org_id(org.pk)`` — no manual SET LOCAL.
+        3. ``SET ROLE`` to the restricted role.
+        4. Run a SELECT through the connection cursor.
+        5. The AF9 execute wrapper fires, issues ``SET LOCAL`` from
+           the ContextVar, then runs the SELECT.
+        6. Assert the RLS-gated query returns the expected rows.
+        """
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
+        _ensure_rls_test_role()
+
+        # Pre-seed data under superuser connection.
+        set_current_org_id(org_a.id)
+        try:
+            Tag.objects.create(name="AF9 Tag", organization=org_a)
+            Company.objects.create(name="AF9 Company", organization=org_a)
+        finally:
+            set_current_org_id(None)
+
+        # Set the ContextVar — the AF9 wrapper derives the GUC from this.
+        set_current_org_id(org_a.id)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
+                try:
+                    # SELECT triggers the AF9 execute wrapper, which
+                    # issues SET LOCAL from the ContextVar before
+                    # running the query — no manual SET required.
+                    cursor.execute(
+                        "SELECT name FROM quickscale_modules_crm_tag ORDER BY name"
+                    )
+                    names = [r[0] for r in cursor.fetchall()]
+                    assert names == ["AF9 Tag"], (
+                        f"Expected AF9 Tag, got {names}. "
+                        "The AF9 wrapper must prime app.current_org_id "
+                        "from the ContextVar for the restricted-role cursor."
+                    )
+                finally:
+                    cursor.execute("RESET ROLE")
+        finally:
+            set_current_org_id(None)
+
     def test_unset_org_context_returns_zero_rows_contacts(self, org_a) -> None:
         """With no ``app.current_org_id`` set (NULL from current_setting), RLS
         returns zero rows — fail-closed behavior."""

@@ -50,6 +50,40 @@ def current_org_id_view(request, org_slug: str):
     return HttpResponse(_current_org_id())
 
 
+# ---------------------------------------------------------------------------
+# AF9 Phase 3 — autocommit GUC probe
+# ---------------------------------------------------------------------------
+
+
+def _af9_guc_probe(request) -> str:
+    """Return the current DB-level ``app.current_org_id`` GUC value.
+
+    Issued via a direct ``cursor.execute()`` so the AF9 priming execute
+    wrapper fires and sets the GUC from the ContextVar.  The GUC is
+    read inside the same ``cursor.execute()`` call, proving that the
+    priming and the tenant SQL share the same short atomic block.
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_setting('app.current_org_id', true)")
+        (raw,) = cursor.fetchone()
+    return raw if raw is not None else ""
+
+
+def af9_guc_probe_view(request):
+    """AF9 autocommit GUC probe: returns the GUC set by the execute wrapper.
+
+    The AF9 execute wrapper issues ``SET LOCAL app.current_org_id``
+    from the ContextVar before this view's ``SELECT current_setting``
+    runs — inside the same short ``transaction.atomic()`` block.
+
+    Expected response: the organization UUID as a string, or empty
+    string when no org context is active.
+    """
+    return HttpResponse(_af9_guc_probe(request))
+
+
 def api_org_context_view(request, org_slug: str):
     return HttpResponse(f"{_current_org_slug(request)}|{_current_org_id()}")
 
@@ -78,6 +112,7 @@ class AdminOnlyMixinView(OrgRoleMixin, View):
 
 urlpatterns = [
     path("", home_view, name="home"),
+    path("_af9/guc-probe/", af9_guc_probe_view, name="af9-guc-probe"),
     path("healthcheck/", healthcheck_view, name="healthcheck"),
     path("accounts/profile/", accounts_profile_view, name="accounts-profile"),
     path(
