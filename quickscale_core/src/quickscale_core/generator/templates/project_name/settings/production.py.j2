@@ -10,7 +10,8 @@ This file contains production-ready security and performance configurations:
 
 REQUIRED ENVIRONMENT VARIABLES:
 - SECRET_KEY: Django secret key (generate with: python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
-- DATABASE_URL: PostgreSQL connection string (e.g., postgresql://user:password@localhost:5432/dbname)
+- DATABASE_URL: Superuser PostgreSQL connection string; used for migrations (schema changes require elevated privileges)
+- RUNTIME_DATABASE_URL: Restricted NOSUPERUSER/NOBYPASSRLS role connection string; required for runtime serving
 - ALLOWED_HOSTS: Comma-separated list of allowed hostnames
 - SENTRY_DSN: (optional) Sentry error tracking DSN
 """
@@ -89,7 +90,6 @@ SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
 
 # Database - PostgreSQL for production
-# Use DATABASE_URL environment variable for Railway deployment
 #
 # Connection pooling: CONN_MAX_AGE=600 keeps persistent connections alive
 # across requests, reducing per-request connection setup overhead.
@@ -97,53 +97,57 @@ X_FRAME_OPTIONS = "DENY"
 # errors from stale connections terminated by the database proxy or by a
 # database or container restart.
 #
-# Runtime role pattern: When RUNTIME_DATABASE_URL is set (see below), the
-# deployment uses the restricted NOSUPERUSER/NOBYPASSRLS role for the
-# default database connection. The deployment script unsets this env var
-# during migrations so the superuser DATABASE_URL is used instead.
-# Validate DATABASE_URL is set in production
+# Runtime role pattern (fail-closed):
+# ------------------------------------
+# Runtime serving requires RUNTIME_DATABASE_URL (restricted
+# NOSUPERUSER/NOBYPASSRLS role). When unset during serving, the app
+# raises a clear error instead of silently falling back to the privileged
+# superuser DATABASE_URL.
+#
+# The migration path is the named exception: start.sh unsets
+# RUNTIME_DATABASE_URL during migrations so the superuser DATABASE_URL
+# is used instead (schema changes require elevated privileges).
+# collectstatic and compilemessages also bypass the check.
+_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)
 database_url = config("DATABASE_URL", default=None)
 
-if not database_url:
-    # Catches both None and empty string "" (e.g. unresolved Railway reference)
-    # Only raise error for production commands that need database
-    # Allow collectstatic and other non-DB commands to run
-    if "collectstatic" not in sys.argv and "compilemessages" not in sys.argv:
+if _runtime_db_url:
+    _db_url = _runtime_db_url
+elif "migrate" in sys.argv:
+    # Migration path: require the superuser DATABASE_URL
+    if not database_url:
         raise ValueError(
             "DATABASE_URL environment variable is not set or is empty. "
+            "Migrations require the superuser database connection. "
             "Railway requires DATABASE_URL to connect to PostgreSQL. "
             "Ensure the database service is linked to your app service in Railway dashboard."
         )
-    # Provide a dummy URL for collectstatic to work
-    database_url = "postgresql://dummy:dummy@localhost:5432/dummy"
+    _db_url = database_url
+elif "collectstatic" in sys.argv or "compilemessages" in sys.argv:
+    # Non-DB commands: provide a dummy URL so Django can configure itself
+    _db_url = database_url or "postgresql://dummy:dummy@localhost:5432/dummy"
+else:
+    # Runtime serving: fail closed — RUNTIME_DATABASE_URL is required
+    raise ValueError(
+        "RUNTIME_DATABASE_URL is required for runtime serving. "
+        "The restricted NOSUPERUSER/NOBYPASSRLS database role connection "
+        "string must be provided when serving requests. "
+        "Set RUNTIME_DATABASE_URL in your environment to the runtime role's "
+        "PostgreSQL connection string. "
+        "For migrations, the deployment script (start.sh) automatically "
+        "unsets this variable so the superuser DATABASE_URL is used instead."
+    )
 
 DATABASES = {
     "default": cast(
         dict[str, object],
-        dj_database_url.config(
-            default=database_url,
+        dj_database_url.parse(
+            _db_url,
             conn_max_age=600,
             conn_health_checks=True,
         ),
     )
 }
-
-# Runtime database URL override for RLS role
-# ------------------------------------------
-# When RUNTIME_DATABASE_URL is set, use the restricted NOSUPERUSER/NOBYPASSRLS
-# role for the default database connection. When running migrations, the
-# deployment script (start.sh) unsets this env var so the superuser DATABASE_URL
-# is used instead (schema changes require elevated privileges).
-_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)
-if _runtime_db_url:
-    DATABASES["default"] = cast(
-        dict[str, object],
-        dj_database_url.config(
-            default=_runtime_db_url,
-            conn_max_age=600,
-            conn_health_checks=True,
-        ),
-    )
 
 # Email configuration
 if "EMAIL_BACKEND" not in globals():

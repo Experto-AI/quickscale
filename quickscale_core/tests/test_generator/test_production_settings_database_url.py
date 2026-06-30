@@ -143,3 +143,55 @@ class TestProductionSettingsValidation:
             assert "RUNTIME_DATABASE_URL" in template_content
             assert 'config("RUNTIME_DATABASE_URL", default=None)' in template_content
             assert "conn_health_checks=True" in template_content
+
+    def test_fail_closed_when_runtime_url_unset_for_serving(self) -> None:
+        """Test template raises clear error when RUNTIME_DATABASE_URL is unset for serving."""
+        template_path = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "quickscale_core"
+            / "generator"
+            / "templates"
+            / "project_name"
+            / "settings"
+            / "production.py.j2"
+        )
+
+        if template_path.exists():
+            with open(template_path) as f:
+                template_content = f.read()
+
+            # Template must raise a clear error about RUNTIME_DATABASE_URL
+            # when serving and the env var is not set (fail-closed).
+            assert (
+                "RUNTIME_DATABASE_URL is required for runtime serving"
+                in template_content
+            )
+            assert (
+                "NOSUPERUSER" in template_content or "NOBYPASSRLS" in template_content
+            )
+            # The migration exception must be documented
+            assert "migrate" in template_content
+
+    def test_migration_exception_preserved(self) -> None:
+        """Test template preserves the migration path with DATABASE_URL."""
+        template_path = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "quickscale_core"
+            / "generator"
+            / "templates"
+            / "project_name"
+            / "settings"
+            / "production.py.j2"
+        )
+
+        if template_path.exists():
+            with open(template_path) as f:
+                template_content = f.read()
+
+            # Migration path must still use DATABASE_URL (the named exception)
+            assert '"migrate" in sys.argv' in template_content
+            assert "DATABASE_URL" in template_content
+            # Railway guidance should still be present in the DATABASE_URL error
+            assert "Railway" in template_content
