@@ -119,10 +119,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` (+ tests).
   *Acceptance:* runserver/gunicorn boot under a BYPASSRLS role raises `ImproperlyConfigured` in solo mode and with `DEBUG=True`, unless the escape hatch is set; `migrate` stays exempt.
 
-- [ ] **SA2.2 — Invert the runtime DB-role default to fail-closed.** `Tier 2 · Track 1 · deps: none`
-  Restructure generated settings so the privileged superuser connection is the *named exception* (migrations only) and runtime serving requires the restricted `RUNTIME_DATABASE_URL` — raise instead of silently falling back to the BYPASSRLS `DATABASE_URL` when serving in `saas`.
-  *Files:* `generator/templates/project_name/settings/production.py.j2`, `base.py.j2`, `start.sh.j2`.
-  *Acceptance:* a generated `saas` app with `RUNTIME_DATABASE_URL` unset fails to serve (clear error) rather than connecting under BYPASSRLS; `migrate` path unchanged.
+- [x] **SA2.2 — Invert the runtime DB-role default to fail-closed.** `Tier 2 · Track 1 · deps: none`
+  Restructured generated settings so the privileged superuser connection is the *named exception* (migrations only) and runtime serving requires the restricted `RUNTIME_DATABASE_URL` — raises instead of silently falling back to the BYPASSRLS `DATABASE_URL` when serving.
+  *Files:* `generator/templates/project_name/settings/production.py.j2`, `base.py.j2`.
+  *Acceptance:* a generated app with `RUNTIME_DATABASE_URL` unset fails to serve (clear error) rather than connecting under BYPASSRLS; `migrate` path unchanged.
+  *Findings:* No blockers or unexpected findings during implementation. Template inversion clean — three-way branching in production.py.j2 (runtime serving → RUNTIME_DATABASE_URL required; migrate → DATABASE_URL superuser; collectstatic/compilemessages → dummy URL). All existing tests pass with no regressions. The `start.sh.j2` migration exception (`RUNTIME_DATABASE_URL="" python manage.py migrate --noinput`) is preserved and continues to work because the migrate branch checks `sys.argv` directly.
 
 #### Finding 3 — Single source of truth for the contract (`why →` [Finding 3](../../findings.md#finding-3--the-isolation-contract-has-no-single-source-of-truth-the-two-authoritative-docs-already-describe-a-weaker-different-posture-than-the-shipped-code))
 
