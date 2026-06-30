@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, and the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes after T1.10, migration/promote commands, and ORM-backed plan feature gating). Ordinary requests are still isolated in the application layer for most modules. PostgreSQL RLS is now active for the **social module** (T1.15), providing database-level org isolation for social tables via `current_setting('app.current_org_id', true)::uuid`. Social admin uses per-org explicit request selection → session persistence → fail-closed behavior under the runtime role, with no operator bypass policy. RLS for remaining modules, downstream tenant-table adoption for modules not yet on the NOT NULL contract, and the React org-management surface remain planned follow-on work unless a later section explicitly says otherwise.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes after T1.10, migration/promote commands, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped tenant-table surface is now registry-backed: **21 ENROLLED models** across CRM (7), Forms (4), Billing (3), Blog (4), Listings (1), and Social (2) each carry a direct `organization_id`, use the shared `TenantManager` / `TenantManager(super_scope=True)` contract, and ship with live FORCE-RLS policies. `TenantMiddleware` plus the AF9 execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, and test-only models) remain outside the tenant-table contract by design.
 
 ---
 
@@ -26,10 +26,10 @@ QuickScale supports two first-class deployment modes, switchable at runtime with
 | Org management UI | Hidden | Full (create, invite, settings, billing) |
 | Org switcher | Not shown | Shown in sidebar |
 | Invitations | Disabled | Enabled |
-| URL structure | `/blog/`, `/crm/` (no slug) | Flat routes: `/blog/` (T1.6), `/crm/` (T1.5); remaining modules under `/orgs/<slug>/.../` until T1.7–T1.8 |
-| Billing scope | Per-user (org has one member) | Per-org (team billing contact) |
-| Isolation today | App-layer guards + middleware org context | App-layer guards + middleware org context; **social module adds PostgreSQL RLS (T1.15)** |
-| PostgreSQL RLS | Deferred until downstream tenant tables carry concrete `organization_id` columns | Partially deployed: active for social tables (T1.15); others deferred until their tenant tables carry concrete `organization_id` columns |
+| URL structure | Flat module routes such as `/blog/`, `/crm/dashboard/`, `/forms/`, `/listings/` (no tenant slug in content routes) | Org-management pages under `/orgs/...`; shipped server content routes stay flat, while fresh `showcase_react` SaaS pages keep org-slug blog/listings pages plus flat redirect shims |
+| Billing scope | Per-org (the personal org is the billing owner) | Per-org (team billing contact) |
+| Isolation today | `request.org` + ContextVar + FORCE-RLS on the enrolled tenant-table surface | `request.org` + ContextVar + FORCE-RLS on the enrolled tenant-table surface |
+| PostgreSQL RLS | Active on all 21 enrolled tenant models; reviewed exclusions stay outside the tenant-table contract | Active on all 21 enrolled tenant models; reviewed exclusions stay outside the tenant-table contract |
 
 ### Why Runtime Instead of Generation Time
 
@@ -38,10 +38,10 @@ The natural comparison is SaaS Pegasus, which resolves solo vs SaaS at **generat
 However, runtime resolution is preferable for QuickScale because:
 
 1. **Start solo, scale to SaaS**: The most common trajectory is a developer who starts with a personal tool, gains traction, and wants to offer it as a multi-tenant SaaS. With generation-time resolution, that requires regenerating the project and migrating data. With runtime resolution, it is a one-line settings change plus a management command.
-2. **One schema, one codebase**: The organizations foundation keeps a single org abstraction, request context, and runtime branching model across Solo and SaaS. Downstream modules still need concrete `organization` columns before database-level isolation can be enabled everywhere.
+2. **One schema, one codebase**: The organizations foundation keeps a single org abstraction, request context, and runtime branching model across Solo and SaaS. The shipped tenant-table surface already uses direct `organization_id` columns plus FORCE-RLS; reviewed exclusions stay out of that contract intentionally.
 3. **Solo mode is a subset of SaaS mode**: Solo mode disables multi-org management — it does not require a different data model. An organization still exists; it just has one member and is never surfaced as a concept in the UI.
 
-**The current tradeoff**: Solo mode already carries the same runtime org concepts as SaaS mode, but the database-hardening step is intentionally deferred. Until downstream modules add concrete `organization_id` columns, isolation for ordinary requests remains in the application layer.
+**The current tradeoff**: Solo mode already carries the same runtime org concepts as SaaS mode. That shared model is now fully hardened for the shipped enrolled tenant tables; the remaining distinction is contract scope, not a separate solo-only architecture.
 
 ### Runtime Switch
 
@@ -52,20 +52,16 @@ QUICKSCALE_MODE = 'solo'   # or 'saas'
 
 `TenantMiddleware` reads this setting and changes two behaviours:
 
-- **URL resolution**: In solo mode, no `org_slug` appears in URLs; middleware auto-resolves the org from the user's personal org via ``request.org`` (set by session or fallback). In SaaS mode, the org is resolved from the **session** (``ACTIVE_ORG_SESSION_KEY``) set by the org-switcher, not from URL kwargs. The CRM and blog modules now use flat route trees (``/crm/`` after T1.5, ``/blog/`` after T1.6) with session/request-based org resolution.
+- **URL resolution**: In solo mode, middleware auto-resolves the org from the user's personal org. In SaaS mode, the org is resolved from the **session** (`ACTIVE_ORG_SESSION_KEY`) set by the org-switcher. The org-management pages live under `/orgs/...`; the shipped module content routes are flat and rely on `request.org` / the current-org ContextVar rather than URL kwargs.
 - **Guard behaviour**: In solo mode, the post-signup guard auto-creates a personal org silently. In SaaS mode, it redirects the user to `/orgs/new/` to name their organization.
 
-URL patterns are loaded conditionally:
+The orgs module now ships a single URL module. The deployment mode changes request behavior, not which Django URL module is imported:
 
 ```python
-# urls.py
-if settings.QUICKSCALE_MODE == 'saas':
-    urlpatterns += [path('orgs/', include('quickscale_modules_orgs.urls.saas'))]
-else:
-    urlpatterns += [path('', include('quickscale_modules_orgs.urls.solo'))]
+urlpatterns += [path('', include('quickscale_modules_orgs.urls'))]
 ```
 
-Views are identical in both modes. Only the URL kwargs differ (`org_slug` present or absent). After T1.5, the CRM module no longer uses org-scoped URL kwargs — the active org is always resolved from ``request.org`` (set by middleware from session or personal-org fallback).
+The same org views serve both modes. Org-management pages keep `org_slug` where needed (`/orgs/<slug>/...`), while tenant content routes no longer use org-scoped URL kwargs. The active org is resolved from middleware-established context.
 
 ### Upgrade Path: Solo → SaaS
 
@@ -101,7 +97,7 @@ The platform owner is **not** an organization member in the RBAC sense and does 
 
 ### Level 2: Organization Hierarchy (Customer Users)
 
-Each customer workspace (organization) has its own internal hierarchy. Today, ordinary organization requests are isolated by org membership checks, routing, and request-scoped org context. PostgreSQL RLS provides database-level isolation for the social module (T1.15); RLS for remaining modules is a later hardening step once their tenant tables carry concrete `organization_id` columns.
+Each customer workspace (organization) has its own internal hierarchy. Ordinary organization requests are isolated by org membership checks, routing, request-scoped org context, and PostgreSQL RLS on the shipped enrolled tenant-table surface.
 
 ```
 Platform Owner (Django superuser)
@@ -122,10 +118,10 @@ Platform Owner (Django superuser)
     dave@acme.com   VIEWER
 
 Current request isolation:
-    Acme Corp users      → org middleware + membership checks resolve Acme context
-    Widget Co users      → org middleware + membership checks resolve Widget context
-    Social DB hardening  → PostgreSQL RLS active (T1.15), via `current_setting('app.current_org_id', true)::uuid`
-    Future DB hardening  → PostgreSQL RLS for remaining modules after their tenant tables expose organization_id
+    Acme Corp users       → org middleware + membership checks resolve Acme context
+    Widget Co users       → org middleware + membership checks resolve Widget context
+    Tenant ORM scoping    → `TenantManager` reads the current-org ContextVar and fails closed with `.none()` when unset
+    Tenant DB hardening   → PostgreSQL FORCE RLS on all 21 enrolled models via `NULLIF(current_setting('app.current_org_id', true), '')::uuid`
 ```
 
 ### Capability Matrix
@@ -162,29 +158,28 @@ A user account is global (one email, one login). A user's role is org-scoped —
 
 ---
 
-## Tenancy Strategy: Shared Deployment + staged PostgreSQL isolation
+## Tenancy Strategy: Shared Deployment + registry-backed PostgreSQL isolation
 
 ### Architecture
 
-One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. The current foundation slice enforces org isolation for ordinary requests in middleware, URL resolution, and membership/role checks. `TenantMiddleware` already sets `app.current_org_id` for resolved org-scoped requests as the database-policy hook. PostgreSQL Row-Level Security (RLS) is now **active for the social module** (T1.15), where social tables carry concrete NOT NULL `organization_id` columns. RLS for remaining downstream modules (blog, forms, listings, CRM, billing) is deferred until those tables adopt the same NOT NULL contract.
+One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. `TenantMiddleware` resolves the active org, the AF9 execute-wrapper derives `app.current_org_id` from the current-org ContextVar, and the tenant registry marks the shipped repo surface explicitly. Today that surface contains **21 ENROLLED models** across CRM, Forms, Billing, Blog, Listings, and Social; each enrolled table has a direct `organization_id` column and a live FORCE-RLS policy. Reviewed exclusions (org control-plane models, system-wide billing metadata, `AuthorProfile`, abstract bases, and test-only models) remain outside the tenant-table contract intentionally.
 
 ```
 Railway project
 ├── app service (Django + Gunicorn)
-│   └── TenantMiddleware → resolves request.org and sets app.current_org_id for org-scoped requests
+│   └── TenantMiddleware + AF9 execute_wrapper
+│       → resolves request.org, sets the current-org ContextVar, primes `app.current_org_id`
 └── postgres service (PostgreSQL 18)
-    ├── Active RLS — social tables (T1.15):
-    │   USING (organization_id = current_setting('app.current_org_id', true)::uuid)
-    └── Future RLS — remaining modules after tenant tables expose organization_id
-        USING (organization_id = current_setting('app.current_org_id', true)::uuid)
+    └── Active RLS — all ENROLLED tenant tables:
+        USING (organization_id = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
 ```
 
-For each RLS migration, the `true` second argument to `current_setting` returns `NULL` instead of raising an error when the setting is absent. That makes an unguarded query fail closed with an empty set — now active for social tables once the migration runs.
+The `true` second argument to `current_setting` returns `NULL` instead of raising when the setting is absent, and the shipped policy template wraps it in `NULLIF(..., '')::uuid`. That makes an unguarded query fail closed with an empty set across the enrolled tenant-table surface.
 
 ### Why This Architecture
 
 - **Cost**: 2 Railway services regardless of how many tenants exist. Railway bills by compute and memory, not by tenant count. At 100 tenants or 10 000, the bill changes only with actual usage.
-- **Defence-in-depth (partially active)**: the middleware-set org context gives RLS a fail-closed database hook. RLS is now active for the social module (T1.15), adding database-level isolation on top of application-layer guards. Other modules still rely on the application layer until their own RLS activation lands.
+- **Defence-in-depth (active on the shipped tenant-table surface)**: the middleware-set org context gives RLS a fail-closed database hook. All 21 enrolled tenant tables now enforce database-level isolation on top of application-layer guards.
 - **Operational simplicity**: One backup covers all tenants. One migration covers all tenants. One deploy upgrades all tenants simultaneously.
 - **Proven pattern**: Supabase, Stripe, and Slack all use shared-database isolation at scale. Detailed code examples are in [`docs/legacy/tenancy-isolation-strategies.md`](../legacy/tenancy-isolation-strategies.md) — that document is the reference implementation; this document does not duplicate it.
 
@@ -197,20 +192,20 @@ QuickScale's isolation model is structurally equivalent to Supabase's. Both are 
 | Isolation unit | User (`auth.uid()`) or custom JWT claim | Organization (`app.current_org_id`) |
 | Context carrier | JWT claim, injected per-transaction by PostgREST | PostgreSQL GUC, derived from ContextVar by execute_wrapper (AF9) |
 | Policy syntax | `USING (auth.uid() = user_id)` | `USING (organization_id = NULLIF(current_setting('app.current_org_id',true),'')::uuid)` (after AF11) |
-| Admin bypass | `service_role` (BYPASSRLS) | `operator_access(reason=…)` seam + BYPASSRLS superuser role (boot-guarded) |
-| Debug impersonation | Dashboard "Impersonate User" button | VIEW-AS feature (roadmap Phase C) |
+| Admin bypass | `service_role` (BYPASSRLS) | No shipped runtime BYPASSRLS admin path; admin/debug stays on the restricted runtime role via explicit org selection / VIEW-AS |
+| Debug impersonation | Dashboard "Impersonate User" button | VIEW-AS feature (shipped) |
 | Policy tester | Dashboard UI | `isolation-conformance` CI job (AF10) |
 | Deployment | Supabase managed cloud | Self-hosted Railway (one app + one Postgres service) |
 
-The primary engineering difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query (automatic); QuickScale's AF9 fix installs a Django `execute_wrapper` that derives the GUC from the ContextVar at every transaction start (equivalent guarantee, different wiring). After AF9 merges, the two models are equivalent in security posture.
+The primary engineering difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query (automatic); QuickScale's shipped AF9 execute-wrapper derives the GUC from the ContextVar at every transaction start (equivalent guarantee, different wiring).
 
 QuickScale adds the Solo/SaaS deployment mode distinction that Supabase (as a per-project service) does not need to model.
 
 ### Known Constraints
 
-- **Operator access must stay explicit**: the current admin/operator surface is outside the tenant-scoped runtime path. Now that RLS is active for the social module, operator access is implemented deliberately per the per-org runtime-role admin contract — explicit per-org selection via the session, fail-closed when unresolved, with no `BYPASSRLS` or automatic cross-tenant bypass. Django `is_superuser` does not infer database-level access.
+- **Operator access must stay explicit**: the current admin/operator surface is outside the tenant-scoped runtime path. With RLS active on the enrolled tenant-table surface, operator access is implemented deliberately per the per-org runtime-role admin contract — explicit per-org selection via the session, fail-closed when unresolved, with no `BYPASSRLS` or automatic cross-tenant bypass. Django `is_superuser` does not infer database-level access.
 - **Noisy neighbour**: One tenant running expensive queries slows response times for others. Acceptable at MVP scale; address with `statement_timeout` and rate limiting later.
-- **RLS debugging**: when PostgreSQL policies are active (social module and future modules), policy failures are silent (rows vanish; no exception is raised). Debugging requires checking `pg_policies` and PostgreSQL logs, not just Django stack traces.
+- **RLS debugging**: when PostgreSQL policies are active, policy failures are silent (rows vanish; no exception is raised). Debugging requires checking `pg_policies` and PostgreSQL logs, not just Django stack traces.
 - **Migrations**: Migrations that add columns or change constraints on tenant tables run against all tenants at once. This is a feature (one migration), but large-table migrations need `CONCURRENTLY` indexes and zero-downtime patterns.
 - **`SET LOCAL` vs `SET`**: `SET LOCAL` scopes the org context to the current transaction. `SET` (session-level) is needed for PgBouncer compatibility. Choose based on connection pooling setup; document this in the deployment guide.
 
@@ -302,25 +297,27 @@ OrganizationInvitation
 
 ### TenantModel Abstract Base
 
-The organizations module ships a `TenantModel` abstract base class. Any module that stores tenant-scoped data inherits from it to get the `organization` FK, the RLS-required index, and shared queryset utilities in one place.
+The organizations module ships a `TenantModel` abstract base class. Any module that stores tenant-scoped data inherits from it to get the canonical `organization` FK, the shared manager contract, and the base-manager wiring in one place.
 
 ```python
 class TenantModel(models.Model):
-    organization = models.ForeignKey(
-        'quickscale_modules_orgs.Organization',
-        on_delete=models.CASCADE,
-        db_index=True,
+    organization = tenant_org_fk(
+        related_name='%(app_label)s_%(class)s_set',
     )
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta:
         abstract = True
+        base_manager_name = 'all_objects'
 ```
 
-Modules affected: CRM, blog, forms, listings, storage, notifications. Cross-module migration dependency ordering must be documented in the organizations release note.
+The shipped repo-enrolled surface currently covers CRM, blog, forms, listings, billing, and social. Cross-module migration dependency ordering must be documented in the organizations release note when new tenant tables join the contract.
 
 ---
 
-**Planned follow-on design note**: the remaining sections mix the shipped server-rendered contract with later v0.86.0 follow-on design. Billing bridge, React org-management, and PostgreSQL RLS activation remain planned follow-on work; the invitation flow and org URL notes below call out the current shipped contract where relevant.
+**Historical design note**: some headings below preserve rollout-era phase labels, but the current shipped contract already includes the org-billing bridge, enrolled-table PostgreSQL RLS, VIEW-AS, and generated React org pages. Only sections explicitly labeled future-ready or deferred should be read as not-yet-shipped work.
 
 ---
 
@@ -355,7 +352,7 @@ Plan.features             → JSONField(default=list) (sole entitlement source)
 
 Credit transactions stay attributed to the acting user (`CreditTransaction.user`) while debiting the authoritative organization balance, and that user link now nulls cleanly on deletion so the org ledger row remains intact.
 
-PostgreSQL RLS activation is still deferred. The org-billing bridge ships first at the ORM/application layer; later DB hardening still depends on downstream tenant tables carrying concrete `organization_id` columns.
+The billing tenant tables (`Subscription`, `CreditBalance`, `CreditTransaction`) are part of the enrolled tenant-table surface and therefore follow the same `organization_id` + `TenantManager` + FORCE-RLS contract as the other shipped tenant-owned models. `Plan` and `WebhookEvent` remain reviewed exclusions because they are system-wide metadata, not tenant-owned rows.
 
 ### Hybrid Billing Model: Credits + Feature Gates + Optional Seats
 
@@ -393,7 +390,7 @@ Views check feature access via a decorator:
 
 ```python
 @require_org_feature('crm')
-def crm_index(request, org_slug):
+def crm_index(request):
     ...
 ```
 
@@ -464,7 +461,7 @@ Invitations are active only in SaaS mode. In Solo mode the invitation views stay
 ### Focused Validation Notes
 
 - Coverage stays focused on invite send/revoke, the slugless accept continuation path, auth redirect/resume behavior, normalized-email redemption guards, and Solo-mode 404 handling.
-- Shipping this slice did not require the deferred Phase 3 PostgreSQL RLS activation work or the later Phase 7 React org-management work.
+- This slice now sits on top of the shipped enrolled-table RLS surface and coexists with the generated React org pages; neither changes the invitation contract itself.
 
 ---
 
@@ -472,7 +469,7 @@ Invitations are active only in SaaS mode. In Solo mode the invitation views stay
 
 ### SaaS Mode
 
-Path routing (not subdomain). The org slug appears in most module URLs so the active organization is always explicit, bookmarkable, and shareable. Modules that have adopted the flat-route contract (CRM per T1.5, blog per T1.6, billing per T1.10) resolve the active organization from ``request.org`` (set by middleware) rather than from a URL slug.
+Path routing (not subdomain). The org slug is part of the org-management surface; the shipped module content routes are now flat and resolve the active organization from `request.org` / the current-org ContextVar rather than from a content-route slug.
 
 ```
 /orgs/                                     # List orgs the current user belongs to
@@ -481,14 +478,20 @@ Path routing (not subdomain). The org slug appears in most module URLs so the ac
 /orgs/<slug>/members/                      # Member list, role management, invite send/revoke
 /orgs/invitations/<token>/accept/          # Public invitation accept / continuation
 /orgs/<slug>/settings/                     # Org settings (name, slug)
-# Module routes (blog uses flat route per T1.6; remaining modules nest under org slug):
-/blog/                                     # Blog (flat route per T1.6)
-/orgs/<slug>/forms/                        # Forms for this org
-/orgs/<slug>/listings/                     # Listings for this org
+
+# Module routes (all flat in the shipped server-rendered surface):
+/blog/                                     # Blog index
+/blog/post/<slug>/                         # Blog detail
+/crm/dashboard/                            # CRM dashboard
+/forms/                                    # Forms index
+/forms/<slug>/                             # Form detail
+/listings/                                 # Listings index
+/billing/dashboard/                        # Authenticated billing dashboard
+/billing/pricing/                          # Public pricing
 
 **Note (T1.10)**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/api/billing/...`). No org-scoped billing URL tree exists after T1.10 — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
 
-**Note (T1.5 / T1.6)**: The CRM and blog modules no longer use org-scoped URLs. After T1.5, all CRM routes are flat (``/crm/``, ``/crm/api/...``) regardless of deployment mode. After T1.6, all blog routes are flat (``/blog/``, ``/blog/post/<slug>/``, ...) regardless of deployment mode. The active organization is resolved from ``request.org`` (set by ``TenantMiddleware`` from the session or the personal-org fallback), not from a URL slug. Remaining modules (forms, listings) may still use org-scoped routes until their own T1.7–T1.8 contract-adoption tasks land.
+**Note (T1.5 / T1.6 / T1.7 / T1.8 / T1.10)**: CRM, blog, forms, listings, and billing all use flat server routes in the shipped contract. The active organization is resolved from `request.org` / the current-org ContextVar, not from a URL slug.
 ```
 
 ### Solo Mode
@@ -514,18 +517,18 @@ No org management pages are exposed in solo mode.
 /orgs                   → OrgListPage
 /orgs/new               → OrgCreatePage
 /orgs/:slug             → OrgDashboardPage  (rendered inside OrgLayout)
+/orgs/:slug/blog        → BlogPage (SaaS org-context page; `/blog` redirects here)
+/orgs/:slug/listings    → ListingsPage (SaaS org-context page; `/listings` redirects here)
 /orgs/:slug/members     → OrgMembersPage (member list, role changes, invite send/revoke)
 /orgs/:slug/settings    → OrgSettingsPage
-/billing/dashboard                → BillingPage (flat route in both modes after T1.10)
-/billing/pricing                  → PricingPage (flat route in both modes after T1.10)
-/blog                   → BlogPage (flat route per T1.6)
-/orgs/:slug/forms       → FormsPage
-/orgs/:slug/listings    → ListingsPage
+/crm                    → CrmPage (flat route)
+/forms                  → FormsPage (flat route)
+/forms/:slug            → FormsPage (flat route)
 ```
 
-**Note (T1.5 / T1.6)**: The CRM and blog modules no longer use org-scoped React routes. CRM pages are served at flat `/crm` paths in both modes; blog pages are served at flat `/blog` paths after T1.6. The org is resolved from `request.org` (session or personal-org fallback) rather than a URL slug.
+**Note:** The generated `showcase_react` SaaS surface keeps org-management pages under `/orgs/:orgSlug/...`, serves CRM and forms at flat routes, and uses legacy redirect shims (`/blog`, `/listings`, `/settings`) to land the user on the active-org route when needed. Billing remains Django-page navigation (`/billing/dashboard/`, `/billing/pricing/`) rather than a generated React billing page.
 
-`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into all nested pages. An org switcher in the sidebar shows the active organization and lets the user navigate to another by changing the slug in the URL. Modules that have not yet adopted the flat-route contract (forms, listings) continue to use org-scoped React routes handled by `OrgLayout`.
+`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into the generated org pages. An org switcher in the sidebar shows the active organization and lets the user navigate to another by changing the slug in the URL.
 
 #### Solo mode
 
@@ -535,20 +538,18 @@ No org management pages are exposed in solo mode.
 /crm                    → CrmPage
 /forms                  → FormsPage
 /listings               → ListingsPage
-/billing/dashboard      → BillingPage
-/billing/pricing        → PricingPage
 ```
 
-No `OrgLayout` or org switcher is rendered.
+No `OrgLayout` or org switcher is rendered. Billing remains Django-page navigation rather than a generated React billing page.
 
 ### Subdomain Routing (Future-Ready)
 
 Subdomain routing (`acme.myapp.com`) is not in v0.86.0 scope, but the architecture is designed to support it with no changes to views or models.
 
-`TenantMiddleware` currently resolves the org from the session (``ACTIVE_ORG_SESSION_KEY``) or from fallback patterns (URL slug for non-CRM modules, personal-org for solo-format routes). To support subdomains, only the initial resolution step changes — instead of reading the session or URL slug, the middleware would read the subdomain from ``request.get_host()``:
+`TenantMiddleware` currently resolves the org from the session (`ACTIVE_ORG_SESSION_KEY`) in SaaS mode and from the authenticated user's personal org in Solo mode; the shipped middleware no longer carries content-route slug fallback. To support subdomains, only the initial SaaS resolution step changes — instead of reading the session first, the middleware would read the subdomain from `request.get_host()`:
 
 ```python
-# Current (session-based):
+# Current (session-based SaaS resolution):
 org_id = request.session.get(ACTIVE_ORG_SESSION_KEY)
 
 # Future (subdomain-based):
@@ -556,38 +557,37 @@ host = request.get_host()
 slug = host.split('.')[0] if host.count('.') >= 2 else None
 if slug:
     org = Organization.objects.get(slug=slug)
-    # then set request.org, contextvar, SET LOCAL as today
+    # then set request.org and the current-org ContextVar as today
 ```
 
-Everything downstream (RLS context, `request.org`, permission checks) is identical. DNS wildcard and NGINX configuration changes are documented in `docs/deployment/railway.md` when the feature is implemented.
+Everything downstream (`request.org`, the current-org ContextVar, permission checks, and any caller-managed RLS priming) is identical. DNS wildcard and NGINX configuration changes are documented in `docs/deployment/railway.md` when the feature is implemented.
 
 ---
 
 ## TenantMiddleware
 
-The current middleware implementation (shipped in T1.3/T1.5) uses **session-based org resolution**. It reads the active org from ``request.session[ACTIVE_ORG_SESSION_KEY]`` (set by the org-switcher), applies fallback resolution for legacy downstream module paths and solo-format routes, and populates ``request.org`` and the ``app.current_org_id`` contextvar/``SET LOCAL``.
+The current middleware implementation (shipped in T1.20 form) uses **session-based org resolution** for SaaS mode and personal-org resolution for Solo mode. It populates `request.org` plus the current-org ContextVar, but it does **not** hold a request-long transaction or issue `SET LOCAL` directly.
 
-The pre-T1.3 middleware extracted the org slug from URL kwargs (e.g. ``/orgs/<slug>/crm/``). That slug-based approach is no longer used for CRM or blog, which now use flat routes with session-based org resolution per Track 1 decisions D1/D4/D5. Remaining modules (forms, listings) may still carry slug-based URL patterns until their own T1.7+ contract-adoption tasks land.
+The pre-T1.20 middleware carried slug/fallback resolution paths for content routes. The shipped middleware no longer does that: org-management URLs (`/orgs/...` and `/api/orgs/...`) bypass tenant resolution so the orgs views can own access control, while all other SaaS requests either resolve an active session org or fail closed.
 
 Key behaviours (current):
-- **Saas mode + active session org** → resolves the org from the session key, validates membership, sets ``request.org`` + contextvar + ``SET LOCAL app.current_org_id``.
-- **Saas mode + no active session org** → redirects to ``/orgs/`` for non-exempt paths.
+- **SaaS mode + active session org** → resolves the org from the session key, validates membership, and sets `request.org` + the current-org ContextVar.
+- **SaaS mode + no active session org** → redirects to `/orgs/` for non-exempt, non-org-management paths.
 - **Solo mode** → resolves the personal org from the authenticated user's membership.
-- **Superuser bypass** → superusers skip membership validation on org-scoped paths.
-- **Fallback A (slug fallback)** → resolves org from URL slug for remaining ``/orgs/<slug>/<module>/...`` paths, seeds the session so subsequent navigation works.
-- **Fallback B (personal org fallback)** → resolves personal org for solo-format routes under known module prefixes (``/crm/``, ``/listings/``, ``/forms/``, ``/blog/``). Does not seed the session.
+- **VIEW-AS debug override** → a superuser debug session org takes priority over the normal Solo/SaaS branch.
+- **Org-management path bypass** → `/orgs/...` and `/api/orgs/...` requests owned by the orgs module bypass middleware tenant resolution so the views can own access control.
 
-**Connection pooling note**: ``SET LOCAL`` scopes the value to the current transaction. With PgBouncer in transaction-pooling mode, use ``SET`` (session-level) instead, combined with connection checkout/return hooks that reset the value. Document the chosen approach in ``docs/deployment/railway.md``.
+**Connection/RLS note**: DB-level `app.current_org_id` priming is now caller-managed (`tenant_context(...)`, `org_scope(...)`, or the AF9 execute-wrapper path where applicable). When deployment topology requires session-level `SET` instead of transaction-local `SET LOCAL`, document that explicitly in `docs/deployment/railway.md`.
 
 ---
 
 ## Admin Panel Contract
 
-The current organizations foundation keeps Django `/admin/` as the primary operator surface. With RLS now active for the social module, the per-org runtime-role admin contract applies: social admin operates through explicit per-org request selection → session persistence → fail-closed behavior under the app runtime role. No `BYPASSRLS` role or automatic cross-tenant operator bypass was introduced. Django superusers on the runtime-role connection see only the rows their session org selects, matching the contract enforced for ordinary users.
+The current organizations foundation keeps Django `/admin/` as the primary operator surface. With RLS now active on the enrolled tenant-table surface, the per-org runtime-role admin contract applies: org-aware admin flows operate through explicit per-org request selection → session persistence → fail-closed behavior under the app runtime role. No `BYPASSRLS` role or automatic cross-tenant operator bypass was introduced. Django superusers on the runtime-role connection see only the rows their session org selects, matching the contract enforced for ordinary users.
 
 **RLS note**: operator access is implemented deliberately per the per-org runtime-role contract. Do **not** assume Django `is_superuser` or `is_staff` automatically bypasses database policies — they do not, and no operator bypass policy was deployed.
 
-**Operator expectation**: admin list views for org-aware models should expose an `organization` column and an `organization` list filter so the operator can focus on a specific client when needed. Any later RLS rollout must re-verify those admin query paths before claiming all-tenant visibility.
+**Operator expectation**: admin list views for org-aware models should expose an `organization` column and an `organization` list filter so the operator can focus on a specific client when needed. Any later registry or admin-query-path change must re-verify those caller-parity paths before claiming all-tenant visibility.
 
 **No tenant should ever have `is_staff=True`.** Organization-scoped administration happens through the org settings pages at `/orgs/<slug>/settings/`, not through Django admin.
 
@@ -595,13 +595,13 @@ The current organizations foundation keeps Django `/admin/` as the primary opera
 
 ## Operator Debug Mode (View-As)
 
-**Status: planned — see roadmap.md §Phase C.**
+**Status: implemented.**
 
-Supabase ships a dashboard "Impersonate User" button so operators can see the app exactly as a specific user sees it — essential for debugging silent RLS row-filtering. QuickScale will ship an equivalent "view app as this org" feature for Django superusers.
+Supabase ships a dashboard "Impersonate User" button so operators can see the app exactly as a specific user sees it — essential for debugging silent RLS row-filtering. QuickScale now ships the equivalent "view app as this org" feature for Django superusers.
 
 ### How It Works
 
-1. In Django Admin (`/admin/`), an operator selects an `Organization` row and uses the **"View app as this org"** action.
+1. In Django Admin (`/admin/`), an operator uses the VIEW-AS entry point for an `Organization` row.
 2. The action sets the session key `quickscale_modules_orgs.debug_as_org_id` to the org's UUID and redirects to `/`.
 3. `TenantMiddleware` detects the session key (superusers only) and resolves the org from it instead of the normal Solo/SaaS path.
 4. A persistent debug banner renders at the top of every page:
@@ -614,7 +614,7 @@ Supabase ships a dashboard "Impersonate User" button so operators can see the ap
 - Only `is_superuser=True` users can set the session key; the middleware ignores it for non-superusers.
 - The debug session uses the same restricted runtime role (`NOBYPASSRLS`) as all other tenant paths — RLS remains fully enforced. The operator sees exactly what an Acme Corp member sees.
 - Every debug activation is audit-logged: who activated it, which org, when, from which path.
-- Depends on AF9 (GUC/ContextVar wiring) being merged — otherwise the debug session would return 0 rows under the restricted role.
+- Depends on the shipped AF9 GUC/ContextVar wiring so the debug session sees the same restricted-role row set as an ordinary tenant request.
 
 ### Implementation Scope
 
@@ -638,8 +638,8 @@ All open questions from the original design were resolved before implementation 
 | `Organization` model location? | **`quickscale_modules_orgs`** | Auth stays minimal and standalone; orgs depends on auth, not the reverse |
 | Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
 | Billing migration path? | **Auto-create personal org per user** | Management command `migrate_billing_to_orgs`; idempotent; zero manual operator work |
-| Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | Social RLS is now active under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
-| Active org routing? | **Session-based in SaaS (mid-2026+); legacy slug compatibility for remaining modules** | T1.3/T1.5/T1.6: CRM and blog use flat routes with session/request-based org resolution. Remaining modules (forms, listings) still use slug-based URL routing until their T1.7+ adoption tasks. Solo: transparent, org resolved from user's personal org |
+| Admin panel isolation? | **Operator access is explicit and separate from tenant runtime** | The enrolled tenant-table surface now runs under the per-org runtime-role admin contract (explicit per-org selection → session → fail-closed); no operator bypass or `BYPASSRLS` deployed |
+| Active org routing? | **Session-based in SaaS; personal-org resolution in Solo** | Org-management pages stay under `/orgs/...`; shipped server content routes are flat for CRM, blog, forms, listings, and billing; fresh `showcase_react` SaaS pages keep org-slug blog/listings routes with flat redirect shims. Solo mode resolves the personal org transparently. |
 | Post-signup flow? | **SaaS: force `/orgs/new/`. Solo: auto-create personal org** | SaaS users must name their workspace; solo users should not see org concepts |
 | Module access per plan? | **Feature gates + credits** | Credits for consumption metering; feature gates for upsell leverage; no per-org custom flags |
 | Seat pricing? | **Optional, designed in** | Operator-configurable; enforced at UI/API layer in v0.86.0; hard DB enforcement deferred |
@@ -663,24 +663,24 @@ This section records the current repository slice, not the eventual end-state de
 | `require_org_role` decorator + `OrgRoleMixin` | ✅ implemented |
 | `require_org_feature` decorator | ✅ implemented with ORM-backed active-subscription lookup and `Plan.features` entitlement checks |
 | Post-signup: auto-create personal org (Solo) or redirect to `/orgs/new/` (SaaS) | ✅ implemented |
-| PostgreSQL RLS migration for downstream tenant tables | ✅ partial — social module (T1.15); others deferred until their tables carry concrete `organization_id` columns |
-| PostgreSQL cross-org isolation test suite | ✅ partial — social module RLS integration tests pass on PostgreSQL (81/81); others deferred with their RLS migration |
+| PostgreSQL RLS migration for downstream tenant tables | ✅ implemented for the shipped repo surface — 21 enrolled tenant models across CRM, Forms, Billing, Blog, Listings, and Social |
+| PostgreSQL cross-org isolation test suite | ✅ implemented — restricted-role proofs plus the `isolation-conformance` CI job cover the enrolled tenant-table surface on PostgreSQL |
 | Server-rendered self-service org creation, dashboard, members, settings, and import-compatible org URL surfaces | ✅ implemented |
 | Server-rendered invitation flow: invite send/revoke on org admin surfaces, notifications registry-backed email, and slugless public accept continuation under `/orgs` | ✅ implemented |
 | Org-authoritative billing bridge (organization ownership fields, canonical org billing routes, flat compatibility shims, and ORM-backed feature gating) | ✅ implemented |
 | `migrate_billing_to_orgs` / `promote_to_saas` management commands | ✅ implemented |
-| React org-management UI surfaces | ❌ planned follow-on work |
+| React org-management UI surfaces | ✅ implemented for fresh `showcase_react` generations (`OrgListPage`, `OrgCreatePage`, `OrgLayout`, `OrgDashboardPage`, `OrgMembersPage`, `OrgSettingsPage`) |
 | Subdomain routing | ❌ future-ready (middleware decoupled; DNS/NGINX config deferred) |
 | Hard seat-count enforcement at DB layer | ❌ deferred |
 | Per-tenant analytics | ❌ deferred |
-| Operator debug mode: "view app as this org" (VIEW-AS) | ❌ planned — see roadmap.md §Phase C |
+| Operator debug mode: "view app as this org" (VIEW-AS) | ✅ implemented — superuser session-scoped impersonation with debug banner and audit trail |
 | Cross-org admin tooling beyond VIEW-AS | ❌ deferred |
 
 ---
 
 ## F11.13b — Structural Isolation Rollout: Adoption Path for Existing Projects
 
-Already-generated QuickScale projects that add the organizations module (or upgrade to a release that includes structural multi-tenant isolation) must adopt the dual-manager queryset contract to maintain correct tenant scoping across all code paths.
+Already-generated QuickScale projects that add the organizations module (or upgrade to a release that includes structural multi-tenant isolation) must adopt the shared `TenantManager` + ContextVar contract to maintain correct tenant scoping across all code paths.
 
 ### Dual-Manager Contract Summary
 
@@ -688,41 +688,43 @@ Every tenant-scoped model (one that inherits from `TenantModel` or carries an `o
 
 | Manager | Class | Purpose | Use in |
 |---------|-------|---------|--------|
-| `objects` | `TenantScopedManager` | Default manager; returns a typed `QuerySet` with an explicit `.for_org(org_id)` method. Calling `.all()` without `.for_org()` returns all rows but signals the caller should review whether scoping is needed. | Views, services, tenant-facing code paths, manual shell work |
-| `all_objects` | `OperatorManager` | Operator escape hatch; returns an unfiltered `QuerySet` for cross-tenant visibility. | Admin `get_queryset()`, management commands, operator/superuser paths |
+| `objects` | `TenantManager()` | Default manager; reads the current organization from the shared ContextVar and auto-filters querysets to that org. When no org context is set, it fails closed with `.none()`. | Views, services, tenant-facing request code, scoped background work |
+| `all_objects` | `TenantManager(super_scope=True)` | Operator escape hatch; removes Python-side tenant auto-filtering. It does **not** by itself bypass PostgreSQL RLS. | Admin `get_queryset()`, audited commands, explicit operator/superuser paths |
 
-`.for_org(None)` is fail-closed — it returns an empty queryset rather than exposing all rows.
+The authoritative tenant-facing API is **ambient scoping**, not `.for_org(...)` chaining.
 
-### Tenant-Scoped: `.for_org()`
+### Tenant-Scoped: ambient `TenantManager`
 
-Use `Model.objects.for_org(organization_id)` in:
+Use the default `objects` manager only after the current org has been established:
 
-- **Views and services** — every org-scoped view or service function resolves the org and chains `.for_org()`:
+- **Views and services** — request-scoped paths rely on `TenantMiddleware` to resolve the org, set `request.org`, and populate the ContextVar that `TenantManager` reads:
   ```python
-  def listing_index(request, org_slug):
-      org = get_object_or_404(Organization, slug=org_slug)
-      posts = Post.objects.for_org(org.pk).filter(published=True)
+  def listing_index(request):
+      posts = Post.objects.filter(published=True)
       ...
   ```
-- **Manual shell / one-off queries** — always scope to an org when operating on behalf of a tenant:
+- **Manual shell / one-off queries** — establish org scope explicitly before using the default manager:
   ```python
+  from quickscale_modules_orgs.current_org import org_scope
   from quickscale_modules_orgs.models import Organization
+
   org = Organization.objects.get(slug="acme-corp")
-  posts = Post.objects.for_org(org.pk)
+  with org_scope(org):
+      posts = Post.objects.filter(published=True)
   ```
 
 ### Operator Path: `all_objects`
 
 Use `Model.all_objects.all()` in:
 
-- **Admin `get_queryset()`** — every `ModelAdmin` for a tenant-scoped model overrides `get_queryset()` to return `self.model.all_objects.all()`. This ensures the Django `/admin/` operator surface retains cross-tenant visibility. An `organization` column and list filter should be added so the operator can focus on a specific client when needed.
-- **Management commands** — commands that iterate across org boundaries must use `all_objects` to include rows without an organization or rows that span multiple tenants:
+- **Admin `get_queryset()`** — every `ModelAdmin` for a tenant-scoped model overrides `get_queryset()` to return `self.model.all_objects.all()`. This removes Python-side tenant auto-filtering so the admin/runtime-role contract can decide the visible rows. Add an `organization` column and list filter so the operator can focus on a specific client when needed.
+- **Management commands** — cross-tenant commands should run under `operator_access(reason=...)` and use `all_objects` only when they truly need an unfiltered queryset:
   ```python
-  # forms_anonymize_submissions.py
-  for form in Form.all_objects.all():
-      ...
+  with operator_access(reason="nightly-maintenance"):
+      for form in Form.all_objects.all():
+          ...
   ```
-- **Operator/superuser shell work** — any ad-hoc query that legitimately needs cross-tenant visibility.
+- **Operator/superuser shell work** — any ad-hoc query that legitimately needs the unfiltered ORM queryset, subject to the active DB-role / RLS contract.
 
 ### Adoption Steps
 
@@ -731,20 +733,20 @@ For a generated project that already exists and is adding structural isolation:
 1. **Add `quickscale_modules_orgs` to `INSTALLED_APPS`** and run its migrations.
 2. **Add `TenantMiddleware`** to the middleware stack and configure `QUICKSCALE_MODE` (see [Deployment Mode](#deployment-mode-solo-vs-saas-organizations) above).
 3. **Wire URL routing** — load org-scoped or solo URL patterns conditionally based on `QUICKSCALE_MODE`.
-4. **Add the dual-manager contract** to every tenant-scoped model that does not already have it — a `TenantScopedManager` as `objects` and an `OperatorManager` as `all_objects`. Each module's `managers.py` defines the concrete queryset and manager classes for that module's models.
+4. **Add the shared manager contract** to every tenant-scoped model that does not already have it — `objects = TenantManager()` and `all_objects = TenantManager(super_scope=True)` (or inherit from `TenantModel`, which provides that contract).
 5. **Backfill `organization_id`** on existing rows — the FK is required for new rows; existing rows may need a data migration to assign an org.
-6. **Switch views and services** — replace bare `.all()` or `.filter(...)` calls with `.for_org(org.pk)`.
+6. **Switch views and services** — remove `.for_org(...)` chaining and rely on middleware-established org context for request paths; for non-request paths, enter scope explicitly with `org_scope(...)` / `tenant_context(...)` / `set_current_org_for_context(...)` before using `objects`.
 7. **Switch admin classes** — override `get_queryset()` to use `self.model.all_objects.all()`; add an `organization` column and list filter.
-8. **Switch management commands** — any command that iterates tenant-scoped models across orgs must use `all_objects`.
+8. **Switch management commands** — audited cross-tenant commands use `operator_access(reason=...)` and `all_objects`; tenant-scoped commands establish org scope explicitly before using the default manager.
 
 ### Async Jobs
 
 QuickScale does not currently ship async job infrastructure for generated projects. When async jobs (Celery, Django Q, or similar) are added later, they must follow the same rule:
 
-- **Tenant-scoped jobs** — use `Model.objects.for_org(org_id)` when the job operates on behalf of a specific org.
-- **Admin/operator jobs** — use `Model.all_objects.all()` when the job crosses org boundaries (e.g., a nightly maintenance task that touches every tenant's data).
+- **Tenant-scoped jobs** — enter org scope explicitly (`org_scope(...)`, `tenant_context(...)`, or an equivalent helper), then use the default `objects` manager.
+- **Admin/operator jobs** — use `Model.all_objects.all()` when the job crosses org boundaries (e.g., a nightly maintenance task that touches every tenant's data), ideally under the same audited operator-access contract as management commands.
 
-No async job path should call `.all()` on a tenant-scoped manager without an explicit `.for_org()` or `all_objects` designation.
+No async job path should use the default tenant manager without first establishing org context, and no operator path should rely on hidden bypass behavior.
 
 ---
 
