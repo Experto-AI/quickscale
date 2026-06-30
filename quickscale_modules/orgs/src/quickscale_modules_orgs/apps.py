@@ -7,6 +7,10 @@ Only ``manage.py migrate`` is exempt from the guard — ``start.sh``
 deliberately unsets ``RUNTIME_DATABASE_URL`` so DDL runs under the
 superuser ``DATABASE_URL``.  All other startup paths (including
 ``manage.py runserver``, gunicorn, and WSGI) remain fail-closed.
+
+AF9 Phase 1 — installs the connection-layer GUC priming execute wrapper
+on every Django ``DatabaseWrapper`` so that ``SET LOCAL app.current_org_id``
+is derived from the ContextVar in the same transaction as tenant SQL.
 """
 
 import sys
@@ -15,6 +19,7 @@ from django.apps import AppConfig
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
+from django.db.backends.signals import connection_created
 
 
 def _is_migrate_command() -> bool:
@@ -62,6 +67,22 @@ def _check_rls_role() -> None:
             )
 
 
+def _install_priming_on_connection(
+    sender: object,
+    connection: object,
+    **kwargs: object,
+) -> None:
+    """Signal handler: install the AF9 priming wrapper on a new connection.
+
+    Connected in ``QuickscaleOrgsConfig.ready()`` to
+    ``django.db.backends.signals.connection_created`` so that every new
+    ``DatabaseWrapper`` receives the execute wrapper automatically.
+    """
+    from quickscale_modules_orgs.current_org import install_priming_wrapper
+
+    install_priming_wrapper(connection)
+
+
 class QuickscaleOrgsConfig(AppConfig):
     """Configuration for the QuickScale organizations module."""
 
@@ -71,6 +92,7 @@ class QuickscaleOrgsConfig(AppConfig):
     verbose_name = "QuickScale Organizations"
 
     def ready(self) -> None:
+        # ---- T1.18 — BYPASSRLS boot guard -------------------------------
         # Only manage.py migrate is exempt — start.sh deliberately unsets
         # RUNTIME_DATABASE_URL so DDL runs under the superuser DATABASE_URL
         # with BYPASSRLS.  All other startup (runserver, gunicorn, WSGI)
@@ -78,3 +100,14 @@ class QuickscaleOrgsConfig(AppConfig):
         if _is_migrate_command():
             return
         _check_rls_role()
+
+        # ---- AF9 Phase 1 — GUC priming execute wrapper ------------------
+        # Install on any connections already created (defensive — at
+        # ready() time the connection pool is typically empty) and
+        # connect the signal for all future connections.
+        from django.db import connections
+        from quickscale_modules_orgs.current_org import install_priming_wrapper
+
+        for conn in connections.all():
+            install_priming_wrapper(conn)
+        connection_created.connect(_install_priming_on_connection)

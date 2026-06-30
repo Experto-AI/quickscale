@@ -944,14 +944,16 @@ def test_purge_organization_sets_db_current_org_id_on_postgres() -> None:
         assert get_current_org_id() == org_id
 
     # Step 5: After the atomic block, the local setting is gone (SET LOCAL
-    # only persists for the current transaction).
+    # only persists for the current transaction).  Reset the ContextVar
+    # first so the AF9 priming wrapper does not re-issue SET LOCAL on
+    # the probe query — without this the wrapper sees the stale ContextVar
+    # and primes the GUC inside its short atomic, masking the proof.
+    reset_current_org_id()
     with connection.cursor() as cursor:
         cursor.execute("SELECT current_setting('app.current_org_id', true)")
         after_txn_raw = cursor.fetchone()[0]
         after_txn = uuid_lib.UUID(after_txn_raw) if after_txn_raw else None
     assert after_txn is None, f"Expected null after transaction ends, got {after_txn!r}"
-    # Python-side ContextVar was not reset (caller must reset it explicitly).
-    # That's the contract documented in current_org.py.
 
     # Step 6: Full purge command also works on Postgres (smoke test).
     stdout = StringIO()

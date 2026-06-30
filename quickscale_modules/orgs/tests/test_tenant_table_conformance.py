@@ -1182,3 +1182,139 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
                 )
         finally:
             cursor.execute("RESET ROLE")
+
+
+# ---------------------------------------------------------------------------
+# AF9 Phase 3 — Restricted-role cursor proof for Listings (PR-AF9-005)
+# ---------------------------------------------------------------------------
+# Proves that the AF9 execute wrapper primes ``app.current_org_id`` from
+# the ContextVar under a restricted PostgreSQL role, using the Listing
+# table as the probe.
+#
+# Unlike the AF11 proof (which uses manual ``SET app.current_org_id``),
+# this proof calls ``set_current_org_id(org.pk)`` and lets the AF9
+# execute wrapper derive the GUC from the ContextVar.  Under ``SET ROLE``,
+# a SELECT on the RLS-protected Listing table must return the expected row.
+#
+# Skipped on non-PostgreSQL databases (SQLite during CI unit tests).
+#
+# This proof lives here rather than in the listings module's test suite
+# because the listings conftest has a pre-existing database-setup issue
+# that blocks test-connection creation.
+#
+# Soundness guard (CR-AF9-001): seeding uses ``all_objects`` with no
+# ContextVar so the AF9 wrapper does NOT pre-prime the GUC.  A pre-SELECT
+# guard assertion verifies the GUC is at session default before the
+# restricted probe establishes the proof window.
+#
+# Connection hygiene: the fixture below closes the shared connection
+# after each test so that ``test_postgres_content_route_does_not_set_db_current_org_id``
+# (which asserts ``current_setting`` returns ``None`` / SQL NULL) is not
+# affected by the GUC parameter becoming session-known as a side effect of
+# any ``SET LOCAL`` or ``SET app.current_org_id`` in this file.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _close_connection() -> None:
+    """Close the shared connection after each test.
+
+    Django reopens it lazily on the next ``cursor()`` access, creating a
+    fresh PostgreSQL session where ``app.current_org_id`` is in the NULL
+    state.  Existing execute wrappers and installation markers survive
+    close/reconnect on the ``DatabaseWrapper`` object.
+    """
+    yield
+    from django.db import connection
+
+    connection.close()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.skipif(
+    not _is_postgres,
+    reason="Restricted-role cursor proof requires PostgreSQL.",
+)
+def test_af9_listings_restricted_role_cursor_proof() -> None:
+    """PR-AF9-005: The AF9 execute wrapper primes ``app.current_org_id``
+    from the ContextVar under a restricted PostgreSQL role for the
+    Listings module.
+
+    Soundness (CR-AF9-001):
+    * Uses ``@pytest.mark.django_db(transaction=True)`` so each
+      ``cursor.execute()`` is its own short transaction, not a shared
+      ambient test transaction.  No statement can consume the GUC
+      priming of a later statement in the same proof window.
+    * Seeds data via ``all_objects`` with no ContextVar set, so the AF9
+      execute wrapper passes through and does NOT pre-prime the GUC.
+    * A guard ``SELECT current_setting(...)`` asserts the GUC is at the
+      session default before the restricted SELECT establishes the proof
+      window — proving no prior statement silently consumed the priming.
+    * Then ``SET ROLE``, ContextVar set, and the probed SELECT is the
+      *first* statement that can establish ``app.current_org_id`` for the
+      restricted-role proof window.
+    """
+    from django.db import connection
+
+    from quickscale_modules_listings.models import Listing
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+    from quickscale_modules_orgs.models import Organization
+
+    _ensure_rls_test_role()
+
+    org = Organization.objects.create(
+        name="AF9 Listings Proof", slug="af9-listings-proof"
+    )
+
+    # Pre-seed data via all_objects with NO ContextVar active, so the AF9
+    # execute wrapper passes through and the GUC is NOT pre-primed.
+    Listing.all_objects.create(
+        title="AF9 Listings Proof",
+        slug="af9-listings-proof",
+        organization=org,
+    )
+
+    # Ensure no ambient ContextVar before the proof.
+    reset_current_org_id()
+
+    with connection.cursor() as cursor:
+        # Guard: verify the GUC is at session default before the proof
+        # window opens.  If a prior statement pre-primed the GUC this
+        # assertion fails, making the soundness failure visible.
+        cursor.execute("SELECT current_setting('app.current_org_id', true)")
+        guard_raw = cursor.fetchone()[0]
+        assert guard_raw is None or guard_raw == "", (
+            f"Guard: GUC must be at session default before proof, "
+            f"got {guard_raw!r}. "
+            "A prior statement pre-primed the GUC, invalidating the proof."
+        )
+
+        # Switch to restricted role.
+        cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
+        try:
+            # Now set the ContextVar — the AF9 wrapper primes the GUC
+            # from this.  No manual ``SET LOCAL`` or ``SET app.current_org_id``.
+            set_current_org_id(org.id)
+            try:
+                # SELECT triggers the AF9 execute wrapper, which issues
+                # SET LOCAL from the ContextVar before running the query.
+                # This is the FIRST statement in this restricted-role
+                # window that can establish the GUC.
+                cursor.execute(
+                    "SELECT title "
+                    "FROM quickscale_modules_listings_listing "
+                    "ORDER BY title"
+                )
+                titles = [r[0] for r in cursor.fetchall()]
+                assert titles == ["AF9 Listings Proof"], (
+                    f"Expected AF9 Listings Proof, got {titles}. "
+                    "The AF9 wrapper must prime app.current_org_id "
+                    "from the ContextVar for the restricted-role cursor."
+                )
+            finally:
+                reset_current_org_id()
+        finally:
+            cursor.execute("RESET ROLE")
