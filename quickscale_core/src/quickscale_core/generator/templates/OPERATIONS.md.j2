@@ -27,7 +27,7 @@ NOCREATEROLE     — cannot create other roles
 The generated settings support two database connection URLs:
 
 - **`DATABASE_URL`** — superuser connection (used for migrations). The startup script (`start.sh`) temporarily unsets `RUNTIME_DATABASE_URL` during `migrate` to ensure schema changes use the superuser role.
-- **`RUNTIME_DATABASE_URL`** — restricted runtime role connection (used for normal app operations). When set, the app uses this URL for all runtime queries. When unset, the app falls back to `DATABASE_URL` (backward compatible).
+- **`RUNTIME_DATABASE_URL`** — restricted runtime role connection (required for runtime serving). When set, the app uses this URL for all runtime queries. If unset during runtime serving, the app raises a clear error instead of falling back to the privileged superuser `DATABASE_URL` (fail-closed). During migrations, the startup script unsets `RUNTIME_DATABASE_URL` so the superuser `DATABASE_URL` is used (schema changes require elevated privileges).
 
 ### Development (Docker Compose)
 

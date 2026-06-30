@@ -128,9 +128,10 @@ def _execute_rendered_settings(
     setattr(
         dj_database_url_module,
         "parse",
-        lambda url, conn_max_age=0, ssl_require=False: {
+        lambda url, conn_max_age=0, conn_health_checks=False, ssl_require=False: {
             "URL": url,
             "CONN_MAX_AGE": conn_max_age,
+            "CONN_HEALTH_CHECKS": conn_health_checks,
             "SSL_REQUIRE": ssl_require,
         },
     )
@@ -881,6 +882,153 @@ class TestRuntimeDatabaseUrlComments:
         )
 
 
+class TestRuntimeDatabaseUrlOperatorContract:
+    """Verify operator-facing templates no longer document RUNTIME_DATABASE_URL as optional (CR-SA22-002)."""
+
+    def test_env_example_runtime_url_uncommented(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """RUNTIME_DATABASE_URL must not be commented out in .env.example."""
+        template = jinja_env.get_template(".env.example.j2")
+        output = template.render(test_context)
+
+        # Must be present as an active variable, not commented out
+        assert "RUNTIME_DATABASE_URL=" in output
+        assert "# RUNTIME_DATABASE_URL=" not in output, (
+            "RUNTIME_DATABASE_URL should not be commented out in .env.example"
+        )
+        # Must NOT document backward-compatible fallback (contradicts fail-closed)
+        assert "falls back to DATABASE_URL" not in output, (
+            ".env.example should not describe RUNTIME_DATABASE_URL fallback"
+        )
+        # Must mention it's required for production
+        assert "required for production" in output.lower() or (
+            "required" in output.lower() and "runtime serving" in output.lower()
+        ), ".env.example should describe RUNTIME_DATABASE_URL as required"
+
+    def test_env_example_mentions_fail_closed(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """.env.example should mention the fail-closed behavior for production."""
+        template = jinja_env.get_template(".env.example.j2")
+        output = template.render(test_context)
+
+        # The comment spans two lines; check for both fragments
+        assert "the app raises" in output, (
+            ".env.example should mention the fail-closed error"
+        )
+        assert "clear error if unset" in output, (
+            ".env.example should mention the clear error when unset"
+        )
+
+    def test_operations_md_no_fallback_language(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """OPERATIONS.md must not describe RUNTIME_DATABASE_URL fallback as backward compatible."""
+        template = jinja_env.get_template("OPERATIONS.md.j2")
+        output = template.render(test_context)
+
+        assert "RUNTIME_DATABASE_URL" in output
+        # Must not describe fallback as backward compatible
+        assert "falls back to DATABASE_URL" not in output, (
+            "OPERATIONS.md should not describe RUNTIME_DATABASE_URL fallback"
+        )
+        assert "backward compatible" not in output.lower(), (
+            "OPERATIONS.md should not describe fallback as backward compatible"
+        )
+        # Must describe the fail-closed behavior
+        assert "fail-closed" in output.lower() or "raises a clear error" in output, (
+            "OPERATIONS.md should describe fail-closed behavior"
+        )
+
+    def test_readme_env_vars_includes_runtime_url(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """README deployment Environment Variables section must include RUNTIME_DATABASE_URL."""
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render(test_context)
+
+        # The production environment variables section must mention RUNTIME_DATABASE_URL
+        assert "RUNTIME_DATABASE_URL" in output, (
+            "README should mention RUNTIME_DATABASE_URL in deployment section"
+        )
+        # Must describe as required for production
+        assert "required for production" in output.lower() or (
+            "runtime database role" in output.lower()
+        ), "README should describe the production runtime role requirement"
+
+    def test_readme_production_checklist_includes_runtime_url(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """README production checklist must include a RUNTIME_DATABASE_URL item."""
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render(test_context)
+
+        assert "RUNTIME_DATABASE_URL" in output
+        # The production checklist section must have a dedicated RUNTIME_DATABASE_URL item
+        assert "Set `RUNTIME_DATABASE_URL`" in output, (
+            "README production checklist should list RUNTIME_DATABASE_URL"
+        )
+        assert "fails closed" in output.lower(), (
+            "README production checklist should mention fail-closed behavior"
+        )
+
+    def test_env_example_local_dev_guidance(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """.env.example should tell non-Docker local devs to remove RUNTIME_DATABASE_URL.
+
+        CR-SA22-002 regression: non-Docker users who copy .env.example to .env
+        must be told to remove RUNTIME_DATABASE_URL so that local.py falls back
+        to DATABASE_URL (the runtime role does not exist in a plain local setup).
+        """
+        template = jinja_env.get_template(".env.example.j2")
+        output = template.render(test_context)
+
+        # Must mention non-Docker local development
+        assert "non-docker local development" in output.lower(), (
+            ".env.example should mention non-Docker local development"
+        )
+        # Must tell users to remove the line
+        assert "remove this line from your .env" in output.lower(), (
+            ".env.example should tell non-Docker users to remove RUNTIME_DATABASE_URL"
+        )
+        # Must explain why (runtime role needs Docker Compose)
+        assert "docker compose" in output.lower(), (
+            ".env.example should explain that Docker Compose provisions the runtime role"
+        )
+
+    def test_readme_local_quick_start_runtime_url_guidance(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """README local quick-start should tell non-Docker users to clear RUNTIME_DATABASE_URL.
+
+        CR-SA22-002 regression: the local Setup section must guide non-Docker
+        users to remove RUNTIME_DATABASE_URL from .env after copying .env.example,
+        since the runtime role is only provisioned automatically by Docker Compose.
+        """
+        template = jinja_env.get_template("README.md.j2")
+        output = template.render(test_context)
+
+        # Locate the local Setup section
+        assert "cp .env.example .env" in output
+        setup_section = output[output.index("cp .env.example .env") :]
+        setup_section = setup_section[: setup_section.index("# 3. Run migrations")]
+
+        # The local quick-start must mention RUNTIME_DATABASE_URL
+        assert "RUNTIME_DATABASE_URL" in setup_section, (
+            "README local quick-start should mention RUNTIME_DATABASE_URL"
+        )
+        # Must tell non-Docker users to delete it
+        assert "delete RUNTIME_DATABASE_URL" in setup_section, (
+            "README local quick-start should tell non-Docker users to delete RUNTIME_DATABASE_URL"
+        )
+        # Must explain why (Docker Compose vs plain local)
+        assert "without Docker" in setup_section, (
+            "README local quick-start should distinguish Docker vs non-Docker"
+        )
+
+
 class TestProductionReadyFeatures:
     """Verify production-ready security and configuration features are present."""
 
@@ -1415,6 +1563,91 @@ class TestGeneratedSecretKeyGuards:
                     ),
                 },
             )
+
+
+class TestProductionSettingsRuntimeDatabaseUrlFailClosed:
+    """Verify production settings requires RUNTIME_DATABASE_URL for serving (SA2.2).
+
+    After SA2.2, production.py raises a clear error when RUNTIME_DATABASE_URL
+    is unset during runtime serving, instead of silently falling back to the
+    privileged superuser DATABASE_URL.  Migrations remain the named exception.
+    """
+
+    def test_fails_closed_when_runtime_url_unset_for_serving(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Runtime serving without RUNTIME_DATABASE_URL must raise ValueError."""
+        base_output = _render_template(
+            jinja_env,
+            "project_name/settings/base.py.j2",
+            test_context,
+        )
+        production_output = _render_template(
+            jinja_env,
+            "project_name/settings/production.py.j2",
+            test_context,
+        )
+
+        with pytest.raises(
+            ValueError, match="RUNTIME_DATABASE_URL is required for runtime serving"
+        ):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=production_output,
+                target_module_name="production",
+                config_values={
+                    "SECRET_KEY": "a-valid-production-secret-key",
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
+                    # RUNTIME_DATABASE_URL deliberately not set
+                },
+            )
+
+    def test_migration_path_uses_database_url(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When sys.argv contains 'migrate', DATABASE_URL must be used."""
+        monkeypatch.setattr(sys, "argv", ["manage.py", "migrate"])
+
+        base_output = _render_template(
+            jinja_env,
+            "project_name/settings/base.py.j2",
+            test_context,
+        )
+        production_output = _render_template(
+            jinja_env,
+            "project_name/settings/production.py.j2",
+            test_context,
+        )
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values={
+                "SECRET_KEY": "a-valid-production-secret-key",
+                "DATABASE_URL": (
+                    "postgresql://postgres:postgres@localhost:5432/testproject"
+                ),
+            },
+        )
+
+        databases = namespace["DATABASES"]
+        assert isinstance(databases, dict)
+        assert databases["default"]["URL"] == (
+            "postgresql://postgres:postgres@localhost:5432/testproject"
+        )
 
 
 class TestLocalSettingsRuntimeDatabaseUrl:

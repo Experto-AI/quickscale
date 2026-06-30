@@ -90,10 +90,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Scope note:* `related_name` shifts to TenantModel's `%(app_label)s_%(class)s_set` pattern — update any in-module `organization.<reverse>_set` usages; no DB migration results from a `related_name`-only change. Keep child→parent and `created_by` FKs as-is.
   *Acceptance:* CRM models are `TenantModel` subclasses; `test_tenant_table_conformance.py` (org_id + scoped manager + `base_manager_name`) and CRM isolation tests stay green on PostgreSQL.
 
-- [ ] **SA1.2 — Migrate blog models to inherit `TenantModel`.** `Tier 2 · Track 3 · deps: none`
+- [x] **SA1.2 — Migrate blog models to inherit `TenantModel`.** `Tier 2 · Track 3 · deps: none`
   Same conversion for `quickscale_modules_blog` tenant models (`Category`, `Tag`, `BlogMediaAsset`, `Post`); leave `AuthorProfile` (reviewed-excluded) alone.
   *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/models.py`.
   *Acceptance:* blog tenant models are `TenantModel` subclasses; conformance + blog tests green.
+  **Completed 2026-06-30, compatibility fix 2026-07-01:** Category, Tag, BlogMediaAsset, Post now inherit `TenantModel`. Each model declares an explicit `organization` FK overriding the abstract `TenantModel` field to preserve the legacy related_name contract (`blog_categories`, `blog_tags`, `blog_media_assets`, `blog_posts`) — no downstream reverse-accessor break. Migration 0004 (state-only: manager and Meta changes — no DB schema impact). Blog tests: 41/41 PASS. Manager tests: 5/5 PASS. Tenant table conformance: 183/183 PASS (2 skipped — the two `PENDING_REMEDIATION` parametrized tests `test_pending_remediation_has_equality_footprint` and `test_pending_remediation_parent_fk_matches_seam` are skipped by pytest because there are zero `PENDING_REMEDIATION` entries in the registry; all have been promoted to ENROLLED or EXCLUDED_REVIEWED).
 
 - [ ] **SA1.3 — Generic, base-class-driven conformance check shipped as a management command.** `Tier 2 · Track 1 · deps: none`
   Add `manage.py check_tenant_isolation` (and a Django system check) that discovers tenant models by *marker* (default manager is a `TenantManager` **or** model is a `TenantModel` subclass) across **all** app labels — not the `quickscale_modules_*` prefix — and asserts each has `organization_id` + a live FORCE-RLS policy in `pg_policies`.
@@ -119,10 +120,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Acceptance:* runserver/gunicorn boot under a BYPASSRLS role raises `ImproperlyConfigured` in solo mode and with `DEBUG=True`, unless the escape hatch is set; `migrate` stays exempt.
   **Closes SA2.1 (2026-06-30, wt-track2).**
 
-- [ ] **SA2.2 — Invert the runtime DB-role default to fail-closed.** `Tier 2 · Track 1 · deps: none`
-  Restructure generated settings so the privileged superuser connection is the *named exception* (migrations only) and runtime serving requires the restricted `RUNTIME_DATABASE_URL` — raise instead of silently falling back to the BYPASSRLS `DATABASE_URL` when serving in `saas`.
-  *Files:* `generator/templates/project_name/settings/production.py.j2`, `base.py.j2`, `start.sh.j2`.
-  *Acceptance:* a generated `saas` app with `RUNTIME_DATABASE_URL` unset fails to serve (clear error) rather than connecting under BYPASSRLS; `migrate` path unchanged.
+- [x] **SA2.2 — Invert the runtime DB-role default to fail-closed.** `Tier 2 · Track 1 · deps: none`
+  Restructured generated settings so the privileged superuser connection is the *named exception* (migrations only) and runtime serving requires the restricted `RUNTIME_DATABASE_URL` — raises instead of silently falling back to the BYPASSRLS `DATABASE_URL` when serving.
+  *Files:* `generator/templates/project_name/settings/production.py.j2`, `base.py.j2`.
+  *Acceptance:* a generated app with `RUNTIME_DATABASE_URL` unset fails to serve (clear error) rather than connecting under BYPASSRLS; `migrate` path unchanged.
+  *Findings:* No blockers or unexpected findings during implementation. Template inversion clean — three-way branching in production.py.j2 (runtime serving → RUNTIME_DATABASE_URL required; migrate → DATABASE_URL superuser; collectstatic/compilemessages → dummy URL). All existing tests pass with no regressions. The `start.sh.j2` migration exception (`RUNTIME_DATABASE_URL="" python manage.py migrate --noinput`) is preserved and continues to work because the migrate branch checks `sys.argv` directly.
 
 #### Finding 3 — Single source of truth for the contract (`why →` [Finding 3](../../findings.md#finding-3--the-isolation-contract-has-no-single-source-of-truth-the-two-authoritative-docs-already-describe-a-weaker-different-posture-than-the-shipped-code))
 
