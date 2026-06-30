@@ -1332,6 +1332,9 @@ def test_org_switcher_updates_session_org(client, settings) -> None:
         "/orgs/acme/members/invitations/00000000-0000-0000-0000-000000000000/revoke/",
         "/orgs/acme/settings/",
         "/orgs/invitations/00000000-0000-0000-0000-000000000000/accept/",
+        # VIEW-AS debug paths — must bypass org resolution
+        "/orgs/acme/debug/view-as/",
+        "/orgs/acme/debug/exit/",
         # API orgs module routes
         "/api/orgs/",
         "/api/orgs/acme/",
