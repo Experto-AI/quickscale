@@ -10,8 +10,9 @@ This module provides 7 core models for CRM functionality:
 - ContactNote: Notes on contacts (parent-derived, no dual manager)
 - DealNote: Notes on deals (parent-derived, no dual manager)
 
-T1.5: Owned models (Tag, Company, Contact, Stage, Deal) use the shared
-``TenantManager`` from ``quickscale_modules_orgs``:
+SA1.1: All 7 models now inherit ``TenantModel`` from
+``quickscale_modules_orgs``, which provides:
+- ``organization`` FK (``tenant_org_fk``, PROTECT-guarded)
 - ``objects`` (TenantManager): contextvar-auto-scoped queryset
 - ``all_objects`` (TenantManager(super_scope=True)): operator escape hatch
 """
@@ -23,27 +24,17 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from quickscale_modules_orgs.managers import TenantManager
+from quickscale_modules_orgs.models import TenantModel
 
 
-class Tag(models.Model):
+class Tag(TenantModel):
     """Generic tags for organizing contacts and deals"""
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.PROTECT,
-        related_name="crm_tags",
-    )
     name = models.CharField(max_length=50)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # T1.5: shared TenantManager contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_modules_crm"
-        base_manager_name = "all_objects"
         ordering = ["name"]
         constraints = [
             # Block duplicate names within the NULL-owned bucket.
@@ -64,27 +55,17 @@ class Tag(models.Model):
         return self.name
 
 
-class Company(models.Model):
+class Company(TenantModel):
     """Company/Organization entity"""
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.PROTECT,
-        related_name="crm_companies",
-    )
     name = models.CharField(max_length=200)
     industry = models.CharField(max_length=100, blank=True)
     website = models.URLField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # T1.5: shared TenantManager contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_modules_crm"
-        base_manager_name = "all_objects"
         ordering = ["name"]
         verbose_name_plural = "Companies"
 
@@ -92,7 +73,7 @@ class Company(models.Model):
         return self.name
 
 
-class Contact(models.Model):
+class Contact(TenantModel):
     """Contact person (lead, prospect, customer)"""
 
     STATUS_CHOICES = [
@@ -103,11 +84,6 @@ class Contact(models.Model):
         ("inactive", "Inactive"),
     ]
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.PROTECT,
-        related_name="crm_contacts",
-    )
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     email = models.EmailField()
@@ -132,13 +108,8 @@ class Contact(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # T1.5: shared TenantManager contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_modules_crm"
-        base_manager_name = "all_objects"
         ordering = ["last_name", "first_name"]
         constraints = [
             models.UniqueConstraint(
@@ -156,7 +127,7 @@ class Contact(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 
-class Stage(models.Model):
+class Stage(TenantModel):
     """Pipeline stage for deal tracking"""
 
     TERMINAL_SEMANTIC_WON = "won"
@@ -166,11 +137,6 @@ class Stage(models.Model):
         (TERMINAL_SEMANTIC_LOST, "Lost"),
     ]
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.PROTECT,
-        related_name="crm_stages",
-    )
     name = models.CharField(max_length=100)
     order = models.PositiveIntegerField(default=0)
     terminal_semantic = models.CharField(
@@ -181,13 +147,8 @@ class Stage(models.Model):
         editable=False,
     )
 
-    # T1.5: shared TenantManager contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_modules_crm"
-        base_manager_name = "all_objects"
         ordering = ["order", "name"]
         constraints = [
             # Block duplicate terminal semantics within the NULL-owned bucket.
@@ -208,14 +169,9 @@ class Stage(models.Model):
         return self.name
 
 
-class Deal(models.Model):
+class Deal(TenantModel):
     """Sales opportunity/deal"""
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.PROTECT,
-        related_name="crm_deals",
-    )
     title = models.CharField(max_length=200)
     contact = models.ForeignKey(
         Contact,
@@ -250,13 +206,8 @@ class Deal(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # T1.5: shared TenantManager contract.
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_modules_crm"
-        base_manager_name = "all_objects"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -274,14 +225,9 @@ class Deal(models.Model):
         return self.contact.company
 
 
-class ContactNote(models.Model):
+class ContactNote(TenantModel):
     """Notes/interactions with a contact"""
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.PROTECT,
-        related_name="crm_contact_notes",
-    )
     contact = models.ForeignKey(
         Contact,
         on_delete=models.CASCADE,
@@ -294,12 +240,8 @@ class ContactNote(models.Model):
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_modules_crm"
-        base_manager_name = "all_objects"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -324,14 +266,9 @@ class ContactNote(models.Model):
         Contact.all_objects.filter(pk=contact_pk).update(last_contacted_at=timestamp)
 
 
-class DealNote(models.Model):
+class DealNote(TenantModel):
     """Notes/interactions with a deal"""
 
-    organization = models.ForeignKey(
-        "quickscale_modules_orgs.Organization",
-        on_delete=models.PROTECT,
-        related_name="crm_deal_notes",
-    )
     deal = models.ForeignKey(
         Deal,
         on_delete=models.CASCADE,
@@ -344,12 +281,8 @@ class DealNote(models.Model):
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
-    objects = TenantManager()
-    all_objects = TenantManager(super_scope=True)
-
-    class Meta:
+    class Meta(TenantModel.Meta):
         app_label = "quickscale_modules_crm"
-        base_manager_name = "all_objects"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
