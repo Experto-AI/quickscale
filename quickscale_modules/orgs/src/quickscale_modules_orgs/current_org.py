@@ -453,6 +453,11 @@ def _make_priming_execute_wrapper() -> Any:
             return execute(sql, params, many, context)
 
         conn = context["connection"]
+
+        # ---- Non-PostgreSQL backend — pass through without priming -------
+        if conn.vendor != "postgresql":
+            return execute(sql, params, many, context)
+
         org_id = get_current_org_id()
 
         # ---- No org context — pass through without priming ---------------
@@ -487,11 +492,15 @@ def install_priming_wrapper(connection: Any) -> bool:
     ``connection.execute_wrappers`` (Django 6.x's ``execute_wrapper()``
     is a context manager, not a permanent install API).
 
+    Priming is only active for PostgreSQL.  The wrapper checks
+    ``connection.vendor`` on each invocation and passes through without
+    priming on non-PostgreSQL backends (e.g. SQLite).
+
     Args:
         connection: A Django ``DatabaseWrapper`` instance (any database
             backend).  Priming is only active for PostgreSQL; the wrapper
-            itself emits ``SET LOCAL`` which PostgreSQL ignores on other
-            vendors.
+            detects the vendor at runtime and passes through on non-PostgreSQL
+            connections.
 
     Returns:
         ``True`` if the wrapper was newly installed, ``False`` if already

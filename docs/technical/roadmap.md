@@ -87,7 +87,7 @@ A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The dec
 
 ## Open work — v87 structural findings
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF10 (Phase A, Track 3), AF11 (Phase A, Track 2), AF12 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). The remaining finding (AF9) requires continued work before the isolation guarantee is correct and CI-verified. AF12 composite-FK schema, proof tests, change-review pass 2, and gate closeout are complete (see AF12 STATUS below).
+Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF9 (Phase A, Track 1), AF10 (Phase A, Track 3), AF11 (Phase A, Track 2), AF12 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). AF12 composite-FK schema, proof tests, change-review pass 2, and gate closeout are complete (see AF12 STATUS below).
 
 ### Track assignment & parallelization
 
@@ -95,7 +95,7 @@ Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF
 
 | Track | Tasks | Notes |
 |---|---|---|---|
-| `wt-track1` | **AF9** | GUC/ContextVar desync — connection-layer fix; highest urgency (app-wide data outage in secure posture) — **BLOCKED at plan-review cap; 2 open proof-harness decisions (PR-AF9-003, PR-AF9-005)** |
+| `wt-track1` | **AF9** ✅ | GUC/ContextVar desync — connection-layer fix; highest urgency (app-wide data outage in secure posture) — **COMPLETE** ✅ |
 | `wt-track2` | **AF11** ✅ → **AF12** ✅ | Policy SQL safety first, then composite FK; AF11 complete; AF12 composite-FK schema, proof tests, VALIDATE CONSTRAINT, and executable parent-org mutation rejection proofs — **COMPLETE** ✅ |
 | `wt-track3` | **AF13** ✅ → **AF10** ✅ | Test infra: Postgres unconditional settings first, then CI isolation job — **COMPLETE** ✅ |
 
@@ -119,7 +119,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 | **AF3** ✅ | 1 | AST-level positive-proof guard: management-command import+invocation of `operator_access(...)`; zero-direct-`.all_objects.` management-command guard; deferred `.all_objects.` manifest set-equality | complete |
 | **AF10** ✅ | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A (complete) |
 | **AF11** ✅ | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A (complete) |
-| **AF9** | 1 | Execute wrapper install + phase-1 lifecycle tests; autocommit request-path proof; CRM + listings restricted-role cursor proofs; **blocked — missing PostgreSQL vendor guard (CR-AF9-003)** | Phase A (implemented; blocked at review cap) |
+| **AF9** ✅ | 1 | Execute wrapper install + phase-1 lifecycle tests; autocommit request-path proof; CRM + listings restricted-role cursor proofs; vendor guard + no-op regression test added (CR-AF9-003 resolved) | Phase A (complete) |
 
 ---
 
@@ -165,30 +165,27 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 
 ---
 
-#### - [ ] AF9 — Wire GUC from ContextVar at connection layer (implemented; blocked at change-review cap)
+#### - [x] AF9 — Wire GUC from ContextVar at connection layer ✅
 
 `**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: high | EXECUTION PATH: full-path**`
 
-- **TRACK:** `wt-track1` — implementation landed 2026-06-29; **BLOCKED at change-review cap**.
+- **TRACK:** `wt-track1` — implementation landed 2026-06-29; **completed 2026-06-30**.
 - **WHY → Finding AF9.** AF4 removed the request-long `transaction.atomic()` from the middleware and pushed GUC-setting onto individual callers. But the normal authenticated path (every CRM/listings/blog view) is not one of those callers. Under the NOBYPASSRLS runtime role, every such query runs with the GUC = NULL and returns **zero rows** (or raises a `WITH CHECK` error on insert). The two isolation layers contradict each other on the hottest path in the app. Reproduced empirically.
 - **OBJECTIVE:** Install a Django execute_wrapper (via `connection_created` signal or a thin custom DB backend) that, at the start of every transaction touching a tenant table, issues `SET LOCAL app.current_org_id = <value>` from `get_current_org_id()`. The ContextVar remains the single source of truth; the GUC is derived from it at the connection layer; per-caller discipline is no longer required; AF4's connection-hold fix is preserved (the SET LOCAL is per-transaction, not per-request).
 - **SCOPE:** `orgs/current_org.py` and `orgs/apps.py` — execute_wrapper install on every DatabaseWrapper via `connection.execute_wrappers.append()`; signal handler for `connection_created`; recursion guard (ContextVar flag); idempotent install (marker attribute).
-- **WHAT WAS IMPLEMENTED (Phase 1 + Phase 3):**
+- **WHAT WAS IMPLEMENTED (Phase 1 + Phase 3 + CR-AF9-003 fix):**
   - **Runtime seam.** Added `install_priming_wrapper()`, `_make_priming_execute_wrapper()`, and `_issue_set_local()` to `current_org.py`. The wrapper intercepts `cursor.execute()` on every DatabaseWrapper: for explicit transactions it issues `SET LOCAL app.current_org_id` from the ContextVar before each statement; for autocommit it wraps each statement in a short `transaction.atomic()` with `SET LOCAL` inside (AF4 guard — no request-long transaction). Installed via `apps.py ready()` on existing connections and the `connection_created` signal for future connections. Idempotent install marker and ContextVar-based recursion guard prevent double-install and infinite recursion.
   - **Phase-1 lifecycle tests (14 tests).** Covers install idempotence, recursion guard, explicit-transaction priming, autocommit priming, no-org pass-through, transaction scoping, and connection hygiene.
   - **Autocommit request-path proof (PR-AF9-001).** Test-only probe view + URL exercises the GUC through `TenantMiddleware` + `cursor.execute()`; asserts the GUC matches the org UUID inside the view's DB statement and resets to session default after request completion.
   - **CRM restricted-role cursor proof (PR-AF9-003).** Added to `crm/tests/test_rls_boundary.py` — calls `set_current_org_id(org.pk)` on the ContextVar, enters `SET ROLE`, runs SELECT; the AF9 wrapper primes the GUC from the ContextVar; asserts the expected row is returned without manual `SET app.current_org_id`.
   - **Listings restricted-role cursor proof (PR-AF9-005).** Added to `orgs/tests/test_tenant_table_conformance.py` using the plan-approved AF11-style `SET ROLE` + direct SELECT pattern against `quickscale_modules_listings_listing`. Relocated from the listings module's broken conftest to the orgs conformance surface where the test environment is green.
-- **VALIDATION:** `make MODULE=orgs lint` — clean; `make MODULE=orgs typecheck` — clean; `make MODULE=orgs test` — 570 passed, 5 skipped, 0 failed. Targeted CRM validation passed (AF9 proof + AF10 red-green verifier). Targeted listings proof passes from orgs conformance surface.
+  - **CR-AF9-003 fix (2026-06-30):** Added `connection.vendor != "postgresql"` guard at the top of the execute wrapper function, matching the existing pattern in `set_db_current_org_id` and `reset_db_current_org_id`. On non-PostgreSQL backends the wrapper passes through without priming. Added regression test `test_priming_wrapper_noop_on_non_postgresql` mocking `connection.vendor` to `"sqlite"` and verifying both normal query completion and unprimed GUC. Docstring updated.
+- **VALIDATION:** `make MODULE=orgs lint` — clean; `make MODULE=orgs typecheck` — clean; `make MODULE=orgs test` — 571 passed, 5 skipped, 0 failed (1 new test). Targeted CRM validation passed (AF9 proof + AF10 red-green verifier). Targeted listings proof passes from orgs conformance surface.
 - **DISCOVERED NON-AF9 FINDINGS:**
   - Pre-existing CRM `mypy` import-not-found error in `adapter.py` (outside AF9 scope).
   - Pre-existing unrelated CRM T1.11 full-suite baseline-red tests (unrelated to AF9 — closeout used targeted CRM AF9 validation instead of full CRM module suite).
   - Pre-existing listings conftest DB-setup issue (`migrate --run-syncdb` skips migrated apps, leaving orgs tables uncreated) — affects all listings RLS boundary tests, not specific to AF9.
-- **STATUS (stop-at-cap, 2026-06-29):** Implementation, phase-1 cycle tests, and phase-3 proof tests are implemented and lint-clean. Change-review reached `review_cycles=2` cap with one **blocking** finding unresolved.
-  - **CR-AF9-003 (high, blocking, breaking-change):** `install_priming_wrapper()` and the execute wrapper install on every `DatabaseWrapper` without a `connection.vendor == 'postgresql'` guard. The wrapper issues `SET LOCAL app.current_org_id` which is a PostgreSQL-specific SQL statement. On non-PostgreSQL connections (SQLite, etc.) this will fail with a SQL syntax error or be silently ignored depending on the backend. The code needs a vendor guard (like the existing pattern in `set_db_current_org_id` and `reset_db_current_org_id`) plus a regression test proving the wrapper is a no-op on non-PostgreSQL backends. The scope decision from plan-review (AF9 stays execute_wrapper-only) remains in force.
-  - **Resolved findings from change-review:**
-    - **CR-AF9-001 (resolved):** Listings proof now uses `@pytest.mark.django_db(transaction=True)` so each `cursor.execute()` is its own transaction; no control statement can consume the GUC proof window before the tenant-table SELECT.
-    - **CR-AF9-002 (resolved):** Signal handler test now creates a true fresh `DatabaseWrapper` via `connections.create_connection()` instead of manipulating the shared default connection.
+- **STATUS (completed 2026-06-30):** All change-review findings resolved. CR-AF9-003 (blocking) fixed with vendor guard + regression test. CR-AF9-001 and CR-AF9-002 resolved in prior pass. All 15 phase-1 lifecycle + regression tests pass. Implementation is complete — passes lint, typecheck, and test gates. See CHANGELOG.md for full resolution details.
 - **NOTE:** The `/admin/` path is an `EXEMPT_PATH_PREFIX` so the middleware sets neither ContextVar nor GUC there; the execute_wrapper handles admin reads from the ContextVar (which the admin itself must set).
 - **DEPENDS:** AF9 is independent of AF10/AF13 (validation via CI job) and AF11 (policy safety is independent of GUC wiring). AF12 and VIEW-AS remain open downstream dependents.
 
@@ -203,6 +200,7 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 | **AF12** ✅ | `wt-track2` | 2026-06-29 | Composite FK for child-parent org equality; VALIDATE CONSTRAINT in Forms 0007; parent-org mutation rejection proofs enabled; all blocking findings resolved — see CHANGELOG |
 | **AF13** ✅ | `wt-track3` | 2026-06-29 | Postgres-only test settings in all 11 modules; SQLite smoke-test helper replaced — see CHANGELOG |
 | **AF10** ✅ | `wt-track3` | 2026-06-29 | Isolation-conformance CI job (Postgres 18 + NOBYPASSRLS role); AF9 CI-green awaits AF9 merge — see CHANGELOG |
+| **AF9** ✅ | `wt-track1` | 2026-06-30 | Connection-layer GUC priming execute wrapper; PostgreSQL vendor guard + no-op regression test; all change-review findings resolved — see CHANGELOG |
 
 ---
 

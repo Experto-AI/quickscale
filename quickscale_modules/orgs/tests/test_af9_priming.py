@@ -148,6 +148,45 @@ def test_signal_handler_installs_wrapper() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Non-PostgreSQL backend — vendor guard (CR-AF9-003)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_priming_wrapper_noop_on_non_postgresql() -> None:
+    """The priming execute wrapper is a no-op on non-PostgreSQL backends.
+
+    Regression for CR-AF9-003: set the ContextVar to a non-None value and
+    mock ``connection.vendor`` to ``"sqlite"``.  A subsequent
+    ``cursor.execute()`` must complete normally without issuing
+    ``SET LOCAL`` — the GUC must remain at the session default.
+    """
+    from unittest import mock
+
+    org_id = uuid.uuid4()
+    set_current_org_id(org_id)
+    try:
+        with mock.patch.object(connection, "vendor", "sqlite"):
+            # Plain query — must complete without raising.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                (result,) = cursor.fetchone()
+            assert result == 1
+
+            # Verify the GUC was NOT primed: current_setting returns
+            # the session default ('' or None), not org_id.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                (raw,) = cursor.fetchone()
+            assert raw is None or raw == "", (
+                "On a non-PostgreSQL backend, the wrapper must not "
+                f"issue SET LOCAL. GUC should be empty, got {raw!r}"
+            )
+    finally:
+        reset_current_org_id()
+
+
+# ---------------------------------------------------------------------------
 # Recursion guard — implicit coverage
 # ---------------------------------------------------------------------------
 # The recursion guard is exercised indirectly by every query that goes
