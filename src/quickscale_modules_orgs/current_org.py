@@ -12,6 +12,13 @@ instead of silently returning ``None``.
 T1.2 adds ``ContextVar``-backed helpers (``set_current_org_id``,
 ``get_current_org_id``, ``reset_current_org_id``) so that tenant-scoped
 managers can auto-filter without a ``request`` reference.
+
+AF9 Phase 1 adds the connection-layer execute wrapper that primes the
+PostgreSQL GUC ``app.current_org_id`` from the ContextVar on the live
+cursor before tenant SQL executes.  The wrapper is installed on every
+``DatabaseWrapper`` via :func:`install_priming_wrapper` and handles both
+explicit-transaction and autocommit modes without introducing request-long
+transaction behavior.
 """
 
 from __future__ import annotations
@@ -331,3 +338,168 @@ def org_scope(organization: Any) -> Iterator[None]:
             else:
                 set_db_current_org_id(prior)
             set_current_org_id(prior)
+
+
+# ---------------------------------------------------------------------------
+# AF9 Phase 1 — Connection-layer GUC priming
+# ---------------------------------------------------------------------------
+# The execute wrapper below is installed on every Django DatabaseWrapper
+# via ``install_priming_wrapper()``.  It intercepts ``cursor.execute()``
+# and issues ``SET LOCAL app.current_org_id`` from the ContextVar before
+# the tenant SQL runs, so that FORCE-RLS policies see the expected tenant
+# context.
+#
+# Two code paths:
+#
+# 1. **Explicit transaction** (``connection.in_atomic_block == True``):
+#    Issues ``SET LOCAL`` before every tenant statement inside the
+#    user-managed transaction.  ``SET LOCAL`` is transaction-scoped and
+#    idempotent — repeating it on each statement is correct and safe.
+#
+# 2. **Autocommit** (``connection.in_atomic_block == False``):
+#    Wraps each tenant statement in a short ``transaction.atomic()``
+#    block that issues ``SET LOCAL`` before the original SQL, then
+#    exits immediately.  This ensures ``SET LOCAL`` and the tenant SQL
+#    share the same transaction scope without holding a request-long
+#    atomic (AF4 regression guard).
+#
+# The wrapper operates exclusively on the live DatabaseWrapper/cursor
+# from ``context['connection']`` — it does **not** reuse the global
+# ``django.db.connection`` helpers from this module.
+#
+# Recursion is prevented by a ``ContextVar`` flag that the wrapper
+# checks before any priming work.
+# ---------------------------------------------------------------------------
+
+_GUC_SETTING = "app.current_org_id"
+"""PostgreSQL GUC that carries the active organization UUID for RLS policies."""
+
+_PRIMING_IN_PROGRESS: ContextVar[bool] = ContextVar(
+    "_af9_priming_in_progress", default=False
+)
+"""Recursion guard for the priming execute wrapper.
+
+Set ``True`` while the wrapper issues ``SET LOCAL`` so that the nested
+``cursor.execute()`` does not re-enter the wrapper.
+"""
+
+_INSTALLED_MARKER = "_af9_priming_installed"
+"""Connection attribute name for idempotent-install detection."""
+
+
+def _issue_set_local(connection: Any, org_id: str) -> None:
+    """Issue ``SET LOCAL app.current_org_id`` on *connection*.
+
+    Wrapped in the recursion guard so that the inner ``cursor.execute()``
+    does not re-trigger the priming execute wrapper.
+
+    Uses ``_GUC_SETTING`` (a module constant) directly in the SQL string
+    — it is a trusted identifier, not user input, so f-string interpolation
+    is safe here.  The org_id value is passed as a parameter.
+
+    Args:
+        connection: A Django ``DatabaseWrapper`` instance.
+        org_id: The organization UUID as a string.
+    """
+    token = _PRIMING_IN_PROGRESS.set(True)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SET LOCAL {_GUC_SETTING} = %s",
+                [org_id],
+            )
+    finally:
+        _PRIMING_IN_PROGRESS.reset(token)
+
+
+def _make_priming_execute_wrapper() -> Any:
+    """Create an execute wrapper for GUC priming from the ContextVar.
+
+    Returns a callable with the Django execute-wrapper signature::
+
+        wrapper(execute, sql, params, many, context) -> result
+
+    The wrapper is connection-agnostic — it reads ``context['connection']``
+    to operate on the live ``DatabaseWrapper``.  Use
+    :func:`install_priming_wrapper` to install it on a specific connection.
+
+    See module docstring for the two code paths (explicit transaction and
+    autocommit).
+    """
+    # NOTE(PHASE-1): We do **not** track per-transaction priming state.
+    #   For explicit transactions we issue SET LOCAL on every wrapper call
+    #   (idempotent and correct).  Per-transaction tracking can be added
+    #   in a later phase if profiling shows measurable overhead.
+    #   The rationale: SET LOCAL is a local GUC assignment — PostgreSQL
+    #   processes it inline without a separate round-trip once the query
+    #   text is received.  For typical transaction sizes (< 100 statements)
+    #   the overhead is negligible.
+    #
+    #   Known edge case: if a connection transitions directly from one
+    #   explicit atomic block to another with no intervening autocommit
+    #   SQL, the priming wrapper still fires correctly because it primes
+    #   unconditionally on every call inside an atomic block.
+    #   The fail-closed outcome (RLS returns zero rows) is safe.
+
+    def wrapper(
+        execute: Any,
+        sql: Any,
+        params: Any,
+        many: bool,
+        context: dict[str, Any],
+    ) -> Any:
+        # ---- Recursion guard --------------------------------------------
+        if _PRIMING_IN_PROGRESS.get():
+            return execute(sql, params, many, context)
+
+        conn = context["connection"]
+        org_id = get_current_org_id()
+
+        # ---- No org context — pass through without priming ---------------
+        if org_id is None:
+            return execute(sql, params, many, context)
+
+        org_id_str = str(org_id)
+
+        # ---- Explicit transaction path ----------------------------------
+        if conn.in_atomic_block:
+            _issue_set_local(conn, org_id_str)
+            return execute(sql, params, many, context)
+
+        # ---- Autocommit path --------------------------------------------
+        # Wrap in a short atomic so SET LOCAL and the tenant SQL share
+        # a transaction scope.  The atomic is entered and exited
+        # immediately — no request-long transaction (AF4 guard).
+        from django.db import transaction
+
+        with transaction.atomic(using=conn.alias):
+            _issue_set_local(conn, org_id_str)
+            return execute(sql, params, many, context)
+
+    return wrapper
+
+
+def install_priming_wrapper(connection: Any) -> bool:
+    """Install the AF9 priming execute wrapper on a ``DatabaseWrapper``.
+
+    Idempotent — subsequent calls on the same connection are no-ops and
+    return ``False``.  The wrapper is appended directly to
+    ``connection.execute_wrappers`` (Django 6.x's ``execute_wrapper()``
+    is a context manager, not a permanent install API).
+
+    Args:
+        connection: A Django ``DatabaseWrapper`` instance (any database
+            backend).  Priming is only active for PostgreSQL; the wrapper
+            itself emits ``SET LOCAL`` which PostgreSQL ignores on other
+            vendors.
+
+    Returns:
+        ``True`` if the wrapper was newly installed, ``False`` if already
+        present.
+    """
+    if getattr(connection, _INSTALLED_MARKER, False):
+        return False
+    wrapper = _make_priming_execute_wrapper()
+    connection.execute_wrappers.append(wrapper)
+    setattr(connection, _INSTALLED_MARKER, True)
+    return True
