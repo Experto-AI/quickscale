@@ -41,6 +41,8 @@ cd /home/victor/code/quickscale
 git merge --no-ff wt-track{N}
 ```
 
+> **Shared closeout files (`CHANGELOG.md` and `docs/technical/roadmap.md`):** Because every track touches these files, they are the most likely source of merge conflicts. The procedure above already handles this — the `git merge v87` before merge-back ensures you resolve any conflicting entries on your track branch rather than on `v87`. Do not skip or reorder that step. When resolving, keep both tracks' entries (don't overwrite another track's completed work).
+
 ---
 
 ## Open work
@@ -66,7 +68,9 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
 **Can start immediately (no deps, fully parallel):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1, SA5.1, SA5.2.
 **Blocked:** SA1.4 (←SA1.3), SA1.5 (←SA1.3), SA4.2 (←SA4.1), SA3.2 (←SA3.1 **and** the cross-track merge of SA1.3).
 
-**Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, the docs, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge is **SA3.2**, which consumes the contract SSOT that **SA1.3** establishes — sequence SA3.2 after SA1.3 has merged to `v87`.
+**Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge is **SA3.2**, which consumes the contract SSOT that **SA1.3** establishes — sequence SA3.2 after SA1.3 has merged to `v87`.
+
+> **Shared closeout files:** `CHANGELOG.md` and this file (`docs/technical/roadmap.md`) are **not** owned by any single track. Every track updates them when closing out a completed task — they are the only files where concurrent edits are expected. To avoid merge conflicts, follow the shared-file merge procedure in the next section: always merge `v87` into your track branch first, resolve conflicts in these two files on the track branch, then merge back.
 
 #### Track summary
 
@@ -80,7 +84,7 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
 
 #### Finding 1 — Single enforced tenant-model contract (`why →` [Finding 1](../../findings.md#finding-1--tenant-isolation-is-a-hand-assembled-per-model-ritual-and-its-enforcement-gate-cannot-see-the-user-code-that-generated-projects-exist-to-host))
 
-- [ ] **SA1.1 — Migrate CRM models to inherit `TenantModel`.** `Tier 2 · Track 2 · deps: none`
+- [x] **SA1.1 — Migrate CRM models to inherit `TenantModel`.** `Tier 2 · Track 2 · deps: none`
   Replace the hand-copied `organization` FK + `objects`/`all_objects`/`base_manager_name` declarations on every `quickscale_modules_crm` model with `class X(TenantModel)`.
   *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/models.py` (+ in-module reverse-accessor callers).
   *Scope note:* `related_name` shifts to TenantModel's `%(app_label)s_%(class)s_set` pattern — update any in-module `organization.<reverse>_set` usages; no DB migration results from a `related_name`-only change. Keep child→parent and `created_by` FKs as-is.
