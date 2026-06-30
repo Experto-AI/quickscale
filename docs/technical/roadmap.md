@@ -113,10 +113,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
 
 #### Finding 2 — Fail-closed master isolation switch (`why →` [Finding 2](../../findings.md#finding-2--the-master-isolation-switch-fails-open-unset-runtime_database_url-silently-runs-under-a-bypassrls-superuser-and-the-boot-guard-is-gated-to-saas--debugfalse))
 
-- [ ] **SA2.1 — Always-on BYPASSRLS boot guard.** `Tier 2 · Track 2 · deps: none`
-  Drop the `QUICKSCALE_MODE == "saas"` and `not DEBUG` gates in `apps.py:_check_rls_role` so the guard refuses every non-`migrate` boot under a BYPASSRLS role, with an explicit `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch for intentional single-tenant ops.
+- [x] **SA2.1 — Always-on BYPASSRLS boot guard.** `Tier 2 · Track 2 · deps: none`
+  Dropped the `QUICKSCALE_MODE == "saas"` and `not DEBUG` gates in `apps.py:_check_rls_role` so the guard refuses every non-`migrate` boot under a BYPASSRLS role, with an explicit `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch for intentional single-tenant ops.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` (+ tests).
   *Acceptance:* runserver/gunicorn boot under a BYPASSRLS role raises `ImproperlyConfigured` in solo mode and with `DEBUG=True`, unless the escape hatch is set; `migrate` stays exempt.
+  **Closes SA2.1 (2026-06-30, wt-track2).**
 
 - [ ] **SA2.2 — Invert the runtime DB-role default to fail-closed.** `Tier 2 · Track 1 · deps: none`
   Restructure generated settings so the privileged superuser connection is the *named exception* (migrations only) and runtime serving requires the restricted `RUNTIME_DATABASE_URL` — raise instead of silently falling back to the BYPASSRLS `DATABASE_URL` when serving in `saas`.
