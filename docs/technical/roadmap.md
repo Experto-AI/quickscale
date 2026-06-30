@@ -86,10 +86,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Scope note:* `related_name` shifts to TenantModel's `%(app_label)s_%(class)s_set` pattern — update any in-module `organization.<reverse>_set` usages; no DB migration results from a `related_name`-only change. Keep child→parent and `created_by` FKs as-is.
   *Acceptance:* CRM models are `TenantModel` subclasses; `test_tenant_table_conformance.py` (org_id + scoped manager + `base_manager_name`) and CRM isolation tests stay green on PostgreSQL.
 
-- [ ] **SA1.2 — Migrate blog models to inherit `TenantModel`.** `Tier 2 · Track 3 · deps: none`
+- [x] **SA1.2 — Migrate blog models to inherit `TenantModel`.** `Tier 2 · Track 3 · deps: none`
   Same conversion for `quickscale_modules_blog` tenant models (`Category`, `Tag`, `BlogMediaAsset`, `Post`); leave `AuthorProfile` (reviewed-excluded) alone.
   *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/models.py`.
   *Acceptance:* blog tenant models are `TenantModel` subclasses; conformance + blog tests green.
+  **Completed 2026-06-30, compatibility fix 2026-07-01:** Category, Tag, BlogMediaAsset, Post now inherit `TenantModel`. Each model declares an explicit `organization` FK overriding the abstract `TenantModel` field to preserve the legacy related_name contract (`blog_categories`, `blog_tags`, `blog_media_assets`, `blog_posts`) — no downstream reverse-accessor break. Migration 0004 (state-only: manager and Meta changes — no DB schema impact). Blog tests: 41/41 PASS. Manager tests: 5/5 PASS. Tenant table conformance: 183/183 PASS (2 skipped — the two `PENDING_REMEDIATION` parametrized tests `test_pending_remediation_has_equality_footprint` and `test_pending_remediation_parent_fk_matches_seam` are skipped by pytest because there are zero `PENDING_REMEDIATION` entries in the registry; all have been promoted to ENROLLED or EXCLUDED_REVIEWED).
 
 - [ ] **SA1.3 — Generic, base-class-driven conformance check shipped as a management command.** `Tier 2 · Track 1 · deps: none`
   Add `manage.py check_tenant_isolation` (and a Django system check) that discovers tenant models by *marker* (default manager is a `TenantManager` **or** model is a `TenantModel` subclass) across **all** app labels — not the `quickscale_modules_*` prefix — and asserts each has `organization_id` + a live FORCE-RLS policy in `pg_policies`.
