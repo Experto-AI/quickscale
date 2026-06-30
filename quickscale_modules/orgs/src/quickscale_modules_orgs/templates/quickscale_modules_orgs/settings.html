@@ -5,6 +5,7 @@
     <title>{{ organization.name }} settings</title>
 </head>
 <body>
+    {% include "quickscale_modules_orgs/_debug_banner.html" %}
     <h1>{{ organization.name }} settings</h1>
     <p>Changing the slug will break existing bookmarks that point at this organization.</p>
     <form method="post">

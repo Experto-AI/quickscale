@@ -44,6 +44,7 @@ def test_admin_columns_and_filters_match_phase_one_contract() -> None:
         "slug",
         "is_personal",
         "created_at",
+        "view_as_button",
     ]
     assert organization_admin.list_filter == ["is_personal"]
 

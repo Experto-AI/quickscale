@@ -62,7 +62,7 @@ git merge --no-ff wt-track{N}
 | **AF13 — SQLite fallback in test settings** | Delete the `QUICKSCALE_TEST_DB` branch and SQLite `:memory:` default from all 11 `tests/settings.py` files; replace with an unconditional `django.db.backends.postgresql` block reading env vars with sensible defaults; update the Module Implementation Checklist template so new modules start Postgres-only. |
 | **AF10 — isolation tests skipped in CI** | **B** — dedicated `isolation-conformance` CI job: Postgres 18 service, NOBYPASSRLS runtime role, `migrate` applied, runs the conformance gate + all `test_rls_boundary.py` + one authenticated-request integration test under the restricted role; fail if any isolation test is skipped. |
 | **AF3 — operator escape hatch unaudited** | **A** — single `operator_access(reason=...)` context manager in `orgs/`; the only path to the unfiltered queryset and the privileged role; emits structured audit records; management commands (`purge_organization`, `migrate_billing_to_orgs`, `forms_anonymize_submissions`) routed through it; `all_objects` removed from model declarations — **implemented wt-track1** |
-| **VIEW-AS — operator debug mode** | **A** — session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` hook overrides normal Solo/SaaS resolution when set; `OrganizationAdmin` action activates it; base-template debug banner shows while active; every activation audit-logged (who, which org, timestamp). No BYPASSRLS — same restricted runtime role as normal tenant path. Depends on AF9. |
+| **VIEW-AS — operator debug mode** | **A** — session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` hook overrides normal Solo/SaaS resolution when set; `OrganizationAdmin` entry/exit views with per-row VIEW-AS button and exit form activate/deactivate it; base-template debug banner shows while active; every activation audit-logged (who, which org, timestamp). No BYPASSRLS — same restricted runtime role as normal tenant path. Depends on AF9. |
 
 **Global constraints:** no backward compatibility, no migration path, no existing users — every change is a clean break. Drop dead paths outright; squash/rewrite migrations rather than layering compat shims.
 
@@ -201,12 +201,13 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 | **AF13** ✅ | `wt-track3` | 2026-06-29 | Postgres-only test settings in all 11 modules; SQLite smoke-test helper replaced — see CHANGELOG |
 | **AF10** ✅ | `wt-track3` | 2026-06-29 | Isolation-conformance CI job (Postgres 18 + NOBYPASSRLS role); AF9 CI-green awaits AF9 merge — see CHANGELOG |
 | **AF9** ✅ | `wt-track1` | 2026-06-30 | Connection-layer GUC priming execute wrapper; PostgreSQL vendor guard + no-op regression test; all change-review findings resolved — see CHANGELOG |
+| **VIEW-AS** ✅ | `wt-track1` | 2026-06-30 | Operator org-impersonation debug mode: session key, middleware override, admin entry/exit views with per-row button and exit form, debug banner partial in orgs/CRM/blog/listings, end-to-end admin flow, 34+ tests — see CHANGELOG |
 
 ---
 
 ### Phase C — Operator & Debug Tools
 
-#### - [ ] VIEW-AS — Operator org-impersonation debug mode
+#### - [x] VIEW-AS — Operator org-impersonation debug mode ✅
 
 `**Tier 1 — Low | PLANNING TIER: low (no plan-review) | RISK LEVEL: low | EXECUTION PATH: direct**`
 
@@ -216,13 +217,14 @@ Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See
 - **DESIGN:**
   - **Session key**: `quickscale_modules_orgs.debug_as_org_id` (UUID string, set only by `is_superuser`)
   - **Middleware hook**: `TenantMiddleware._resolve_debug_org()` — if `request.user.is_superuser` and session key present, use that org instead of normal Solo/SaaS resolution. Logs every resolved use (who, which org, timestamp, path) to Python audit logger.
-  - **Admin action**: `OrganizationAdmin` action `"View app as this org"` → sets session key → redirect to `/`; second action `"Exit debug mode"` clears it. Both actions gate on `is_superuser`.
+  - **Admin affordance**: `OrganizationAdmin` per-row "VIEW-AS" button (GET link to admin entry view) that sets the debug session directly and redirects to the org dashboard; admin change-list "Exit VIEW-AS" button (POST form) when a debug session is active. Both gate on `is_superuser`.
   - **Debug banner**: base template renders a top-bar strip `"DEBUG MODE — viewing as org '{name}' [Exit]"` when session key is present and user is superuser.
-  - **Security**: non-superusers cannot set the session key; admin actions blocked for non-superusers; no BYPASSRLS — debug session uses the same restricted runtime role as all other tenant paths (so RLS is still active and the operator sees exactly what the org members see).
-- **SCOPE:** `orgs/middleware.py` (`_resolve_debug_org`); `orgs/admin.py` (two actions on `OrganizationAdmin`); `orgs/views.py` (`DebugAsOrgView`, `ExitDebugModeView`); `orgs/urls.py` (two new endpoints); base/layout template (debug banner).
-- **ACCEPTANCE CRITERIA:** superuser selects org in admin → redirected to `/` with debug banner showing org name → CRM/blog/listings data shows only that org's rows → Exit clears banner and restores normal resolution; non-superuser cannot set or read `debug_as_org_id` in session; each activation appears in audit log.
-- **VALIDATION PATH:** manual smoke test — log in as superuser, use admin action, verify banner + data scoping + Exit; write a test asserting non-superuser request cannot set the session key.
+  - **Security**: non-superusers cannot set the session key; admin views blocked for non-superusers; no BYPASSRLS — debug session uses the same restricted runtime role as all other tenant paths (so RLS is still active and the operator sees exactly what the org members see).
+- **SCOPE:** `orgs/middleware.py` (`_resolve_debug_org`); `orgs/admin.py` (entry/exit views with per-row VIEW-AS button and change-list exit form); `orgs/views.py` (`DebugAsOrgView`, `ExitDebugModeView`); `orgs/urls.py` (two endpoints); base/layout template (debug banner).
+- **ACCEPTANCE CRITERIA:** superuser clicks VIEW-AS button in admin change list → redirected to org dashboard with debug session active → banner shows org name → Exit button clears banner and restores normal resolution; non-superuser cannot set or read `debug_as_org_id` in session; each activation appears in audit log.
+- **VALIDATION PATH:** admin VIEW-AS button redirects to org dashboard with session key set; admin exit clears session; end-to-end test proves set → banner → clear cycle.
 - **DEPENDS:** AF9 merged (GUC/ContextVar wiring must be live; otherwise debug session shows 0 rows under the restricted runtime role).
+- **STATUS (completed 2026-06-30):** VIEW-AS Option A completed on wt-track1 — debug session key, middleware `_resolve_debug_org()` override, admin entry/exit views with per-row VIEW-AS button and change-list exit form, reusable `_debug_banner.html` partial included in orgs plus CRM/blog/listings base templates, root debug exit route, 34 focused tests including end-to-end admin set → banner → clear proof. Lint, typecheck, and test-unit gates all green. **Notable implementation finding:** roadmap assumed an orgs base template, but the module actually used standalone templates, so a shared partial/include strategy was used instead; no blocking issues remain. See CHANGELOG for full details.
 
 ---
 
