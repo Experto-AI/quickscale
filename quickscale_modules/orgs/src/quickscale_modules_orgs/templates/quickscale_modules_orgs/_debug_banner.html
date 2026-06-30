@@ -1,0 +1,19 @@
+{% load quickscale_orgs_debug %}
+{% debug_as_active as is_debug_active %}
+{% if is_debug_active %}
+{% with debug_org_id=request.session.quickscale_modules_orgs.debug_as_org_id %}
+<div style="background: #dc2626; color: #fff; padding: 0.75rem 1rem; text-align: center; font-size: 0.875rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <strong>VIEW-AS DEBUG MODE</strong>
+    &mdash; You are browsing as <strong>{{ request.org.name|default:"an organization" }}</strong>.
+    Your actions are visible to members of this organization.
+    {% if request.org %}
+    <form method="post" action="{% url 'org-debug-exit' org_slug=request.org.slug %}" style="display: inline; margin-left: 1rem;">
+        {% csrf_token %}
+        <button type="submit" style="background: #fff; color: #dc2626; border: none; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; font-weight: 600;">
+            Exit debug mode
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endwith %}
+{% endif %}

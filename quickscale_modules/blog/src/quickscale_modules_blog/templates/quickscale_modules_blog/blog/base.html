@@ -9,6 +9,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    {% include "quickscale_modules_orgs/_debug_banner.html" %}
     <header>
         <nav>
             <a href="{% url 'quickscale_blog:post_list' %}">Blog Home</a>

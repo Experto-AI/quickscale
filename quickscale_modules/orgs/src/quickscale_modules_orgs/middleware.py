@@ -95,6 +95,14 @@ class TenantMiddleware:
         if not self._is_authenticated_user(org_request):
             return self.get_response(org_request)
 
+        # VIEW-AS debug override: superuser-initiated debug session
+        # takes priority over normal solo/saas resolution.  This runs
+        # after the exempt-path and auth checks but before solo/saas
+        # branching so that debug sessions work in both modes.
+        debug_org = self._resolve_debug_org(org_request)
+        if debug_org is not None:
+            return self._call_with_org(org_request, debug_org)
+
         if self._is_saas_mode():
             return self._handle_saas_request(org_request)
         return self._handle_solo_request(org_request)
@@ -191,6 +199,25 @@ class TenantMiddleware:
         return bool(getattr(user, "is_superuser", False))
 
     @staticmethod
+    def _resolve_debug_org(request: OrganizationRequest) -> Organization | None:
+        """Resolve a VIEW-AS debug session org, or return ``None``.
+
+        Checks the ``DEBUG_AS_ORG_SESSION_KEY`` in the session.
+        Returns the resolved ``Organization`` when the session key is
+        present, the org exists, and the current user is a superuser.
+        Stale/invalid keys and non-superuser sessions are cleared safely.
+
+        Returns ``None`` when the request has no session attribute
+        (e.g. bare ``RequestFactory`` requests or middleware-level tests).
+        """
+        session = getattr(request, "session", None)
+        if session is None:
+            return None
+        from .debug_helpers import get_debug_as_org
+
+        return get_debug_as_org(request)
+
+    @staticmethod
     def _is_exempt_path(path: str) -> bool:
         return any(path.startswith(prefix) for prefix in EXEMPT_PATH_PREFIXES)
 
@@ -226,6 +253,10 @@ class TenantMiddleware:
             next_segment = segments[2]
             # Known management sub-paths.
             if next_segment in ("members", "settings"):
+                return True
+            # VIEW-AS debug paths — bypass org resolution so the debug
+            # views can activate/exit without an active session org.
+            if next_segment == "debug" and len(segments) >= 4:
                 return True
             # Unknown segment — fail closed: resolve org instead of bypassing.
             return False

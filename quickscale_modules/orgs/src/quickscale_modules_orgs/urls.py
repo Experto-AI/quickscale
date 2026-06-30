@@ -2,6 +2,7 @@
 
 from django.urls import path
 
+from .debug_views import DebugAsOrgView, ExitDebugModeView
 from .views import (
     OrgApiDetailView,
     OrgApiInviteView,
@@ -23,6 +24,12 @@ from .views import (
 
 urlpatterns = [
     path("", OrgDashboardView.as_view(), name="org-home"),
+    # Root-level debug exit (accessible without an org slug).
+    path(
+        "debug/exit/",
+        ExitDebugModeView.as_view(),
+        name="org-debug-exit-root",
+    ),
     path("api/orgs/", OrgApiListCreateView.as_view(), name="org-api-list-create"),
     path(
         "api/orgs/<slug:org_slug>/", OrgApiDetailView.as_view(), name="org-api-detail"
@@ -63,6 +70,18 @@ urlpatterns = [
         "orgs/invitations/<uuid:token>/accept/",
         OrgInvitationAcceptView.as_view(),
         name="org-invitation-accept",
+    ),
+    # VIEW-AS debug routes — placed before the catch-all slug route
+    # so they are matched before /orgs/<slug:org_slug>/ captures them.
+    path(
+        "orgs/<slug:org_slug>/debug/view-as/",
+        DebugAsOrgView.as_view(),
+        name="org-debug-view-as",
+    ),
+    path(
+        "orgs/<slug:org_slug>/debug/exit/",
+        ExitDebugModeView.as_view(),
+        name="org-debug-exit",
     ),
     path("orgs/<slug:org_slug>/", OrgDashboardView.as_view(), name="org-detail"),
     path(
