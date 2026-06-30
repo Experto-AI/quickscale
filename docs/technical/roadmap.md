@@ -74,161 +74,37 @@ git merge --no-ff wt-track{N}
 - **D4 — RLS role.** App DB role is `NOSUPERUSER` + `NOBYPASSRLS`; superuser/admin and management commands set `app.current_org_id` or connect under an explicit operator role. Generator settings/templates updated.
 - **D5 — migrations.** No users → no data backfill. Rewrite/squash module migrations to the clean NOT NULL contract; delete `null=True`, `isnull` flat-bucket logic, and `/orgs/<slug>/` content routes outright.
 
-## How tasks stay out of Tier 3
-
-A naïve "implement tenant isolation" is `RISK: high` → forced Tier 3. The decomposition below keeps every task **single-concern with contained, single-module blast radius** → `RISK: medium` → floors at Tier 2, never Tier 3. Foundation/shared-contract tasks carry `PLANNING TIER: medium` and should take the plan-review gate; billing and every RLS task get **mandatory** plan-review.
-
-**Conventions for all tasks:**
-- Closeout: `validate-and-review` (`Adaptive-quality-gate` → `Adaptive-change-review`).
-- Lint/type gate: `make MODULE=<m> lint -- --modules` + `make MODULE=<m> typecheck -- --modules`.
-- Branch strategy: one worktree per phase-lane, mirroring the `wt-track1/2/3` flow.
-
 ---
 
-## Open work — v87 structural findings
+## v87 Structural Findings — Complete ✅
 
-Source: [findings.md](../../findings.md) (fresh post–AF4 pass, 2026-06-28). AF4's removal of the request-long transaction desynchronized the ContextVar and RLS GUC, and the CI gap (SQLite-only tests) made it invisible. Six findings (AF9, AF10, AF11, AF12, AF13, plus AF3) were identified, spanning Phase A + Phase B. **AF3 (Phase B), AF9 (Phase A, Track 1), AF10 (Phase A, Track 3), AF11 (Phase A, Track 2), AF12 (Phase A, Track 2), and AF13 (Phase A, Track 3) have been implemented and merged** (see Recently completed below). AF12 composite-FK schema, proof tests, change-review pass 2, and gate closeout are complete (see AF12 STATUS below).
+All structural findings from the 2026-06-28 autopsy are resolved and merged to `v87`. See [CHANGELOG.md](../../CHANGELOG.md) for full implementation details.
 
-### Track assignment & parallelization
-
-#### Phase A — all three tracks run in parallel; merge to `v87` before Phase B
-
-| Track | Tasks | Notes |
-|---|---|---|---|
-| `wt-track1` | **AF9** ✅ | GUC/ContextVar desync — connection-layer fix; highest urgency (app-wide data outage in secure posture) — **COMPLETE** ✅ |
-| `wt-track2` | **AF11** ✅ → **AF12** ✅ | Policy SQL safety first, then composite FK; AF11 complete; AF12 composite-FK schema, proof tests, VALIDATE CONSTRAINT, and executable parent-org mutation rejection proofs — **COMPLETE** ✅ |
-| `wt-track3` | **AF13** ✅ → **AF10** ✅ | Test infra: Postgres unconditional settings first, then CI isolation job — **COMPLETE** ✅ |
-
-#### Phase B — after all Phase A tasks merged to `v87`
-
-Phase B (AF3) is now **complete and merged** — no remaining Phase B tasks. See recently-completed section below.
-
-**Sequencing rationale.**
-- AF3 was originally gated on AF9/AF11/AF10 but was implemented on the hardened AF1/AF2 base with a structured-logging-only seam (no schema). The AF9/AF11/AF10 dependencies remain valid for a full RLS-integrated operator path but are not required for the current audit-seam contract.
-- Within Track 2: AF12 was independent of AF11 but shared migration authorship; AF11 landed first to keep migrations coherent. AF12 composite-FK schema, helpers, proof tests, change-review pass 2, and gate closeout are complete (see AF12 STATUS).
-- Within Track 3: AF13 is a prerequisite for AF10 — CI cannot add a Postgres service if the test settings still default to SQLite.
-- AF9 (Track 1) and AF13→AF10 (Track 3) are independent; they run in parallel without sequencing risk.
-
-### QA hardening thread (cross-track)
-
-| Task | Track | Property test it adds | Status |
-|---|---|---|---|
-| **AF1** ✅ | 1 | CI conformance gate: every tenant model has a FORCE-RLS policy in `pg_policies` | complete |
-| **AF2** ✅ | 2 | Regression: forward-FK traversal + `refresh_from_db()` with **no** org context set | complete |
-| **AF5** ✅ | 3 | Fault-injection harness: kill after step N, rerun, assert convergence (all 16 steps) | complete |
-| **AF3** ✅ | 1 | AST-level positive-proof guard: management-command import+invocation of `operator_access(...)`; zero-direct-`.all_objects.` management-command guard; deferred `.all_objects.` manifest set-equality | complete |
-| **AF10** ✅ | 3 | Isolation-conformance CI job: restricted-role Postgres run that would have caught AF9 at the AF4 commit | Phase A (complete) |
-| **AF11** ✅ | 2 | Conformance gate extended: `''`-GUC → 0 rows (not 500) assertion | Phase A (complete) |
-| **AF9** ✅ | 1 | Execute wrapper install + phase-1 lifecycle tests; autocommit request-path proof; CRM + listings restricted-role cursor proofs; vendor guard + no-op regression test added (CR-AF9-003 resolved) | Phase A (complete) |
-
----
-
-### Phase A tasks
-
-#### - [x] AF13 — Delete SQLite fallback from all module test-settings files ✅
-
-**TRACK: `wt-track3`** — Completed 2026-06-29. See [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-#### - [x] AF10 — Dedicated isolation-conformance CI job ✅
-
-**TRACK: `wt-track3`** — Completed 2026-06-29. See [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-#### - [x] AF11 — NULLIF empty-string guard in RLS policy template ✅
-
-**TRACK: `wt-track2`** — Completed 2026-06-29. See [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-#### - [x] AF12 — Composite FK for child-parent org equality ✅
-
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: medium | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track2` — after AF11 merged on this track.
-- **WHY → Finding AF12.** The `_EQUALITY_TRIGGER_SQL` only fires on child writes; a parent's `organization_id` mutation (operator action, data migration) silently orphans children outside the tenant boundary with no DB-level rejection. The trigger exists to be the backstop for the privileged/operator path, and it only covers half of it.
-- **OBJECTIVE:** Add a `UNIQUE (id, organization_id)` constraint to each enrolled parent table. Redefine each child table's parent FK as a composite `(parent_id, organization_id)` FK referencing `(parent.id, parent.organization_id)`. Drop the child-only equality trigger once the composite FK makes the invariant structurally unrepresentable. Enrolled parents: `Contact`, `Deal` (crm); `Form`, `FormField`, `FormSubmission` (forms). Enrolled children: `ContactNote`, `DealNote` (crm); `FormField`, `FormSubmission`, `FormFieldValue` (forms).
-- **SCOPE:** `crm/` and `forms/` models + migrations; `orgs/tenancy.py` (add composite-FK helpers to replace trigger installer); conformance gate (check composite FK in pg_constraint instead of trigger presence in pg_trigger).
-- **ACCEPTANCE CRITERIA:** a parent `organization_id` mutation is rejected by the FK constraint; the conformance gate verifies the composite FK is live; no equality trigger needed.
-- **VALIDATION PATH:** `make MODULE=crm test` + `make MODULE=forms test` (FK constraint test); `make MODULE=orgs test` (conformance gate).
-- **DEPENDS:** AF11 merged on this track (keep migrations coherent; AF12 is logically independent of AF11 but shares Track 2 to avoid migration conflicts).
-- **WHAT WAS IMPLEMENTED:** Phase 1 (schema/migration changes — added `UNIQUE (id, organization_id)` constraints on Contact, Deal, Form, FormField, FormSubmission; added 6 composite child FKs replacing trigger-based equality helpers in `tenancy.py`; rewrote CRM 0009 and Forms 0007 migrations to install constraints instead of triggers; FormFieldValue.field special case uses PG15+ partial-column `ON DELETE SET NULL (field_id)`), Phase 2 (targeted proof tests — 31 helper/conformance/delete-path tests in orgs suite, 5 MigrationExecutor tests in CRM, 6 in Forms; pg_constraint-based conformance replacing pg_trigger check; negative parent-org mutation proofs; FormFieldValue.field raw-DELETE delete-path proof), Phase 3 (docs — this entry).
-- **STATUS:** Schema and Phase 1-2 proof tests completed 2026-06-29. Change-review pass 1 hit iteration cap with three blocking findings (CR-AF12-003, CR-AF12-005, CR-AF12-006). **All three resolved in follow-up pass (2026-06-29):**
-  - **CR-AF12-001 (resolved ✅):** Removed the blocking `@pytest.mark.skip` decorator from `TestCrmParentOrgMutationRejection` and `TestFormsParentOrgMutationRejection`. The `@pytest.mark.skipif(not _IS_POSTGRES)` guard is retained — these are standard Django `@pytest.mark.django_db` tests that require PostgreSQL FK enforcement, no RLS or `SET ROLE` infrastructure needed. The tests run in the AF10 CI job (which provisions Postgres).
-  - **CR-AF12-004 (resolved ✅):** Forms migration `0007` now finishes each composite FK with `ALTER TABLE ... VALIDATE CONSTRAINT ...` after creation. Backfill completes before the constraint installation step, so all existing rows carry a valid `organization_id`. The `NOT VALID` flag is retained during initial creation (avoids a blocking validation scan) and is followed by explicit `VALIDATE CONSTRAINT` for production-safety posture.
-  - **CR-AF12-005 (resolved ✅, follow-up):** Forms 0007 composite FKs now carry `DEFERRABLE INITIALLY DEFERRED` alongside `NOT VALID` + explicit `VALIDATE CONSTRAINT`. Added `pg_constraint` regression proof (condeferrable + condeferred assertion) in test_migrations.py.
-  - **CR-AF12-006 (resolved ✅, follow-up):** `test_admin.py` and `test_views.py` tests that violated the AF12 child-parent org equality invariant fixed: `test_export_cross_org_field_values` now creates separate forms per org; `test_authenticated_schema_returns_org_scoped_form` creates the form under the target org from the start instead of reassigning the fixture form's org after children exist.
-  - **CR-AF12-003 (resolved ✅):** Docs and changelog updated in this pass to accurately reflect completion status (this entry).
-- **CURRENT STATUS (2026-06-29):** Re-validation and change-review pass 2 complete. Gate closed — all CR-AF12 findings resolved, composite FKs live, parent-org mutation rejection proofs enabled. See CHANGELOG for full resolution details.
-
----
-
-#### - [x] AF9 — Wire GUC from ContextVar at connection layer ✅
-
-`**Tier 2 — Medium | PLANNING TIER: medium (plan-review) | RISK LEVEL: high | EXECUTION PATH: full-path**`
-
-- **TRACK:** `wt-track1` — implementation landed 2026-06-29; **completed 2026-06-30**.
-- **WHY → Finding AF9.** AF4 removed the request-long `transaction.atomic()` from the middleware and pushed GUC-setting onto individual callers. But the normal authenticated path (every CRM/listings/blog view) is not one of those callers. Under the NOBYPASSRLS runtime role, every such query runs with the GUC = NULL and returns **zero rows** (or raises a `WITH CHECK` error on insert). The two isolation layers contradict each other on the hottest path in the app. Reproduced empirically.
-- **OBJECTIVE:** Install a Django execute_wrapper (via `connection_created` signal or a thin custom DB backend) that, at the start of every transaction touching a tenant table, issues `SET LOCAL app.current_org_id = <value>` from `get_current_org_id()`. The ContextVar remains the single source of truth; the GUC is derived from it at the connection layer; per-caller discipline is no longer required; AF4's connection-hold fix is preserved (the SET LOCAL is per-transaction, not per-request).
-- **SCOPE:** `orgs/current_org.py` and `orgs/apps.py` — execute_wrapper install on every DatabaseWrapper via `connection.execute_wrappers.append()`; signal handler for `connection_created`; recursion guard (ContextVar flag); idempotent install (marker attribute).
-- **WHAT WAS IMPLEMENTED (Phase 1 + Phase 3 + CR-AF9-003 fix):**
-  - **Runtime seam.** Added `install_priming_wrapper()`, `_make_priming_execute_wrapper()`, and `_issue_set_local()` to `current_org.py`. The wrapper intercepts `cursor.execute()` on every DatabaseWrapper: for explicit transactions it issues `SET LOCAL app.current_org_id` from the ContextVar before each statement; for autocommit it wraps each statement in a short `transaction.atomic()` with `SET LOCAL` inside (AF4 guard — no request-long transaction). Installed via `apps.py ready()` on existing connections and the `connection_created` signal for future connections. Idempotent install marker and ContextVar-based recursion guard prevent double-install and infinite recursion.
-  - **Phase-1 lifecycle tests (14 tests).** Covers install idempotence, recursion guard, explicit-transaction priming, autocommit priming, no-org pass-through, transaction scoping, and connection hygiene.
-  - **Autocommit request-path proof (PR-AF9-001).** Test-only probe view + URL exercises the GUC through `TenantMiddleware` + `cursor.execute()`; asserts the GUC matches the org UUID inside the view's DB statement and resets to session default after request completion.
-  - **CRM restricted-role cursor proof (PR-AF9-003).** Added to `crm/tests/test_rls_boundary.py` — calls `set_current_org_id(org.pk)` on the ContextVar, enters `SET ROLE`, runs SELECT; the AF9 wrapper primes the GUC from the ContextVar; asserts the expected row is returned without manual `SET app.current_org_id`.
-  - **Listings restricted-role cursor proof (PR-AF9-005).** Added to `orgs/tests/test_tenant_table_conformance.py` using the plan-approved AF11-style `SET ROLE` + direct SELECT pattern against `quickscale_modules_listings_listing`. Relocated from the listings module's broken conftest to the orgs conformance surface where the test environment is green.
-  - **CR-AF9-003 fix (2026-06-30):** Added `connection.vendor != "postgresql"` guard at the top of the execute wrapper function, matching the existing pattern in `set_db_current_org_id` and `reset_db_current_org_id`. On non-PostgreSQL backends the wrapper passes through without priming. Added regression test `test_priming_wrapper_noop_on_non_postgresql` mocking `connection.vendor` to `"sqlite"` and verifying both normal query completion and unprimed GUC. Docstring updated.
-- **VALIDATION:** `make MODULE=orgs lint` — clean; `make MODULE=orgs typecheck` — clean; `make MODULE=orgs test` — 571 passed, 5 skipped, 0 failed (1 new test). Targeted CRM validation passed (AF9 proof + AF10 red-green verifier). Targeted listings proof passes from orgs conformance surface.
-- **DISCOVERED NON-AF9 FINDINGS:**
-  - Pre-existing CRM `mypy` import-not-found error in `adapter.py` (outside AF9 scope).
-  - Pre-existing unrelated CRM T1.11 full-suite baseline-red tests (unrelated to AF9 — closeout used targeted CRM AF9 validation instead of full CRM module suite).
-  - Pre-existing listings conftest DB-setup issue (`migrate --run-syncdb` skips migrated apps, leaving orgs tables uncreated) — affects all listings RLS boundary tests, not specific to AF9.
-- **STATUS (completed 2026-06-30):** All change-review findings resolved. CR-AF9-003 (blocking) fixed with vendor guard + regression test. CR-AF9-001 and CR-AF9-002 resolved in prior pass. All 15 phase-1 lifecycle + regression tests pass. Implementation is complete — passes lint, typecheck, and test gates. See CHANGELOG.md for full resolution details.
-- **NOTE:** The `/admin/` path is an `EXEMPT_PATH_PREFIX` so the middleware sets neither ContextVar nor GUC there; the execute_wrapper handles admin reads from the ContextVar (which the admin itself must set).
-- **DEPENDS:** AF9 is independent of AF10/AF13 (validation via CI job) and AF11 (policy safety is independent of GUC wiring). AF12 and VIEW-AS remain open downstream dependents.
-
----
-
-### Recently completed
+**Track status (2026-06-30):** All three tracks clean — no open work on any track.
 
 | Task | Track | Completed | Summary |
 |---|---|---|---|
-| **AF3** ✅ | `wt-track1` | 2026-06-29 | Single audited `operator_access(reason=...)` seam; 4 management commands routed through it; AST-level conformance proof — see CHANGELOG |
-| **AF11** ✅ | `wt-track2` | 2026-06-29 | NULLIF empty-string guard in RLS policy template; 6 sweep migrations; restricted-role conformance proof — see CHANGELOG |
-| **AF12** ✅ | `wt-track2` | 2026-06-29 | Composite FK for child-parent org equality; VALIDATE CONSTRAINT in Forms 0007; parent-org mutation rejection proofs enabled; all blocking findings resolved — see CHANGELOG |
 | **AF13** ✅ | `wt-track3` | 2026-06-29 | Postgres-only test settings in all 11 modules; SQLite smoke-test helper replaced — see CHANGELOG |
-| **AF10** ✅ | `wt-track3` | 2026-06-29 | Isolation-conformance CI job (Postgres 18 + NOBYPASSRLS role); AF9 CI-green awaits AF9 merge — see CHANGELOG |
-| **AF9** ✅ | `wt-track1` | 2026-06-30 | Connection-layer GUC priming execute wrapper; PostgreSQL vendor guard + no-op regression test; all change-review findings resolved — see CHANGELOG |
-| **VIEW-AS** ✅ | `wt-track1` | 2026-06-30 | Operator org-impersonation debug mode: session key, middleware override, admin entry/exit views with per-row button and exit form, debug banner partial in orgs/CRM/blog/listings, end-to-end admin flow, 34+ tests — see CHANGELOG |
+| **AF10** ✅ | `wt-track3` | 2026-06-29 | Isolation-conformance CI job (Postgres 18 + NOBYPASSRLS role) — see CHANGELOG |
+| **AF11** ✅ | `wt-track2` | 2026-06-29 | NULLIF empty-string guard in RLS policy template; 6 sweep migrations — see CHANGELOG |
+| **AF12** ✅ | `wt-track2` | 2026-06-29 | Composite FK for child-parent org equality; all blocking findings resolved — see CHANGELOG |
+| **AF3** ✅ | `wt-track1` | 2026-06-29 | Single audited `operator_access(reason=...)` seam; AST-level conformance proof — see CHANGELOG |
+| **AF9** ✅ | `wt-track1` | 2026-06-30 | Connection-layer GUC priming execute wrapper; PostgreSQL vendor guard — see CHANGELOG |
+| **VIEW-AS** ✅ | `wt-track1` | 2026-06-30 | Operator org-impersonation debug mode; admin entry/exit views; debug banner; 34+ tests — see CHANGELOG |
 
 ---
 
-### Phase C — Operator & Debug Tools
+## Pre-existing issues (non-blocking, discovered during AF9 validation)
 
-#### - [x] VIEW-AS — Operator org-impersonation debug mode ✅
+These are outside v87 scope but should be tracked for a future pass:
 
-`**Tier 1 — Low | PLANNING TIER: low (no plan-review) | RISK LEVEL: low | EXECUTION PATH: direct**`
-
-- **TRACK:** standalone task; any track after all Phase A tasks merged to `v87`.
-- **WHY → RLS Strategy Review (2026-06-29).** Supabase ships an "Impersonate User" button in its dashboard so operators can see the app exactly as a specific tenant sees it — essential for debugging silent RLS row-filtering and data-visibility issues. QuickScale has no equivalent; operators currently need raw DB console access (which bypasses the application layer and the restricted runtime role entirely). This feature closes that parity gap.
-- **OBJECTIVE:** Allow Django superusers to select any `Organization` in Django Admin and "view app as this org" — activates an RLS-scoped session that uses that org's context, shows a persistent debug banner, and logs every debug activation.
-- **DESIGN:**
-  - **Session key**: `quickscale_modules_orgs.debug_as_org_id` (UUID string, set only by `is_superuser`)
-  - **Middleware hook**: `TenantMiddleware._resolve_debug_org()` — if `request.user.is_superuser` and session key present, use that org instead of normal Solo/SaaS resolution. Logs every resolved use (who, which org, timestamp, path) to Python audit logger.
-  - **Admin affordance**: `OrganizationAdmin` per-row "VIEW-AS" button (GET link to admin entry view) that sets the debug session directly and redirects to the org dashboard; admin change-list "Exit VIEW-AS" button (POST form) when a debug session is active. Both gate on `is_superuser`.
-  - **Debug banner**: base template renders a top-bar strip `"DEBUG MODE — viewing as org '{name}' [Exit]"` when session key is present and user is superuser.
-  - **Security**: non-superusers cannot set the session key; admin views blocked for non-superusers; no BYPASSRLS — debug session uses the same restricted runtime role as all other tenant paths (so RLS is still active and the operator sees exactly what the org members see).
-- **SCOPE:** `orgs/middleware.py` (`_resolve_debug_org`); `orgs/admin.py` (entry/exit views with per-row VIEW-AS button and change-list exit form); `orgs/views.py` (`DebugAsOrgView`, `ExitDebugModeView`); `orgs/urls.py` (two endpoints); base/layout template (debug banner).
-- **ACCEPTANCE CRITERIA:** superuser clicks VIEW-AS button in admin change list → redirected to org dashboard with debug session active → banner shows org name → Exit button clears banner and restores normal resolution; non-superuser cannot set or read `debug_as_org_id` in session; each activation appears in audit log.
-- **VALIDATION PATH:** admin VIEW-AS button redirects to org dashboard with session key set; admin exit clears session; end-to-end test proves set → banner → clear cycle.
-- **DEPENDS:** AF9 merged (GUC/ContextVar wiring must be live; otherwise debug session shows 0 rows under the restricted runtime role).
-- **STATUS (completed 2026-06-30):** VIEW-AS Option A completed on wt-track1 — debug session key, middleware `_resolve_debug_org()` override, admin entry/exit views with per-row VIEW-AS button and change-list exit form, reusable `_debug_banner.html` partial included in orgs plus CRM/blog/listings base templates, root debug exit route, 34 focused tests including end-to-end admin set → banner → clear proof. Lint, typecheck, and test-unit gates all green. **Notable implementation finding:** roadmap assumed an orgs base template, but the module actually used standalone templates, so a shared partial/include strategy was used instead; no blocking issues remain. See CHANGELOG for full details.
+- **CRM mypy** — import-not-found error in `adapter.py` (pre-existing).
+- **CRM T1.11** — baseline-red tests in the full CRM suite; targeted validation was used for AF9 closeout.
+- **Listings conftest** — DB-setup issue (`migrate --run-syncdb` skips migrated apps, leaving orgs tables uncreated); AF9 listings restricted-role proof relocated to the orgs conformance surface as a workaround.
 
 ---
 
-### Explicitly out of scope
+## Explicitly out of scope
 
 Single-PR items that do not change the design:
 
