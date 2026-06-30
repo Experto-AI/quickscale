@@ -1173,6 +1173,12 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - Boot guard required: `orgs.QuickscaleOrgsConfig.ready()` must assert `rolbypassrls=false` in saas mode with `DEBUG=False`; raise `ImproperlyConfigured` and refuse to start if the connected role has BYPASSRLS (T1.18)
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` — this is correct for migrations; catastrophic for `runserver`/`gunicorn`
 
+**Isolation architecture rules (permanent):**
+- Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.
+- Operator access: `operator_access(reason=...)` in `orgs/` is the sole path to an unfiltered queryset or privileged role; `all_objects` must not appear on model declarations; management commands that need cross-tenant data must route through this context manager and emit structured audit records.
+- Org ownership: System org owns all published-public content (blog feed, public listings, social links). Anonymous visitors see System-org rows; solo authenticated = personal org; saas authenticated = active org.
+- Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
+
 **Rejected alternatives (do not re-introduce):**
 - ❌ **Per-client Railway deployment** — linear operational overhead per tenant; not a SaaS platform
 - ❌ **App-layer-only filtering without RLS** — no defence-in-depth; a single missed filter leaks cross-tenant data
