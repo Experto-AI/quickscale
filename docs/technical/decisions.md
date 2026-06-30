@@ -1167,10 +1167,12 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ✅ Users may belong to multiple organizations; org-switcher in the React UI
 - ✅ Module access is differentiated by credits plus ORM-backed `Plan.features` gates
 
-**RLS enforcement rule (critical):**
+**RLS enforcement rule (critical, updated by SA2.1 + SA2.2):**
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named migration path intentionally uses the superuser `DATABASE_URL`
-- Current boot guard: `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false` in SaaS mode with `DEBUG=False`; `migrate` remains the only exempt command path until SA2.1 widens that guard
+- **Always-on boot guard (SA2.1):** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false` on every non-`migrate` boot — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS unless one of the two explicit exemptions applies:
+  1. `manage.py migrate` — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so migrations run under the superuser role (correct and deliberate).
+  2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate`; `runserver`/`gunicorn` must still use the restricted runtime role
 
 **Isolation architecture rules (permanent):**

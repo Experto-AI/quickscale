@@ -5,6 +5,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Seed the SA2.1 escape hatch before Django setup so the always-on
+# boot guard does not block test startup.
+os.environ.setdefault("QUICKSCALE_ALLOW_BYPASSRLS", "1")
+
 SECRET_KEY = "test-secret-key-for-blog-module"
 
 DEBUG = True
