@@ -1,15 +1,15 @@
 """SA1.3 — Django system check for tenant-isolation conformance.
+SA1.4 — Default-deny classification system check.
 
-Registers a ``check_tenant_isolation`` system check with the
-``quickscale_modules_orgs`` app that runs at Django startup (via
-``AppConfig.ready()``) to warn when tenant models lack ``organization_id``
-or FORCE-RLS policies.
+Registers two system checks with the ``quickscale_modules_orgs`` app:
 
-The check uses the same marker-based discovery as the ``check_tenant_isolation``
-management command: a model is tenant-scoped if its default ``objects``
-manager is a ``TenantManager``, or it is a ``TenantModel`` subclass.
+1. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
+   ``organization_id`` or FORCE-RLS policies.
+2. ``check_model_classification`` (SA1.4) — warns when a concrete project
+   model is not classified in ``TENANT_TABLE_REGISTRY``.
 
-The check emits ``WARNING`` level messages so it does not block startup in
+Both checks use the same marker-based discovery as the management command.
+They emit ``WARNING`` level messages so they do not block startup in
 development or pre-migration states.  Use the management command for a
 pass/fail exit code in CI.
 """
@@ -21,6 +21,7 @@ from django.core.checks import Warning, register
 from quickscale_modules_orgs.tenancy import (
     check_tenant_model_isolation,
     get_tenant_models,
+    get_unclassified_concrete_models,
 )
 
 
@@ -87,5 +88,52 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
                     id="quickscale_modules_orgs.W004",
                 )
             )
+
+    return messages
+
+
+# ---------------------------------------------------------------------------
+# SA1.4 — Default-deny classification system check
+# ---------------------------------------------------------------------------
+
+
+@register("quickscale_modules_orgs")
+def check_model_classification(app_configs: object, **kwargs: object) -> list:
+    """Warn about concrete project models not classified in ``TENANT_TABLE_REGISTRY``.
+
+    Every concrete model from a project-owned app must be classified in
+    the registry as ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION.
+    Unclassified models emit ``quickscale_modules_orgs.W005``.
+
+    Returns:
+        A list of ``CheckMessage`` instances.
+    """
+    messages: list = []
+
+    try:
+        unclassified = get_unclassified_concrete_models()
+    except Exception as exc:
+        messages.append(
+            Warning(
+                f"Failed to discover concrete project models: {exc}",
+                hint="Ensure Django apps are fully loaded before this check runs.",
+                id="quickscale_modules_orgs.W005",
+            )
+        )
+        return messages
+
+    for model in unclassified:
+        messages.append(
+            Warning(
+                f"Concrete project model {model._meta.app_label}.{model.__name__} "
+                f"is not classified in TENANT_TABLE_REGISTRY.",
+                hint=(
+                    "Add an entry to TENANT_TABLE_REGISTRY in "
+                    "quickscale_modules_orgs.tenancy with status "
+                    "ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION."
+                ),
+                id="quickscale_modules_orgs.W005",
+            )
+        )
 
     return messages

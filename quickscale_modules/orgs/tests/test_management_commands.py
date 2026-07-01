@@ -1645,28 +1645,30 @@ def test_check_tenant_isolation_pass_on_current_models() -> None:
     All real ENROLLED models (21 total) should have organization_id + FORCE
     RLS.  Test-only models (ConcreteTenantResource, ForwardFKChild) are
     detected as tenant models (they inherit TenantModel) but their test
-    tables lack FORCE-RLS — this is expected and the command correctly
-    reports them as FAIL.
+    tables lack FORCE-RLS — on PostgreSQL this would cause a fail, but on
+    SQLite all models pass (``force_rls`` is None so only
+    ``organization_id`` is checked).
     """
     from io import StringIO
 
     stdout = StringIO()
     stderr = StringIO()
 
-    with pytest.raises(SystemExit):
-        call_command(
-            "check_tenant_isolation",
-            stdout=stdout,
-            stderr=stderr,
-            verbosity=0,
-        )
+    call_command(
+        "check_tenant_isolation",
+        stdout=stdout,
+        stderr=stderr,
+        verbosity=0,
+    )
 
     output = stdout.getvalue()
     # Should have discovered tenant models.
     assert "Discovered" in output
     assert "Result:" in output
-    # 21 real models pass, 2 test-only models fail (no FORCE-RLS).
-    assert "21 passed, 2 failed" in output
+    # On SQLite, all models pass (force_rls is None; only org_id checked).
+    # Test-only models (ConcreteTenantResource, ForwardFKChild) are only
+    # present when test_models is explicitly imported, so 21 models total.
+    assert "21 passed, 0 failed" in output
 
 
 @pytest.mark.django_db
@@ -1677,24 +1679,27 @@ def test_check_tenant_isolation_json_output() -> None:
     stdout = StringIO()
     stderr = StringIO()
 
-    with pytest.raises(SystemExit):
-        call_command(
-            "check_tenant_isolation",
-            format="json",
-            stdout=stdout,
-            stderr=stderr,
-            verbosity=0,
-        )
+    call_command(
+        "check_tenant_isolation",
+        format="json",
+        stdout=stdout,
+        stderr=stderr,
+        verbosity=0,
+    )
 
     import json as json_lib
 
     data = json_lib.loads(stdout.getvalue())
     assert "status" in data
-    assert "total" in data
-    assert "passed" in data
-    assert "results" in data
-    assert data["total"] == 23
-    assert data["passed"] == 21
+    assert "tenant_models" in data
+    assert "total" in data["tenant_models"]
+    assert "passed" in data["tenant_models"]
+    assert "results" in data["tenant_models"]
+    # On SQLite, all models pass (force_rls is None; only org_id checked).
+    assert data["tenant_models"]["total"] == 21
+    assert data["tenant_models"]["passed"] == 21
+    assert data["tenant_models"]["failed"] == 0
+    assert "unclassified" in data
 
 
 @pytest.mark.django_db
@@ -1799,13 +1804,13 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
 
         data = json_lib.loads(stdout.getvalue())
         assert data["status"] == "fail"
-        assert data["total"] == 1
-        assert data["passed"] == 0
-        assert data["failed"] == 1
-        assert len(data["results"]) == 1
-        assert data["results"][0]["model_name"] == "NoOrgModel"
-        assert data["results"][0]["has_organization_id"] is False
-        assert data["results"][0]["passed"] is False
+        assert data["tenant_models"]["total"] == 1
+        assert data["tenant_models"]["passed"] == 0
+        assert data["tenant_models"]["failed"] == 1
+        assert len(data["tenant_models"]["results"]) == 1
+        assert data["tenant_models"]["results"][0]["model_name"] == "NoOrgModel"
+        assert data["tenant_models"]["results"][0]["has_organization_id"] is False
+        assert data["tenant_models"]["results"][0]["passed"] is False
 
 
 @pytest.mark.django_db
@@ -1958,9 +1963,324 @@ def test_check_tenant_isolation_json_no_models() -> None:
 
     data = json_lib.loads(stdout.getvalue())
     assert data["status"] == "warning"
-    assert data["results"] == []
+    assert data["tenant_models"]["results"] == []
+    assert data["unclassified"] == []
     assert "No tenant models discovered" in data["message"]
     # No human-only text should leak into JSON output.  The human branch
     # contains "by marker detection" which does not appear in JSON output.
     assert "by marker detection" not in stdout.getvalue()
     assert "TenantManager" not in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_json_no_models_postgres_only_skip() -> None:
+    """get_tenant_models()==[] with --postgres-only --format json on
+    non-PostgreSQL must emit a single valid JSON document (CR-SA14-003).
+
+    Regression: the no-models payload and the --postgres-only skip must
+    be combined into one JSON document, not written as two separate docs.
+    """
+    from io import StringIO
+    from unittest.mock import patch
+
+    stdout = StringIO()
+    stderr = StringIO()
+
+    with (
+        patch(
+            "quickscale_modules_orgs.management.commands."
+            "check_tenant_isolation.get_tenant_models",
+            return_value=[],
+        ),
+        patch(
+            "quickscale_modules_orgs.management.commands."
+            "check_tenant_isolation.connection.vendor",
+            "sqlite",
+        ),
+    ):
+        call_command(
+            "check_tenant_isolation",
+            postgres_only=True,
+            format="json",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    import json as json_lib
+
+    output = stdout.getvalue()
+    # Must be parseable as a single JSON document — if two docs were
+    # written, json.loads would raise or only parse the first.
+    data = json_lib.loads(output)
+    assert data["status"] == "skip"
+    assert "postgresql" in data["message"].lower()
+    # Must include the tenant_models section (no-models info).
+    assert "tenant_models" in data
+    assert data["tenant_models"]["total"] == 0
+    assert data["tenant_models"]["results"] == []
+    assert "unclassified" in data
+    assert data["unclassified"] == []
+    # No human-only text should leak into JSON output.
+    assert "SKIP:" not in output
+    assert "by marker detection" not in output
+
+
+# ---------------------------------------------------------------------------
+# SA1.4 — Default-deny classification check tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_classification_check_ok_when_all_models_classified() -> None:
+    """The classification check must pass when all project models are
+    classified in TENANT_TABLE_REGISTRY.
+
+    In the current maintainer repo, every ``quickscale_modules_*`` model
+    is accounted for, so ``get_unclassified_concrete_models()`` returns
+    an empty list and the command must not report any unclassified models.
+    """
+    from io import StringIO
+
+    from quickscale_modules_orgs.tenancy import get_unclassified_concrete_models
+
+    unclassified = get_unclassified_concrete_models()
+    assert len(unclassified) == 0, (
+        f"Expected zero unclassified models, got: "
+        f"{[(m._meta.app_label, m.__name__) for m in unclassified]}"
+    )
+
+    # Full command run must not fail on classification.
+    stdout = StringIO()
+    stderr = StringIO()
+    call_command(
+        "check_tenant_isolation",
+        stdout=stdout,
+        stderr=stderr,
+        verbosity=0,
+    )
+    # On SQLite all models pass the isolation check (force_rls is None,
+    # only org_id is checked), so no SystemExit is raised.  The output
+    # must not contain any classification failure language.
+    output = stdout.getvalue()
+    assert "unclassified" not in output.lower()
+
+
+@pytest.mark.django_db
+def test_classification_check_fails_on_unclassified_model_human() -> None:
+    """An unclassified concrete model must cause the command to exit 1 with
+    a clear message in human-readable output."""
+    from unittest.mock import MagicMock, patch
+
+    from io import StringIO
+
+    # Patch to return a synthetic unclassified model.
+    model = MagicMock(spec=[])
+    model.__name__ = "RogueModel"
+    model._meta = MagicMock()
+    model._meta.app_label = "quickscale_modules_rogue"
+    model._meta.db_table = "test_roguemodel"
+
+    with patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_unclassified_concrete_models",
+        return_value=[model],
+    ):
+        stdout = StringIO()
+        stderr = StringIO()
+        with pytest.raises(SystemExit) as excinfo:
+            call_command(
+                "check_tenant_isolation",
+                stdout=stdout,
+                stderr=stderr,
+                verbosity=0,
+            )
+        assert excinfo.value.code == 1
+        output = stdout.getvalue()
+        assert "UNCLASSIFIED" in output
+        assert "RogueModel" in output
+        assert "quickscale_modules_rogue" in output
+
+
+@pytest.mark.django_db
+def test_classification_check_fails_on_unclassified_model_json() -> None:
+    """An unclassified concrete model must produce valid JSON with the
+    unclassified model listed."""
+    from unittest.mock import MagicMock, patch
+
+    from io import StringIO
+
+    model = MagicMock(spec=[])
+    model.__name__ = "RogueModelJSON"
+    model._meta = MagicMock()
+    model._meta.app_label = "quickscale_modules_rogue"
+    model._meta.db_table = "test_roguemodeljson"
+
+    with patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_unclassified_concrete_models",
+        return_value=[model],
+    ):
+        stdout = StringIO()
+        stderr = StringIO()
+        with pytest.raises(SystemExit) as excinfo:
+            call_command(
+                "check_tenant_isolation",
+                format="json",
+                stdout=stdout,
+                stderr=stderr,
+                verbosity=0,
+            )
+        assert excinfo.value.code == 1
+
+        import json as json_lib
+
+        data = json_lib.loads(stdout.getvalue())
+        assert data["status"] == "fail"
+        assert len(data["unclassified"]) == 1
+        assert data["unclassified"][0]["model_name"] == "RogueModelJSON"
+        assert data["unclassified"][0]["app_label"] == "quickscale_modules_rogue"
+
+
+def test_get_unclassified_concrete_models_acceptance() -> None:
+    """Directly prove that get_unclassified_concrete_models() returns
+    an empty list when all project models are classified.
+
+    This is a unit-level test of the helper function itself, independent
+    of the management command.
+    """
+    from quickscale_modules_orgs.tenancy import get_unclassified_concrete_models
+
+    unclassified = get_unclassified_concrete_models()
+    assert unclassified == [], (
+        f"Expected empty list, got: "
+        f"{[(m._meta.app_label, m.__name__) for m in unclassified]}"
+    )
+
+
+def test_get_concrete_project_models_returns_expected_models() -> None:
+    """Prove that get_concrete_project_models() returns all concrete
+    models from ``quickscale_modules_*`` apps, and that the set is
+    non-empty (smoke test).
+    """
+    from quickscale_modules_orgs.tenancy import (
+        QS_APP_PREFIX,
+        get_concrete_project_models,
+    )
+
+    project_models = get_concrete_project_models()
+    assert len(project_models) > 0, "Expected at least one project model"
+
+    # Every model must have a quickscale_modules_* app label.
+    for m in project_models:
+        assert m._meta.app_label.startswith(QS_APP_PREFIX), (
+            f"Model {m._meta.app_label}.{m.__name__} does not start with "
+            f"{QS_APP_PREFIX}"
+        )
+
+    # CR-SA14-001: Verify auto-created ManyToMany through models are included.
+    through_model_names = {
+        (m._meta.app_label, m.__name__) for m in project_models if m._meta.auto_created
+    }
+    expected_through = {
+        ("quickscale_modules_crm", "Contact_tags"),
+        ("quickscale_modules_crm", "Deal_tags"),
+        ("quickscale_modules_blog", "Post_tags"),
+    }
+    missing = expected_through - through_model_names
+    assert not missing, (
+        f"Auto-created through models missing from "
+        f"get_concrete_project_models(): {sorted(missing)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# CR-SA14-002 — --postgres-only must not bypass classification check
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_postgres_only_classification_still_runs_human() -> None:
+    """--postgres-only on non-PostgreSQL must still report unclassified
+    models in human-readable output (CR-SA14-002).
+    """
+    from unittest.mock import MagicMock, patch
+
+    from io import StringIO
+
+    model = MagicMock(spec=[])
+    model.__name__ = "RogueModel"
+    model._meta = MagicMock()
+    model._meta.app_label = "quickscale_modules_rogue"
+    model._meta.db_table = "test_roguemodel"
+
+    with patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_unclassified_concrete_models",
+        return_value=[model],
+    ):
+        with patch(
+            "quickscale_modules_orgs.management.commands."
+            "check_tenant_isolation.connection.vendor",
+            "sqlite",
+        ):
+            stdout = StringIO()
+            stderr = StringIO()
+            with pytest.raises(SystemExit) as excinfo:
+                call_command(
+                    "check_tenant_isolation",
+                    postgres_only=True,
+                    stdout=stdout,
+                    stderr=stderr,
+                    verbosity=0,
+                )
+            assert excinfo.value.code == 1
+            output = stdout.getvalue()
+            assert "UNCLASSIFIED" in output
+            assert "RogueModel" in output
+
+
+@pytest.mark.django_db
+def test_postgres_only_classification_still_runs_json() -> None:
+    """--postgres-only on non-PostgreSQL must still report unclassified
+    models in JSON output (CR-SA14-002).
+    """
+    from unittest.mock import MagicMock, patch
+
+    from io import StringIO
+
+    model = MagicMock(spec=[])
+    model.__name__ = "RogueModelJSON"
+    model._meta = MagicMock()
+    model._meta.app_label = "quickscale_modules_rogue"
+    model._meta.db_table = "test_roguemodeljson"
+
+    with patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_unclassified_concrete_models",
+        return_value=[model],
+    ):
+        with patch(
+            "quickscale_modules_orgs.management.commands."
+            "check_tenant_isolation.connection.vendor",
+            "sqlite",
+        ):
+            stdout = StringIO()
+            stderr = StringIO()
+            with pytest.raises(SystemExit) as excinfo:
+                call_command(
+                    "check_tenant_isolation",
+                    postgres_only=True,
+                    format="json",
+                    stdout=stdout,
+                    stderr=stderr,
+                    verbosity=0,
+                )
+            assert excinfo.value.code == 1
+
+            import json as json_lib
+
+            data = json_lib.loads(stdout.getvalue())
+            assert data["status"] == "fail"
+            assert len(data["unclassified"]) == 1
+            assert data["unclassified"][0]["model_name"] == "RogueModelJSON"

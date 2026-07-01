@@ -31,6 +31,7 @@ from django.db import connection
 from quickscale_modules_orgs.tenancy import (
     check_tenant_model_isolation,
     get_tenant_models,
+    get_unclassified_concrete_models,
 )
 
 
@@ -49,7 +50,8 @@ class Command(BaseCommand):
             "--postgres-only",
             action="store_true",
             default=False,
-            help="Skip non-PostgreSQL environments entirely (exit 0).",
+            help="Skip PostgreSQL-specific checks on non-PostgreSQL connections. "
+            "The SA1.4 classification check still runs (CR-SA14-002).",
         )
         parser.add_argument(
             "--format",
@@ -62,39 +64,65 @@ class Command(BaseCommand):
         postgres_only: bool = options.get("postgres_only", False)  # type: ignore[assignment]
         fmt: str = options.get("format", "human")  # type: ignore[assignment]
 
-        # If --postgres-only and not on PostgreSQL, skip silently.
-        if postgres_only and connection.vendor != "postgresql":
-            if fmt == "json":
-                self.stdout.write(
-                    json.dumps(
-                        {
-                            "status": "skip",
-                            "message": (
-                                "--postgres-only flag set but not connected "
-                                "to PostgreSQL."
-                            ),
-                        }
-                    )
-                )
-            else:
-                self.stdout.write(
-                    "SKIP: --postgres-only and not connected to PostgreSQL."
-                )
-            return None
-
         models = get_tenant_models()
 
+        # ---- SA1.4 — Classification check runs before any --postgres-only
+        # skip so that DB-agnostic unclassified-model detection cannot be
+        # bypassed (CR-SA14-002). -------------------------------------------
+        unclassified = get_unclassified_concrete_models()
+        has_unclassified = len(unclassified) > 0
+
         if not models:
+            # ---- SA1.4 — Classification check already ran above.
+            # Decide up front whether the --postgres-only skip applies so we
+            # can build a single JSON payload (CR-SA14-003).
+            is_pg_skip = postgres_only and connection.vendor != "postgresql"
+
             if fmt == "json":
-                self.stdout.write(
-                    json.dumps(
-                        {
-                            "status": "warning",
-                            "message": "No tenant models discovered.",
+                unclassified_list = [
+                    {
+                        "app_label": m._meta.app_label,
+                        "model_name": m.__name__,
+                        "db_table": m._meta.db_table,
+                    }
+                    for m in unclassified
+                ]
+
+                if is_pg_skip:
+                    payload: dict[str, object] = {
+                        "status": ("skip" if not has_unclassified else "fail"),
+                        "message": (
+                            "--postgres-only flag set but not connected to PostgreSQL."
+                            if not has_unclassified
+                            else "No tenant models discovered; unclassified "
+                            "project models found."
+                        ),
+                        "tenant_models": {
+                            "total": 0,
+                            "passed": 0,
+                            "failed": 0,
                             "results": [],
-                        }
-                    )
-                )
+                        },
+                        "unclassified": unclassified_list,
+                    }
+                else:
+                    payload = {
+                        "status": ("warning" if not has_unclassified else "fail"),
+                        "message": (
+                            "No tenant models discovered."
+                            if not has_unclassified
+                            else "No tenant models discovered; unclassified "
+                            "project models found."
+                        ),
+                        "tenant_models": {
+                            "total": 0,
+                            "passed": 0,
+                            "failed": 0,
+                            "results": [],
+                        },
+                        "unclassified": unclassified_list,
+                    }
+                self.stdout.write(json.dumps(payload, indent=2))
             else:
                 self.stdout.write(
                     self.style.WARNING(
@@ -103,39 +131,132 @@ class Command(BaseCommand):
                         "inherits TenantModel."
                     )
                 )
+                if has_unclassified:
+                    self.stdout.write(
+                        self.style.ERROR(
+                            "\nUnclassified project model(s) — not in "
+                            "TENANT_TABLE_REGISTRY:\n"
+                        )
+                    )
+                    for m in unclassified:
+                        self.stdout.write(
+                            f"  [{self.style.ERROR('UNCLASSIFIED')}] "
+                            f"{m._meta.app_label}.{m.__name__}\n"
+                            f"         Table: {m._meta.db_table}\n"
+                        )
+                if is_pg_skip:
+                    self.stdout.write(
+                        "SKIP: --postgres-only and not connected to PostgreSQL."
+                    )
+
+            if is_pg_skip:
+                if has_unclassified:
+                    sys.exit(1)
+                return None
+
+            if has_unclassified:
+                sys.exit(1)
             return None
 
+        # ---- SA1.3 — Tenant model isolation check -------------------------
         results = [check_tenant_model_isolation(m) for m in models]
         passed_count = sum(1 for r in results if r["passed"])
         failed_count = len(results) - passed_count
 
-        if fmt == "json":
-            self.stdout.write(
-                json.dumps(
-                    {
-                        "status": "ok" if failed_count == 0 else "fail",
-                        "total": len(results),
-                        "passed": passed_count,
-                        "failed": failed_count,
-                        "results": [
+        # ---- SA1.4 — Default-deny classification check -------------------
+        # (already ran above as the first step)
+
+        # If --postgres-only and not on PostgreSQL, report classification
+        # findings and skip the remaining output (CR-SA14-002).
+        if postgres_only and connection.vendor != "postgresql":
+            if has_unclassified:
+                if fmt == "json":
+                    self.stdout.write(
+                        json.dumps(
                             {
-                                "app_label": r["app_label"],
-                                "model_name": r["model_name"],
-                                "db_table": r["db_table"],
-                                "has_organization_id": r["has_organization_id"],
-                                "has_force_rls": (
-                                    r["has_force_rls"]
-                                    if r["has_force_rls"] is not None
-                                    else "n/a"
+                                "status": "fail",
+                                "message": (
+                                    "--postgres-only flag set; unclassified "
+                                    "models found."
                                 ),
-                                "passed": r["passed"],
+                                "unclassified": [
+                                    {
+                                        "app_label": m._meta.app_label,
+                                        "model_name": m.__name__,
+                                        "db_table": m._meta.db_table,
+                                    }
+                                    for m in unclassified
+                                ],
                             }
-                            for r in results
-                        ],
-                    },
-                    indent=2,
-                )
-            )
+                        )
+                    )
+                else:
+                    self.stdout.write(
+                        self.style.ERROR(
+                            "Unclassified project model(s) — not in "
+                            "TENANT_TABLE_REGISTRY:\n"
+                        )
+                    )
+                    for m in unclassified:
+                        self.stdout.write(
+                            f"  [{self.style.ERROR('UNCLASSIFIED')}] "
+                            f"{m._meta.app_label}.{m.__name__}\n"
+                        )
+                sys.exit(1)
+            else:
+                if fmt == "json":
+                    self.stdout.write(
+                        json.dumps(
+                            {
+                                "status": "skip",
+                                "message": (
+                                    "--postgres-only flag set but not "
+                                    "connected to PostgreSQL."
+                                ),
+                            }
+                        )
+                    )
+                else:
+                    self.stdout.write(
+                        "SKIP: --postgres-only and not connected to PostgreSQL."
+                    )
+            return None
+
+        if fmt == "json":
+            payload: dict[str, object] = {  # type: ignore[no-redef]
+                "status": (
+                    "ok" if failed_count == 0 and not has_unclassified else "fail"
+                ),
+                "tenant_models": {
+                    "total": len(results),
+                    "passed": passed_count,
+                    "failed": failed_count,
+                    "results": [
+                        {
+                            "app_label": r["app_label"],
+                            "model_name": r["model_name"],
+                            "db_table": r["db_table"],
+                            "has_organization_id": r["has_organization_id"],
+                            "has_force_rls": (
+                                r["has_force_rls"]
+                                if r["has_force_rls"] is not None
+                                else "n/a"
+                            ),
+                            "passed": r["passed"],
+                        }
+                        for r in results
+                    ],
+                },
+                "unclassified": [
+                    {
+                        "app_label": m._meta.app_label,
+                        "model_name": m.__name__,
+                        "db_table": m._meta.db_table,
+                    }
+                    for m in unclassified
+                ],
+            }
+            self.stdout.write(json.dumps(payload, indent=2))
         else:
             self.stdout.write(
                 f"Tenant isolation conformance check\n"
@@ -167,9 +288,28 @@ class Command(BaseCommand):
                     f"         FORCE RLS: {rls_status}"
                 )
 
-            self.stdout.write(f"\n{'=' * 50}")
-            self.stdout.write(f"Result: {passed_count} passed, {failed_count} failed")
+            if has_unclassified:
+                self.stdout.write(
+                    self.style.ERROR(
+                        "\nUnclassified project model(s) — not in "
+                        "TENANT_TABLE_REGISTRY:\n"
+                    )
+                )
+                for m in unclassified:
+                    self.stdout.write(
+                        f"  [{self.style.ERROR('UNCLASSIFIED')}] "
+                        f"{m._meta.app_label}.{m.__name__}\n"
+                        f"         Table: {m._meta.db_table}\n"
+                    )
 
+            self.stdout.write(f"\n{'=' * 50}")
+            self.stdout.write(
+                f"Result: {passed_count} passed, {failed_count} failed"
+                + (f", {len(unclassified)} unclassified" if has_unclassified else "")
+            )
+
+        if has_unclassified:
+            sys.exit(1)
         if failed_count > 0:
             sys.exit(1)
 

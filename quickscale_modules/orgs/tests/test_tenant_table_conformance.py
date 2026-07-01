@@ -59,8 +59,17 @@ def _get_field(
 
 
 def _concrete_qs_models() -> list[type[models.Model]]:
-    """Return every concrete installed model under a QuickScale app label."""
-    return [m for m in apps.get_models() if _is_qs_model(m) and _is_concrete(m)]
+    """Return every concrete installed model under a QuickScale app label.
+
+    Includes auto-created models (e.g. implicit ManyToMany through tables)
+    so that the conformance gate covers project-owned intermediate tables
+    as well (CR-SA14-001).
+    """
+    return [
+        m
+        for m in apps.get_models(include_auto_created=True)
+        if _is_qs_model(m) and _is_concrete(m)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +125,28 @@ def test_registry_covers_all_concrete_qs_models() -> None:
     stale -= exempt_keys
     assert not stale, (
         f"TENANT_TABLE_REGISTRY entries with no installed model: {sorted(stale)}"
+    )
+
+
+def test_concrete_qs_models_includes_auto_created_through() -> None:
+    """Proof that auto-created ManyToMany through models are now included
+    in the conformance walk (CR-SA14-001).
+    """
+    concrete = _concrete_qs_models()
+    through_model_names = {
+        (m._meta.app_label, m.__name__) for m in concrete if m._meta.auto_created
+    }
+
+    # The three known auto-created through models must be present.
+    expected_through = {
+        ("quickscale_modules_crm", "Contact_tags"),
+        ("quickscale_modules_crm", "Deal_tags"),
+        ("quickscale_modules_blog", "Post_tags"),
+    }
+    missing = expected_through - through_model_names
+    assert not missing, (
+        f"Auto-created through models missing from conformance walk: "
+        f"{sorted(missing)}. Found auto-created: {sorted(through_model_names)}"
     )
 
 
