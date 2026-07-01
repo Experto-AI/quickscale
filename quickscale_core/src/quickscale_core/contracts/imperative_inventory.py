@@ -278,6 +278,44 @@ STORAGE_MANIFEST: Final[list[tuple[str, str, str]]] = [
 ]
 
 # ---------------------------------------------------------------------------
+# Freeze guardrail baseline
+#
+# SA5.2 freeze guardrail: grandfathered set of module names that still
+# carry imperative inventory entries.  Any module NOT in this set that
+# appears in MANIFEST_INVENTORY will fail CI — new modules must go through
+# the manifest/derivation path, not add imperative inventory entries.
+#
+# This set is a **grandfathered freeze** that may only SHRINK when a
+# module's imperative entries have been fully migrated to the
+# manifest/derivation path (e.g. analytics after SA5.1).  Adding a new
+# name here is a freeze-busting event that requires explicit documented
+# approval.
+#
+# Manifest-only / derivation-only modules that ship without imperative
+# inventory entries do NOT need to be added to this set.
+# ---------------------------------------------------------------------------
+
+#: Grandfathered module names that may still carry imperative inventory
+#: entries.  SA5.2 freeze guardrail baseline — this is a grandfathered
+#: freeze, not a mutable allowlist (see module docstring for rules).
+AUTHORIZED_IMPERATIVE_MODULES: Final[frozenset[str]] = frozenset(
+    {
+        "analytics",
+        "auth",
+        "backups",
+        "billing",
+        "blog",
+        "crm",
+        "forms",
+        "listings",
+        "notifications",
+        "orgs",
+        "social",
+        "storage",
+    }
+)
+
+# ---------------------------------------------------------------------------
 # Combined inventory
 # ---------------------------------------------------------------------------
 
@@ -367,6 +405,7 @@ def count_inventory_category(category: str) -> int:
 __all__ = [
     "ADAPTER_ONLY",
     "ADAPTER_ONLY_SYMBOLS",
+    "AUTHORIZED_IMPERATIVE_MODULES",
     "DECLARATIVE_TARGET",
     "DECLARATIVE_TARGET_SYMBOLS",
     "MANIFEST_INVENTORY",

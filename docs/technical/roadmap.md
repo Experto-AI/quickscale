@@ -65,7 +65,7 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
                    │     └───────────────────────────────────────────► SA3.2  (←SA3.1 & ←SA1.3)
 ```
 
-**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1, SA5.1 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5, SA3.2, SA4.2, SA5.2) is clear to start now; none is waiting on another track.
+**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1, SA5.1, SA5.2 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5, SA3.2, SA4.2) is clear to start now; none is waiting on another track.
 
 **Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge is **SA3.2**, which consumes the contract SSOT that **SA1.3** establishes — sequence SA3.2 after SA1.3 has merged to `v87`.
 
@@ -147,10 +147,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Files:* `quickscale_modules/analytics/.../module.yml`, `quickscale_core/.../manifest/` + `contracts/`, the analytics imperative builder.
   *Acceptance:* analytics config derives from `module.yml` with no imperative builder; `imperative_inventory.py` loses the analytics entries; plan/apply for analytics unchanged in behavior.
 
-- [ ] **SA5.2 — Freeze guardrail against new imperative wiring.** `Tier 2 · Track 3 · deps: none`
+- [x] **SA5.2 — Freeze guardrail against new imperative wiring.** `Tier 2 · Track 3 · deps: none`
   Add a lint/test that fails when a newly added module ships imperative per-module config instead of going through the manifest/derivation path, stopping the imperative surface from growing while the cutover proceeds.
   *Files:* repo-level test (reads `imperative_inventory.py` / module set).
   *Acceptance:* adding an imperative builder for a new module fails CI; remaining per-module migrations are tracked as one Tier-2 task each (follow-on, not in this batch).
+  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
 
 ---
 

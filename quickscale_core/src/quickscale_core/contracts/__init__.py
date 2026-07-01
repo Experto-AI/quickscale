@@ -15,6 +15,7 @@ shims at its original import locations.
 from quickscale_core.contracts.imperative_inventory import (
     ADAPTER_ONLY,
     ADAPTER_ONLY_SYMBOLS,
+    AUTHORIZED_IMPERATIVE_MODULES,
     DECLARATIVE_TARGET,
     DECLARATIVE_TARGET_SYMBOLS,
     MANIFEST_INVENTORY,
@@ -220,6 +221,7 @@ __all__ = [
     # Imperative-logic inventory
     "ADAPTER_ONLY",
     "ADAPTER_ONLY_SYMBOLS",
+    "AUTHORIZED_IMPERATIVE_MODULES",
     "DECLARATIVE_TARGET",
     "DECLARATIVE_TARGET_SYMBOLS",
     "MANIFEST_INVENTORY",
