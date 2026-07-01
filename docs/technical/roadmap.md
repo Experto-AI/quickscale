@@ -65,9 +65,9 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
                    │     └───────────────────────────────────────────► SA3.2  (←SA3.1 & ←SA1.3)
 ```
 
-**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1, SA4.2, SA5.1, SA5.2 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5, SA3.2) is clear to start now; none is waiting on another track.
+**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5) is clear to start now; none is waiting on another track.
 
-**Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge is **SA3.2**, which consumes the contract SSOT that **SA1.3** establishes — sequence SA3.2 after SA1.3 has merged to `v87`.
+**Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge was **SA3.2**, which consumed the contract SSOT that **SA1.3** established — now closed.
 
 > **Shared closeout files:** `CHANGELOG.md` and this file (`docs/technical/roadmap.md`) are **not** owned by any single track. Every track updates them when closing out a completed task — they are the only files where concurrent edits are expected. To avoid merge conflicts, follow the shared-file merge procedure in the next section: always merge `v87` into your track branch first, resolve conflicts in these two files on the track branch, then merge back.
 
@@ -123,10 +123,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Acceptance:* no doc statement contradicts `TENANT_TABLE_REGISTRY` or the shipped manager classes.
   **Closed 2026-06-30, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail. Unblocks SA3.2.
 
-- [ ] **SA3.2 — CI doc-consistency gate.** `Tier 2 · Track 3 · deps: SA3.1 + (cross-track) SA1.3`
-  Add a test/CI check that diffs the enrolled-model list and manager-API names asserted in the docs against `TENANT_TABLE_REGISTRY` (the SSOT established by SA1.3) and the actual manager classes, failing on mismatch.
-  *Files:* new test under `quickscale_modules/orgs/tests/` (or a repo-level doc-lint).
-  *Acceptance:* editing the registry without updating the docs (or vice-versa) fails CI.
+- [x] **SA3.2 — CI doc-consistency gate.** `Tier 2 · Track 3 · deps: SA3.1 + (cross-track) SA1.3`
+  Added `test_doc_consistency.py` under `quickscale_modules/orgs/tests/` that reads a machine-readable `<!-- enrolled-models assertion: ... -->` comment from **both** `docs/technical/organizations.md` **and** `docs/technical/decisions.md` at runtime and diffs the asserted enrolled-model counts (total: 21, per-app: CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) against the `TENANT_TABLE_REGISTRY` SSOT (established by SA1.3), failing on mismatch. The gate also validates the documented `TenantManager` / `TenantManager(super_scope=True)` API surface against the actual code, verifies that `.for_org()` chaining is absent from `TenantManager`, and guards against re-introduction of stale manager names (`TenantScopedManager`, `OperatorManager`) in both the managers module and both authoritative docs. The cross-doc agreement test ensures the assertion in both docs stays identical. The gate uses no hardcoded constants — any doc-only edit to the assertion changes the test outcome directly.
+  *Files:* `quickscale_modules/orgs/tests/test_doc_consistency.py`, `docs/technical/organizations.md`, `docs/technical/decisions.md`.
+  *Acceptance:* editing the registry without updating either doc assertion (or vice-versa) fails CI; the documented manager API must match the actual code; stale manager names cannot reappear.
+  *Findings/blockers:* **CR-SA32-001 (resolved):** The gate now consumes the doc at runtime via a parseable assertion block instead of copied constants, so doc-only drift properly fails CI. Both docs are checked and the documented manager API surface is validated. **Closed 2026-07-01.**
 
 #### Finding 4 — O(1) tenant-context priming (`why →` [Finding 4](../../findings.md#finding-4--db-tenant-context-is-primed-per-statement-by-a-connection-layer-wrapper-that-opens-a-transaction-around-every-autocommit-tenant-query))
 
