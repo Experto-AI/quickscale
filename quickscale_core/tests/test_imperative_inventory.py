@@ -7,6 +7,7 @@ internally consistent and meet basic structural expectations.
 from quickscale_core.contracts.imperative_inventory import (
     ADAPTER_ONLY,
     ADAPTER_ONLY_SYMBOLS,
+    AUTHORIZED_IMPERATIVE_MODULES,
     DECLARATIVE_TARGET,
     DECLARATIVE_TARGET_SYMBOLS,
     MANIFEST_INVENTORY,
@@ -23,17 +24,14 @@ from quickscale_core.contracts.module_discovery import discover_shipped_module_n
 class TestImperativeInventoryStructure:
     """Tests for the structure and consistency of MANIFEST_INVENTORY."""
 
-    def test_inventory_has_all_shipped_modules(self) -> None:
-        """Every shipped module should have an inventory entry."""
-        shipped = discover_shipped_module_names()
-        for name in shipped:
-            assert name in MANIFEST_INVENTORY, (
-                f"Shipped module '{name}' missing from MANIFEST_INVENTORY"
-            )
-
     def test_inventory_only_has_shipped_modules(self) -> None:
-        """Inventory should not contain entries for placeholder modules."""
-        assert "teams" not in MANIFEST_INVENTORY
+        """Every module in MANIFEST_INVENTORY must be a shipped module."""
+        shipped = set(discover_shipped_module_names())
+        for name in MANIFEST_INVENTORY:
+            assert name in shipped, (
+                f"Module '{name}' in MANIFEST_INVENTORY but not a shipped module. "
+                "New modules must go through the manifest/derivation path."
+            )
 
     def test_every_entry_has_valid_category(self) -> None:
         """Every symbol entry should have a recognised ownership category."""
@@ -99,6 +97,44 @@ class TestImperativeInventoryStructure:
             if cat == ADAPTER_ONLY
         )
         assert computed_adapter == ADAPTER_ONLY_SYMBOLS
+
+    # ------------------------------------------------------------------
+    # SA5.2 freeze guardrail
+    # ------------------------------------------------------------------
+
+    def test_no_new_imperative_modules_outside_authorized_set(self) -> None:
+        """No module outside AUTHORIZED_IMPERATIVE_MODULES may appear in
+        MANIFEST_INVENTORY.
+
+        SA5.2 freeze guardrail: adding a new module's imperative builder
+        entries to MANIFEST_INVENTORY fails CI unless the module name is
+        first added to AUTHORIZED_IMPERATIVE_MODULES through an explicit
+        policy decision (see the constant's docstring for rules).
+
+        New modules must go through the manifest/derivation path instead
+        of adding imperative inventory entries.
+        """
+        inventory_modules = set(MANIFEST_INVENTORY.keys())
+        unauthorized = inventory_modules - AUTHORIZED_IMPERATIVE_MODULES
+        assert not unauthorized, (
+            f"Modules in MANIFEST_INVENTORY outside "
+            f"AUTHORIZED_IMPERATIVE_MODULES: {unauthorized}. "
+            "New modules must go through the manifest/derivation path, "
+            "not add imperative inventory entries."
+        )
+
+    def test_authorized_set_contains_all_inventory_modules(self) -> None:
+        """AUTHORIZED_IMPERATIVE_MODULES should be a superset of
+        MANIFEST_INVENTORY keys.  This is the companion assertion to
+        test_no_new_imperative_modules_outside_authorized_set, verifying
+        that the authorized set is not accidentally narrowed.
+        """
+        assert AUTHORIZED_IMPERATIVE_MODULES.issuperset(MANIFEST_INVENTORY.keys()), (
+            "AUTHORIZED_IMPERATIVE_MODULES is missing some modules from "
+            "MANIFEST_INVENTORY.  Either add the missing module names to "
+            "the authorized set, or migrate those modules to the "
+            "manifest/derivation path and remove their inventory entries."
+        )
 
 
 class TestManifestInventoryHelpers:
