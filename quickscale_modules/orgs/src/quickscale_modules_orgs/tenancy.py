@@ -849,3 +849,202 @@ def remove_composite_child_fk(
 
 #: Column name used for tenant isolation on all ENROLLED models.
 ORG_ID_COLUMN: str = "organization_id"
+
+
+# ---------------------------------------------------------------------------
+# Tenant-model detection helpers (SA1.3)
+# ---------------------------------------------------------------------------
+# These helpers discover tenant-owned models across **all** installed app
+# labels by marker rather than by app-label prefix.  A model is considered
+# a tenant model if either:
+#
+#   1. Its default ``objects`` manager is an instance of ``TenantManager``, or
+#   2. It is a subclass of ``TenantModel`` (directly or through MRO).
+#
+# This dual-detection approach works regardless of whether a module has
+# already been migrated to inherit ``TenantModel`` (SA1.1/SA1.2) or still
+# uses the hand-rolled ``objects = TenantManager()`` pattern.
+#
+# These helpers are imported by ``check_tenant_isolation`` management command
+# (SA1.3), the Django system check in ``checks.py`` (SA1.3), and the
+# conformance gate tests.  They intentionally do **not** depend on
+# ``TENANT_TABLE_REGISTRY``, which covers only the ``quickscale_modules_*``
+# prefix; SA1.3 detection is app-label-agnostic.
+# ---------------------------------------------------------------------------
+
+
+def is_tenant_model(model: type[models.Model]) -> bool:
+    """Return ``True`` if *model* is a tenant-scoped model.
+
+    A model is considered tenant-scoped when:
+
+    * Its default ``objects`` manager is a ``TenantManager`` instance, **or**
+    * It inherits from ``TenantModel``.
+
+    Args:
+        model: A Django ``Model`` subclass.
+
+    Returns:
+        ``True`` if the model appears to be tenant-scoped.
+    """
+    from quickscale_modules_orgs.managers import TenantManager
+
+    # Check by manager marker first (works before TenantModel adoption).
+    objects = getattr(model, "objects", None)
+    if isinstance(objects, TenantManager):
+        return True
+
+    # Check by class hierarchy (works after TenantModel adoption).
+    from quickscale_modules_orgs.models import TenantModel
+
+    if issubclass(model, TenantModel):
+        return True
+
+    return False
+
+
+def get_tenant_models() -> list[type[models.Model]]:
+    """Return every installed concrete model that is tenant-scoped.
+
+    Uses :func:`is_tenant_model` across **all** app labels — not limited
+    to the ``quickscale_modules_*`` prefix.
+
+    Returns:
+        A list of concrete Django model classes that are tenant-scoped.
+    """
+    from django.apps import apps
+
+    result: list[type[models.Model]] = []
+    for model in apps.get_models():
+        # Skip abstract and proxy models.
+        if model._meta.abstract or model._meta.proxy:
+            continue
+        if is_tenant_model(model):
+            result.append(model)
+    return result
+
+
+def has_organization_id_field(model: type[models.Model]) -> bool:
+    """Return ``True`` if *model* has a direct ``organization_id`` column.
+
+    Checks ``model._meta.get_field()`` for the ``organization_id`` field
+    name.  Does **not** follow parent abstract fields — only direct fields
+    on the model's own ``_meta.local_fields`` or inherited concrete fields.
+
+    Args:
+        model: A Django ``Model`` subclass.
+
+    Returns:
+        ``True`` if the model has ``organization_id`` in its fields.
+    """
+    from django.core.exceptions import FieldDoesNotExist
+
+    try:
+        model._meta.get_field(ORG_ID_COLUMN)
+        return True
+    except FieldDoesNotExist:
+        return False
+
+
+def table_has_force_rls(db_table: str) -> bool | None:
+    """Check whether a database table has FORCE RLS enabled.
+
+    Queries the PostgreSQL catalog (``pg_class`` + ``pg_policies``) to
+    verify that:
+
+    1. ``relrowsecurity`` is true (RLS enabled).
+    2. ``relforcerowsecurity`` is true (FORCE RLS).
+    3. At least one policy exists in ``pg_policies`` for the table.
+
+    Returns ``None`` on non-PostgreSQL databases (safe to call from any
+    environment without a vendor check).
+
+    Args:
+        db_table: The physical database table name (``model._meta.db_table``).
+
+    Returns:
+        ``True`` if FORCE RLS is active with at least one policy,
+        ``False`` if RLS is disabled or not forced, ``None`` on
+        non-PostgreSQL databases.
+    """
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        return None
+
+    with connection.cursor() as cursor:
+        # Check relrowsecurity and relforcerowsecurity in pg_class.
+        cursor.execute(
+            """
+            SELECT relrowsecurity, relforcerowsecurity
+            FROM pg_class
+            WHERE relname = %s
+            """,
+            [db_table],
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return False
+        relrowsecurity, relforcerowsecurity = row
+        if not relrowsecurity or not relforcerowsecurity:
+            return False
+
+        # Check at least one policy exists in pg_policies.
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM pg_policies
+            WHERE tablename = %s
+            """,
+            [db_table],
+        )
+        policy_count = cursor.fetchone()[0]
+        return policy_count > 0
+
+
+def check_tenant_model_isolation(
+    model: type[models.Model],
+) -> dict[str, object]:
+    """Run the full SA1.3 isolation check against a single model.
+
+    Checks:
+    1. The model has a direct ``organization_id`` column.
+    2. If on PostgreSQL, the model's table has FORCE RLS enabled with
+       at least one policy.
+
+    Args:
+        model: A Django ``Model`` subclass (typically from
+            :func:`get_tenant_models`).
+
+    Returns:
+        A dict with keys:
+        - ``model``: The model class.
+        - ``app_label``: Django app label.
+        - ``model_name``: Short model name.
+        - ``db_table``: Physical table name.
+        - ``has_organization_id``: ``True``/``False``.
+        - ``has_force_rls``: ``True``/``False``/``None`` (None = not on
+          PostgreSQL).
+        - ``passed``: ``True`` if all checks pass for the current
+          environment.
+    """
+    db_table = model._meta.db_table
+    has_org_id = has_organization_id_field(model)
+    force_rls = table_has_force_rls(db_table)
+
+    # On PostgreSQL, both checks must pass.  On other databases, only
+    # organization_id is required.
+    if force_rls is None:
+        passed = has_org_id
+    else:
+        passed = has_org_id and force_rls
+
+    return {
+        "model": model,
+        "app_label": model._meta.app_label,
+        "model_name": model.__name__,
+        "db_table": db_table,
+        "has_organization_id": has_org_id,
+        "has_force_rls": force_rls,
+        "passed": passed,
+    }
