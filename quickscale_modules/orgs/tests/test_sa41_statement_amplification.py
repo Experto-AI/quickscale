@@ -124,21 +124,23 @@ BASELINE_AUTOCOMMIT_AMPLIFICATION = 4.0
 
 # --- Scenario 3: org context, explicit transaction -------------------------
 # The caller wraps the dispatch in ``transaction.atomic()``.  AF9's
-# explicit-transaction path fires ``SET LOCAL`` before every query inside
-# the atomic.  ``CaptureQueriesContext`` is nested inside the outer atomic,
-# so the outer atomic's BEGIN/COMMIT are not captured (in
-# ``transaction=True`` mode the outer atomic creates a savepoint before
-# the capture window opens).
-# Pattern:  (SL D) (SL D)  =  0B 2SL 2D 0C
-# Total:    4
+# explicit-transaction path fires ``SET LOCAL`` only on the first wrapper
+# call inside the atomic (SA4.2 per-transaction memo eliminates redundant
+# SET LOCALs on subsequent statements).  ``CaptureQueriesContext`` is
+# nested inside the outer atomic, so the outer atomic's BEGIN/COMMIT are
+# not captured (in ``transaction=True`` mode the outer atomic creates a
+# savepoint before the capture window opens).
+# Pattern:  (SL D) D  =  0B 1SL 2D 0C
+# Total:    3
 
-BASELINE_EXPLICIT_TXN_TOTAL = 4
+BASELINE_EXPLICIT_TXN_TOTAL = 3
 """Total captured SQL statements with AF9 active inside an explicit transaction.
 
 Note: ``CaptureQueriesContext`` is nested inside the outer
 ``db_transaction.atomic()``, so the outer atomic's BEGIN/COMMIT are not
 captured.  In ``transaction=True`` test mode the outer atomic creates a
-savepoint before the capture window opens.
+savepoint before the capture window opens.  SA4.2 eliminates the redundant
+SET LOCAL, reducing the total from 4 → 3.
 """
 
 BASELINE_EXPLICIT_TXN_DATA = 2
@@ -150,17 +152,19 @@ BASELINE_EXPLICIT_TXN_BEGIN = 0
 BASELINE_EXPLICIT_TXN_COMMIT = 0
 """COMMIT count — not captured (outer atomic is a savepoint in ``transaction=True``)."""
 
-BASELINE_EXPLICIT_TXN_SET_LOCAL = 2
-"""SET LOCAL count — one per data query, even inside the same transaction."""
+BASELINE_EXPLICIT_TXN_SET_LOCAL = 1
+"""SET LOCAL count — SA4.2 eliminates redundant SET LOCALs inside the
+same transaction.  Only the first statement primes; subsequent statements
+reuse the per-transaction memo.
+"""
 
-BASELINE_EXPLICIT_TXN_AMPLIFICATION = 2.0  # 4 / 2
-"""Amplification factor: total / data = 4 / 2.
+BASELINE_EXPLICIT_TXN_AMPLIFICATION = 1.5  # 3 / 2
+"""Amplification factor: total / data = 3 / 2.
 
-    The first SET LOCAL is required priming (it establishes the org
-    context for the transaction); only the second SET LOCAL inside the
-    same transaction is redundant.  That redundant SET LOCAL is the
-    overhead that **SA4.2 will eliminate** with per-transaction memo.
-    Reducing from 4→3 statements (1 SET LOCAL saved).
+    SA4.2 eliminates the redundant SET LOCAL inside the same transaction
+    via a per-transaction memo (the first statement primes, subsequent
+    statements reuse the memo).  Reducing from 4→3 statements
+    (1 SET LOCAL saved) lowers amplification from 2.0x → 1.5x.
 """
 
 
@@ -490,14 +494,12 @@ class TestSa41StatementAmplification:
     # the outer atomic creates a savepoint before the capture window
     # opens).
     #
-    # Expected: 4 SQL statements = 2 × (SET LOCAL + SELECT).
-    # Amplification: 2.0× over the unprimed data baseline.
+    # Expected: 3 SQL statements = 1 × SET LOCAL + 2 × SELECT.
+    # Amplification: 1.5× over the unprimed data baseline.
     #
-    # The first SET LOCAL is required priming (it establishes the org
-    # context for the transaction); only the second SET LOCAL inside the
-    # same transaction is redundant.  That redundant SET LOCAL is the
-    # overhead that **SA4.2 will eliminate** with per-transaction memo.
-    # Saving 1 SET LOCAL reduces the captured total from 4 → 3.
+    # SA4.2 eliminates the redundant SET LOCAL inside the same transaction
+    # via a per-transaction memo.  Saving 1 SET LOCAL reduces the captured
+    # total from 4 → 3 (amplification 2.0x → 1.5x).
 
     @pytest.mark.django_db(transaction=True)
     def test_with_org_explicit_transaction(self, _seeded_org) -> None:
@@ -559,9 +561,9 @@ class TestSa41StatementAmplification:
     #   [SA4.1]  With-org autocommit:      total=8, data=2, txn=(2B+2C+0R),
     #       set_local=2, savepoint=(0SP+0RL)
     #   [SA4.1]    → Amplification factor:   4.0x  (baseline 4.0x)
-    #   [SA4.1]  With-org explicit txn:    total=4, data=2, txn=(0B+0C+0R),
-    #       set_local=2, savepoint=(0SP+0RL)
-    #   [SA4.1]    → Amplification factor:   2.0x  (baseline 2.00x)
+    #   [SA4.1]  With-org explicit txn:    total=3, data=2, txn=(0B+0C+0R),
+    #       set_local=1, savepoint=(0SP+0RL)
+    #   [SA4.1]    → Amplification factor:   1.5x  (baseline 1.50x)
     #
     # Baselines are request-bound — measured through the real
     # ``TenantMiddleware`` session-org resolution path (via the
@@ -569,4 +571,5 @@ class TestSa41StatementAmplification:
     # the exact amplification that production content routes see.
     # The explicit-transaction capture starts inside the outer atomic
     # (``CaptureQueriesContext`` is nested), so no BEGIN/COMMIT appear
-    # in the measured totals.
+    # in the measured totals.  SA4.2 reduces the explicit-transaction
+    # total from 4→3 (one redundant SET LOCAL eliminated).

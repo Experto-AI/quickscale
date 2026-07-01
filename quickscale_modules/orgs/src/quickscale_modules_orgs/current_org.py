@@ -30,6 +30,9 @@ from contextvars import ContextVar
 from typing import Any
 
 
+_SENTINEL = object()
+"""Sentinel for detecting unset memo-atomic attribute."""
+
 _current_org_id_var: ContextVar[uuid.UUID | None] = ContextVar(
     "_current_org_id", default=None
 )
@@ -426,20 +429,28 @@ def _make_priming_execute_wrapper() -> Any:
     See module docstring for the two code paths (explicit transaction and
     autocommit).
     """
-    # NOTE(PHASE-1): We do **not** track per-transaction priming state.
-    #   For explicit transactions we issue SET LOCAL on every wrapper call
-    #   (idempotent and correct).  Per-transaction tracking can be added
-    #   in a later phase if profiling shows measurable overhead.
-    #   The rationale: SET LOCAL is a local GUC assignment — PostgreSQL
-    #   processes it inline without a separate round-trip once the query
-    #   text is received.  For typical transaction sizes (< 100 statements)
-    #   the overhead is negligible.
+    # NOTE(SA4.2): Per-transaction priming memo eliminates redundant
+    #   SET LOCAL calls inside the same explicit transaction.  We store
+    #   a connection attribute ``_af9_primed_for_txn`` set to the primed
+    #   org_id string, and ``_af9_primed_atomic`` set to the outermost
+    #   ``Atomic`` object reference.  On subsequent wrapper calls inside
+    #   the same atomic block, if the memo matches the current org_id we
+    #   skip the SET LOCAL.
     #
-    #   Known edge case: if a connection transitions directly from one
-    #   explicit atomic block to another with no intervening autocommit
-    #   SQL, the priming wrapper still fires correctly because it primes
-    #   unconditionally on every call inside an atomic block.
-    #   The fail-closed outcome (RLS returns zero rows) is safe.
+    #   CR-SA42-001 fix: the memo carries the outermost Atomic object
+    #   reference so it is invalidated across explicit-transaction
+    #   boundaries even when no intervening autocommit query fires on a
+    #   reused connection.  We use Python's ``is`` operator on the stored
+    #   Atomic reference to detect object identity changes.  This avoids
+    #   CPython memory-address reuse where ``id()`` returns the same value
+    #   for two different Atomic objects allocated at the same address
+    #   (the core CR-SA42-001 defect).  Each ``transaction.atomic()``
+    #   creates a new ``Atomic`` instance, so ``current_atomic is not
+    #   memo_atomic`` across transactions — the memo is cleared on
+    #   mismatch, forcing the first statement in the new transaction to
+    #   re-prime unconditionally, regardless of whether the org_id
+    #   matches.  This is correct because ``SET LOCAL`` is
+    #   transaction-scoped — the prior transaction's GUC setting is gone.
 
     def wrapper(
         execute: Any,
@@ -467,11 +478,43 @@ def _make_priming_execute_wrapper() -> Any:
         org_id_str = str(org_id)
 
         # ---- Explicit transaction path ----------------------------------
+        # CR-SA42-001: Per-transaction memo with atomic block identity.
+        # The memo carries the outermost ``atomic_blocks[0]`` identity so
+        # it is invalidated across explicit-transaction boundaries even
+        # when no intervening autocommit query fires on a reused connection.
+        # ``SET LOCAL`` is transaction-scoped; a memo from a prior
+        # transaction must not prevent re-priming in a new transaction.
         if conn.in_atomic_block:
-            _issue_set_local(conn, org_id_str)
+            # Detect atomic-block boundary via outermost atomic object
+            # identity.  Each ``transaction.atomic()`` creates a new
+            # ``Atomic`` instance; we store a direct reference to the
+            # atomic object so that the ``is`` operator reliably detects
+            # object identity changes across transactions.  Using
+            # ``is`` on the stored reference avoids CPython memory-address
+            # reuse where ``id()`` can return the same value for two
+            # different atomic objects (CR-SA42-001).
+            current_atomic = conn.atomic_blocks[0] if conn.atomic_blocks else None
+            memo_atomic = getattr(conn, "_af9_primed_atomic", _SENTINEL)
+            if memo_atomic is not _SENTINEL and current_atomic is not memo_atomic:
+                if hasattr(conn, "_af9_primed_for_txn"):
+                    del conn._af9_primed_for_txn
+
+            already_primed = getattr(conn, "_af9_primed_for_txn", None)
+            if already_primed != org_id_str:
+                _issue_set_local(conn, org_id_str)
+                conn._af9_primed_for_txn = org_id_str
+                conn._af9_primed_atomic = current_atomic
             return execute(sql, params, many, context)
 
         # ---- Autocommit path --------------------------------------------
+        # Clear any stale per-transaction memo from a prior
+        # explicit transaction.  The next explicit transaction will
+        # prime unconditionally because the memo is absent.
+        if hasattr(conn, "_af9_primed_for_txn"):
+            del conn._af9_primed_for_txn
+        if hasattr(conn, "_af9_primed_atomic"):
+            del conn._af9_primed_atomic
+
         # Wrap in a short atomic so SET LOCAL and the tenant SQL share
         # a transaction scope.  The atomic is entered and exited
         # immediately — no request-long transaction (AF4 guard).

@@ -80,9 +80,6 @@ from quickscale_core.contracts.resolvers import (
     normalize_storage_module_options,
     resolve_storage_module_options,
     validate_storage_module_options,
-    # Private helpers
-    _is_valid_posthog_host,
-    _normalize_posthog_host,
 )
 from quickscale_core.manifest.schema import ModuleManifest
 
@@ -100,6 +97,10 @@ def _make_mock_manifest(
     manifest.name = name
     manifest.get_defaults.return_value = defaults or {}
     manifest.managed_files = {}
+    # SA5.1: manifest bridge reads derivation attributes from the manifest.
+    manifest.wiring_projections = None
+    manifest.derived_settings = None
+    manifest.option_derivations = None
     return manifest
 
 
@@ -113,31 +114,6 @@ _MANIFEST_PATCH_PATH = "quickscale_core.contracts.resolvers.load_manifest_from_p
 
 class TestResolversAnalytics:
     """Tests for analytics module resolver/validate/default functions."""
-
-    def test_normalize_posthog_host(self) -> None:
-        """_normalize_posthog_host canonicalizes PostHog host URLs."""
-        assert _normalize_posthog_host("") == ""
-        assert _normalize_posthog_host("  ") == ""
-        assert _normalize_posthog_host("us.i.posthog.com") == "https://us.i.posthog.com"
-        assert (
-            _normalize_posthog_host("https://eu.i.posthog.com")
-            == "https://eu.i.posthog.com"
-        )
-        assert (
-            _normalize_posthog_host("http://localhost:8000") == "http://localhost:8000"
-        )
-        assert (
-            _normalize_posthog_host("//cdn.i.posthog.com/")
-            == "https://cdn.i.posthog.com"
-        )
-
-    def test_is_valid_posthog_host(self) -> None:
-        """_is_valid_posthog_host validates PostHog host URLs."""
-        assert _is_valid_posthog_host("") is False
-        assert _is_valid_posthog_host("https://us.i.posthog.com") is True
-        assert _is_valid_posthog_host("http://localhost:8000") is True
-        assert _is_valid_posthog_host("not-a-url") is False
-        assert _is_valid_posthog_host("") is False
 
     @patch(_MANIFEST_PATCH_PATH)
     def test_default_analytics(self, mock_load: MagicMock) -> None:
