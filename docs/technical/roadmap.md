@@ -65,7 +65,7 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
                    │     └───────────────────────────────────────────► SA3.2  (←SA3.1 & ←SA1.3)
 ```
 
-**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1, SA5.1, SA5.2 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5, SA3.2, SA4.2) is clear to start now; none is waiting on another track.
+**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1, SA4.2, SA5.1, SA5.2 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5, SA3.2) is clear to start now; none is waiting on another track.
 
 **Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge is **SA3.2**, which consumes the contract SSOT that **SA1.3** establishes — sequence SA3.2 after SA1.3 has merged to `v87`.
 
@@ -102,10 +102,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Acceptance:* command passes on the QuickScale repo and fails when a tenant model lacks org_id or a FORCE-RLS policy.
   **Closed 2026-07-01, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail. Establishes the SSOT (`get_tenant_models()`) that SA3.2 consumes.
 
-- [ ] **SA1.4 — Default-deny exclusion registry for user models.** `Tier 2 · Track 1 · deps: SA1.3`
-  Extend the check so every concrete project model must be *either* tenant-enrolled *or* listed in an explicit project-level exclusion registry; an unclassified concrete model fails the check (forces a per-model isolation decision in user code).
-  *Files:* `tenancy.py` (exclusion-registry mechanism), `check_tenant_isolation.py`.
-  *Acceptance:* a new unclassified `models.Model` fails the check until enrolled or explicitly excluded.
+- [x] **SA1.4 — Default-deny exclusion registry for user models.** `Tier 2 · Track 1 · deps: SA1.3`
+  Extended the check so every concrete model from a project-owned app (``quickscale_modules_*`` prefix) must be *either* tenant-enrolled *or* explicitly classified in ``TENANT_TABLE_REGISTRY``; an unclassified concrete model fails the check. Added helpers to ``tenancy.py``: ``QS_APP_PREFIX``, ``is_project_app()``, ``get_concrete_project_models()``, ``is_classified_in_registry()``, ``get_unclassified_concrete_models()``. The management command and system check both enforce the new default-deny rule (command exits 1 for unclassified models; system check emits ``W005``). All 21 enrolled + 13 excluded/pending QuickScale module models are accounted for — no false positives in the current maintainer repo.
+  *Files:* `tenancy.py` (exclusion-registry mechanism), `check_tenant_isolation.py`, `checks.py`.
+  *Acceptance:* a new unclassified `models.Model` under a ``quickscale_modules_*`` app fails the check until enrolled or explicitly excluded.
+  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
 
 - [ ] **SA1.5 — Ship the isolation gate into generated-project CI.** `Tier 2 · Track 1 · deps: SA1.3`
   Wire `check_tenant_isolation` into the generated project's CI/test scaffold so it runs in the **user's** repo against the user's apps.
@@ -135,10 +136,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Acceptance:* reproducible baseline now recorded and enforced as test assertions.
   **Closed 2026-07-01, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail and measured amplification figures. Confirms the SA4.2 opportunity (4→3 statements via a per-transaction memo); SA4.2 can proceed immediately.
 
-- [ ] **SA4.2 — Per-transaction "already-primed" memo in the execute wrapper.** `Tier 2 · Track 2 · deps: SA4.1`
+- [x] **SA4.2 — Per-transaction "already-primed" memo in the execute wrapper.** `Tier 2 · Track 2 · deps: SA4.1`
   Skip the redundant `SET LOCAL` when the GUC is already primed within the current transaction (cheapest win; does not reintroduce request-long transactions). Defer the larger connection-checkout priming until SA4.1 justifies it.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py` (`_make_priming_execute_wrapper`).
   *Acceptance:* AF9/AF11 restricted-role RLS proofs stay green; multi-statement transactions issue `SET LOCAL` once; fail-closed behavior unchanged.
+  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
 
 #### Finding 5 — Declarative module-config cutover (`why →` [Finding 5](../../findings.md#finding-5--module-integration-is-a-high-arity-coordination-tax-mid-migration-between-an-imperative-per-module-path-and-an-incomplete-declarative-manifest-layer))
 
