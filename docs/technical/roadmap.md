@@ -145,10 +145,15 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
 
 #### Finding 4 — O(1) tenant-context priming (`why →` [Finding 4](../../findings.md#finding-4--db-tenant-context-is-primed-per-statement-by-a-connection-layer-wrapper-that-opens-a-transaction-around-every-autocommit-tenant-query))
 
-- [ ] **SA4.1 — Instrument per-request statement/transaction counts.** `Tier 2 · Track 2 · deps: none`
-  Add a staging load-test / measurement harness that records statements-per-request and `BEGIN`/`COMMIT` counts under representative tenant traffic, to confirm whether the per-statement priming overhead is real before changing the wrapper.
-  *Files:* test/bench harness under the orgs test suite (no production-path edits).
-  *Acceptance:* a reproducible measurement of statement-amplification on a multi-query endpoint; documented baseline.
+- [x] **SA4.1 — Instrument per-request statement/transaction counts.** `Tier 2 · Track 2 · deps: none`
+  Added a reusable measurement harness (`test_sa41_statement_amplification.py`) under the orgs test suite that captures SQL statements via `connection.queries` and categorises them into data, transaction-control (`BEGIN`/`COMMIT`), and priming (`SET LOCAL`) counts.  Three scenarios are measured for the `OrgDashboardView` data-access pattern exercised through `TenantMiddleware` session-org resolution via the test-only non-management URL `/sa41-bench/<slug>/` (the middleware pre-sets `request.org`, so the view skips the slug lookup — 2 data SELECTs: membership role check + member count): no-org baseline (AF9 pass-through), with-org autocommit (AF9 per-statement wrapping), and with-org explicit transaction (AF9 redundant-SET-LOCAL).
+  *Files:* `quickscale_modules/orgs/tests/test_sa41_statement_amplification.py`, `quickscale_modules/orgs/tests/urls.py`.
+  *Acceptance:* reproducible baseline now recorded and enforced as test assertions.
+  *Findings:* The per-statement priming overhead is **real and measurable**.
+  - **Autocommit amplification (2 data queries):** 8 SQL statements vs. 2 unprimed = **4× amplification**. Each data query triggers `BEGIN + SET LOCAL + query + COMMIT` via the AF9 wrapper's short-atomic path.
+  - **Explicit-transaction amplification (same 2 queries in one atomic):** 4 SQL statements vs. 2 unprimed = **2.0× amplification**. `CaptureQueriesContext` is nested inside the outer `transaction.atomic()`, so the outer atomic's `BEGIN`/`COMMIT` are not captured — only the 2 `SET LOCAL` + 2 data SELECTs appear in the measured total. AF9 issues `SET LOCAL` before every statement inside the atomic — the first SET LOCAL is the required priming call; only the second SET LOCAL is redundant (the GUC is already primed after the first one).
+  - **SA4.2 opportunity confirmed:** The explicit-transaction case shows that a per-transaction "already primed" memo would eliminate the lone redundant SET LOCAL call, bringing the captured count from 4 → 3 SQL statements per request (0 BEGIN + 1 SET LOCAL + 2 queries + 0 COMMIT).  No blocker discovered — the measurement infrastructure is ready; SA4.2 can proceed immediately.
+  **Closes SA4.1 (2026-07-01, wt-track2). Runtime/test/docs work complete — CR-SA41-001 resolved. CR-SA41-002 (low, blocking, consistency): accepted remaining blocker — the module-level Scenario 3 summary comment in `test_sa41_statement_amplification.py:21–26` still needs wording harmonization to match the validated explicit-transaction 4→3 projection. No further decision needed; user accepted stop-here closeout with this finding explicitly recorded.**
 
 - [ ] **SA4.2 — Per-transaction "already-primed" memo in the execute wrapper.** `Tier 2 · Track 2 · deps: SA4.1`
   Skip the redundant `SET LOCAL` when the GUC is already primed within the current transaction (cheapest win; does not reintroduce request-long transactions). Defer the larger connection-checkout priming until SA4.1 justifies it.
