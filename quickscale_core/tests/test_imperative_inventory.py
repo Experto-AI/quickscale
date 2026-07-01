@@ -107,7 +107,8 @@ class TestManifestInventoryHelpers:
     def test_get_manifest_inventory_known(self) -> None:
         """get_manifest_inventory returns entries for known modules."""
         entries = get_manifest_inventory("analytics")
-        assert len(entries) > 0
+        # SA5.1: analytics inventory cleared — all symbols served by manifest bridge.
+        assert len(entries) == 0
 
     def test_get_manifest_inventory_unknown(self) -> None:
         """get_manifest_inventory returns empty list for unknown modules."""
