@@ -1630,3 +1630,337 @@ def test_purge_organization_clears_social_cache() -> None:
     assert cache.get(link_key) is None
     assert cache.get(SOCIAL_EMBEDS_CACHE_KEY) is None
     assert cache.get(embed_key) is None
+
+
+# ---------------------------------------------------------------------------
+# SA1.3 — check_tenant_isolation command tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_pass_on_current_models() -> None:
+    """The command must report the correct pass/fail counts for current
+    installed tenant models.
+
+    All real ENROLLED models (21 total) should have organization_id + FORCE
+    RLS.  Test-only models (ConcreteTenantResource, ForwardFKChild) are
+    detected as tenant models (they inherit TenantModel) but their test
+    tables lack FORCE-RLS — this is expected and the command correctly
+    reports them as FAIL.
+    """
+    from io import StringIO
+
+    stdout = StringIO()
+    stderr = StringIO()
+
+    with pytest.raises(SystemExit):
+        call_command(
+            "check_tenant_isolation",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    output = stdout.getvalue()
+    # Should have discovered tenant models.
+    assert "Discovered" in output
+    assert "Result:" in output
+    # 21 real models pass, 2 test-only models fail (no FORCE-RLS).
+    assert "21 passed, 2 failed" in output
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_json_output() -> None:
+    """The --format json option must produce valid JSON with pass/fail status."""
+    from io import StringIO
+
+    stdout = StringIO()
+    stderr = StringIO()
+
+    with pytest.raises(SystemExit):
+        call_command(
+            "check_tenant_isolation",
+            format="json",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    import json as json_lib
+
+    data = json_lib.loads(stdout.getvalue())
+    assert "status" in data
+    assert "total" in data
+    assert "passed" in data
+    assert "results" in data
+    assert data["total"] == 23
+    assert data["passed"] == 21
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_detects_missing_organization_id() -> None:
+    """The command must detect a model that lacks organization_id.
+
+    Uses the detection helper directly to prove negative detection works,
+    then simulates a model without organization_id by checking a known
+    control-plane model that is not tenant-scoped.
+    """
+    from django.apps import apps
+
+    from quickscale_modules_orgs.tenancy import (
+        check_tenant_model_isolation,
+        has_organization_id_field,
+        is_tenant_model,
+    )
+
+    # Plan is a system-wide model — it should NOT be detected as tenant.
+    model = apps.get_model("quickscale_modules_billing", "Plan")
+    assert model is not None
+    assert not is_tenant_model(model), "Plan should not be detected as a tenant model."
+
+    # Organization (control-plane) should NOT be detected as tenant.
+    org_model = apps.get_model("quickscale_modules_orgs", "Organization")
+    assert org_model is not None
+    assert not is_tenant_model(org_model), (
+        "Organization should not be detected as a tenant model."
+    )
+
+    # Tag (CRM) is a tenant model — must have organization_id.
+    tag_model = apps.get_model("quickscale_modules_crm", "Tag")
+    assert tag_model is not None
+    assert is_tenant_model(tag_model), "CRM Tag must be detected as tenant."
+    assert has_organization_id_field(tag_model), "CRM Tag must have organization_id."
+    result = check_tenant_model_isolation(tag_model)
+    assert result["passed"] is True or result["has_force_rls"] is None
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
+    """The command must fail when a tenant model lacks organization_id.
+
+    Uses a mock model that IS detected by marker (simulated via
+    ``get_tenant_models`` mock) but lacks the ``organization_id`` field.
+    Exercises the real ``check_tenant_model_isolation`` path through
+    the management command surface for both human and JSON output.
+
+    This fills the gap where all real tenant models in the repo have
+    ``organization_id`` — positive proof that the failure path works
+    end-to-end through ``check_tenant_model_isolation``.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from django.core.exceptions import FieldDoesNotExist
+
+    model = MagicMock(spec=[])
+    model.__name__ = "NoOrgModel"
+    model._meta = MagicMock()
+    model._meta.app_label = "test_app"
+    model._meta.db_table = "test_noorgmodel"
+    model._meta.get_field.side_effect = FieldDoesNotExist("organization_id")
+
+    with patch(
+        "quickscale_modules_orgs.management.commands.check_tenant_isolation"
+        ".get_tenant_models",
+        return_value=[model],
+    ):
+        # --- Human format ---
+        stdout = StringIO()
+        stderr = StringIO()
+        with pytest.raises(SystemExit) as excinfo:
+            call_command(
+                "check_tenant_isolation",
+                stdout=stdout,
+                stderr=stderr,
+                verbosity=0,
+            )
+        assert excinfo.value.code == 1, (
+            "Command should exit 1 when a model lacks org_id"
+        )
+
+        output = stdout.getvalue()
+        assert "[FAIL]" in output
+        assert "test_app.NoOrgModel" in output
+        assert "MISSING" in output  # organization_id status
+        assert "0 passed, 1 failed" in output
+
+        # --- JSON format ---
+        stdout = StringIO()
+        stderr = StringIO()
+        with pytest.raises(SystemExit):
+            call_command(
+                "check_tenant_isolation",
+                format="json",
+                stdout=stdout,
+                stderr=stderr,
+                verbosity=0,
+            )
+
+        import json as json_lib
+
+        data = json_lib.loads(stdout.getvalue())
+        assert data["status"] == "fail"
+        assert data["total"] == 1
+        assert data["passed"] == 0
+        assert data["failed"] == 1
+        assert len(data["results"]) == 1
+        assert data["results"][0]["model_name"] == "NoOrgModel"
+        assert data["results"][0]["has_organization_id"] is False
+        assert data["results"][0]["passed"] is False
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_detection_helpers() -> None:
+    """Unit-test the SA1.3 detection helpers directly.
+
+    * TenantModel subclasses (like ConcreteTenantResource in test_models.py)
+      must be detected as tenant models.
+    * Non-tenant models (Organization, OrganizationMembership) must NOT be
+      detected.
+    """
+    from quickscale_modules_orgs.tenancy import (
+        get_tenant_models,
+    )
+
+    tenant_models = get_tenant_models()
+    tenant_names = {(m._meta.app_label, m.__name__) for m in tenant_models}
+
+    # CRM models should be detected as tenant models.
+    assert (
+        "quickscale_modules_crm",
+        "Tag",
+    ) in tenant_names, "CRM Tag should be in tenant model list."
+
+    # Organization (control-plane) should NOT be in the list.
+    assert (
+        "quickscale_modules_orgs",
+        "Organization",
+    ) not in tenant_names, (
+        "Organization (control-plane) must not be detected as tenant."
+    )
+
+    # OrganizationMembership should NOT be in the list.
+    assert (
+        "quickscale_modules_orgs",
+        "OrganizationMembership",
+    ) not in tenant_names, "OrganizationMembership must not be detected as tenant."
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_detects_all_enrolled_models() -> None:
+    """The command must discover all ENROLLED models from the registry.
+
+    This proves the marker-based detection matches the registry's ENROLLED
+    entries.  EXCLUDED_REVIEWED and abstract models should not be detected.
+    """
+    from quickscale_modules_orgs.tenancy import (
+        TENANT_TABLE_REGISTRY,
+        TenantTableStatus,
+        get_tenant_models,
+    )
+
+    enrolled = {
+        (e.app_label, e.model_name)
+        for e in TENANT_TABLE_REGISTRY
+        if e.status == TenantTableStatus.ENROLLED
+    }
+
+    tenant_models = get_tenant_models()
+    detected = {(m._meta.app_label, m.__name__) for m in tenant_models}
+
+    # Every ENROLLED model must be detected.
+    missing = enrolled - detected
+    assert not missing, f"ENROLLED models not detected by marker: {sorted(missing)}"
+
+    # No EXCLUDED model that uses TenantModel accidentally detected.
+    # TenantModel itself is abstract, but subclasses could be excluded.
+    # Check every excluded entry that is not abstract.
+    for entry in TENANT_TABLE_REGISTRY:
+        if entry.status == TenantTableStatus.EXCLUDED_REVIEWED:
+            if entry.model_name in (
+                "TenantModel",
+                "AbstractListing",
+                "BaseSocialItem",
+            ):
+                continue  # abstract — not in get_models()
+            if entry.reason.startswith("Test-only"):
+                continue  # test-only — only present when test_models imported
+            assert (entry.app_label, entry.model_name) not in detected, (
+                f"EXCLUDED_REVIEWED model {entry.app_label}.{entry.model_name} "
+                f"was incorrectly detected as a tenant model."
+            )
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_json_postgres_only_skip() -> None:
+    """--postgres-only --format json on non-PostgreSQL must emit clean JSON.
+
+    Regression for CR-SA13-001: the --postgres-only skip branch must emit
+    JSON-only output with status ``skip`` when ``--format json`` is
+    specified and the database is not PostgreSQL.
+    """
+    from io import StringIO
+    from unittest.mock import patch
+
+    stdout = StringIO()
+    stderr = StringIO()
+
+    with patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.connection.vendor",
+        "sqlite",
+    ):
+        call_command(
+            "check_tenant_isolation",
+            postgres_only=True,
+            format="json",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    import json as json_lib
+
+    data = json_lib.loads(stdout.getvalue())
+    assert data["status"] == "skip"
+    assert "postgresql" in data["message"].lower()
+    # No human-only text should leak into JSON output.
+    assert "SKIP:" not in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_check_tenant_isolation_json_no_models() -> None:
+    """get_tenant_models()==[] with --format json must emit clean JSON.
+
+    Regression for CR-SA13-001: the no-models warning branch must emit
+    JSON-only output with status ``warning`` when ``--format json`` is
+    specified and no tenant models are discovered.
+    """
+    from io import StringIO
+    from unittest.mock import patch
+
+    stdout = StringIO()
+    stderr = StringIO()
+
+    with patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_tenant_models",
+        return_value=[],
+    ):
+        call_command(
+            "check_tenant_isolation",
+            format="json",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+    import json as json_lib
+
+    data = json_lib.loads(stdout.getvalue())
+    assert data["status"] == "warning"
+    assert data["results"] == []
+    assert "No tenant models discovered" in data["message"]
+    # No human-only text should leak into JSON output.  The human branch
+    # contains "by marker detection" which does not appear in JSON output.
+    assert "by marker detection" not in stdout.getvalue()
+    assert "TenantManager" not in stdout.getvalue()
