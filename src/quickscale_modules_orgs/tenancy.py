@@ -289,6 +289,25 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="User-profile extension linked to auth.User, not tenant-scoped.",
     ),
+    # -- Auto-created ManyToMany through tables --
+    TenantTableEntry(
+        app_label="quickscale_modules_crm",
+        model_name="Contact_tags",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Auto-created ManyToMany through table — no tenant-scoped data.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_crm",
+        model_name="Deal_tags",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Auto-created ManyToMany through table — no tenant-scoped data.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_blog",
+        model_name="Post_tags",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Auto-created ManyToMany through table — no tenant-scoped data.",
+    ),
     # -- Abstract base models --
     TenantTableEntry(
         app_label="quickscale_modules_listings",
@@ -849,6 +868,93 @@ def remove_composite_child_fk(
 
 #: Column name used for tenant isolation on all ENROLLED models.
 ORG_ID_COLUMN: str = "organization_id"
+
+
+# ---------------------------------------------------------------------------
+# SA1.4 — Default-deny classification check
+# ---------------------------------------------------------------------------
+# Every concrete model from a project-owned app must appear in
+# ``TENANT_TABLE_REGISTRY`` — either as ENROLLED (tenant-scoped) or as
+# EXCLUDED_REVIEWED / PENDING_REMEDIATION (explicitly excluded).  Models
+# that are not in the registry at all fail the default-deny check.
+#
+# This scope uses the ``quickscale_modules_`` prefix to identify
+# project-owned apps — matching the existing conformance-gate convention.
+# User projects should override or extend ``is_project_app()`` to include
+# their own custom app labels.
+# ---------------------------------------------------------------------------
+
+#: App-label prefix for QuickScale module apps.
+QS_APP_PREFIX: str = "quickscale_modules_"
+
+
+def is_project_app(app_label: str) -> bool:
+    """Return ``True`` if *app_label* belongs to a project-owned app.
+
+    Currently matches the ``quickscale_modules_`` prefix (the existing
+    conformance-gate convention).  User projects may override or extend
+    this to include their own custom app labels.
+
+    Args:
+        app_label: Django app label (e.g. ``quickscale_modules_crm``).
+
+    Returns:
+        ``True`` if the app is considered project-owned.
+    """
+    return app_label.startswith(QS_APP_PREFIX)
+
+
+def get_concrete_project_models() -> list[type[models.Model]]:
+    """Return every installed concrete model from a project-owned app.
+
+    Uses :func:`is_project_app` to scope the search to project-owned
+    apps.  Abstract and proxy models are excluded.  Auto-created models
+    (e.g. implicit ManyToMany through tables) are included so that they
+    are covered by the default-deny classification guarantee (SA1.4).
+
+    Returns:
+        A list of concrete Django model classes from project-owned apps.
+    """
+    from django.apps import apps
+
+    result: list[type[models.Model]] = []
+    for model in apps.get_models(include_auto_created=True):
+        if model._meta.abstract or model._meta.proxy:
+            continue
+        if is_project_app(model._meta.app_label):
+            result.append(model)
+    return result
+
+
+def is_classified_in_registry(model: type[models.Model]) -> bool:
+    """Return ``True`` if *model* appears in ``TENANT_TABLE_REGISTRY``.
+
+    A model is considered classified when it has any entry in the registry
+    (ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION).
+
+    Args:
+        model: A Django ``Model`` subclass.
+
+    Returns:
+        ``True`` if the model has a registry entry.
+    """
+    key = (model._meta.app_label, model.__name__)
+    return key in REGISTRY_LOOKUP
+
+
+def get_unclassified_concrete_models() -> list[type[models.Model]]:
+    """Return concrete project models not in ``TENANT_TABLE_REGISTRY``.
+
+    These are models from :func:`get_concrete_project_models` that are
+    not registered at all — they are neither ENROLLED, EXCLUDED_REVIEWED,
+    nor PENDING_REMEDIATION.
+
+    Returns:
+        A list of unclassified model classes.
+    """
+    return [
+        m for m in get_concrete_project_models() if not is_classified_in_registry(m)
+    ]
 
 
 # ---------------------------------------------------------------------------
