@@ -57,18 +57,11 @@ ADAPTER_ONLY: Final[str] = "adapter_only"
 # canonical location in a comment.
 # ---------------------------------------------------------------------------
 
-ANALYTICS_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Declarative targets — should move to module.yml derivation section
-    ("ANALYTICS_PROVIDER_POSTHOG", DECLARATIVE_TARGET, "T2.4"),
-    ("ANALYTICS_PROVIDERS", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR", DECLARATIVE_TARGET, "T2.4"),
-    ("DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR", DECLARATIVE_TARGET, "T2.4"),
-    ("ANALYTICS_POSTHOG_DEFAULT_HOST", DECLARATIVE_TARGET, "T2.4"),
-    # Adapter-only — configuration+resolution surface
-    ("default_analytics_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_analytics_module_options", ADAPTER_ONLY, "T2.5"),
-    ("validate_analytics_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA5.1: Analytics imperative inventory cleared — all symbols are now
+# served by the manifest-driven bridge in quickscale_core.contracts.resolvers.
+# The analytics key remains in MANIFEST_INVENTORY with an empty list so that
+# callers of get_manifest_inventory("analytics") continue to succeed.
+ANALYTICS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 AUTH_MANIFEST: Final[list[tuple[str, str, str]]] = [
     # Shared helpers — relocated to quickscale_core.contracts.module_options

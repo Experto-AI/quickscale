@@ -18,7 +18,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 import re
 from typing import Any
-from urllib.parse import urlsplit
 
 from quickscale_core.contracts.module_options import (
     # Auth
@@ -55,6 +54,7 @@ from quickscale_core.manifest.derivation import (
     NormalizationRule,
     OptionDerivation,
     ValidationRule,
+    build_schema_from_manifest,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.manifest.resolver import resolve_module_config
@@ -63,14 +63,19 @@ from quickscale_core.contracts.module_discovery import get_modules_base_path
 
 
 # ---------------------------------------------------------------------------
-# Analytics
+# Analytics — manifest-driven bridge (SA5.1)
+#
+# All public functions in this section delegate to the manifest-driven
+# pipeline (module.yml derivation rules) instead of the legacy imperative
+# derivation schema.  The behaviour is identical — the flat-dict contract
+# expected by CLI callers is preserved.
 # ---------------------------------------------------------------------------
 
 _ANALYTICS_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def _normalize_posthog_host(value: Any) -> str:
-    """Canonicalize a PostHog host URL."""
+    """Canonicalize a PostHog host URL (preserved for backward compat)."""
     candidate = str(value).strip()
     if not candidate:
         return ""
@@ -79,171 +84,18 @@ def _normalize_posthog_host(value: Any) -> str:
     return candidate.rstrip("/")
 
 
-def _is_valid_posthog_host(value: str) -> bool:
-    candidate = value.strip()
-    if not candidate:
-        return False
-    parsed = urlsplit(candidate)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
-
-
-def _load_analytics_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "analytics" / "module.yml")
-
-
-def _build_analytics_derivation_schema() -> ModuleDerivationSchema:
-    return ModuleDerivationSchema(
-        module_name="analytics",
-        version="1",
-        option_derivations={
-            "provider": OptionDerivation(
-                option_key="provider",
-                normalization_rules=[
-                    NormalizationRule(
-                        source_key="provider", target_key="provider", rule_type="strip"
-                    ),
-                    NormalizationRule(
-                        source_key="provider",
-                        target_key="provider",
-                        rule_type="lowercase",
-                    ),
-                ],
-                validation_rules=[
-                    ValidationRule(
-                        option_key="provider",
-                        rule_type="choices",
-                        allowed_values=["posthog"],
-                        description="modules.analytics.provider must be one of: posthog",
-                    ),
-                ],
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_PROVIDER",
-                        source_options=["provider"],
-                        derivation_type="direct",
-                        expression={"option": "provider"},
-                    ),
-                ],
-            ),
-            "posthog_api_key_env_var": OptionDerivation(
-                option_key="posthog_api_key_env_var",
-                normalization_rules=[
-                    NormalizationRule(
-                        source_key="posthog_api_key_env_var",
-                        target_key="posthog_api_key_env_var",
-                        rule_type="strip",
-                    )
-                ],
-                validation_rules=[
-                    ValidationRule(
-                        option_key="posthog_api_key_env_var",
-                        rule_type="pattern",
-                        pattern=r"^[A-Z][A-Z0-9_]*$",
-                        description="modules.analytics.posthog_api_key_env_var must be an environment variable name matching ^[A-Z][A-Z0-9_]*$",
-                    ),
-                ],
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-                        source_options=["posthog_api_key_env_var"],
-                        derivation_type="direct",
-                        expression={"option": "posthog_api_key_env_var"},
-                    )
-                ],
-            ),
-            "posthog_host_env_var": OptionDerivation(
-                option_key="posthog_host_env_var",
-                normalization_rules=[
-                    NormalizationRule(
-                        source_key="posthog_host_env_var",
-                        target_key="posthog_host_env_var",
-                        rule_type="strip",
-                    )
-                ],
-                validation_rules=[
-                    ValidationRule(
-                        option_key="posthog_host_env_var",
-                        rule_type="pattern",
-                        pattern=r"^[A-Z][A-Z0-9_]*$",
-                        description="modules.analytics.posthog_host_env_var must be an environment variable name matching ^[A-Z][A-Z0-9_]*$",
-                    ),
-                ],
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-                        source_options=["posthog_host_env_var"],
-                        derivation_type="direct",
-                        expression={"option": "posthog_host_env_var"},
-                    )
-                ],
-            ),
-            "posthog_host": OptionDerivation(
-                option_key="posthog_host",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-                        source_options=["posthog_host"],
-                        derivation_type="direct",
-                        expression={"option": "posthog_host"},
-                    )
-                ],
-            ),
-            "enabled": OptionDerivation(
-                option_key="enabled",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_ENABLED",
-                        source_options=["enabled"],
-                        derivation_type="direct",
-                        expression={"option": "enabled"},
-                    )
-                ],
-            ),
-            "exclude_debug": OptionDerivation(
-                option_key="exclude_debug",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
-                        source_options=["exclude_debug"],
-                        derivation_type="direct",
-                        expression={"option": "exclude_debug"},
-                    )
-                ],
-            ),
-            "exclude_staff": OptionDerivation(
-                option_key="exclude_staff",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
-                        source_options=["exclude_staff"],
-                        derivation_type="direct",
-                        expression={"option": "exclude_staff"},
-                    )
-                ],
-            ),
-            "anonymous_by_default": OptionDerivation(
-                option_key="anonymous_by_default",
-                derived_settings=[
-                    DerivedSetting(
-                        setting_key="QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
-                        source_options=["anonymous_by_default"],
-                        derivation_type="direct",
-                        expression={"option": "anonymous_by_default"},
-                    )
-                ],
-            ),
-        },
-    )
-
-
 def default_analytics_module_options() -> dict[str, Any]:
-    manifest = _load_analytics_manifest()
+    """Return defaults declared in analytics ``module.yml``."""
+    manifest = load_manifest_from_path(
+        get_modules_base_path() / "analytics" / "module.yml"
+    )
     return dict(manifest.get_defaults())
 
 
 def normalize_analytics_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
+    """Normalize analytics options (strip, lowercase provider)."""
     normalized = dict(options or {})
     if "provider" in normalized:
         normalized["provider"] = str(normalized["provider"]).strip().lower()
@@ -258,11 +110,26 @@ def normalize_analytics_module_options(
 def resolve_analytics_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    manifest = _load_analytics_manifest()
-    schema = _build_analytics_derivation_schema()
+    """Resolve analytics module options via the manifest runtime path.
+
+    Delegates to ``build_schema_from_manifest`` using the derivation rules
+    declared in ``module.yml`` (instead of the legacy hardcoded schema).
+    Applies legacy-compatible post-resolution string normalisation.
+    """
+    manifest = load_manifest_from_path(
+        get_modules_base_path() / "analytics" / "module.yml"
+    )
+    schema = build_schema_from_manifest(
+        manifest_name="analytics",
+        wiring_projections=manifest.wiring_projections,
+        derived_settings=manifest.derived_settings,
+        option_derivations=manifest.option_derivations,
+        version="1",
+    )
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
     resolved = dict(result.resolved)
-    # Apply analytics-specific post-resolution normalization.
+
+    # Apply analytics-specific post-resolution normalisation.
     if "posthog_host" in resolved:
         resolved["posthog_host"] = _normalize_posthog_host(resolved["posthog_host"])
     resolved["provider"] = str(resolved.get("provider", "")).strip().lower()
@@ -273,6 +140,7 @@ def resolve_analytics_module_options(
         resolved.get("posthog_host_env_var", "")
     ).strip()
     resolved["posthog_host"] = _normalize_posthog_host(resolved.get("posthog_host", ""))
+
     return resolved
 
 
@@ -287,6 +155,8 @@ def validate_analytics_env_var_reference(option_name: str, value: Any) -> str | 
 
 
 def validate_analytics_module_options(options: Mapping[str, Any] | None) -> list[str]:
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
     resolved = resolve_analytics_module_options(options)
     issues: list[str] = []
     provider = str(resolved.get("provider", "")).strip().lower()
@@ -298,7 +168,15 @@ def validate_analytics_module_options(options: Mapping[str, Any] | None) -> list
         )
         if issue:
             issues.append(issue)
-    if not _is_valid_posthog_host(str(resolved.get("posthog_host", ""))):
+    # Inline PostHog host URL validation (was _is_valid_posthog_host).
+    _ph_host = str(resolved.get("posthog_host", "")).strip()
+    if _ph_host:
+        _parsed = urlsplit(_ph_host)
+        if not (_parsed.scheme in {"http", "https"} and bool(_parsed.netloc)):
+            issues.append(
+                "modules.analytics.posthog_host must be an absolute http(s) URL"
+            )
+    else:
         issues.append("modules.analytics.posthog_host must be an absolute http(s) URL")
     for option_name in (
         "enabled",
