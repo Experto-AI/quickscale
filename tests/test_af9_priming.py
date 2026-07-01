@@ -323,6 +323,55 @@ def test_priming_guc_differs_per_org_in_explicit_txn() -> None:
         reset_current_org_id()
 
 
+@pytest.mark.django_db(transaction=True)
+def test_priming_same_org_consecutive_explicit_txns() -> None:
+    """CR-SA42-001 regression: back-to-back same-org explicit transactions
+    must each issue SET LOCAL on their first statement.
+
+    The per-transaction memo carries the atomic block identity.  When a
+    connection transitions directly from one explicit transaction to another
+    with the same org (no intervening autocommit query), the changed atomic
+    block identity forces the memo to be cleared, ensuring the first
+    statement in the second transaction re-primes unconditionably.
+
+    Proof: GUC value check + CaptureQueriesContext in the second transaction
+    confirms exactly one SET LOCAL is issued.
+    """
+    from django.test.utils import CaptureQueriesContext
+
+    org_id = uuid.uuid4()
+    set_current_org_id(org_id)
+    try:
+        # First transaction — primes SET LOCAL and sets the memo.
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+        # Second transaction — same org, no intervening query.
+        # Verify the GUC is primed (memo was cleared) and exactly one
+        # SET LOCAL appears in the captured statements.
+        with transaction.atomic():
+            with CaptureQueriesContext(connection) as captured:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                    (raw,) = cursor.fetchone()
+
+            assert raw == str(org_id), (
+                f"Second explicit transaction must re-prime. "
+                f"Expected {org_id}, got {raw!r}"
+            )
+
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Second transaction must issue exactly 1 SET LOCAL "
+                f"(first statement primes), got {set_local_count}"
+            )
+    finally:
+        reset_current_org_id()
+
+
 # ---------------------------------------------------------------------------
 # GUC priming — autocommit
 # ---------------------------------------------------------------------------
