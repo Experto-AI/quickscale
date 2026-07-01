@@ -1161,21 +1161,25 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 **Chosen shape:**
 - ✅ Single Railway project (one app + one PostgreSQL 18 service); Railway bill is flat regardless of tenant count
-- ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS + contextvar TenantManager
+- ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS on the 21 `TENANT_TABLE_REGISTRY` ENROLLED models plus ContextVar-driven `TenantManager` scoping
 - ✅ Billing unit: `Subscription → Organization` (not per-user)
 - ✅ URL routing: flat routes only — `/crm/`, `/blog/`; no `/orgs/<slug>/` content routes
 - ✅ Users may belong to multiple organizations; org-switcher in the React UI
-- ✅ All organizations get all modules; differentiate by credit limits only (no feature gating)
+- ✅ Module access is differentiated by credits plus ORM-backed `Plan.features` gates
 
-**RLS enforcement rule (critical):**
-- RLS enforces only when the app connects as the `NOSUPERUSER/NOBYPASSRLS` runtime role, selected by `RUNTIME_DATABASE_URL`
-- When `RUNTIME_DATABASE_URL` is unset the app falls back to the superuser `DATABASE_URL` (BYPASSRLS) — **all RLS silently disables; fail open**
-- Boot guard required: `orgs.QuickscaleOrgsConfig.ready()` must assert `rolbypassrls=false` in saas mode with `DEBUG=False`; raise `ImproperlyConfigured` and refuse to start if the connected role has BYPASSRLS (T1.18)
-- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` — this is correct for migrations; catastrophic for `runserver`/`gunicorn`
+**RLS enforcement rule (critical, updated by SA2.1 + SA2.2):**
+- RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
+- Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named migration path intentionally uses the superuser `DATABASE_URL`
+- **Always-on boot guard (SA2.1):** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false` on every non-`migrate` boot — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS unless one of the two explicit exemptions applies:
+  1. `manage.py migrate` — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so migrations run under the superuser role (correct and deliberate).
+  2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
+- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate`; `runserver`/`gunicorn` must still use the restricted runtime role
 
 **Isolation architecture rules (permanent):**
+- Registry authority: `TENANT_TABLE_REGISTRY` is the SSOT for the shipped tenant-table surface. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct `organization_id`, `objects = TenantManager()`, `all_objects = TenantManager(super_scope=True)`, and a live FORCE-RLS policy.
 - Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.
-- Operator access: `operator_access(reason=...)` in `orgs/` is the sole path to an unfiltered queryset or privileged role; `all_objects` must not appear on model declarations; management commands that need cross-tenant data must route through this context manager and emit structured audit records.
+- Ambient scoping: request-scoped tenant reads flow through `request.org` → ContextVar (`app.current_org_id`) → `TenantManager`; the authoritative tenant-facing API is ambient manager scoping, not `.for_org(...)` query chaining.
+- Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract.
 - Org ownership: System org owns all published-public content (blog feed, public listings, social links). Anonymous visitors see System-org rows; solo authenticated = personal org; saas authenticated = active org.
 - Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
 
@@ -1183,15 +1187,15 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - ❌ **Per-client Railway deployment** — linear operational overhead per tenant; not a SaaS platform
 - ❌ **App-layer-only filtering without RLS** — no defence-in-depth; a single missed filter leaks cross-tenant data
 - ❌ **PostgreSQL schema-per-tenant isolation** — schema metadata bloat, migration complexity with many tenants
-- ❌ **Supabase as the database provider** — valid for teams that want managed infrastructure, but introduces vendor lock-in and changes the cost/operational model; our self-hosted Railway approach is equivalent in security model once AF9 is fixed (both use a GUC parameter set per-transaction as the tenant context carrier)
+- ❌ **Supabase as the database provider** — valid for teams that want managed infrastructure, but introduces vendor lock-in and changes the cost/operational model; our self-hosted Railway approach uses the same GUC-carried tenant-context pattern without changing the current contract
 
 **Supabase architecture parity note (2026-06-29):**
-QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supabase's multi-tenant architecture. Both use a PostgreSQL GUC parameter as the per-transaction tenant context carrier; both use `FORCE ROW LEVEL SECURITY`; both use a NOBYPASSRLS runtime role for application queries and a BYPASSRLS role for operator/admin access. The key difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query; QuickScale's AF9 fix (execute_wrapper deriving GUC from ContextVar at transaction start) achieves the same guarantee. After AF9 merges, the two models are equivalent. Supabase also ships a dashboard "Impersonate User" button — QuickScale's VIEW-AS task (see roadmap.md §Phase C) closes that parity gap.
+QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supabase's multi-tenant architecture. Both use a PostgreSQL GUC parameter as the per-transaction tenant context carrier and `FORCE ROW LEVEL SECURITY` for tenant data isolation. The key difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query; QuickScale's AF9 execute-wrapper derives the GUC from the ContextVar at transaction start. Supabase also ships a dashboard "Impersonate User" button — QuickScale now ships VIEW-AS for the same restricted-role debugging need. In QuickScale's shipped surface, runtime admin/debug access stays on the restricted role; BYPASSRLS is reserved for the migration exception and any future explicitly documented non-runtime privileged path.
 
-**Operator debug mode — locked design (VIEW-AS, 2026-06-29):**
-Django superusers may activate a debug session that scopes the entire request to a selected organization — allowing them to see the app exactly as that org's members see it. Design: session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when key is present; `OrganizationAdmin` action activates it; debug banner rendered in base template while active; every activation audit-logged (who, which org, timestamp). No BYPASSRLS — debug session runs under the same restricted runtime role as all other tenant paths (RLS remains fully enforced). See roadmap.md §Phase C for the implementation task.
+**Operator debug mode — shipped VIEW-AS contract:**
+Django superusers may activate a debug session that scopes the entire request to a selected organization so they can see the app exactly as that org's members see it. The shipped surface uses the session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when the key is present; the admin surface activates or exits the session; a debug banner renders while active; and every activation is audit-logged. No BYPASSRLS — the debug session runs under the same restricted runtime role as all other tenant paths, so RLS remains fully enforced.
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (open implementation tasks D1, AF1–AF7, Phase C) | [findings.md](../../findings.md) (current risk posture)
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [findings.md](../../findings.md) (current risk posture)
 
 ---
 

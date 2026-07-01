@@ -117,10 +117,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
 
 #### Finding 2 — Fail-closed master isolation switch (`why →` [Finding 2](../../findings.md#finding-2--the-master-isolation-switch-fails-open-unset-runtime_database_url-silently-runs-under-a-bypassrls-superuser-and-the-boot-guard-is-gated-to-saas--debugfalse))
 
-- [ ] **SA2.1 — Always-on BYPASSRLS boot guard.** `Tier 2 · Track 2 · deps: none`
-  Drop the `QUICKSCALE_MODE == "saas"` and `not DEBUG` gates in `apps.py:_check_rls_role` so the guard refuses every non-`migrate` boot under a BYPASSRLS role, with an explicit `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch for intentional single-tenant ops.
+- [x] **SA2.1 — Always-on BYPASSRLS boot guard.** `Tier 2 · Track 2 · deps: none`
+  Dropped the `QUICKSCALE_MODE == "saas"` and `not DEBUG` gates in `apps.py:_check_rls_role` so the guard refuses every non-`migrate` boot under a BYPASSRLS role, with an explicit `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch for intentional single-tenant ops.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` (+ tests).
   *Acceptance:* runserver/gunicorn boot under a BYPASSRLS role raises `ImproperlyConfigured` in solo mode and with `DEBUG=True`, unless the escape hatch is set; `migrate` stays exempt.
+  **Closes SA2.1 (2026-06-30, wt-track2).**
 
 - [x] **SA2.2 — Invert the runtime DB-role default to fail-closed.** `Tier 2 · Track 1 · deps: none`
   Restructured generated settings so the privileged superuser connection is the *named exception* (migrations only) and runtime serving requires the restricted `RUNTIME_DATABASE_URL` — raises instead of silently falling back to the BYPASSRLS `DATABASE_URL` when serving.
@@ -130,10 +131,12 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
 
 #### Finding 3 — Single source of truth for the contract (`why →` [Finding 3](../../findings.md#finding-3--the-isolation-contract-has-no-single-source-of-truth-the-two-authoritative-docs-already-describe-a-weaker-different-posture-than-the-shipped-code))
 
-- [ ] **SA3.1 — Re-sync the authoritative docs with shipped reality.** `Tier 1 · Track 3 · deps: none`
+- [x] **SA3.1 — Re-sync the authoritative docs with shipped reality.** `Tier 1 · Track 3 · deps: none`
   Update `decisions.md §Multi-tenant SaaS Architecture` and `organizations.md` to the shipped state: 21 models enrolled with FORCE-RLS (not "social only"), and the `TenantManager(super_scope=…)` + `ContextVar` API (remove the stale `TenantScopedManager`/`OperatorManager`/`.for_org()` framing).
   *Files:* `docs/technical/decisions.md`, `docs/technical/organizations.md`.
   *Acceptance:* no doc statement contradicts `TENANT_TABLE_REGISTRY` or the shipped manager classes.
+  **Completed 2026-06-30:** The authoritative tenancy docs now match the shipped contract: `decisions.md` and `organizations.md` both describe the 21 ENROLLED FORCE-RLS tenant models, ambient `TenantManager()` / `TenantManager(super_scope=True)` scoping via the current-org ContextVar + AF9 execute-wrapper, the fail-closed runtime-role posture after SA2.2, and the shipped VIEW-AS/admin surface.
+  *Findings:* No blockers. While updating the authoritative sections, several adjacent stale statements in the same SSOT slices were corrected in the same pass (solo billing scope, implementation-scope/status rows, and old social-only RLS wording) so the docs stay internally consistent.
 
 - [ ] **SA3.2 — CI doc-consistency gate.** `Tier 2 · Track 3 · deps: SA3.1 + (cross-track) SA1.3`
   Add a test/CI check that diffs the enrolled-model list and manager-API names asserted in the docs against `TENANT_TABLE_REGISTRY` (the SSOT established by SA1.3) and the actual manager classes, failing on mismatch.

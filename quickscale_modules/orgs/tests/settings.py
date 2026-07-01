@@ -11,6 +11,11 @@ Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 
 import os
 
+# Set the SA2.1 escape hatch before Django setup so the always-on
+# boot guard does not block test startup.  Individual tests that
+# exercise the guard clear this via an autouse fixture.
+os.environ.setdefault("QUICKSCALE_ALLOW_BYPASSRLS", "1")
+
 SECRET_KEY = "test-secret-key-for-orgs-module"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
