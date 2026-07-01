@@ -13,6 +13,7 @@ from quickscale_modules_orgs.permissions import (
     require_org_feature,
     require_org_role,
 )
+from quickscale_modules_orgs.views import OrgDashboardView
 
 
 def _current_org_id() -> str:
@@ -144,6 +145,13 @@ urlpatterns = [
         "orgs/<slug:org_slug>/feature/",
         feature_view,
         name="feature-view",
+    ),
+    # SA4.1 benchmark path — non-management route that triggers middleware
+    # session-org resolution (not a /orgs/<slug>/ management bypass).
+    path(
+        "sa41-bench/<slug:org_slug>/",
+        OrgDashboardView.as_view(),
+        name="sa41-org-dashboard",
     ),
     path("", include("quickscale_modules_orgs.urls")),
     path("admin/", admin.site.urls),
