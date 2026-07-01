@@ -65,8 +65,7 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
                    │     └───────────────────────────────────────────► SA3.2  (←SA3.1 & ←SA1.3)
 ```
 
-**Can start immediately (no deps, fully parallel):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1, SA5.1, SA5.2.
-**Blocked:** SA1.4 (←SA1.3), SA1.5 (←SA1.3), SA4.2 (←SA4.1), SA3.2 (←SA3.1 **and** the cross-track merge of SA1.3).
+**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA4.1 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5, SA3.2, SA4.2, SA5.1, SA5.2) is clear to start now; none is waiting on another track.
 
 **Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge is **SA3.2**, which consumes the contract SSOT that **SA1.3** establishes — sequence SA3.2 after SA1.3 has merged to `v87`.
 
@@ -94,16 +93,14 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   Same conversion for `quickscale_modules_blog` tenant models (`Category`, `Tag`, `BlogMediaAsset`, `Post`); leave `AuthorProfile` (reviewed-excluded) alone.
   *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/models.py`.
   *Acceptance:* blog tenant models are `TenantModel` subclasses; conformance + blog tests green.
-  **Completed 2026-06-30, compatibility fix 2026-07-01:** Category, Tag, BlogMediaAsset, Post now inherit `TenantModel`. Each model declares an explicit `organization` FK overriding the abstract `TenantModel` field to preserve the legacy related_name contract (`blog_categories`, `blog_tags`, `blog_media_assets`, `blog_posts`) — no downstream reverse-accessor break. Migration 0004 (state-only: manager and Meta changes — no DB schema impact). Blog tests: 41/41 PASS. Manager tests: 5/5 PASS. Tenant table conformance: 183/183 PASS (2 skipped — the two `PENDING_REMEDIATION` parametrized tests `test_pending_remediation_has_equality_footprint` and `test_pending_remediation_parent_fk_matches_seam` are skipped by pytest because there are zero `PENDING_REMEDIATION` entries in the registry; all have been promoted to ENROLLED or EXCLUDED_REVIEWED).
+  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
 
 - [x] **SA1.3 — Generic, base-class-driven conformance check shipped as a management command.** `Tier 2 · Track 1 · deps: none`
   Added `manage.py check_tenant_isolation` (and a Django system check in `checks.py`) that discovers tenant models by *marker* (default manager is a `TenantManager` **or** model is a `TenantModel` subclass) across **all** app labels — not the `quickscale_modules_*` prefix — and asserts each has `organization_id` + a live FORCE-RLS policy in `pg_policies`.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/check_tenant_isolation.py`; `quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py`; helpers in `tenancy.py`.
   *Scope note:* detect by `TenantManager` so CRM/blog pass before **and** after SA1.1/SA1.2 (no cross-track ordering dependency).
   *Acceptance:* command passes on the QuickScale repo and fails when a tenant model lacks org_id or a FORCE-RLS policy.
-  **Completed 2026-06-30:** five new detection helpers (`is_tenant_model`, `get_tenant_models`, `has_organization_id_field`, `table_has_force_rls`, `check_tenant_model_isolation`) added to `tenancy.py`. Management command supports `--postgres-only` and `--format json`. System check registered as `quickscale_modules_orgs.W003/W004`. System check wired via `apps.py ready()`. 7 focused tests cover pass, JSON output, negative detection, helper unit tests, and registry-vs-detection parity. Validation: `MODULE=orgs make test-unit -- --modules` — all tests green. See also Finding 3 dependency SA3.2 (CI doc-consistency gate, can now consume `get_tenant_models()` as the SSOT).
-  **CR-SA13 follow-up (2026-06-30):** `--format json` output fixed on the `--postgres-only` skip branch and the no-models warning branch — both now emit clean JSON instead of mixed human/JSON output. Added `test_check_tenant_isolation_model_without_org_id_through_command` proving the command correctly exits 1 with both human and JSON output when a tenant-classified model lacks `organization_id`. Validation: `MODULE=orgs make test-unit -- --modules` — 11 SA1.3 tests green (8 original + 1 new + 2 existing json/skip coverage).
-  **CR-SA13 regression-test follow-up (2026-07-01):** Added two direct ``call_command`` regression tests for the repaired JSON branches: ``test_check_tenant_isolation_json_postgres_only_skip`` (``--postgres-only --format json`` on a non-PostgreSQL connection) and ``test_check_tenant_isolation_json_no_models`` (``get_tenant_models()==[]`` with ``--format json``). Both assert JSON-only output with no mixed human text. Final SA1.3 test surface: 13 tests green (8 original + 1 new + 2 existing json/skip + 2 direct command regression tests). Validation: ``MODULE=orgs make test-unit -- --modules`` — all tests pass.
+  **Closed 2026-07-01, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail. Establishes the SSOT (`get_tenant_models()`) that SA3.2 consumes.
 
 - [ ] **SA1.4 — Default-deny exclusion registry for user models.** `Tier 2 · Track 1 · deps: SA1.3`
   Extend the check so every concrete project model must be *either* tenant-enrolled *or* listed in an explicit project-level exclusion registry; an unclassified concrete model fails the check (forces a per-model isolation decision in user code).
@@ -115,19 +112,7 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Files:* `quickscale_core/src/quickscale_core/generator/templates/` (CI workflow + `Makefile`/test target template).
   *Acceptance:* a freshly generated project runs the isolation check in CI; conformance fixture proves a deliberately-unprotected model fails the generated CI.
 
-#### Finding 2 — Fail-closed master isolation switch (`why →` [Finding 2](../../findings.md#finding-2--the-master-isolation-switch-fails-open-unset-runtime_database_url-silently-runs-under-a-bypassrls-superuser-and-the-boot-guard-is-gated-to-saas--debugfalse))
-
-- [x] **SA2.1 — Always-on BYPASSRLS boot guard.** `Tier 2 · Track 2 · deps: none`
-  Dropped the `QUICKSCALE_MODE == "saas"` and `not DEBUG` gates in `apps.py:_check_rls_role` so the guard refuses every non-`migrate` boot under a BYPASSRLS role, with an explicit `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch for intentional single-tenant ops.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` (+ tests).
-  *Acceptance:* runserver/gunicorn boot under a BYPASSRLS role raises `ImproperlyConfigured` in solo mode and with `DEBUG=True`, unless the escape hatch is set; `migrate` stays exempt.
-  **Closes SA2.1 (2026-06-30, wt-track2).**
-
-- [x] **SA2.2 — Invert the runtime DB-role default to fail-closed.** `Tier 2 · Track 1 · deps: none`
-  Restructured generated settings so the privileged superuser connection is the *named exception* (migrations only) and runtime serving requires the restricted `RUNTIME_DATABASE_URL` — raises instead of silently falling back to the BYPASSRLS `DATABASE_URL` when serving.
-  *Files:* `generator/templates/project_name/settings/production.py.j2`, `base.py.j2`.
-  *Acceptance:* a generated app with `RUNTIME_DATABASE_URL` unset fails to serve (clear error) rather than connecting under BYPASSRLS; `migrate` path unchanged.
-  *Findings:* No blockers or unexpected findings during implementation. Template inversion clean — three-way branching in production.py.j2 (runtime serving → RUNTIME_DATABASE_URL required; migrate → DATABASE_URL superuser; collectstatic/compilemessages → dummy URL). All existing tests pass with no regressions. The `start.sh.j2` migration exception (`RUNTIME_DATABASE_URL="" python manage.py migrate --noinput`) is preserved and continues to work because the migrate branch checks `sys.argv` directly.
+#### Finding 2 — Fail-closed master isolation switch (`why →` [Finding 2](../../findings.md#finding-2--closed-2026-07-01)) — **CLOSED 2026-07-01.** Both SA2.1 and SA2.2 shipped and merged to `v87`; see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
 
 #### Finding 3 — Single source of truth for the contract (`why →` [Finding 3](../../findings.md#finding-3--the-isolation-contract-has-no-single-source-of-truth-the-two-authoritative-docs-already-describe-a-weaker-different-posture-than-the-shipped-code))
 
@@ -135,8 +120,7 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   Update `decisions.md §Multi-tenant SaaS Architecture` and `organizations.md` to the shipped state: 21 models enrolled with FORCE-RLS (not "social only"), and the `TenantManager(super_scope=…)` + `ContextVar` API (remove the stale `TenantScopedManager`/`OperatorManager`/`.for_org()` framing).
   *Files:* `docs/technical/decisions.md`, `docs/technical/organizations.md`.
   *Acceptance:* no doc statement contradicts `TENANT_TABLE_REGISTRY` or the shipped manager classes.
-  **Completed 2026-06-30:** The authoritative tenancy docs now match the shipped contract: `decisions.md` and `organizations.md` both describe the 21 ENROLLED FORCE-RLS tenant models, ambient `TenantManager()` / `TenantManager(super_scope=True)` scoping via the current-org ContextVar + AF9 execute-wrapper, the fail-closed runtime-role posture after SA2.2, and the shipped VIEW-AS/admin surface.
-  *Findings:* No blockers. While updating the authoritative sections, several adjacent stale statements in the same SSOT slices were corrected in the same pass (solo billing scope, implementation-scope/status rows, and old social-only RLS wording) so the docs stay internally consistent.
+  **Closed 2026-06-30, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail. Unblocks SA3.2.
 
 - [ ] **SA3.2 — CI doc-consistency gate.** `Tier 2 · Track 3 · deps: SA3.1 + (cross-track) SA1.3`
   Add a test/CI check that diffs the enrolled-model list and manager-API names asserted in the docs against `TENANT_TABLE_REGISTRY` (the SSOT established by SA1.3) and the actual manager classes, failing on mismatch.
@@ -149,11 +133,7 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   Added a reusable measurement harness (`test_sa41_statement_amplification.py`) under the orgs test suite that captures SQL statements via `connection.queries` and categorises them into data, transaction-control (`BEGIN`/`COMMIT`), and priming (`SET LOCAL`) counts.  Three scenarios are measured for the `OrgDashboardView` data-access pattern exercised through `TenantMiddleware` session-org resolution via the test-only non-management URL `/sa41-bench/<slug>/` (the middleware pre-sets `request.org`, so the view skips the slug lookup — 2 data SELECTs: membership role check + member count): no-org baseline (AF9 pass-through), with-org autocommit (AF9 per-statement wrapping), and with-org explicit transaction (AF9 redundant-SET-LOCAL).
   *Files:* `quickscale_modules/orgs/tests/test_sa41_statement_amplification.py`, `quickscale_modules/orgs/tests/urls.py`.
   *Acceptance:* reproducible baseline now recorded and enforced as test assertions.
-  *Findings:* The per-statement priming overhead is **real and measurable**.
-  - **Autocommit amplification (2 data queries):** 8 SQL statements vs. 2 unprimed = **4× amplification**. Each data query triggers `BEGIN + SET LOCAL + query + COMMIT` via the AF9 wrapper's short-atomic path.
-  - **Explicit-transaction amplification (same 2 queries in one atomic):** 4 SQL statements vs. 2 unprimed = **2.0× amplification**. `CaptureQueriesContext` is nested inside the outer `transaction.atomic()`, so the outer atomic's `BEGIN`/`COMMIT` are not captured — only the 2 `SET LOCAL` + 2 data SELECTs appear in the measured total. AF9 issues `SET LOCAL` before every statement inside the atomic — the first SET LOCAL is the required priming call; only the second SET LOCAL is redundant (the GUC is already primed after the first one).
-  - **SA4.2 opportunity confirmed:** The explicit-transaction case shows that a per-transaction "already primed" memo would eliminate the lone redundant SET LOCAL call, bringing the captured count from 4 → 3 SQL statements per request (0 BEGIN + 1 SET LOCAL + 2 queries + 0 COMMIT).  No blocker discovered — the measurement infrastructure is ready; SA4.2 can proceed immediately.
-  **Closes SA4.1 (2026-07-01, wt-track2). Runtime/test/docs work complete — CR-SA41-001 resolved. CR-SA41-002 (low, blocking, consistency): accepted remaining blocker — the module-level Scenario 3 summary comment in `test_sa41_statement_amplification.py:21–26` still needs wording harmonization to match the validated explicit-transaction 4→3 projection. No further decision needed; user accepted stop-here closeout with this finding explicitly recorded.**
+  **Closed 2026-07-01, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail and measured amplification figures. Confirms the SA4.2 opportunity (4→3 statements via a per-transaction memo); SA4.2 can proceed immediately.
 
 - [ ] **SA4.2 — Per-transaction "already-primed" memo in the execute wrapper.** `Tier 2 · Track 2 · deps: SA4.1`
   Skip the redundant `SET LOCAL` when the GUC is already primed within the current transaction (cheapest win; does not reintroduce request-long transactions). Defer the larger connection-checkout priming until SA4.1 justifies it.

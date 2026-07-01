@@ -19,7 +19,7 @@ Remediation plan: [roadmap.md → Structural Autopsy Remediation](docs/technical
 | # | Finding | Horizon | Confidence | Remediation tasks |
 |---|---------|---------|------------|-------------------|
 | 1 | Tenant-isolation correctness is a hand-replicated per-model ritual; its only enforcement (the conformance gate) is scoped to `quickscale_modules_*` and does not reach the user-authored models that generated projects exist to host | now / 6–18mo | High | SA1.1, SA1.2, SA1.3, SA1.4, SA1.5 |
-| 2 | The master isolation switch fails open: an unset `RUNTIME_DATABASE_URL` silently connects under a BYPASSRLS superuser role, and the boot guard that catches it is gated to `saas` + `DEBUG=False` | now (latent) | High | SA2.1, SA2.2 |
+| 2 | **CLOSED 2026-07-01.** The master isolation switch failed open: an unset `RUNTIME_DATABASE_URL` silently connected under a BYPASSRLS superuser role, and the boot guard that caught it was gated to `saas` + `DEBUG=False` | now (latent) | High | SA2.1, SA2.2 (both shipped, merged to `v87`) |
 | 3 | No single source of truth for the isolation contract — the two authoritative docs already describe a weaker, different posture (and a different manager API) than the shipped code | now | High | SA3.1, SA3.2 |
 | 4 | DB tenant context is primed per-statement by a connection-layer wrapper that opens a transaction around every autocommit tenant query | 6–18mo | Medium | SA4.1, SA4.2 |
 | 5 | Module integration is a high-arity coordination tax mid-migration between an imperative per-module path and an incomplete declarative manifest layer | 6–18mo | Medium | SA5.1, SA5.2 |
@@ -83,44 +83,12 @@ This dated section is the full structural autopsy. Findings are ranked by blast 
 
 ---
 
-## Finding 2 — The master isolation switch fails open: unset `RUNTIME_DATABASE_URL` silently runs under a BYPASSRLS superuser, and the boot guard is gated to `saas` + `DEBUG=False`
+## Finding 2 — Closed 2026-07-01
 
-**Rank rationale (blast radius × likelihood):** Blast is total — every RLS policy across every module silently disables for all tenants at once. Likelihood is held down by the boot guard and the start.sh contract, but the guard has real coverage gaps, so this is high-blast × low-to-medium-likelihood.
-
-**Horizon:** `now` (latent) — one misconfigured env var or `DEBUG=True` deploy away.
-
-**Confidence:** High — the fallback and the guard's gating conditions are both verified in code/templates.
-
-**Context dependence:** `wrong-regardless` for a shared-DB multi-tenant product; the fail-open direction on a security boundary is wrong independent of scale.
-
-**Problem:** Isolation correctness hinges on the app connecting as a `NOBYPASSRLS` role, selected by an env var; the *absence* of that env var grants access (connects as the superuser `DATABASE_URL`, which has BYPASSRLS and silently voids all policies). The only structural catch fails open in solo mode, under `DEBUG=True`, and when `QUICKSCALE_MODE` is unset.
-
-**Evidence:**
-- `…/settings/production.py.j2:133-147` — `_runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)`; only `if _runtime_db_url:` is `DATABASES["default"]` overridden to the restricted role. Unset → the superuser `DATABASE_URL` remains the default connection. `decisions.md §multitenant` states this plainly: "all RLS silently disables; fail open."
-- `quickscale_modules/orgs/.../apps.py:_check_rls_role` returns early unless `QUICKSCALE_MODE == "saas"` (default `"solo"`) **and** `not settings.DEBUG`. A prod deploy with `DEBUG=True` both leaks *and* disables its own guard.
-
-**Why it compounds:** Every module added to the isolation contract increases what this single switch protects, so the blast radius of a fail-open grows monotonically with adoption — the more successful the RLS rollout, the more catastrophic a silent bypass. The guard's mode/DEBUG gating means the protection does *not* grow with it.
-
-**Correct shape:** The default connection role must be fail-closed: the app refuses to serve runtime traffic under a BYPASSRLS role regardless of `QUICKSCALE_MODE` or `DEBUG`, with `migrate` the single audited exemption. Access must require the restricted role's presence, not merely the absence of a misconfiguration.
-
-**Trigger for urgency:** A Railway env var is dropped/renamed on redeploy, a staging box runs `DEBUG=True`, or a solo app is promoted to `saas` and the role swap is missed.
-
-**Compounding factor:** All 21 enrolled models and their conformance proofs assume the restricted role at runtime; they all silently lose enforcement together under this fallback.
-
-**Detection signal:** Add a startup assertion (independent of mode/DEBUG) that logs and refuses non-`migrate` boot when `rolbypassrls = true`; alert on any runtime process whose `current_user` has BYPASSRLS. Today there is no signal in solo/DEBUG paths.
-
-**Strongest counter-argument (steelman):** The `start.sh` contract (set runtime URL for serving, unset only for `migrate`) is the real control, and solo mode is effectively single-tenant so a bypass there is low-stakes; gating the guard to `saas`+`DEBUG=False` avoids breaking local dev. — Reasonable, but "fail open when misconfigured" on the master switch is the wrong default for a security boundary, and `DEBUG=True`-in-prod is a common real incident.
-
-**Alternative solutions:**
-1. **Always-on boot guard** that fails closed on BYPASSRLS for every non-`migrate` start, with an explicit `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch for intentional single-tenant ops. *Low effort, removes the gap, small risk of surprising local dev (mitigated by the escape hatch).*
-2. **Require the restricted role explicitly** — make `RUNTIME_DATABASE_URL` mandatory in `saas` and raise on absence rather than falling back. *Low effort; shifts fail-open to fail-fast.*
-3. **Single role with RLS, no superuser default** — provision the app's default connection as `NOBYPASSRLS` and use a separately-named privileged URL only for migrations. *Higher effort, best end state, removes the "absence grants access" shape entirely.*
-
-**Preferred option + why:** (3) as the target, (1) immediately. Inverting so the privileged connection is the *named exception* rather than the default is the only shape where a missing env var fails closed; the always-on guard is the cheap stopgap that closes the DEBUG/solo holes now.
-
-**Migration path:** First cut — drop the mode/`DEBUG` conditions in `apps.py:_check_rls_role` so the BYPASSRLS guard runs on every non-`migrate` boot.
+Fully remediated: SA2.1 (always-on BYPASSRLS boot guard, `QUICKSCALE_ALLOW_BYPASSRLS=1` escape hatch) and SA2.2 (runtime DB-role default inverted to fail-closed — `RUNTIME_DATABASE_URL` required to serve, superuser `DATABASE_URL` now the named `migrate`-only exception) both shipped and merged to `v87`. Full autopsy detail (problem, evidence, alternatives) has been superseded by the shipped fix; see [CHANGELOG.md](CHANGELOG.md) (SA2.1, SA2.2 entries) for the implementation record.
 
 ---
+
 
 ## Finding 3 — The isolation contract has no single source of truth; the two authoritative docs already describe a weaker, different posture than the shipped code
 
