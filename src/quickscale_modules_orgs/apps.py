@@ -1,22 +1,28 @@
 """Django app configuration for QuickScale organizations.
 
-T1.18 — RLS boot guard: raises ``ImproperlyConfigured`` at startup when
-connected as a PostgreSQL role with BYPASSRLS in saas production mode.
+T1.18 / SA2.1 — BYPASSRLS boot guard: raises ``ImproperlyConfigured``
+at startup when connected as a PostgreSQL role with the BYPASSRLS
+privilege.  The guard has two narrow exemptions:
 
-Only ``manage.py migrate`` is exempt from the guard — ``start.sh``
-deliberately unsets ``RUNTIME_DATABASE_URL`` so DDL runs under the
-superuser ``DATABASE_URL``.  All other startup paths (including
-``manage.py runserver``, gunicorn, and WSGI) remain fail-closed.
+1. ``manage.py migrate`` — ``start.sh`` deliberately unsets
+   ``RUNTIME_DATABASE_URL`` so DDL runs under the superuser
+   ``DATABASE_URL`` with BYPASSRLS.
+2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
+   intentional single-tenant or development use.
+
+All other startup paths (including ``manage.py runserver``,
+gunicorn, and WSGI) remain fail-closed regardless of
+``QUICKSCALE_MODE`` or ``DEBUG``.
 
 AF9 Phase 1 — installs the connection-layer GUC priming execute wrapper
 on every Django ``DatabaseWrapper`` so that ``SET LOCAL app.current_org_id``
 is derived from the ContextVar in the same transaction as tenant SQL.
 """
 
+import os
 import sys
 
 from django.apps import AppConfig
-from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.db.backends.signals import connection_created
@@ -32,6 +38,9 @@ def _is_migrate_command() -> bool:
     management commands (notably ``runserver``) and non-manage.py
     startup (gunicorn, WSGI) must still fail closed — running with
     BYPASSRLS on a runtime server is catastrophic for RLS enforcement.
+
+    SA2.1: For the separate ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape
+    hatch see ``_check_rls_role``.
     """
     return (
         len(sys.argv) >= 2
@@ -43,14 +52,21 @@ def _is_migrate_command() -> bool:
 def _check_rls_role() -> None:
     """Verify the connected PostgreSQL role does not have BYPASSRLS.
 
-    In SaaS mode with ``DEBUG=False``, query ``pg_roles`` and fail fast
-    if the current role has ``rolbypassrls = true``.  No-op on SQLite
-    (non-PostgreSQL), in solo mode, and when ``DEBUG=True``.
+    SA2.1: The guard is always active (regardless of ``QUICKSCALE_MODE``
+    or ``DEBUG``) with two narrow exemptions:
+
+    1. ``manage.py migrate`` — handled in ``ready()`` before this is
+       called.
+    2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
+       intentional single-tenant or development use.
+
+    No-op on SQLite (non-PostgreSQL).
     """
-    if getattr(settings, "QUICKSCALE_MODE", "solo") != "saas":
+    # ---- Escape hatch --------------------------------------------------
+    # Explicit opt-in for single-tenant / development environments.
+    if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
         return
-    if settings.DEBUG:
-        return
+
     if connection.vendor != "postgresql":
         return
 
@@ -92,11 +108,15 @@ class QuickscaleOrgsConfig(AppConfig):
     verbose_name = "QuickScale Organizations"
 
     def ready(self) -> None:
-        # ---- T1.18 — BYPASSRLS boot guard -------------------------------
-        # Only manage.py migrate is exempt — start.sh deliberately unsets
-        # RUNTIME_DATABASE_URL so DDL runs under the superuser DATABASE_URL
-        # with BYPASSRLS.  All other startup (runserver, gunicorn, WSGI)
-        # must still fail closed.
+        # ---- T1.18 / SA2.1 — BYPASSRLS boot guard ----------------------
+        # Two narrow exemptions:
+        #   1. manage.py migrate — start.sh deliberately unsets
+        #      RUNTIME_DATABASE_URL so DDL runs under the superuser
+        #      DATABASE_URL with BYPASSRLS.
+        #   2. QUICKSCALE_ALLOW_BYPASSRLS=1 env-var escape hatch
+        #      (checked inside _check_rls_role).
+        # All other startup (runserver, gunicorn, WSGI) must still
+        # fail closed — regardless of QUICKSCALE_MODE or DEBUG.
         if _is_migrate_command():
             return
         _check_rls_role()
