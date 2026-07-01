@@ -1,4 +1,4 @@
-"""Tests for the SA1.3 tenant-isolation system check (checks.py).
+"""Tests for the SA1.3/SA1.4 tenant-isolation system checks (checks.py).
 
 Covers every code path in ``check_tenant_isolation()``:
 
@@ -8,6 +8,12 @@ Covers every code path in ``check_tenant_isolation()``:
 * W004 — model without FORCE RLS
 * Happy path — all checks pass, no warnings
 * Multi-model — both W003 and W004 emitted for separate models
+
+Covers every code path in ``check_model_classification()``:
+
+* W005 — exception during classification discovery
+* W005 — unclassified concrete model found
+* Happy path — all models classified, no warnings
 """
 
 from __future__ import annotations
@@ -164,7 +170,7 @@ class TestCheckTenantIsolationMultiModel:
 
         mock_get.return_value = [model_a, model_b]
 
-        def isolation_side_effect(model: object) -> dict:  # type: ignore[return]
+        def isolation_side_effect(model: object) -> dict:
             if getattr(model, "__name__", "") == "ModelA":
                 return {
                     "model": model,
@@ -193,3 +199,56 @@ class TestCheckTenantIsolationMultiModel:
         message_ids = {m.id for m in messages}
         assert "quickscale_modules_orgs.W003" in message_ids
         assert "quickscale_modules_orgs.W004" in message_ids
+
+
+# ---------------------------------------------------------------------------
+# SA1.4 — Default-deny classification check (W005) tests
+# ---------------------------------------------------------------------------
+
+
+class TestCheckModelClassificationW005Exception:
+    """``get_unclassified_concrete_models()`` raises an exception → W005."""
+
+    @patch("quickscale_modules_orgs.checks.get_unclassified_concrete_models")
+    def test_returns_w005_on_exception(self, mock_get: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_model_classification
+
+        mock_get.side_effect = RuntimeError("Simulated classification failure")
+
+        messages = check_model_classification(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.W005"
+        assert "Failed to discover concrete project models" in messages[0].msg
+
+
+class TestCheckModelClassificationW005Unclassified:
+    """Unclassified model found → W005."""
+
+    @patch("quickscale_modules_orgs.checks.get_unclassified_concrete_models")
+    def test_returns_w005_for_unclassified(self, mock_get: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_model_classification
+
+        model = _make_mock_model("UnclassifiedModel", "quickscale_modules_test")
+        mock_get.return_value = [model]
+
+        messages = check_model_classification(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.W005"
+        assert "UnclassifiedModel" in messages[0].msg
+        assert "not classified" in messages[0].msg
+
+
+class TestCheckModelClassificationHappy:
+    """All models classified → no messages."""
+
+    @patch("quickscale_modules_orgs.checks.get_unclassified_concrete_models")
+    def test_all_classified_returns_empty(self, mock_get: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_model_classification
+
+        mock_get.return_value = []
+
+        messages = check_model_classification(app_configs=None)
+
+        assert len(messages) == 0

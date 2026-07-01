@@ -102,10 +102,11 @@ SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)     
   *Acceptance:* command passes on the QuickScale repo and fails when a tenant model lacks org_id or a FORCE-RLS policy.
   **Closed 2026-07-01, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail. Establishes the SSOT (`get_tenant_models()`) that SA3.2 consumes.
 
-- [ ] **SA1.4 — Default-deny exclusion registry for user models.** `Tier 2 · Track 1 · deps: SA1.3`
-  Extend the check so every concrete project model must be *either* tenant-enrolled *or* listed in an explicit project-level exclusion registry; an unclassified concrete model fails the check (forces a per-model isolation decision in user code).
-  *Files:* `tenancy.py` (exclusion-registry mechanism), `check_tenant_isolation.py`.
-  *Acceptance:* a new unclassified `models.Model` fails the check until enrolled or explicitly excluded.
+- [x] **SA1.4 — Default-deny exclusion registry for user models.** `Tier 2 · Track 1 · deps: SA1.3`
+  Extended the check so every concrete model from a project-owned app (``quickscale_modules_*`` prefix) must be *either* tenant-enrolled *or* explicitly classified in ``TENANT_TABLE_REGISTRY``; an unclassified concrete model fails the check. Added helpers to ``tenancy.py``: ``QS_APP_PREFIX``, ``is_project_app()``, ``get_concrete_project_models()``, ``is_classified_in_registry()``, ``get_unclassified_concrete_models()``. The management command and system check both enforce the new default-deny rule (command exits 1 for unclassified models; system check emits ``W005``). All 21 enrolled + 13 excluded/pending QuickScale module models are accounted for — no false positives in the current maintainer repo.
+  *Files:* `tenancy.py` (exclusion-registry mechanism), `check_tenant_isolation.py`, `checks.py`.
+  *Acceptance:* a new unclassified `models.Model` under a ``quickscale_modules_*`` app fails the check until enrolled or explicitly excluded.
+  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
 
 - [ ] **SA1.5 — Ship the isolation gate into generated-project CI.** `Tier 2 · Track 1 · deps: SA1.3`
   Wire `check_tenant_isolation` into the generated project's CI/test scaffold so it runs in the **user's** repo against the user's apps.
