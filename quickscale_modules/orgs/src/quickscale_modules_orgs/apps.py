@@ -131,3 +131,9 @@ class QuickscaleOrgsConfig(AppConfig):
         for conn in connections.all():
             install_priming_wrapper(conn)
         connection_created.connect(_install_priming_on_connection)
+
+        # ---- SA1.3 — tenant-isolation system check -----------------------
+        # Import checks.py to register the check_tenant_isolation system
+        # check.  The @register decorator runs at import time, so importing
+        # the module is sufficient to register it.
+        import quickscale_modules_orgs.checks  # noqa: F401
