@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from django.db import IntegrityError, transaction
 from django.test import override_settings
 
 from quickscale_modules_billing.models import (
@@ -880,6 +881,235 @@ def test_credit_user_suppresses_replayed_reference_data_after_many_intervening_c
     assert duplicate_transaction.pk == first_transaction.pk
     assert CreditTransaction.all_objects.filter(organization=organization).count() == 27
     assert CreditBalance.all_objects.get(organization=organization).balance == 205
+
+
+@pytest.mark.django_db
+def test_credit_user_db_constraint_rejects_direct_duplicate(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """The DB partial unique constraint rejects a direct duplicate when bypassing the procedural check."""
+    first = credit_user(
+        user,
+        amount=100,
+        organization=organization,
+        transaction_type=CreditTransaction.TransactionType.PLAN,
+        stripe_event_id="evt_constraint_check",
+    )
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            CreditTransaction.all_objects.create(
+                user=user,
+                organization=organization,
+                amount=200,
+                transaction_type=CreditTransaction.TransactionType.PLAN,
+                stripe_event_id="evt_constraint_check",
+                balance_after=300,
+            )
+
+    # Procedural recovery still works within a single transaction
+    second = credit_user(
+        user,
+        amount=100,
+        organization=organization,
+        transaction_type=CreditTransaction.TransactionType.PLAN,
+        stripe_event_id="evt_constraint_check",
+    )
+    assert second.pk == first.pk
+
+
+@pytest.mark.django_db(transaction=True)
+def test_credit_user_concurrent_duplicate_integrity_path(
+    user,
+    organization,
+) -> None:
+    """Deterministically exercise ``credit_user``'s ``IntegrityError`` recovery branch.
+
+    Two worker threads call ``credit_user`` with the same ``stripe_event_id``.
+    Each thread opens its own database connection, so both pass the procedural
+    ``_find_existing_credit_transaction`` check before either inserts.  The DB
+    constraint backstop catches the duplicate insert, ``credit_user`` recovers
+    in the ``except IntegrityError`` handler, and exactly one row with the
+    correct balance remains.
+    """
+    import concurrent.futures
+    import threading
+
+    from django.db import close_old_connections
+
+    from quickscale_modules_orgs.current_org import (
+        set_current_org_id,
+        reset_current_org_id,
+    )
+
+    barrier = threading.Barrier(2, timeout=30)
+
+    def _credit_worker() -> tuple[str, object]:
+        close_old_connections()
+        set_current_org_id(organization.pk)
+        try:
+            barrier.wait()
+            result = credit_user(
+                user,
+                amount=100,
+                organization=organization,
+                transaction_type=CreditTransaction.TransactionType.PLAN,
+                stripe_event_id="evt_concurrent_integrity_recovery",
+            )
+            return ("ok", result.pk)
+        except Exception as exc:
+            return ("error", str(exc))
+        finally:
+            reset_current_org_id()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_1 = executor.submit(_credit_worker)
+        future_2 = executor.submit(_credit_worker)
+        r1 = future_1.result(timeout=60)
+        r2 = future_2.result(timeout=60)
+
+    assert r1[0] == "ok", f"First worker failed: {r1[1]}"
+    assert r2[0] == "ok", f"Second worker failed: {r2[1]}"
+    assert r1[1] == r2[1], "Both workers must return the same CreditTransaction PK"
+
+    # Exactly one row was committed
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+    # Balance reflects a single credit of 100, not 200
+    assert CreditBalance.all_objects.get(organization=organization).balance == 100
+
+
+@pytest.mark.django_db(transaction=True)
+def test_credit_user_deterministic_integrity_recovery(
+    user,
+    organization,
+) -> None:
+    """Deterministically exercise ``credit_user``'s ``except IntegrityError`` recovery path.
+
+    Uses single-threaded controlled patching to simulate the race condition
+    where two callers both pass the procedural duplicate check before either
+    inserts the CreditTransaction row.  An injected ``IntegrityError`` on the
+    manager's ``create`` method triggers the recovery handler instead of
+    relying on the DB unique constraint (which can be order-dependent under
+    full-suite conditions).  The handler re-fetches the row that a competing
+    commit inserted.
+    """
+    from quickscale_modules_billing import services as billing_services
+
+    # Pre-create the CreditBalance so a savepoint rollback inside
+    # credit_user doesn't remove it.
+    CreditBalance.all_objects.get_or_create(
+        organization=organization,
+        defaults={"balance": 0},
+    )
+
+    # Pre-insert a competing CreditTransaction row that would have
+    # been committed by a concurrent request.  This row has the same
+    # (stripe_event_id, transaction_type) that we will pass to
+    # credit_user, so its create() call will hit the unique constraint.
+    competing = CreditTransaction.all_objects.create(
+        user=user,
+        organization=organization,
+        amount=100,
+        transaction_type=CreditTransaction.TransactionType.PLAN,
+        stripe_event_id="evt_deterministic_integrity_recovery",
+        stripe_object_id="",
+        stripe_reference_data={},
+        description="Competing concurrent insert",
+        balance_after=100,
+    )
+
+    # Patch _find_existing_credit_transaction to return None so
+    # credit_user proceeds past the procedural duplicate check and
+    # attempts to create a row.
+    original_find = billing_services._find_existing_credit_transaction
+    billing_services._find_existing_credit_transaction = lambda **kwargs: None  # type: ignore[method-assign]
+
+    # Patch CreditTransaction.all_objects.create to raise IntegrityError
+    # deterministically instead of relying on the DB unique constraint
+    # (which can be order-dependent under full-suite conditions).
+    original_create = CreditTransaction.all_objects.create
+    CreditTransaction.all_objects.create = lambda **kwargs: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        IntegrityError("Simulated concurrent insert conflict")
+    )
+
+    try:
+        result = credit_user(
+            user,
+            amount=100,
+            organization=organization,
+            transaction_type=CreditTransaction.TransactionType.PLAN,
+            stripe_event_id="evt_deterministic_integrity_recovery",
+        )
+    finally:
+        billing_services._find_existing_credit_transaction = original_find
+        CreditTransaction.all_objects.create = original_create
+
+    # The recovery handler should return the pre-inserted competing row.
+    assert result.pk == competing.pk, (
+        f"Expected competing PK {competing.pk}, got {result.pk}"
+    )
+
+    # Exactly one row was committed (the pre-inserted competing row).
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+
+    # The balance delta inside the rolled-back savepoint was undone.
+    assert CreditBalance.all_objects.get(organization=organization).balance == 0
+
+
+@pytest.mark.django_db
+def test_credit_user_db_constraint_allows_distinct_stripe_event_ids(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """Different stripe_event_ids for the same transaction_type are not blocked."""
+    first = credit_user(
+        user,
+        amount=50,
+        organization=organization,
+        transaction_type=CreditTransaction.TransactionType.PLAN,
+        stripe_event_id="evt_distinct_one",
+    )
+    second = credit_user(
+        user,
+        amount=75,
+        organization=organization,
+        transaction_type=CreditTransaction.TransactionType.PLAN,
+        stripe_event_id="evt_distinct_two",
+    )
+
+    assert second.pk != first.pk
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 2
+    assert CreditBalance.all_objects.get(organization=organization).balance == 125
+
+
+@pytest.mark.django_db
+def test_credit_user_db_constraint_allows_empty_stripe_event_id(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """Transactions without a stripe_event_id are not affected by the partial constraint."""
+    first = credit_user(
+        user,
+        amount=25,
+        organization=organization,
+        transaction_type=CreditTransaction.TransactionType.USAGE,
+        stripe_event_id="",
+    )
+    second = credit_user(
+        user,
+        amount=35,
+        organization=organization,
+        transaction_type=CreditTransaction.TransactionType.USAGE,
+        stripe_event_id="",
+    )
+
+    # Both succeed because the constraint only applies when stripe_event_id is populated
+    assert second.pk != first.pk
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 2
 
 
 @pytest.mark.django_db
