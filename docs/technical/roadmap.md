@@ -47,42 +47,9 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-### Structural Autopsy Remediation (opened 2026-06-30)
+_No open items._ The Structural Autopsy Remediation (opened 2026-06-30, derived from the [2026-06-30 autopsy](../../findings.md#autopsy--2026-06-30)) is complete — all tasks across Findings 1–5 (SA1.1–SA1.5, SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2) shipped and merged to `v87`. SA1.5 (the last remaining task, generated-project CI isolation gate) closed 2026-07-02. Full implementation detail is archived in [CHANGELOG.md](../../CHANGELOG.md); closure rationale for each finding is in [findings.md](../../findings.md).
 
-Fix plan derived from the [2026-06-30 autopsy](../../findings.md#autopsy--2026-06-30). Each task below is sized Adaptive **Tier 1 or Tier 2** (one concern, statable in one sentence; isolation work is sensitive-domain → `RISK LEVEL: medium` → floors at Tier 2). Every task carries a `why →` link to the finding it closes.
-
-**Naming:** `SAn.m` = Structural-Autopsy finding *n*, task *m*.
-
-**Status (2026-07-02):** Findings 2, 3, 4, and 5 are fully closed — all their tasks (SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2) shipped; detail archived in [CHANGELOG.md](../../CHANGELOG.md). **Finding 1 is fully closed:** SA1.1–SA1.5 all shipped.
-
-```
-Track 1 (orgs gate + generator)   Track 2 (CRM + boot guard + perf)   Track 3 (blog + docs + modules)
-─────────────────────────────     ───────────────────────────────     ──────────────────────────────
-SA2.2  (no deps) ───────┐         SA1.1  (no deps)                     SA1.2  (no deps)
-SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)                     SA3.1  (no deps) ──┐
-   ├─ SA1.4 (←1.3) │     │  │      SA4.1  (no deps)                     SA5.1  (no deps)   │
-   └─ SA1.5 (←1.3) │     │  └────► SA4.2  (←SA4.1)                      SA5.2  (no deps)   │
-                   │     └───────────────────────────────────────────► SA3.2  (←SA3.1 & ←SA1.3)
-```
-
-**Status (2026-07-02):** All Structural Autopsy tasks from Findings 1–5 are closed. No open roadmap tasks remain — the Structural Autopsy remediation is complete.
-
-**Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring.
-
-> **Shared closeout files:** `CHANGELOG.md` and this file (`docs/technical/roadmap.md`) are **not** owned by any single track. Every track updates them when closing out a completed task — they are the only files where concurrent edits are expected. To avoid merge conflicts, follow the shared-file merge procedure in the next section: always merge `v87` into your track branch first, resolve conflicts in these two files on the track branch, then merge back.
-
-#### Finding 1 — Single enforced tenant-model contract (`why →` [Finding 1](../../findings.md#finding-1--tenant-isolation-is-a-hand-assembled-per-model-ritual-and-its-enforcement-gate-cannot-see-the-user-code-that-generated-projects-exist-to-host))
-
-- [x] **SA1.5 — Ship the isolation gate into generated-project CI.** `Tier 2 · Track 1 · deps: SA1.3 (closed)`
-  Wired `check_tenant_isolation` into the generated project's CI/test scaffold. The CI workflow template ships a PostgreSQL service container, a `manage.py migrate` step, and a tenant isolation conformance step with `QUICKSCALE_ALLOW_BYPASSRLS=1`. The Makefile template exposes a `check-tenant-isolation` target for local use. Both are conditional on orgs support. Template-rendering tests verify both surfaces. An E2E conformance test proves unprotected model detection.
-  *Key fixes:*
-  - **CR-SA15-002 resolved:** Gating conditionals use `selected_modules is none` (correctly excludes the gate for `selected_modules=[]`).
-  - **CR-SA15-001 resolved:** Makefile `check-tenant-isolation` target now clears `RUNTIME_DATABASE_URL` before `manage.py migrate` so migrations use the superuser `DATABASE_URL` rather than the runtime-restricted role.
-  Completed. Closes SA1.5 — the last Structural Autopsy task.
-
-#### Findings 2, 3, 4, 5 — all closed
-
-Full remediation history for Findings 2 (fail-closed master isolation switch), 3 (contract single source of truth), 4 (O(1) tenant-context priming), and 5 (declarative module-config cutover) is in [CHANGELOG.md](../../CHANGELOG.md) (SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2 entries). Findings 4 and 5 closed 2026-07-02 by maintainer decision: each shipped the lowest-effort mitigation the autopsy prescribed (a per-transaction priming memo; an analytics pilot plus a freeze guardrail) and left the larger structural fix as explicitly deferred/unscheduled backlog rather than an open roadmap task — see [findings.md](../../findings.md) for the closure rationale on each.
+Next work item is not yet defined — see the maintainer for the next roadmap phase.
 
 ---
 
