@@ -39,7 +39,7 @@ def jinja_env(template_dir: Path) -> Environment:
 
 
 @pytest.fixture
-def test_context() -> dict[str, str]:
+def test_context() -> dict[str, str | list[str] | None]:
     """Provide sample context data for template rendering tests.
 
     Includes generated-project runtime pins imported from the
@@ -59,6 +59,7 @@ def test_context() -> dict[str, str]:
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
         "runtime_db_role": "testproject_app",
         "runtime_db_password": "testproject_app_password",
+        "selected_modules": None,
     }
 
 
@@ -1876,8 +1877,13 @@ class TestMissingVariableErrors:
 class TestDevOpsTemplateLoading:
     """Verify all DevOps templates can be loaded by Jinja2."""
 
+    def test_ci_workflow_loads(self, jinja_env: Environment) -> None:
+        """Test CI workflow template loads without errors."""
+        template = jinja_env.get_template("github/workflows/ci.yml.j2")
+        assert template is not None
+
     def test_makefile_loads(self, jinja_env: Environment) -> None:
-        """Test generated Makefile template loads without errors."""
+        """Test Makefile template loads without errors."""
         template = jinja_env.get_template("Makefile.j2")
         assert template is not None
 
@@ -1949,6 +1955,84 @@ class TestDevOpsTemplateLoading:
 
 class TestDevOpsTemplateRendering:
     """Verify DevOps templates render correctly with sample context data."""
+
+    def test_ci_workflow_postgres_service_present(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """CI workflow should include a PostgreSQL service container (SA1.5)."""
+        template = jinja_env.get_template("github/workflows/ci.yml.j2")
+        output = template.render(test_context)
+
+        assert "services:" in output
+        assert "image: postgres:" in output
+        assert "POSTGRES_HOST_AUTH_METHOD: trust" in output
+        assert "--health-cmd pg_isready" in output
+        assert "ports:" in output
+        assert "- 5432:5432" in output
+
+    def test_ci_workflow_contains_tenant_isolation_check(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """CI workflow should include a check_tenant_isolation step when orgs is selected or implied (SA1.5)."""
+        template = jinja_env.get_template("github/workflows/ci.yml.j2")
+
+        # Default (selected_modules=None) — legacy behavior: render the step
+        output = template.render(test_context)
+        assert "check_tenant_isolation" in output
+        assert "DATABASE_URL: postgres://postgres@localhost/postgres" in output
+        assert "migrate" in output
+        assert "QUICKSCALE_ALLOW_BYPASSRLS" in output
+
+        # With orgs explicitly selected — step present
+        output_with_orgs = template.render(
+            {**test_context, "selected_modules": ["orgs"]}
+        )
+        assert "check_tenant_isolation" in output_with_orgs
+        assert "QUICKSCALE_ALLOW_BYPASSRLS" in output_with_orgs
+        assert "migrate" in output_with_orgs
+
+        # Without orgs selected — step absent
+        output_without_orgs = template.render(
+            {**test_context, "selected_modules": ["auth"]}
+        )
+        assert "check_tenant_isolation" not in output_without_orgs
+
+        # Empty selected_modules — step absent (CR-SA15-002: [] must not render dead orgs-only entrypoints)
+        output_empty = template.render({**test_context, "selected_modules": []})
+        assert "check_tenant_isolation" not in output_empty
+
+    def test_makefile_contains_check_tenant_isolation_target(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Makefile should include a check-tenant-isolation target when orgs is selected or implied (SA1.5)."""
+        template = jinja_env.get_template("Makefile.j2")
+
+        # Default (selected_modules=None) — legacy behavior: render target
+        output = template.render(test_context)
+        assert "check-tenant-isolation:" in output
+        assert "check_tenant_isolation" in output
+        assert "--postgres-only" in output
+        assert "--format json" in output
+        assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in output
+        assert "poetry run python manage.py migrate" in output
+
+        # With orgs explicitly selected — target present
+        output_with_orgs = template.render(
+            {**test_context, "selected_modules": ["orgs"]}
+        )
+        assert "check-tenant-isolation:" in output_with_orgs
+        assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in output_with_orgs
+        assert "poetry run python manage.py migrate" in output_with_orgs
+
+        # Without orgs selected — target absent
+        output_without_orgs = template.render(
+            {**test_context, "selected_modules": ["auth"]}
+        )
+        assert "check-tenant-isolation:" not in output_without_orgs
+
+        # Empty selected_modules — target absent (CR-SA15-002: [] must not render dead orgs-only entrypoints)
+        output_empty = template.render({**test_context, "selected_modules": []})
+        assert "check-tenant-isolation:" not in output_empty
 
     def test_makefile_renders_expected_targets(
         self, jinja_env: Environment, test_context: dict[str, str]

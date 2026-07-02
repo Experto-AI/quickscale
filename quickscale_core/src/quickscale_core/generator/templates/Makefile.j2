@@ -2,7 +2,7 @@
 
 FRONTEND_PACKAGE := frontend/package.json
 
-.PHONY: help setup lint lint-backend lint-frontend format test test-backend test-frontend check ci
+.PHONY: help setup lint lint-backend lint-frontend format test test-backend test-frontend check ci{% if selected_modules is none or "orgs" in selected_modules %} check-tenant-isolation{% endif %}
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -63,3 +63,9 @@ test-frontend: ## Run frontend tests when frontend exists
 check: lint test ## Run the standard local quality checks
 
 ci: check ## Alias for check
+
+{% if selected_modules is none or "orgs" in selected_modules %}
+check-tenant-isolation: ## Run tenant isolation conformance check
+	poetry run python manage.py migrate
+	QUICKSCALE_ALLOW_BYPASSRLS=1 poetry run python manage.py check_tenant_isolation --postgres-only --format json
+{% endif %}

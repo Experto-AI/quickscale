@@ -9,6 +9,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:{{ postgres_version }}
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     strategy:
       matrix:
         python-version: ["{{ python_version }}"]
@@ -86,6 +98,21 @@ jobs:
       with:
         files: ./coverage.xml
         fail_ci_if_error: false
+
+    {% if selected_modules is none or "orgs" in selected_modules %}
+    - name: Run migrations
+      run: poetry run python manage.py migrate --noinput
+      env:
+        DATABASE_URL: postgres://postgres@localhost/postgres
+        DJANGO_SETTINGS_MODULE: "{{ package_name }}.settings.base"
+
+    - name: Run tenant isolation conformance check
+      run: poetry run python manage.py check_tenant_isolation --postgres-only --format json
+      env:
+        DATABASE_URL: postgres://postgres@localhost/postgres
+        DJANGO_SETTINGS_MODULE: "{{ package_name }}.settings.base"
+        QUICKSCALE_ALLOW_BYPASSRLS: "1"
+    {% endif %}
 
   frontend-lint:
     runs-on: ubuntu-latest

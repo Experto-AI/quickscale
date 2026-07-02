@@ -55,6 +55,18 @@ Fix plan derived from the [2026-06-30 autopsy](../../findings.md#autopsy--2026-0
 
 **Status (2026-07-02):** Findings 2, 3, 4, and 5 are fully closed — all their tasks (SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2) shipped and merged to `v87`; detail archived in [CHANGELOG.md](../../CHANGELOG.md). Finding 1 is nearly closed: SA1.1–SA1.4 shipped, leaving **SA1.5** as the only open task project-wide.
 
+```
+Track 1 (orgs gate + generator)   Track 2 (CRM + boot guard + perf)   Track 3 (blog + docs + modules)
+─────────────────────────────     ───────────────────────────────     ──────────────────────────────
+SA2.2  (no deps) ───────┐         SA1.1  (no deps)                     SA1.2  (no deps)
+SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)                     SA3.1  (no deps) ──┐
+   ├─ SA1.4 (←1.3) │     │  │      SA4.1  (no deps)                     SA5.1  (no deps)   │
+   └─ SA1.5 (←1.3) │     │  └────► SA4.2  (←SA4.1)                      SA5.2  (no deps)   │
+                   │     └───────────────────────────────────────────► SA3.2  (←SA3.1 & ←SA1.3)
+```
+
+**Status (2026-07-02):** SA1.1, SA1.2, SA1.3, SA1.4, SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, and SA5.2 are closed and merged to `v87`. The only remaining open task is **SA1.5** (partially merged on `wt-track1`; blocked by CR-SA15-001).
+
 **Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring.
 
 > **Shared closeout files:** `CHANGELOG.md` and this file (`docs/technical/roadmap.md`) are **not** owned by any single track. Every track updates them when closing out a completed task — they are the only files where concurrent edits are expected. To avoid merge conflicts, follow the shared-file merge procedure in the next section: always merge `v87` into your track branch first, resolve conflicts in these two files on the track branch, then merge back.
@@ -63,8 +75,16 @@ Fix plan derived from the [2026-06-30 autopsy](../../findings.md#autopsy--2026-0
 
 - [ ] **SA1.5 — Ship the isolation gate into generated-project CI.** `Tier 2 · Track 1 · deps: SA1.3 (closed)`
   Wire `check_tenant_isolation` into the generated project's CI/test scaffold so it runs in the **user's** repo against the user's apps.
-  *Files:* `quickscale_core/src/quickscale_core/generator/templates/` (CI workflow + `Makefile`/test target template).
-  *Acceptance:* a freshly generated project runs the isolation check in CI; conformance fixture proves a deliberately-unprotected model fails the generated CI.
+  *Files:* `quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2`, `quickscale_core/src/quickscale_core/generator/templates/Makefile.j2`; plus template tests in `test_templates.py` and E2E conformance in `test_e2e_full_workflow.py`.
+  *Scope notes:* The CI workflow template now ships a PostgreSQL service container, a ``manage.py migrate`` step, and a tenant isolation conformance step that runs ``manage.py check_tenant_isolation --postgres-only --format json`` with ``QUICKSCALE_ALLOW_BYPASSRLS=1``. The Makefile template exposes a ``check-tenant-isolation`` target for local use. Both the CI step and Makefile target are conditional on orgs support: they render only when ``selected_modules`` is ``None`` (legacy non-modularized generation) or includes ``"orgs"``. Template-rendering tests verify both surfaces. An E2E conformance test (`test_tenant_isolation_conformance_catches_unprotected_model`) proves a deliberately-unprotected model (uses TenantManager but lacks organization_id) causes the command to exit 1 with JSON failure output.
+  *Completed groundwork (merged partial):*
+  - CI workflow template (`ci.yml.j2`) ships PostgreSQL service + migrate step + conditional ``check_tenant_isolation --postgres-only --format json`` step.
+  - Makefile template (`Makefile.j2`) exposes ``check-tenant-isolation`` target with orgs gating.
+  - Gating conditionals use ``selected_modules is none`` (CR-SA15-002 resolved: fixed from ``not selected_modules`` to correctly exclude the gate for ``selected_modules=[]``).
+  - Template-rendering tests cover all four render variants; E2E conformance proves unprotected model detection.
+  *Remaining blocker — CR-SA15-001 (still open):*
+  The generated ``Makefile.j2`` ``check-tenant-isolation`` target needs to clear/override ``RUNTIME_DATABASE_URL`` before ``manage.py migrate`` so the migration step uses the superuser role (via ``DATABASE_URL``) rather than the runtime-restricted role. The CI workflow template already handles this correctly via its dedicated PostgreSQL service ``DATABASE_URL``; the Makefile local path needs a parallel fix.
+  *Decision needed:* Complete with a targeted Makefile fix, or intentionally narrow SA1.5 scope to CI-only support and close without the Makefile bootstrap path?
 
 #### Findings 2, 3, 4, 5 — all closed
 
