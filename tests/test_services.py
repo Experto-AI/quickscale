@@ -123,3 +123,27 @@ class TestEnsureOrgDefaultStages:
         stages = Stage.all_objects.filter(organization=org_a)
         assert stages.count() == 4
         assert all(s.terminal_semantic is None for s in stages)
+
+
+@pytest.mark.django_db
+def test_organization_created_receiver_calls_ensure_org_default_stages(org_a) -> None:
+    """The CRM receiver for organization_created delegates to ensure_org_default_stages.
+
+    SA7.1 establishes the signal/receiver seam.  This test verifies the
+    CRM-side receiver is correctly wired: firing the signal from orgs
+    must trigger the same ``ensure_org_default_stages`` call that the
+    old ``crm_bootstrap.maybe_seed_crm_default_stages`` used to make.
+    """
+    # Ensure the receiver is connected by importing the signals module.
+    # (In production this happens via QuickscaleCrmConfig.ready().)
+    import quickscale_modules_crm.signals  # noqa: F401
+
+    from quickscale_modules_orgs.models import Organization
+    from quickscale_modules_orgs.signals import organization_created
+
+    with mock.patch(
+        "quickscale_modules_crm.signals.ensure_org_default_stages"
+    ) as mock_ensure:
+        organization_created.send(sender=Organization, organization=org_a)
+
+    mock_ensure.assert_called_once_with(org_a)
