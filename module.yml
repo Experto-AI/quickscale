@@ -13,6 +13,9 @@ config:
       django_setting: LISTINGS_PER_PAGE
       description: "Number of listings per page"
 
+required_modules:
+  - orgs
+
 dependencies:
   - django-filter>=25.0
   - django-markdownx>=4.0
@@ -22,6 +25,9 @@ django_apps:
   - django_filters
   - markdownx
   - quickscale_modules_listings
+
+implies:
+  - name: orgs
 
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)
@@ -48,6 +54,16 @@ derivation:
 
   option_derivations:
     listings_per_page:
+      normalization_rules:
+        - source_key: listings_per_page
+          target_key: listings_per_page
+          rule_type: strip
+          description: "Strip whitespace from listings_per_page"
+      validation_rules:
+        - option_key: listings_per_page
+          rule_type: pattern
+          pattern: ^\d+$
+          description: "modules.listings.listings_per_page must be a positive integer"
       derived_settings:
         - setting_key: LISTINGS_PER_PAGE
           source_options: [listings_per_page]
