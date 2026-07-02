@@ -565,6 +565,222 @@ class TestFullE2EWorkflow:
         # Generated project tests should pass
         assert result.returncode == 0, f"Generated tests failed: {result.stderr}"
 
+    def test_tenant_isolation_conformance_catches_unprotected_model(
+        self, tmp_path, e2e_postgres_url
+    ):
+        """SA1.5 conformance: a deliberately-unprotected model fails check_tenant_isolation.
+
+        Generates a project, embeds the orgs module, adds a model with
+        TenantManager but no organization_id, and proves the management
+        command exits 1 with JSON failure output.
+        """
+        from quickscale_core.generator import ProjectGenerator
+
+        generator = ProjectGenerator(theme="showcase_html")
+        project_name = "sa15_conformance"
+        project_path = tmp_path / project_name
+
+        generator.generate(project_name, project_path)
+        self._install_project_dependencies(project_path)
+
+        # ── Embed the orgs module as a path dependency ──────────────────
+        module_dir = project_path / "modules" / "orgs"
+        _copytree_for_generated_project_smoke(
+            REPO_ROOT / "quickscale_modules" / "orgs",
+            module_dir,
+        )
+
+        pyproject_path = project_path / "pyproject.toml"
+        pyproject_content = pyproject_path.read_text()
+
+        if "quickscale-module-orgs" not in pyproject_content:
+            pyproject_content = pyproject_content.replace(
+                'dj-database-url = "^3.1.0"\n',
+                'dj-database-url = "^3.1.0"\n'
+                'quickscale-module-orgs = {path = "./modules/orgs", develop = true}\n',
+            )
+            pyproject_path.write_text(pyproject_content)
+
+        # Regenerate lock and install with the new path dependency
+        lock_result = subprocess.run(
+            ["poetry", "lock"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert lock_result.returncode == 0, (
+            f"poetry lock failed after adding orgs dep: {lock_result.stderr}"
+        )
+        install_result = subprocess.run(
+            ["poetry", "install", "--no-interaction"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        assert install_result.returncode == 0, (
+            f"poetry install failed after adding orgs dep: {install_result.stderr}"
+        )
+
+        # ── Create an app with a deliberately-unprotected model ────────
+        test_app_dir = project_path / project_name / "test_unprotected"
+        test_app_dir.mkdir(exist_ok=True)
+        (test_app_dir / "__init__.py").write_text("")
+
+        (test_app_dir / "models.py").write_text(
+            '"""Deliberately-unprotected model — TenantManager but no organization_id."""\n'
+            "from django.db import models\n"
+            "from quickscale_modules_orgs.models import TenantManager\n"
+            "\n"
+            "\n"
+            "class UnprotectedModel(models.Model):\n"
+            '    """Model with TenantManager but MISSING organization_id — should fail isolation."""\n'
+            "    name = models.CharField(max_length=100)\n"
+            "    objects = TenantManager()\n"
+            "\n"
+            "    class Meta:\n"
+            '        app_label = "test_unprotected"\n'
+        )
+
+        # ── Register both the orgs module and the test app ─────────────
+        test_settings = project_path / project_name / "settings" / "test_e2e.py"
+        parsed = urllib.parse.urlparse(e2e_postgres_url)
+        db_host = parsed.hostname or "localhost"
+        db_port = parsed.port or "5432"
+
+        test_settings.write_text(
+            f'"""E2E conformance test settings — includes orgs + unprotected test app."""\n'
+            f"from .base import *\n"
+            f"\n"
+            f"INSTALLED_APPS += [\n"
+            f'    "quickscale_modules_orgs",\n'
+            f'    "{project_name}.test_unprotected",\n'
+            f"]\n"
+            f"\n"
+            f"DATABASES = {{\n"
+            f"    'default': {{\n"
+            f"        'ENGINE': 'django.db.backends.postgresql',\n"
+            f"        'NAME': 'test_db',\n"
+            f"        'USER': 'test_user',\n"
+            f"        'PASSWORD': 'test_password',\n"
+            f"        'HOST': '{db_host}',\n"
+            f"        'PORT': '{db_port}',\n"
+            f"    }}\n"
+            f"}}\n"
+            f"\n"
+            f"DEBUG = False\n"
+            f"ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']\n"
+            f"\n"
+            f"CACHES = {{\n"
+            f"    'default': {{\n"
+            f"        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',\n"
+            f"    }}\n"
+            f"}}\n"
+            f"\n"
+            f"# Override logging to use console only (no file logging in tests)\n"
+            f"LOGGING = {{\n"
+            f"    'version': 1,\n"
+            f"    'disable_existing_loggers': False,\n"
+            f"    'formatters': {{\n"
+            f"        'verbose': {{\n"
+            f"            'format': '{{levelname}} {{asctime}} {{module}} {{message}}',\n"
+            f"            'style': '{{',\n"
+            f"        }},\n"
+            f"    }},\n"
+            f"    'handlers': {{\n"
+            f"        'console': {{\n"
+            f"            'class': 'logging.StreamHandler',\n"
+            f"            'formatter': 'verbose',\n"
+            f"        }},\n"
+            f"    }},\n"
+            f"    'root': {{\n"
+            f"        'handlers': ['console'],\n"
+            f"        'level': 'INFO',\n"
+            f"    }},\n"
+            f"    'loggers': {{\n"
+            f"        'django': {{\n"
+            f"            'handlers': ['console'],\n"
+            f"            'level': 'INFO',\n"
+            f"            'propagate': False,\n"
+            f"        }},\n"
+            f"    }},\n"
+            f"}}\n"
+        )
+
+        # Run migrations so the table exists
+        migrate_result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
+                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+            },
+        )
+        assert migrate_result.returncode == 0, (
+            f"Migrations failed: {migrate_result.stderr}"
+        )
+
+        # ── Run check_tenant_isolation and assert failure ──────────────
+        check_result = subprocess.run(
+            [
+                "poetry",
+                "run",
+                "python",
+                "manage.py",
+                "check_tenant_isolation",
+                "--postgres-only",
+                "--format",
+                "json",
+            ],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
+                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+            },
+        )
+
+        # Exit code 1 — isolation check failed
+        assert check_result.returncode != 0, (
+            f"check_tenant_isolation should fail with unprotected model "
+            f"but exited 0:\nstdout: {check_result.stdout}\n"
+            f"stderr: {check_result.stderr}"
+        )
+
+        # JSON output should contain failure info
+        import json
+
+        try:
+            payload = json.loads(check_result.stdout)
+        except json.JSONDecodeError as exc:
+            raise AssertionError(
+                f"check_tenant_isolation output should be valid JSON:\n"
+                f"{check_result.stdout}\n{check_result.stderr}"
+            ) from exc
+
+        assert payload.get("status") in ("fail",), (
+            f"Expected status 'fail', got {payload.get('status')!r}: "
+            f"{json.dumps(payload, indent=2)}"
+        )
+
+        # Either tenant_models has a failure or unclassified list is non-empty
+        tenant_models = payload.get("tenant_models", {})
+        unclassified = payload.get("unclassified", [])
+        has_tenant_failure = (
+            isinstance(tenant_models, dict) and tenant_models.get("failed", 0) > 0
+        )
+        has_unclassified = isinstance(unclassified, list) and len(unclassified) > 0
+        assert has_tenant_failure or has_unclassified, (
+            f"Expected tenant model failure or unclassified model, "
+            f"but found none:\n{json.dumps(payload, indent=2)}"
+        )
+
     def test_generated_project_python_ruff_check(self, tmp_path):
         """Generated Python project should pass Ruff lint check."""
         from quickscale_core.generator import ProjectGenerator
