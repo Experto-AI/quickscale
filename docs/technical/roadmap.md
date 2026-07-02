@@ -57,19 +57,19 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../findings.md#auto
 
 #### Dependency & parallelization overview (2026-07-02 status)
 
-`SA12.1`, `SA9.1`, `SA6.1`, `SA6.2` shipped and merged — see [CHANGELOG.md](../../CHANGELOG.md). Diagram below shows only remaining open work.
+`SA12.1`, `SA9.1`, `SA6.1`, `SA6.2`, and `SA6.3` shipped and merged — see [CHANGELOG.md](../../CHANGELOG.md). Diagram below shows only remaining open work.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + org-switch)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────────────
-SA11.1 groundwork committed,         SA9.2  (no deps)                         SA6.3  (←6.2, satisfied — ready)
-  decision resolved, impl pending    SA9.3  (no deps)                         SA7.1  (no deps)
-  ├─ SA11.2 (←11.1, pending impl)      ├─ SA9.4 (←9.3)                        SA7.2  (no deps)
-  ├─ SA11.3 (←11.1, pending impl)      └─ SA9.5 (←9.3)                        SA7.3  (no deps)
-  └─ SA11.4 (←11.1, pending impl)          └─ SA9.6 (←9.4 & ←9.5)             SA7.4  (no deps)
-SA11.5 (no deps — clean)             SA10.1 (no deps)                         SA8.1  (no deps)
-SA11.6 (no deps — clean)               └─ SA10.2 (←10.1)                       └─ SA8.2 (←8.1)
-SA11.7 (no deps — clean)                                                          └─ SA8.3 (←8.2)
+SA11.1 groundwork committed,         SA9.2  (no deps)                         SA7.1  (no deps)
+  decision resolved, impl pending    SA9.3  (no deps)                         SA7.2  (no deps)
+  ├─ SA11.2 (←11.1, pending impl)      ├─ SA9.4 (←9.3)                        SA7.3  (no deps)
+  ├─ SA11.3 (←11.1, pending impl)      └─ SA9.5 (←9.3)                        SA7.4  (no deps)
+  └─ SA11.4 (←11.1, pending impl)          └─ SA9.6 (←9.4 & ←9.5)             SA8.1  (no deps)
+SA11.5 (no deps — clean)             SA10.1 (no deps)                           └─ SA8.2 (←8.1)
+SA11.6 (no deps — clean)               └─ SA10.2 (←10.1)                           └─ SA8.3 (←8.2)
+SA11.7 (no deps — clean)
 ```
 
 No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.1` — new `signals.py`/`services.py` receiver + `apps.py` wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back, same as the SA3.2/SA1.3 precedent.
@@ -80,13 +80,13 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 |-------|------------------|-------|
 | **1** | SA11.1 *(decision resolved, impl pending)* → SA11.2/SA11.3/SA11.4 *(pending SA11.1 impl)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
 | **2** | SA9.2 → SA9.3 → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA6.3 · SA7.1 → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
+| **3** | SA7.1 → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
 
 #### Track status (as of 2026-07-02)
 
 - **Track 1 — unblocked, implementation pending.** The design decision blocking `SA11.1` (`CR-SA11.1-001`) resolved 2026-07-02 — see below. No further decision is needed; the remaining work is implementation: force `TemplateResponse.render()` inside `org_scope()` in `PublicSystemOrgReadMixin.dispatch()`, then add the real `ListView`/`TemplateResponse` render-lifecycle test (`CR-SA11.1-002`). Once that lands, `SA11.2`/`SA11.3`/`SA11.4` can proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
 - **Track 2 — clean.** No blockers; `SA9.2` and `SA9.3` are independent and can run in parallel, as can `SA10.1`.
-- **Track 3 — clean.** `SA6.3`'s dependency (`SA6.2`) shipped, so it's ready to start; `SA7.1`–`SA7.4` and `SA8.1` have no dependencies.
+- **Track 3 — clean.** `SA6.3` is complete; the next pending item is `SA7.1`, and `SA7.2`–`SA7.4` plus `SA8.1` remain unblocked by dependencies.
 
 ---
 
@@ -184,7 +184,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 1: wiring fan-out / two coexisting mechanisms (`why →` [Finding 1](../../findings.md#finding-1-per-module-integration-knowledge-is-fanned-across-three-packages-with-two-wiring-mechanisms-coexisting-and-the-declared-migration-unscheduled))
 
-- [ ] **SA6.3 — Update the imperative-wiring freeze guardrail.** `Tier 1 · Track 3 · deps: SA6.2`
+- [x] **SA6.3 — Update the imperative-wiring freeze guardrail.** `Tier 1 · Track 3 · deps: SA6.2`
   Extend `test_imperative_inventory.py` so it also asserts listings stays migrated (mirroring the existing analytics assertion), preventing regression back to imperative wiring.
   *Files:* `quickscale_core/tests/test_imperative_inventory.py`.
   *Acceptance:* re-introducing an imperative listings builder fails this test.

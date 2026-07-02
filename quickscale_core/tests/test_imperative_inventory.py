@@ -146,6 +146,17 @@ class TestManifestInventoryHelpers:
         # SA5.1: analytics inventory cleared — all symbols served by manifest bridge.
         assert len(entries) == 0
 
+    def test_get_manifest_inventory_listings_migrated(self) -> None:
+        """get_manifest_inventory returns empty list for listings after SA6.2.
+
+        SA6.3 freeze guardrail: listings inventory cleared — all symbols
+        served by manifest-driven derivation. Re-introducing imperative
+        listings builder entries to MANIFEST_INVENTORY will fail this test.
+        """
+        entries = get_manifest_inventory("listings")
+        # SA6.2: listings inventory cleared — all symbols served by manifest derivation.
+        assert len(entries) == 0
+
     def test_get_manifest_inventory_unknown(self) -> None:
         """get_manifest_inventory returns empty list for unknown modules."""
         entries = get_manifest_inventory("nonexistent")
