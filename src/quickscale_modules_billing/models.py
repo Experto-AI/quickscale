@@ -136,6 +136,13 @@ class CreditTransaction(models.Model):
         app_label = "quickscale_modules_billing"
         base_manager_name = "all_objects"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stripe_event_id", "transaction_type"],
+                condition=populated_value_q("stripe_event_id"),
+                name="quickscale_billing_unique_stripe_event_id_per_type",
+            ),
+        ]
 
     def __str__(self) -> str:
         actor = self.user or self.organization or "Unknown actor"

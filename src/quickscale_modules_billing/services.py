@@ -816,35 +816,49 @@ def credit_user(
         raise BillingValidationError("Credit amount must be greater than zero.")
 
     normalized_reference_data = _normalize_mapping(stripe_reference_data or {})
-    with transaction.atomic():
-        balance, _ = _get_or_create_credit_balance(organization=organization)
-        existing_transaction = _find_existing_credit_transaction(
-            user=user,
-            organization=organization,
-            transaction_type=transaction_type,
-            stripe_event_id=stripe_event_id,
-            stripe_object_id=stripe_object_id,
-            stripe_reference_data=normalized_reference_data,
-        )
-        if existing_transaction is not None:
-            return existing_transaction
+    try:
+        with transaction.atomic():
+            balance, _ = _get_or_create_credit_balance(organization=organization)
+            existing_transaction = _find_existing_credit_transaction(
+                user=user,
+                organization=organization,
+                transaction_type=transaction_type,
+                stripe_event_id=stripe_event_id,
+                stripe_object_id=stripe_object_id,
+                stripe_reference_data=normalized_reference_data,
+            )
+            if existing_transaction is not None:
+                return existing_transaction
 
-        updated_balance = _apply_locked_credit_balance_delta(
-            balance=balance,
-            delta=amount,
-        )
-        transaction_row = CreditTransaction.all_objects.create(
-            user=user,
-            organization=organization,
-            amount=amount,
+            updated_balance = _apply_locked_credit_balance_delta(
+                balance=balance,
+                delta=amount,
+            )
+            transaction_row = CreditTransaction.all_objects.create(
+                user=user,
+                organization=organization,
+                amount=amount,
+                transaction_type=transaction_type,
+                stripe_event_id=stripe_event_id,
+                stripe_object_id=stripe_object_id,
+                stripe_reference_data=normalized_reference_data,
+                description=description,
+                balance_after=updated_balance,
+            )
+            return transaction_row
+    except IntegrityError:
+        # A concurrent request beat us to inserting this transaction.
+        # The DB constraint prevents duplicates; the savepoint has been
+        # rolled back (including the balance delta), so re-fetch the row
+        # that was committed by the other request.
+        existing = CreditTransaction.all_objects.filter(
             transaction_type=transaction_type,
             stripe_event_id=stripe_event_id,
-            stripe_object_id=stripe_object_id,
-            stripe_reference_data=normalized_reference_data,
-            description=description,
-            balance_after=updated_balance,
-        )
-        return transaction_row
+            organization=organization,
+        ).first()
+        if existing is not None:
+            return existing
+        raise
 
 
 def debit_user(
@@ -1587,9 +1601,11 @@ def _resolve_subscription_for_runtime_event(
 ) -> Subscription | None:
     normalized_subscription_id = stripe_subscription_id.strip()
     if normalized_subscription_id:
-        queryset = Subscription.all_objects.select_related("user", "plan").filter(
+        queryset = Subscription.all_objects.filter(
             stripe_subscription_id=normalized_subscription_id
         )
+        if not for_update:
+            queryset = queryset.select_related("user", "plan")
         if for_update:
             queryset = queryset.select_for_update()
         subscription = queryset.order_by("-pk").first()
@@ -1946,7 +1962,9 @@ def _resolve_authoritative_subscription_reservation(
     if organization is None and not normalized_customer_id:
         return None
 
-    queryset = Subscription.all_objects.select_related("user", "plan").order_by("-pk")
+    queryset = Subscription.all_objects.order_by("-pk")
+    if not for_update:
+        queryset = queryset.select_related("user", "plan")
     if for_update:
         queryset = queryset.select_for_update()
     if organization is not None:
