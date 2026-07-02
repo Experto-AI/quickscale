@@ -28,7 +28,6 @@ from quickscale_cli.commands.module_config import (
     apply_blog_configuration,
     apply_crm_configuration,
     apply_forms_configuration,
-    apply_listings_configuration,
     apply_notifications_configuration,
     apply_social_configuration,
     apply_storage_configuration,
@@ -800,121 +799,6 @@ class TestApplyBlogConfigurationFull:
 # ============================================================================
 # Listings configuration - full apply flows
 # ============================================================================
-
-
-class TestApplyListingsConfigurationFull:
-    """Full tests for apply_listings_configuration"""
-
-    def test_settings_not_found(self, tmp_path, capsys):
-        """Abort when standalone regeneration cannot resolve project identity."""
-        project = tmp_path / "proj"
-        project.mkdir()
-        with pytest.raises(click.Abort):
-            apply_listings_configuration(project, {"listings_per_page": 12})
-
-        error_output = capsys.readouterr().err
-        assert "Managed wiring regeneration failed" in error_output
-        assert "Unable to resolve project identity" in error_output
-
-    def test_already_configured(self, tmp_path):
-        """Managed wiring remains idempotent when listings reapplied."""
-        project = _make_project(tmp_path)
-        listings_dir = project / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-        config = {"listings_per_page": 12}
-        apply_listings_configuration(project, config)
-        apply_listings_configuration(project, config)
-        settings = (project / "myproject" / "settings" / "modules.py").read_text()
-        assert settings.count("quickscale_modules_listings") == 1
-
-    def test_full_apply_listings(self, tmp_path):
-        """Full listings config apply"""
-        project = _make_project(tmp_path)
-        # Create listings module pyproject
-        listings_dir = project / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-
-        config = {"listings_per_page": 20}
-        apply_listings_configuration(project, config)
-
-        settings = (project / "myproject" / "settings" / "modules.py").read_text()
-        assert "quickscale_modules_listings" in settings
-        assert "'LISTINGS_PER_PAGE': 20" in settings
-
-        urls = (project / "myproject" / "urls_modules.py").read_text()
-        assert "quickscale_modules_listings.urls" in urls
-        assert "markdownx.urls" in urls
-
-    def test_full_apply_listings_leaves_pyproject_dependency_sync_to_cli_helper(
-        self,
-        tmp_path,
-    ):
-        """Listings wiring should no longer mutate pyproject.toml directly."""
-        project = _make_project(tmp_path)
-        listings_dir = project / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\n"
-            'django-filter = "^23.0"\n'
-            'django-markdownx = "^4.0"\n'
-        )
-
-        apply_listings_configuration(project, {"listings_per_page": 20})
-
-        pyproject_content = (project / "pyproject.toml").read_text()
-        assert "django-filter" not in pyproject_content
-        assert "django-markdownx" not in pyproject_content
-
-    def test_listings_all_apps_already_present(self, tmp_path):
-        """All required apps already in INSTALLED_APPS"""
-        project = _make_project(tmp_path)
-        settings = project / "myproject" / "settings" / "base.py"
-        settings.write_text(
-            'INSTALLED_APPS = ["django_filters", "quickscale_modules_listings"]\n'
-        )
-        # No listings module dir needed since we already have the apps
-        # but need pyproject for dependency
-        (project / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\npython = "^3.14"\ndjango-filter = "^23.0"\n'
-        )
-
-        config = {"listings_per_page": 15}
-        settings.write_text('INSTALLED_APPS = ["django_filters"]\n')
-        listings_dir = project / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-        apply_listings_configuration(project, config)
-
-        content = (project / "myproject" / "settings" / "modules.py").read_text()
-        assert "'LISTINGS_PER_PAGE': 15" in content
-
-    def test_listings_urls_already_present(self, tmp_path):
-        """Skip URL update when listings URLs already present"""
-        project = _make_project(tmp_path)
-        (project / "myproject" / "urls.py").write_text(
-            "quickscale_modules_listings here\n"
-        )
-        settings = project / "myproject" / "settings" / "base.py"
-        settings.write_text("INSTALLED_APPS = []\n")
-        listings_dir = project / "modules" / "listings"
-        listings_dir.mkdir(parents=True)
-        (listings_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
-        )
-
-        config = {"listings_per_page": 12}
-        apply_listings_configuration(project, config)
-        managed_urls = (project / "myproject" / "urls_modules.py").read_text()
-        assert "quickscale_modules_listings.urls" in managed_urls
-        assert "markdownx.urls" in managed_urls
 
 
 class TestModuleWiringSpecs:

@@ -51,12 +51,6 @@ from quickscale_core.contracts.resolvers import (
     normalize_forms_module_options,
     resolve_forms_module_options,
     validate_forms_module_options,
-    # Listings
-    DEFAULT_LISTINGS_PER_PAGE,
-    LISTINGS_MODULE_OPTION_KEYS,
-    default_listings_module_options,
-    resolve_listings_module_options,
-    validate_listings_module_options,
     # Notifications
     default_notifications_module_options,
     notifications_live_delivery_configured,
@@ -594,59 +588,6 @@ class TestResolversForms:
         )
         issues = validate_forms_module_options(None)
         assert any("forms_per_page" in i for i in issues)
-
-
-# ===================================================================
-# Listings
-# ===================================================================
-
-
-class TestResolversListings:
-    """Tests for Listings module option functions."""
-
-    def test_listings_constants(self) -> None:
-        assert DEFAULT_LISTINGS_PER_PAGE == 12
-        assert "listings_per_page" in LISTINGS_MODULE_OPTION_KEYS
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_default_listings(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "listings", {"listings_per_page": 12}
-        )
-        result = default_listings_module_options()
-        assert result["listings_per_page"] == 12
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_listings(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "listings", {"listings_per_page": 12}
-        )
-        result = resolve_listings_module_options({"listings_per_page": 24})
-        assert result["listings_per_page"] == 24
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_listings_valid(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "listings", {"listings_per_page": 12}
-        )
-        assert validate_listings_module_options(None) == []
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_listings_invalid(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _make_mock_manifest(
-            "listings", {"listings_per_page": 0}
-        )
-        issues = validate_listings_module_options(None)
-        assert any("listings_per_page" in i for i in issues)
-
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_validate_listings_empty_string_non_int(self, mock_load: MagicMock) -> None:
-        """validate_listings handles non-integer listings_per_page (error in validate path)."""
-        mock_load.return_value = _make_mock_manifest(
-            "listings", {"listings_per_page": 0}
-        )
-        issues = validate_listings_module_options(None)
-        assert any("listings_per_page" in i for i in issues)
 
 
 # ===================================================================

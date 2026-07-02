@@ -645,64 +645,10 @@ def apply_blog_configuration(
     click.echo(f"  • API rate limit: {normalized['api_rate_limit']}")
 
 
-# ============================================================================
-# LISTINGS MODULE CONFIGURATION
-# ============================================================================
-
-
-def get_default_listings_config() -> dict[str, Any]:
-    """Get default configuration for listings module (non-interactive mode)"""
-    return {
-        "listings_per_page": 12,
-    }
-
-
-def configure_listings_module(
-    non_interactive: bool = False,
-    existing_config: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Interactive configuration for listings module"""
-    defaults = _merge_existing_config(get_default_listings_config(), existing_config)
-
-    if non_interactive:
-        click.echo("\n⚙️  Using default listings module configuration...")
-        config = defaults
-        click.echo(f"  • Listings per page: {config['listings_per_page']}")
-        return config
-
-    click.echo("\n⚙️  Configuring listings module...")
-    click.echo(
-        "The listings module provides an abstract base model for marketplace listings.\n"
-    )
-
-    config = {
-        "listings_per_page": click.prompt(
-            "Listings per page",
-            type=int,
-            default=int(defaults["listings_per_page"]),
-        ),
-    }
-
-    return config
-
-
-def apply_listings_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply listings module configuration via managed wiring files."""
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "listings",
-        config,
-        execution_mode=execution_mode,
-    )
-
-    # Show configuration summary
-    click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Listings per page: {config['listings_per_page']}")
+# SA6.2: Listings no longer needs a configurator triad — its
+# defaults/normalization/validation now come from module.yml's
+# derivation section.  The manifest-driven path in entry_point.py
+# handles the wiring directly.
 
 
 # ============================================================================
@@ -2024,12 +1970,6 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
             configure=configure_blog_module,
             apply=apply_blog_configuration,
             get_defaults=get_default_blog_config,
-        ),
-        ModuleConfigurator(
-            name="listings",
-            configure=configure_listings_module,
-            apply=apply_listings_configuration,
-            get_defaults=get_default_listings_config,
         ),
         ModuleConfigurator(
             name="crm",

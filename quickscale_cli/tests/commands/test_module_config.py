@@ -12,13 +12,10 @@ from quickscale_cli.commands.module_config import (
     _regenerate_wiring_for_module,
     apply_auth_configuration,
     apply_blog_configuration,
-    apply_listings_configuration,
     configure_auth_module,
     configure_blog_module,
-    configure_listings_module,
     get_default_auth_config,
     get_default_blog_config,
-    get_default_listings_config,
     has_migrations_been_run,
     MODULE_CONFIGURATOR_REGISTRY,
     ModuleConfigurator,
@@ -323,57 +320,6 @@ class TestBlogModuleConfig:
             pass
 
 
-class TestListingsModuleConfig:
-    """Tests for listings module configuration functions."""
-
-    def test_get_default_listings_config(self):
-        """Test default listings configuration."""
-        config = get_default_listings_config()
-
-        assert config["listings_per_page"] == 12
-
-    def test_configure_listings_module_non_interactive(self):
-        """Test non-interactive listings configuration."""
-        config = configure_listings_module(non_interactive=True)
-
-        assert config["listings_per_page"] == 12
-
-    @patch("quickscale_cli.commands.module_config.click.prompt")
-    def test_configure_listings_module_interactive(self, mock_prompt):
-        """Test interactive listings configuration."""
-        mock_prompt.return_value = 24
-
-        config = configure_listings_module(non_interactive=False)
-
-        assert config["listings_per_page"] == 24
-
-    @patch("quickscale_cli.commands.module_config.Path.exists")
-    def test_apply_listings_configuration(self, mock_exists, tmp_path):
-        """Test applying listings configuration to project."""
-        mock_exists.return_value = True
-
-        # Create minimal project structure
-        settings_dir = tmp_path / "myproject" / "settings"
-        settings_dir.mkdir(parents=True)
-        base_py = settings_dir / "base.py"
-        base_py.write_text("INSTALLED_APPS = []\n")
-
-        urls_py = tmp_path / "myproject" / "urls.py"
-        urls_py.write_text("urlpatterns = []\n")
-
-        pyproject_toml = tmp_path / "pyproject.toml"
-        pyproject_toml.write_text("[tool.poetry.dependencies]\n")
-
-        config = get_default_listings_config()
-
-        # Test that function runs without crashing
-        try:
-            apply_listings_configuration(tmp_path, config)
-        except Exception:
-            # Expected to fail on some operations
-            pass
-
-
 class TestModuleConfigurators:
     """Tests for MODULE_CONFIGURATOR_REGISTRY."""
 
@@ -381,7 +327,6 @@ class TestModuleConfigurators:
         """Test that MODULE_CONFIGURATOR_REGISTRY is properly structured."""
         assert "auth" in MODULE_CONFIGURATOR_REGISTRY
         assert "blog" in MODULE_CONFIGURATOR_REGISTRY
-        assert "listings" in MODULE_CONFIGURATOR_REGISTRY
 
         for name, entry in MODULE_CONFIGURATOR_REGISTRY.items():
             assert isinstance(entry, ModuleConfigurator)
@@ -411,10 +356,3 @@ class TestModuleConfigurators:
 
         config = entry.configure(non_interactive=True)
         assert "enable_rss" in config
-
-    def test_listings_configurator_in_registry(self):
-        """Test listings configurator is accessible from MODULE_CONFIGURATOR_REGISTRY."""
-        entry = MODULE_CONFIGURATOR_REGISTRY["listings"]
-
-        config = entry.configure(non_interactive=True)
-        assert "listings_per_page" in config
