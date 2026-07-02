@@ -72,6 +72,7 @@ from quickscale_cli.utils.module_dependency_sync import (
     _load_toml_file,
     _prefer_dependency_value,
     _render_toml_literal,
+    _update_dependency_entries,
     resolve_embedded_module_install_path,
 )
 from quickscale_core.module_wiring import collect_wiring
@@ -329,6 +330,12 @@ class TestSharedModuleDependencySyncHelpers:
         assert (
             ProjectDependencySyncResult(
                 added_package_dependencies=["django-allauth"]
+            ).changed
+            is True
+        )
+        assert (
+            ProjectDependencySyncResult(
+                updated_package_dependencies=["quickscale-core"]
             ).changed
             is True
         )
@@ -2443,3 +2450,534 @@ class TestApplyCRMConfiguration:
 
         settings = (project / "myproject" / "settings" / "modules.py").read_text()
         assert "CRM_DEALS_PER_PAGE" in settings
+
+
+# ============================================================================
+# SA9.1-REV-001: repin_existing mode and _update_dependency_entries
+# ============================================================================
+
+
+class TestUpdateDependencyEntries:
+    """Tests for the _update_dependency_entries helper."""
+
+    def test_replaces_existing_key_in_section(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'quickscale-core = {path = "../quickscale-core", develop = true}\n'
+        )
+
+        _update_dependency_entries(
+            pyproject,
+            {"quickscale-core": ">=0.86.0,<0.87.0"},
+        )
+
+        content = pyproject.read_text()
+        assert 'quickscale-core = ">=0.86.0,<0.87.0"' in content
+        assert '{path = "../quickscale-core", develop = true}' not in content
+
+    def test_preserves_other_entries(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'quickscale-core = {path = "../quickscale-core", develop = true}\n'
+            'django-allauth = ">=0.63.0"\n'
+        )
+
+        _update_dependency_entries(
+            pyproject,
+            {"quickscale-core": ">=0.86.0,<0.87.0"},
+        )
+
+        content = pyproject.read_text()
+        assert 'Django = "^6.0"' in content
+        assert 'django-allauth = ">=0.63.0"' in content
+
+    def test_appends_when_key_not_found(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
+
+        _update_dependency_entries(
+            pyproject,
+            {"missing-dep": ">=1.0.0"},
+        )
+
+        content = pyproject.read_text()
+        assert 'missing-dep = ">=1.0.0"' in content
+
+    def test_validates_toml_before_writing(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
+
+        with pytest.raises(
+            DependencySyncError, match="Unsupported TOML dependency value"
+        ):
+            # Trigger rendering failure by having a non-serializable value
+            _update_dependency_entries(
+                pyproject,
+                {"bad": object()},
+            )
+
+    def test_noop_on_empty_updates(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        original = '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        pyproject.write_text(original)
+
+        _update_dependency_entries(pyproject, {})
+
+        assert pyproject.read_text() == original
+
+    def test_raises_when_section_missing(self, tmp_path):
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("[tool.poetry]\n")
+
+        with pytest.raises(DependencySyncError, match="Unable to locate"):
+            _update_dependency_entries(pyproject, {"dep": "^1.0"})
+
+
+class TestRepinExistingMode:
+    """Tests for sync_project_module_dependencies with repin_existing=True."""
+
+    def test_repin_replaces_path_style_entry_with_manifest_range(self, tmp_path):
+        """Existing path-style dependency should be replaced with the
+        manifest-derived bounded range when repin_existing=True."""
+        project = _make_project(tmp_path)
+        # Pre-populate pyproject.toml with a path-style quickscale-core entry
+        # similar to what pre-SA9.1 applies would have produced.
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'quickscale-core = {path = "../quickscale-core", develop = true}\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                "name: backups\n"
+                'version: "0.77.0"\n'
+                "dependencies:\n"
+                "  - quickscale-core>=0.86.0,<0.87.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = ">=0.86.0,<0.87.0"\n'
+            ),
+        )
+        # Create a minimal manifest file for manifest loading
+        (project / "modules" / "backups" / "module.yml").write_text(
+            "name: backups\n"
+            'version: "0.77.0"\n'
+            "dependencies:\n"
+            "  - quickscale-core>=0.86.0,<0.87.0\n"
+        )
+
+        result = sync_project_module_dependencies(
+            project,
+            {"backups": {}},
+            repin_existing=True,
+        )
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert result.updated_package_dependencies == ["quickscale-core"]
+        assert 'quickscale-core = ">=0.86.0,<0.87.0"' in pyproject_content
+        assert '{path = "../quickscale-core", develop = true}' not in pyproject_content
+        # Other entries preserved
+        assert 'Django = "^6.0"' in pyproject_content
+
+    def test_repin_does_not_modify_already_correct_entry(self, tmp_path):
+        """When the existing dependency already matches the manifest range,
+        repin mode should not modify it."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'quickscale-core = ">=0.86.0,<0.87.0"\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                "name: backups\n"
+                'version: "0.77.0"\n'
+                "dependencies:\n"
+                "  - quickscale-core>=0.86.0,<0.87.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = ">=0.86.0,<0.87.0"\n'
+            ),
+        )
+        (project / "modules" / "backups" / "module.yml").write_text(
+            "name: backups\n"
+            'version: "0.77.0"\n'
+            "dependencies:\n"
+            "  - quickscale-core>=0.86.0,<0.87.0\n"
+        )
+
+        result = sync_project_module_dependencies(
+            project,
+            {"backups": {}},
+            repin_existing=True,
+        )
+
+        assert result.updated_package_dependencies == []
+        # Entry unchanged
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert 'quickscale-core = ">=0.86.0,<0.87.0"' in pyproject_content
+
+    def test_repin_also_adds_missing_entries(self, tmp_path):
+        """Repin mode should still add truly missing dependencies alongside
+        updating existing ones."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'quickscale-core = {path = "../quickscale-core", develop = true}\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                "name: backups\n"
+                'version: "0.77.0"\n'
+                "dependencies:\n"
+                "  - quickscale-core>=0.86.0,<0.87.0\n"
+                "  - django-storages>=1.14.6\n"
+                "  - boto3>=1.40.46\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = ">=0.86.0,<0.87.0"\n'
+                'django-storages = "^1.14.6"\n'
+                'boto3 = "^1.40.46"\n'
+            ),
+        )
+        (project / "modules" / "backups" / "module.yml").write_text(
+            "name: backups\n"
+            'version: "0.77.0"\n'
+            "dependencies:\n"
+            "  - quickscale-core>=0.86.0,<0.87.0\n"
+            "  - django-storages>=1.14.6\n"
+            "  - boto3>=1.40.46\n"
+        )
+
+        result = sync_project_module_dependencies(
+            project,
+            {"backups": {}},
+            repin_existing=True,
+        )
+
+        # quickscale-core was repinned; django-storages and boto3 are new
+        assert result.updated_package_dependencies == ["quickscale-core"]
+        assert result.added_package_dependencies == ["boto3", "django-storages"]
+        assert result.added_path_dependencies == ["quickscale-module-backups"]
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert 'quickscale-core = ">=0.86.0,<0.87.0"' in pyproject_content
+        assert '{path = "../quickscale-core", develop = true}' not in pyproject_content
+        assert 'django-storages = "^1.14.6"' in pyproject_content
+        assert 'boto3 = "^1.40.46"' in pyproject_content
+
+    def test_repin_raises_when_pyproject_missing_dependency_version(self, tmp_path):
+        """Repin mode raises DependencySyncError when the module pyproject.toml
+        is missing the version for a manifest dependency."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'quickscale-core = ">=0.85.0,<0.86.0"\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                "name: backups\n"
+                'version: "0.77.0"\n'
+                "dependencies:\n"
+                "  - quickscale-core>=0.86.0,<0.87.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                # Missing quickscale-core in [tool.poetry.dependencies]
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+            ),
+        )
+        (project / "modules" / "backups" / "module.yml").write_text(
+            "name: backups\n"
+            'version: "0.77.0"\n'
+            "dependencies:\n"
+            "  - quickscale-core>=0.86.0,<0.87.0\n"
+        )
+
+        with pytest.raises(DependencySyncError, match="missing the Poetry dependency"):
+            sync_project_module_dependencies(
+                project,
+                {"backups": {}},
+                repin_existing=True,
+            )
+
+    def test_repin_with_options_skips_cloud_deps_for_local_storage(self, tmp_path):
+        """Repin mode should respect module options (e.g., storage backend)."""
+        project = _make_project(tmp_path)
+        # Already has django-storages and boto3 from pre-SA9.1
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'quickscale-module-storage = {path = "./modules/storage", develop = true}\n'
+            'django-storages = {path = "../django-storages", develop = true}\n'
+            'boto3 = {path = "../boto3", develop = true}\n'
+        )
+        _write_module_package(
+            project,
+            "storage",
+            manifest_content=(
+                "name: storage\n"
+                'version: "0.83.0"\n'
+                "dependencies:\n"
+                "  - django-storages>=1.14.4\n"
+                "  - boto3>=1.35.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-storage"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-storages = "^1.14.4"\n'
+                'boto3 = "^1.35.0"\n'
+            ),
+        )
+        (project / "modules" / "storage" / "module.yml").write_text(
+            "name: storage\n"
+            'version: "0.83.0"\n'
+            "dependencies:\n"
+            "  - django-storages>=1.14.4\n"
+            "  - boto3>=1.35.0\n"
+        )
+
+        # With local backend, cloud deps are skipped entirely — no update
+        result = sync_project_module_dependencies(
+            project,
+            {"storage": {"backend": "local"}},
+            repin_existing=True,
+        )
+
+        assert result.updated_package_dependencies == []
+        assert result.added_package_dependencies == []
+        # Path dependency for the module itself is still added if missing
+        # (it already exists here, so nothing added)
+
+    def test_repin_does_not_affect_add_only_default(self, tmp_path):
+        """Default (repin_existing=False) must remain add-only for the
+        apply path — existing entries are never repinned."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'quickscale-core = {path = "../quickscale-core", develop = true}\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                "name: backups\n"
+                'version: "0.77.0"\n'
+                "dependencies:\n"
+                "  - quickscale-core>=0.86.0,<0.87.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = ">=0.86.0,<0.87.0"\n'
+            ),
+        )
+        (project / "modules" / "backups" / "module.yml").write_text(
+            "name: backups\n"
+            'version: "0.77.0"\n'
+            "dependencies:\n"
+            "  - quickscale-core>=0.86.0,<0.87.0\n"
+        )
+
+        # Default mode (repin_existing=False) — add-only
+        result = sync_project_module_dependencies(
+            project,
+            {"backups": {}},
+        )
+
+        assert result.updated_package_dependencies == []
+        # The path-style entry is preserved (add-only)
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert '{path = "../quickscale-core", develop = true}' in pyproject_content
+
+    def test_repin_shared_dependency_uses_highest_floor_across_modules(
+        self,
+        tmp_path,
+    ):
+        """When multiple installed modules share a dependency, update-time
+        repinning must use the highest compatible version floor across all
+        modules, not just the last one processed (SA9.1-REV-004)."""
+        project = _make_project(tmp_path)
+        # Pre-populate project with path-style entries for the shared deps,
+        # simulating pre-SA9.1 applies.
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'django-storages = {path = "../django-storages", develop = true}\n'
+            'boto3 = {path = "../boto3", develop = true}\n'
+        )
+
+        # Backups module: higher minimum requirements for shared deps
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                "name: backups\n"
+                'version: "0.77.0"\n'
+                "dependencies:\n"
+                "  - django-storages>=1.14.6\n"
+                "  - boto3>=1.40.46\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-storages = "^1.14.6"\n'
+                'boto3 = "^1.40.46"\n'
+            ),
+        )
+        (project / "modules" / "backups" / "module.yml").write_text(
+            "name: backups\n"
+            'version: "0.77.0"\n'
+            "dependencies:\n"
+            "  - django-storages>=1.14.6\n"
+            "  - boto3>=1.40.46\n"
+        )
+
+        # Storage module: lower minimums, table-form pyproject entries
+        # (like real storage pyproject.toml).  Cloud backend so shared
+        # cloud deps are not skipped.
+        _write_module_package(
+            project,
+            "storage",
+            manifest_content=(
+                "name: storage\n"
+                'version: "0.76.0"\n'
+                "dependencies:\n"
+                "  - django-storages>=1.14.4\n"
+                "  - boto3>=1.35.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-storage"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                # Table-form entries trigger the non-string fallback
+                'django-storages = {version = "^1.14.4", optional = true}\n'
+                'boto3 = {version = "^1.35.0", optional = true}\n'
+            ),
+        )
+        (project / "modules" / "storage" / "module.yml").write_text(
+            "name: storage\n"
+            'version: "0.76.0"\n'
+            "dependencies:\n"
+            "  - django-storages>=1.14.4\n"
+            "  - boto3>=1.35.0\n"
+        )
+
+        # Run repin with both modules (cloud backend on storage so its
+        # cloud deps participate in cross-module resolution).
+        result = sync_project_module_dependencies(
+            project,
+            {"backups": {}, "storage": {"backend": "s3"}},
+            repin_existing=True,
+        )
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+
+        # Both shared deps must be updated to the HIGHER floor (backups')
+        assert "django-storages" in result.updated_package_dependencies
+        assert "boto3" in result.updated_package_dependencies
+        assert 'django-storages = "^1.14.6"' in pyproject_content
+        assert 'boto3 = "^1.40.46"' in pyproject_content
+
+        # Storage's lower manifest-derived fallback must NOT win
+        assert 'django-storages = ">=1.14.4"' not in pyproject_content
+        assert 'boto3 = ">=1.35.0"' not in pyproject_content
+
+        # Original path-style entries must be gone
+        assert '{path = "../django-storages"' not in pyproject_content
+        assert '{path = "../boto3"' not in pyproject_content
+
+    def test_repin_shared_dependency_with_table_form_resolves_to_highest(
+        self,
+        tmp_path,
+    ):
+        """When storage (table-form pyproject deps) is the ONLY module,
+        the non-string fallback to manifest spec should still produce a
+        valid repin.  This confirms that single-module repin is unchanged
+        and that the cross-module _prefer_dependency_value path accepts
+        the fallback value correctly."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'Django = "^6.0"\n'
+            'django-storages = {path = "../django-storages", develop = true}\n'
+        )
+        _write_module_package(
+            project,
+            "storage",
+            manifest_content=(
+                "name: storage\n"
+                'version: "0.76.0"\n'
+                "dependencies:\n"
+                "  - django-storages>=1.14.4\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-storage"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-storages = {version = "^1.14.4", optional = true}\n'
+            ),
+        )
+        (project / "modules" / "storage" / "module.yml").write_text(
+            "name: storage\n"
+            'version: "0.76.0"\n'
+            "dependencies:\n"
+            "  - django-storages>=1.14.4\n"
+        )
+
+        result = sync_project_module_dependencies(
+            project,
+            {"storage": {"backend": "s3"}},
+            repin_existing=True,
+        )
+
+        assert "django-storages" in result.updated_package_dependencies
+        pyproject_content = (project / "pyproject.toml").read_text()
+        # Non-string fallback from storage table-form produces ">=1.14.4"
+        assert 'django-storages = ">=1.14.4"' in pyproject_content

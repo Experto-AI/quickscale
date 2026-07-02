@@ -438,7 +438,7 @@ def _perform_module_embed(
         raise
 
     if sync_dependencies:
-        if not _sync_module_dependencies(project_path, module, config):
+        if not _sync_module_dependencies(project_path, {module: config}):
             if execution_mode == APPLY_MODULE_EXECUTION_MODE:
                 _cleanup_failed_apply_embed(project_path, module)
             return False, None
@@ -745,29 +745,40 @@ def _print_installation_error(
 
 def _sync_module_dependencies(
     project_path: Path,
-    module: str,
-    config: dict[str, Any] | None = None,
+    modules_options: dict[str, dict[str, Any] | None],
 ) -> bool:
-    """Sync missing project dependency entries for an embedded module."""
+    """Sync project dependency entries for embedded modules (update path).
+
+    Accepts a dict of ``{module_name: options_or_none}`` so that shared
+    dependencies across multiple installed modules are resolved to the
+    highest compatible version floor during repinning (SA9.1-REV-004).
+
+    Uses repin mode so that existing path-style or out-of-range entries
+    from pre-SA9.1 applies are corrected to the bounded range from the
+    updated module manifest (REV-001).
+    """
     click.echo("\n📦 Syncing dependency entries...")
 
     try:
         sync_result = sync_project_module_dependencies(
             project_path,
-            {module: config or {}},
+            modules_options,
+            repin_existing=True,
         )
     except (DependencySyncError, ManifestError) as error:
+        module_names = ", ".join(sorted(modules_options))
         click.secho(
-            f"\n❌ Failed to sync {module} dependency entries",
+            f"\n❌ Failed to sync dependency entries for {module_names}",
             fg="red",
             err=True,
             bold=True,
         )
         click.echo(f"\n📋 Error: {error}", err=True)
         click.echo("\n💡 To fix this manually:", err=True)
-        click.echo(f"   1. Ensure modules/{module}/module.yml is valid", err=True)
+        click.echo("   1. Ensure each module's module.yml is valid", err=True)
         click.echo(
-            f"   2. Ensure modules/{module}/pyproject.toml contains matching Poetry dependency versions",
+            "   2. Ensure each module's pyproject.toml contains matching "
+            "Poetry dependency versions",
             err=True,
         )
         click.echo("   3. Re-run the embed/apply command", err=True)
@@ -894,6 +905,7 @@ def _record_update_mutation_snapshots(
         ("module-tree", project_path / module_prefix),
         ("legacy-config-yml", project_path / ".quickscale" / "config.yml"),
         ("state-yml", project_path / ".quickscale" / "state.yml"),
+        ("pyproject-toml", project_path / "pyproject.toml"),
     ]
     return [
         _snapshot_update_path(path, backup_root, label)
@@ -1213,6 +1225,24 @@ def _update_single_module(
                 )
 
                 installed_version = _read_embedded_module_version(project_path, name)
+
+                # Sync generated-project dependencies after subtree pull so
+                # the pinned compatible version range travels with the
+                # updated module.yml (SA9.1).  Uses repin mode so existing
+                # pre-SA9.1 path-style entries are corrected to the bounded
+                # range (REV-001).  Failure triggers a full rollback
+                # (REV-002).
+                #
+                # Pass ALL installed modules' options so shared-dependency
+                # repinning picks the highest required compatible floor
+                # across modules, not just the updated one (SA9.1-REV-004).
+                all_modules_options: dict[str, dict[str, Any] | None] = {}
+                for m_name in applied_state.modules:
+                    m_state = applied_state.modules.get(m_name)
+                    all_modules_options[m_name] = m_state.options if m_state else {}
+                if not _sync_module_dependencies(project_path, all_modules_options):
+                    raise RuntimeError(f"Failed to sync dependency entries for {name}")
+
                 _sync_state_module_version(
                     project_path,
                     name,
@@ -1275,6 +1305,9 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
     state_path = Path(".quickscale") / "state.yml"
     if state_path.exists():
         tracked_paths.append(str(state_path))
+    pyproject_path = Path("pyproject.toml")
+    if pyproject_path.exists():
+        tracked_paths.append(str(pyproject_path))
 
     try:
         subprocess.run(
