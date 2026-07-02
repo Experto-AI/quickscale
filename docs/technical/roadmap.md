@@ -125,7 +125,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Module Finding 2: billing webhook idempotency (`why →` [Module Finding 2](../../findings.md#module-finding-2-billing-webhook-idempotency-is-procedural-flag--check-then-act-with-no-database-backstop-on-the-money-ledger))
 
-- [ ] **SA12.1 — DB-enforced ledger idempotency.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
+- [x] **SA12.1 — DB-enforced ledger idempotency.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
   Add a partial unique index on `CreditTransaction` over `(stripe_event_id, transaction_type)` where `stripe_event_id <> ''`, and make `credit_user` catch `IntegrityError` and return the existing row instead of relying solely on the pre-lock `_find_existing_credit_transaction` read.
   *Files:* `quickscale_modules/billing/src/quickscale_modules_billing/models.py` (constraint), new migration, `quickscale_modules/billing/src/quickscale_modules_billing/services.py` (`credit_user`).
   *Acceptance:* a test that fires two concurrent `credit_user` calls with the same `stripe_event_id` results in exactly one `CreditTransaction` row and a correct `balance_after`.
