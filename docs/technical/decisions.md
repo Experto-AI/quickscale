@@ -1177,6 +1177,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 **Isolation architecture rules (permanent):**
 - Registry authority: `TENANT_TABLE_REGISTRY` is the SSOT for the shipped tenant-table surface. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct `organization_id`, `objects = TenantManager()`, `all_objects = TenantManager(super_scope=True)`, and a live FORCE-RLS policy.
+  <!-- enrolled-models assertion: total=21, quickscale_modules_crm=7, quickscale_modules_forms=4, quickscale_modules_billing=3, quickscale_modules_blog=4, quickscale_modules_listings=1, quickscale_modules_social=2 -->
 - Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.
 - Ambient scoping: request-scoped tenant reads flow through `request.org` → ContextVar (`app.current_org_id`) → `TenantManager`; the authoritative tenant-facing API is ambient manager scoping, not `.for_org(...)` query chaining.
 - Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract.
