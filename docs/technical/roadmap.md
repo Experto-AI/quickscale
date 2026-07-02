@@ -143,9 +143,9 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 4: core-as-runtime-API boundary (`why →` [Finding 4](../../findings.md#finding-4-quickscalecores-entire-internal-surface-is-a-de-facto-runtime-api-for-user-owned-generated-projects--with-an-open-ended-version-range-and-a-repo-wide-clean-break-policy))
 
-- [ ] **SA9.1 — Compatible-range pin for backups' core dependency.** `Tier 1 · Track 2 · deps: none`
-  Change `quickscale-core>=0.86.0` to a compatible range (`>=X.Y,<X.Y+1`, matching the core version paired with this embed) and update the dependency-sync path so `quickscale update` moves the pin with the subtree.
-  *Files:* `quickscale_modules/backups/module.yml`, `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py`.
+- [x] **SA9.1 — Compatible-range pin for backups' core dependency.** `Tier 1 · Track 2 · deps: none`
+  Changed `quickscale-core>=0.86.0` to `>=0.86.0,<0.87.0` in module.yml. Updated `sync_project_module_dependencies` to fall back to the manifest version spec when the module's pyproject.toml declares a non-string (path/table) dependency, so generated projects receive a bounded version range instead of a developer-only path entry. Wired `_sync_module_dependencies` into `_update_single_module` so `quickscale update` also refreshes generated-project dependencies after subtree pull.
+  *Files:* `quickscale_modules/backups/module.yml`, `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py`, `quickscale_cli/src/quickscale_cli/commands/module_commands.py`.
   *Acceptance:* a fresh embed of backups writes a bounded core version range into the generated project's `pyproject.toml`.
 
 - [ ] **SA9.2 — CI job: module-vs-oldest-claimed-core import check.** `Tier 1 · Track 2 · deps: none`

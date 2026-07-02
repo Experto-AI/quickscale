@@ -286,7 +286,7 @@ class TestPerformModuleEmbed:
             version="0.82.0",
             project_path=tmp_path,
         )
-        mock_sync_dependencies.assert_called_once_with(tmp_path, "auth", {})
+        mock_sync_dependencies.assert_called_once_with(tmp_path, {"auth": {}})
         mock_install.assert_called_once_with(tmp_path, "auth")
 
     @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
@@ -332,8 +332,7 @@ class TestPerformModuleEmbed:
         applier.assert_called_once_with(tmp_path, {"some": "config"})
         mock_sync_dependencies.assert_called_once_with(
             tmp_path,
-            "blog",
-            {"some": "config"},
+            {"blog": {"some": "config"}},
         )
 
     @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
@@ -1251,6 +1250,11 @@ class TestUpdateSingleModule:
             + "\n"
         )
         state_path.write_text(original_state)
+        # Create minimal pyproject.toml so dependency sync can load it
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
+        original_pyproject = (tmp_path / "pyproject.toml").read_text()
         monkeypatch.chdir(tmp_path)
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
@@ -1309,6 +1313,8 @@ class TestUpdateSingleModule:
             == "modules:\n  auth:\n    installed_version: 0.71.0\n"
         )
         assert state_path.read_text() == original_state
+        # pyproject.toml should also be restored (SA9.1-REV-002)
+        assert (tmp_path / "pyproject.toml").read_text() == original_pyproject
 
     @patch(
         "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
@@ -1962,6 +1968,10 @@ class TestUpdatePathProvenancePersistence:
             )
             + "\n"
         )
+        # Provide pyproject.toml so dependency sync can load it
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
         monkeypatch.chdir(tmp_path)
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
@@ -2089,6 +2099,10 @@ class TestUpdatePathProvenancePersistence:
             "    installed_version: '0.71.0'\n"
             "    installed_at: '2025-01-01'\n"
         )
+        # Provide pyproject.toml so dependency sync can load it
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
         monkeypatch.chdir(tmp_path)
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
@@ -2174,6 +2188,10 @@ class TestUpdatePathProvenancePersistence:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+        # Provide pyproject.toml so dependency sync can load it
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
         monkeypatch.chdir(tmp_path)
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
@@ -2268,6 +2286,388 @@ class TestUpdatePathProvenancePersistence:
         assert result is False
         assert "resolve source ref" in captured.err
         mock_pull.assert_not_called()
+
+
+# ============================================================================
+# SA9.1-REV-002/003: update-path dependency sync — rollback, commit,
+# and option-passing
+# ============================================================================
+
+
+class TestUpdatePathDependencySync:
+    """Tests for update-path dependency sync behavior (SA9.1-REV-001/002/003)."""
+
+    def test_pyproject_toml_restored_on_post_pull_rollback(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """pyproject.toml should be restored from snapshot when a post-pull
+        failure triggers a full update rollback (SA9.1-REV-002)."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        module_manifest = module_dir / "module.yml"
+        module_manifest.write_text('name: auth\nversion: "0.71.0"\n')
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        config_path = quickscale_dir / "config.yml"
+        config_path.write_text("modules:\n  auth:\n    installed_version: 0.71.0\n")
+        state_path = quickscale_dir / "state.yml"
+        original_state = (
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2025-01-01T00:00:00'\n"
+            "  last_applied: '2025-01-01T00:00:00'\n"
+            "modules:\n"
+            "  auth:\n"
+            "    name: auth\n"
+            "    version: '0.71.0'\n"
+            "    commit_sha: 'abc123'\n"
+            "    embedded_at: '2025-01-01T00:00:00'\n"
+            "    options: {}\n"
+        )
+        state_path.write_text(original_state)
+
+        # Create a pyproject.toml that will be modified by dependency sync
+        pyproject_path = tmp_path / "pyproject.toml"
+        original_pyproject = '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        pyproject_path.write_text(original_pyproject)
+
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        def _fake_subtree_pull(*, prefix, remote, branch, squash):
+            del remote, branch, squash
+            (tmp_path / prefix / "module.yml").write_text(
+                'name: auth\nversion: "0.82.0"\n'
+            )
+            return "updated"
+
+        def _fake_read_version(project_path, module_name):
+            del project_path, module_name
+            return "0.82.0"
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="a" * 40,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                side_effect=_fake_subtree_pull,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                side_effect=_fake_read_version,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+                side_effect=Exception("commit failed"),
+            ),
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is False
+        # pyproject.toml should be restored to its original content
+        assert pyproject_path.read_text() == original_pyproject
+        # Module manifest should also be restored
+        assert module_manifest.read_text() == 'name: auth\nversion: "0.71.0"\n'
+        assert state_path.read_text() == original_state
+
+    def test_sync_module_dependencies_failure_triggers_rollback(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        """A _sync_module_dependencies failure should trigger full rollback
+        and return False, not silently continue (SA9.1-REV-002)."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2025-01-01T00:00:00'\n"
+            "  last_applied: '2025-01-01T00:00:00'\n"
+            "modules:\n"
+            "  auth:\n"
+            "    name: auth\n"
+            "    version: '0.71.0'\n"
+            "    commit_sha: 'abc123'\n"
+            "    embedded_at: '2025-01-01T00:00:00'\n"
+            "    options: {}\n"
+        )
+
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="a" * 40,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                return_value="updated",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.82.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version",
+            ),
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        captured = capsys.readouterr()
+        assert result is False
+        assert "Failed to sync dependency entries" in captured.err
+
+    def test_module_options_passed_into_dependency_sync(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """Module options from applied state should be passed through to
+        dependency sync during update (SA9.1-REV-003)."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2025-01-01T00:00:00'\n"
+            "  last_applied: '2025-01-01T00:00:00'\n"
+            "modules:\n"
+            "  auth:\n"
+            "    name: auth\n"
+            "    version: '0.71.0'\n"
+            "    commit_sha: 'abc123'\n"
+            "    embedded_at: '2025-01-01T00:00:00'\n"
+            "    options: {}\n"
+        )
+
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies"
+            ) as mock_sync,
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="a" * 40,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                return_value="updated",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.82.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version",
+            ),
+        ):
+            mock_sync.return_value = True
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is True
+        # Verify all_modules_options dict was passed to
+        # _sync_module_dependencies with the module's options
+        # (SA9.1-REV-003/004).
+        mock_sync.assert_called_once()
+        args, _ = mock_sync.call_args
+        assert len(args) >= 2
+        all_options = args[1]
+        assert isinstance(all_options, dict)
+        assert "auth" in all_options
+        assert all_options["auth"] == {}
+
+    def test_module_options_with_local_backend_suppress_cloud_deps(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """When applied state has storage.local backend, dependency sync
+        must receive options = {\"backend\": \"local\"} and suppress
+        cloud packages (SA9.1-REV-003)."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2025-01-01T00:00:00'\n"
+            "  last_applied: '2025-01-01T00:00:00'\n"
+            "modules:\n"
+            "  storage:\n"
+            "    name: storage\n"
+            "    version: '0.83.0'\n"
+            "    commit_sha: 'abc123'\n"
+            "    embedded_at: '2025-01-01T00:00:00'\n"
+            "    options:\n"
+            "      backend: local\n"
+        )
+
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/storage", branch="splits/storage-module")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies"
+            ) as mock_sync,
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="a" * 40,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                return_value="updated",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.83.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version",
+            ),
+        ):
+            mock_sync.return_value = True
+            result = _update_single_module(
+                "storage",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is True
+        mock_sync.assert_called_once()
+        args, _ = mock_sync.call_args
+        assert len(args) >= 2
+        all_options = args[1]
+        assert isinstance(all_options, dict)
+        assert all_options.get("storage") == {"backend": "local"}
+
+    def test_pyproject_toml_included_in_commit_tracking(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """pyproject.toml should be included in the git add paths during
+        _commit_module_update so changes from dependency sync are committed
+        (SA9.1-REV-002)."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "  created_at: '2025-01-01T00:00:00'\n"
+            "  last_applied: '2025-01-01T00:00:00'\n"
+            "modules:\n"
+            "  auth:\n"
+            "    name: auth\n"
+            "    version: '0.71.0'\n"
+            "    commit_sha: 'abc123'\n"
+            "    embedded_at: '2025-01-01T00:00:00'\n"
+            "    options: {}\n"
+        )
+        # Create pyproject.toml so it's included in the commit
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
+
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update",
+                return_value=Mock(
+                    modules={
+                        "auth": Mock(
+                            version="0.71.0",
+                            options={},
+                        )
+                    }
+                ),
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update"
+            ) as mock_commit,
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                return_value="0.82.0",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="a" * 40,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                return_value="updated",
+            ),
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        assert result is True
+        mock_commit.assert_called_once_with("auth", "modules/auth")
 
 
 # ============================================================================
