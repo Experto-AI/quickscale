@@ -239,6 +239,9 @@ class ModuleDerivationSchema:
             apply across multiple options (e.g. global key renaming).
         shared_validation_rules: Module-wide validation rules that apply
             across multiple options.
+        shared_derived_settings: Module-wide derived settings that apply
+            across multiple options (e.g. settings derived from module-level
+            configuration rather than a specific option key).
         module_wiring_projections: Module-level wiring projections that are
             not tied to a specific option (e.g. static app labels or
             middleware that are always contributed regardless of options).
@@ -252,6 +255,7 @@ class ModuleDerivationSchema:
     shared_normalization_rules: list[NormalizationRule] = field(default_factory=list)
     shared_validation_rules: list[ValidationRule] = field(default_factory=list)
     shared_legacy_aliases: list[LegacyKeyAlias] = field(default_factory=list)
+    shared_derived_settings: list[DerivedSetting] = field(default_factory=list)
     module_wiring_projections: list[WiringProjection] = field(default_factory=list)
     description: str = ""
 
@@ -267,13 +271,17 @@ class ModuleDerivationSchema:
         return self.option_derivations.get(option_key)
 
     def get_all_derived_settings(self) -> list[DerivedSetting]:
-        """Collect every derived setting across all option derivations.
+        """Collect every derived setting across module-level declarations and
+        per-option derivations.
+
+        Module-level shared_derived_settings come first, then per-option
+        derived settings in option-derivation order.
 
         Returns:
             Flat list of all :class:`DerivedSetting` instances declared
-            in this schema, in option-derivation order.
+            in this schema.
         """
-        settings: list[DerivedSetting] = []
+        settings: list[DerivedSetting] = list(self.shared_derived_settings)
         for derivation in self.option_derivations.values():
             settings.extend(derivation.derived_settings)
         return settings
@@ -487,6 +495,9 @@ def build_schema_from_manifest(
         A fully typed :class:`ModuleDerivationSchema`.
     """
     parsed_wiring = [_parse_wiring_projection(w) for w in (wiring_projections or [])]
+    parsed_derived_settings = [
+        _parse_derived_setting(s) for s in (derived_settings or [])
+    ]
 
     parsed_option_derivations: dict[str, OptionDerivation] = {}
     for opt_key, opt_raw in (option_derivations or {}).items():
@@ -497,12 +508,16 @@ def build_schema_from_manifest(
         version=version,
         description=description,
         module_wiring_projections=parsed_wiring,
+        shared_derived_settings=parsed_derived_settings,
         option_derivations=parsed_option_derivations,
         shared_normalization_rules=[
             _parse_normalization_rule(r) for r in (derivation_rules or [])
         ],
         shared_validation_rules=[
             _parse_validation_rule(r) for r in (validation_rules or [])
+        ],
+        shared_legacy_aliases=[
+            _parse_legacy_key_alias(a) for a in (legacy_aliases or [])
         ],
     )
 

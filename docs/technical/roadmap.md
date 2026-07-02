@@ -182,10 +182,11 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 1: wiring fan-out / two coexisting mechanisms (`why →` [Finding 1](../../findings.md#finding-1-per-module-integration-knowledge-is-fanned-across-three-packages-with-two-wiring-mechanisms-coexisting-and-the-declared-migration-unscheduled))
 
-- [ ] **SA6.1 — `module.yml` `derivation:` YAML loader.** `Tier 2 · Track 3 · deps: none`
+- [x] **SA6.1 — `module.yml` `derivation:` YAML loader.** `Tier 2 · Track 3 · deps: none`
   Implement the deferred YAML loading for `ModuleDerivationSchema` (declared but unimplemented per `decisions.md` §Module Derivation Schema) so a module can declare its normalization/validation/derivation rules in `module.yml` instead of a hand-written `_build_<module>_derivation_schema()` Python function.
   *Files:* `quickscale_core/src/quickscale_core/manifest/derivation.py`, `quickscale_core/src/quickscale_core/manifest/loader.py`.
-  *Acceptance:* a `module.yml` with a `derivation:` section round-trips through `yaml.safe_load` into a `ModuleDerivationSchema` equal to the hand-built schema for a sample module; no runtime behavior change yet.
+  *Acceptance:* a `module.yml` with a `derivation:` section round-trips through `yaml.safe_load` into a `ModuleDerivationSchema` equal to a directly-constructed hand-built schema for a sample module, with all seven field categories preserved (normalization_rules, validation_rules, legacy_aliases, derived_settings at both module and per-option level, wiring_projections, and option_derivations); no runtime behavior change yet.
+  *Note:* Module-level `derived_settings` are now preserved via the `shared_derived_settings` field on `ModuleDerivationSchema` and wired through `build_schema_from_manifest()`. The round-trip test uses directly-constructed dataclasses for the hand-built reference to eliminate shared-helper bias.
 
 - [ ] **SA6.2 — Migrate `listings` onto the derivation loader end-to-end.** `Tier 2 · Track 3 · deps: SA6.1`
   Move listings' config (defaults, normalization, validation) into `module.yml`'s `derivation:` section; delete `_build_listings_derivation_schema` and the `default_/normalize_/resolve_/validate_listings_module_options` functions from `resolvers.py`; delete the listings triad from `module_config.py`; confirm the listings adapter (already core-inline per `entry_point.py:457`) now sources its schema from the loaded manifest. Include listings' own `required_modules: [orgs]` version-range addition in this task (see SA7.4 scope note).
