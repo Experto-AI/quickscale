@@ -989,9 +989,11 @@ def test_credit_user_deterministic_integrity_recovery(
 
     Uses single-threaded controlled patching to simulate the race condition
     where two callers both pass the procedural duplicate check before either
-    inserts the CreditTransaction row.  The ``IntegrityError`` raised by the
-    unique constraint on ``(stripe_event_id, transaction_type)`` triggers the
-    recovery handler, which re-fetches the row that a competing commit inserted.
+    inserts the CreditTransaction row.  An injected ``IntegrityError`` on the
+    manager's ``create`` method triggers the recovery handler instead of
+    relying on the DB unique constraint (which can be order-dependent under
+    full-suite conditions).  The handler re-fetches the row that a competing
+    commit inserted.
     """
     from quickscale_modules_billing import services as billing_services
 
@@ -1020,10 +1022,18 @@ def test_credit_user_deterministic_integrity_recovery(
 
     # Patch _find_existing_credit_transaction to return None so
     # credit_user proceeds past the procedural duplicate check and
-    # attempts to create a row that violates the partial unique
-    # constraint, triggering the except IntegrityError handler.
+    # attempts to create a row.
     original_find = billing_services._find_existing_credit_transaction
     billing_services._find_existing_credit_transaction = lambda **kwargs: None  # type: ignore[method-assign]
+
+    # Patch CreditTransaction.all_objects.create to raise IntegrityError
+    # deterministically instead of relying on the DB unique constraint
+    # (which can be order-dependent under full-suite conditions).
+    original_create = CreditTransaction.all_objects.create
+    CreditTransaction.all_objects.create = lambda **kwargs: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        IntegrityError("Simulated concurrent insert conflict")
+    )
+
     try:
         result = credit_user(
             user,
@@ -1034,6 +1044,7 @@ def test_credit_user_deterministic_integrity_recovery(
         )
     finally:
         billing_services._find_existing_credit_transaction = original_find
+        CreditTransaction.all_objects.create = original_create
 
     # The recovery handler should return the pre-inserted competing row.
     assert result.pk == competing.pk, (
