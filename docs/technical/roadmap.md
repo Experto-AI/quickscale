@@ -91,6 +91,15 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py` (new).
   *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves.
 
+  > **2026-07-02 checkpoint — groundwork committed, review blocking.**
+  > Code delivered: `resolve_public_org_context()` plain function, `PublicSystemOrgReadMixin` CBV seam (overrides `dispatch()` with `org_scope()`), and 17 unit tests covering org resolution, real tenant-scoped queries, fail-closed no-org path, and mixin dispatch lifecycle.
+  >
+  > **Blocking (independent review, unresolved):**
+  > - `CR-SA11.1-001` (high) — mixin `dispatch()` wraps in `org_scope()` which opens+closes `transaction.atomic()`. Not yet proven safe for template-backed generic `ListView`s targeted by SA11.3/SA11.4: the atomic block may close before the response template finishes rendering lazy-evaluated querysets, or before a streaming `TemplateResponse` resolves its content.
+  > - `CR-SA11.1-002` (medium) — tests do not yet cover a real `ListView`/`TemplateResponse` render lifecycle under the mixin, or a reviewer-accepted RLS-sensitive proof for that seam.
+  >
+  > **Decision needed:** Is `org_scope()` (atomic-on-enter, atomic-on-exit) the right boundary for request-scoped public views, or should the mixin use a non-atomic approach (caller-managed `transaction.atomic()` + `tenant_context()`) that lets each view handler control its own transaction scope? Resolving this will determine whether SA11.3/SA11.4 can consume the mixin as-is or need to use the plain function directly.
+
 - [ ] **SA11.2 — Restricted-role anonymous-read E2E smoke.** `Tier 2 · Track 1 · deps: SA11.1 · RISK LEVEL: medium`
   Add an integration test that runs against the restricted `NOBYPASSRLS` runtime role (not the superuser test posture used elsewhere) and asserts an anonymous request to a public blog page returns a published System-org post. This is the single test that covers the whole defect class.
   *Files:* new test under `quickscale_modules/blog/tests/` (or a shared restricted-role harness in `tests_shared/isolation.py`).
