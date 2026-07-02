@@ -57,18 +57,18 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../findings.md#auto
 
 #### Dependency & parallelization overview (2026-07-02 status)
 
-`SA12.1`, `SA9.1`, `SA6.1`, `SA6.2`, and `SA6.3` shipped and merged — see [CHANGELOG.md](../../CHANGELOG.md). Diagram below shows only remaining open work.
+`SA12.1`, `SA9.1`, `SA6.1`, `SA6.2`, `SA6.3`, and `SA7.1` shipped and merged — see [CHANGELOG.md](../../CHANGELOG.md). Diagram below shows only remaining open work.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + org-switch)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────────────
-SA11.1 groundwork committed,         SA9.2  (no deps)                         SA7.1  (no deps)
-  decision resolved, impl pending    SA9.3  (no deps)                         SA7.2  (no deps)
-  ├─ SA11.2 (←11.1, pending impl)      ├─ SA9.4 (←9.3)                        SA7.3  (no deps)
-  ├─ SA11.3 (←11.1, pending impl)      └─ SA9.5 (←9.3)                        SA7.4  (no deps)
-  └─ SA11.4 (←11.1, pending impl)          └─ SA9.6 (←9.4 & ←9.5)             SA8.1  (no deps)
-SA11.5 (no deps — clean)             SA10.1 (no deps)                           └─ SA8.2 (←8.1)
-SA11.6 (no deps — clean)               └─ SA10.2 (←10.1)                           └─ SA8.3 (←8.2)
+SA11.1 groundwork committed,         SA9.2  (no deps)                         SA7.2  (no deps)
+  decision resolved, impl pending    SA9.3  (no deps)                         SA7.3  (no deps)
+  ├─ SA11.2 (←11.1, pending impl)      ├─ SA9.4 (←9.3)                        SA7.4  (no deps)
+  ├─ SA11.3 (←11.1, pending impl)      └─ SA9.5 (←9.3)                        SA8.1  (no deps)
+  └─ SA11.4 (←11.1, pending impl)          └─ SA9.6 (←9.4 & ←9.5)               └─ SA8.2 (←8.1)
+SA11.5 (no deps — clean)             SA10.1 (no deps)                             └─ SA8.3 (←8.2)
+SA11.6 (no deps — clean)               └─ SA10.2 (←10.1)
 SA11.7 (no deps — clean)
 ```
 
@@ -80,13 +80,13 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 |-------|------------------|-------|
 | **1** | SA11.1 *(decision resolved, impl pending)* → SA11.2/SA11.3/SA11.4 *(pending SA11.1 impl)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
 | **2** | SA9.2 → SA9.3 → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA7.1 → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
+| **3** | SA7.1 *(completed)* → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
 
 #### Track status (as of 2026-07-02)
 
 - **Track 1 — unblocked, implementation pending.** The design decision blocking `SA11.1` (`CR-SA11.1-001`) resolved 2026-07-02 — see below. No further decision is needed; the remaining work is implementation: force `TemplateResponse.render()` inside `org_scope()` in `PublicSystemOrgReadMixin.dispatch()`, then add the real `ListView`/`TemplateResponse` render-lifecycle test (`CR-SA11.1-002`). Once that lands, `SA11.2`/`SA11.3`/`SA11.4` can proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
 - **Track 2 — clean.** No blockers; `SA9.2` and `SA9.3` are independent and can run in parallel, as can `SA10.1`.
-- **Track 3 — clean.** `SA6.3` is complete; the next pending item is `SA7.1`, and `SA7.2`–`SA7.4` plus `SA8.1` remain unblocked by dependencies.
+- **Track 3 — clean.** `SA7.1` is complete (see below); the next pending item is `SA7.2`, and `SA7.3`–`SA7.4` plus `SA8.1`–`SA8.3` remain unblocked by dependencies.
 
 ---
 
@@ -193,10 +193,10 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 2: orgs composition god module (`why →` [Finding 2](../../findings.md#finding-2-orgs-is-becoming-the-composition-god-module--inter-module-integration-is-hand-wired-pairwise-with-no-contract-and-the-central-tenant-registry-couples-all-module-versions-in-lockstep))
 
-- [ ] **SA7.1 — `organization_created` signal replaces CRM bootstrap reverse-import.** `Tier 1 · Track 3 · deps: none`
-  Add an `organization_created` Django signal fired by orgs on org creation; convert `crm_bootstrap.maybe_seed_crm_default_stages` into a CRM-side receiver of that signal instead of orgs importing CRM via `apps.is_installed(...)` + `import_module(...)`.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/{models.py or signals.py}` (signal definition + dispatch), `quickscale_modules/orgs/src/quickscale_modules_orgs/crm_bootstrap.py` (delete), `quickscale_modules/crm/src/quickscale_modules_crm/{signals.py new, apps.py}` (receiver + connection).
-  *Acceptance:* creating an organization still seeds CRM default stages when CRM is installed, with orgs containing zero CRM-specific code; establishes the composition seam pattern for future cross-module behavior.
+- [x] **SA7.1 — `organization_created` signal replaces CRM bootstrap reverse-import.** `Tier 1 · Track 3 · completed 2026-07-02`
+  Added an `organization_created` Django signal in `orgs/signals.py`, fired from `OrgCreateForm.save()`. Converted `crm_bootstrap.maybe_seed_crm_default_stages` into a CRM-side receiver (`crm/signals.py`) connected via `QuickscaleCrmConfig.ready()`. Deleted `crm_bootstrap.py` and its import from `forms.py`. Acceptance verified: org creation still seeds CRM default stages when CRM is installed, orgs contain zero CRM-specific code, personal-org path preserved (no signal from `create_personal_for`), and the composition seam pattern is established for future cross-module behavior.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/signals.py` (new), `quickscale_modules/orgs/src/quickscale_modules_orgs/forms.py` (modified), `quickscale_modules/orgs/src/quickscale_modules_orgs/crm_bootstrap.py` (deleted), `quickscale_modules/crm/src/quickscale_modules_crm/signals.py` (new), `quickscale_modules/crm/src/quickscale_modules_crm/apps.py` (modified).
+  *Findings:* None — no blockers discovered. The CRM view-level warm-on-read behavior in `crm/views.py` is untouched and continues to provide the secondary bootstrap path for personal orgs and migrated orgs that bypass the form flow.
 
 - [ ] **SA7.2 — Fail-hard the auth-adapter import fallback.** `Tier 1 · Track 3 · deps: none`
   Replace the silent `try: from quickscale_modules_auth.adapters import ... except ImportError: fallback to DefaultAccountAdapter` with an explicit check: if auth is a declared dependency (it is, transitively, via allauth), require it; only allow the fallback in an explicitly test-only code path, not production import resolution.
