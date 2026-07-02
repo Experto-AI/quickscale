@@ -49,112 +49,26 @@ git merge --no-ff wt-track{N}
 
 ### Structural Autopsy Remediation (opened 2026-06-30)
 
-Fix plan derived from the [2026-06-30 autopsy](../../findings.md#autopsy--2026-06-30). Each task below is sized Adaptive **Tier 1 or Tier 2** (one concern, statable in one sentence; isolation work is sensitive-domain → `RISK LEVEL: medium` → floors at Tier 2). Anything that would be Tier 3 (multiple objectives, broad security side-effects, or a non-contained contract change) has been split into per-module / per-file tasks. Every task carries a `why →` link to the finding it closes.
+Fix plan derived from the [2026-06-30 autopsy](../../findings.md#autopsy--2026-06-30). Each task below is sized Adaptive **Tier 1 or Tier 2** (one concern, statable in one sentence; isolation work is sensitive-domain → `RISK LEVEL: medium` → floors at Tier 2). Every task carries a `why →` link to the finding it closes.
 
 **Naming:** `SAn.m` = Structural-Autopsy finding *n*, task *m*.
 
-#### Dependency & parallelization overview
+**Status (2026-07-02):** Findings 2, 3, 4, and 5 are fully closed — all their tasks (SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2) shipped and merged to `v87`; detail archived in [CHANGELOG.md](../../CHANGELOG.md). Finding 1 is nearly closed: SA1.1–SA1.4 shipped, leaving **SA1.5** as the only open task project-wide.
 
-```
-Track 1 (orgs gate + generator)   Track 2 (CRM + boot guard + perf)   Track 3 (blog + docs + modules)
-─────────────────────────────     ───────────────────────────────     ──────────────────────────────
-SA2.2  (no deps) ───────┐         SA1.1  (no deps)                     SA1.2  (no deps)
-SA1.3  (no deps) ──┬─────┼──┐      SA2.1  (no deps)                     SA3.1  (no deps) ──┐
-   ├─ SA1.4 (←1.3) │     │  │      SA4.1  (no deps)                     SA5.1  (no deps)   │
-   └─ SA1.5 (←1.3) │     │  └────► SA4.2  (←SA4.1)                      SA5.2  (no deps)   │
-                   │     └───────────────────────────────────────────► SA3.2  (←SA3.1 & ←SA1.3)
-```
-
-**Status (2026-07-01):** SA1.1, SA1.2, SA1.3, SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2 are closed and merged to `v87`. Their dependents are consequently unblocked — every remaining open task (SA1.4, SA1.5) is clear to start now; none is waiting on another track.
-
-**Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring. The only cross-track edge was **SA3.2**, which consumed the contract SSOT that **SA1.3** established — now closed.
+**Cross-track safety:** file ownership is partitioned so concurrent tracks never edit the same file. Track 1 owns `orgs/tenancy.py` + generator templates; Track 2 owns `orgs/apps.py`, `orgs/current_org.py`, and `quickscale_modules/crm/`; Track 3 owns `quickscale_modules/blog/`, `quickscale_modules/analytics/`, and CLI wiring.
 
 > **Shared closeout files:** `CHANGELOG.md` and this file (`docs/technical/roadmap.md`) are **not** owned by any single track. Every track updates them when closing out a completed task — they are the only files where concurrent edits are expected. To avoid merge conflicts, follow the shared-file merge procedure in the next section: always merge `v87` into your track branch first, resolve conflicts in these two files on the track branch, then merge back.
 
-#### Track summary
-
-| Track | Tasks (in order) | Theme |
-|-------|------------------|-------|
-| **1** | SA2.2 → SA1.3 → SA1.4 → SA1.5 | orgs isolation gate + generator hardening |
-| **2** | SA1.1 → SA2.1 → SA4.1 → SA4.2 | CRM migration + always-on boot guard + priming perf |
-| **3** | SA1.2 → SA3.1 → SA5.1 → SA5.2 → SA3.2 | blog migration + contract docs/SSOT + module-integration |
-
----
-
 #### Finding 1 — Single enforced tenant-model contract (`why →` [Finding 1](../../findings.md#finding-1--tenant-isolation-is-a-hand-assembled-per-model-ritual-and-its-enforcement-gate-cannot-see-the-user-code-that-generated-projects-exist-to-host))
 
-- [x] **SA1.1 — Migrate CRM models to inherit `TenantModel`.** `Tier 2 · Track 2 · deps: none`
-  Replace the hand-copied `organization` FK + `objects`/`all_objects`/`base_manager_name` declarations on every `quickscale_modules_crm` model with `class X(TenantModel)`.
-  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/models.py` (+ in-module reverse-accessor callers).
-  *Scope note:* `related_name` shifts to TenantModel's `%(app_label)s_%(class)s_set` pattern — update any in-module `organization.<reverse>_set` usages; no DB migration results from a `related_name`-only change. Keep child→parent and `created_by` FKs as-is.
-  *Acceptance:* CRM models are `TenantModel` subclasses; `test_tenant_table_conformance.py` (org_id + scoped manager + `base_manager_name`) and CRM isolation tests stay green on PostgreSQL.
-
-- [x] **SA1.2 — Migrate blog models to inherit `TenantModel`.** `Tier 2 · Track 3 · deps: none`
-  Same conversion for `quickscale_modules_blog` tenant models (`Category`, `Tag`, `BlogMediaAsset`, `Post`); leave `AuthorProfile` (reviewed-excluded) alone.
-  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/models.py`.
-  *Acceptance:* blog tenant models are `TenantModel` subclasses; conformance + blog tests green.
-  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
-
-- [x] **SA1.3 — Generic, base-class-driven conformance check shipped as a management command.** `Tier 2 · Track 1 · deps: none`
-  Added `manage.py check_tenant_isolation` (and a Django system check in `checks.py`) that discovers tenant models by *marker* (default manager is a `TenantManager` **or** model is a `TenantModel` subclass) across **all** app labels — not the `quickscale_modules_*` prefix — and asserts each has `organization_id` + a live FORCE-RLS policy in `pg_policies`.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/check_tenant_isolation.py`; `quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py`; helpers in `tenancy.py`.
-  *Scope note:* detect by `TenantManager` so CRM/blog pass before **and** after SA1.1/SA1.2 (no cross-track ordering dependency).
-  *Acceptance:* command passes on the QuickScale repo and fails when a tenant model lacks org_id or a FORCE-RLS policy.
-  **Closed 2026-07-01, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail. Establishes the SSOT (`get_tenant_models()`) that SA3.2 consumes.
-
-- [x] **SA1.4 — Default-deny exclusion registry for user models.** `Tier 2 · Track 1 · deps: SA1.3`
-  Extended the check so every concrete model from a project-owned app (``quickscale_modules_*`` prefix) must be *either* tenant-enrolled *or* explicitly classified in ``TENANT_TABLE_REGISTRY``; an unclassified concrete model fails the check. Added helpers to ``tenancy.py``: ``QS_APP_PREFIX``, ``is_project_app()``, ``get_concrete_project_models()``, ``is_classified_in_registry()``, ``get_unclassified_concrete_models()``. The management command and system check both enforce the new default-deny rule (command exits 1 for unclassified models; system check emits ``W005``). All 21 enrolled + 13 excluded/pending QuickScale module models are accounted for — no false positives in the current maintainer repo.
-  *Files:* `tenancy.py` (exclusion-registry mechanism), `check_tenant_isolation.py`, `checks.py`.
-  *Acceptance:* a new unclassified `models.Model` under a ``quickscale_modules_*`` app fails the check until enrolled or explicitly excluded.
-  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
-
-- [ ] **SA1.5 — Ship the isolation gate into generated-project CI.** `Tier 2 · Track 1 · deps: SA1.3`
+- [ ] **SA1.5 — Ship the isolation gate into generated-project CI.** `Tier 2 · Track 1 · deps: SA1.3 (closed)`
   Wire `check_tenant_isolation` into the generated project's CI/test scaffold so it runs in the **user's** repo against the user's apps.
   *Files:* `quickscale_core/src/quickscale_core/generator/templates/` (CI workflow + `Makefile`/test target template).
   *Acceptance:* a freshly generated project runs the isolation check in CI; conformance fixture proves a deliberately-unprotected model fails the generated CI.
 
-#### Finding 2 — Fail-closed master isolation switch (`why →` [Finding 2](../../findings.md#finding-2--closed-2026-07-01)) — **CLOSED 2026-07-01.** Both SA2.1 and SA2.2 shipped and merged to `v87`; see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
+#### Findings 2, 3, 4, 5 — all closed
 
-#### Finding 3 — Single source of truth for the contract (`why →` [Finding 3](../../findings.md#finding-3--the-isolation-contract-has-no-single-source-of-truth-the-two-authoritative-docs-already-describe-a-weaker-different-posture-than-the-shipped-code))
-
-- [x] **SA3.1 — Re-sync the authoritative docs with shipped reality.** `Tier 1 · Track 3 · deps: none`
-  Update `decisions.md §Multi-tenant SaaS Architecture` and `organizations.md` to the shipped state: 21 models enrolled with FORCE-RLS (not "social only"), and the `TenantManager(super_scope=…)` + `ContextVar` API (remove the stale `TenantScopedManager`/`OperatorManager`/`.for_org()` framing).
-  *Files:* `docs/technical/decisions.md`, `docs/technical/organizations.md`.
-  *Acceptance:* no doc statement contradicts `TENANT_TABLE_REGISTRY` or the shipped manager classes.
-  **Closed 2026-06-30, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail. Unblocks SA3.2.
-
-- [x] **SA3.2 — CI doc-consistency gate.** `Tier 2 · Track 3 · deps: SA3.1 + (cross-track) SA1.3`
-  Added `test_doc_consistency.py` under `quickscale_modules/orgs/tests/` that reads a machine-readable `<!-- enrolled-models assertion: ... -->` comment from **both** `docs/technical/organizations.md` **and** `docs/technical/decisions.md` at runtime and diffs the asserted enrolled-model counts (total: 21, per-app: CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) against the `TENANT_TABLE_REGISTRY` SSOT (established by SA1.3), failing on mismatch. The gate also validates the documented `TenantManager` / `TenantManager(super_scope=True)` API surface against the actual code, verifies that `.for_org()` chaining is absent from `TenantManager`, and guards against re-introduction of stale manager names (`TenantScopedManager`, `OperatorManager`) in both the managers module and both authoritative docs. The cross-doc agreement test ensures the assertion in both docs stays identical. The gate uses no hardcoded constants — any doc-only edit to the assertion changes the test outcome directly.
-  *Files:* `quickscale_modules/orgs/tests/test_doc_consistency.py`, `docs/technical/organizations.md`, `docs/technical/decisions.md`.
-  *Acceptance:* editing the registry without updating either doc assertion (or vice-versa) fails CI; the documented manager API must match the actual code; stale manager names cannot reappear.
-  *Findings/blockers:* **CR-SA32-001 (resolved):** The gate now consumes the doc at runtime via a parseable assertion block instead of copied constants, so doc-only drift properly fails CI. Both docs are checked and the documented manager API surface is validated. **Closed 2026-07-01.**
-
-#### Finding 4 — O(1) tenant-context priming (`why →` [Finding 4](../../findings.md#finding-4--db-tenant-context-is-primed-per-statement-by-a-connection-layer-wrapper-that-opens-a-transaction-around-every-autocommit-tenant-query))
-
-- [x] **SA4.1 — Instrument per-request statement/transaction counts.** `Tier 2 · Track 2 · deps: none`
-  Added a reusable measurement harness (`test_sa41_statement_amplification.py`) under the orgs test suite that captures SQL statements via `connection.queries` and categorises them into data, transaction-control (`BEGIN`/`COMMIT`), and priming (`SET LOCAL`) counts.  Three scenarios are measured for the `OrgDashboardView` data-access pattern exercised through `TenantMiddleware` session-org resolution via the test-only non-management URL `/sa41-bench/<slug>/` (the middleware pre-sets `request.org`, so the view skips the slug lookup — 2 data SELECTs: membership role check + member count): no-org baseline (AF9 pass-through), with-org autocommit (AF9 per-statement wrapping), and with-org explicit transaction (AF9 redundant-SET-LOCAL).
-  *Files:* `quickscale_modules/orgs/tests/test_sa41_statement_amplification.py`, `quickscale_modules/orgs/tests/urls.py`.
-  *Acceptance:* reproducible baseline now recorded and enforced as test assertions.
-  **Closed 2026-07-01, merged to `v87`** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail and measured amplification figures. Confirms the SA4.2 opportunity (4→3 statements via a per-transaction memo); SA4.2 can proceed immediately.
-
-- [x] **SA4.2 — Per-transaction "already-primed" memo in the execute wrapper.** `Tier 2 · Track 2 · deps: SA4.1`
-  Skip the redundant `SET LOCAL` when the GUC is already primed within the current transaction (cheapest win; does not reintroduce request-long transactions). Defer the larger connection-checkout priming until SA4.1 justifies it.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py` (`_make_priming_execute_wrapper`).
-  *Acceptance:* AF9/AF11 restricted-role RLS proofs stay green; multi-statement transactions issue `SET LOCAL` once; fail-closed behavior unchanged.
-  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
-
-#### Finding 5 — Declarative module-config cutover (`why →` [Finding 5](../../findings.md#finding-5--module-integration-is-a-high-arity-coordination-tax-mid-migration-between-an-imperative-per-module-path-and-an-incomplete-declarative-manifest-layer))
-
-- [x] **SA5.1 — Analytics derivation pilot end-to-end.** `Tier 2 · Track 3 · deps: none`
-  Implement `module.yml` `derivation:` loading + runtime derivation execution for the analytics module and delete its imperative builder, proving one module is fully manifest-driven.
-  *Files:* `quickscale_modules/analytics/.../module.yml`, `quickscale_core/.../manifest/` + `contracts/`, the analytics imperative builder.
-  *Acceptance:* analytics config derives from `module.yml` with no imperative builder; `imperative_inventory.py` loses the analytics entries; plan/apply for analytics unchanged in behavior.
-
-- [x] **SA5.2 — Freeze guardrail against new imperative wiring.** `Tier 2 · Track 3 · deps: none`
-  Add a lint/test that fails when a newly added module ships imperative per-module config instead of going through the manifest/derivation path, stopping the imperative surface from growing while the cutover proceeds.
-  *Files:* repo-level test (reads `imperative_inventory.py` / module set).
-  *Acceptance:* adding an imperative builder for a new module fails CI; remaining per-module migrations are tracked as one Tier-2 task each (follow-on, not in this batch).
-  **Closed 2026-07-01** — see [CHANGELOG.md](../../CHANGELOG.md) for implementation detail.
+Full remediation history for Findings 2 (fail-closed master isolation switch), 3 (contract single source of truth), 4 (O(1) tenant-context priming), and 5 (declarative module-config cutover) is in [CHANGELOG.md](../../CHANGELOG.md) (SA2.1, SA2.2, SA3.1, SA3.2, SA4.1, SA4.2, SA5.1, SA5.2 entries). Findings 4 and 5 closed 2026-07-02 by maintainer decision: each shipped the lowest-effort mitigation the autopsy prescribed (a per-transaction priming memo; an analytics pilot plus a freeze guardrail) and left the larger structural fix as explicitly deferred/unscheduled backlog rather than an open roadmap task — see [findings.md](../../findings.md) for the closure rationale on each.
 
 ---
 
