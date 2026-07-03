@@ -748,7 +748,7 @@ disable_error_code = var-annotated
 - [ ] Templates must work immediately after embed (no user customization required)
 
 **4. CLI Integration (quickscale_cli):**
-- [ ] Add module name to `AVAILABLE_MODULES` list in `module_commands.py`
+- [ ] `AVAILABLE_MODULES` in `module_commands.py` is discovery-derived (`get_discovered_module_names()`) — no manual list edit needed; just ensure the module is discoverable (correct manifest/package layout)
 - [ ] Create `configure_<name>_module()` function for interactive prompts
 - [ ] Create `apply_<name>_configuration()` function to:
   - [ ] Add dependencies to project's `pyproject.toml`

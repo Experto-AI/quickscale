@@ -376,3 +376,147 @@ class TestRegenerateManagedWiringAdapterFailure:
             REGISTRY.update(_orig_registry)
             ORIGINS.clear()
             ORIGINS.update(_orig_origins)
+
+
+class TestRegenerateManagedWiringFailHard:
+    """SA18.2 fail-hard: invalid analytics configuration must propagate
+    through regenerate_managed_wiring instead of being silently swallowed
+    (CR-SA18.2-001)."""
+
+    def test_invalid_analytics_config_fails_through_regenerate(
+        self, tmp_path: Path
+    ) -> None:
+        """Invalid analytics options (empty provider/host) cause
+        regenerate_managed_wiring to return (False, message) instead of
+        silently continuing."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Override all analytics required settings to empty values,
+        # which triggers the _analytics_post_hook fail-hard validation.
+        success, message = regenerate_managed_wiring(
+            project,
+            module_names=["analytics"],
+            option_overrides={
+                "analytics": {
+                    "enabled": True,
+                    "provider": "",
+                    "posthog_api_key_env_var": "",
+                    "posthog_host_env_var": "",
+                    "posthog_host": "",
+                }
+            },
+        )
+
+        assert not success, (
+            "Expected regenerate_managed_wiring to fail with invalid "
+            f"analytics options, but it succeeded. Message: {message}"
+        )
+        assert "Analytics manifest settings" in message, (
+            "Expected message about analytics settings validation failure, "
+            f"got: {message}"
+        )
+
+    def test_valid_analytics_config_succeeds_with_overrides(
+        self, tmp_path: Path
+    ) -> None:
+        """Valid analytics options still succeed through the override path,
+        proving the fail-hard check does not break normal usage."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        success, message = regenerate_managed_wiring(
+            project,
+            module_names=["analytics"],
+            option_overrides={
+                "analytics": {
+                    "enabled": True,
+                    "provider": "posthog",
+                    "posthog_api_key_env_var": "POSTHOG_API_KEY",
+                    "posthog_host_env_var": "POSTHOG_HOST",
+                    "posthog_host": "https://us.i.posthog.com",
+                }
+            },
+        )
+
+        assert success, (
+            "Expected regenerate_managed_wiring to succeed with valid "
+            f"analytics options, but it failed. Message: {message}"
+        )
+
+
+class TestRegenerateManagedWiringSkipManifestNotFound:
+    """SA18.2 regression (CR-SA18.2-003): when _has_real_manifests is True,
+    a registered module whose module.yml is missing from the embedded modules
+    directory triggers ManifestError("Manifest file not found") which is
+    silently skipped (continue), preserving the skip behaviour for legitimate
+    embedded missing-manifest cases while non-"Manifest file not found"
+    ManifestError cases still fail (validated in
+    TestRegenerateManagedWiringFailHard)."""
+
+    def test_registered_module_without_manifest_skipped_when_embedded(
+        self, tmp_path: Path
+    ) -> None:
+        """When _has_real_manifests is True and a registered module's
+        module.yml is absent from the embedded directory, the ManifestError
+        is caught and silently skipped, preserving the skip-unknown contract."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Create modules/ with analytics (has module.yml) and blog (no module.yml).
+        # At least one real manifest is needed for _has_real_manifests == True.
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
+        # blog is in MANIFEST_ADAPTER_REGISTRY but has no module.yml here.
+        (project / "modules" / "blog").mkdir(parents=True)
+
+        success, message = regenerate_managed_wiring(project)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+        assert "regenerated" in message.lower()
+
+        # Verify analytics wiring was still written (blog was silently skipped).
+        settings_modules = project / "myapp" / "settings" / "modules.py"
+        assert settings_modules.exists()
+        content = settings_modules.read_text()
+        assert "quickscale_modules_analytics" in content
+
+    def test_forwarded_registered_module_without_manifest_still_succeeds(
+        self, tmp_path: Path
+    ) -> None:
+        """When _has_real_manifests is True and a registered module name is
+        explicitly forwarded but its module.yml is absent, regeneration still
+        succeeds (the ManifestError is silently skipped)."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Only analytics has module.yml; blog exists as an empty directory.
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
+        (project / "modules" / "blog").mkdir(parents=True)
+
+        # Forward both module names explicitly.
+        success, message = regenerate_managed_wiring(
+            project, module_names=["analytics", "blog"]
+        )
+        assert success, f"regenerate_managed_wiring failed: {message}"
+        assert "regenerated" in message.lower()
+
+        # Verify analytics wiring was written.
+        content = (project / "myapp" / "settings" / "modules.py").read_text()
+        assert "quickscale_modules_analytics" in content
