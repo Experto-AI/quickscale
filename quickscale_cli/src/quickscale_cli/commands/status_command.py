@@ -21,13 +21,74 @@ from quickscale_cli.schema.config_schema import (
 from quickscale_cli.schema.delta import compute_delta, format_delta
 from quickscale_cli.schema.state_schema import QuickScaleState, StateError, StateManager
 from quickscale_core.config import ConfigError
-from quickscale_core.manifest import ModuleManifest
+from quickscale_core.manifest import ModuleManifest, parse_version_tuple
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.project_state import (
     FILE_HASHES_FILENAME,
     ProjectStateManager,
     check_version_drift,
 )
+
+
+def _check_contract_vintage(
+    project_contract: str | None,
+    manifests: dict[str, ModuleManifest] | None,
+) -> dict:
+    """Compare each installed module's contract-vintage requirement against
+    the project's recorded ``project_contract``.
+
+    For every installed module that declares a ``contract_vintage`` block
+    in its manifest, this function checks whether the project's contract
+    meets or exceeds ``minimum``.  When the project is behind (or the
+    project contract is unknown/``None`` — legacy project), the gap is
+    recorded together with the manual-adoption steps the module declares.
+
+    Returns a diagnostics dict suitable for both text display and JSON
+    serialization:
+
+    * ``project_contract`` — the project's recorded contract version
+      (``None`` for legacy projects).
+    * ``modules_behind`` — list of modules whose vintage minimum exceeds
+      the project contract.  Each entry carries ``module``, ``minimum``,
+      and ``manual_adoption_steps``.
+    * ``module_count`` — total number of installed modules that declare
+      a contract-vintage boundary.
+    * ``modules_behind_count`` — count of modules behind.
+    """
+    if not manifests:
+        return {
+            "project_contract": project_contract,
+            "modules_behind": [],
+            "module_count": 0,
+            "modules_behind_count": 0,
+        }
+
+    project_tuple = parse_version_tuple(project_contract) if project_contract else (0,)
+    modules_behind: list[dict[str, object]] = []
+    module_count = 0
+
+    for module_name, manifest in manifests.items():
+        vintage = manifest.contract_vintage
+        if vintage is None:
+            continue
+        module_count += 1
+
+        minimum_tuple = parse_version_tuple(vintage.minimum)
+        if project_tuple < minimum_tuple:
+            modules_behind.append(
+                {
+                    "module": module_name,
+                    "minimum": vintage.minimum,
+                    "manual_adoption_steps": list(vintage.manual_adoption_steps),
+                }
+            )
+
+    return {
+        "project_contract": project_contract,
+        "modules_behind": modules_behind,
+        "module_count": module_count,
+        "modules_behind_count": len(modules_behind),
+    }
 
 
 def _get_docker_status() -> dict[str, str] | None:
@@ -338,6 +399,7 @@ def _compute_drift_diagnostics(
     state: QuickScaleState | None,
     project_state_manager: ProjectStateManager,
     state_manager: StateManager,
+    manifests: dict[str, ModuleManifest] | None = None,
 ) -> dict:
     """Compute M2 drift and compatibility diagnostics.
 
@@ -411,6 +473,11 @@ def _compute_drift_diagnostics(
         for w in version_warnings
     ]
 
+    # SA10.2: contract-vintage check.
+    project_contract = state.project.project_contract if state else None
+    contract_vintage = _check_contract_vintage(project_contract, manifests)
+    contract_vintage["has_state"] = state is not None
+
     return {
         "state_consolidated": consolidated_on_disk,
         "legacy_files_present": legacy_files_present,
@@ -427,6 +494,7 @@ def _compute_drift_diagnostics(
         },
         "managed_file_drift": managed_file_drift,
         "version_drift": version_drift,
+        "contract_vintage": contract_vintage,
     }
 
 
@@ -521,6 +589,49 @@ def _display_drift_diagnostics(diagnostics: dict) -> None:
             f"   Version drift: ⚠️  {len(vd)} disagreement(s) ({modules_str})",
             fg="yellow",
         )
+
+    # SA10.2: Contract-vintage detection.
+    cv = diagnostics.get("contract_vintage", {})
+    module_count = cv.get("module_count", 0)
+    behind_count = cv.get("modules_behind_count", 0)
+    modules_behind = cv.get("modules_behind", [])
+    project_contract = cv.get("project_contract")
+
+    click.echo("")
+    click.secho("🏛️  Contract Vintage:", bold=True)
+
+    if project_contract is None:
+        has_state = cv.get("has_state", True)
+        if has_state:
+            msg = "   Project contract: unknown (legacy project — pre-v0.87.0)"
+        else:
+            msg = "   Project contract: unknown (no state yet — run 'quickscale apply')"
+        click.secho(msg, fg="yellow")
+    else:
+        click.echo(f"   Project contract: {project_contract}")
+
+    if module_count == 0:
+        click.echo("   Module vintage requirements: none declared")
+    elif behind_count == 0:
+        click.secho(
+            f"   Module vintage: {module_count}/{module_count} satisfied ✅",
+            fg="green",
+        )
+    else:
+        click.secho(
+            f"   Module vintage: {module_count - behind_count}/{module_count}"
+            f" satisfied — {behind_count} module(s) behind ⚠️",
+            fg="yellow",
+        )
+        for entry in modules_behind:
+            click.secho(
+                f"\n   • {entry['module']} requires project_contract"
+                f" >= {entry['minimum']}",
+                fg="yellow",
+            )
+            steps = entry.get("manual_adoption_steps", [])
+            for step in steps:
+                click.echo(f"     {step}")
 
 
 def _build_json_output(
@@ -737,7 +848,11 @@ def status(json_output: bool) -> None:
     # Handle JSON output
     if json_output:
         drift_diagnostics = _compute_drift_diagnostics(
-            project_path, state, project_state_manager, state_manager
+            project_path,
+            state,
+            project_state_manager,
+            state_manager,
+            manifests=manifests,
         )
         output = _build_json_output(
             project_path,
@@ -752,7 +867,11 @@ def status(json_output: bool) -> None:
 
     # Compute drift diagnostics for text output.
     drift_diagnostics = _compute_drift_diagnostics(
-        project_path, state, project_state_manager, state_manager
+        project_path,
+        state,
+        project_state_manager,
+        state_manager,
+        manifests=manifests,
     )
 
     # Display text status

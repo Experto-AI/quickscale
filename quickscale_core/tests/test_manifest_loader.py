@@ -933,3 +933,159 @@ derivation:
         )
         with pytest.raises(ManifestError, match="option_derivations.enabled"):
             load_manifest(yaml_content, "mymod")
+
+
+# ---------------------------------------------------------------------------
+# Contract-vintage section parsing (SA10.2)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestContractVintage:
+    """Tests for the optional contract_vintage section in load_manifest."""
+
+    def test_no_contract_vintage_section(self) -> None:
+        """Manifests without a contract_vintage section produce None."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is None
+
+    def test_contract_vintage_with_minimum_only(self) -> None:
+        """A contract_vintage section with just minimum is parsed."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0.87.0"
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.minimum == "0.87.0"
+        assert manifest.contract_vintage.manual_adoption_steps == []
+
+    def test_contract_vintage_with_steps(self) -> None:
+        """A contract_vintage section with manual_adoption_steps is parsed."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0.87.0"
+  manual_adoption_steps:
+    - "Step one: do this"
+    - "Step two: do that"
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.minimum == "0.87.0"
+        assert len(manifest.contract_vintage.manual_adoption_steps) == 2
+        assert manifest.contract_vintage.manual_adoption_steps[0] == "Step one: do this"
+        assert manifest.contract_vintage.manual_adoption_steps[1] == "Step two: do that"
+
+    def test_contract_vintage_not_mapping_raises(self) -> None:
+        """contract_vintage that is not a mapping raises ManifestError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\ncontract_vintage: not_a_mapping\n"
+        )
+        with pytest.raises(ManifestError, match="contract_vintage"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_missing_minimum_raises(self) -> None:
+        """contract_vintage without minimum raises ManifestError."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  manual_adoption_steps: []
+"""
+        with pytest.raises(ManifestError, match="minimum"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_empty_minimum_raises(self) -> None:
+        """contract_vintage with empty minimum raises ManifestError."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: ""
+"""
+        with pytest.raises(ManifestError, match="minimum"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_steps_not_list_raises(self) -> None:
+        """contract_vintage with non-list manual_adoption_steps raises."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0.87.0"
+  manual_adoption_steps: not_a_list
+"""
+        with pytest.raises(ManifestError, match="manual_adoption_steps"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_step_not_string_raises(self) -> None:
+        """A manual_adoption_step that is not a string raises."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0.87.0"
+  manual_adoption_steps:
+    - 123
+"""
+        with pytest.raises(ManifestError, match="manual_adoption_steps"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_does_not_break_backward_compat(self) -> None:
+        """A manifest without contract_vintage loads cleanly."""
+        yaml_content = "name: auth\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "auth")
+        assert manifest.contract_vintage is None
+        assert manifest.name == "auth"
+        assert manifest.version == "1.0.0"
+
+    def test_contract_vintage_malformed_minimum_raises(self) -> None:
+        """contract_vintage with unparseable minimum raises ManifestError
+        (fail closed instead of silently producing (0,))."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "abc"
+"""
+        with pytest.raises(ManifestError, match="dotted-numeric"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_malformed_minimum_partial_raises(self) -> None:
+        """Partially numeric minimum like '1.2.three' raises ManifestError."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "1.2.three"
+"""
+        with pytest.raises(ManifestError, match="dotted-numeric"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_minimum_with_prerelease(self) -> None:
+        """Pre-release suffix on minimum is valid (stripped before parse)."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0.87.0-alpha"
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.minimum == "0.87.0-alpha"
+
+    def test_contract_vintage_minimum_single_component(self) -> None:
+        """A single-component minimum like '0' is accepted (valid version)."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0"
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.minimum == "0"

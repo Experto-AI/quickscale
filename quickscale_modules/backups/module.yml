@@ -78,6 +78,11 @@ config:
       django_setting: QUICKSCALE_BACKUPS_SCHEDULE
       description: "Cron-like schedule documentation for command-driven backup automation."
 
+contract_vintage:
+  minimum: "0.87.0"
+  manual_adoption_steps:
+    - "PostgreSQL 18 backups contract requires updated Docker image packages and CI runner tooling. Existing generated projects must manually update Dockerfile, docker-compose.yml, and CI workflow files. See `docs/technical/implementation_contract.md` and `docs/technical/decisions.md` §Backups-Contract for the tooling specification."
+
 dependencies:
   - django-storages>=1.14.6
   - boto3>=1.40.46

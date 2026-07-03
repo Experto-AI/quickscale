@@ -141,10 +141,11 @@ No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/`
   *Acceptance:* a fresh generation's `state.yml` includes `project_contract`; existing state-file tests updated for the new field.
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA10.2 — `quickscale status` contract-vintage check.** `Tier 2 · Track 2 · deps: SA10.1`
-  Compare each installed module's declared minimum project-contract requirement against the project's recorded `project_contract` and print the specific manual-adoption steps when the project is behind.
-  *Files:* `quickscale_cli/src/quickscale_cli/commands/status_command.py`.
-  *Acceptance:* `quickscale status` on a project generated before a contract-requiring module update names the gap and the manual step, instead of silence.
+- [x] **SA10.2 — `quickscale status` contract-vintage check (complete).** `Tier 2 · Track 2 · deps: SA10.1`
+  Added `ContractVintage` dataclass (`minimum: str`, `manual_adoption_steps: list[str]`) and `contract_vintage` field to `ModuleManifest`. Added `_parse_contract_vintage` to the YAML loader; absent on legacy manifests. Added `_check_contract_vintage` to status that compares each installed module's declared minimum against `state.project.project_contract` and reports gaps in both text and JSON drift output. Seeded `social/module.yml` and `backups/module.yml` with `contract_vintage: {minimum: "0.87.0", manual_adoption_steps: [...]}` matching their documented manual-adoption boundaries. `parse_version_tuple` utility handles `None` → `(0,)` so legacy projects (unknown vintage) are flagged as behind any declared minimum. Forward-compatible: no minimum or `contract_vintage` → no-op.
+  *Files:* schema, loader, status_command, social/backups module.yml, tests.
+  *Acceptance:* `quickscale status` on a project generated before v0.87.0 with social or backups installed reports the contract gap and manual steps; fresh v0.87.0+ generations pass clean; legacy manifests load with `contract_vintage=None`.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 ---
 

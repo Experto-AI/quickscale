@@ -2,6 +2,7 @@
 
 from quickscale_core.manifest import (
     ConfigOption,
+    ContractVintage,
     ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
@@ -444,6 +445,83 @@ class TestModuleManifestManagedFiles:
 # ---------------------------------------------------------------------------
 # ImpliesEntry
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# ContractVintage and parse_version_tuple
+# ---------------------------------------------------------------------------
+
+
+class TestParseVersionTuple:
+    """Tests for parse_version_tuple utility."""
+
+    def test_normal_version(self) -> None:
+        """A normal dotted version parses to integer tuple."""
+        from quickscale_core.manifest.schema import parse_version_tuple
+
+        assert parse_version_tuple("0.87.0") == (0, 87, 0)
+
+    def test_pre_release_version(self) -> None:
+        """Pre-release suffix is stripped before parsing."""
+        from quickscale_core.manifest.schema import parse_version_tuple
+
+        assert parse_version_tuple("0.87.0-alpha") == (0, 87, 0)
+
+    def test_none_input(self) -> None:
+        """None input returns (0,) to represent unknown."""
+        from quickscale_core.manifest.schema import parse_version_tuple
+
+        assert parse_version_tuple(None) == (0,)
+
+    def test_empty_string(self) -> None:
+        """Empty string returns (0,)."""
+        from quickscale_core.manifest.schema import parse_version_tuple
+
+        assert parse_version_tuple("") == (0,)
+
+    def test_invalid_string(self) -> None:
+        """Unparseable string returns (0,) safely."""
+        from quickscale_core.manifest.schema import parse_version_tuple
+
+        assert parse_version_tuple("not.a.version") == (0,)
+
+    def test_single_component(self) -> None:
+        """A single-component version is handled."""
+        from quickscale_core.manifest.schema import parse_version_tuple
+
+        assert parse_version_tuple("1") == (1,)
+
+    def test_comparison_ordering(self) -> None:
+        """Version tuples compare correctly."""
+        from quickscale_core.manifest.schema import parse_version_tuple
+
+        assert parse_version_tuple("0.86.0") < parse_version_tuple("0.87.0")
+        assert parse_version_tuple("0.87.0") == parse_version_tuple("0.87.0")
+        assert parse_version_tuple("0.88.0") > parse_version_tuple("0.87.0")
+        assert parse_version_tuple(None) < parse_version_tuple("0.1.0")
+
+
+class TestContractVintage:
+    """Tests for ContractVintage dataclass."""
+
+    def test_minimum_only(self) -> None:
+        """ContractVintage can be created with just a minimum."""
+        vintage = ContractVintage(minimum="0.87.0")
+        assert vintage.minimum == "0.87.0"
+        assert vintage.manual_adoption_steps == []
+
+    def test_with_steps(self) -> None:
+        """ContractVintage accepts manual_adoption_steps."""
+        steps = ["Step one", "Step two"]
+        vintage = ContractVintage(minimum="0.87.0", manual_adoption_steps=steps)
+        assert vintage.minimum == "0.87.0"
+        assert vintage.manual_adoption_steps == steps
+
+    def test_equality(self) -> None:
+        """ContractVintage equality works."""
+        a = ContractVintage(minimum="0.87.0", manual_adoption_steps=["Do X"])
+        b = ContractVintage(minimum="0.87.0", manual_adoption_steps=["Do X"])
+        assert a == b
 
 
 class TestImpliesEntry:
