@@ -13,6 +13,10 @@ from django.utils import timezone as django_timezone
 class BackupPolicy(models.Model):
     """Operational policy controlling how backup artifacts are created and retained."""
 
+    #: Excluded from tenant isolation: backup policies are operational
+    #: singleton-config records, not tenant-scoped data.
+    tenant_excluded = "Operational backup policy — singleton config, not tenant-scoped."
+
     TARGET_MODE_LOCAL = "local"
     TARGET_MODE_PRIVATE_REMOTE = "private_remote"
     TARGET_MODE_CHOICES = [
@@ -77,6 +81,10 @@ class BackupPolicy(models.Model):
 
 class BackupArtifact(models.Model):
     """Recorded metadata for a created backup artifact."""
+
+    #: Excluded from tenant isolation: backup artifact metadata records
+    #: are operational/audit data, not tenant-scoped application data.
+    tenant_excluded = "Operational backup artifact metadata — not tenant-scoped."
 
     STATUS_READY = "ready"
     STATUS_VALIDATED = "validated"
@@ -205,6 +213,10 @@ class BackupArtifact(models.Model):
 
 class BackupSnapshot(models.Model):
     """Internal snapshot substrate that tracks dump artifacts plus private sidecars."""
+
+    #: Excluded from tenant isolation: snapshot metadata tracks DR
+    #: operations, not tenant-scoped application data.
+    tenant_excluded = "Internal DR snapshot metadata — not tenant-scoped."
 
     STATUS_PENDING = "pending"
     STATUS_READY = "ready"

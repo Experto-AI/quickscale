@@ -6,6 +6,10 @@ from django.db import models
 class NotificationSettings(models.Model):
     """Read-only operational snapshot of the authoritative notification settings."""
 
+    #: Excluded from tenant isolation: notification settings are
+    #: application-wide operational config, not tenant-scoped data.
+    tenant_excluded = "Operational notification configuration — not tenant-scoped."
+
     key = models.CharField(
         max_length=32,
         unique=True,
@@ -41,6 +45,10 @@ class NotificationSettings(models.Model):
 
 class NotificationMessage(models.Model):
     """Logical notification send request rendered by the module."""
+
+    #: Excluded from tenant isolation: notification messages track
+    #: send-request lifecycle across recipients, not tenant-scoped data.
+    tenant_excluded = "System-wide notification send-request — not tenant-scoped."
 
     STATUS_QUEUED = "queued"
     STATUS_SENT = "sent"
@@ -86,6 +94,10 @@ class NotificationMessage(models.Model):
 
 class NotificationDelivery(models.Model):
     """Recipient-granular delivery tracking for a logical notification message."""
+
+    #: Excluded from tenant isolation: delivery tracking is per-recipient
+    #: operational data, not tenant-scoped application data.
+    tenant_excluded = "Recipient delivery tracking — not tenant-scoped."
 
     STATUS_QUEUED = "queued"
     STATUS_SENT = "sent"
@@ -142,6 +154,10 @@ class NotificationDelivery(models.Model):
 
 class NotificationDeliveryEvent(models.Model):
     """Provider event history for a recipient delivery."""
+
+    #: Excluded from tenant isolation: provider event history tracks
+    #: delivery lifecycle, not tenant-scoped application data.
+    tenant_excluded = "Provider delivery event history — not tenant-scoped."
 
     delivery = models.ForeignKey(
         NotificationDelivery,
