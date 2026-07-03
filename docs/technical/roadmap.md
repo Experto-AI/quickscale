@@ -86,7 +86,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 - **Track 1 — unblocked, implementation pending.** The design decision blocking `SA11.1` (`CR-SA11.1-001`) resolved 2026-07-02 — see below. No further decision is needed; the remaining work is implementation: force `TemplateResponse.render()` inside `org_scope()` in `PublicSystemOrgReadMixin.dispatch()`, then add the real `ListView`/`TemplateResponse` render-lifecycle test (`CR-SA11.1-002`). Once that lands, `SA11.2`/`SA11.3`/`SA11.4` can proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
 - **Track 2 — clean.** No blockers; `SA9.2` and `SA9.3` are independent and can run in parallel, as can `SA10.1`.
-- **Track 3 — clean.** `SA7.1` is complete (see below); the next pending item is `SA7.2`, and `SA7.3`–`SA7.4` plus `SA8.1`–`SA8.3` remain unblocked by dependencies.
+- **Track 3 — clean.** `SA7.1` and `SA7.2` are complete (see below); the next pending item is `SA7.3`, and `SA7.4` plus `SA8.1`–`SA8.3` remain unblocked by dependencies.
 
 ---
 
@@ -198,10 +198,12 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/signals.py` (new), `quickscale_modules/orgs/src/quickscale_modules_orgs/forms.py` (modified), `quickscale_modules/orgs/src/quickscale_modules_orgs/crm_bootstrap.py` (deleted), `quickscale_modules/crm/src/quickscale_modules_crm/signals.py` (new), `quickscale_modules/crm/src/quickscale_modules_crm/apps.py` (modified).
   *Findings:* None — no blockers discovered. The CRM view-level warm-on-read behavior in `crm/views.py` is untouched and continues to provide the secondary bootstrap path for personal orgs and migrated orgs that bypass the form flow.
 
-- [ ] **SA7.2 — Fail-hard the auth-adapter import fallback.** `Tier 1 · Track 3 · deps: none`
-  Replace the silent `try: from quickscale_modules_auth.adapters import ... except ImportError: fallback to DefaultAccountAdapter` with an explicit check: if auth is a declared dependency (it is, transitively, via allauth), require it; only allow the fallback in an explicitly test-only code path, not production import resolution.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py`.
-  *Acceptance:* orgs-without-auth-installed either raises a clear configuration error or the fallback is demonstrably confined to test contexts (per `decisions.md` §fail-hard-principle).
+- [x] **SA7.2 — Fail-hard the auth-adapter import fallback.** `Tier 1 · Track 3 · completed 2026-07-03`
+  Replaced the silent `try/except ImportError` fallback in `adapters.py` with an unconditional import from `quickscale_modules_auth.adapters.QuickscaleAccountAdapter`. If the auth module is not on the Python path, the `ImportError` now propagates as a hard failure at module load time instead of silently degrading to `DefaultAccountAdapter`. No test-only fallback path was needed — the auth module is always importable via PYTHONPATH without Django app registration.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py`, `quickscale_modules/orgs/module.yml`, `quickscale_core/src/quickscale_core/data/manifests/orgs/module.yml`, `quickscale_modules/orgs/pyproject.toml`.
+  *Findings:* Adding `quickscale_modules_auth` to `tests/settings.py` `INSTALLED_APPS` was considered during implementation but was removed during validation — PYTHONPATH already makes the adapter importable without app registration, and adding the app caused tenant-registry test collisions. No fix needed; the fail-hard import works correctly via PYTHONPATH alone. This change closes the known fail-hard violation tracked in `decisions.md` §fail-hard-principle.
+  **`CR-SA7.2-001` (high) — RESOLVED 2026-07-03.** The code changes (SA7.2 initial) introduced an unconditional `from quickscale_modules_auth.adapters import QuickscaleAccountAdapter` but the orgs module metadata still declared no first-party auth dependency. **Fix:** declared `required_modules: [auth]` in both `orgs/module.yml` manifests (module-owned and core data mirror), and added `quickscale-module-auth = ">=0.71.0,<0.87.0"` to `orgs/pyproject.toml`. The `implies` section was left unchanged — auth is gated by the apply-time `_validate_module_prerequisites` check rather than auto-resolved via implications, so users must explicitly include auth in their module selection.
+  *Acceptance:* omitting the auth module from the Python path raises `ModuleNotFoundError` at import time (fail-hard); orgs unit tests: 677 passed, 3 failed (pre-existing FORCE-RLS failures in `test_management_commands.py`, unrelated to SA7.2), 5 skipped; CLI orgs contract tests: 7 passed. Module metadata now declares the auth dependency explicitly, matching the code.
 
 - [ ] **SA7.3 — De-duplicate notifications defaults out of orgs' manifest.** `Tier 1 · Track 3 · deps: none`
   Remove the inlined `default_config` block for notifications from `orgs/module.yml`'s `implies:` section; reference notifications' own canonical defaults instead of copying them.
