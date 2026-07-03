@@ -40,12 +40,13 @@ def test_org_create_form_dispatches_organization_created_signal() -> None:
 
 
 @pytest.mark.django_db
-def test_create_personal_for_does_not_dispatch_organization_created_signal() -> None:
-    """Personal-org creation should not dispatch the organization_created signal.
+def test_create_personal_for_dispatches_organization_created_signal() -> None:
+    """Personal-org creation dispatches the organization_created signal.
 
-    SA7.1 preserves the legacy personal-org behavior: personal orgs are
-    created through the manager (``create_personal_for``), not the form,
-    and do not fire the signal.
+    SA11.6: ``create_personal_for`` now fires ``organization_created`` so
+    that CRM default pipeline stages (and any future signal receivers) are
+    seeded at personal-org creation time — matching the behavior of
+    ``OrgCreateForm.save()``.
     """
 
     user = get_user_model().objects.create_user(
@@ -57,5 +58,6 @@ def test_create_personal_for_does_not_dispatch_organization_created_signal() -> 
     with patch.object(organization_created, "send") as mock_send:
         organization = Organization.objects.create_personal_for(user)
 
-    mock_send.assert_not_called()
+    mock_send.assert_called_once()
+    assert mock_send.call_args.kwargs["organization"].pk == organization.pk
     assert organization.is_personal is True

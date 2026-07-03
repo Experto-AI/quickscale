@@ -1046,6 +1046,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         factory = APIRequestFactory()
         request = factory.patch("/crm/api/contacts/1/")
         request.user = staff_user
+        request.org = personal_org  # type: ignore[attr-defined]
 
         serializer = ContactDetailSerializer(
             contact,
@@ -1102,6 +1103,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         factory = APIRequestFactory()
         request = factory.patch("/crm/api/deals/1/")
         request.user = staff_user
+        request.org = personal_org  # type: ignore[attr-defined]
 
         serializer = DealDetailSerializer(
             deal,
@@ -1152,6 +1154,7 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         factory = APIRequestFactory()
         request = factory.patch("/crm/api/deals/1/")
         request.user = staff_user
+        request.org = personal_org  # type: ignore[attr-defined]
 
         serializer = DealDetailSerializer(
             deal,
@@ -1352,6 +1355,11 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         from rest_framework.test import APIRequestFactory
 
         from quickscale_modules_crm.models import Company, Contact, Stage, Tag
+        from quickscale_modules_orgs.models import Organization
+
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
 
         company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
         contact_b = Contact.objects.create(
@@ -1369,6 +1377,7 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Contact create with foreign-org company on solo route
         contact_request = factory.post("/crm/api/contacts/")
         contact_request.user = staff_user
+        contact_request.org = personal_org  # type: ignore[attr-defined]
 
         contact_serializer = ContactDetailSerializer(
             data={
@@ -1385,13 +1394,8 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Contact create with foreign-org tags on solo route
         contact_request2 = factory.post("/crm/api/contacts/")
         contact_request2.user = staff_user
+        contact_request2.org = personal_org  # type: ignore[attr-defined]
 
-        # Get the staff user's personal org for creating same-org company
-        from quickscale_modules_orgs.models import Organization
-
-        personal_org = Organization.objects.get(
-            is_personal=True, memberships__user=staff_user
-        )
         same_org_company = Company.objects.create(
             name="Personal Corp", organization=personal_org
         )
@@ -1412,6 +1416,7 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Deal create with foreign-org contact on solo route
         deal_request = factory.post("/crm/api/deals/")
         deal_request.user = staff_user
+        deal_request.org = personal_org  # type: ignore[attr-defined]
 
         deal_contact_serializer = DealDetailSerializer(
             data={
@@ -1428,6 +1433,7 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Deal create with foreign-org stage on solo route
         deal_request2 = factory.post("/crm/api/deals/")
         deal_request2.user = staff_user
+        deal_request2.org = personal_org  # type: ignore[attr-defined]
 
         same_org_contact = Contact.objects.create(
             first_name="Personal",
@@ -1452,6 +1458,7 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Deal create with foreign-org tags on solo route
         deal_request3 = factory.post("/crm/api/deals/")
         deal_request3.user = staff_user
+        deal_request3.org = personal_org  # type: ignore[attr-defined]
 
         same_org_stage = Stage.objects.create(
             name="Personal Stage", order=1, organization=personal_org
@@ -1568,18 +1575,23 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
 
         from quickscale_modules_crm.models import Stage
         from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+        from quickscale_modules_orgs.models import Organization
 
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
+        )
         stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
 
         factory = APIRequestFactory()
         request = factory.post("/crm/api/deals/bulk-update-stage/")
         request.user = staff_user
+        request.org = personal_org  # type: ignore[attr-defined]
 
         serializer = BulkUpdateStageSerializer(
             data={"deal_ids": [1], "stage_id": stage_b.id},
             context={"request": request},
         )
-        # Phase 2: solo route now rejects foreign-org stages.
+        # SA11.6: foreign-org stages rejected via request.org on factory request.
         assert not serializer.is_valid()
         assert "stage_id" in serializer.errors
 
@@ -1601,10 +1613,11 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         factory = APIRequestFactory()
         request = factory.post("/crm/api/deals/bulk-update-stage/")
         request.user = staff_user
+        request.org = personal_org  # type: ignore[attr-defined]
 
         serializer = BulkUpdateStageSerializer(
             data={"deal_ids": [1], "stage_id": stage.id},
             context={"request": request},
         )
-        # Phase 2: solo route accepts same-org stages via personal-org fallback.
+        # SA11.6: same-org stages accepted via request.org on factory request.
         assert serializer.is_valid(), serializer.errors

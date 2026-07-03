@@ -51,6 +51,21 @@ class TenantManager(models.Manager):
 class OrganizationManager(models.Manager["Organization"]):
     """Manager helpers for organization creation workflows."""
 
+    def _send_org_created(self, organization: "Organization") -> None:
+        """Dispatch the ``organization_created`` signal for *organization*.
+
+        Mirrors the dispatch in ``OrgCreateForm.save()`` (``orgs/forms.py``)
+        so that the signal fires for personal orgs too — not just SaaS orgs
+        created via the form.  CRM's receiver seeds default pipeline stages;
+        future receivers are added by their owning modules.
+        """
+        from .signals import organization_created
+
+        organization_created.send(
+            sender=self.model,
+            organization=organization,
+        )
+
     def _validate_system_org(self, row: "Organization") -> None:
         """Assert the row meets System org invariants, or raise RuntimeError."""
         from .constants import SYSTEM_ORG_SLUG
@@ -189,6 +204,7 @@ class OrganizationManager(models.Manager["Organization"]):
                         organization=organization,
                         role=OrgRole.OWNER,
                     )
+                    self._send_org_created(organization)
                     return organization
             except IntegrityError:
                 existing_membership = (
