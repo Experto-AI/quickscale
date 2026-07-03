@@ -147,9 +147,37 @@ jobs:
       run: |
         make check-module-core-imports
 
+  manifest-sync-gate:
+    name: Manifest Sync Gate (SA16.1)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Verify module manifests match core snapshots
+      run: |
+        make check-manifest-sync
+
   test:
     name: Run Tests (Unit + Integration)
-    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter]
+    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -268,7 +296,7 @@ jobs:
 
   isolation-conformance:
     name: Isolation Conformance (AF10)
-    needs: [backups-validation, module-manifest-contract]
+    needs: [backups-validation, module-manifest-contract, manifest-sync-gate]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -349,7 +377,7 @@ jobs:
 
   lint-cli:
     name: Lint CLI Package
-    needs: [backups-validation, module-manifest-contract]
+    needs: [backups-validation, module-manifest-contract, manifest-sync-gate]
     runs-on: ubuntu-latest
 
     steps:
