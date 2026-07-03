@@ -78,13 +78,13 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA11.1 *(complete)* → SA11.2/SA11.3/SA11.4 *(unblocked)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
-| **2** | SA9.2 *(completed)* → SA9.3 → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
+| **2** | SA9.2 *(completed)* → SA9.3 *(completed)* → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
 | **3** | SA7.1 *(completed)* → SA7.2 *(completed)* → SA7.3 *(completed)* → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
 
 #### Track status (as of 2026-07-03)
 
 - **Track 1 — SA11.1 complete, SA11.2/SA11.3/SA11.4 unblocked.** `SA11.1` finished 2026-07-03 (`.render()`-forcing in `dispatch()`, render-lifecycle test, roadmap/changelog updated). `SA11.2`/`SA11.3`/`SA11.4` can now proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
-- **Track 2 — SA9.2 complete; SA9.3 up next.** The maintainer decision on the backups/`dr_engine` core-version compatibility gap (`SA9.2`) was confirmed and implemented 2026-07-03 — see below. `SA9.3`, the `SA9.4`/`SA9.5` → `SA9.6` chain, and the independent `SA10.1` → `SA10.2` chain remain clean to start/continue regardless.
+- **Track 2 — SA9.2 and SA9.3 complete; SA9.4 up next.** The maintainer decision on the backups/`dr_engine` core-version compatibility gap (`SA9.2`) was confirmed and implemented 2026-07-03 — see below. `SA9.3` completed 2026-07-03 (runtime facade created). The `SA9.4`/`SA9.5` → `SA9.6` chain, and the independent `SA10.1` → `SA10.2` chain remain clean to start/continue.
 - **Track 3 — clean.** `SA7.1`, `SA7.2`, and `SA7.3` are complete (see below); the next pending item is `SA7.4`, and `SA8.1`–`SA8.3` remain unblocked by dependencies.
 
 #### Track 1 status snapshot (2026-07-03)
@@ -156,10 +156,10 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   > 3. **Tests**: created `test_check_module_core_compatibility.py` with 12 tests covering skip-allowlist integrity (only `backups`, reason-annotated, dated), management command discovery (backups=9+, forms=2, crm=0, nonexistent dir=0), probe code generation (Phase 3 inclusion/omission, core-failure heuristic), and public symbol regression.
   > 4. **Follow-up** (not part of SA9.2, track alongside SA9.4): once SA9.4 migrates backups off the deep `dr_engine` import and `quickscale-core` 0.87.0 publishes, bump backups' `module.yml` floor to `>=0.87.0,<0.88.0` and remove it from the skip list, re-enabling the probe for it. SA9.2-FINDING-001 remains advisory and non-blocking; this follow-up fixes it incidentally.
 
-- [ ] **SA9.3 — `quickscale_core.runtime` public facade.** `Tier 2 · Track 2 · deps: none`
-  Create a facade module re-exporting the specific symbols module code is known to need today (the DR adapter surface: `capture_snapshot`, `fetch_snapshot_report`, `record_verification`, `set_rollback_pin`, `build_database_plan`, `execute_database_restore`, `sync_media`; plus the social-manifest rendering surface). No behavior change — pure re-export layer.
-  *Files:* `quickscale_core/src/quickscale_core/runtime.py` (new).
-  *Acceptance:* facade importable and re-exports match the DR adapter's public surface; no existing import path removed yet (that's SA9.4/SA9.5).
+- [x] **SA9.3 — `quickscale_core.runtime` public facade (completed 2026-07-03).** `Tier 2 · Track 2 · deps: none`
+  Created `quickscale_core/src/quickscale_core/runtime.py` — a pure re-export facade covering the DR adapter surface (`capture_snapshot`, `fetch_snapshot_report`, `record_verification`, `set_rollback_pin`, `build_database_plan`, `execute_database_restore`, `sync_media`, `ADAPTER_FUNCTIONS`, and `BackupError`) plus the social-manifest rendering surface (`SOCIAL_LINK_TREE_PATH`, `SOCIAL_EMBEDS_PATH`, `SOCIAL_INTEGRATION_BASE_PATH`, `SOCIAL_INTEGRATION_EMBEDS_PATH`, `resolve_social_module_options`, `assemble_wiring_spec`, `ResolverResult`, `load_social_manifest`, `render_social_managed_init_module`, `render_social_managed_urls_module`, `render_social_managed_views_module`, `social_provider_supports_embeds`, and `ModuleWiringSpec`). No behavior change — pure re-export layer. Includes focused direct tests verifying every symbol is importable, correctly typed, and matches the `__all__` export list.
+  *Files:* `quickscale_core/src/quickscale_core/runtime.py` (new), `quickscale_core/tests/test_runtime.py` (new).
+  *Acceptance:* `poetry run pytest quickscale_core/tests/test_runtime.py` passes; facade importable and re-exports match the declared surface; no existing import path removed yet (that's SA9.4/SA9.5).
 
 - [ ] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade.** `Tier 2 · Track 2 · deps: SA9.3`
   Repoint `services.py` and the seven management commands from `quickscale_core.dr_engine.{orchestration,primitives,recovery,verification,adapter}` to `quickscale_core.runtime`.
