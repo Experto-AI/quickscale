@@ -53,7 +53,7 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../findings.md#auto
 
 **Naming:** `SAn.m` continues the sequence from the closed 2026-06-30 remediation (`SA1`–`SA5`); this batch starts at `SA6` to avoid collision. `SA6`–`SA10` close repo-level findings, `SA11`–`SA12` close module-level findings.
 
-**Priority note:** SA11.1–SA11.5 close a **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1) and should be the first work landed regardless of track scheduling below.
+**Priority note:** SA11.1–SA11.4 close the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1) and should be the first work landed regardless of track scheduling below. SA11.5 should stay in that first landing batch because it closes the broader Module Finding 1 hardening work immediately adjacent to the defect chain.
 
 #### Dependency & parallelization overview
 
@@ -82,11 +82,18 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 | **2** | SA12.1 → SA9.1 → SA9.2 → SA9.3 → SA9.4/SA9.5 → SA9.6 → SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
 | **3** | SA6.1 → SA6.2 → SA6.3 · SA7.1 → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
 
+#### Track 1 status snapshot (2026-07-03)
+
+- **Delivered but still open:** SA11.1 groundwork is committed in the Track 1 worktree (`quickscale_modules_orgs/public_context.py` + 17 unit tests), but the checklist item stays open until the independent-review blockers below are resolved.
+- **Pending + blocked on SA11.1 closeout:** SA11.2 should wait until SA11.1's review findings are closed, and SA11.3/SA11.4 should wait for both that closeout and the request-boundary decision because they are the first public views that would adopt the helper seam.
+- **Pending after the live-defect chain:** SA11.5 remains in the first landing batch because it closes the broader Module Finding 1 hardening work, while SA11.6 and SA11.7 stay queued after that batch.
+- **Decision still needed before public-view adoption:** decide whether request-scoped public views should keep `org_scope()` as the mixin boundary or switch the mixin seam to a non-atomic caller-managed `transaction.atomic()` + `tenant_context()` pattern.
+
 ---
 
 #### Finding — Module Finding 1: request→tenant-context boundary (`why →` [Module Finding 1](../../findings.md#module-finding-1-the-requesttenant-context-boundary-is-a-per-module-convention-with-divergent-idioms--and-bloglistings-public-pages-read-as-empty-under-the-hardened-production-posture))
 
-- [ ] **SA11.1 — Orgs-owned public-read context helper.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
+- [ ] **SA11.1 — Orgs-owned public-read context helper (implementation landed; closeout blocked).** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
   Add a helper in the orgs module (new file, e.g. `quickscale_modules_orgs/public_context.py`) that both scopes a queryset to a given organization *and* primes the tenant `ContextVar`/GUC (`tenant_context(...)`) in one call — generalizing the idiom already proven correct in `quickscale_core/manifest/social_manifest.py:444–447`. Ship as a mixin (`PublicSystemOrgReadMixin`) and a plain function for non-CBV call sites.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py` (new).
   *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves.
