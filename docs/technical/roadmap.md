@@ -129,10 +129,8 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 - [x] **SA9.3 — `quickscale_core.runtime` public facade (completed 2026-07-03).** `Tier 2 · Track 2 · deps: none`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade.** `Tier 2 · Track 2 · deps: SA9.3`
-  Repoint `services.py` and the seven management commands from `quickscale_core.dr_engine.{orchestration,primitives,recovery,verification,adapter}` to `quickscale_core.runtime`.
-  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/services.py`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/*.py`.
-  *Acceptance:* backups test suite green with zero remaining `from quickscale_core.dr_engine` imports outside `quickscale_core` itself.
+- [x] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA9.5 — Migrate social's deep core imports to the facade.** `Tier 2 · Track 2 · deps: SA9.3`
   Repoint `social/adapter.py` from `quickscale_core.contracts.{module_options,resolvers}` and `quickscale_core.manifest.{assembler,resolver,social_manifest}` to `quickscale_core.runtime`.

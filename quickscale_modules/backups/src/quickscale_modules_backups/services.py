@@ -15,7 +15,8 @@ from typing import Any, Protocol
 
 from quickscale_modules_backups.models import BackupPolicy
 
-from quickscale_core.dr_engine.orchestration import (  # noqa: F401
+from quickscale_core.runtime import (  # noqa: F401
+    # orchestration surface
     BackupLockError,
     StagedAdminRestoreUpload,
     _build_env_var_manifest,
@@ -31,8 +32,10 @@ from quickscale_core.dr_engine.orchestration import (  # noqa: F401
     _collect_module_versions,
     _database_server_version_query,
     _delete_private_remote_key,
+    _ensure_postgresql_18_restore_runtime,
     _get_git_revision,
     _get_project_slug,
+    _get_restore_compatibility_issues,
     _get_source_environment,
     _is_path_within_root,
     _load_snapshot_sidecar_payload,
@@ -43,14 +46,12 @@ from quickscale_core.dr_engine.orchestration import (  # noqa: F401
     _release_backup_lock,
     _replace_policy_remote_prefix,
     _resolve_private_remote_credentials,
+    _resolve_restore_source,
+    _restore_execution_allowed,
     _rollback_remote_upload_after_persistence_failure,
     _snapshot_sidecar_path,
     _upload_to_private_remote,
     _validate_policy_snapshot_internal,
-    _ensure_postgresql_18_restore_runtime,
-    _get_restore_compatibility_issues,
-    _resolve_restore_source,
-    _restore_execution_allowed,
     build_backup_filename,
     build_backup_snapshot_report,
     clear_backup_snapshot_rollback_pin,
@@ -68,8 +69,7 @@ from quickscale_core.dr_engine.orchestration import (  # noqa: F401
     set_backup_snapshot_rollback_pin,
     sync_backup_snapshot_media,
     validate_backup_artifact,
-)
-from quickscale_core.dr_engine.primitives import (  # noqa: F401
+    # primitives surface
     BackupConfigurationError,
     BackupError,
     BackupPolicySnapshot,
@@ -99,8 +99,7 @@ from quickscale_core.dr_engine.primitives import (  # noqa: F401
     _relative_snapshot_child_path,
     _run_shell_command,
     _write_json_file,
-)
-from quickscale_core.dr_engine.recovery import (  # noqa: F401
+    # recovery surface
     ArtifactLike,
     BackupRestoreBlocked,
     RemoteMaterializer,
@@ -115,8 +114,7 @@ from quickscale_core.dr_engine.recovery import (  # noqa: F401
     _get_restore_source_compatibility_issues,
     _get_restore_source_validation_issues,
     _normalize_restore_file_path,
-)
-from quickscale_core.dr_engine.verification import (  # noqa: F401
+    # verification surface
     _build_clear_rollback_pin_fields,
     _build_verification_payload,
     _compute_rollback_pin_fields,
@@ -174,9 +172,7 @@ def ensure_default_policy() -> BackupPolicy:
 
     Delegates the implementation to ``dr_engine.orchestration``.
     """
-    from quickscale_core.dr_engine.orchestration import (
-        _ensure_default_policy_internal,
-    )
+    from quickscale_core.runtime import _ensure_default_policy_internal
 
     return _ensure_default_policy_internal()
 
@@ -186,9 +182,7 @@ def load_policy_snapshot() -> BackupPolicySnapshot:
 
     Delegates to the engine-owned implementation for model access.
     """
-    from quickscale_core.dr_engine.orchestration import (
-        _load_active_policy_snapshot,
-    )
+    from quickscale_core.runtime import _load_active_policy_snapshot
 
     return _load_active_policy_snapshot()
 

@@ -17,7 +17,7 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
+from quickscale_core.runtime import ADAPTER_FUNCTIONS
 
 
 class Command(BaseCommand):
