@@ -188,13 +188,20 @@ def regenerate_managed_wiring(
                 # for non-registered module names (e.g. a modules/ directory that
                 # contains a module without a manifest adapter).
                 continue
-            except ManifestError:
+            except ManifestError as exc:
                 # When the embedded project's modules directory is set as the
                 # base path (via set_modules_base_path below), a module name
                 # may appear in selected_modules but not exist in the embedded
-                # directory.  Silently skip it, matching the skip-unknown
-                # contract for non-embedded modules.
-                continue
+                # directory.  Silently skip it only for "Manifest file not
+                # found" errors, matching the skip-unknown contract for
+                # non-embedded modules.
+                # Other ManifestError instances (e.g. invalid analytics
+                # configuration from SA18.2) fail as (False, message),
+                # consistent with the ValueError/ImproperlyConfigured
+                # handlers in this loop.
+                if "Manifest file not found" in str(exc):
+                    continue
+                return False, str(exc)
             except ValueError as error:
                 return False, f"Unable to build managed wiring specs: {error}"
             except ImproperlyConfigured as error:

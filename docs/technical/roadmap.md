@@ -64,7 +64,7 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA13.1 (no deps — ready)             SA15.3 (no deps — SA15.1/15.2 complete)   SA18.2 (no deps)
+SA13.1 (no deps — ready)             SA15.3 (no deps — SA15.1/15.2 complete)   SA18.2 ✅ (no deps)
 SA13.2 (deps: SA13.1)                SA17.1 (no deps)                          SA18.3 (no deps)
 SA13.3 (deps: SA13.1)                SA17.2 (no deps)                          SA18.4 (no deps)
 SA13.4 (deps: SA13.2, SA13.3)        SA17.3 (no deps)                          SA18.5 (no deps)
@@ -84,7 +84,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 |-------|------------------|-------|
 | **1** | SA13.1 (ready — scope decision resolved 2026-07-04) → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA15.3 *(SA15.1, SA15.2 complete)*, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
-| **3** | SA18.2–SA18.11 | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
+| **3** | SA18.2 ✅, plus SA18.3–SA18.11 | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
 
 ---
 
@@ -218,10 +218,11 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 - [x] **SA18.1 — Narrow the import-time `except Exception: pass` in manifest adapter init (complete — 2026-07-03).** `Tier 1 · Track 3 · deps: none`
   Closed the fail-hard violation formerly tracked as tech-audit TA3 (now dropped from tech-audit.md). See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA18.2 — Raise instead of silently defaulting empty analytics manifest settings.** `Tier 1 · Track 3 · deps: none · (why → TA4)`
-  Empty-after-resolution analytics settings currently get silently replaced with hardcoded defaults ("fallback defaults matching legacy behaviour"); an empty result after resolution means the derivation produced an invalid result and should raise.
-  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py:302-311`.
-  *Acceptance:* an empty-after-resolution analytics config raises a descriptive error instead of silently filling in `posthog`/`us.i.posthog.com` defaults.
+- [x] **SA18.2 — Raise instead of silently defaulting empty analytics manifest settings (complete — 2026-07-03).** `Tier 1 · Track 3 · deps: none · (why → TA4)`
+  Replaced the silent PostHog fallback defaults in `_analytics_post_hook` with a `ManifestError` that raises when resolved settings are empty, naming the empty keys. The PR-4 disabled short-circuit (`enabled=False` → empty spec) is unaffected and remains before the validation check. Five unit tests added to `TestAnalyticsPostHookFailHard` covering empty provider, empty host, multiple empty keys, non-empty happy path, and disabled short-circuit.
+  **Follow-up (CR-SA18.2-001):** Fixed `regenerate_managed_wiring` in `module_wiring_manager.py` which was silently swallowing `ManifestError` from `build_manifest_wiring_spec`, masking the analytics fail-hard validation. The `except ManifestError: continue` handler now only skips "Manifest file not found" errors for modules absent from the embedded directory; all other `ManifestError` instances (including invalid analytics configuration) propagate as real failures. Two regression tests added proving invalid analytics options fail through the regenerate/apply seam. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_core/tests/test_manifest_entry_point.py`, `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`, `quickscale_cli/tests/test_module_wiring_manager_manifest.py`.
+  *Acceptance:* an empty-after-resolution analytics config raises a descriptive error through `build_manifest_wiring_spec` *and* through the `regenerate_managed_wiring`/apply seam; the disabled short-circuit behaviour is unaffected.
 
 - [ ] **SA18.3 — Delete the `quickscale_cli.schema` compat shim.** `Tier 2 · Track 3 · deps: none · (why → TA5)`
   Migrate the CLI's own internal imports (`utils/project_manager.py`, `utils/module_wiring_manager.py`, `commands/plan_command.py`, `commands/remove_command.py`) to `quickscale_core.schema` directly, then delete the undocumented `quickscale_cli/src/quickscale_cli/schema/` shim package.

@@ -717,3 +717,108 @@ class TestLazyInitFailureDoesNotLatch:
 
         entry_point_module._ensure_adapters_initialized()
         assert entry_point_module._ADAPTERS_INITIALIZED is True
+
+
+# ---------------------------------------------------------------------------
+# SA18.2: Fail-hard on empty-after-resolution analytics manifest settings.
+# An empty result after resolution means the manifest derivation produced
+# an invalid result and should raise ManifestError instead of silently
+# defaulting to PostHog values.
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyticsPostHookFailHard:
+    """Empty-after-resolution analytics manifest settings raise ManifestError
+    instead of silently defaulting to PostHog values (SA18.2)."""
+
+    def test_empty_provider_raises_manifest_error(self) -> None:
+        """An empty QUICKSCALE_ANALYTICS_PROVIDER raises ManifestError."""
+        from quickscale_core.manifest import ManifestError
+
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_ANALYTICS_ENABLED": True,
+                "QUICKSCALE_ANALYTICS_PROVIDER": "",
+                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://us.i.posthog.com",
+            }
+        )
+        resolved = {"enabled": True}
+
+        with pytest.raises(ManifestError, match="QUICKSCALE_ANALYTICS_PROVIDER"):
+            entry_point_module._analytics_post_hook(spec, resolved)
+
+    def test_empty_host_raises_manifest_error(self) -> None:
+        """An empty QUICKSCALE_ANALYTICS_POSTHOG_HOST raises ManifestError."""
+        from quickscale_core.manifest import ManifestError
+
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_ANALYTICS_ENABLED": True,
+                "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
+                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "",
+            }
+        )
+        resolved = {"enabled": True}
+
+        with pytest.raises(ManifestError, match="QUICKSCALE_ANALYTICS_POSTHOG_HOST"):
+            entry_point_module._analytics_post_hook(spec, resolved)
+
+    def test_multiple_empty_keys_reported(self) -> None:
+        """Multiple empty settings are all listed in the error message."""
+        from quickscale_core.manifest import ManifestError
+
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_ANALYTICS_ENABLED": True,
+                "QUICKSCALE_ANALYTICS_PROVIDER": "",
+                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "",
+            }
+        )
+        resolved = {"enabled": True}
+
+        with pytest.raises(ManifestError) as exc_info:
+            entry_point_module._analytics_post_hook(spec, resolved)
+        msg = str(exc_info.value)
+        assert "QUICKSCALE_ANALYTICS_PROVIDER" in msg
+        assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR" in msg
+        assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR" in msg
+        assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST" in msg
+
+    def test_non_empty_settings_do_not_raise(self) -> None:
+        """Non-empty analytics settings pass through without error."""
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_ANALYTICS_ENABLED": True,
+                "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
+                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
+                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://eu.i.posthog.com",
+            }
+        )
+        resolved = {"enabled": True}
+
+        # Should not raise.
+        result = entry_point_module._analytics_post_hook(spec, resolved)
+        assert result is not None
+        assert isinstance(result, ModuleWiringSpec)
+
+    def test_disabled_short_circuit_still_works(self) -> None:
+        """The PR-4 disabled short-circuit returns empty spec before
+        reaching the empty-settings check."""
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_ANALYTICS_ENABLED": False,
+                "QUICKSCALE_ANALYTICS_PROVIDER": "",
+            }
+        )
+        resolved = {"enabled": False}
+
+        result = entry_point_module._analytics_post_hook(spec, resolved)
+        assert isinstance(result, ModuleWiringSpec)
+        assert result.apps == ()
