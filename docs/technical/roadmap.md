@@ -141,10 +141,24 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 4: core-as-runtime-API boundary (`why →` [Finding 4](../../findings.md#finding-4-quickscalecores-entire-internal-surface-is-a-de-facto-runtime-api-for-user-owned-generated-projects--with-an-open-ended-version-range-and-a-repo-wide-clean-break-policy))
 
-- [ ] **SA9.2 — CI job: module-vs-oldest-claimed-core import check.** `Tier 1 · Track 2 · deps: none`
-  Add a CI job that installs each module against the *oldest* core version its `module.yml` claims and imports the module, so a drift between claimed and actual minimum compatibility fails loudly instead of silently.
-  *Files:* new CI workflow step / script under `scripts/`.
-  *Acceptance:* the job fails if a module imports a core symbol not present in its manifest's minimum core version.
+- [x] **SA9.1 — Compatible-range pin for backups' core dependency.** `Tier 1 · Track 2 · deps: none`
+  Changed `quickscale-core>=0.86.0` to `>=0.86.0,<0.87.0` in module.yml. Updated `sync_project_module_dependencies` to fall back to the manifest version spec when the module's pyproject.toml declares a non-string (path/table) dependency, so generated projects receive a bounded version range instead of a developer-only path entry. Wired `_sync_module_dependencies` into `_update_single_module` so `quickscale update` also refreshes generated-project dependencies after subtree pull.
+  *Files:* `quickscale_modules/backups/module.yml`, `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py`, `quickscale_cli/src/quickscale_cli/commands/module_commands.py`.
+  *Acceptance:* a fresh embed of backups writes a bounded core version range into the generated project's `pyproject.toml`.
+
+- [ ] **SA9.2 — CI job: module-vs-oldest-claimed-core import check.** `Tier 1 · Track 2 · deps: none · RISK LEVEL: medium`
+  Added `scripts/check_module_core_compatibility.py` — a two-phase script that (1) statically analyses each module's `quickscale_core` imports against the on-disk core source, and (2) performs a real install/import probe: for each module with a quantifiable minimum core version, creates an isolated venv, installs `quickscale-core==<min_claimed>` plus the module's non-core deps, and imports the module's package and key submodules. Wired as `make check-core-compat`, added as step 3/6 in `scripts/check_ci_locally.sh`, and added as a `module-core-compat` gate job in `.github/workflows/ci.yml` that the `test` job depends on. Included in `make check`.
+  *Files:* `scripts/check_module_core_compatibility.py`, `Makefile`, `scripts/check_ci_locally.sh`, `.github/workflows/ci.yml`.
+  *Acceptance:* `make check-core-compat` passes; the script fails if a module imports a core symbol not present in the current core source, if a module's minimum claimed core version exceeds the repository's VERSION, or if any module with a claimed minimum core version cannot be imported against `quickscale-core==<min_claimed>` in an isolated environment. The `test` CI job will not run unless the `module-core-compat` gate passes. Pass `--skip-install-probe` to skip the heavy runtime check for local development.
+  *Discovered finding:* The embedded manifest copy at `quickscale_core/src/quickscale_core/data/manifests/backups/module.yml` still declares `quickscale-core>=0.86.0` (missing the `<0.87.0` upper bound applied in SA9.1 to the authoritative `quickscale_modules/backups/module.yml`). This drift does not block SA9.2 but should be cleaned up to keep the embedded manifest consistent with the shipped inventory. Tracked separately as **SA9.2-FINDING-001** — remains advisory and non-blocking.
+
+  > **2026-07-03 checkpoint — code delivered, install/import probe reveals pre-existing version mismatch — blocked.**
+  > Code delivered: `check_module_core_compatibility.py` (two-phase static analysis + real install/import probe), `Makefile` wiring (`make check-core-compat`), `.github/workflows/ci.yml` gate job, `scripts/check_ci_locally.sh` step.
+  >
+  > **Blocking (pre-existing condition surfaced by the new probe, not created by SA9.2):**
+  > - The real install/import probe fails on `quickscale_modules_backups.services` because **no published `quickscale-core` release in the range `>=0.86.0,<0.87.0` contains `quickscale_core.dr_engine`**. Backups' `module.yml` declares compatibility with a version range that does not satisfy its actual import requirements. This is a pre-existing discrepancy between the module's declared compatibility and the published core's API surface — the CI gate is working as designed and correctly caught a latent defect.
+  >
+  > **Decision needed:** How to resolve the pre-existing compatibility gap between backups' declared `quickscale-core>=0.86.0,<0.87.0` range and the published core's missing `dr_engine` subpackage. Options include: (a) publish a `quickscale-core` 0.86.x release that includes `dr_engine` so the range aligns with the actual API surface, (b) narrow the `module.yml` range to a version that includes `dr_engine` (or add a `>=` floor that matches), or (c) skip the install probe for backups only until the facade work (SA9.3–SA9.5) eliminates the deep import. SA9.2-FINDING-001 remains advisory and non-blocking; any of the above options would also fix it incidentally.
 
 - [ ] **SA9.3 — `quickscale_core.runtime` public facade.** `Tier 2 · Track 2 · deps: none`
   Create a facade module re-exporting the specific symbols module code is known to need today (the DR adapter surface: `capture_snapshot`, `fetch_snapshot_report`, `record_verification`, `set_rollback_pin`, `build_database_plan`, `execute_database_restore`, `sync_media`; plus the social-manifest rendering surface). No behavior change — pure re-export layer.

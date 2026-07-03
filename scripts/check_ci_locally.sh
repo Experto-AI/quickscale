@@ -30,9 +30,10 @@ for arg in "$@"; do
             echo "This script runs all checks that GitHub Actions CI runs:"
             echo "  1. Install dependencies"
             echo "  2. Lint (ruff check + format)"
-            echo "  3. Type check (mypy)"
-            echo "  4. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
-            echo "  5. E2E tests (optional, with --e2e flag)"
+            echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
+            echo "  4. Type check (mypy)"
+            echo "  5. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
+            echo "  6. E2E tests (optional, with --e2e flag)"
             exit 0
             ;;
     esac
@@ -46,21 +47,33 @@ echo ""
 # Track overall status
 FAILED=false
 
-echo "[1/5] Installing dependencies..."
+echo "[1/6] Installing dependencies..."
 poetry install --with dev
 
 echo ""
-echo "[2/5] Running linters (ruff)..."
+echo "[2/6] Running linters (ruff)..."
 make lint -- --core --cli --modules
 echo "✓ Linting passed"
 
 echo ""
-echo "[3/5] Running type checks (mypy)..."
+echo "[3/6] Running module-vs-core compatibility check..."
+make check-core-compat || FAILED=true
+if [ "$FAILED" = true ]; then
+    echo ""
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✗ Module-Core Compatibility Failed   ║"
+    echo "╚════════════════════════════════════════╝"
+    exit 1
+fi
+echo "✓ Module-to-core compatibility passed"
+
+echo ""
+echo "[4/6] Running type checks (mypy)..."
 make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""
-echo "[4/5] Running unit/integration tests..."
+echo "[5/6] Running unit/integration tests..."
 ./scripts/test_unit.sh || FAILED=true
 
 if [ "$FAILED" = true ]; then
@@ -75,7 +88,7 @@ echo "✓ All unit/integration tests passed"
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then
     echo ""
-    echo "[5/5] Running E2E tests (this may take several minutes)..."
+    echo "[6/6] Running E2E tests (this may take several minutes)..."
     ./scripts/test_e2e.sh || FAILED=true
 
     if [ "$FAILED" = true ]; then
@@ -88,7 +101,7 @@ if [ "$RUN_E2E" = true ]; then
     echo "✓ E2E tests passed"
 else
     echo ""
-    echo "[5/5] Skipping E2E tests (use --e2e to include)"
+    echo "[6/6] Skipping E2E tests (use --e2e to include)"
 fi
 
 echo ""
