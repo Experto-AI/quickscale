@@ -113,7 +113,7 @@ def reset_current_org_id() -> None:
 # ---------------------------------------------------------------------------
 
 
-def set_db_current_org_id(org_id: uuid.UUID | str) -> None:
+def _set_db_current_org_id(org_id: uuid.UUID | str) -> None:
     """Set PostgreSQL ``app.current_org_id`` for the active transaction scope.
 
     Non-middleware callers (e.g. generated social managed views) should call
@@ -160,34 +160,39 @@ def reset_db_current_org_id() -> None:
 # ---------------------------------------------------------------------------
 
 
-def set_current_org_for_context(*, org_id: uuid.UUID) -> None:
+def _set_current_org_for_context(*, org_id: uuid.UUID) -> None:
     """Set both the ContextVar and ``SET LOCAL app.current_org_id``.
+
+    .. deprecated::
+       Prefer :func:`org_scope` for new code.  This helper is retained
+       for management-command callers that need the raw ContextVar+GUC
+       pair without the ``transaction.atomic()`` wrapper.
 
     Non-middleware callers (management commands, background tasks, or any
     code outside the request cycle) should call this inside a
     ``transaction.atomic()`` block to establish consistent org context for
     both Python-level tenant-scoped managers and database-level row security.
 
-    Combines :func:`set_current_org_id` and :func:`set_db_current_org_id`
+    Combines :func:`set_current_org_id` and :func:`_set_db_current_org_id`
     so callers do not need to remember both calls.
 
     Example::
 
         with transaction.atomic():
-            set_current_org_for_context(org_id=organization.pk)
+            _set_current_org_for_context(org_id=organization.pk)
             # ... tenant-scoped queries and DB SET LOCAL are in sync ...
     """
     set_current_org_id(org_id)
-    set_db_current_org_id(org_id)
+    _set_db_current_org_id(org_id)
 
 
 # ---------------------------------------------------------------------------
-# Phase 2 — request-scoped tenant_context (no atomic wrapper)
+# Phase 2 — request-scoped _tenant_context (no atomic wrapper)
 # ---------------------------------------------------------------------------
 
 
 def _restore_current_org_id(prior: uuid.UUID | None) -> None:
-    """Restore the DB GUC after a tenant_context() scope exits.
+    """Restore the DB GUC after a _tenant_context() scope exits.
 
     Issues ``SET LOCAL`` (transaction-scoped) to restore *prior* or to clear
     the GUC to its default (empty string) when *prior* was ``None``.  Using
@@ -206,7 +211,7 @@ def _restore_current_org_id(prior: uuid.UUID | None) -> None:
 
 
 @contextlib.contextmanager
-def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
+def _tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
     """Request-scoped activation: set ContextVar + DB ``app.current_org_id``.
 
     Unlike :func:`org_scope`, this does **not** wrap in
@@ -225,7 +230,7 @@ def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
       is ``None``) so that FORCE RLS on PostgreSQL allows or denies queries.
 
     On exit: restores the prior ContextVar **and** the prior DB GUC
-    so that nested ``tenant_context()`` use never leaves the DB
+    so that nested ``_tenant_context()`` use never leaves the DB
     ``app.current_org_id`` desynchronized from the Python-level scope.
 
     Examples
@@ -233,13 +238,13 @@ def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
     Inside an admin view with explicit transaction management::
 
         with transaction.atomic():
-            with tenant_context(org_id):
+            with _tenant_context(org_id):
                 # ... queries run with ContextVar and DB GUC set ...
 
     Inside middleware (which wraps the entire request in ``org_scope``
     or an equivalent atomic block)::
 
-        with tenant_context(organization.pk):
+        with _tenant_context(organization.pk):
             response = self.get_response(request)
     """
     prior = get_current_org_id()
@@ -250,20 +255,20 @@ def tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
             yield
         finally:
             set_current_org_id(prior)
-            # Restore the DB GUC so nested tenant_context() stays in sync.
+            # Restore the DB GUC so nested _tenant_context() stays in sync.
             if prior is None:
                 reset_db_current_org_id()
             else:
-                set_db_current_org_id(prior)
+                _set_db_current_org_id(prior)
         return
 
     set_current_org_id(org_id)
     try:
-        set_db_current_org_id(org_id)
+        _set_db_current_org_id(org_id)
         yield
     finally:
         set_current_org_id(prior)
-        # Restore the DB GUC so nested tenant_context() stays in sync.
+        # Restore the DB GUC so nested _tenant_context() stays in sync.
         # Use SET LOCAL with DEFAULT when prior was None so we reset the
         # transaction-scoped GUC without affecting the session default
         # (CR-AF11-001 regression: RESET is session-scoped and can
@@ -319,7 +324,7 @@ def org_scope(organization: Any) -> Iterator[None]:
                 if prior is None:
                     reset_db_current_org_id()
                 else:
-                    set_db_current_org_id(prior)
+                    _set_db_current_org_id(prior)
                 set_current_org_id(prior)
         return
 
@@ -330,7 +335,7 @@ def org_scope(organization: Any) -> Iterator[None]:
     from django.db import transaction
 
     with transaction.atomic():
-        set_db_current_org_id(organization.pk)
+        _set_db_current_org_id(organization.pk)
         try:
             yield
         finally:
@@ -339,7 +344,7 @@ def org_scope(organization: Any) -> Iterator[None]:
             if prior is None:
                 reset_db_current_org_id()
             else:
-                set_db_current_org_id(prior)
+                _set_db_current_org_id(prior)
             set_current_org_id(prior)
 
 
@@ -555,3 +560,22 @@ def install_priming_wrapper(connection: Any) -> bool:
     connection.execute_wrappers.append(wrapper)
     setattr(connection, _INSTALLED_MARKER, True)
     return True
+
+
+# ---------------------------------------------------------------------------
+# SA13.1 — Compatibility aliases for deferred caller migrations
+# ---------------------------------------------------------------------------
+# These old public names still work during SA13.2/SA13.3 so external callers
+# don't break before they're migrated.  The SA13.1 lint gate warns on any
+# direct external use.  Remove these aliases after SA13.4 flips the gate to
+# hard-fail.
+# ---------------------------------------------------------------------------
+
+set_db_current_org_id = _set_db_current_org_id
+"""SA13.1 compatibility alias — prefer :func:`org_scope` for new code."""
+
+set_current_org_for_context = _set_current_org_for_context
+"""SA13.1 compatibility alias — prefer :func:`org_scope` for new code."""
+
+tenant_context = _tenant_context
+"""SA13.1 compatibility alias — prefer :func:`org_scope` for new code."""
