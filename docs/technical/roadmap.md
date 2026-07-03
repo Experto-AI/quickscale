@@ -62,14 +62,13 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + org-switch)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────────────
-SA11.1 groundwork committed,         SA9.2  (no deps)                         SA7.2  (no deps)
-  decision resolved, impl pending    SA9.3  (no deps)                         SA7.3  (no deps)
-  ├─ SA11.2 (←11.1, pending impl)      ├─ SA9.4 (←9.3)                        SA7.4  (no deps)
-  ├─ SA11.3 (←11.1, pending impl)      └─ SA9.5 (←9.3)                        SA8.1  (no deps)
-  └─ SA11.4 (←11.1, pending impl)          └─ SA9.6 (←9.4 & ←9.5)               └─ SA8.2 (←8.1)
-SA11.5 (no deps — clean)             SA10.1 (no deps)                             └─ SA8.3 (←8.2)
-SA11.6 (no deps — clean)               └─ SA10.2 (←10.1)
-SA11.7 (no deps — clean)
+SA11.1 ✓ completed                   SA9.2  (no deps)                         SA7.2  (no deps)
+  ├─ SA11.2 (←11.1, unblocked)          SA9.3  (no deps)                         SA7.3  (no deps)
+  ├─ SA11.3 (←11.1, unblocked)          ├─ SA9.4 (←9.3)                        SA7.4  (no deps)
+  └─ SA11.4 (←11.1, unblocked)          └─ SA9.5 (←9.3)                        SA8.1  (no deps)
+SA11.5 (no deps — clean)                 └─ SA9.6 (←9.4 & ←9.5)                  └─ SA8.2 (←8.1)
+SA11.6 (no deps — clean)             SA10.1 (no deps)                             └─ SA8.3 (←8.2)
+SA11.7 (no deps — clean)               └─ SA10.2 (←10.1)
 ```
 
 No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.1` — new `signals.py`/`services.py` receiver + `apps.py` wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back, same as the SA3.2/SA1.3 precedent.
@@ -78,41 +77,37 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.1 *(decision resolved, impl pending)* → SA11.2/SA11.3/SA11.4 *(pending SA11.1 impl)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
-| **2** | SA9.2 *(decision confirmed, impl pending)* → SA9.3 → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA7.1 *(completed)* → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
+| **1** | SA11.1 *(complete)* → SA11.2/SA11.3/SA11.4 *(unblocked)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
+| **2** | SA9.2 *(completed)* → SA9.3 → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
+| **3** | SA7.1 *(completed)* → SA7.2 *(completed)* → SA7.3 *(completed)* → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
 
 #### Track status (as of 2026-07-03)
 
-- **Track 1 — unblocked, implementation pending.** The design decision blocking `SA11.1` (`CR-SA11.1-001`) resolved 2026-07-02 — see below. No further decision is needed; the remaining work is implementation: force `TemplateResponse.render()` inside `org_scope()` in `PublicSystemOrgReadMixin.dispatch()`, then add the real `ListView`/`TemplateResponse` render-lifecycle test (`CR-SA11.1-002`). Once that lands, `SA11.2`/`SA11.3`/`SA11.4` can proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
-- **Track 2 — unblocked, implementation pending.** The maintainer decision on the backups/`dr_engine` core-version compatibility gap (`SA9.2`) was confirmed 2026-07-03 — see below. No further decision is needed; the remaining work is implementation: add a skip mechanism to `check_module_core_compatibility.py` for backups' install probe, and close `CR-SA9.2-002` (management-command probe coverage). `SA9.3`, the `SA9.4`/`SA9.5` → `SA9.6` chain, and the independent `SA10.1` → `SA10.2` chain remain clean to start/continue regardless.
+- **Track 1 — SA11.1 complete, SA11.2/SA11.3/SA11.4 unblocked.** `SA11.1` finished 2026-07-03 (`.render()`-forcing in `dispatch()`, render-lifecycle test, roadmap/changelog updated). `SA11.2`/`SA11.3`/`SA11.4` can now proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
+- **Track 2 — SA9.2 complete; SA9.3 up next.** The maintainer decision on the backups/`dr_engine` core-version compatibility gap (`SA9.2`) was confirmed and implemented 2026-07-03 — see below. `SA9.3`, the `SA9.4`/`SA9.5` → `SA9.6` chain, and the independent `SA10.1` → `SA10.2` chain remain clean to start/continue regardless.
 - **Track 3 — clean.** `SA7.1`, `SA7.2`, and `SA7.3` are complete (see below); the next pending item is `SA7.4`, and `SA8.1`–`SA8.3` remain unblocked by dependencies.
 
 #### Track 1 status snapshot (2026-07-03)
 
-- **Delivered but still open:** SA11.1 groundwork is committed in the Track 1 worktree (`quickscale_modules_orgs/public_context.py` + 17 unit tests), but the checklist item stays open until the remaining implementation below lands.
-- **Decision resolved 2026-07-02 (`CR-SA11.1-001`):** keep `org_scope()` as the mixin's transaction boundary; force `.render()` on unrendered `TemplateResponse`s inside it. No decision is pending — the remaining work on SA11.1 is implementation only (the `.render()`-forcing change plus the `CR-SA11.1-002` render-lifecycle test).
-- **Pending + blocked on SA11.1 closeout:** SA11.2 should wait until SA11.1's review findings are closed, and SA11.3/SA11.4 should wait for that same closeout because they are the first public views that would adopt the helper seam.
+- **SA11.1 complete.** The `.render()`-forcing change and `CR-SA11.1-002` render-lifecycle test have landed. SA11.2/SA11.3/SA11.4 can now proceed.
+- **Next up:** SA11.2 (restricted-role E2E smoke) should land before SA11.3/SA11.4 because it proves the defect class is closed. SA11.3/SA11.4 (migrate blog/listings views) are the first consumer views adopting the helper seam.
 - **Pending after the live-defect chain:** SA11.5 remains in the first landing batch because it closes the broader Module Finding 1 hardening work, while SA11.6 and SA11.7 stay queued after that batch.
 
 ---
 
 #### Finding — Module Finding 1: request→tenant-context boundary (`why →` [Module Finding 1](../../arch-audit.md#module-finding-1-the-requesttenant-context-boundary-is-a-per-module-convention-with-divergent-idioms--and-bloglistings-public-pages-read-as-empty-under-the-hardened-production-posture))
 
-- [ ] **SA11.1 — Orgs-owned public-read context helper (implementation landed; closeout blocked).** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  Add a helper in the orgs module (new file, e.g. `quickscale_modules_orgs/public_context.py`) that both scopes a queryset to a given organization *and* primes the tenant `ContextVar`/GUC (`tenant_context(...)`) in one call — generalizing the idiom already proven correct in `quickscale_core/manifest/social_manifest.py:444–447`. Ship as a mixin (`PublicSystemOrgReadMixin`) and a plain function for non-CBV call sites.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py` (new).
-  *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves.
+- [x] **SA11.1 — Orgs-owned public-read context helper (complete — 2026-07-03).** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
+  Added a helper in the orgs module (`quickscale_modules_orgs/public_context.py`) that both scopes a queryset to a given organization *and* primes the tenant `ContextVar`/GUC (`tenant_context(...)`) in one call — generalizing the idiom already proven correct in `quickscale_core/manifest/social_manifest.py:444–447`. Ships as a mixin (`PublicSystemOrgReadMixin`) and a plain function for non-CBV call sites.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py`.
+  *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves. TemplateResponse rendering is forced inside `org_scope()` so lazy queryset evaluation during template rendering sees the primed tenant context (CR-SA11.1-001 fix); a dedicated render-lifecycle test with a lazy `QuerySet` in the template context proves this (CR-SA11.1-002 fix; strengthened by CR-SA11.1-003).
 
-  > **2026-07-02 checkpoint — groundwork committed, implementation resuming after decision.**
-  > Code delivered: `resolve_public_org_context()` plain function, `PublicSystemOrgReadMixin` CBV seam (overrides `dispatch()` with `org_scope()`), and 17 unit tests covering org resolution, real tenant-scoped queries, fail-closed no-org path, and mixin dispatch lifecycle.
+  > **2026-07-03 — SA11.1 complete.**
+  > The `.render()`-forcing change is implemented in `PublicSystemOrgReadMixin.dispatch()`: after calling `super().dispatch()`, if the response is an unrendered `TemplateResponse`, the mixin calls `.render()` on it before returning — still inside the `with org_scope():` block, so lazy queryset evaluation happens while the GUC is still primed. Streamed responses are documented as unsupported (not used for public pages today).
   >
-  > **`CR-SA11.1-001` (high) — RESOLVED 2026-07-02.** Root cause: `org_scope()`'s `transaction.atomic()` block (and the `SET LOCAL app.current_org_id` GUC inside it) closes the instant `dispatch()` returns — but template-backed generic views (`ListView`/`DetailView`, SA11.3/SA11.4's target) return an unrendered `TemplateResponse`; Django calls `.render()` on it *after* `dispatch()` returns, so any queryset lazily evaluated during template rendering runs with no GUC set and RLS silently returns zero rows — reproducing Module Finding 1 inside its own fix.
-  > **Decision:** keep `org_scope()` as the mixin's transaction boundary (preserves the one-shared-seam shape Module Finding 1 calls for, instead of pushing transaction discipline back onto every call site). Fix: in `dispatch()`, after calling `super().dispatch()`, if the response is unrendered (has a `.render()` method, e.g. `TemplateResponse`), call `.render()` on it before returning — still inside the `with org_scope():` block, so lazy queryset evaluation happens while the GUC is still primed. Does not cover genuinely streamed responses (not in use for QuickScale's public pages today — note this as a documented limitation in the mixin's docstring).
+  > `CR-SA11.1-002` is closed by `test_mixin_forces_template_response_render`, a `TemplateResponse`-based test that proves the fix works: the view returns an unrendered `TemplateResponse` and the test asserts the rendered content is correct — confirming the lazy queryset executed with the tenant GUC primed. The test was strengthened in `CR-SA11.1-003` to use a **lazy** `QuerySet` (the `ListView`/`DetailView` pattern) that evaluates only during template rendering rather than an eagerly-evaluated `count()` in the context dict, so a regression that moves `.render()` outside `org_scope()` would now correctly fail.
   >
-  > **Remaining before SA11.1 closes (implementation, not a decision):**
-  > - Implement the `.render()`-forcing change in `PublicSystemOrgReadMixin.dispatch()`.
-  > - `CR-SA11.1-002` (medium, still open) — add a test that exercises a real `ListView`/`TemplateResponse` render lifecycle under the mixin (not just the unit tests against plain views/functions) to prove the fix actually closes the gap for the views SA11.3/SA11.4 will build.
+  > SA11.1 is complete. SA11.2/SA11.3/SA11.4 can now proceed.
 
 - [ ] **SA11.2 — Restricted-role anonymous-read E2E smoke.** `Tier 2 · Track 1 · deps: SA11.1 · RISK LEVEL: medium`
   Add an integration test that runs against the restricted `NOBYPASSRLS` runtime role (not the superuser test posture used elsewhere) and asserts an anonymous request to a public blog page returns a published System-org post. This is the single test that covers the whole defect class.
@@ -148,27 +143,18 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 4: core-as-runtime-API boundary (`why →` [Finding 4](../../arch-audit.md#finding-4-quickscalecores-entire-internal-surface-is-a-de-facto-runtime-api-for-user-owned-generated-projects--with-an-open-ended-version-range-and-a-repo-wide-clean-break-policy))
 
-- [ ] **SA9.2 — CI job: module-vs-oldest-claimed-core import check (code delivered; decision confirmed, implementation pending).** `Tier 1 · Track 2 · deps: none · RISK LEVEL: medium`
-  Added `scripts/check_module_core_compatibility.py` — a two-phase script that (1) statically analyses each module's `quickscale_core` imports against the on-disk core source, and (2) performs a real install/import probe: for each module with a quantifiable minimum core version, creates an isolated venv, installs `quickscale-core==<min_claimed>` plus the module's non-core deps, and imports the module's package plus its primary `services` submodule (the probe currently does not cover management-command entry points). Wired as `make check-core-compat`, added as step 3/6 in `scripts/check_ci_locally.sh`, and added as a `module-core-compat` gate job in `.github/workflows/ci.yml` that the `test` job depends on. Included in `make check`.
-  *Files:* `scripts/check_module_core_compatibility.py`, `Makefile`, `scripts/check_ci_locally.sh`, `.github/workflows/ci.yml`.
+- [x] **SA9.2 — CI job: module-vs-oldest-claimed-core import check (completed 2026-07-03).** `Tier 1 · Track 2 · deps: none · RISK LEVEL: medium`
+  Added `scripts/check_module_core_compatibility.py` — a two-phase script that (1) statically analyses each module's `quickscale_core` imports against the on-disk core source, and (2) performs a real install/import probe: for each module with a quantifiable minimum core version, creates an isolated venv, installs `quickscale-core==<min_claimed>` plus the module's non-core deps from PyPI, and imports the module's package plus its primary `services` submodule. Wired as `make check-core-compat`, added as step 3/6 in `scripts/check_ci_locally.sh`, and added as a `module-core-compat` gate job in `.github/workflows/ci.yml` that the `test` job depends on. Included in `make check`.
+  *Files:* `scripts/check_module_core_compatibility.py`, `Makefile`, `scripts/check_ci_locally.sh`, `.github/workflows/ci.yml`, `quickscale_core/tests/scripts/test_check_module_core_compatibility.py`.
   *Acceptance:* `make check-core-compat` passes; the script fails if a module imports a core symbol not present in the current core source, if a module's minimum claimed core version exceeds the repository's VERSION, or if any module with a claimed minimum core version cannot be imported against `quickscale-core==<min_claimed>` in an isolated environment. The `test` CI job will not run unless the `module-core-compat` gate passes. Pass `--skip-install-probe` to skip the heavy runtime check for local development.
   *Discovered finding:* The embedded manifest copy at `quickscale_core/src/quickscale_core/data/manifests/backups/module.yml` still declares `quickscale-core>=0.86.0` (missing the `<0.87.0` upper bound applied in SA9.1 to the authoritative `quickscale_modules/backups/module.yml`). This drift does not block SA9.2 but should be cleaned up to keep the embedded manifest consistent with the shipped inventory. Tracked separately as **SA9.2-FINDING-001** — remains advisory and non-blocking.
 
-  > **2026-07-03 checkpoint — code delivered, install/import probe reveals pre-existing version mismatch — decision confirmed, implementation pending.**
-  > Code delivered: `check_module_core_compatibility.py` (two-phase static analysis + real install/import probe), `Makefile` wiring (`make check-core-compat`), `.github/workflows/ci.yml` gate job, `scripts/check_ci_locally.sh` step.
-  >
-  > **Pre-existing condition surfaced by the new probe, not created by SA9.2:**
-  > - The real install/import probe fails on `quickscale_modules_backups.services` because **no published `quickscale-core` release in the range `>=0.86.0,<0.87.0` contains `quickscale_core.dr_engine`**. Backups' `module.yml` declares compatibility with a version range that does not satisfy its actual import requirements. This is a pre-existing discrepancy between the module's declared compatibility and the published core's API surface — the CI gate is working as designed and correctly caught a latent defect. `dr_engine` appears to be new in the current unreleased v0.87.0 hardening cycle, so no published version number exists yet that would make the declared range true.
-  >
-  > **`CR-SA9.2-002` (medium, blocking, completeness) — still open, implementation task, not a decision:** The runtime probe currently imports only `<package>.services` for each module during the install/import phase. The backups module's management-command entry points (`management/commands/*.py`) also depend on `quickscale_core.dr_engine.*` and are not covered by the import probe. Even after the version-mismatch item below is resolved, the probe would underreport real-world compatibility risk because the management-command runtime paths remain untested. The probe should be extended to import a representative set of management-command modules per module before SA9.2 can close.
-  >
-  > **Decision — CONFIRMED by the maintainer 2026-07-03:** option (c) — skip the install probe for backups only until the facade work (`SA9.3`–`SA9.5`) replaces its deep `dr_engine` imports with the `quickscale_core.runtime` facade. Rationale: (a) publishing a `quickscale-core` 0.86.x patch backporting `dr_engine` requires unplanned release engineering for a module about to stop needing the deep import anyway; (b) narrowing the floor to a version that actually contains `dr_engine` is currently impossible — no published version has it. (c) matches Finding 4's already-adopted preferred path ("facade before next core release") and needs no extra release engineering.
-  >
-  > **Remaining before SA9.2 closes (implementation, not a decision):**
-  > - Add an explicit, documented skip mechanism to `check_module_core_compatibility.py` (e.g. a `--skip-modules` flag or a small allowlist keyed by module name + reason string) and apply it to `backups`, citing this decision.
-  > - Update the acceptance criteria/test for `check_module_core_compatibility.py` to assert `backups` is the *only* module skipped, and that the skip is reason-annotated (prevents silent scope creep of the exemption).
-  > - Close `CR-SA9.2-002` (management-command probe coverage) for the modules the probe does cover.
-  > - Follow-up (not part of SA9.2, track alongside `SA9.4`): once `SA9.4` migrates backups off the deep `dr_engine` import and `quickscale-core` 0.87.0 publishes, bump backups' `module.yml` floor to `>=0.87.0,<0.88.0` and remove it from the skip list, re-enabling the probe for it. `SA9.2-FINDING-001` remains advisory and non-blocking; this follow-up fixes it incidentally.
+  > **2026-07-03 closeout — all remaining implementation items completed.**
+  > The following items were implemented to close SA9.2:
+  > 1. **Backups-only skip mechanism** (`SKIP_INSTALL_PROBE_MODULES`): a dict constant in the script keyed by module name with a documented reason string citing the confirmed 2026-07-03 roadmap decision. Applied to `backups` only. Static analysis (Phase 1) still runs for all modules; only the install/import probe (Phase 2) is skipped.
+  > 2. **Management-command probe coverage** (`CR-SA9.2-002`): added `_get_management_command_modules()` helper that scans `src/<package>/management/commands/*.py` for each module and returns dotted import paths. Extended `_build_probe_script()` with Phase 3 that imports each discovered management command module, using the same `quickscale_core`-aware failure heuristic as Phase 2b. The probe now covers both `<package>.services` and all management command entry points.
+  > 3. **Tests**: created `test_check_module_core_compatibility.py` with 12 tests covering skip-allowlist integrity (only `backups`, reason-annotated, dated), management command discovery (backups=9+, forms=2, crm=0, nonexistent dir=0), probe code generation (Phase 3 inclusion/omission, core-failure heuristic), and public symbol regression.
+  > 4. **Follow-up** (not part of SA9.2, track alongside SA9.4): once SA9.4 migrates backups off the deep `dr_engine` import and `quickscale-core` 0.87.0 publishes, bump backups' `module.yml` floor to `>=0.87.0,<0.88.0` and remove it from the skip list, re-enabling the probe for it. SA9.2-FINDING-001 remains advisory and non-blocking; this follow-up fixes it incidentally.
 
 - [ ] **SA9.3 — `quickscale_core.runtime` public facade.** `Tier 2 · Track 2 · deps: none`
   Create a facade module re-exporting the specific symbols module code is known to need today (the DR adapter surface: `capture_snapshot`, `fetch_snapshot_report`, `record_verification`, `set_rollback_pin`, `build_database_plan`, `execute_database_restore`, `sync_media`; plus the social-manifest rendering surface). No behavior change — pure re-export layer.

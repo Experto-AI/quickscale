@@ -63,7 +63,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -80,6 +80,20 @@ CORE_DEP_NAME: Final[str] = "quickscale-core"
 # Regex to extract the minimum version from a pep-440-style specifier.
 # Handles shapes like: >=0.86.0, >=0.86.0,<0.87.0, >=0.86.0,!=0.86.1
 _MIN_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r">=\s*(?P<min_ver>\d+[.]\d+[.]\d+)")
+
+# Modules exempt from the install/import probe (Phase 2) only.
+# Static analysis (Phase 1) still runs for all modules.
+# This is a temporary measure — remove entries when their root cause is fixed.
+SKIP_INSTALL_PROBE_MODULES: Final[dict[str, str]] = {
+    "backups": (
+        "Pre-existing version mismatch: no published quickscale-core "
+        ">=0.86.0,<0.87.0 contains quickscale_core.dr_engine, which "
+        "backups' services.py and management commands require. "
+        "Skipped until SA9.3\u2013SA9.5 facade work replaces the deep "
+        "dr_engine imports with quickscale_core.runtime (roadmap "
+        "decision confirmed 2026-07-03)."
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +148,7 @@ def _parse_module_yml(module_yml: Path) -> dict:
     import yaml  # pyyaml is a core dependency
 
     with module_yml.open(encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+        return cast(dict, yaml.safe_load(fh))
 
 
 def _get_core_dep_spec(data: dict) -> str | None:
@@ -470,6 +484,28 @@ def _get_module_non_core_deps(module_dir: Path) -> list[str]:
     return specs
 
 
+def _get_management_command_modules(package_name: str, src_dir: Path) -> list[str]:
+    """
+    Return dotted import paths for management command modules in *package_name*.
+
+    Scans ``src_dir/<package_name>/management/commands/*.py`` (excluding
+    ``__init__.py``) and returns fully-qualified dotted paths suitable for
+    ``importlib.import_module`` or ``__import__``.
+
+    Returns an empty list when the directory does not exist or no commands
+    are found.
+    """
+    pkg_dir = src_dir / package_name
+    commands_dir = pkg_dir / "management" / "commands"
+    if not commands_dir.is_dir():
+        return []
+    modules: list[str] = []
+    for cmd_file in sorted(commands_dir.iterdir()):
+        if cmd_file.suffix == ".py" and cmd_file.stem != "__init__":
+            modules.append(f"{package_name}.management.commands.{cmd_file.stem}")
+    return modules
+
+
 def _probe_module_install_import(
     mod_name: str,
     package_name: str,
@@ -555,6 +591,9 @@ def _probe_module_install_import(
                         f"{result.stderr.strip()}"
                     )
 
+            # --- discover management command modules ---
+            management_cmds = _get_management_command_modules(package_name, src_dir)
+
             # --- write probe script ---
             probe_script = tmpdir / "_probe.py"
             probe_script.write_text(
@@ -562,6 +601,7 @@ def _probe_module_install_import(
                     package_name=package_name,
                     src_dir=src_dir,
                     has_django=has_django,
+                    management_commands=management_cmds,
                 ),
                 encoding="utf-8",
             )
@@ -617,12 +657,17 @@ def _build_probe_script(
     package_name: str,
     src_dir: Path,
     has_django: bool,
+    management_commands: list[str] | None = None,
 ) -> str:
     """
     Build the probe script that will be run inside the isolated venv.
 
     The script writes PROBE_RESULT: PASS on success, or PROBE_FAIL: <msg>
     on failure.  Any other output is informational.
+
+    *management_commands* is an optional list of dotted module paths for
+    management command modules (e.g. ``["backups.management.commands.backups_create"]``)
+    that should be imported during the probe to verify they resolve.
     """
     lines: list[str] = [
         "import sys",
@@ -685,6 +730,32 @@ def _build_probe_script(
         "        else:",
         '            print(f"PROBE_FAIL: import {_mod} failed: {exc}")',
     ]
+
+    # Phase 3: probe management command modules (if any found)
+    if management_commands:
+        _cmd_list_repr = repr(management_commands)
+        lines += [
+            "",
+            "# Phase 3: probe management command modules",
+            f"for _cmd_mod in {_cmd_list_repr}:",
+            "    try:",
+            "        __import__(_cmd_mod)",
+            '        print(f"OK: {_cmd_mod} imported")',
+            "    except ImportError as exc:",
+            "        msg = str(exc)",
+            '        if "quickscale_core" in msg or "quickscale" in msg.lower():',
+            '            print(f"PROBE_FAIL: import {_cmd_mod} failed: {exc}")',
+            "        else:",
+            '            print(f"SKIP: {_cmd_mod} requires configuration: {exc}")',
+            "    except Exception as exc:",
+            "        if 'ImproperlyConfigured' in type(exc).__name__:",
+            '            print(f"SKIP: {_cmd_mod} needs Django app config: {exc}")',
+            "        elif hasattr(exc, '__module__') and 'django'"
+            " in getattr(exc, '__module__', ''):",
+            '            print(f"SKIP: {_cmd_mod} Django infrastructure: {exc}")',
+            "        else:",
+            '            print(f"PROBE_FAIL: import {_cmd_mod} failed: {exc}")',
+        ]
 
     # Success marker
     lines += [
@@ -845,23 +916,26 @@ def main(argv: list[str] | None = None) -> int:
 
         # ---- Phase 2: install / import probe ----
         if not skip_install_probe and min_ver_str is not None:
-            package_name = _get_module_package_name(mod_dir)
-            if package_name and src_dir.is_dir():
-                probe_issues = _probe_module_install_import(
-                    mod_name=mod_name,
-                    package_name=package_name,
-                    min_version=min_ver_str,
-                    src_dir=src_dir,
-                    module_dir=mod_dir,
-                )
-                for pi in probe_issues:
-                    print(pi)
-                    overall_exit = 1
-            elif not package_name:
-                print(
-                    "  INSTALL PROBE: Could not determine package name "
-                    "from pyproject.toml — skipping probe."
-                )
+            if mod_name in SKIP_INSTALL_PROBE_MODULES:
+                print(f"  INSTALL PROBE: Skipped — {SKIP_INSTALL_PROBE_MODULES[mod_name]}")
+            else:
+                package_name = _get_module_package_name(mod_dir)
+                if package_name and src_dir.is_dir():
+                    probe_issues = _probe_module_install_import(
+                        mod_name=mod_name,
+                        package_name=package_name,
+                        min_version=min_ver_str,
+                        src_dir=src_dir,
+                        module_dir=mod_dir,
+                    )
+                    for pi in probe_issues:
+                        print(pi)
+                        overall_exit = 1
+                else:
+                    print(
+                        "  INSTALL PROBE: Could not determine package name "
+                        "from pyproject.toml — skipping probe."
+                    )
 
         print()  # blank line between modules
 

@@ -143,12 +143,29 @@ class PublicSystemOrgReadMixin:
             return None
 
     def dispatch(self, request: Any, *args: Any, **kwargs: Any) -> Any:
-        """Wrap dispatch in ``org_scope()`` for tenant-context isolation."""
+        """Wrap dispatch in ``org_scope()`` for tenant-context isolation.
+
+        Forces ``.render()`` on unrendered ``TemplateResponse`` objects
+        while still inside the ``org_scope()`` block so that lazy queryset
+        evaluation during template rendering runs with the tenant GUC
+        primed.
+
+        **Streamed responses** (e.g. ``StreamingHttpResponse``) are not
+        rendered here.  If any view in this mixin hierarchy returns a
+        streamed response, the tenant GUC will not cover template
+        rendering — QuickScale does not use streamed responses for
+        public pages today, so this limitation is documented as a
+        future concern.
+        """
+        from django.template.response import TemplateResponse
         from .current_org import org_scope
 
         organization = self.get_public_org()
         with org_scope(organization):
-            return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
+            response = super().dispatch(request, *args, **kwargs)  # type: ignore[misc]
+            if isinstance(response, TemplateResponse):
+                response.render()
+            return response
 
     def get_public_org_context(
         self,
