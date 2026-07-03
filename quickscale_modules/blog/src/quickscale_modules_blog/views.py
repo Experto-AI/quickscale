@@ -24,6 +24,8 @@ from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 from PIL import Image, UnidentifiedImageError
 
+from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
+
 from .models import BlogMediaAsset, Category, Post, Tag
 
 storage_build_public_media_url: Callable[..., str] | None = None
@@ -58,20 +60,6 @@ RATE_LIMIT_CACHE_FALLBACK_ERRORS = (AttributeError, NotImplementedError, ValueEr
 # ---------------------------------------------------------------------------
 # Org-resolution helpers for the single-URL contract (T1.6)
 # ---------------------------------------------------------------------------
-
-
-def _resolve_org_for_read(request: HttpRequest) -> Any | None:
-    """Return the organization to scope blog reads to.
-
-    Anonymous/public readers see System-org content (D2).
-    Authenticated readers see their active org via ``request.org``.
-    """
-    user = getattr(request, "user", None)
-    if user is None or not user.is_authenticated:
-        from quickscale_modules_orgs.models import Organization
-
-        return Organization.objects.get_system_org()
-    return getattr(request, "org", None)
 
 
 def _resolve_api_org(request: HttpRequest, author: Any) -> Any:
@@ -728,32 +716,32 @@ def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     )
 
 
-class OrgScopedViewMixin:
-    """Mixin for blog list/detail views that applies org scoping.
+class BlogPublicReadMixin(PublicSystemOrgReadMixin):
+    """Mixin for blog public read views that resolves org context.
 
     Anonymous/public readers see System-org content (D2).
     Authenticated readers see their active org via ``request.org``.
 
-    Uses ``all_objects`` (operator bypass) for the base queryset since
-    org scoping is done explicitly here — TenantManager auto-scoping is
-    bypassed to avoid double-filtering.
+    Wraps ``dispatch()`` in ``org_scope()`` to prime both the Python
+    ContextVar and the PostgreSQL GUC ``app.current_org_id``, so that
+    tenant-scoped default managers auto-scope queries correctly and
+    RLS policies see the correct org context.
     """
 
-    request: HttpRequest
+    def get_public_org(self) -> Any | None:  # type: ignore[override]
+        """Return the organization for this request.
 
-    def _scope_by_org(self, qs):  # type: ignore[no-untyped-def]
-        """Filter *qs* by org context.
-
-        Anonymous readers are scoped to the System org (D2).
-        Authenticated readers are scoped to their active org.
+        Authenticated readers are scoped to their active org via
+        ``request.org``.  Anonymous/public readers default to the
+        System org singleton.
         """
-        organization = _resolve_org_for_read(self.request)
-        if organization is None:
-            return qs.none()
-        return qs.filter(organization=organization)
+        user = getattr(self.request, "user", None)
+        if user is not None and user.is_authenticated:
+            return getattr(self.request, "org", None)
+        return super().get_public_org()
 
 
-class PostListView(OrgScopedViewMixin, ListView):
+class PostListView(BlogPublicReadMixin, ListView):
     """Display paginated list of published blog posts"""
 
     model = Post
@@ -771,14 +759,14 @@ class PostListView(OrgScopedViewMixin, ListView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return only published posts, ordered by publish date"""
-        return self._scope_by_org(
-            Post.all_objects.filter(status="published")
+        return (
+            Post.objects.filter(status="published")
             .select_related("author", "category")
             .prefetch_related("tags")
         )
 
 
-class PostDetailView(OrgScopedViewMixin, DetailView):
+class PostDetailView(BlogPublicReadMixin, DetailView):
     """Display single blog post"""
 
     model = Post
@@ -787,8 +775,8 @@ class PostDetailView(OrgScopedViewMixin, DetailView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return only published posts"""
-        return self._scope_by_org(
-            Post.all_objects.filter(status="published")
+        return (
+            Post.objects.filter(status="published")
             .select_related("author", "category")
             .prefetch_related("tags")
         )
@@ -800,7 +788,7 @@ class PostDetailView(OrgScopedViewMixin, DetailView):
         return context
 
 
-class CategoryListView(OrgScopedViewMixin, ListView):
+class CategoryListView(BlogPublicReadMixin, ListView):
     """Display posts filtered by category"""
 
     model = Post
@@ -818,16 +806,12 @@ class CategoryListView(OrgScopedViewMixin, ListView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts in the specified category"""
-        organization = _resolve_org_for_read(self.request)
-        if organization is None:
-            self.category = get_object_or_404(Category.all_objects.none())
-        else:
-            self.category = get_object_or_404(
-                Category.all_objects.filter(organization=organization),
-                slug=self.kwargs["slug"],
-            )
-        return self._scope_by_org(
-            Post.all_objects.filter(status="published", category=self.category)
+        self.category = get_object_or_404(
+            Category.objects.all(),
+            slug=self.kwargs["slug"],
+        )
+        return (
+            Post.objects.filter(status="published", category=self.category)
             .select_related("author", "category")
             .prefetch_related("tags")
         )
@@ -839,7 +823,7 @@ class CategoryListView(OrgScopedViewMixin, ListView):
         return context
 
 
-class TagListView(OrgScopedViewMixin, ListView):
+class TagListView(BlogPublicReadMixin, ListView):
     """Display posts filtered by tag"""
 
     model = Post
@@ -857,16 +841,12 @@ class TagListView(OrgScopedViewMixin, ListView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts with the specified tag"""
-        organization = _resolve_org_for_read(self.request)
-        if organization is None:
-            self.tag = get_object_or_404(Tag.all_objects.none())
-        else:
-            self.tag = get_object_or_404(
-                Tag.all_objects.filter(organization=organization),
-                slug=self.kwargs["slug"],
-            )
-        return self._scope_by_org(
-            Post.all_objects.filter(status="published", tags=self.tag)
+        self.tag = get_object_or_404(
+            Tag.objects.all(),
+            slug=self.kwargs["slug"],
+        )
+        return (
+            Post.objects.filter(status="published", tags=self.tag)
             .select_related("author", "category")
             .prefetch_related("tags")
         )
