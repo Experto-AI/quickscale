@@ -282,6 +282,18 @@ if globals().get("EMAIL_BACKEND") == "anymail.backends.resend.EmailBackend":
         ANYMAIL["RESEND_SENDER_DOMAIN"] = _notifications_resend_domain
 
 
+# DRF default permission baseline — fail-closed
+# ----------------------------------------------
+# Module APIs default to authenticated-only unless a view explicitly opts
+# into public access via ``permission_classes``.  Set after MODULE_SETTINGS
+# so this template's safe default wins over any module-provided DRF config.
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/stable/ref/settings/#default-auto-field
 

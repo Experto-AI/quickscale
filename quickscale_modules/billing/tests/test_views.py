@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 from django.conf import settings
-from django.test import Client, RequestFactory
+from django.test import Client, RequestFactory, override_settings
 from django.shortcuts import resolve_url
 from django.urls import reverse
 from django.utils import timezone
@@ -1478,3 +1478,108 @@ def test_webhook_view_maps_configuration_errors_to_500(
     assert response.json()["error"] == (
         "Stripe webhook secret is not configured in the runtime environment."
     )
+
+
+_DRF_AUTH_ONLY_SETTINGS = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+
+class TestBillingDrfDefaultCallerParity:
+    """Caller-parity coverage for billing routes under the generated-project DRF baseline.
+
+    CR-SA11.5-002: Verify billing views preserve their intended behavior
+    when ``REST_FRAMEWORK.DEFAULT_PERMISSION_CLASSES`` is set to
+    ``IsAuthenticated`` (matching the generated-project template).
+
+    Note: ``@override_settings`` is applied per-method (not at class level)
+    because Django's class-level override_settings only works on
+    ``SimpleTestCase`` subclasses.
+    """
+
+    @pytest.mark.django_db
+    @override_settings(REST_FRAMEWORK=_DRF_AUTH_ONLY_SETTINGS)
+    def test_plan_list_view_remains_public_under_drf_default(
+        self,
+        client: Client,
+    ) -> None:
+        """PlanListView must remain publicly accessible even under IsAuthenticated default."""
+        from quickscale_modules_billing.models import Plan
+
+        Plan.objects.create(
+            name="Starter Monthly",
+            slug="starter-monthly",
+            stripe_price_id="price_starter_monthly",
+            credits_per_period=100,
+            price_cents=1900,
+            currency="usd",
+            billing_interval=Plan.BillingInterval.MONTHLY,
+            is_active=True,
+        )
+        Plan.objects.create(
+            name="Starter Yearly",
+            slug="starter-yearly",
+            stripe_price_id="price_starter_yearly",
+            price_cents=19000,
+            credits_per_period=1200,
+            currency="usd",
+            billing_interval=Plan.BillingInterval.YEARLY,
+            is_active=True,
+        )
+
+        response = client.get(reverse("quickscale_billing:subscription-plans"))
+
+        assert response.status_code == 200
+        assert len(response.json()) == 2
+
+    @pytest.mark.django_db
+    @override_settings(REST_FRAMEWORK=_DRF_AUTH_ONLY_SETTINGS)
+    @pytest.mark.parametrize(
+        "route_name",
+        [
+            "pricing-page",
+            "purchase-success",
+            "purchase-cancel",
+            "subscription-success",
+            "subscription-cancel",
+            "portal-return",
+        ],
+    )
+    def test_public_template_views_remain_public_under_drf_default(
+        self,
+        client: Client,
+        route_name: str,
+    ) -> None:
+        """Public template views must remain accessible under IsAuthenticated default."""
+        response = client.get(reverse(f"quickscale_billing:{route_name}"))
+
+        assert response.status_code == 200
+
+    @override_settings(REST_FRAMEWORK=_DRF_AUTH_ONLY_SETTINGS)
+    @pytest.mark.parametrize(
+        "route_name",
+        [
+            "billing-config",
+            "credit-balance",
+            "credit-transactions",
+            "subscription-detail",
+        ],
+    )
+    def test_auth_handling_views_still_return_custom_401_for_anonymous(
+        self,
+        client: Client,
+        route_name: str,
+    ) -> None:
+        """Views with internal auth checks must still return custom 401 for anonymous.
+
+        These views handle authentication inside the view body rather than
+        relying on DRF's global permission class.  Under the IsAuthenticated
+        default, the explicit ``AllowAny`` lets DRF pass the request through
+        so the view's own auth check can return the custom 401 JSON.
+        """
+        response = client.get(reverse(f"quickscale_billing:{route_name}"))
+
+        assert response.status_code == 401
+        assert response.json() == {"error": "Authentication required"}

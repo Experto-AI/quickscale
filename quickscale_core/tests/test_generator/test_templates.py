@@ -1310,6 +1310,63 @@ class TestProductionReadyFeatures:
         assert "NOSUPERUSER" in output or "NOBYPASSRLS" in output
 
 
+class TestDrfPermissionBaseline:
+    """Verify generated base settings include the DRF authenticated-only default.
+
+    SA11.5: emitted ``REST_FRAMEWORK`` must default to
+    ``IsAuthenticated`` so module APIs fail closed unless a view
+    explicitly opts into public access.
+    """
+
+    def test_rest_framework_setting_present(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Rendered base settings must include ``REST_FRAMEWORK``."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+        assert "REST_FRAMEWORK" in output
+
+    def test_rest_framework_default_permission_classes(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The ``DEFAULT_PERMISSION_CLASSES`` must include ``IsAuthenticated``."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        assert "DEFAULT_PERMISSION_CLASSES" in output
+        assert "rest_framework.permissions.IsAuthenticated" in output
+        assert "AllowAny" not in output, (
+            "Default must not be AllowAny — explicit IsAuthenticated fail-closed"
+        )
+
+    def test_rest_framework_set_after_module_settings(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """``REST_FRAMEWORK`` must appear after ``globals().update(MODULE_SETTINGS)``.
+
+        The template's safe default must clobber any module-provided DRF
+        config so authentication is required by default (fail-closed).
+        """
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        module_settings_index = output.index("globals().update(MODULE_SETTINGS)")
+        drf_index = output.index("REST_FRAMEWORK")
+
+        assert module_settings_index < drf_index, (
+            "REST_FRAMEWORK must be defined after MODULE_SETTINGS so the "
+            "template's safe default wins (fail-closed)"
+        )
+
+    def test_rest_framework_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Rendered REST_FRAMEWORK setting must produce valid Python."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+        ast.parse(output)
+
+
 class TestCorrelationIdFilterRuntime:
     """Verify CorrelationIdFilter actually sources correlation_id from middleware.
 
