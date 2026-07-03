@@ -100,10 +100,7 @@ poetry show
 
 #### 3. Run Tests (3-5 minutes)
 ```bash
-./scripts/test_unit.sh
-
-# Or run with Poetry directly
-poetry run pytest
+make test-unit
 
 # Expected output:
 # =================== test session starts ====================
@@ -114,7 +111,7 @@ poetry run pytest
 
 #### 4. Run Linters (1-2 minutes)
 ```bash
-./scripts/lint.sh
+make lint
 
 # Prove the rendered showcase_react starter frontend without Docker
 make frontend-proof
@@ -125,6 +122,8 @@ make frontend-proof
 # ✓ mypy (type checking)
 # All checks passed!
 ```
+
+See [validation_policy.md § Repository Command Reference](./validation_policy.md#repository-command-reference) for the full shared `make` entrypoint list.
 
 #### 5. Generate Test Project (2-3 minutes)
 ```bash
@@ -191,34 +190,18 @@ pytest
 ```
 
 **Run tests:**
+
+Use `make test` / `make test-unit` (see [validation_policy.md § Repository Command Reference](./validation_policy.md#repository-command-reference)). For one-off debugging of a specific file, run pytest directly:
 ```bash
-# All tests
-poetry run pytest
-
-# Specific package
-poetry run pytest quickscale_core/tests/
-poetry run pytest quickscale_cli/tests/
-
-# Specific test file
-poetry run pytest quickscale_core/tests/test_generator.py
-
-# With verbose output
-poetry run pytest -v
-
-# With coverage report
-poetry run pytest --cov=quickscale_core --cov=quickscale_cli
+poetry run pytest quickscale_core/tests/test_generator.py -v
 ```
 
 **Run linters:**
-```bash
-# All linters (via script)
-./scripts/lint.sh
 
-# Individual linters
-poetry run ruff format --check .    # Check formatting
-poetry run ruff format .             # Auto-format code
-poetry run ruff check .              # Linting
-poetry run mypy quickscale_core/ quickscale_cli/  # Type checking
+Use `make lint` / `make format` (see [validation_policy.md § Repository Command Reference](./validation_policy.md#repository-command-reference)). For a single tool:
+```bash
+poetry run ruff check .              # Linting only
+poetry run mypy quickscale_core/ quickscale_cli/  # Type checking only
 ```
 
 **Pre-commit hooks:**
@@ -240,7 +223,7 @@ poetry run pre-commit run --all-files
 1. Create feature branch: `git checkout -b feature/my-feature`
 2. Make code changes in `quickscale_core/src/` or `quickscale_cli/src/`
 3. Add tests in corresponding `tests/` directory
-4. Run tests: `./scripts/test_unit.sh`
+4. Run tests: `make test-unit`
 5. Run linters: `make lint` or `make lint-fix`; run `make typecheck` before commit
 6. Commit changes: `git commit -m "feat: description"`
 7. Push and create PR: `git push origin feature/my-feature`
@@ -310,8 +293,8 @@ quickscale/
 **Module Testing Architecture:**
 - Modules use ROOT poetry environment (not their own `.venv`)
 - Module `pyproject.toml` has minimal dev dependencies (only `pytest-django`)
-- `./scripts/test_unit.sh` runs module tests with `PYTHONPATH` set correctly
-- `./scripts/lint.sh` lints modules using ROOT poetry environment
+- `make MODULE=<name> test-unit -- --modules` runs module tests with `PYTHONPATH` set correctly
+- `make lint` lints modules using the ROOT poetry environment
 - See [Module Implementation Checklist](./decisions.md#module-implementation-checklist) for new module setup
 
 ---
@@ -519,8 +502,8 @@ quickscale --version
 **Commands Quick Reference:**
 - Bootstrap: `./scripts/bootstrap.sh`
 - Install: `poetry install`
-- Tests: `./scripts/test_unit.sh` or `poetry run pytest`
-- Linters: `./scripts/lint.sh`
+- Tests: `make test-unit` or `poetry run pytest`
+- Linters: `make lint`
 - CLI: `poetry run quickscale --help`
 
 **Troubleshooting:**
@@ -541,8 +524,8 @@ quickscale --version
 You have a working development environment when:
 
 - ✅ `poetry run quickscale --version` shows version number
-- ✅ `./scripts/test_unit.sh` meets the repository coverage policy (90% overall mean and 80% per-file minimum)
-- ✅ `./scripts/lint.sh` passes all checks
+- ✅ `make test-unit` meets the repository coverage policy (90% overall mean and 80% per-file minimum)
+- ✅ `make lint` passes all checks
 - ✅ `quickscale plan testproject`, then `cd testproject`, then `quickscale apply` generates a working Django project
 - ✅ Can make changes, run tests, and see results in <2 minutes
 

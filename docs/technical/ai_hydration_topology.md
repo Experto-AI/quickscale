@@ -1,7 +1,7 @@
 # AI Hydration Topology And Governance
 
 > **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **AI Hydration Topology And Governance**
-> **Related docs**: [adaptive.rules.md](../../adaptive.rules.md) | [AI Context Baseline](ai_context.md) | [Context Hydration Refactor](../planning/context-refactor.md)
+> **Related docs**: [adaptive.rules.md](../../adaptive.rules.md) | [AI Context Baseline](ai_context.md)
 
 This companion owns the current `adaptive.rules.md` topology, the rationale for each expanded hydrated input and docs-local always-read pointer, the latest validation snapshot, the role-level rollback map, and the governance rules for future include-graph edits. Technical facts remain authoritative in the documents named by [ai_context.md](./ai_context.md); this file governs the hydration graph itself.
 
@@ -67,7 +67,7 @@ Two distinct hydration mechanisms appear in the tables above. They have differen
 <a id="must-have-facts-checklist"></a>
 ## Must-Have Facts Checklist
 
-Before trimming, swapping, or widening any role input in [adaptive.rules.md](../../adaptive.rules.md) or [docs/adaptive.rules.md](../adaptive.rules.md), confirm that the affected role still hydrates the decision-critical facts below. This promotes the preservation checklist from [Context Hydration Refactor](../planning/context-refactor.md) into the maintained topology contract for future include-graph edits.
+Before trimming, swapping, or widening any role input in [adaptive.rules.md](../../adaptive.rules.md) or [docs/adaptive.rules.md](../adaptive.rules.md), confirm that the affected role still hydrates the decision-critical facts below. This checklist is the maintained topology contract for future include-graph edits.
 
 | Role | Must-have facts to preserve |
 |---|---|
@@ -94,7 +94,7 @@ Hydration status was `configured` and `ready` before the metrics capture below. 
 | `quality-gate` | 2,875 | 128.6 KB | 408 | 16.6 KB | -2,467 lines, -112.0 KB | Pass | Shared baseline plus validation policy, testing, and debugging guidance are present. |
 | `change-review` | 2,572 | 119.7 KB | 129 | 6.5 KB | -2,443 lines, -113.2 KB | Pass | Shared baseline plus review guidance are present. |
 
-All role payloads with provisional budgets in [docs/planning/context-refactor.md](../planning/context-refactor.md) are now below both their line and size targets.
+All role payloads are now below both their line and size targets.
 
 <a id="m2-hydration-edit-rationale"></a>
 ### Phase 2 / M2 Hydration-Edit Rationale (2026-06-16)

@@ -5,6 +5,7 @@ merge_strategy: append
 
 # Shared
 <!-- Add reusable principles to be included by reference here -->
+- **Important context (always read)**: [docs/index.md](index.md) — the documentation nav hub and authority map for docs-scoped work.
 - This directory has two audiences: human contributors and AI hydration.
 - Human-first documents: README.md, START_HERE.md, docs/contrib/contributing.md,
   docs/contrib/shared/README.md. Do not optimize these for AI consumption.

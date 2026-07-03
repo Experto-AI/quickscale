@@ -77,7 +77,7 @@ If you're contributing to QuickScale development (modifying source code), see th
 
 - The repository `Makefile` is the standard entrypoint for shared bootstrap, lint, test, CI, and version-check workflows. The `scripts/` directory contains lower-level helpers used by those targets.
 - The primary CLI provided by this repository is the `quickscale` command (installed by the `quickscale_cli` package).
-- For dependency management we recommend Poetry — see `docs/technical/poetry_user_manual.md` for full Poetry usage. This manual focuses on QuickScale commands, not Poetry details.
+- For dependency management we recommend Poetry. This manual focuses on QuickScale commands, not Poetry details.
 
 ## 1) Bootstrap the repository
 

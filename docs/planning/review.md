@@ -1,5 +1,8 @@
 # QuickScale Architectural & Module Review
 
+> **Status:** Point-in-time audit kept for context. Not authoritative for current priorities.
+> **Current rule:** This snapshot's findings and investment recommendations (documentation consolidation, module dependency governance, DR docs) are now tracked live in [roadmap.md](../technical/roadmap.md). Use the roadmap for current priorities and status; use this file only to understand the reasoning behind decisions made around v0.83.0.
+
 **Review Date**: April 26, 2026
 **Reviewer**: Technical Leadership (Maintainer-Led Review)
 **Scope**: QuickScale v0.83.0 monorepo including published packages, first-party modules, and generator infrastructure
