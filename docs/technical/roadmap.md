@@ -57,18 +57,17 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 
 #### Dependency & parallelization overview (2026-07-03)
 
-**Completed and merged — see [CHANGELOG.md](../../CHANGELOG.md):** SA12.1, SA9.1, SA6.1, SA6.2, SA6.3, SA7.1, SA7.2, SA7.3, SA9.2, SA9.3, SA11.1.
+**Completed and merged — see [CHANGELOG.md](../../CHANGELOG.md):** SA12.1, SA9.1, SA6.1, SA6.2, SA6.3, SA7.1, SA7.2, SA7.3, SA9.2, SA9.3, SA9.4, SA9.5, SA11.1.
 
 Diagram below shows only remaining open work.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + deps)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────
-SA11.4 (←11.1, unblocked)           SA9.4  (←9.3)                             SA7.4  (no deps)
-SA11.5 (no deps)                    SA9.5  (←9.3)
-SA11.6 (no deps)                    └─ SA9.6 (←9.4 & 9.5)
-SA11.7 (no deps)                    SA10.1 (no deps)
-                                      └─ SA10.2 (←10.1)
+SA11.4 (←11.1, unblocked)           SA9.6                                     SA7.4  (no deps)
+SA11.5 (no deps)                    SA10.1 (no deps)
+SA11.6 (no deps)                      └─ SA10.2 (←10.1)
+SA11.7 (no deps)
 ```
 
 No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.x` — signals/wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back.
@@ -78,7 +77,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA11.4 *(unblocked)* → SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
-| **2** | SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
+| **2** | SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
 | **3** | SA7.4 *(no deps)* | Declarative-wiring migration slice + orgs god-module de-coupling version-range constraints |
 
 ---
@@ -127,8 +126,9 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 - [x] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA9.5 — Migrate social's deep core imports to the facade.** `Tier 2 · Track 2 · deps: SA9.3`
-  Repoint `social/adapter.py` from `quickscale_core.contracts.{module_options,resolvers}` and `quickscale_core.manifest.{assembler,resolver,social_manifest}` to `quickscale_core.runtime`.
+- [x] **SA9.5 — Migrate social's deep core imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
+  Repointed `social/adapter.py` from `quickscale_core.contracts.{module_options,resolvers}` and `quickscale_core.manifest.{assembler,resolver,social_manifest}` to `quickscale_core.runtime`.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
   *Files:* `quickscale_modules/social/src/quickscale_modules_social/adapter.py`.
   *Acceptance:* social test suite green with imports going through the facade only.
 
