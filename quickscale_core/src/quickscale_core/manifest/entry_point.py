@@ -38,7 +38,7 @@ from typing import Any
 
 from quickscale_core.contracts.module_discovery import get_modules_base_path
 from quickscale_core.manifest.derivation import build_schema_from_manifest
-from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.loader import ManifestError, load_manifest_from_path
 from quickscale_core.manifest.resolver import resolve_module_config
 from quickscale_core.manifest.assembler import (
     PostResolutionHook,
@@ -299,16 +299,23 @@ def _analytics_post_hook(
         if str_key in settings:
             settings[str_key] = str(settings[str_key]).strip()
 
-    # Fallback defaults matching legacy behaviour.
-    posthog_defaults = {
-        "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://us.i.posthog.com",
-    }
-    for key, fallback in posthog_defaults.items():
-        if key in settings and not settings[key]:
-            settings[key] = fallback
+    # SA18.2: Fail-hard on empty-after-resolution analytics settings.
+    # An empty result after resolution means the manifest derivation
+    # produced an invalid result — raise descriptively instead of
+    # silently defaulting to PostHog values.
+    _required_nonempty = (
+        "QUICKSCALE_ANALYTICS_PROVIDER",
+        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
+    )
+    empty_keys = [k for k in _required_nonempty if k in settings and not settings[k]]
+    if empty_keys:
+        raise ManifestError(
+            f"Analytics manifest settings resolved to empty values: "
+            f"{', '.join(sorted(empty_keys))}. "
+            f"The manifest derivation produced an invalid result."
+        )
 
     return ModuleWiringSpec(
         apps=spec.apps,
