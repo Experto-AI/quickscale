@@ -53,31 +53,30 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 
 **Naming:** `SAn.m` continues the sequence from the closed 2026-06-30 remediation (`SA1`–`SA5`); this batch starts at `SA6` to avoid collision. `SA6`–`SA10` close repo-level findings, `SA11`–`SA12` close module-level findings.
 
-**Priority note:** SA11.1–SA11.4 closed the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1); see CHANGELOG.md. SA11.5 stays in the first landing batch because it closes the broader Module Finding 1 hardening work adjacent to that now-closed defect chain.
+**Priority note:** SA11.1–SA11.5 closed the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1) and its adjacent hardening work; see CHANGELOG.md. SA11.6–SA11.7 continue the Module Finding 1 remediation.
 
 #### Dependency & parallelization overview (2026-07-03)
 
-**Completed and merged — see [CHANGELOG.md](../../CHANGELOG.md):** SA12.1, SA9.1, SA6.1, SA6.2, SA6.3, SA7.1, SA7.2, SA7.3, SA7.4, SA9.2, SA9.3, SA9.4, SA9.5, SA11.1, SA11.2, SA11.3, SA11.4. Repo Finding 2 (`orgs` god-module de-coupling) and Repo Finding 3 (dual source of truth for active org) are fully resolved — see CHANGELOG.md and, for Finding 3, `decisions.md` §D1.
+**Completed — closeout in [CHANGELOG.md](../../CHANGELOG.md):** SA6.1–SA6.3, SA7.1–SA7.4, SA9.1–SA9.6, SA10.1, SA11.1–SA11.5, SA12.1. Repo Findings 2, 3, and 4 are fully resolved — see CHANGELOG.md and, for Finding 3, `decisions.md` §D1.
 
 Diagram below shows only remaining open work.
 
 ```
-Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + deps)
-───────────────────────────────      ───────────────────────────────────      ────────────────────────────────
-SA11.5 (no deps)                    SA9.6                                     —
-SA11.6 (no deps)                    SA10.1 (no deps)
-SA11.7 (no deps)                      └─ SA10.2 (←10.1)
+Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3
+───────────────────────────────      ───────────────────────────────────      ───────
+SA11.6 (no deps)                    SA10.2 (deps: SA10.1 ✓)                  —
+SA11.7 (no deps)
 ```
 
-No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/` (signals/wiring) is complete and merged, so the only remaining touch on that package is Track 1's `SA11.6` — no cross-track file-ownership conflict remains.
+No cross-track dependencies. Track 3 has no remaining open tasks.
 
 #### Track summary
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
-| **2** | SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | No open tasks in current batch *(SA7.4 complete)* | Declarative-wiring migration slice + orgs god-module de-coupling version-range constraints |
+| **1** | SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — CRM `_resolve_active_org` cleanup + auth fail-hard default |
+| **2** | SA10.2 *(deps: SA10.1 ✓)* | Module↔generated-project contract-vintage detection |
+| **3** | No open tasks | All SA7.x complete |
 
 ---
 
@@ -95,9 +94,6 @@ No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/`
 - [x] **SA11.4 — Migrate listings public views to the helper (complete).** `Tier 1 · Track 1 · deps: SA11.1`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [x] **SA11.5 — Generated-project DRF permission baseline (complete — 2026-07-03).** `Tier 1 · Track 1 · deps: none`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
 - [ ] **SA11.6 — Clean up CRM's `_resolve_active_org`.** `Tier 1 · Track 1 · deps: none`
   Remove the "for tests that bypass middleware" personal-org fallback from production code (move it into test fixtures/middleware instead) and stop performing the stage-seeding write as a side effect of every org resolution — seed once at org-creation time instead.
   *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/views.py`.
@@ -110,34 +106,7 @@ No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/`
 
 ---
 
-#### Finding — Repo Finding 4: core-as-runtime-API boundary (`why →` [Finding 4](../../arch-audit.md#finding-4-quickscalecores-entire-internal-surface-is-a-de-facto-runtime-api-for-user-owned-generated-projects--with-an-open-ended-version-range-and-a-repo-wide-clean-break-policy))
-
-- [x] **SA9.2 — CI job: module-vs-oldest-claimed-core import check (completed 2026-07-03).** `Tier 1 · Track 2 · deps: none · RISK LEVEL: medium`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA9.3 — `quickscale_core.runtime` public facade (completed 2026-07-03).** `Tier 2 · Track 2 · deps: none`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA9.5 — Migrate social's deep core imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA9.6 — CI import-linter gate (completed — 2026-07-03).** `Tier 1 · Track 2 · deps: SA9.4 & SA9.5`
-  Added `scripts/check_module_core_imports.py` — an AST-based import linter that scans `quickscale_modules/*/src/` and rejects any `quickscale_core` import that targets a module other than `quickscale_core.runtime` (with per-module legacy exceptions for billing/crm adapter seams only). Two framework-seam imports (`quickscale_core.manifest.entry_point`, `quickscale_core.module_wiring`) are scoped to billing and CRM via the `LEGACY_ALLOWED_IMPORTS` dict — no other module may use them. Wired as `make check-module-core-imports`, included in `make check` and in `scripts/check_ci_locally.sh` (step 4/7). Added a `module-core-import-linter` gate job in `.github/workflows/ci.yml` that the `test` CI job depends on.
-  *Findings:* CR-SA9.6-001 (global allowlist too broad) — resolved: exceptions now scoped per module. CR-SA9.6-002 (docs/policy inconsistency) — resolved: roadmap, changelog, Makefile help, and implementation contract aligned with the scoped policy. CR-SA9.6-003 (advisory test-gap) — remains visible for future follow-up.
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
----
-
 #### Finding — Repo Finding 5: module↔generated-project contract drift (`why →` [Finding 5](../../arch-audit.md#finding-5-the-modulegenerated-project-contract-drifts-by-design--every-release-accretes-existing-projects-must-manually-adopt-steps-with-no-mechanism-to-apply-them))
-
-- [x] **SA10.1 — `project_contract` version in state.yml (complete).** `Tier 1 · Track 2 · deps: none`
-  Record the generator/contract version a project was generated against in `.quickscale/state.yml` at generation time.
-  *Files:* `quickscale_core/src/quickscale_core/schema/state_schema.py`, generator state-writing path.
-  *Acceptance:* a fresh generation's `state.yml` includes `project_contract`; existing state-file tests updated for the new field.
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA10.2 — `quickscale status` contract-vintage check.** `Tier 2 · Track 2 · deps: SA10.1`
   Compare each installed module's declared minimum project-contract requirement against the project's recorded `project_contract` and print the specific manual-adoption steps when the project is behind.
@@ -146,7 +115,7 @@ No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/`
 
 ---
 
-> **Closed findings:** Repo Finding 2 (`orgs` composition god module — SA7.2, SA7.3, SA7.4 all complete) and Repo Finding 3 (dual source of truth for active organization — resolved by product decision 2026-07-03) have no open tasks. Closeout detail is in [CHANGELOG.md](../../CHANGELOG.md); the Finding 3 product decision is recorded in `decisions.md` §D1.
+> **Closed findings:** Repo Finding 2 (orgs god-module — SA7.2–SA7.4), Repo Finding 3 (dual active-org truth — product decision 2026-07-03), and Repo Finding 4 (core-as-runtime-API boundary — SA9.1–SA9.6) are fully resolved with no open tasks. Closeout detail is in [CHANGELOG.md](../../CHANGELOG.md); the Finding 3 product decision is recorded in `decisions.md` §D1.
 
 ## References
 
