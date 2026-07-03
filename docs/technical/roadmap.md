@@ -174,9 +174,10 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 #### `SA17` — Module-side settings and config fail-hard fixes (Track 2)
 
-- [ ] **SA17.1 — Reject legacy config keys instead of silently translating/dropping them.** `Tier 2 · Track 2 · deps: none · (why → TA1)`
+- [x] **SA17.1 — Reject legacy config keys instead of silently translating/dropping them (complete).** `Tier 2 · Track 2 · deps: none · (why → TA1)`
   In `normalize_auth_module_options()` and the CRM/notifications equivalents, raise `ConfigValidationError` naming the legacy key and its replacement instead of silently mapping (`allow_registration` → `registration_enabled`) or dropping (`social_providers`, `default_pipeline_stages`, `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS`) the key.
-  *Files:* `quickscale_core/src/quickscale_core/contracts/resolvers.py` (~:222-233, :556, :780).
+  *Implementation:* Modified `normalize_auth_module_options` and `normalize_crm_module_options` in both `module_options.py` and `resolvers.py` (duplicate local definitions); `normalize_notifications_module_options` was updated in `module_options.py` only (the resolver path reuses the shared helper via import). All three now raise `ConfigValidationError` via lazy import (avoiding circular-import risk). Applied to `sanitize_module_options` dispatcher path and the resolver path. Updated 25+ tests across `test_module_options.py`, `test_auth_parity.py`, `test_resolvers_module_options.py`, `test_schema.py`, `test_config_delta.py`, `test_state_schema.py`, `test_apply_command_extended.py`, `test_module_config.py`, `test_module_config_extended.py`. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `quickscale_core/src/quickscale_core/contracts/module_options.py`, `quickscale_core/src/quickscale_core/contracts/resolvers.py`, plus the 9 test files listed above.
   *Acceptance:* a `quickscale.yml` containing any of the named legacy keys fails `quickscale plan`/`apply` with an error naming the dead key and its replacement, instead of silently changing behavior.
 
 - [ ] **SA17.2 — Fail-hard analytics/billing enabled-flag settings.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium (billing) · (why → TA2)`

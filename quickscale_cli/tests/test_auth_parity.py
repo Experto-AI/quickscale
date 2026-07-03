@@ -14,7 +14,7 @@ now owns the defaults.
 Scope
 -----
 * Default option values (all 4 keys including immutable authentication_method)
-* Legacy-key normalisation (allow_registration -> registration_enabled, social_providers dropped)
+* Legacy-key normalisation (allow_registration and social_providers now raise ConfigValidationError instead of silent translate/drop)
 * Resolution (defaults + normalised overrides)
 * Behavioral equivalence of ``format_auth_desired_config_contract()`` (canonical keys, value shapes, legacy guidance)
 """
@@ -22,6 +22,8 @@ Scope
 from __future__ import annotations
 
 from typing import Any
+
+import pytest
 
 from quickscale_core.contracts.module_options import (
     AUTH_AUTHENTICATION_METHOD_OPTION,
@@ -40,6 +42,7 @@ from quickscale_core.contracts.resolvers import (
     default_auth_module_options,
     resolve_auth_module_options,
 )
+from quickscale_core.schema.config_schema import ConfigValidationError
 
 # ---------------------------------------------------------------------------
 # Gold expectations recovered from the legacy auth_contract.py
@@ -137,44 +140,41 @@ class TestConstantsParity:
 
 
 class TestNormalizationParity:
-    """Normalisation must behave identically to the legacy contract."""
+    """Normalisation fails hard on legacy keys instead of silent translation."""
 
-    def test_legacy_allow_registration_migrated_when_absent(self) -> None:
-        """allow_registration -> registration_enabled when registration_enabled is absent."""
-        normalized = normalize_auth_module_options(
-            {LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: False}
-        )
-        assert normalized.get("registration_enabled") is False
-        assert LEGACY_AUTH_ALLOW_REGISTRATION_OPTION not in normalized
+    def test_legacy_allow_registration_raises(self) -> None:
+        """allow_registration raises ConfigValidationError instead of migration."""
+        with pytest.raises(ConfigValidationError, match="allow_registration"):
+            normalize_auth_module_options(
+                {LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: False}
+            )
 
-    def test_legacy_allow_registration_not_migrated_when_present(self) -> None:
-        """registration_enabled takes precedence over allow_registration."""
-        normalized = normalize_auth_module_options(
-            {
-                AUTH_REGISTRATION_ENABLED_OPTION: True,
-                LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: False,
-            }
-        )
-        assert normalized.get("registration_enabled") is True
-        assert LEGACY_AUTH_ALLOW_REGISTRATION_OPTION not in normalized
+    def test_legacy_allow_registration_raises_even_when_canonical_present(self) -> None:
+        """allow_registration raises even when registration_enabled is also present."""
+        with pytest.raises(ConfigValidationError, match="allow_registration"):
+            normalize_auth_module_options(
+                {
+                    AUTH_REGISTRATION_ENABLED_OPTION: True,
+                    LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: False,
+                }
+            )
 
-    def test_legacy_social_providers_dropped(self) -> None:
-        """social_providers is always removed during normalization."""
-        normalized = normalize_auth_module_options(
-            {LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION: ["google", "github"]}
-        )
-        assert LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION not in normalized
+    def test_legacy_social_providers_raises(self) -> None:
+        """social_providers raises ConfigValidationError instead of silent drop."""
+        with pytest.raises(ConfigValidationError, match="social_providers"):
+            normalize_auth_module_options(
+                {LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION: ["google", "github"]}
+            )
 
-    def test_both_legacy_keys_dropped_simultaneously(self) -> None:
-        normalized = normalize_auth_module_options(
-            {
-                LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: True,
-                LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION: ["google"],
-            }
-        )
-        assert LEGACY_AUTH_ALLOW_REGISTRATION_OPTION not in normalized
-        assert LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION not in normalized
-        assert normalized.get("registration_enabled") is True
+    def test_both_legacy_keys_raise(self) -> None:
+        """Both legacy keys at once raise on first encountered."""
+        with pytest.raises(ConfigValidationError, match="allow_registration"):
+            normalize_auth_module_options(
+                {
+                    LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: True,
+                    LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION: ["google"],
+                }
+            )
 
     def test_none_options_returns_empty_dict(self) -> None:
         normalized = normalize_auth_module_options(None)
@@ -231,19 +231,16 @@ class TestResolutionParity:
         # Untouched default remains
         assert resolved["session_cookie_age"] == 1209600
 
-    def test_legacy_allow_registration_resolved_via_normalize(self) -> None:
-        """Legacy allow_registration is migrated before resolution."""
-        resolved = resolve_auth_module_options(
-            {LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: False}
-        )
-        assert resolved["registration_enabled"] is False
-        assert LEGACY_AUTH_ALLOW_REGISTRATION_OPTION not in resolved
+    def test_legacy_allow_registration_raises_in_resolve(self) -> None:
+        """Legacy allow_registration raises ConfigValidationError through resolution."""
+        with pytest.raises(ConfigValidationError, match="allow_registration"):
+            resolve_auth_module_options({LEGACY_AUTH_ALLOW_REGISTRATION_OPTION: False})
 
-    def test_legacy_social_providers_dropped_in_resolved(self) -> None:
-        resolved = resolve_auth_module_options(
-            {LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION: ["google"]}
-        )
-        assert LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION not in resolved
+    def test_legacy_social_providers_raises_in_resolve(self) -> None:
+        with pytest.raises(ConfigValidationError, match="social_providers"):
+            resolve_auth_module_options(
+                {LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION: ["google"]}
+            )
 
     def test_resolved_keys_match_legacy(self) -> None:
         """The resolved dict must contain exactly the same keys as legacy."""

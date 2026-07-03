@@ -883,8 +883,8 @@ class TestLoadAndValidateConfig:
         assert "allow_registration" in original
         assert "social_providers" in original
 
-    def test_legacy_notifications_secrets_are_sanitized_on_load(self, tmp_path):
-        """Legacy notification secrets should be rewritten to env-var references."""
+    def test_legacy_notifications_secrets_raise_on_load(self, tmp_path):
+        """Legacy notification secrets raise ConfigValidationError instead of silent rewrite."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
             'version: "1"\n'
@@ -902,24 +902,12 @@ class TestLoadAndValidateConfig:
             "  start: false\n"
         )
 
-        result = _load_and_validate_config(config)
-        rewritten = config.read_text()
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
 
-        assert (
-            result.modules["notifications"].options["resend_api_key_env_var"]
-            == "RESEND_API_KEY"
-        )
-        assert (
-            result.modules["notifications"].options["webhook_secret_env_var"]
-            == "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
-        )
-        assert "raw-secret" not in rewritten
-        assert "webhook-secret" not in rewritten
-        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
-        assert (
-            "webhook_secret_env_var: QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
-            in rewritten
-        )
+        rewritten = config.read_text()
+        assert "resend_api_key" in rewritten
+        assert "webhook_secret" in rewritten
 
     def test_production_targeted_notifications_require_complete_live_config(
         self,

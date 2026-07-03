@@ -279,11 +279,11 @@ class TestComputeDeltaWithManifests:
         assert delta.has_mutable_config_changes is False
         assert delta.has_immutable_config_changes is False
 
-    def test_legacy_crm_default_pipeline_stages_is_pruned_before_comparison(
+    def test_crm_canonical_keys_no_drift_when_matching(
         self,
         crm_manifest: ModuleManifest,
     ) -> None:
-        """Retired CRM keys should not show up as immutable drift."""
+        """Matching canonical CRM keys produce no drift."""
         desired = QuickScaleConfig(
             version="1",
             project=ProjectConfig(
@@ -298,12 +298,6 @@ class TestComputeDeltaWithManifests:
                         "enable_api": True,
                         "deals_per_page": 25,
                         "contacts_per_page": 50,
-                        "default_pipeline_stages": [
-                            "Prospecting",
-                            "Negotiation",
-                            "Closed-Won",
-                            "Closed-Lost",
-                        ],
                     },
                 )
             },
@@ -327,12 +321,6 @@ class TestComputeDeltaWithManifests:
                         "enable_api": True,
                         "deals_per_page": 25,
                         "contacts_per_page": 50,
-                        "default_pipeline_stages": [
-                            "Prospecting",
-                            "Negotiation",
-                            "Closed-Won",
-                            "Closed-Lost",
-                        ],
                     },
                 )
             },
@@ -344,11 +332,11 @@ class TestComputeDeltaWithManifests:
         assert delta.has_mutable_config_changes is False
         assert delta.has_immutable_config_changes is False
 
-    def test_mixed_legacy_auth_keys_are_pruned_before_comparison(
+    def test_auth_canonical_keys_no_drift_when_matching(
         self,
         auth_manifest: ModuleManifest,
     ) -> None:
-        """Legacy auth keys should not create mutable or immutable drift."""
+        """Matching canonical auth keys produce no drift (without legacy keys)."""
         desired = QuickScaleConfig(
             version="1",
             project=ProjectConfig(
@@ -361,10 +349,8 @@ class TestComputeDeltaWithManifests:
                     name="auth",
                     options={
                         "registration_enabled": True,
-                        "allow_registration": False,
-                        "social_providers": ["google"],
                         "session_cookie_age": 1209600,
-                        "authentication_method": "email_username",
+                        "authentication_method": "email",
                     },
                 )
             },
@@ -387,7 +373,7 @@ class TestComputeDeltaWithManifests:
                     options={
                         "registration_enabled": True,
                         "session_cookie_age": 1209600,
-                        "authentication_method": "email_username",
+                        "authentication_method": "email",
                     },
                 )
             },

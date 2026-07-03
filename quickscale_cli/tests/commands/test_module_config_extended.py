@@ -483,42 +483,42 @@ class TestAuthModuleConfig:
         assert "social_providers" not in config
         assert config["authentication_method"] == "email"
 
-    def test_configure_auth_non_interactive_omits_legacy_social_providers(self, capsys):
-        """Legacy config reads stay non-fatal without re-emitting removed keys."""
+    def test_configure_auth_non_interactive_with_canonical_keys(self, capsys):
+        """Canonical keys pass through non-interactive auth config."""
         config = configure_auth_module(
             non_interactive=True,
             existing_config={
-                "allow_registration": False,
-                "social_providers": ["google"],
+                "registration_enabled": False,
+                "email_verification": "none",
+                "authentication_method": "email",
             },
         )
 
         output = capsys.readouterr().out
 
-        assert "social_providers" not in config
         assert config["registration_enabled"] is False
         assert "Registration: Disabled" in output
 
     @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
-    def test_apply_auth_configuration_tolerates_legacy_social_providers(
+    def test_apply_auth_configuration_with_canonical_keys(
         self,
         mock_regenerate,
         tmp_path,
     ):
-        """Legacy social provider values should be ignored during apply."""
+        """Canonical keys pass through apply_auth_configuration."""
         project = _make_project(tmp_path)
 
         apply_auth_configuration(
             project,
             {
                 "registration_enabled": True,
-                "social_providers": ["google"],
+                "email_verification": "none",
+                "authentication_method": "email",
             },
         )
 
         normalized_config = mock_regenerate.call_args.args[2]
 
-        assert "social_providers" not in normalized_config
         assert normalized_config["registration_enabled"] is True
 
 
@@ -533,7 +533,7 @@ class TestGenerateAuthSettingsAddition:
     def test_email_auth_method(self):
         """Test email-only auth settings"""
         config = {
-            "allow_registration": True,
+            "registration_enabled": True,
             "email_verification": "none",
             "authentication_method": "email",
         }
@@ -544,7 +544,7 @@ class TestGenerateAuthSettingsAddition:
     def test_username_auth_method(self):
         """Test username-only auth settings"""
         config = {
-            "allow_registration": False,
+            "registration_enabled": False,
             "email_verification": "mandatory",
             "authentication_method": "username",
         }
@@ -557,7 +557,7 @@ class TestGenerateAuthSettingsAddition:
     def test_both_auth_method(self):
         """Test both email+username auth settings"""
         config = {
-            "allow_registration": True,
+            "registration_enabled": True,
             "email_verification": "optional",
             "authentication_method": "both",
         }
@@ -568,7 +568,7 @@ class TestGenerateAuthSettingsAddition:
     def test_common_settings_present(self):
         """Verify common settings are always included"""
         config = {
-            "allow_registration": True,
+            "registration_enabled": True,
             "email_verification": "none",
             "authentication_method": "email",
         }
@@ -1014,12 +1014,12 @@ class TestModuleWiringSpecs:
         assert settings["AWS_DEFAULT_ACL"] == "public-read"
         assert settings["AWS_QUERYSTRING_AUTH"] is True
 
-    def test_auth_wiring_supports_legacy_allow_registration_and_username_mode(self):
-        """Auth wiring should keep legacy config compatibility paths covered."""
+    def test_auth_wiring_supports_canonical_keys_and_username_mode(self):
+        """Auth wiring passes canonical keys through to settings correctly."""
         specs = _build_specs(
             {
                 "auth": {
-                    "allow_registration": False,
+                    "registration_enabled": False,
                     "authentication_method": "username",
                     "email_verification": "mandatory",
                 }
@@ -2155,18 +2155,18 @@ class TestCRMModuleConfig:
         assert config["deals_per_page"] == 25
         assert config["contacts_per_page"] == 50
 
-    def test_configure_crm_non_interactive_prunes_legacy_stage_defaults(self):
-        """Legacy CRM stage defaults should not reappear in non-interactive mode."""
+    def test_configure_crm_non_interactive_with_canonical_keys(self):
+        """Canonical CRM keys pass through non-interactive config."""
         config = configure_crm_module(
             non_interactive=True,
             existing_config={
                 "deals_per_page": 30,
-                "default_pipeline_stages": ["Custom"],
+                "contacts_per_page": 100,
             },
         )
 
         assert config["deals_per_page"] == 30
-        assert "default_pipeline_stages" not in config
+        assert config["contacts_per_page"] == 100
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
@@ -2224,12 +2224,12 @@ class TestApplyCRMConfiguration:
         assert settings.count("quickscale_modules_crm") == 1
 
     @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
-    def test_apply_crm_configuration_prunes_legacy_stage_defaults(
+    def test_apply_crm_configuration_with_canonical_keys(
         self,
         mock_regenerate,
         tmp_path,
     ):
-        """Legacy CRM stage defaults should be removed before managed wiring runs."""
+        """Canonical CRM keys pass through apply_crm_configuration."""
         project = _make_project(tmp_path)
 
         apply_crm_configuration(
@@ -2238,7 +2238,6 @@ class TestApplyCRMConfiguration:
                 "enable_api": True,
                 "deals_per_page": 25,
                 "contacts_per_page": 50,
-                "default_pipeline_stages": ["Prospecting", "Closed-Won"],
             },
         )
 
