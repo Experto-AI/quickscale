@@ -26,9 +26,10 @@ import json
 import sys
 
 from django.core.management.base import BaseCommand
-from django.db import connection
+from django.db import connection, models
 
 from quickscale_modules_orgs.tenancy import (
+    _is_implicit_m2m_through,
     check_tenant_model_isolation,
     get_tenant_models,
     get_unclassified_concrete_models,
@@ -59,6 +60,22 @@ class Command(BaseCommand):
             default="human",
             help="Output format (default: human).",
         )
+
+    def _write_classification_hint(self, model: type[models.Model]) -> None:
+        """Write remediation guidance for an unclassified model."""
+        if _is_implicit_m2m_through(model):
+            self.stdout.write(
+                "         Hint: Auto-created ManyToMany through model. "
+                "Add an EXCLUDED_REVIEWED entry to TENANT_TABLE_REGISTRY, "
+                "or ensure the related models are classified first so "
+                "that relation inference can classify it automatically.\n"
+            )
+        else:
+            self.stdout.write(
+                "         Hint: Add an entry to TENANT_TABLE_REGISTRY in "
+                "quickscale_modules_orgs.tenancy, or add a "
+                "'tenant_excluded' class attribute to the model.\n"
+            )
 
     def handle(self, **options: object) -> str | None:
         postgres_only: bool = options.get("postgres_only", False)  # type: ignore[assignment]
@@ -144,6 +161,7 @@ class Command(BaseCommand):
                             f"{m._meta.app_label}.{m.__name__}\n"
                             f"         Table: {m._meta.db_table}\n"
                         )
+                        self._write_classification_hint(m)
                 if is_pg_skip:
                     self.stdout.write(
                         "SKIP: --postgres-only and not connected to PostgreSQL."
@@ -202,6 +220,7 @@ class Command(BaseCommand):
                             f"  [{self.style.ERROR('UNCLASSIFIED')}] "
                             f"{m._meta.app_label}.{m.__name__}\n"
                         )
+                        self._write_classification_hint(m)
                 sys.exit(1)
             else:
                 if fmt == "json":
@@ -301,6 +320,7 @@ class Command(BaseCommand):
                         f"{m._meta.app_label}.{m.__name__}\n"
                         f"         Table: {m._meta.db_table}\n"
                     )
+                    self._write_classification_hint(m)
 
             self.stdout.write(f"\n{'=' * 50}")
             self.stdout.write(

@@ -2094,6 +2094,74 @@ class TestDevOpsTemplateRendering:
         output_empty = template.render({**test_context, "selected_modules": []})
         assert "check-tenant-isolation:" not in output_empty
 
+    def test_ci_workflow_caller_parity_exercises_classification_contract(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Generated CI workflow must exercise the SA15.1 widened classification
+        contract via check_tenant_isolation --postgres-only --format json.
+
+        The management command internally runs get_unclassified_concrete_models()
+        which uses the SA15.1 widened scope (all non-contrib, non-third-party
+        apps) and implicit M2M through-model inference.  This caller-parity test
+        proves the generated project's CI pipeline triggers that path.
+
+        The step runs after migrations so the DB schema is available for
+        detection (CR-SA15.1-002).
+        """
+        template = jinja_env.get_template("github/workflows/ci.yml.j2")
+
+        # Default (all modules) — step present with classification flags.
+        output = template.render(test_context)
+        assert "check_tenant_isolation" in output, (
+            "CI must invoke check_tenant_isolation (SA1.5)"
+        )
+        assert "--postgres-only" in output, (
+            "CI must pass --postgres-only (required for FORCE-RLS checks)"
+        )
+        assert "--format json" in output, (
+            "CI must use JSON output for structured parsing"
+        )
+        # Classification runs before --postgres-only skip (CR-SA14-002).
+        assert "migrate" in output, (
+            "Migrations must run before check_tenant_isolation so the "
+            "DB schema is available for classification detection"
+        )
+
+        # With orgs explicitly selected — same contract.
+        output_with_orgs = template.render(
+            {**test_context, "selected_modules": ["orgs"]}
+        )
+        assert "check_tenant_isolation" in output_with_orgs
+        assert "--postgres-only" in output_with_orgs
+
+    def test_makefile_caller_parity_exercises_classification_contract(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Generated Makefile must exercise the SA15.1 widened classification
+        contract via the check-tenant-isolation target.
+
+        The target runs both migrations and the classification check with
+        --postgres-only --format json, proving that the generated project's
+        local workflow triggers the same widened contract as CI
+        (CR-SA15.1-002).
+        """
+        template = jinja_env.get_template("Makefile.j2")
+
+        # Default (all modules) — target present with classification flags.
+        output = template.render(test_context)
+        assert "check-tenant-isolation:" in output, (
+            "Makefile must have a check-tenant-isolation target (SA1.5)"
+        )
+        assert "check_tenant_isolation" in output, (
+            "Makefile target must invoke check_tenant_isolation"
+        )
+        assert "--postgres-only" in output, "Makefile must pass --postgres-only"
+        assert "--format json" in output, "Makefile must use JSON output format"
+        # Migrations run first so the schema is available.
+        assert "migrate" in output, (
+            "Makefile must run migrations before the classification check"
+        )
+
     def test_makefile_renders_expected_targets(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
