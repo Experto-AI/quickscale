@@ -13,6 +13,9 @@ config:
         choices: ["solo", "saas"]
   immutable: {}
 
+required_modules:
+  - auth
+
 dependencies:
   - django-allauth>=65.14.1,<66.0.0
 
