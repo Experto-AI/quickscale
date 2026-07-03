@@ -116,6 +116,9 @@ from quickscale_core.utils.git_utils import (
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
+from quickscale_core.manifest.required_modules import (
+    check_required_module_versions,
+)
 
 # AF6 Phase 2 — core step bodies
 from quickscale_core.apply.steps import (
@@ -649,6 +652,24 @@ def _abort_for_manifest_error(error: ManifestError, *, command_name: str) -> Non
         err=True,
     )
     raise click.Abort()
+
+
+def _validate_required_module_versions(
+    manifests: dict[str, ModuleManifest],
+) -> None:
+    """Validate required-module version constraints and abort on violation.
+
+    Delegates to :func:`check_required_module_versions` and maps
+    the raised :class:`ManifestError` to the existing abort pattern.
+    """
+    # SA7.4: version-floor check applies only when we have manifests
+    # for installed modules to cross-reference.
+    if not manifests:
+        return
+    try:
+        check_required_module_versions(manifests)
+    except ManifestError as error:
+        _abort_for_manifest_error(error, command_name="apply")
 
 
 def _load_module_manifests(
@@ -2588,6 +2609,9 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         except ManifestError as error:
             _abort_for_manifest_error(error, command_name="apply")
 
+        # SA7.4: validate required-module version constraints
+        _validate_required_module_versions(manifests)
+
     # Compute delta
     delta = compute_delta(qs_config, existing_state, manifests)
 
@@ -2815,6 +2839,13 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
             )
         except ManifestError:
             manifests = {}
+
+        # SA7.4: re-validate required-module version constraints with
+        # fresh manifests so a concurrent module update is not missed.
+        try:
+            check_required_module_versions(manifests)
+        except ManifestError as error:
+            _abort_for_manifest_error(error, command_name="apply")
 
     delta = compute_delta(ctx.qs_config, merged_state, manifests)
 
@@ -3142,6 +3173,46 @@ def _execute_apply_steps_locked(
             reason=f"required module '{embed_result.failed_module}' failed to embed",
         )
         raise click.Abort()
+
+    # ------------------------------------------------------------------
+    # Step 2a: Post-embed required-module version floor re-validation
+    # ------------------------------------------------------------------
+    # The pre-embed check in _prepare_apply_context and
+    # _refresh_context_after_lock only examines already-installed manifests.
+    # After embedding a new module, its manifest may carry version floors
+    # that were not visible before embed (e.g. newly added billing requires
+    # orgs>=0.86.0 but orgs was already installed at 0.85.0).  Re-validate
+    # the full post-embed module set before continuing to wiring, dependency
+    # sync, or migration steps.
+    if embedded_modules:
+        post_embed_manifests = _load_module_manifests(
+            ctx.output_path,
+            list(ctx.qs_config.modules.keys()),
+            strict=True,
+        )
+        try:
+            check_required_module_versions(post_embed_manifests)
+        except ManifestError as error:
+            # Modules were already embedded — persist partial state
+            # before aborting so the operator can inspect or repair.
+            if not _save_project_state(
+                ctx.output_path,
+                ctx.qs_config,
+                ctx.existing_state,
+                embedded_modules,
+                ctx.delta,
+                provenance_payloads=provenance_payloads,
+            ):
+                _print_apply_failure_summary(
+                    failed_step=_FAILED_STEP["authoritative state persistence"],
+                    reason=(
+                        f"Required-module version floor violated after embed: {error}, "
+                        "and QuickScale could not save partial authoritative state to "
+                        ".quickscale/state.yml."
+                    ),
+                )
+            _clear_apply_recovery_state(ctx.output_path)
+            _abort_for_manifest_error(error, command_name="apply")
 
     # ------------------------------------------------------------------
     # Step 2: Post-embed state snapshot

@@ -15,9 +15,11 @@ from quickscale_cli.commands.apply_command import (
     _load_and_validate_config,
     _regenerate_managed_wiring_for_apply,
     _validate_module_prerequisites,
+    _validate_required_module_versions,
     apply,
 )
 from quickscale_core.contracts.resolvers import default_notifications_module_options
+from quickscale_core.manifest.schema import ModuleManifest
 
 
 def _make_apply_context(project_path, *, package_name="myapp"):
@@ -244,6 +246,116 @@ modules:
             "Organizations requires the auth module before apply can continue"
             in error_output
         )
+
+
+# ---------------------------------------------------------------------------
+# SA7.4 — required-module version-floor validation wrapper
+# ---------------------------------------------------------------------------
+
+
+class TestValidateRequiredModuleVersions:
+    """Tests for the _validate_required_module_versions wrapper in apply_command."""
+
+    def _manifest(self, name: str, version: str) -> ModuleManifest:
+        return ModuleManifest(name=name, version=version)
+
+    def test_validate_passes_without_manifests(self) -> None:
+        """Empty manifests dict must not raise."""
+        _validate_required_module_versions({})
+
+    def test_validate_passes_without_constraints(self) -> None:
+        """Plain required_module names without version specs pass."""
+        billing = self._manifest("billing", "0.85.0")
+        billing.required_modules = ["orgs"]
+        _validate_required_module_versions(
+            {
+                "billing": billing,
+                "orgs": self._manifest("orgs", "0.86.0"),
+            }
+        )
+
+    def test_validate_passes_with_satisfied_floor(self) -> None:
+        """An installed version meeting the minimum floor passes."""
+        billing = self._manifest("billing", "0.85.0")
+        billing.required_modules = ["orgs>=0.86.0"]
+        _validate_required_module_versions(
+            {
+                "billing": billing,
+                "orgs": self._manifest("orgs", "0.86.0"),
+            }
+        )
+
+    def test_validate_aborts_on_violated_floor(self) -> None:
+        """An installed version below the minimum floor raises click.Abort."""
+        billing = self._manifest("billing", "0.85.0")
+        billing.required_modules = ["orgs>=0.86.0"]
+        with pytest.raises(click.Abort):
+            _validate_required_module_versions(
+                {
+                    "billing": billing,
+                    "orgs": self._manifest("orgs", "0.85.0"),
+                }
+            )
+
+    def test_validate_aborts_on_missing_required_module(self) -> None:
+        """A missing required module raises click.Abort."""
+        billing = self._manifest("billing", "0.85.0")
+        billing.required_modules = ["orgs>=0.86.0"]
+        with pytest.raises(click.Abort):
+            _validate_required_module_versions(
+                {
+                    "billing": billing,
+                }
+            )
+
+    def test_post_embed_disk_loaded_manifests_detect_violation(self, tmp_path) -> None:
+        """Post-embed manifest loading from disk catches a version floor
+        violation when a newly embedded module depends on an already-installed
+        module below the floor.
+
+        This simulates the CR-SA7.4-001 scenario: orgs is installed at 0.85.0,
+        billing (which requires orgs>=0.86.0) has just been embedded, and
+        _load_module_manifests returns the full post-embed set including
+        billing's manifest.  _validate_required_module_versions must then
+        detect the violation through the CLI abort wrapper.
+        """
+        from quickscale_cli.commands.apply_command import (
+            _load_module_manifests,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir()
+
+        # Create orgs module at 0.85.0 (below the 0.86.0 floor)
+        orgs_dir = project / "modules" / "orgs"
+        orgs_dir.mkdir(parents=True)
+        (orgs_dir / "module.yml").write_text(
+            'name: orgs\nversion: "0.85.0"\nrequired_modules:\n  - auth\n'
+        )
+
+        # Create billing module requiring orgs>=0.86.0 (simulating just-embedded)
+        billing_dir = project / "modules" / "billing"
+        billing_dir.mkdir(parents=True)
+        (billing_dir / "module.yml").write_text(
+            'name: billing\nversion: "0.85.0"\nrequired_modules:\n  - orgs>=0.86.0\n'
+        )
+
+        manifests = _load_module_manifests(
+            project,
+            ["billing", "orgs", "auth"],
+            strict=True,
+        )
+
+        # Org and billing must both be loaded.
+        assert "orgs" in manifests
+        assert "billing" in manifests
+
+        with pytest.raises(click.Abort):
+            _validate_required_module_versions(manifests)
+
+
+class TestApplyConfigValidationAutoAdds:
+    """Tests for config validation auto-add behaviors in apply command."""
 
     def test_load_and_validate_config_auto_adds_orgs_and_notifications_for_billing(
         self,
