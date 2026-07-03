@@ -69,6 +69,24 @@ class TestResolveModuleImplications:
         result = resolve_module_implications(["social", "orgs"])
         assert "orgs" not in result
 
+    # --- listings -> orgs (SA6.2-CR-001) ---
+
+    def test_listings_implies_orgs(self) -> None:
+        """Selecting listings should materialize orgs.
+
+        Regression for SA6.2-CR-001: listings/module.yml declares
+        ``required_modules: [orgs]`` and must also carry ``implies``
+        so the planner/apply seam auto-materializes orgs.
+        """
+        result = resolve_module_implications(["listings"])
+        assert "orgs" in result
+        assert result["orgs"] == {}
+
+    def test_listings_with_orgs_already_selected(self) -> None:
+        """listings with orgs already present should not duplicate orgs."""
+        result = resolve_module_implications(["listings", "orgs"])
+        assert "orgs" not in result
+
     # --- orgs -> notifications ---
 
     def test_orgs_implies_notifications(self) -> None:

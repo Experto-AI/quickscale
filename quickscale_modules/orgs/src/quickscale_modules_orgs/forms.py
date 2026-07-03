@@ -11,13 +11,13 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
-from .crm_bootstrap import maybe_seed_crm_default_stages
 from .models import (
     OrgRole,
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
 )
+from .signals import organization_created
 
 
 _INVITATION_EXPIRY_DAYS = 7
@@ -114,7 +114,10 @@ class OrgCreateForm(forms.Form):
                     organization=organization,
                     role=OrgRole.OWNER,
                 )
-                maybe_seed_crm_default_stages(organization)
+                organization_created.send(
+                    sender=Organization,
+                    organization=organization,
+                )
                 return organization
 
 

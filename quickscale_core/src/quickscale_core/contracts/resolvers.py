@@ -770,65 +770,6 @@ def validate_forms_module_options(options: Mapping[str, Any] | None) -> list[str
 
 
 # ---------------------------------------------------------------------------
-# Listings
-# ---------------------------------------------------------------------------
-
-DEFAULT_LISTINGS_PER_PAGE = 12
-
-LISTINGS_MODULE_OPTION_KEYS = frozenset(
-    {
-        "listings_per_page",
-    }
-)
-
-
-def _load_listings_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "listings" / "module.yml")
-
-
-def _build_listings_derivation_schema() -> ModuleDerivationSchema:
-    return ModuleDerivationSchema(
-        module_name="listings", version="1", option_derivations={}
-    )
-
-
-def default_listings_module_options() -> dict[str, Any]:
-    manifest = _load_listings_manifest()
-    return dict(manifest.get_defaults())
-
-
-def normalize_listings_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    return dict(options or {})
-
-
-def resolve_listings_module_options(
-    options: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    manifest = _load_listings_manifest()
-    schema = _build_listings_derivation_schema()
-    result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
-    resolved = dict(result.resolved)
-    resolved["listings_per_page"] = int(resolved["listings_per_page"])
-    return resolved
-
-
-def validate_listings_module_options(options: Mapping[str, Any] | None) -> list[str]:
-    resolved = resolve_listings_module_options(options)
-    issues: list[str] = []
-    per_page = resolved.get("listings_per_page")
-    try:
-        if int(per_page) <= 0:  # type: ignore[arg-type]
-            issues.append(
-                "modules.listings.listings_per_page must be a positive integer"
-            )
-    except (TypeError, ValueError):
-        issues.append("modules.listings.listings_per_page must be a positive integer")
-    return issues
-
-
-# ---------------------------------------------------------------------------
 # Notifications
 # ---------------------------------------------------------------------------
 
@@ -1747,13 +1688,6 @@ __all__ = [
     "normalize_forms_module_options",
     "resolve_forms_module_options",
     "validate_forms_module_options",
-    # Listings
-    "DEFAULT_LISTINGS_PER_PAGE",
-    "LISTINGS_MODULE_OPTION_KEYS",
-    "default_listings_module_options",
-    "normalize_listings_module_options",
-    "resolve_listings_module_options",
-    "validate_listings_module_options",
     # Notifications
     "default_notifications_module_options",
     "notifications_live_delivery_configured",

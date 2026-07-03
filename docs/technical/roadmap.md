@@ -55,21 +55,21 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../findings.md#auto
 
 **Priority note:** SA11.1–SA11.4 close the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1) and should be the first work landed regardless of track scheduling below. SA11.5 should stay in that first landing batch because it closes the broader Module Finding 1 hardening work immediately adjacent to the defect chain.
 
-#### Dependency & parallelization overview
+#### Dependency & parallelization overview (2026-07-02 status)
+
+`SA12.1`, `SA9.1`, `SA6.1`, `SA6.2`, `SA6.3`, and `SA7.1` shipped and merged — see [CHANGELOG.md](../../CHANGELOG.md). Diagram below shows only remaining open work.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + org-switch)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────────────
-SA11.1 (no deps)                     SA12.1 (no deps)                         SA6.1  (no deps)
-  ├─ SA11.2 (←11.1)                  SA9.1  (no deps)                           └─ SA6.2 (←6.1)
-  ├─ SA11.3 (←11.1)                  SA9.2  (no deps)                                └─ SA6.3 (←6.2)
-  └─ SA11.4 (←11.1)                  SA9.3  (no deps)                          SA7.1  (no deps)
-SA11.5 (no deps)                       ├─ SA9.4 (←9.3)                         SA7.2  (no deps)
-SA11.6 (no deps)                       └─ SA9.5 (←9.3)                         SA7.3  (no deps)
-SA11.7 (no deps)                           └─ SA9.6 (←9.4 & ←9.5)              SA7.4  (no deps)
-                                      SA10.1 (no deps)                         SA8.1  (no deps)
-                                        └─ SA10.2 (←10.1)                       └─ SA8.2 (←8.1)
-                                                                                     └─ SA8.3 (←8.2)
+SA11.1 groundwork committed,         SA9.2  (no deps)                         SA7.2  (no deps)
+  decision resolved, impl pending    SA9.3  (no deps)                         SA7.3  (no deps)
+  ├─ SA11.2 (←11.1, pending impl)      ├─ SA9.4 (←9.3)                        SA7.4  (no deps)
+  ├─ SA11.3 (←11.1, pending impl)      └─ SA9.5 (←9.3)                        SA8.1  (no deps)
+  └─ SA11.4 (←11.1, pending impl)          └─ SA9.6 (←9.4 & ←9.5)               └─ SA8.2 (←8.1)
+SA11.5 (no deps — clean)             SA10.1 (no deps)                             └─ SA8.3 (←8.2)
+SA11.6 (no deps — clean)               └─ SA10.2 (←10.1)
+SA11.7 (no deps — clean)
 ```
 
 No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.1` — new `signals.py`/`services.py` receiver + `apps.py` wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back, same as the SA3.2/SA1.3 precedent.
@@ -78,9 +78,15 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.1 → SA11.2/SA11.3/SA11.4 → SA11.5 → SA11.6 → SA11.7 | Tenant-context request boundary — fixes the live public-page defect |
-| **2** | SA12.1 → SA9.1 → SA9.2 → SA9.3 → SA9.4/SA9.5 → SA9.6 → SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA6.1 → SA6.2 → SA6.3 · SA7.1 → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
+| **1** | SA11.1 *(decision resolved, impl pending)* → SA11.2/SA11.3/SA11.4 *(pending SA11.1 impl)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
+| **2** | SA9.2 → SA9.3 → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
+| **3** | SA7.1 *(completed)* → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
+
+#### Track status (as of 2026-07-02)
+
+- **Track 1 — unblocked, implementation pending.** The design decision blocking `SA11.1` (`CR-SA11.1-001`) resolved 2026-07-02 — see below. No further decision is needed; the remaining work is implementation: force `TemplateResponse.render()` inside `org_scope()` in `PublicSystemOrgReadMixin.dispatch()`, then add the real `ListView`/`TemplateResponse` render-lifecycle test (`CR-SA11.1-002`). Once that lands, `SA11.2`/`SA11.3`/`SA11.4` can proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
+- **Track 2 — clean.** No blockers; `SA9.2` and `SA9.3` are independent and can run in parallel, as can `SA10.1`.
+- **Track 3 — clean.** `SA7.1` is complete (see below); the next pending item is `SA7.2`, and `SA7.3`–`SA7.4` plus `SA8.1`–`SA8.3` remain unblocked by dependencies.
 
 #### Track 1 status snapshot (2026-07-03)
 
@@ -98,14 +104,15 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py` (new).
   *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves.
 
-  > **2026-07-02 checkpoint — groundwork committed, review blocking.**
+  > **2026-07-02 checkpoint — groundwork committed, implementation resuming after decision.**
   > Code delivered: `resolve_public_org_context()` plain function, `PublicSystemOrgReadMixin` CBV seam (overrides `dispatch()` with `org_scope()`), and 17 unit tests covering org resolution, real tenant-scoped queries, fail-closed no-org path, and mixin dispatch lifecycle.
   >
-  > **Blocking (independent review, unresolved):**
-  > - `CR-SA11.1-001` (high) — mixin `dispatch()` wraps in `org_scope()` which opens+closes `transaction.atomic()`. Not yet proven safe for template-backed generic `ListView`s targeted by SA11.3/SA11.4: the atomic block may close before the response template finishes rendering lazy-evaluated querysets, or before a streaming `TemplateResponse` resolves its content.
-  > - `CR-SA11.1-002` (medium) — tests do not yet cover a real `ListView`/`TemplateResponse` render lifecycle under the mixin, or a reviewer-accepted RLS-sensitive proof for that seam.
+  > **`CR-SA11.1-001` (high) — RESOLVED 2026-07-02.** Root cause: `org_scope()`'s `transaction.atomic()` block (and the `SET LOCAL app.current_org_id` GUC inside it) closes the instant `dispatch()` returns — but template-backed generic views (`ListView`/`DetailView`, SA11.3/SA11.4's target) return an unrendered `TemplateResponse`; Django calls `.render()` on it *after* `dispatch()` returns, so any queryset lazily evaluated during template rendering runs with no GUC set and RLS silently returns zero rows — reproducing Module Finding 1 inside its own fix.
+  > **Decision:** keep `org_scope()` as the mixin's transaction boundary (preserves the one-shared-seam shape Module Finding 1 calls for, instead of pushing transaction discipline back onto every call site). Fix: in `dispatch()`, after calling `super().dispatch()`, if the response is unrendered (has a `.render()` method, e.g. `TemplateResponse`), call `.render()` on it before returning — still inside the `with org_scope():` block, so lazy queryset evaluation happens while the GUC is still primed. Does not cover genuinely streamed responses (not in use for QuickScale's public pages today — note this as a documented limitation in the mixin's docstring).
   >
-  > **Decision needed:** Is `org_scope()` (atomic-on-enter, atomic-on-exit) the right boundary for request-scoped public views, or should the mixin use a non-atomic approach (caller-managed `transaction.atomic()` + `tenant_context()`) that lets each view handler control its own transaction scope? Resolving this will determine whether SA11.3/SA11.4 can consume the mixin as-is or need to use the plain function directly.
+  > **Remaining before SA11.1 closes (implementation, not a decision):**
+  > - Implement the `.render()`-forcing change in `PublicSystemOrgReadMixin.dispatch()`.
+  > - `CR-SA11.1-002` (medium, still open) — add a test that exercises a real `ListView`/`TemplateResponse` render lifecycle under the mixin (not just the unit tests against plain views/functions) to prove the fix actually closes the gap for the views SA11.3/SA11.4 will build.
 
 - [ ] **SA11.2 — Restricted-role anonymous-read E2E smoke.** `Tier 2 · Track 1 · deps: SA11.1 · RISK LEVEL: medium`
   Add an integration test that runs against the restricted `NOBYPASSRLS` runtime role (not the superuser test posture used elsewhere) and asserts an anonymous request to a public blog page returns a published System-org post. This is the single test that covers the whole defect class.
@@ -139,26 +146,26 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 ---
 
-#### Finding — Module Finding 2: billing webhook idempotency (`why →` [Module Finding 2](../../findings.md#module-finding-2-billing-webhook-idempotency-is-procedural-flag--check-then-act-with-no-database-backstop-on-the-money-ledger))
-
-- [x] **SA12.1 — DB-enforced ledger idempotency.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
-  Add a partial unique index on `CreditTransaction` over `(stripe_event_id, transaction_type)` where `stripe_event_id <> ''`, and make `credit_user` catch `IntegrityError` and return the existing row instead of relying solely on the pre-lock `_find_existing_credit_transaction` read.
-  *Files:* `quickscale_modules/billing/src/quickscale_modules_billing/models.py` (constraint), new migration, `quickscale_modules/billing/src/quickscale_modules_billing/services.py` (`credit_user`).
-  *Acceptance:* a test that fires two concurrent `credit_user` calls with the same `stripe_event_id` results in exactly one `CreditTransaction` row and a correct `balance_after`.
-
----
-
 #### Finding — Repo Finding 4: core-as-runtime-API boundary (`why →` [Finding 4](../../findings.md#finding-4-quickscalecores-entire-internal-surface-is-a-de-facto-runtime-api-for-user-owned-generated-projects--with-an-open-ended-version-range-and-a-repo-wide-clean-break-policy))
 
-- [ ] **SA9.1 — Compatible-range pin for backups' core dependency.** `Tier 1 · Track 2 · deps: none`
-  Change `quickscale-core>=0.86.0` to a compatible range (`>=X.Y,<X.Y+1`, matching the core version paired with this embed) and update the dependency-sync path so `quickscale update` moves the pin with the subtree.
-  *Files:* `quickscale_modules/backups/module.yml`, `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py`.
+- [x] **SA9.1 — Compatible-range pin for backups' core dependency.** `Tier 1 · Track 2 · deps: none`
+  Changed `quickscale-core>=0.86.0` to `>=0.86.0,<0.87.0` in module.yml. Updated `sync_project_module_dependencies` to fall back to the manifest version spec when the module's pyproject.toml declares a non-string (path/table) dependency, so generated projects receive a bounded version range instead of a developer-only path entry. Wired `_sync_module_dependencies` into `_update_single_module` so `quickscale update` also refreshes generated-project dependencies after subtree pull.
+  *Files:* `quickscale_modules/backups/module.yml`, `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py`, `quickscale_cli/src/quickscale_cli/commands/module_commands.py`.
   *Acceptance:* a fresh embed of backups writes a bounded core version range into the generated project's `pyproject.toml`.
 
-- [ ] **SA9.2 — CI job: module-vs-oldest-claimed-core import check.** `Tier 1 · Track 2 · deps: none`
-  Add a CI job that installs each module against the *oldest* core version its `module.yml` claims and imports the module, so a drift between claimed and actual minimum compatibility fails loudly instead of silently.
-  *Files:* new CI workflow step / script under `scripts/`.
-  *Acceptance:* the job fails if a module imports a core symbol not present in its manifest's minimum core version.
+- [ ] **SA9.2 — CI job: module-vs-oldest-claimed-core import check.** `Tier 1 · Track 2 · deps: none · RISK LEVEL: medium`
+  Added `scripts/check_module_core_compatibility.py` — a two-phase script that (1) statically analyses each module's `quickscale_core` imports against the on-disk core source, and (2) performs a real install/import probe: for each module with a quantifiable minimum core version, creates an isolated venv, installs `quickscale-core==<min_claimed>` plus the module's non-core deps, and imports the module's package and key submodules. Wired as `make check-core-compat`, added as step 3/6 in `scripts/check_ci_locally.sh`, and added as a `module-core-compat` gate job in `.github/workflows/ci.yml` that the `test` job depends on. Included in `make check`.
+  *Files:* `scripts/check_module_core_compatibility.py`, `Makefile`, `scripts/check_ci_locally.sh`, `.github/workflows/ci.yml`.
+  *Acceptance:* `make check-core-compat` passes; the script fails if a module imports a core symbol not present in the current core source, if a module's minimum claimed core version exceeds the repository's VERSION, or if any module with a claimed minimum core version cannot be imported against `quickscale-core==<min_claimed>` in an isolated environment. The `test` CI job will not run unless the `module-core-compat` gate passes. Pass `--skip-install-probe` to skip the heavy runtime check for local development.
+  *Discovered finding:* The embedded manifest copy at `quickscale_core/src/quickscale_core/data/manifests/backups/module.yml` still declares `quickscale-core>=0.86.0` (missing the `<0.87.0` upper bound applied in SA9.1 to the authoritative `quickscale_modules/backups/module.yml`). This drift does not block SA9.2 but should be cleaned up to keep the embedded manifest consistent with the shipped inventory. Tracked separately as **SA9.2-FINDING-001** — remains advisory and non-blocking.
+
+  > **2026-07-03 checkpoint — code delivered, install/import probe reveals pre-existing version mismatch — blocked.**
+  > Code delivered: `check_module_core_compatibility.py` (two-phase static analysis + real install/import probe), `Makefile` wiring (`make check-core-compat`), `.github/workflows/ci.yml` gate job, `scripts/check_ci_locally.sh` step.
+  >
+  > **Blocking (pre-existing condition surfaced by the new probe, not created by SA9.2):**
+  > - The real install/import probe fails on `quickscale_modules_backups.services` because **no published `quickscale-core` release in the range `>=0.86.0,<0.87.0` contains `quickscale_core.dr_engine`**. Backups' `module.yml` declares compatibility with a version range that does not satisfy its actual import requirements. This is a pre-existing discrepancy between the module's declared compatibility and the published core's API surface — the CI gate is working as designed and correctly caught a latent defect.
+  >
+  > **Decision needed:** How to resolve the pre-existing compatibility gap between backups' declared `quickscale-core>=0.86.0,<0.87.0` range and the published core's missing `dr_engine` subpackage. Options include: (a) publish a `quickscale-core` 0.86.x release that includes `dr_engine` so the range aligns with the actual API surface, (b) narrow the `module.yml` range to a version that includes `dr_engine` (or add a `>=` floor that matches), or (c) skip the install probe for backups only until the facade work (SA9.3–SA9.5) eliminates the deep import. SA9.2-FINDING-001 remains advisory and non-blocking; any of the above options would also fix it incidentally.
 
 - [ ] **SA9.3 — `quickscale_core.runtime` public facade.** `Tier 2 · Track 2 · deps: none`
   Create a facade module re-exporting the specific symbols module code is known to need today (the DR adapter surface: `capture_snapshot`, `fetch_snapshot_report`, `record_verification`, `set_rollback_pin`, `build_database_plan`, `execute_database_restore`, `sync_media`; plus the social-manifest rendering surface). No behavior change — pure re-export layer.
@@ -198,18 +205,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 1: wiring fan-out / two coexisting mechanisms (`why →` [Finding 1](../../findings.md#finding-1-per-module-integration-knowledge-is-fanned-across-three-packages-with-two-wiring-mechanisms-coexisting-and-the-declared-migration-unscheduled))
 
-- [x] **SA6.1 — `module.yml` `derivation:` YAML loader.** `Tier 2 · Track 3 · deps: none`
-  Implement the deferred YAML loading for `ModuleDerivationSchema` (declared but unimplemented per `decisions.md` §Module Derivation Schema) so a module can declare its normalization/validation/derivation rules in `module.yml` instead of a hand-written `_build_<module>_derivation_schema()` Python function.
-  *Files:* `quickscale_core/src/quickscale_core/manifest/derivation.py`, `quickscale_core/src/quickscale_core/manifest/loader.py`.
-  *Acceptance:* a `module.yml` with a `derivation:` section round-trips through `yaml.safe_load` into a `ModuleDerivationSchema` equal to a directly-constructed hand-built schema for a sample module, with all seven field categories preserved (normalization_rules, validation_rules, legacy_aliases, derived_settings at both module and per-option level, wiring_projections, and option_derivations); no runtime behavior change yet.
-  *Note:* Module-level `derived_settings` are now preserved via the `shared_derived_settings` field on `ModuleDerivationSchema` and wired through `build_schema_from_manifest()`. The round-trip test uses directly-constructed dataclasses for the hand-built reference to eliminate shared-helper bias.
-
-- [ ] **SA6.2 — Migrate `listings` onto the derivation loader end-to-end.** `Tier 2 · Track 3 · deps: SA6.1`
-  Move listings' config (defaults, normalization, validation) into `module.yml`'s `derivation:` section; delete `_build_listings_derivation_schema` and the `default_/normalize_/resolve_/validate_listings_module_options` functions from `resolvers.py`; delete the listings triad from `module_config.py`; confirm the listings adapter (already core-inline per `entry_point.py:457`) now sources its schema from the loaded manifest. Include listings' own `required_modules: [orgs]` version-range addition in this task (see SA7.4 scope note).
-  *Files:* `quickscale_modules/listings/module.yml`, `quickscale_core/src/quickscale_core/contracts/resolvers.py`, `quickscale_core/src/quickscale_core/contracts/module_options.py`, `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `quickscale_core/src/quickscale_core/contracts/imperative_inventory.py` (`LISTINGS_MANIFEST → []`).
-  *Acceptance:* `quickscale plan --add listings` + `quickscale apply` behavior unchanged; `imperative_inventory.py` shows listings fully migrated (matching analytics' `ANALYTICS_MANIFEST = []` precedent).
-
-- [ ] **SA6.3 — Update the imperative-wiring freeze guardrail.** `Tier 1 · Track 3 · deps: SA6.2`
+- [x] **SA6.3 — Update the imperative-wiring freeze guardrail.** `Tier 1 · Track 3 · deps: SA6.2`
   Extend `test_imperative_inventory.py` so it also asserts listings stays migrated (mirroring the existing analytics assertion), preventing regression back to imperative wiring.
   *Files:* `quickscale_core/tests/test_imperative_inventory.py`.
   *Acceptance:* re-introducing an imperative listings builder fails this test.
@@ -218,10 +214,10 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 2: orgs composition god module (`why →` [Finding 2](../../findings.md#finding-2-orgs-is-becoming-the-composition-god-module--inter-module-integration-is-hand-wired-pairwise-with-no-contract-and-the-central-tenant-registry-couples-all-module-versions-in-lockstep))
 
-- [ ] **SA7.1 — `organization_created` signal replaces CRM bootstrap reverse-import.** `Tier 1 · Track 3 · deps: none`
-  Add an `organization_created` Django signal fired by orgs on org creation; convert `crm_bootstrap.maybe_seed_crm_default_stages` into a CRM-side receiver of that signal instead of orgs importing CRM via `apps.is_installed(...)` + `import_module(...)`.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/{models.py or signals.py}` (signal definition + dispatch), `quickscale_modules/orgs/src/quickscale_modules_orgs/crm_bootstrap.py` (delete), `quickscale_modules/crm/src/quickscale_modules_crm/{signals.py new, apps.py}` (receiver + connection).
-  *Acceptance:* creating an organization still seeds CRM default stages when CRM is installed, with orgs containing zero CRM-specific code; establishes the composition seam pattern for future cross-module behavior.
+- [x] **SA7.1 — `organization_created` signal replaces CRM bootstrap reverse-import.** `Tier 1 · Track 3 · completed 2026-07-02`
+  Added an `organization_created` Django signal in `orgs/signals.py`, fired from `OrgCreateForm.save()`. Converted `crm_bootstrap.maybe_seed_crm_default_stages` into a CRM-side receiver (`crm/signals.py`) connected via `QuickscaleCrmConfig.ready()`. Deleted `crm_bootstrap.py` and its import from `forms.py`. Acceptance verified: org creation still seeds CRM default stages when CRM is installed, orgs contain zero CRM-specific code, personal-org path preserved (no signal from `create_personal_for`), and the composition seam pattern is established for future cross-module behavior.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/signals.py` (new), `quickscale_modules/orgs/src/quickscale_modules_orgs/forms.py` (modified), `quickscale_modules/orgs/src/quickscale_modules_orgs/crm_bootstrap.py` (deleted), `quickscale_modules/crm/src/quickscale_modules_crm/signals.py` (new), `quickscale_modules/crm/src/quickscale_modules_crm/apps.py` (modified).
+  *Findings:* None — no blockers discovered. The CRM view-level warm-on-read behavior in `crm/views.py` is untouched and continues to provide the secondary bootstrap path for personal orgs and migrated orgs that bypass the form flow.
 
 - [ ] **SA7.2 — Fail-hard the auth-adapter import fallback.** `Tier 1 · Track 3 · deps: none`
   Replace the silent `try: from quickscale_modules_auth.adapters import ... except ImportError: fallback to DefaultAccountAdapter` with an explicit check: if auth is a declared dependency (it is, transitively, via allauth), require it; only allow the fallback in an explicitly test-only code path, not production import resolution.

@@ -22,15 +22,20 @@ class DependencySyncError(Exception):
 
 @dataclass(frozen=True)
 class ProjectDependencySyncResult:
-    """Summary of dependency entries added to a generated project."""
+    """Summary of dependency entries added or updated in a generated project."""
 
     added_path_dependencies: list[str] = field(default_factory=list)
     added_package_dependencies: list[str] = field(default_factory=list)
+    updated_package_dependencies: list[str] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
         """Return True when the project pyproject.toml was updated."""
-        return bool(self.added_path_dependencies or self.added_package_dependencies)
+        return bool(
+            self.added_path_dependencies
+            or self.added_package_dependencies
+            or self.updated_package_dependencies
+        )
 
 
 def resolve_embedded_module_install_path(
@@ -278,13 +283,80 @@ def _append_dependency_entries(
     _write_validated_toml(pyproject_path, "\n".join(updated_lines) + "\n")
 
 
+def _update_dependency_entries(
+    pyproject_path: Path,
+    updates: dict[str, Any],
+) -> None:
+    """Replace existing dependency entries in pyproject.toml with new values.
+
+    Used by the update-path repin mode to replace stale path-style or
+    out-of-range version entries with the correct bounded range from the
+    module manifest.
+    """
+    if not updates:
+        return
+
+    original = pyproject_path.read_text()
+    lines = original.splitlines()
+    section_header = "[tool.poetry.dependencies]"
+    section_start: int | None = None
+    section_end = len(lines)
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == section_header:
+            section_start = index
+            continue
+        if (
+            section_start is not None
+            and stripped.startswith("[")
+            and stripped.endswith("]")
+        ):
+            section_end = index
+            break
+
+    if section_start is None:
+        raise DependencySyncError(
+            f"Unable to locate [tool.poetry.dependencies] in {pyproject_path}"
+        )
+
+    updated_lines = list(lines)
+    for dep_name, dep_value in updates.items():
+        rendered = _render_toml_literal(dep_value)
+        new_line = f"{dep_name} = {rendered}"
+        found = False
+        for i in range(section_start + 1, section_end):
+            stripped = updated_lines[i].strip()
+            if stripped.startswith(f"{dep_name} =") or stripped.startswith(
+                f"{dep_name}="
+            ):
+                updated_lines[i] = new_line
+                found = True
+                break
+        if not found:
+            # Defensive fallback: append if the key is somehow missing from
+            # the section (should not happen when repinning existing entries).
+            updated_lines.insert(section_end, new_line)
+            section_end += 1
+
+    _write_validated_toml(pyproject_path, "\n".join(updated_lines) + "\n")
+
+
 def sync_project_module_dependencies(
     project_path: Path,
     module_options_by_name: Mapping[str, Mapping[str, Any] | None],
+    repin_existing: bool = False,
 ) -> ProjectDependencySyncResult:
-    """Add missing module path and third-party dependencies to a project pyproject.
+    """Add or update module path and third-party dependencies in a project pyproject.
 
-    The sync is intentionally add-only. Existing project dependency values always win.
+    In the default add-only mode (``repin_existing=False``), existing project
+    dependency values always win and only truly missing entries are appended.
+
+    In repin mode (``repin_existing=True``), existing project dependency
+    entries are compared against the manifest-derived bounded range, and any
+    that differ are replaced inline.  This is used by the update path to
+    repin pre-SA9.1 path-style or out-of-range entries to the correct
+    compatible version range.
     """
     if not module_options_by_name:
         return ProjectDependencySyncResult()
@@ -296,6 +368,7 @@ def sync_project_module_dependencies(
 
     pending_path_dependencies: dict[str, Any] = {}
     pending_package_dependencies: dict[str, Any] = {}
+    pending_package_updates: dict[str, Any] = {}
 
     for module_name in sorted(module_options_by_name):
         module_options = module_options_by_name.get(module_name) or {}
@@ -335,12 +408,46 @@ def sync_project_module_dependencies(
                 module_name,
             )
 
-        for dependency_name in _iter_required_dependency_names(
-            module_name,
-            manifest.dependencies,
-            module_options,
-        ):
+        for requirement in manifest.dependencies:
+            dependency_name = _extract_dependency_name(requirement, module_name)
+
+            if _should_skip_manifest_dependency(
+                module_name, dependency_name, module_options
+            ):
+                continue
+
             if dependency_name in existing_dependency_names:
+                # Repin mode: replace existing entries that differ from the
+                # manifest-derived bounded range.
+                if repin_existing:
+                    if dependency_name not in module_poetry_dependencies:
+                        raise DependencySyncError(
+                            "Embedded module pyproject.toml is missing the Poetry "
+                            f"dependency version for {module_name}.{dependency_name}"
+                        )
+                    desired_value = module_poetry_dependencies[dependency_name]
+                    # When pyproject.toml declares a non-string (e.g. path/table)
+                    # dependency, fall back to the version spec from the module.yml
+                    # manifest requirement so generated projects receive a proper
+                    # bounded version range instead of a developer-only path entry.
+                    if not isinstance(desired_value, str):
+                        spec = requirement[len(dependency_name) :].strip()
+                        desired_value = spec if spec else desired_value
+
+                    # Cross-module conflict resolution using
+                    # _prefer_dependency_value ensures the highest compatible
+                    # version floor wins regardless of module iteration order
+                    # (SA9.1-REV-004).  The comparison against current project
+                    # values happens once after the full module loop.
+                    if dependency_name in pending_package_updates:
+                        pending_package_updates[dependency_name] = (
+                            _prefer_dependency_value(
+                                pending_package_updates[dependency_name],
+                                desired_value,
+                            )
+                        )
+                    else:
+                        pending_package_updates[dependency_name] = desired_value
                 continue
 
             if dependency_name not in module_poetry_dependencies:
@@ -350,6 +457,15 @@ def sync_project_module_dependencies(
                 )
 
             dependency_value = module_poetry_dependencies[dependency_name]
+
+            # When pyproject.toml declares a non-string (e.g. path/table)
+            # dependency, fall back to the version spec from the module.yml
+            # manifest requirement so generated projects receive a proper
+            # bounded version range instead of a developer-only path entry.
+            if not isinstance(dependency_value, str):
+                spec = requirement[len(dependency_name) :].strip()
+                dependency_value = spec if spec else dependency_value
+
             if dependency_name in pending_package_dependencies:
                 pending_package_dependencies[dependency_name] = (
                     _prefer_dependency_value(
@@ -359,6 +475,20 @@ def sync_project_module_dependencies(
                 )
             else:
                 pending_package_dependencies[dependency_name] = dependency_value
+
+    # Apply updates to existing entries (repin mode) before appending new ones.
+    # Entries whose cross-module maximum already matches the current project
+    # value are filtered out to avoid unnecessary rewrites (SA9.1-REV-004).
+    if pending_package_updates:
+        filtered_updates = {
+            dep_name: dep_value
+            for dep_name, dep_value in pending_package_updates.items()
+            if dep_name not in project_dependencies
+            or project_dependencies[dep_name] != dep_value
+        }
+        if filtered_updates:
+            _update_dependency_entries(pyproject_path, filtered_updates)
+        pending_package_updates = filtered_updates
 
     entries_to_add = [
         (dependency_name, pending_package_dependencies[dependency_name])
@@ -373,4 +503,5 @@ def sync_project_module_dependencies(
     return ProjectDependencySyncResult(
         added_path_dependencies=sorted(pending_path_dependencies),
         added_package_dependencies=sorted(pending_package_dependencies),
+        updated_package_dependencies=sorted(pending_package_updates),
     )

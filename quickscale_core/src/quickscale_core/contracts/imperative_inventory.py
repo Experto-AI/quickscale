@@ -171,18 +171,11 @@ FORMS_MANIFEST: Final[list[tuple[str, str, str]]] = [
     ("validate_forms_module_options", ADAPTER_ONLY, "T2.5"),
 ]
 
-LISTINGS_MANIFEST: Final[list[tuple[str, str, str]]] = [
-    # Declarative targets
-    ("DEFAULT_LISTINGS_PER_PAGE", DECLARATIVE_TARGET, "T2.4"),
-    ("LISTINGS_MODULE_OPTION_KEYS", DECLARATIVE_TARGET, "T2.4"),
-    # Manifest resolver
-    ("_build_listings_derivation_schema", MANIFEST_RESOLVER, "T2.4"),
-    # Adapter-only
-    ("default_listings_module_options", ADAPTER_ONLY, "T2.5"),
-    ("normalize_listings_module_options", ADAPTER_ONLY, "T2.5"),
-    ("resolve_listings_module_options", ADAPTER_ONLY, "T2.5"),
-    ("validate_listings_module_options", ADAPTER_ONLY, "T2.5"),
-]
+# SA6.2: Listings imperative inventory cleared — all symbols are now
+# served by the manifest-driven derivation path in module.yml.
+# The listings key remains in MANIFEST_INVENTORY with an empty list so that
+# callers of get_manifest_inventory("listings") continue to succeed.
+LISTINGS_MANIFEST: Final[list[tuple[str, str, str]]] = []
 
 NOTIFICATIONS_MANIFEST: Final[list[tuple[str, str, str]]] = [
     # Shared helpers — relocated to quickscale_core.contracts.module_options
