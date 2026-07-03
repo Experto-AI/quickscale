@@ -437,7 +437,7 @@ Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: they ar
 
 - **Module tracking**: `.quickscale/state.yml` (Phase 2 / M2) — The sole authoritative applied-state store. Per-module consolidated tracking fields (`prefix`, `branch`, `installed_at`) and the `managed_files` sub-section replace the legacy `config.yml` and `file_hashes.yml`. Legacy files are read-through imported as compatibility inputs when `state.yml` lacks consolidated sections and ignored when consolidated sections are present.
 - **Advisory lock**: `.quickscale/<name>.lock` — Exclusive-create file-based advisory lock used to serialize concurrent operations that mutate `state.yml`. Fail-fast contention; stale-lock inspection and manual-clear guidance only.
-- **Recovery state**: `.quickscale/apply-recovery.yml` — Separate recovery-only state for the saga-model apply recovery ledger (future Phase 12 work).
+- **Recovery state**: `.quickscale/apply-recovery.yml` — Separate recovery-only state for the saga-model apply recovery ledger, shipped as a 16-step checkpointed ledger with atomic writes and resume gating (`quickscale_core/apply/executor.py`, `ledger.py`).
 - **User manual**: See [user_manual.md §4.3](./user_manual.md#43-planapply-commands-shipped-in-v0680) for workflow examples and CLI usage.
 - **Project structure**: See [scaffolding.md §5](./scaffolding.md#generated-project-output) for complete project layout including state files.
 
@@ -634,7 +634,7 @@ workflow coverage are aligned to it.
 
 **Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The existing manifest loader, runtime behaviour, and CLI contract-file path are unchanged.
 
-**YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so that future `module.yml` `derivation:` sections can round-trip through `yaml.safe_load` without custom codecs. YAML serialisation and loader wiring are intentionally deferred to a later roadmap item.
+**YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so `module.yml` `derivation:` sections round-trip through `yaml.safe_load` without custom codecs. Loader wiring shipped in SA6.1 (round-trips all seven field categories via `load_manifest`/`build_schema_from_manifest`); see CHANGELOG.md.
 
 **Dataclass summary:**
 
@@ -647,16 +647,15 @@ workflow coverage are aligned to it.
 | `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
 | `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
 
-**Roadmap context:** This foundation is the first step toward eventually replacing the imperative `normalize_*` / `validate_*` functions and CLI contract files that historically duplicated per-module knowledge (seven hand-written contract files, the now-deleted `module_wiring_specs.py`, and `module_config.py`). The analytics module is the planned first pilot slice. Later phases will add loader wiring, runtime derivation execution, and progressive contract-file deletion — one module at a time.
+**Roadmap context:** This foundation replaces the imperative `normalize_*` / `validate_*` functions and CLI contract files that historically duplicated per-module knowledge (seven hand-written contract files, the now-deleted `module_wiring_specs.py`, and `module_config.py`). Analytics (SA6 pilot) and listings (SA6.2) are fully migrated to declarative derivation, with an imperative-freeze guardrail preventing regression (SA6.3). Remaining modules migrate one at a time; see [arch-audit.md Finding 4](../../arch-audit.md#finding-4-per-module-contract-knowledge-is-still-fanned-across-6-hand-written-surfaces--and-the-duplicate-manifest-snapshots-already-drift) for the current fan-out state and drift risk across the unmigrated modules.
 
 **Constraints:**
 - ✅ Derivation types are frozen dataclasses (immutable after construction)
 - ✅ All field types are YAML-safe (scalars, lists, dicts)
 - ✅ `ModuleDerivationSchema` is a companion to `ModuleManifest`, not a replacement
-- ✅ No current loader, runtime, or CLI behaviour changes
-- ❌ No YAML loading from `module.yml` yet (deferred to next roadmap item)
-- ❌ No runtime derivation execution yet (deferred to analytics pilot)
-- ❌ No contract-file deletion yet (deferred to per-module migration phases)
+- ✅ YAML loading from `module.yml` shipped (SA6.1)
+- ✅ Runtime derivation execution shipped for analytics and listings (SA6.2); other modules remain imperative pending migration
+- ❌ No contract-file deletion yet for unmigrated modules (deferred to per-module migration phases)
 
 ---
 
@@ -1077,7 +1076,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` | One-time M2 consolidation path: pre-M2 projects have `config.yml` + `file_hashes.yml` but lack consolidated `state.yml` fields; failing hard on stale legacy files would block the M2 migration. Failures are logged and import is skipped. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
 
-**Known violations:** `arch-audit.md §Finding-8`/`roadmap.md §AF8` (referenced here previously) no longer exist — that batch closed and was archived to CHANGELOG.md. The remaining fail-hard violation awaiting remediation is SA11.7 (auth signup-open permissive default); see [arch-audit.md](../../arch-audit.md#module-by-module-autopsy--2026-07-02) Module Finding 1 for the underlying analysis. SA7.2 was resolved as part of the v0.87.0 hardening release — see [CHANGELOG.md](../../CHANGELOG.md).
+**Known violations:** tracked in [tech-audit.md](../../tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
 
 ---
 

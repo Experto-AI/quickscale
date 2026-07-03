@@ -47,6 +47,8 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
+> **Pending decision — new findings not yet scoped as tasks:** The [2026-07-03 fresh-pass autopsy](../../arch-audit.md#autopsy--2026-07-03-fresh-full-pass) identified 4 additional structural findings (`operator-read-path-undefined`, `registry-universe-mismatch`, `org-context-api-accretion`, `per-module-knowledge-fanout`) that are not yet on this roadmap. See "Decisions needed" below for scoping options.
+
 ### Structural Autopsy Remediation II (opened 2026-07-02)
 
 Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#autopsy--2026-07-02) and the [2026-07-02 module-by-module autopsy](../../arch-audit.md#module-by-module-autopsy--2026-07-02). Each task below is sized Adaptive **Tier 1 or Tier 2**. Tenant-isolation and money-ledger work is sensitive-domain → `RISK LEVEL: medium` → floors at Tier 2.
@@ -57,25 +59,25 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 
 #### Dependency & parallelization overview (2026-07-03)
 
-**Completed — closeout in [CHANGELOG.md](../../CHANGELOG.md):** SA6.1–SA6.3, SA7.1–SA7.4, SA9.1–SA9.6, SA10.1, SA11.1–SA11.5, SA12.1. Repo Findings 2, 3, and 4 are fully resolved — see CHANGELOG.md and, for Finding 3, `decisions.md` §D1.
+**Completed — closeout in [CHANGELOG.md](../../CHANGELOG.md):** SA6.1–SA6.3, SA7.1–SA7.4, SA9.1–SA9.6, SA10.1–SA10.2, SA11.1–SA11.5, SA12.1. Repo Findings 2, 3, 4, and 5 are fully resolved — see CHANGELOG.md and, for Finding 3, `decisions.md` §D1.
 
 Diagram below shows only remaining open work.
 
 ```
-Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3
+Track 1 (tenant-context surface)     Track 2                                   Track 3
 ───────────────────────────────      ───────────────────────────────────      ───────
-SA11.6 (no deps)                    SA10.2 (deps: SA10.1 ✓)                  —
+SA11.6 (no deps)                    No open tasks                             —
 SA11.7 (no deps)
 ```
 
-No cross-track dependencies. Track 3 has no remaining open tasks.
+No cross-track dependencies. Tracks 2 and 3 have no remaining open tasks.
 
 #### Track summary
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — CRM `_resolve_active_org` cleanup + auth fail-hard default |
-| **2** | SA10.2 *(deps: SA10.1 ✓)* | Module↔generated-project contract-vintage detection |
+| **2** | No open tasks | All SA9.x/SA10.x complete |
 | **3** | No open tasks | All SA7.x complete |
 
 ---
@@ -106,28 +108,13 @@ No cross-track dependencies. Track 3 has no remaining open tasks.
 
 ---
 
-#### Finding — Repo Finding 5: module↔generated-project contract drift (`why →` [Finding 5](../../arch-audit.md#finding-5-the-modulegenerated-project-contract-drifts-by-design--every-release-accretes-existing-projects-must-manually-adopt-steps-with-no-mechanism-to-apply-them))
-
-- [x] **SA10.1 — `project_contract` version in state.yml (complete).** `Tier 1 · Track 2 · deps: none`
-  Record the generator/contract version a project was generated against in `.quickscale/state.yml` at generation time.
-  *Files:* `quickscale_core/src/quickscale_core/schema/state_schema.py`, generator state-writing path.
-  *Acceptance:* a fresh generation's `state.yml` includes `project_contract`; existing state-file tests updated for the new field.
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA10.2 — `quickscale status` contract-vintage check (complete).** `Tier 2 · Track 2 · deps: SA10.1`
-  Added `ContractVintage` dataclass (`minimum: str`, `manual_adoption_steps: list[str]`) and `contract_vintage` field to `ModuleManifest`. Added `_parse_contract_vintage` to the YAML loader; absent on legacy manifests. Added `_check_contract_vintage` to status that compares each installed module's declared minimum against `state.project.project_contract` and reports gaps in both text and JSON drift output. Seeded `social/module.yml` and `backups/module.yml` with `contract_vintage: {minimum: "0.87.0", manual_adoption_steps: [...]}` matching their documented manual-adoption boundaries. `parse_version_tuple` utility handles `None` → `(0,)` so legacy projects (unknown vintage) are flagged as behind any declared minimum. Forward-compatible: no minimum or `contract_vintage` → no-op.
-  *Files:* schema, loader, status_command, social/backups module.yml, tests.
-  *Acceptance:* `quickscale status` on a project generated before v0.87.0 with social or backups installed reports the contract gap and manual steps; fresh v0.87.0+ generations pass clean; legacy manifests load with `contract_vintage=None`.
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
----
-
-> **Closed findings:** Repo Finding 2 (orgs god-module — SA7.2–SA7.4), Repo Finding 3 (dual active-org truth — product decision 2026-07-03), and Repo Finding 4 (core-as-runtime-API boundary — SA9.1–SA9.6) are fully resolved with no open tasks. Closeout detail is in [CHANGELOG.md](../../CHANGELOG.md); the Finding 3 product decision is recorded in `decisions.md` §D1.
+> **Closed findings:** Repo Finding 2 (orgs god-module — SA7.2–SA7.4), Repo Finding 3 (dual active-org truth — product decision 2026-07-03), Repo Finding 4 (core-as-runtime-API boundary — SA9.1–SA9.6), and Repo Finding 5 (module↔generated-project contract drift — SA10.1–SA10.2) are fully resolved with no open tasks. Closeout detail is in [CHANGELOG.md](../../CHANGELOG.md); the Finding 3 product decision is recorded in `decisions.md` §D1.
 
 ## References
 
 - **Completed and archived work:** [CHANGELOG.md](../../CHANGELOG.md)
 - **Structural autopsy:** [arch-audit.md](../../arch-audit.md)
+- **Fail-hard violations audit:** [tech-audit.md](../../tech-audit.md)
 - **Release notes:** `docs/releases/`
 - **Technical SSOT:** [decisions.md](./decisions.md)
 - **Scaffolding SSOT:** [scaffolding.md](./scaffolding.md)
