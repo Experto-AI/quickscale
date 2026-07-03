@@ -10,7 +10,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from quickscale_core.dr_engine.primitives import BackupError
+from quickscale_core.runtime import BackupError
 
 
 def test_backups_report_command_requests_sidecar_payloads() -> None:
@@ -33,7 +33,7 @@ def test_backups_report_command_requests_sidecar_payloads() -> None:
     )
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"fetch_snapshot_report": mock_report},
     ):
         call_command(
@@ -60,7 +60,7 @@ def test_backups_record_verification_command_records_route_report() -> None:
     mock_record = MagicMock(return_value={"snapshot_id": "snap-verify"})
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"record_verification": mock_record},
     ):
         call_command(
@@ -106,7 +106,7 @@ def test_backups_sync_media_command_outputs_json_result() -> None:
     )
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"sync_media": mock_sync},
     ):
         call_command(
@@ -165,7 +165,7 @@ def test_backups_pin_command_outputs_json_report() -> None:
     )
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"set_rollback_pin": mock_pin},
     ):
         call_command(
@@ -198,7 +198,7 @@ def test_backups_pin_command_outputs_json_report() -> None:
 def test_backups_pin_command_wraps_service_errors() -> None:
     mock_clear = MagicMock(side_effect=BackupError("clear exploded"))
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"clear_rollback_pin": mock_clear},
     ):
         with pytest.raises(CommandError, match="clear exploded"):
@@ -212,7 +212,7 @@ def test_backups_pin_command_wraps_service_errors() -> None:
 
     mock_set = MagicMock(side_effect=BackupError("set exploded"))
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"set_rollback_pin": mock_set},
     ):
         with pytest.raises(CommandError, match="set exploded"):
@@ -260,7 +260,7 @@ def test_backups_record_verification_command_outputs_json_report() -> None:
     )
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"record_verification": mock_record},
     ):
         call_command(
@@ -296,7 +296,7 @@ def test_backups_record_verification_command_outputs_json_report() -> None:
 def test_backups_record_verification_command_wraps_service_errors() -> None:
     mock_record = MagicMock(side_effect=BackupError("verification exploded"))
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"record_verification": mock_record},
     ):
         with pytest.raises(CommandError, match="verification exploded"):
@@ -368,7 +368,7 @@ def test_backups_sync_media_command_renders_summary(
     mock_sync = MagicMock(return_value=result_payload)
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"sync_media": mock_sync},
     ):
         call_command(
@@ -390,7 +390,7 @@ def test_backups_sync_media_command_renders_summary(
 def test_backups_sync_media_command_wraps_service_errors() -> None:
     mock_sync = MagicMock(side_effect=BackupError("media sync exploded"))
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"sync_media": mock_sync},
     ):
         with pytest.raises(CommandError, match="media sync exploded"):
