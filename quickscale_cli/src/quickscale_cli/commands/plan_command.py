@@ -24,7 +24,7 @@ from quickscale_core.contracts.module_catalog import (
     get_module_readiness_reason,
 )
 from quickscale_core.manifest.implications import resolve_module_implications
-from quickscale_cli.schema.config_schema import (
+from quickscale_core.schema.config_schema import (
     ConfigValidationError,
     DockerConfig,
     ModuleConfig,
@@ -33,7 +33,7 @@ from quickscale_cli.schema.config_schema import (
     generate_yaml,
     validate_config,
 )
-from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
+from quickscale_core.schema.state_schema import QuickScaleState, StateManager
 from quickscale_core.utils.file_utils import validate_project_name
 
 # Available themes for selection

@@ -11,12 +11,12 @@ from tempfile import TemporaryDirectory
 
 import click
 
-from quickscale_cli.schema.config_schema import (
+from quickscale_core.schema.config_schema import (
     QuickScaleConfig,
     generate_yaml,
     validate_config,
 )
-from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
+from quickscale_core.schema.state_schema import QuickScaleState, StateManager
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_core.apply import LedgerError, LedgerManager, RecoveryLedger
 from quickscale_core.config.module_config import (

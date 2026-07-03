@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 import pytest
 
-from quickscale_cli.schema.config_schema import ConfigValidationError
+from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_cli.commands.status_command import (
     _build_json_output,
     _check_contract_vintage,
@@ -686,7 +686,7 @@ class TestComputeDriftDiagnostics:
             "modules: {}\n"
         )
 
-        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.schema.state_schema import StateManager
         from quickscale_core.project_state import ProjectStateManager
 
         sm = StateManager(tmp_path)
@@ -724,7 +724,7 @@ class TestComputeDriftDiagnostics:
             project_path=tmp_path,
         )
 
-        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.schema.state_schema import StateManager
         from quickscale_core.project_state import ProjectStateManager
 
         sm = StateManager(tmp_path)
@@ -742,7 +742,7 @@ class TestComputeDriftDiagnostics:
         state_dir = tmp_path / ".quickscale"
         state_dir.mkdir()
 
-        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.schema.state_schema import StateManager
         from quickscale_core.project_state import ProjectStateManager
 
         sm = StateManager(tmp_path)
@@ -994,7 +994,7 @@ class TestContractVintageInDiagnostics:
             "modules: {}\n"
         )
 
-        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.schema.state_schema import StateManager
         from quickscale_core.project_state import ProjectStateManager
 
         sm = StateManager(tmp_path)

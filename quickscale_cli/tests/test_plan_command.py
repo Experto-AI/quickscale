@@ -366,7 +366,7 @@ class TestPlanYamlValidation:
 
     def test_plan_generates_valid_yaml(self):
         """Test that plan generates valid YAML that can be parsed"""
-        from quickscale_cli.schema.config_schema import validate_config
+        from quickscale_core.schema.config_schema import validate_config
 
         runner = CliRunner()
         with runner.isolated_filesystem():

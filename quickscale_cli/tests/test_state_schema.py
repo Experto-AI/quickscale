@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from quickscale_cli.schema.state_schema import (
+from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
     QuickScaleState,
