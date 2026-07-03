@@ -1142,7 +1142,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` | One-time M2 consolidation path: pre-M2 projects have `config.yml` + `file_hashes.yml` but lack consolidated `state.yml` fields; failing hard on stale legacy files would block the M2 migration. Failures are logged and import is skipped. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
 
-**Known violations:** `findings.md §Finding-8`/`roadmap.md §AF8` (referenced here previously) no longer exist — that batch closed and was archived to CHANGELOG.md. The remaining fail-hard violation awaiting remediation is SA11.7 (auth signup-open permissive default); see [findings.md](../../findings.md#module-by-module-autopsy--2026-07-02) Module Finding 1 for the underlying analysis. SA7.2 was resolved as part of the v0.87.0 hardening release — see [CHANGELOG.md](../../CHANGELOG.md).
+**Known violations:** `arch-audit.md §Finding-8`/`roadmap.md §AF8` (referenced here previously) no longer exist — that batch closed and was archived to CHANGELOG.md. The remaining fail-hard violation awaiting remediation is SA11.7 (auth signup-open permissive default); see [arch-audit.md](../../arch-audit.md#module-by-module-autopsy--2026-07-02) Module Finding 1 for the underlying analysis. SA7.2 was resolved as part of the v0.87.0 hardening release — see [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
@@ -1196,7 +1196,7 @@ QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supab
 **Operator debug mode — shipped VIEW-AS contract:**
 Django superusers may activate a debug session that scopes the entire request to a selected organization so they can see the app exactly as that org's members see it. The shipped surface uses the session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when the key is present; the admin surface activates or exits the session; a debug banner renders while active; and every activation is audit-logged. No BYPASSRLS — the debug session runs under the same restricted runtime role as all other tenant paths, so RLS remains fully enforced.
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [findings.md](../../findings.md) (current risk posture)
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../../arch-audit.md) (current risk posture)
 
 ---
 
