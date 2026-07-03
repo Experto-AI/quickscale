@@ -73,7 +73,7 @@ class TestFilterFunctionality:
         filter_class = get_listing_filter(ConcreteListing)
         f = filter_class(
             data={"price_min": "100"},
-            queryset=ConcreteListing.objects.all(),
+            queryset=ConcreteListing.all_objects.all(),
         )
 
         results = f.qs
@@ -92,7 +92,7 @@ class TestFilterFunctionality:
         filter_class = get_listing_filter(ConcreteListing)
         f = filter_class(
             data={"price_max": "100"},
-            queryset=ConcreteListing.objects.all(),
+            queryset=ConcreteListing.all_objects.all(),
         )
 
         results = f.qs
@@ -107,7 +107,7 @@ class TestFilterFunctionality:
         filter_class = get_listing_filter(ConcreteListing)
         f = filter_class(
             data={"location": "new york"},
-            queryset=ConcreteListing.objects.all(),
+            queryset=ConcreteListing.all_objects.all(),
         )
 
         results = f.qs
@@ -122,7 +122,7 @@ class TestFilterFunctionality:
         filter_class = get_listing_filter(ConcreteListing)
         f = filter_class(
             data={"status": "published"},
-            queryset=ConcreteListing.objects.all(),
+            queryset=ConcreteListing.all_objects.all(),
         )
 
         results = f.qs
@@ -157,7 +157,7 @@ class TestFilterFunctionality:
                 "price_max": "200",
                 "location": "New York",
             },
-            queryset=ConcreteListing.objects.all(),
+            queryset=ConcreteListing.all_objects.all(),
         )
 
         results = f.qs
