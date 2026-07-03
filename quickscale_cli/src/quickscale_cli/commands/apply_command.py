@@ -86,6 +86,7 @@ from quickscale_cli.schema.state_schema import (
     StateError,
     StateManager,
 )
+from quickscale_core import __version__ as quickscale_version
 from quickscale_core.config import (
     normalize_installed_version,
 )
@@ -2112,6 +2113,7 @@ def _build_project_state_snapshot(
                 slug=qs_config.project.slug,
                 package=qs_config.project.package,
                 theme=qs_config.project.theme,
+                project_contract=quickscale_version,
                 created_at=timestamp,
                 last_applied=timestamp,
             ),
@@ -2120,6 +2122,12 @@ def _build_project_state_snapshot(
     else:
         new_state = copy.deepcopy(existing_state)
         new_state.project.last_applied = timestamp
+        # SA10.1: project_contract is generation-vintage evidence.
+        # Fresh states set it from the current version (above).
+        # Existing states preserve whatever they already have — legacy
+        # projects that predate SA10.1 keep None (unknown vintage)
+        # so future SA10.2 can distinguish "already on this contract"
+        # from "unknown — needs manual adoption review".
 
     for module_name in embedded_modules:
         if module_name not in qs_config.modules:

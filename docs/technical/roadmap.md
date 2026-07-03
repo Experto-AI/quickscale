@@ -135,10 +135,11 @@ No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/`
 
 #### Finding — Repo Finding 5: module↔generated-project contract drift (`why →` [Finding 5](../../arch-audit.md#finding-5-the-modulegenerated-project-contract-drifts-by-design--every-release-accretes-existing-projects-must-manually-adopt-steps-with-no-mechanism-to-apply-them))
 
-- [ ] **SA10.1 — `project_contract` version in state.yml.** `Tier 1 · Track 2 · deps: none`
+- [x] **SA10.1 — `project_contract` version in state.yml (complete).** `Tier 1 · Track 2 · deps: none`
   Record the generator/contract version a project was generated against in `.quickscale/state.yml` at generation time.
   *Files:* `quickscale_core/src/quickscale_core/schema/state_schema.py`, generator state-writing path.
   *Acceptance:* a fresh generation's `state.yml` includes `project_contract`; existing state-file tests updated for the new field.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA10.2 — `quickscale status` contract-vintage check.** `Tier 2 · Track 2 · deps: SA10.1`
   Compare each installed module's declared minimum project-contract requirement against the project's recorded `project_contract` and print the specific manual-adoption steps when the project is behind.
