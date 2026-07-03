@@ -55,7 +55,7 @@
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
         check-llm lint-llm typecheck-llm test-llm test-cov-llm \
-        check-core-compat check-module-core-imports \
+        check-core-compat check-module-core-imports check-manifest-sync \
         help
 
 # Default Python command (uses root Poetry environment)
@@ -153,6 +153,11 @@ help:
 	@echo "  make check-module-core-imports - Verify module code imports only from"
 	@echo "                               quickscale_core.runtime (with per-module"
 	@echo "                               legacy exceptions for billing/crm adapters)"
+	@echo ""
+	@echo "Manifest Sync Gate (SA16.1):"
+	@echo "  make check-manifest-sync  - Verify all module-owned module.yml files"
+	@echo "                               match their core snapshots"
+	@echo "  make manifest-sync        - Copy source manifests to snapshot paths"
 	@echo ""
 	@echo "LLM Optimized Checks (Quiet on success):"
 	@echo "  make check-llm            - Run all checks quietly"
@@ -537,10 +542,21 @@ check-core-compat:
 check-module-core-imports:
 	@$(PYTHON) scripts/check_module_core_imports.py
 
+# --- Manifest Sync Gate (SA16.1) ---
+
+# Verify that every module-owned module.yml matches its core snapshot.
+# Fails CI if drift is introduced.  Run ``make manifest-sync`` to
+# resync snapshots after intentionally updating a module manifest.
+check-manifest-sync:
+	@$(PYTHON) scripts/sync_module_manifests.py
+
+manifest-sync:
+	@$(PYTHON) scripts/sync_module_manifests.py --sync
+
 # --- Combined Checks ---
 
-# Run all checks (lint + typecheck + test + core-compat + import-linter)
-check: lint typecheck test check-core-compat check-module-core-imports
+# Run all checks (lint + typecheck + test + core-compat + import-linter + manifest-sync)
+check: lint typecheck test check-core-compat check-module-core-imports check-manifest-sync
 	@echo ""
 	@echo "🎉 All checks passed!"
 

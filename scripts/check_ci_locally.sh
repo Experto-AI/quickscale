@@ -27,14 +27,15 @@ for arg in "$@"; do
             echo "  --e2e     Include E2E tests (slow, requires Docker)"
             echo "  --help    Show this help message"
             echo ""
-            echo "This script runs all checks that GitHub Actions CI runs:"
-            echo "  1. Install dependencies"
-            echo "  2. Lint (ruff check + format)"
-            echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
-            echo "  4. Module-core import linter (check_module_core_imports)"
-            echo "  5. Type check (mypy)"
-            echo "  6. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
-            echo "  7. E2E tests (optional, with --e2e flag)"
+echo "This script runs all checks that GitHub Actions CI runs:"
+echo "  1. Install dependencies"
+echo "  2. Lint (ruff check + format)"
+echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
+echo "  4. Module-core import linter (check_module_core_imports)"
+echo "  5. Manifest sync gate (sync_module_manifests)"
+echo "  6. Type check (mypy)"
+echo "  7. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
+echo "  8. E2E tests (optional, with --e2e flag)"
             exit 0
             ;;
     esac
@@ -69,7 +70,7 @@ fi
 echo "✓ Module-to-core compatibility passed"
 
 echo ""
-echo "[4/7] Running module-core import linter..."
+echo "[4/8] Running module-core import linter..."
 make check-module-core-imports || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -81,12 +82,24 @@ fi
 echo "✓ Module-core import linter passed"
 
 echo ""
-echo "[5/7] Running type checks (mypy)..."
+echo "[5/8] Running manifest sync gate..."
+make check-manifest-sync || FAILED=true
+if [ "$FAILED" = true ]; then
+    echo ""
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✗ Manifest Sync Gate Failed          ║"
+    echo "╚════════════════════════════════════════╝"
+    exit 1
+fi
+echo "✓ Manifest snapshots in sync"
+
+echo ""
+echo "[6/8] Running type checks (mypy)..."
 make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""
-echo "[6/7] Running unit/integration tests..."
+echo "[7/8] Running unit/integration tests..."
 ./scripts/test_unit.sh || FAILED=true
 
 if [ "$FAILED" = true ]; then
@@ -101,7 +114,7 @@ echo "✓ All unit/integration tests passed"
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then
     echo ""
-    echo "[7/7] Running E2E tests (this may take several minutes)..."
+    echo "[8/8] Running E2E tests (this may take several minutes)..."
     ./scripts/test_e2e.sh || FAILED=true
 
     if [ "$FAILED" = true ]; then
@@ -114,7 +127,7 @@ if [ "$RUN_E2E" = true ]; then
     echo "✓ E2E tests passed"
 else
     echo ""
-    echo "[7/7] Skipping E2E tests (use --e2e to include)"
+    echo "[8/8] Skipping E2E tests (use --e2e to include)"
 fi
 
 echo ""
