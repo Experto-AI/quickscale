@@ -214,10 +214,8 @@ No cross-track dependencies — all three tracks can run fully in parallel.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/check_tenant_isolation.py`, `quickscale_modules/orgs/tests/test_checks.py`, `quickscale_modules/orgs/tests/test_management_commands.py`, `quickscale_core/tests/test_generator/test_templates.py`.
   *Acceptance:* the classification check now considers any installed concrete model (not just `quickscale_modules_*`); models can declare exclusion via the new attribute; auto-created M2M through models are auto-classified when their related models are classified; W005 and CLI output provide actionable remediation guidance.
 
-- [ ] **SA15.2 — Backfill markers on auth/backups/notifications/storage models.** `Tier 2 · Track 2 · deps: SA15.1 · RISK LEVEL: medium`
-  Classify the concrete models `TENANT_TABLE_REGISTRY` currently omits (auth's `User` + M2M through-tables, backups' 3 models, notifications' 4 models, storage's models) as ENROLLED or `tenant_excluded`, so orgs+auth / orgs+backups / orgs+notifications generated projects stop failing `check_tenant_isolation` in CI.
-  *Files:* `quickscale_modules/{auth,backups,notifications,storage}/src/**/models.py`.
-  *Acceptance:* generating an orgs+auth project and running `manage.py check_tenant_isolation --postgres-only` exits 0.
+- [x] **SA15.2 — Backfill markers on auth/backups/notifications/storage models (complete).** `Tier 2 · Track 2 · deps: SA15.1 · RISK LEVEL: medium`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA15.3 — Derive the human-readable registry as a generated artifact.** `Tier 1 · Track 2 · deps: SA15.2`
   Generate the reviewable registry overview from the markers rather than hand-maintaining it; keep the old literal `TENANT_TABLE_REGISTRY` temporarily as a cross-check test against the derived view (retire it once confidence is established), and drop the manual `decisions.md:1114-1115` enrolled-model count assertion in favor of the generated view.
