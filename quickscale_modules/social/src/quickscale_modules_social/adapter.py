@@ -15,23 +15,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.contracts.module_options import (
+from quickscale_core.runtime import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINK_TREE_PATH,
-)
-from quickscale_core.contracts.resolvers import resolve_social_module_options
-from quickscale_core.manifest.assembler import assemble_wiring_spec
-from quickscale_core.manifest.resolver import ResolverResult
-from quickscale_core.manifest.social_manifest import (
+    ModuleWiringSpec,
+    ResolverResult,
+    assemble_wiring_spec,
     load_social_manifest,
     render_social_managed_init_module,
     render_social_managed_urls_module,
     render_social_managed_views_module,
+    resolve_social_module_options,
     social_provider_supports_embeds,
 )
-from quickscale_core.module_wiring import ModuleWiringSpec
 
 
 def _social_manifest_adapter(
