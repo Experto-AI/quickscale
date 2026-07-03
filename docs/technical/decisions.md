@@ -346,7 +346,7 @@ contract is ready.
 | **Customization** | Minimal (mostly backend) | Heavy (colors, layout, etc.) |
 | **Backend/Frontend** | 70% backend, 30% frontend | 10% backend, 90% frontend |
 
-**For detailed workflow documentation** (split branch mechanics, conflict resolution, troubleshooting), see [roadmap.md §v0.61.0](./roadmap.md#v0610-theme-system-foundation--split-branch-infrastructure)
+**For detailed workflow documentation** (split branch mechanics, conflict resolution, troubleshooting), see [§Module & Theme Architecture](#module-theme-architecture) above
 
 ---
 
@@ -637,7 +637,7 @@ workflow coverage are aligned to it.
 - `quickscale plan` selects modules and creates `quickscale.yml`
 - Module-specific values are configured in `quickscale.yml` before apply
 
-**Authoritative Reference**: [roadmap.md §Plan/Apply Architecture](./roadmap.md#-planapply-architecture-v06800)
+**Authoritative Reference**: [§Plan/Apply Architecture](#planapply-architecture) above (this document)
 
 ---
 

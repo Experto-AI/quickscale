@@ -1,14 +1,14 @@
 # QuickScale Development Roadmap
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work, plus recently-completed handoff)
+> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work)
 > **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Changelog](../../CHANGELOG.md) | [Release Summary Template](release_summary_template.md) | [Start Here](../../START_HERE.md)
 
 ## Purpose
 
-Tracks pending roadmap work and, when open items are resolved, a brief recently-completed handoff section. Detailed completed implementation history remains in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as Adaptive Tier 1–2; split before implementing if a checklist item is Tier 3.
+Tracks pending roadmap work. Detailed completed implementation history is in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as Adaptive Tier 1–2; split before implementing if a checklist item is Tier 3.
 
 **Rules:**
-- Keep open todo items here, plus optionally a recently-completed handoff section.
+- Keep open todo items here.
 - Move detailed completed implementation history to CHANGELOG.md.
 - Each open phase links back (`why →`) to the finding that justifies it.
 
@@ -49,65 +49,45 @@ git merge --no-ff wt-track{N}
 
 ### Structural Autopsy Remediation II (opened 2026-07-02)
 
-Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#autopsy--2026-07-02) and the [2026-07-02 module-by-module autopsy](../../arch-audit.md#module-by-module-autopsy--2026-07-02). Each task below is sized Adaptive **Tier 1 or Tier 2** (one concern, statable in one sentence). Tenant-isolation and money-ledger work is sensitive-domain → `RISK LEVEL: medium` → floors at Tier 2. Two items that would be Tier 3 as a whole (the full declarative-wiring migration across all modules, and the full orgs-registry inversion) have been split: only the first credible slice is scheduled now; the remainder is tracked as a per-module/per-step follow-on, not in this batch — matching the precedent set by SA5.2. Every task carries a `why →` link to the finding it closes.
+Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#autopsy--2026-07-02) and the [2026-07-02 module-by-module autopsy](../../arch-audit.md#module-by-module-autopsy--2026-07-02). Each task below is sized Adaptive **Tier 1 or Tier 2**. Tenant-isolation and money-ledger work is sensitive-domain → `RISK LEVEL: medium` → floors at Tier 2.
 
 **Naming:** `SAn.m` continues the sequence from the closed 2026-06-30 remediation (`SA1`–`SA5`); this batch starts at `SA6` to avoid collision. `SA6`–`SA10` close repo-level findings, `SA11`–`SA12` close module-level findings.
 
-**Priority note:** SA11.1–SA11.4 close the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1) and should be the first work landed regardless of track scheduling below. SA11.5 should stay in that first landing batch because it closes the broader Module Finding 1 hardening work immediately adjacent to the defect chain.
+**Priority note:** SA11.1–SA11.4 closed the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1). SA11.5 stays in the first landing batch because it closes the broader Module Finding 1 hardening work adjacent to the defect chain. SA11.2 should land before SA11.3/SA11.4 because it proves the defect class is closed.
 
-#### Dependency & parallelization overview (2026-07-02 status)
+#### Dependency & parallelization overview (2026-07-03)
 
-`SA12.1`, `SA9.1`, `SA6.1`, `SA6.2`, `SA6.3`, and `SA7.1` shipped and merged — see [CHANGELOG.md](../../CHANGELOG.md). Diagram below shows only remaining open work.
+**Completed and merged — see [CHANGELOG.md](../../CHANGELOG.md):** SA12.1, SA9.1, SA6.1, SA6.2, SA6.3, SA7.1, SA7.2, SA7.3, SA9.2, SA9.3, SA11.1.
+
+Diagram below shows only remaining open work.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + org-switch)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────────────
-SA11.1 ✓ completed                   SA9.2  (no deps)                         SA7.2  (no deps)
-  ├─ SA11.2 (←11.1, unblocked)          SA9.3  (no deps)                         SA7.3  (no deps)
-  ├─ SA11.3 (←11.1, unblocked)          ├─ SA9.4 (←9.3)                        SA7.4  (no deps)
-  └─ SA11.4 (←11.1, unblocked)          └─ SA9.5 (←9.3)                        SA8.1  (no deps)
-SA11.5 (no deps — clean)                 └─ SA9.6 (←9.4 & ←9.5)                  └─ SA8.2 (←8.1)
-SA11.6 (no deps — clean)             SA10.1 (no deps)                             └─ SA8.3 (←8.2)
-SA11.7 (no deps — clean)               └─ SA10.2 (←10.1)
+SA11.2 (←11.1, unblocked)           SA9.4  (←9.3)                             SA7.4  (no deps)
+├─ SA11.3 (←11.1, unblocked)        SA9.5  (←9.3)                             SA8.1  ⚠ DECISION (no deps)
+└─ SA11.4 (←11.1, unblocked)        └─ SA9.6 (←9.4 & 9.5)                       └─ SA8.2 (←8.1)
+SA11.5 (no deps)                    SA10.1 (no deps)                              └─ SA8.3 (←8.2)
+SA11.6 (no deps)                      └─ SA10.2 (←10.1)
+SA11.7 (no deps)
 ```
 
-No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.1` — new `signals.py`/`services.py` receiver + `apps.py` wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back, same as the SA3.2/SA1.3 precedent.
+No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.x` — signals/wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back.
 
 #### Track summary
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.1 *(complete)* → SA11.2/SA11.3/SA11.4 *(unblocked)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
-| **2** | SA9.2 *(completed)* → SA9.3 *(completed)* → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA7.1 *(completed)* → SA7.2 *(completed)* → SA7.3 *(completed)* → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
-
-#### Track status (as of 2026-07-03)
-
-- **Track 1 — SA11.1 complete, SA11.2/SA11.3/SA11.4 unblocked.** `SA11.1` finished 2026-07-03 (`.render()`-forcing in `dispatch()`, render-lifecycle test, roadmap/changelog updated). `SA11.2`/`SA11.3`/`SA11.4` can now proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
-- **Track 2 — SA9.2 and SA9.3 complete; SA9.4 up next.** The maintainer decision on the backups/`dr_engine` core-version compatibility gap (`SA9.2`) was confirmed and implemented 2026-07-03 — see below. `SA9.3` completed 2026-07-03 (runtime facade created). The `SA9.4`/`SA9.5` → `SA9.6` chain, and the independent `SA10.1` → `SA10.2` chain remain clean to start/continue.
-- **Track 3 — clean.** `SA7.1`, `SA7.2`, and `SA7.3` are complete (see below); the next pending item is `SA7.4`, and `SA8.1`–`SA8.3` remain unblocked by dependencies.
-
-#### Track 1 status snapshot (2026-07-03)
-
-- **SA11.1 complete.** The `.render()`-forcing change and `CR-SA11.1-002` render-lifecycle test have landed. SA11.2/SA11.3/SA11.4 can now proceed.
-- **Next up:** SA11.2 (restricted-role E2E smoke) should land before SA11.3/SA11.4 because it proves the defect class is closed. SA11.3/SA11.4 (migrate blog/listings views) are the first consumer views adopting the helper seam.
-- **Pending after the live-defect chain:** SA11.5 remains in the first landing batch because it closes the broader Module Finding 1 hardening work, while SA11.6 and SA11.7 stay queued after that batch.
+| **1** | SA11.2/SA11.3/SA11.4 *(unblocked)* → SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
+| **2** | SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
+| **3** | SA7.4 · SA8.1 ⚠ → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
 
 ---
 
 #### Finding — Module Finding 1: request→tenant-context boundary (`why →` [Module Finding 1](../../arch-audit.md#module-finding-1-the-requesttenant-context-boundary-is-a-per-module-convention-with-divergent-idioms--and-bloglistings-public-pages-read-as-empty-under-the-hardened-production-posture))
 
 - [x] **SA11.1 — Orgs-owned public-read context helper (complete — 2026-07-03).** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  Added a helper in the orgs module (`quickscale_modules_orgs/public_context.py`) that both scopes a queryset to a given organization *and* primes the tenant `ContextVar`/GUC (`tenant_context(...)`) in one call — generalizing the idiom already proven correct in `quickscale_core/manifest/social_manifest.py:444–447`. Ships as a mixin (`PublicSystemOrgReadMixin`) and a plain function for non-CBV call sites.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py`.
-  *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves. TemplateResponse rendering is forced inside `org_scope()` so lazy queryset evaluation during template rendering sees the primed tenant context (CR-SA11.1-001 fix); a dedicated render-lifecycle test with a lazy `QuerySet` in the template context proves this (CR-SA11.1-002 fix; strengthened by CR-SA11.1-003).
-
-  > **2026-07-03 — SA11.1 complete.**
-  > The `.render()`-forcing change is implemented in `PublicSystemOrgReadMixin.dispatch()`: after calling `super().dispatch()`, if the response is an unrendered `TemplateResponse`, the mixin calls `.render()` on it before returning — still inside the `with org_scope():` block, so lazy queryset evaluation happens while the GUC is still primed. Streamed responses are documented as unsupported (not used for public pages today).
-  >
-  > `CR-SA11.1-002` is closed by `test_mixin_forces_template_response_render`, a `TemplateResponse`-based test that proves the fix works: the view returns an unrendered `TemplateResponse` and the test asserts the rendered content is correct — confirming the lazy queryset executed with the tenant GUC primed. The test was strengthened in `CR-SA11.1-003` to use a **lazy** `QuerySet` (the `ListView`/`DetailView` pattern) that evaluates only during template rendering rather than an eagerly-evaluated `count()` in the context dict, so a regression that moves `.render()` outside `org_scope()` would now correctly fail.
-  >
-  > SA11.1 is complete. SA11.2/SA11.3/SA11.4 can now proceed.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA11.2 — Restricted-role anonymous-read E2E smoke.** `Tier 2 · Track 1 · deps: SA11.1 · RISK LEVEL: medium`
   Add an integration test that runs against the restricted `NOBYPASSRLS` runtime role (not the superuser test posture used elsewhere) and asserts an anonymous request to a public blog page returns a published System-org post. This is the single test that covers the whole defect class.
@@ -115,7 +95,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   *Acceptance:* test fails on current `main` (proving it reproduces the defect) and passes once SA11.3 lands.
 
 - [ ] **SA11.3 — Migrate blog public views to the helper.** `Tier 1 · Track 1 · deps: SA11.1`
-  Convert `_resolve_org_for_read`/`_scope_by_org` to use `SA11.1`'s helper so anonymous reads prime the GUC instead of only filtering.
+  Convert `_resolve_org_for_read`/`_scope_by_org` to use SA11.1's helper so anonymous reads prime the GUC instead of only filtering.
   *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py`.
   *Acceptance:* SA11.2 passes; existing blog test suite stays green.
 
@@ -144,22 +124,10 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 #### Finding — Repo Finding 4: core-as-runtime-API boundary (`why →` [Finding 4](../../arch-audit.md#finding-4-quickscalecores-entire-internal-surface-is-a-de-facto-runtime-api-for-user-owned-generated-projects--with-an-open-ended-version-range-and-a-repo-wide-clean-break-policy))
 
 - [x] **SA9.2 — CI job: module-vs-oldest-claimed-core import check (completed 2026-07-03).** `Tier 1 · Track 2 · deps: none · RISK LEVEL: medium`
-  Added `scripts/check_module_core_compatibility.py` — a two-phase script that (1) statically analyses each module's `quickscale_core` imports against the on-disk core source, and (2) performs a real install/import probe: for each module with a quantifiable minimum core version, creates an isolated venv, installs `quickscale-core==<min_claimed>` plus the module's non-core deps from PyPI, and imports the module's package plus its primary `services` submodule. Wired as `make check-core-compat`, added as step 3/6 in `scripts/check_ci_locally.sh`, and added as a `module-core-compat` gate job in `.github/workflows/ci.yml` that the `test` job depends on. Included in `make check`.
-  *Files:* `scripts/check_module_core_compatibility.py`, `Makefile`, `scripts/check_ci_locally.sh`, `.github/workflows/ci.yml`, `quickscale_core/tests/scripts/test_check_module_core_compatibility.py`.
-  *Acceptance:* `make check-core-compat` passes; the script fails if a module imports a core symbol not present in the current core source, if a module's minimum claimed core version exceeds the repository's VERSION, or if any module with a claimed minimum core version cannot be imported against `quickscale-core==<min_claimed>` in an isolated environment. The `test` CI job will not run unless the `module-core-compat` gate passes. Pass `--skip-install-probe` to skip the heavy runtime check for local development.
-  *Discovered finding:* The embedded manifest copy at `quickscale_core/src/quickscale_core/data/manifests/backups/module.yml` still declares `quickscale-core>=0.86.0` (missing the `<0.87.0` upper bound applied in SA9.1 to the authoritative `quickscale_modules/backups/module.yml`). This drift does not block SA9.2 but should be cleaned up to keep the embedded manifest consistent with the shipped inventory. Tracked separately as **SA9.2-FINDING-001** — remains advisory and non-blocking.
-
-  > **2026-07-03 closeout — all remaining implementation items completed.**
-  > The following items were implemented to close SA9.2:
-  > 1. **Backups-only skip mechanism** (`SKIP_INSTALL_PROBE_MODULES`): a dict constant in the script keyed by module name with a documented reason string citing the confirmed 2026-07-03 roadmap decision. Applied to `backups` only. Static analysis (Phase 1) still runs for all modules; only the install/import probe (Phase 2) is skipped.
-  > 2. **Management-command probe coverage** (`CR-SA9.2-002`): added `_get_management_command_modules()` helper that scans `src/<package>/management/commands/*.py` for each module and returns dotted import paths. Extended `_build_probe_script()` with Phase 3 that imports each discovered management command module, using the same `quickscale_core`-aware failure heuristic as Phase 2b. The probe now covers both `<package>.services` and all management command entry points.
-  > 3. **Tests**: created `test_check_module_core_compatibility.py` with 12 tests covering skip-allowlist integrity (only `backups`, reason-annotated, dated), management command discovery (backups=9+, forms=2, crm=0, nonexistent dir=0), probe code generation (Phase 3 inclusion/omission, core-failure heuristic), and public symbol regression.
-  > 4. **Follow-up** (not part of SA9.2, track alongside SA9.4): once SA9.4 migrates backups off the deep `dr_engine` import and `quickscale-core` 0.87.0 publishes, bump backups' `module.yml` floor to `>=0.87.0,<0.88.0` and remove it from the skip list, re-enabling the probe for it. SA9.2-FINDING-001 remains advisory and non-blocking; this follow-up fixes it incidentally.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [x] **SA9.3 — `quickscale_core.runtime` public facade (completed 2026-07-03).** `Tier 2 · Track 2 · deps: none`
-  Created `quickscale_core/src/quickscale_core/runtime.py` — a pure re-export facade covering the DR adapter surface (`capture_snapshot`, `fetch_snapshot_report`, `record_verification`, `set_rollback_pin`, `build_database_plan`, `execute_database_restore`, `sync_media`, `ADAPTER_FUNCTIONS`, and `BackupError`) plus the social-manifest rendering surface (`SOCIAL_LINK_TREE_PATH`, `SOCIAL_EMBEDS_PATH`, `SOCIAL_INTEGRATION_BASE_PATH`, `SOCIAL_INTEGRATION_EMBEDS_PATH`, `resolve_social_module_options`, `assemble_wiring_spec`, `ResolverResult`, `load_social_manifest`, `render_social_managed_init_module`, `render_social_managed_urls_module`, `render_social_managed_views_module`, `social_provider_supports_embeds`, and `ModuleWiringSpec`). No behavior change — pure re-export layer. Includes focused direct tests verifying every symbol is importable, correctly typed, and matches the `__all__` export list.
-  *Files:* `quickscale_core/src/quickscale_core/runtime.py` (new), `quickscale_core/tests/test_runtime.py` (new).
-  *Acceptance:* `poetry run pytest quickscale_core/tests/test_runtime.py` passes; facade importable and re-exports match the declared surface; no existing import path removed yet (that's SA9.4/SA9.5).
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade.** `Tier 2 · Track 2 · deps: SA9.3`
   Repoint `services.py` and the seven management commands from `quickscale_core.dr_engine.{orchestration,primitives,recovery,verification,adapter}` to `quickscale_core.runtime`.
@@ -194,17 +162,11 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 2: orgs composition god module (`why →` [Finding 2](../../arch-audit.md#finding-2-orgs-is-becoming-the-composition-god-module--inter-module-integration-is-hand-wired-pairwise-with-no-contract-and-the-central-tenant-registry-couples-all-module-versions-in-lockstep))
 
-- [x] **SA7.2 — Fail-hard the auth-adapter import fallback.** `Tier 1 · Track 3 · completed 2026-07-03`
-  Replaced the silent `try/except ImportError` fallback in `adapters.py` with an unconditional import from `quickscale_modules_auth.adapters.QuickscaleAccountAdapter`. If the auth module is not on the Python path, the `ImportError` now propagates as a hard failure at module load time instead of silently degrading to `DefaultAccountAdapter`. No test-only fallback path was needed — the auth module is always importable via PYTHONPATH without Django app registration.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py`, `quickscale_modules/orgs/module.yml`, `quickscale_core/src/quickscale_core/data/manifests/orgs/module.yml`, `quickscale_modules/orgs/pyproject.toml`.
-  *Findings:* Adding `quickscale_modules_auth` to `tests/settings.py` `INSTALLED_APPS` was considered during implementation but was removed during validation — PYTHONPATH already makes the adapter importable without app registration, and adding the app caused tenant-registry test collisions. No fix needed; the fail-hard import works correctly via PYTHONPATH alone. This change closes the known fail-hard violation tracked in `decisions.md` §fail-hard-principle.
-  **`CR-SA7.2-001` (high) — RESOLVED 2026-07-03.** The code changes (SA7.2 initial) introduced an unconditional `from quickscale_modules_auth.adapters import QuickscaleAccountAdapter` but the orgs module metadata still declared no first-party auth dependency. **Fix:** declared `required_modules: [auth]` in both `orgs/module.yml` manifests (module-owned and core data mirror), and added `quickscale-module-auth = ">=0.71.0,<0.87.0"` to `orgs/pyproject.toml`. The `implies` section was left unchanged — auth is gated by the apply-time `_validate_module_prerequisites` check rather than auto-resolved via implications, so users must explicitly include auth in their module selection.
-  *Acceptance:* omitting the auth module from the Python path raises `ModuleNotFoundError` at import time (fail-hard); orgs unit tests: 677 passed, 3 failed (pre-existing FORCE-RLS failures in `test_management_commands.py`, unrelated to SA7.2), 5 skipped; CLI orgs contract tests: 7 passed. Module metadata now declares the auth dependency explicitly, matching the code.
+- [x] **SA7.2 — Fail-hard the auth-adapter import fallback (completed 2026-07-03).** `Tier 1 · Track 3`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [x] **SA7.3 — De-duplicate notifications defaults out of orgs' manifest.** `Tier 1 · Track 3 · completed 2026-07-03`
-  Removed the inlined `default_config` block for notifications from both `orgs/module.yml` manifests (module-owned and core data mirror). Notifications' implied entry now carries no inline defaults — the notifications module's own `module.yml` config defaults are the sole source of truth. The existing `test_orgs_implies_notifications_default_config_parity` drift-prevention test was updated to assert that the `default_config` is empty, preventing re-duplication. All implication tests updated to expect empty config dicts for notifications. Acceptance criteria satisfied: behavior is preserved because both the old inline defaults and the canonical notifications defaults were identical, and downstream apply/plan flow falls through to notifications' own manifest defaults when the implied config is empty.
-  *Files:* `quickscale_modules/orgs/module.yml`, `quickscale_core/src/quickscale_core/data/manifests/orgs/module.yml`, `quickscale_core/tests/test_manifest_loader.py`, `quickscale_core/tests/test_manifest_implications.py`, `quickscale_cli/tests/commands/test_implied_module_defaults.py`.
-  *Findings/blockers:* None. The inline duplicated defaults were an exact copy of the canonical notifications defaults, so removing them is a pure deduplication with zero behavior change.
+- [x] **SA7.3 — De-duplicate notifications defaults out of orgs' manifest (completed 2026-07-03).** `Tier 1 · Track 3`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA7.4 — Version-range constraints on `required_modules`.** `Tier 2 · Track 3 · deps: none`
   Add a minimum-version constraint to each module's `required_modules: [orgs]` declaration (billing, blog, crm, social — the four modules that declare it today) and make `_validate_module_prerequisites` in `apply_command.py` fail closed when an installed module's required-module version is below the declared minimum.
@@ -215,10 +177,11 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 3: dual source of truth for active organization (`why →` [Finding 3](../../arch-audit.md#finding-3-active-organization-has-two-sources-of-truth-in-generated-saas-apps--the-server-session-and-the-spas-client-state--and-the-shipped-resolution-was-to-amputate-features-d1-option-b))
 
-- [ ] **SA8.1 — D1 Option A decision record: explicit-org API contract.** `Tier 1 · Track 3 · deps: none`
+- [ ] **SA8.1 ⚠ DECISION REQUIRED — D1 Option A decision record: explicit-org API contract.** `Tier 1 · Track 3 · deps: none`
   Write the deferred D1 Option A decision: org-scoped JSON APIs take the org slug/id explicitly in the request (path or body) and the server validates membership per request; ambient session scoping is reserved for server-rendered flat routes only. Update `decisions.md` §D1 to record this as the chosen direction (superseding "Option A deferred").
   *Files:* `docs/technical/decisions.md`.
   *Acceptance:* `decisions.md` §D1 states the explicit-org contract as decided, with the scope of "org-scoped API" defined precisely enough for SA8.2 to implement against.
+  > **See decision context below.**
 
 - [ ] **SA8.2 — Membership-validating request wrapper for org-scoped endpoints.** `Tier 2 · Track 3 · deps: SA8.1 · RISK LEVEL: medium`
   Add a reusable server-side decorator/mixin (extending the existing `require_org_role`/`OrgRoleMixin` pattern in `permissions.py`) that resolves the org from an explicit request parameter (not the session), validates the requesting user's membership, and sets tenant context for the duration of the request.
@@ -229,6 +192,24 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   Update the generated React theme's API hooks to pass the explicit org (from client state) on every org-scoped request instead of relying on the ambient session, using SA8.2's validated endpoints.
   *Files:* `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/hooks/{useApi.ts.j2,useOrgs.ts.j2}`.
   *Acceptance:* switching org client-side and immediately firing an org-scoped query resolves the newly-selected org, not the previous session org (manual verification: switch org, inspect the next request's resolved org server-side).
+
+---
+
+## Decision Gate: SA8.1 — D1 Explicit-Org API Contract
+
+**Context (from arch-audit.md Finding 3):** Generated SaaS apps have two sources of truth for the active organization — the server session (`ACTIVE_ORG_SESSION_KEY` → middleware → ContextVar → RLS GUC) and the React SPA's client state. The shipped resolution (D1 Option B) was to amputate features (remove billing SPA entry points) rather than fix the root cause. Every org-scoped SPA surface re-triggers this collision — and the `useOrgs.ts` hooks already build slug-scoped paths (the client-side pattern), but the server still resolves org from the session, so a client-side switch silently serves the wrong org until the next full navigation.
+
+**SA8.1 proposes:** All org-scoped JSON APIs take the org slug/id explicitly in the request (path or body); the server validates membership per request; ambient session scoping is reserved for server-rendered flat routes only. This supersedes D1 Option B and closes the deferral.
+
+**Three alternatives:**
+
+| # | Approach | Effort | Pros | Cons | Precedent fit |
+|---|----------|--------|------|------|---------------|
+| 1 | **Explicit-org API contract** (SA8.1 proposal) | Medium | Structural fix — org is an explicit, validated parameter per request; no sync step to forget; matches the slug-scoped `/api/orgs/<slug>/` pattern already shipped and permitted by `decisions.md:1227`; fixes root cause permanently | Requires migrating all org-scoped endpoints to the wrapper (SA8.2) and client hooks (SA8.3) | **Best fit.** Arch-audit Finding 3 preferred option (1); the client-side pattern in `useOrgs.ts` already builds slug-scoped paths — SA8.1 finishes it server-side |
+| 2 | **Session-sync endpoint** (original D1 Option A) | Low–Medium | Lower effort; keeps ambient scoping for existing routes | Per-callsite discipline ("await the sync") degrades exactly like procedural tenant filtering; doesn't solve dual authority, just syncs it on switch | Acceptable bridge, but re-introduces a forget-prone step every org-scoped SPA surface must remember |
+| 3 | **Server-driven switching** (full navigation) | Low | Lowest effort; client state never diverges | Costs SPA fluidity; contradicts the SPA-in-React direction | Stopgap only; contradicts the product direction |
+
+**Decision needed:** Confirm Option 1 (explicit-org API contract) as the chosen direction, which unlocks SA8.2/SA8.3. Option 2 is a valid fallback if Option 1 scope feels too large for this batch.
 
 ---
 
