@@ -1,19 +1,12 @@
 """Public-context helpers for orgs-owned anonymous/public read operations.
 
-SA11.1 provides a plain helper context manager and a CBV mixin that
-generalize the proven tenant-context priming idiom from
-``social_manifest.py:444-447`` for public/anonymous read paths in other
-modules.
+SA11.1 provides a CBV mixin that generalizes the proven tenant-context
+priming idiom from ``social_manifest.py:444-447`` for public/anonymous
+read paths in other modules.
 
-The pattern this encapsulates::
-
-    resolved_org_id = (
-        org.id if org is not None
-        else Organization.objects.get_system_org().id
-    )
-    with transaction.atomic():
-        with tenant_context(resolved_org_id):
-            ...  # queries run with ContextVar and DB GUC primed
+The mixin wraps ``dispatch()`` in :func:`~.current_org.org_scope` which
+opens a ``transaction.atomic()`` block and primes both the Python
+ContextVar and the PostgreSQL GUC for the duration of the view.
 """
 
 from __future__ import annotations
@@ -22,75 +15,6 @@ import contextlib
 import uuid
 from collections.abc import Iterator
 from typing import Any
-
-from .current_org import tenant_context
-
-
-@contextlib.contextmanager
-def resolve_public_org_context(
-    org: Any | None = None,
-) -> Iterator[uuid.UUID | None]:
-    """Resolve the public-facing org and prime tenant context for its scope.
-
-    Parameters
-    ----------
-    org : Organization or None
-        An ``Organization`` instance (or any object with a ``pk`` attribute).
-        When ``None`` (the default), the System org singleton is resolved
-        via ``Organization.objects.get_system_org()``.
-
-    Yields
-    ------
-    uuid.UUID or None
-        The resolved organization UUID, or ``None`` when the System org
-        could not be resolved (fail-closed — see below).
-
-    The Python ``ContextVar`` and the PostgreSQL GUC ``app.current_org_id``
-    are primed for the duration of the context via ``tenant_context()``.
-
-    **Transaction boundary**: ``tenant_context()`` does **not** wrap in
-    ``transaction.atomic()`` — the caller is responsible for managing
-    database transaction boundaries.  An active transaction is required
-    for the ``SET LOCAL`` commands to succeed.
-
-    **Fail-closed**: if ``org`` is ``None`` **and** the System org cannot
-    be resolved (e.g. before migrations have created it), ``None`` is
-    yielded and ``tenant_context(None)`` is used.  Tenant-scoped default
-    managers return ``.none()`` in this state, preventing accidental
-    exposure of all rows.
-
-    Examples
-    --------
-    Plain-function call site::
-
-        from django.db import transaction
-        from quickscale_modules_orgs.public_context import (
-            resolve_public_org_context,
-        )
-
-        with transaction.atomic():
-            with resolve_public_org_context() as org_id:
-                posts = Post.objects.all()  # auto-scoped to System org
-
-    Explicit org override::
-
-        with transaction.atomic():
-            with resolve_public_org_context(org=my_org) as org_id:
-                data = MyModel.objects.filter(...)
-    """
-    from .models import Organization
-
-    if org is not None:
-        resolved_id: uuid.UUID | None = org.pk
-    else:
-        try:
-            resolved_id = Organization.objects.get_system_org().pk
-        except Exception:
-            # System org not available — fail-closed via None.
-            resolved_id = None
-
-    with tenant_context(resolved_id):
-        yield resolved_id
 
 
 class PublicSystemOrgReadMixin:
@@ -167,15 +91,17 @@ class PublicSystemOrgReadMixin:
                 response.render()
             return response
 
+    @contextlib.contextmanager
     def get_public_org_context(
         self,
         org: Any | None = None,
     ) -> Iterator[uuid.UUID | None]:
         """Return a context manager that primes tenant context for public reads.
 
-        Wraps :func:`resolve_public_org_context` so that CBV callers can
-        invoke it as ``self.get_public_org_context(org)`` without
-        importing the module-level function directly.
+        Resolves the public-facing org (System org by default) and returns
+        a context manager that primes the Python ContextVar and PostgreSQL
+        GUC via :func:`~.current_org._tenant_context` for the duration of
+        the block.
 
         This is a convenience accessor for call sites that need manual
         context management instead of the automatic ``dispatch``-level
@@ -184,11 +110,27 @@ class PublicSystemOrgReadMixin:
         Parameters
         ----------
         org : Organization or None
-            Passed through to :func:`resolve_public_org_context`.
+            An ``Organization`` instance (or any object with a ``pk``
+            attribute).  When ``None`` (the default), the System org
+            singleton is resolved via
+            ``Organization.objects.get_system_org()``.
 
         Yields
         ------
         uuid.UUID or None
-            The resolved organization UUID.
+            The resolved organization UUID, or ``None`` when the System org
+            could not be resolved (fail-closed).
         """
-        return resolve_public_org_context(org=org)
+        from .current_org import _tenant_context
+        from .models import Organization
+
+        if org is not None:
+            resolved_id: uuid.UUID | None = org.pk
+        else:
+            try:
+                resolved_id = Organization.objects.get_system_org().pk
+            except Exception:
+                resolved_id = None
+
+        with _tenant_context(resolved_id):
+            yield resolved_id
