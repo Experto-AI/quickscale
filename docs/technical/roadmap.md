@@ -53,11 +53,11 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 
 **Naming:** `SAn.m` continues the sequence from the closed 2026-06-30 remediation (`SA1`–`SA5`); this batch starts at `SA6` to avoid collision. `SA6`–`SA10` close repo-level findings, `SA11`–`SA12` close module-level findings.
 
-**Priority note:** SA11.1–SA11.4 closed the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1). SA11.5 stays in the first landing batch because it closes the broader Module Finding 1 hardening work adjacent to the defect chain. SA11.2 should land before SA11.3/SA11.4 because it proves the defect class is closed.
+**Priority note:** SA11.1–SA11.4 closed the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1); see CHANGELOG.md. SA11.5 stays in the first landing batch because it closes the broader Module Finding 1 hardening work adjacent to that now-closed defect chain.
 
 #### Dependency & parallelization overview (2026-07-03)
 
-**Completed and merged — see [CHANGELOG.md](../../CHANGELOG.md):** SA12.1, SA9.1, SA6.1, SA6.2, SA6.3, SA7.1, SA7.2, SA7.3, SA9.2, SA9.3, SA9.4, SA9.5, SA11.1.
+**Completed and merged — see [CHANGELOG.md](../../CHANGELOG.md):** SA12.1, SA9.1, SA6.1, SA6.2, SA6.3, SA7.1, SA7.2, SA7.3, SA7.4, SA9.2, SA9.3, SA9.4, SA9.5, SA11.1, SA11.2, SA11.3, SA11.4. Repo Finding 2 (`orgs` god-module de-coupling) and Repo Finding 3 (dual source of truth for active org) are fully resolved — see CHANGELOG.md and, for Finding 3, `decisions.md` §D1.
 
 Diagram below shows only remaining open work.
 
@@ -69,7 +69,7 @@ SA11.6 (no deps)                    SA10.1 (no deps)
 SA11.7 (no deps)                      └─ SA10.2 (←10.1)
 ```
 
-No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.x` — signals/wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back.
+No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/` (signals/wiring) is complete and merged, so the only remaining touch on that package is Track 1's `SA11.6` — no cross-track file-ownership conflict remains.
 
 #### Track summary
 
@@ -124,10 +124,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [x] **SA9.5 — Migrate social's deep core imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
-  Repointed `social/adapter.py` from `quickscale_core.contracts.{module_options,resolvers}` and `quickscale_core.manifest.{assembler,resolver,social_manifest}` to `quickscale_core.runtime`.
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `quickscale_modules/social/src/quickscale_modules_social/adapter.py`.
-  *Acceptance:* social test suite green with imports going through the facade only.
 
 - [ ] **SA9.6 — CI import-linter gate.** `Tier 1 · Track 2 · deps: SA9.4 & SA9.5`
   Add a CI check that fails if any file under `quickscale_modules/*/src/` imports `quickscale_core` from outside `quickscale_core.runtime` (or another explicitly documented allowlist entry).
@@ -150,30 +147,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 ---
 
-#### Finding — Repo Finding 2: orgs composition god module (`why →` [Finding 2](../../arch-audit.md#finding-2-orgs-is-becoming-the-composition-god-module--inter-module-integration-is-hand-wired-pairwise-with-no-contract-and-the-central-tenant-registry-couples-all-module-versions-in-lockstep))
-
-- [x] **SA7.2 — Fail-hard the auth-adapter import fallback (completed 2026-07-03).** `Tier 1 · Track 3`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA7.3 — De-duplicate notifications defaults out of orgs' manifest (completed 2026-07-03).** `Tier 1 · Track 3`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA7.4 — Version-range constraints on `required_modules` (complete — 2026-07-03, review follow-up 2026-07-03).** `Tier 2 · Track 3 · deps: none`
-  Added a `>=0.86.0` version floor to the `required_modules: [orgs]` declaration in billing, blog, crm, social, **and listings** module manifests.  Created `quickscale_core.manifest.required_modules` with `parse_required_module_entry()` and `check_required_module_versions()` for parsing inline `name>=version` specs and comparing installed module versions.  Wired the version-floor check into `_prepare_apply_context`, `_refresh_context_after_lock`, and (post-embed) in `_execute_apply_steps_locked` in `apply_command.py` so `quickscale apply` fails closed with an explicit error naming the dependent module, required module, required minimum version, and installed version — including modules embedded in the same run.  Updated `test_module_manifest_contract.py`'s `_required_module_package_names` to strip version specs when comparing against pyproject first-party dependencies.  Added 22 unit tests for `parse_required_module_entry`, `_parse_version_parts`, and `check_required_module_versions` in `quickscale_core/tests/test_required_modules.py`, plus **five** version-floor contract tests in `test_module_manifest_contract.py`.  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
----
-
-#### Finding — Repo Finding 3: dual source of truth for active organization (`why →` [Finding 3](../../arch-audit.md#finding-3-active-organization-has-two-sources-of-truth-in-generated-saas-apps--the-server-session-and-the-spas-client-state--and-the-shipped-resolution-was-to-amputate-features-d1-option-b))
-
-- [x] **RESOLVED 2026-07-03 by product decision — no multi-org membership for regular users.**
-  Regular SaaS users belong to exactly one organization. The server session is the sole authority for org resolution, eliminating the dual-source-of-truth problem. No org switcher in the user-facing UI. VIEW-AS (superuser-only) remains the debug path for operator org-scope switching — already shipped.
-
-  **Consequences:**
-  - SA8.1/SA8.2/SA8.3 (explicit-org API contract) are unnecessary — cancelled.
-  - Billing SPA entry points are no longer blocked by the D1 org-switch problem and can be restored as separate implementation work.
-  - The D1 decision record in `decisions.md` §D1 has been updated to reflect this resolution.
-
-  > **Implementation note:** Removing the org switcher from the user-facing React UI and restoring billing SPA entry points are tracked separately — not part of this SA hardening batch.
+> **Closed findings:** Repo Finding 2 (`orgs` composition god module — SA7.2, SA7.3, SA7.4 all complete) and Repo Finding 3 (dual source of truth for active organization — resolved by product decision 2026-07-03) have no open tasks. Closeout detail is in [CHANGELOG.md](../../CHANGELOG.md); the Finding 3 product decision is recorded in `decisions.md` §D1.
 
 ## References
 
