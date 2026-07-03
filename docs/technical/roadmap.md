@@ -122,7 +122,7 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA11.7 (no deps)                     SA15.1 → SA15.2 → SA15.3                  SA16.1 (no deps)
+SA11.7 (no deps)                     SA15.2 → SA15.3                            SA16.1 (no deps)
                                      SA17.1 (no deps)                          SA16.2 (no deps)
 SA13.1 (no deps)                     SA17.2 (no deps)                          SA18.1 (no deps)
 SA13.2 (deps: SA13.1)                SA17.3 (no deps)                          SA18.2 (no deps)
@@ -144,7 +144,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA11.7 *(carried over)*, then SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
-| **2** | SA15.1 → SA15.2 → SA15.3, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
+| **2** | SA15.2 → SA15.3 *(SA15.1 complete)*, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
 | **3** | SA16.1, SA16.2, plus SA18.1–SA18.11 | Manifest-snapshot drift (Finding 4) + core/CLI fail-hard plumbing |
 
 ---
@@ -209,10 +209,10 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 #### Finding — `registry-universe-mismatch` (`why →` [Finding 2](../../arch-audit.md#finding-2-the-default-deny-registrys-universe-is-the-orgs-test-matrix-not-the-module-set-users-can-deploy))
 
-- [ ] **SA15.1 — Add the `tenant_excluded` marker; widen classification scope.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
-  Add an explicit `tenant_excluded = "reason"` class attribute for exclusions (ENROLLED is already marker-detectable via `TenantModel`/`TenantManager`), and widen `get_unclassified_concrete_models()` from the `quickscale_modules_` prefix to all non-contrib installed apps, with a third-party allowlist.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, `checks.py`.
-  *Acceptance:* the classification check now considers any installed concrete model (not just `quickscale_modules_*`), and models can declare exclusion via the new attribute.
+- [x] **SA15.1 — Add the `tenant_excluded` marker; widen classification scope; add implicit M2M inference (complete).** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
+  Added a `has_tenant_excluded_marker()` helper and updated `is_classified_in_registry()` to consider models with the `tenant_excluded = "reason"` class attribute as classified. Widened `is_project_app()` from the `quickscale_modules_` prefix to all non-contrib installed apps, with an explicit `THIRD_PARTY_APP_PREFIXES` allowlist excluding known third-party packages. Added `_is_implicit_m2m_through()` and `_get_m2m_through_classification()` to auto-classify auto-created ManyToMany through models whose source and target models are both classified (Option A — relation inference). Updated W005 hint and CLI guidance to mention all remediation options (registry entry, `tenant_excluded` marker, and implicit M2M inference). Added generated-project caller-parity tests proving CI/Makefile templates exercise the widened classification contract. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/check_tenant_isolation.py`, `quickscale_modules/orgs/tests/test_checks.py`, `quickscale_modules/orgs/tests/test_management_commands.py`, `quickscale_core/tests/test_generator/test_templates.py`.
+  *Acceptance:* the classification check now considers any installed concrete model (not just `quickscale_modules_*`); models can declare exclusion via the new attribute; auto-created M2M through models are auto-classified when their related models are classified; W005 and CLI output provide actionable remediation guidance.
 
 - [ ] **SA15.2 — Backfill markers on auth/backups/notifications/storage models.** `Tier 2 · Track 2 · deps: SA15.1 · RISK LEVEL: medium`
   Classify the concrete models `TENANT_TABLE_REGISTRY` currently omits (auth's `User` + M2M through-tables, backups' 3 models, notifications' 4 models, storage's models) as ENROLLED or `tenant_excluded`, so orgs+auth / orgs+backups / orgs+notifications generated projects stop failing `check_tenant_isolation` in CI.

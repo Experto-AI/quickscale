@@ -887,13 +887,117 @@ ORG_ID_COLUMN: str = "organization_id"
 #: App-label prefix for QuickScale module apps.
 QS_APP_PREFIX: str = "quickscale_modules_"
 
+#: Known third-party app-label prefixes excluded from project-app detection.
+#: Models from these apps are not expected to appear in
+#: ``TENANT_TABLE_REGISTRY``.  Users may extend this tuple in their own
+#: project to include additional third-party app labels.
+THIRD_PARTY_APP_PREFIXES: tuple[str, ...] = (
+    "allauth",
+    "rest_framework",
+    "corsheaders",
+    "anymail",
+    "storages",
+    "django_filters",
+    "drf_spectacular",
+    "django_extensions",
+    "phonenumber_field",
+    "tinymce",
+    "colorfield",
+    "guardian",
+    "oauth2_provider",
+    "captcha",
+    "django_celery_beat",
+    "django_celery_results",
+    "import_export",
+    "debug_toolbar",
+    "tagulous",
+    "taggit",
+    "polymorphic",
+    "mptt",
+    "constance",
+    "haystack",
+    "webpack_loader",
+    "solo",
+    "sortedm2m",
+    "simple_history",
+    "axes",
+    "django_otp",
+    "two_factor",
+    "qr_code",
+)
+
+
+#: Cache of Django contrib app labels detected by module path.
+_contrib_app_labels: dict[str, bool] = {}
+
+#: Cache of third-party app labels detected by module path.
+_third_party_app_labels: dict[str, bool] = {}
+
+
+def _is_django_contrib_app(app_label: str) -> bool:
+    """Return ``True`` if *app_label* belongs to ``django.contrib.*``.
+
+    Uses the app config's module path rather than the app label itself
+    (which is the short form, e.g. ``auth``, not ``django.contrib.auth``).
+    Results are cached per app_label for the lifetime of the process.
+
+    Args:
+        app_label: Django app label (e.g. ``auth``).
+
+    Returns:
+        ``True`` if the app's module lives under ``django.contrib.*``.
+    """
+    if app_label not in _contrib_app_labels:
+        try:
+            from django.apps import apps
+
+            app_config = apps.get_app_config(app_label)
+            module_name: str = app_config.module.__name__
+            _contrib_app_labels[app_label] = module_name.startswith("django.contrib.")
+        except Exception:
+            _contrib_app_labels[app_label] = False
+    return _contrib_app_labels[app_label]
+
+
+def _is_third_party_app(app_label: str) -> bool:
+    """Return ``True`` if *app_label* belongs to a known third-party package.
+
+    Uses the app config's module path (e.g. ``allauth.account`` for app
+    label ``account``) and checks it against ``THIRD_PARTY_APP_PREFIXES``.
+    This correctly handles Django apps whose labels are short names that
+    differ from their package root.  Results are cached per app_label.
+
+    Args:
+        app_label: Django app label (e.g. ``account``).
+
+    Returns:
+        ``True`` if the app's module is under a known third-party package.
+    """
+    if app_label not in _third_party_app_labels:
+        try:
+            from django.apps import apps
+
+            app_config = apps.get_app_config(app_label)
+            module_name: str = app_config.module.__name__
+            _third_party_app_labels[app_label] = any(
+                module_name == pkg or module_name.startswith(f"{pkg}.")
+                for pkg in THIRD_PARTY_APP_PREFIXES
+            )
+        except Exception:
+            _third_party_app_labels[app_label] = False
+    return _third_party_app_labels[app_label]
+
 
 def is_project_app(app_label: str) -> bool:
     """Return ``True`` if *app_label* belongs to a project-owned app.
 
-    Currently matches the ``quickscale_modules_`` prefix (the existing
-    conformance-gate convention).  User projects may override or extend
-    this to include their own custom app labels.
+    A project-owned app is any installed app that is NOT:
+    1. A Django contrib app (``django.contrib.*``).
+    2. A known third-party app (listed in ``THIRD_PARTY_APP_PREFIXES``).
+
+    QuickScale module apps (``quickscale_modules_`` prefix) are always
+    considered project-owned.  User projects may override or extend this
+    function to include their own custom app labels.
 
     Args:
         app_label: Django app label (e.g. ``quickscale_modules_crm``).
@@ -901,7 +1005,22 @@ def is_project_app(app_label: str) -> bool:
     Returns:
         ``True`` if the app is considered project-owned.
     """
-    return app_label.startswith(QS_APP_PREFIX)
+    # Django contrib apps are not project-owned.  Use the module path
+    # rather than the app label (Django's app registry stores short
+    # labels like ``auth``, not ``django.contrib.auth``).
+    if _is_django_contrib_app(app_label):
+        return False
+    # Known third-party apps are not project-owned.  Also uses module
+    # path matching for reliable detection (the app label ``account``
+    # belongs to ``allauth.account``, which our check catches because
+    # the module path starts with ``allauth.``).
+    if _is_third_party_app(app_label):
+        return False
+    # QuickScale module apps are always project-owned.
+    if app_label.startswith(QS_APP_PREFIX):
+        return True
+    # All remaining non-contrib, non-third-party apps are project-owned.
+    return True
 
 
 def get_concrete_project_models() -> list[type[models.Model]]:
@@ -914,6 +1033,10 @@ def get_concrete_project_models() -> list[type[models.Model]]:
 
     Returns:
         A list of concrete Django model classes from project-owned apps.
+        Uses :func:`is_project_app` with the widened SA15.1 scope: all
+        non-contrib, non-third-party installed apps.  Auto-created through
+        models are included so they are covered by the default-deny
+        classification guarantee (SA1.4).
     """
     from django.apps import apps
 
@@ -926,20 +1049,109 @@ def get_concrete_project_models() -> list[type[models.Model]]:
     return result
 
 
-def is_classified_in_registry(model: type[models.Model]) -> bool:
-    """Return ``True`` if *model* appears in ``TENANT_TABLE_REGISTRY``.
+def has_tenant_excluded_marker(model: type[models.Model]) -> bool:
+    """Return ``True`` if *model* declares the ``tenant_excluded`` marker.
 
-    A model is considered classified when it has any entry in the registry
-    (ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION).
+    A model can declare itself explicitly excluded from the tenant-isolation
+    contract by setting a truthy ``tenant_excluded`` class attribute with a
+    human-readable reason string::
+
+        class MyModel(models.Model):
+            tenant_excluded = "This model is not tenant-scoped because ..."
 
     Args:
         model: A Django ``Model`` subclass.
 
     Returns:
-        ``True`` if the model has a registry entry.
+        ``True`` if the model has a truthy ``tenant_excluded`` attribute.
+    """
+    return bool(getattr(model, "tenant_excluded", None))
+
+
+def _is_implicit_m2m_through(model: type[models.Model]) -> bool:
+    """Return ``True`` if *model* is an auto-created implicit M2M through table.
+
+    Django auto-creates a hidden through model for every
+    ``ManyToManyField`` that does not specify an explicit ``through``
+    argument.  These models are concrete (have a real database table)
+    but cannot declare custom fields, managers, or class attributes.
+
+    Args:
+        model: A Django ``Model`` subclass.
+
+    Returns:
+        ``True`` if the model was auto-created by Django for an implicit
+        M2M relationship.
+    """
+    return (
+        model._meta.auto_created and not model._meta.abstract and not model._meta.proxy
+    )
+
+
+def _get_m2m_through_classification(model: type[models.Model]) -> bool:
+    """Check if an implicit M2M through model is classifiable via its relations.
+
+    When an auto-created ManyToMany through model is not explicitly in
+    ``TENANT_TABLE_REGISTRY`` and does not carry a
+    ``tenant_excluded`` marker, it can still be classified by
+    consulting the two related models (source and target).  If both
+    related models are classified in the registry (ENROLLED,
+    EXCLUDED_REVIEWED, or PENDING_REMEDIATION), the through model
+    inherits classification automatically.
+
+    This prevents project-owned auto-created M2M through models from
+    becoming permanently unclassifiable under the widened SA15.1
+    default-deny scope.
+
+    Args:
+        model: A Django ``Model`` subclass (expected to be an implicit
+            M2M through model per :func:`_is_implicit_m2m_through`).
+
+    Returns:
+        ``True`` if both models participating in the M2M relationship
+        are themselves classified.
+    """
+    if not _is_implicit_m2m_through(model):
+        return False
+
+    from django.apps import apps
+
+    for candidate in apps.get_models():
+        for field in candidate._meta.many_to_many:
+            if field.remote_field.through is model:
+                source_model = candidate
+                target_model = field.remote_field.model
+                return is_classified_in_registry(
+                    source_model
+                ) and is_classified_in_registry(target_model)
+    return False
+
+
+def is_classified_in_registry(model: type[models.Model]) -> bool:
+    """Return ``True`` if *model* is classified.
+
+    A model is considered classified when:
+    * It has any entry in the registry (ENROLLED, EXCLUDED_REVIEWED,
+      or PENDING_REMEDIATION), **or**
+    * It declares the ``tenant_excluded`` class attribute marker
+      (SA15.1), **or**
+    * It is an auto-created implicit ManyToMany through model whose
+      source and target models are both classified (SA15.1 — Option A).
+
+    Args:
+        model: A Django ``Model`` subclass.
+
+    Returns:
+        ``True`` if the model is classified.
     """
     key = (model._meta.app_label, model.__name__)
-    return key in REGISTRY_LOOKUP
+    if key in REGISTRY_LOOKUP:
+        return True
+    if has_tenant_excluded_marker(model):
+        return True
+    if _get_m2m_through_classification(model):
+        return True
+    return False
 
 
 def get_unclassified_concrete_models() -> list[type[models.Model]]:
@@ -948,6 +1160,12 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
     These are models from :func:`get_concrete_project_models` that are
     not registered at all — they are neither ENROLLED, EXCLUDED_REVIEWED,
     nor PENDING_REMEDIATION.
+
+    A model is unclassified when it is not in ``TENANT_TABLE_REGISTRY``
+    and does not declare the ``tenant_excluded`` marker (SA15.1).
+    Auto-created implicit ManyToMany through models whose source and
+    target models are both classified are considered classified via
+    relation inference (SA15.1 — Option A).
 
     Returns:
         A list of unclassified model classes.
