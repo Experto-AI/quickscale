@@ -55,7 +55,7 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 
 **Naming:** `SAn.m` continues the sequence from the closed 2026-06-30 remediation (`SA1`–`SA5`); this batch starts at `SA6` to avoid collision. `SA6`–`SA10` close repo-level findings, `SA11`–`SA12` close module-level findings.
 
-**Priority note:** SA11.1–SA11.5 closed the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1) and its adjacent hardening work; see CHANGELOG.md. SA11.6–SA11.7 continue the Module Finding 1 remediation.
+**Priority note:** SA11.1–SA11.5 closed the **live defect** (anonymous public pages render empty under the hardened production RLS posture — Module Finding 1) and its adjacent hardening work; see CHANGELOG.md. SA11.6–SA11.7 continue the Module Finding 1 remediation. SA11.7 is complete; see CHANGELOG.md for closeout details.
 
 #### Dependency & parallelization overview (2026-07-03)
 
@@ -66,16 +66,16 @@ Diagram below shows only remaining open work.
 ```
 Track 1 (tenant-context surface)     Track 2                                   Track 3
 ───────────────────────────────      ───────────────────────────────────      ───────
-SA11.7 (no deps)                    No open tasks                             —
+No open tasks                       No open tasks                             —
 ```
 
-No cross-track dependencies. Tracks 2 and 3 have no remaining open tasks.
+All SAII tracks are fully resolved — see CHANGELOG.md for closeout details.
 
 #### Track summary
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.7 *(no deps)* | Auth fail-hard default |
+| **1** | *(complete — see CHANGELOG.md)* | Auth fail-hard default |
 | **2** | No open tasks | All SA9.x/SA10.x complete |
 | **3** | No open tasks | All SA7.x complete |
 
@@ -98,9 +98,9 @@ No cross-track dependencies. Tracks 2 and 3 have no remaining open tasks.
 - [x] **SA11.6 — Clean up CRM's `_resolve_active_org` (complete — 2026-07-03).** `Tier 1 · Track 1 · deps: none`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA11.7 — Fail-hard the auth signup-open default.** `Tier 1 · Track 1 · deps: none`
-  Replace the permissive `getattr(settings, "ACCOUNT_ALLOW_REGISTRATION", True)` fallback with a required-setting read (raise `ImproperlyConfigured` if unset), consistent with the fail-hard principle.
-  *Files:* `quickscale_modules/auth/src/quickscale_modules_auth/adapters.py`.
+- [x] **SA11.7 — Fail-hard the auth signup-open default (complete — 2026-07-03).** `Tier 1 · Track 1 · deps: none`
+  Replaced the permissive `getattr(settings, "ACCOUNT_ALLOW_REGISTRATION", True)` fallback with a required-setting read (raises `ImproperlyConfigured` if unset), consistent with the fail-hard principle. Startup check added to `QuickscaleAuthConfig.ready()` so the error surfaces at Django boot time. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `quickscale_modules/auth/src/quickscale_modules_auth/adapters.py`, `quickscale_modules/auth/src/quickscale_modules_auth/apps.py`.
   *Acceptance:* omitting `ACCOUNT_ALLOW_REGISTRATION` from settings raises at startup instead of silently defaulting to open registration.
 
 ---
@@ -122,18 +122,18 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA11.7 (no deps)                     SA15.2 → SA15.3                            SA16.1 ✅ (complete)
-                                     SA17.1 (no deps)                          SA16.2 (no deps)
-SA13.1 (no deps)                     SA17.2 (no deps)                          SA18.1 (no deps)
-SA13.2 (deps: SA13.1)                SA17.3 (no deps)                          SA18.2 (no deps)
-SA13.3 (deps: SA13.1)                SA17.4 (no deps)                          SA18.3 (no deps)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps)                          SA18.4 (no deps)
-SA14.1 (deps: SA13.1)                SA17.6 (no deps)                          SA18.5 (no deps)
-SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.2, SA17.5)             SA18.6 (no deps)
-SA14.3 (deps: SA14.1)                SA17.8 (no deps)                          SA18.7 (no deps)
-SA14.4 (deps: SA14.2, SA14.3)                                                  SA18.8 (no deps)
-SA14.5 (deps: SA13.1)                                                          SA18.9 (no deps)
-SA14.6 (no deps)                                                               SA18.10 (deps: SA18.6, SA18.9)
+SA13.1 (no deps)                     SA15.2 → SA15.3                            SA16.1 ✅ (complete)
+SA13.2 (deps: SA13.1)                SA17.1 (no deps)                          SA16.2 (no deps)
+SA13.3 (deps: SA13.1)                SA17.2 (no deps)                          SA18.1 (no deps)
+SA13.4 (deps: SA13.2, SA13.3)        SA17.3 (no deps)                          SA18.2 (no deps)
+SA14.1 (deps: SA13.1)                SA17.4 (no deps)                          SA18.3 (no deps)
+SA14.2 (deps: SA14.1)                SA17.5 (no deps)                          SA18.4 (no deps)
+SA14.3 (deps: SA14.1)                SA17.6 (no deps)                          SA18.5 (no deps)
+SA14.4 (deps: SA14.2, SA14.3)        SA17.7 (deps: SA17.2, SA17.5)             SA18.6 (no deps)
+SA14.5 (deps: SA13.1)                SA17.8 (no deps)                          SA18.7 (no deps)
+SA14.6 (no deps)                                                               SA18.8 (no deps)
+                                                                                SA18.9 (no deps)
+                                                                                SA18.10 (deps: SA18.6, SA18.9)
                                                                                 SA18.11 (no deps)
 ```
 
@@ -143,7 +143,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.7 *(carried over)*, then SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
+| **1** | SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA15.2 → SA15.3 *(SA15.1 complete)*, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
 | **3** | ~~SA16.1~~ ✅, SA16.2, plus SA18.1–SA18.11 | Manifest-snapshot drift (Finding 4) + core/CLI fail-hard plumbing |
 

@@ -4,14 +4,25 @@ from typing import Any
 
 from allauth.account.adapter import DefaultAccountAdapter
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 
 class QuickscaleAccountAdapter(DefaultAccountAdapter):
     """Custom account adapter for QuickScale authentication"""
 
     def is_open_for_signup(self, request: Any) -> bool:
-        """Check if signup is allowed based on settings"""
-        return getattr(settings, "ACCOUNT_ALLOW_REGISTRATION", True)
+        """Check if signup is allowed based on settings.
+
+        Raises ``ImproperlyConfigured`` if ``ACCOUNT_ALLOW_REGISTRATION``
+        is not set — there must be no silent default that enables open
+        signup.  See SA11.7.
+        """
+        if not hasattr(settings, "ACCOUNT_ALLOW_REGISTRATION"):
+            raise ImproperlyConfigured(
+                "The ACCOUNT_ALLOW_REGISTRATION setting is required. "
+                "Set it to True or False in your Django settings."
+            )
+        return settings.ACCOUNT_ALLOW_REGISTRATION
 
     def save_user(self, request: Any, user: Any, form: Any, commit: bool = True) -> Any:
         """Save user with custom logic"""
