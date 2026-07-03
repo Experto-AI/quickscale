@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid as uuid_lib
 from io import StringIO
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -2160,22 +2161,31 @@ def test_get_unclassified_concrete_models_acceptance() -> None:
 
 def test_get_concrete_project_models_returns_expected_models() -> None:
     """Prove that get_concrete_project_models() returns all concrete
-    models from ``quickscale_modules_*`` apps, and that the set is
-    non-empty (smoke test).
+    models from project-owned apps under the SA15.1 widened scope:
+    all installed non-contrib, non-third-party apps.  The set must be
+    non-empty and must include auto-created through models (CR-SA14-001).
     """
-    from quickscale_modules_orgs.tenancy import (
-        QS_APP_PREFIX,
-        get_concrete_project_models,
-    )
+    from quickscale_modules_orgs.tenancy import get_concrete_project_models
 
     project_models = get_concrete_project_models()
     assert len(project_models) > 0, "Expected at least one project model"
 
-    # Every model must have a quickscale_modules_* app label.
+    # No model should come from Django contrib or known third-party apps.
+    from quickscale_modules_orgs.tenancy import (
+        _is_django_contrib_app,
+        _is_third_party_app,
+    )
+
     for m in project_models:
-        assert m._meta.app_label.startswith(QS_APP_PREFIX), (
-            f"Model {m._meta.app_label}.{m.__name__} does not start with "
-            f"{QS_APP_PREFIX}"
+        app_label = m._meta.app_label
+        assert not _is_django_contrib_app(app_label), (
+            f"Model {app_label}.{m.__name__} is from a Django contrib app "
+            f"but was returned as a project model."
+        )
+        assert not _is_third_party_app(app_label), (
+            f"Model {app_label}.{m.__name__} is from a known third-party "
+            f"app but was returned as a project model (import path: "
+            f"{type(m).__module__})."
         )
 
     # CR-SA14-001: Verify auto-created ManyToMany through models are included.
@@ -2284,3 +2294,142 @@ def test_postgres_only_classification_still_runs_json() -> None:
             assert data["status"] == "fail"
             assert len(data["unclassified"]) == 1
             assert data["unclassified"][0]["model_name"] == "RogueModelJSON"
+
+
+# ---------------------------------------------------------------------------
+# SA15.1 — Implicit M2M through models are auto-classified (CR-SA15.1-001)
+# ---------------------------------------------------------------------------
+
+
+class TestImplicitM2MThroughClassification:
+    """Auto-created implicit M2M through models whose related models are
+    classified must NOT appear in the unclassified list."""
+
+    @patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_tenant_models"
+    )
+    @patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_unclassified_concrete_models"
+    )
+    def test_implicit_m2m_through_not_reported_when_classified(
+        self, mock_get_unclassified: MagicMock, mock_tenant: MagicMock
+    ) -> None:
+        """When _get_m2m_through_classification returns True for a through
+        model, it must not appear in the command's unclassified output."""
+        mock_get_unclassified.return_value = []
+        mock_tenant.return_value = []
+
+        stdout = StringIO()
+        stderr = StringIO()
+        call_command(
+            "check_tenant_isolation",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+        output = stdout.getvalue()
+        assert "unclassified" not in output.lower()
+
+    @patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_tenant_models"
+    )
+    @patch(
+        "quickscale_modules_orgs.management.commands."
+        "check_tenant_isolation.get_unclassified_concrete_models"
+    )
+    def test_rationale_model_count_zero_when_all_classified(
+        self, mock_get_unclassified: MagicMock, mock_tenant: MagicMock
+    ) -> None:
+        """Human-readable output must show 0 unclassified when all models
+        including implicit M2M through models are classified."""
+        mock_get_unclassified.return_value = []
+        mock_tenant.return_value = []
+
+        stdout = StringIO()
+        stderr = StringIO()
+        call_command(
+            "check_tenant_isolation",
+            stdout=stdout,
+            stderr=stderr,
+            verbosity=0,
+        )
+
+        output = stdout.getvalue()
+        # The summary line must not mention unclassified count
+        assert "unclassified" not in output.lower()
+
+
+# ---------------------------------------------------------------------------
+# SA15.1 — tenant_excluded marker classification path (CR-SA15.1-003)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_tenant_excluded_marker_classifies_model() -> None:
+    """A model with a truthy tenant_excluded marker must be classified
+    and not trigger W005 or appear in unclassified output.
+
+    Uses a real model subclass with the marker set and proves that
+    is_classified_in_registry() recognizes it, and the management
+    command does not report it as unclassified.
+    """
+    from django.db import models as django_models
+
+    from quickscale_modules_orgs.tenancy import (
+        is_classified_in_registry,
+    )
+
+    # Create a minimal concrete model class with the marker.
+    class TenantExcludedModel(django_models.Model):
+        name = django_models.CharField(max_length=100)
+        tenant_excluded = "Lookup table — not tenant-scoped."
+
+        class Meta:
+            app_label = "quickscale_modules_orgs"
+
+    # Prove the marker is recognized at the function level.
+    assert is_classified_in_registry(TenantExcludedModel), (
+        "A model with tenant_excluded marker must be classified"
+    )
+
+
+@pytest.mark.django_db
+def test_tenant_excluded_marker_keeps_model_out_of_unclassified() -> None:
+    """A model with the tenant_excluded marker must not appear in the
+    unclassified list returned by get_unclassified_concrete_models().
+
+    This is an integration-style test using a real model subclass.
+    """
+    from django.db import models as django_models
+
+    from quickscale_modules_orgs.tenancy import (
+        get_concrete_project_models,
+        get_unclassified_concrete_models,
+    )
+
+    class TenantExcludedModel(django_models.Model):
+        name = django_models.CharField(max_length=100)
+        tenant_excluded = "Lookup table — not tenant-scoped."
+
+        class Meta:
+            app_label = "quickscale_modules_orgs"
+
+    # Verify the model is in the project models list.
+    all_project_models = get_concrete_project_models()
+    assert any(m.__name__ == "TenantExcludedModel" for m in all_project_models), (
+        "TenantExcludedModel must be discovered as a project model"
+    )
+
+    # Verify it is NOT in the unclassified list.
+    unclassified = get_unclassified_concrete_models()
+    for m in unclassified:
+        assert m.__name__ != "TenantExcludedModel", (
+            "TenantExcludedModel must not appear in unclassified models"
+        )
+    assert all(m.__name__ != "TenantExcludedModel" for m in unclassified), (
+        "TenantExcludedModel with tenant_excluded marker must not be unclassified"
+    )

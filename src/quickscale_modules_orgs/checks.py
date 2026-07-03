@@ -19,6 +19,7 @@ from __future__ import annotations
 from django.core.checks import Warning, register
 
 from quickscale_modules_orgs.tenancy import (
+    _is_implicit_m2m_through,
     check_tenant_model_isolation,
     get_tenant_models,
     get_unclassified_concrete_models,
@@ -123,15 +124,31 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
         return messages
 
     for model in unclassified:
+        hint_parts: list[str] = [
+            "Add an entry to TENANT_TABLE_REGISTRY in "
+            "quickscale_modules_orgs.tenancy with status "
+            "ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION.",
+        ]
+        if not model._meta.auto_created:
+            hint_parts.append(
+                "Alternatively, add a 'tenant_excluded' class attribute "
+                "with a reason string to mark the model excluded."
+            )
+        # Auto-created M2M through models that reach this point could not
+        # be classified by relation inference (the related models
+        # themselves are unclassified).  Advise adding them manually.
+        if _is_implicit_m2m_through(model):
+            hint_parts.append(
+                "Auto-created ManyToMany through model — add an "
+                "EXCLUDED_REVIEWED entry to TENANT_TABLE_REGISTRY, "
+                "or ensure the related models are classified first so "
+                "that relation inference can classify it automatically."
+            )
         messages.append(
             Warning(
                 f"Concrete project model {model._meta.app_label}.{model.__name__} "
                 f"is not classified in TENANT_TABLE_REGISTRY.",
-                hint=(
-                    "Add an entry to TENANT_TABLE_REGISTRY in "
-                    "quickscale_modules_orgs.tenancy with status "
-                    "ENROLLED, EXCLUDED_REVIEWED, or PENDING_REMEDIATION."
-                ),
+                hint=" ".join(hint_parts),
                 id="quickscale_modules_orgs.W005",
             )
         )

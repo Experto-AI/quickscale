@@ -252,3 +252,201 @@ class TestCheckModelClassificationHappy:
         messages = check_model_classification(app_configs=None)
 
         assert len(messages) == 0
+
+
+# ---------------------------------------------------------------------------
+# SA15.1 — Implicit M2M through model detection
+# ---------------------------------------------------------------------------
+
+
+class TestIsImplicitM2MThrough:
+    """Verify auto-created M2M through model detection."""
+
+    def _make_model(
+        self,
+        *,
+        auto_created: bool = False,
+        abstract: bool = False,
+        proxy: bool = False,
+    ) -> MagicMock:
+        model = MagicMock(spec=[])
+        model._meta = MagicMock()
+        model._meta.auto_created = auto_created
+        model._meta.abstract = abstract
+        model._meta.proxy = proxy
+        return model
+
+    def test_rejects_regular_model(self) -> None:
+        """A normal (non-auto-created) model must not be detected as M2M through."""
+        from quickscale_modules_orgs.tenancy import _is_implicit_m2m_through
+
+        model = self._make_model(auto_created=False)
+        assert _is_implicit_m2m_through(model) is False
+
+    def test_rejects_abstract_auto_created(self) -> None:
+        """An abstract auto-created model must not be detected."""
+        from quickscale_modules_orgs.tenancy import _is_implicit_m2m_through
+
+        model = self._make_model(auto_created=True, abstract=True)
+        assert _is_implicit_m2m_through(model) is False
+
+    def test_rejects_proxy_auto_created(self) -> None:
+        """A proxy auto-created model must not be detected."""
+        from quickscale_modules_orgs.tenancy import _is_implicit_m2m_through
+
+        model = self._make_model(auto_created=True, proxy=True)
+        assert _is_implicit_m2m_through(model) is False
+
+    def test_accepts_implicit_m2m_through(self) -> None:
+        """A concrete, non-proxy, auto-created model must be detected."""
+        from quickscale_modules_orgs.tenancy import _is_implicit_m2m_through
+
+        model = self._make_model(auto_created=True)
+        assert _is_implicit_m2m_through(model) is True
+
+
+# ---------------------------------------------------------------------------
+# SA15.1 — tenant_excluded marker test
+# ---------------------------------------------------------------------------
+
+
+class TestHasTenantExcludedMarker:
+    """Verify ``has_tenant_excluded_marker()`` behavior (CR-SA15.1-003)."""
+
+    def _make_model_with_attr(self, **attrs: object) -> MagicMock:
+        model = MagicMock(spec=[])
+        for key, value in attrs.items():
+            setattr(model, key, value)
+        return model
+
+    def test_no_marker_returns_false(self) -> None:
+        """A model without the attribute must return False."""
+        from quickscale_modules_orgs.tenancy import has_tenant_excluded_marker
+
+        model = self._make_model_with_attr()
+        assert has_tenant_excluded_marker(model) is False
+
+    def test_falsy_marker_returns_false(self) -> None:
+        """A falsy tenant_excluded (empty string) must return False."""
+        from quickscale_modules_orgs.tenancy import has_tenant_excluded_marker
+
+        model = self._make_model_with_attr(tenant_excluded="")
+        assert has_tenant_excluded_marker(model) is False
+
+    def test_truthy_marker_returns_true(self) -> None:
+        """A truthy tenant_excluded with a reason string must return True."""
+        from quickscale_modules_orgs.tenancy import has_tenant_excluded_marker
+
+        model = self._make_model_with_attr(
+            tenant_excluded="Not tenant-scoped because it is a lookup table."
+        )
+        assert has_tenant_excluded_marker(model) is True
+
+    def test_boolean_marker_returns_true(self) -> None:
+        """A truthy boolean tenant_excluded must also return True."""
+        from quickscale_modules_orgs.tenancy import has_tenant_excluded_marker
+
+        model = self._make_model_with_attr(tenant_excluded=True)
+        assert has_tenant_excluded_marker(model) is True
+
+
+# ---------------------------------------------------------------------------
+# SA15.1 — W005 hint includes marker-based and M2M inference guidance
+# ---------------------------------------------------------------------------
+
+
+class TestW005HintIncludesRemediationGuidance:
+    """W005 hint must mention all available remediation options."""
+
+    @patch("quickscale_modules_orgs.checks.get_unclassified_concrete_models")
+    def test_hint_mentions_marker_for_regular_model(self, mock_get: MagicMock) -> None:
+        """For a non-auto-created model, the hint must mention tenant_excluded."""
+        from quickscale_modules_orgs.checks import check_model_classification
+
+        model = MagicMock(spec=[])
+        model.__name__ = "MyModel"
+        model._meta = MagicMock()
+        model._meta.app_label = "myapp"
+        model._meta.auto_created = False
+        model._meta.db_table = "myapp_mymodel"
+
+        mock_get.return_value = [model]
+        messages = check_model_classification(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_modules_orgs.W005"
+        msg = messages[0].msg
+        hint = messages[0].hint
+        assert "MyModel" in msg
+        assert "not classified" in msg
+        # Must mention registry edits
+        assert "TENANT_TABLE_REGISTRY" in hint
+        # Must mention tenant_excluded marker for regular models
+        assert "tenant_excluded" in hint
+
+    @patch("quickscale_modules_orgs.checks.get_unclassified_concrete_models")
+    def test_hint_mentions_m2m_inference_for_through_model(
+        self, mock_get: MagicMock
+    ) -> None:
+        """For an auto-created M2M through model, the hint must mention relation inference."""
+        from quickscale_modules_orgs.checks import check_model_classification
+
+        model = MagicMock(spec=[])
+        model.__name__ = "MyModel_tags"
+        model._meta = MagicMock()
+        model._meta.app_label = "myapp"
+        model._meta.auto_created = True
+        model._meta.abstract = False
+        model._meta.proxy = False
+        model._meta.db_table = "myapp_mymodel_tags"
+
+        mock_get.return_value = [model]
+        messages = check_model_classification(app_configs=None)
+
+        assert len(messages) == 1
+        hint = messages[0].hint
+        # Must mention relation inference for through models
+        assert "ManyToMany through" in hint
+        assert "relation inference" in hint
+
+
+# ---------------------------------------------------------------------------
+# SA15.1 — is_classified_in_registry includes implicit M2M path
+# ---------------------------------------------------------------------------
+
+
+class TestIsClassifiedInRegistryWithImplicitM2M:
+    """``is_classified_in_registry()`` must return True for implicit M2M
+    through models whose related models are classified."""
+
+    @patch("quickscale_modules_orgs.tenancy._get_m2m_through_classification")
+    def test_implicit_m2m_through_is_classified(self, mock_m2m: MagicMock) -> None:
+        """When _get_m2m_through_classification returns True, the model
+        must be considered classified."""
+        from quickscale_modules_orgs.tenancy import is_classified_in_registry
+
+        mock_m2m.return_value = True
+
+        model = MagicMock(spec=[])
+        model.__name__ = "ImplicitThroughModel"
+        model._meta = MagicMock()
+        model._meta.app_label = "myapp"
+
+        # Not in REGISTRY_LOOKUP, no tenant_excluded marker.
+        assert is_classified_in_registry(model) is True
+
+    @patch("quickscale_modules_orgs.tenancy._get_m2m_through_classification")
+    def test_unrelated_m2m_through_not_classified(self, mock_m2m: MagicMock) -> None:
+        """When _get_m2m_through_classification returns False, the model
+        must NOT be considered classified via this path."""
+        from quickscale_modules_orgs.tenancy import is_classified_in_registry
+
+        mock_m2m.return_value = False
+
+        model = MagicMock(spec=[])
+        model.__name__ = "UnrelatedThroughModel"
+        model._meta = MagicMock()
+        model._meta.app_label = "myapp"
+
+        # Not in REGISTRY_LOOKUP, no tenant_excluded marker.
+        assert is_classified_in_registry(model) is False
