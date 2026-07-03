@@ -22,6 +22,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import AllowAny
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -138,6 +139,7 @@ class _TransactionPagination(PageNumberPagination):
 class PlanListView(APIView):
     """Return the public recurring billing catalog."""
 
+    permission_classes = [AllowAny]
     http_method_names = ["get"]
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -375,6 +377,7 @@ class CreateBillingPortalSessionView(View):
 class CreditBalanceView(APIView):
     """Return the authenticated organization's current credit balance snapshot."""
 
+    permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
 
@@ -403,6 +406,7 @@ class CreditBalanceView(APIView):
 class CreditTransactionListView(APIView):
     """Return the authenticated organization's paginated credit transaction history."""
 
+    permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
     pagination_class = _TransactionPagination
@@ -432,6 +436,7 @@ class CreditTransactionListView(APIView):
 class SubscriptionDetailView(APIView):
     """Return the authenticated organization's current recurring subscription."""
 
+    permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
 
@@ -466,6 +471,7 @@ class SubscriptionDetailView(APIView):
 class StripePublishableKeyView(APIView):
     """Return the authenticated Stripe publishable key for billing UI clients."""
 
+    permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
     http_method_names = ["get"]
 
