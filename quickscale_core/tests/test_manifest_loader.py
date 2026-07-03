@@ -636,17 +636,16 @@ implies:
 
     def test_orgs_implies_notifications_default_config_parity(self) -> None:
         """The orgs module's implied default_config for notifications
-        matches the canonical notifications module.yml config defaults.
+        is empty — defaults are sourced from notifications/module.yml only.
 
-        This prevents silent drift between the inlined defaults in the
-        orgs implies block and the authoritative notifications defaults.
+        SA7.3 removed the duplicated inline defaults from orgs/module.yml.
+        Re-adding them would silently create a second source of truth for
+        notifications defaults, so this test asserts the default_config
+        block stays empty.
         """
         repo_root = Path(__file__).resolve().parent.parent.parent
         orgs_manifest = load_manifest_from_path(
             repo_root / "quickscale_modules" / "orgs" / "module.yml"
-        )
-        notifications_manifest = load_manifest_from_path(
-            repo_root / "quickscale_modules" / "notifications" / "module.yml"
         )
 
         # Find the implies entry for notifications
@@ -656,13 +655,12 @@ implies:
         assert len(notifications_implies) == 1
         implied_config = notifications_implies[0].default_config
 
-        # Compare against canonical notifications defaults
-        canonical_defaults = notifications_manifest.get_defaults()
-        assert implied_config == canonical_defaults, (
-            f"orgs implies notifications default_config has drifted from "
-            f"notifications/module.yml canonical defaults.\n"
-            f"Implied: {implied_config}\n"
-            f"Canonical: {canonical_defaults}"
+        # Must be empty — notifications provides its own canonical defaults
+        assert implied_config == {}, (
+            f"orgs implies notifications default_config must be empty.\n"
+            f"SA7.3 removed the duplicated inline defaults; notifications "
+            f"defaults are now sourced exclusively from\n"
+            f"notifications/module.yml. Found: {implied_config}"
         )
 
 

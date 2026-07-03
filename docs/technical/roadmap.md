@@ -62,14 +62,13 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + org-switch)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────────────
-SA11.1 groundwork committed,         SA9.2  (no deps)                         SA7.2  (no deps)
-  decision resolved, impl pending    SA9.3  (no deps)                         SA7.3  (no deps)
-  ├─ SA11.2 (←11.1, pending impl)      ├─ SA9.4 (←9.3)                        SA7.4  (no deps)
-  ├─ SA11.3 (←11.1, pending impl)      └─ SA9.5 (←9.3)                        SA8.1  (no deps)
-  └─ SA11.4 (←11.1, pending impl)          └─ SA9.6 (←9.4 & ←9.5)               └─ SA8.2 (←8.1)
-SA11.5 (no deps — clean)             SA10.1 (no deps)                             └─ SA8.3 (←8.2)
-SA11.6 (no deps — clean)               └─ SA10.2 (←10.1)
-SA11.7 (no deps — clean)
+SA11.1 ✓ completed                   SA9.2  (no deps)                         SA7.2  (no deps)
+  ├─ SA11.2 (←11.1, unblocked)          SA9.3  (no deps)                         SA7.3  (no deps)
+  ├─ SA11.3 (←11.1, unblocked)          ├─ SA9.4 (←9.3)                        SA7.4  (no deps)
+  └─ SA11.4 (←11.1, unblocked)          └─ SA9.5 (←9.3)                        SA8.1  (no deps)
+SA11.5 (no deps — clean)                 └─ SA9.6 (←9.4 & ←9.5)                  └─ SA8.2 (←8.1)
+SA11.6 (no deps — clean)             SA10.1 (no deps)                             └─ SA8.3 (←8.2)
+SA11.7 (no deps — clean)               └─ SA10.2 (←10.1)
 ```
 
 No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.1` — new `signals.py`/`services.py` receiver + `apps.py` wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back, same as the SA3.2/SA1.3 precedent.
@@ -78,41 +77,37 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.1 *(decision resolved, impl pending)* → SA11.2/SA11.3/SA11.4 *(pending SA11.1 impl)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
+| **1** | SA11.1 *(complete)* → SA11.2/SA11.3/SA11.4 *(unblocked)* · SA11.5 → SA11.6 → SA11.7 *(clean, no dep on SA11.1)* | Tenant-context request boundary — fixes the live public-page defect |
 | **2** | SA9.2 *(completed)* → SA9.3 *(completed)* → SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA7.1 *(completed)* → SA7.2 → SA7.3 → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
+| **3** | SA7.1 *(completed)* → SA7.2 *(completed)* → SA7.3 *(completed)* → SA7.4 · SA8.1 → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
 
 #### Track status (as of 2026-07-03)
 
-- **Track 1 — unblocked, implementation pending.** The design decision blocking `SA11.1` (`CR-SA11.1-001`) resolved 2026-07-02 — see below. No further decision is needed; the remaining work is implementation: force `TemplateResponse.render()` inside `org_scope()` in `PublicSystemOrgReadMixin.dispatch()`, then add the real `ListView`/`TemplateResponse` render-lifecycle test (`CR-SA11.1-002`). Once that lands, `SA11.2`/`SA11.3`/`SA11.4` can proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
+- **Track 1 — SA11.1 complete, SA11.2/SA11.3/SA11.4 unblocked.** `SA11.1` finished 2026-07-03 (`.render()`-forcing in `dispatch()`, render-lifecycle test, roadmap/changelog updated). `SA11.2`/`SA11.3`/`SA11.4` can now proceed. `SA11.5`, `SA11.6`, `SA11.7` have no dependency on `SA11.1` and remain clean to start in parallel.
 - **Track 2 — SA9.2 and SA9.3 complete; SA9.4 up next.** The maintainer decision on the backups/`dr_engine` core-version compatibility gap (`SA9.2`) was confirmed and implemented 2026-07-03 — see below. `SA9.3` completed 2026-07-03 (runtime facade created). The `SA9.4`/`SA9.5` → `SA9.6` chain, and the independent `SA10.1` → `SA10.2` chain remain clean to start/continue.
-- **Track 3 — clean.** `SA7.1` and `SA7.2` are complete (see below); the next pending item is `SA7.3`, and `SA7.4` plus `SA8.1`–`SA8.3` remain unblocked by dependencies.
+- **Track 3 — clean.** `SA7.1`, `SA7.2`, and `SA7.3` are complete (see below); the next pending item is `SA7.4`, and `SA8.1`–`SA8.3` remain unblocked by dependencies.
 
 #### Track 1 status snapshot (2026-07-03)
 
-- **Delivered but still open:** SA11.1 groundwork is committed in the Track 1 worktree (`quickscale_modules_orgs/public_context.py` + 17 unit tests), but the checklist item stays open until the remaining implementation below lands.
-- **Decision resolved 2026-07-02 (`CR-SA11.1-001`):** keep `org_scope()` as the mixin's transaction boundary; force `.render()` on unrendered `TemplateResponse`s inside it. No decision is pending — the remaining work on SA11.1 is implementation only (the `.render()`-forcing change plus the `CR-SA11.1-002` render-lifecycle test).
-- **Pending + blocked on SA11.1 closeout:** SA11.2 should wait until SA11.1's review findings are closed, and SA11.3/SA11.4 should wait for that same closeout because they are the first public views that would adopt the helper seam.
+- **SA11.1 complete.** The `.render()`-forcing change and `CR-SA11.1-002` render-lifecycle test have landed. SA11.2/SA11.3/SA11.4 can now proceed.
+- **Next up:** SA11.2 (restricted-role E2E smoke) should land before SA11.3/SA11.4 because it proves the defect class is closed. SA11.3/SA11.4 (migrate blog/listings views) are the first consumer views adopting the helper seam.
 - **Pending after the live-defect chain:** SA11.5 remains in the first landing batch because it closes the broader Module Finding 1 hardening work, while SA11.6 and SA11.7 stay queued after that batch.
 
 ---
 
 #### Finding — Module Finding 1: request→tenant-context boundary (`why →` [Module Finding 1](../../arch-audit.md#module-finding-1-the-requesttenant-context-boundary-is-a-per-module-convention-with-divergent-idioms--and-bloglistings-public-pages-read-as-empty-under-the-hardened-production-posture))
 
-- [ ] **SA11.1 — Orgs-owned public-read context helper (implementation landed; closeout blocked).** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  Add a helper in the orgs module (new file, e.g. `quickscale_modules_orgs/public_context.py`) that both scopes a queryset to a given organization *and* primes the tenant `ContextVar`/GUC (`tenant_context(...)`) in one call — generalizing the idiom already proven correct in `quickscale_core/manifest/social_manifest.py:444–447`. Ship as a mixin (`PublicSystemOrgReadMixin`) and a plain function for non-CBV call sites.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py` (new).
-  *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves.
+- [x] **SA11.1 — Orgs-owned public-read context helper (complete — 2026-07-03).** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
+  Added a helper in the orgs module (`quickscale_modules_orgs/public_context.py`) that both scopes a queryset to a given organization *and* primes the tenant `ContextVar`/GUC (`tenant_context(...)`) in one call — generalizing the idiom already proven correct in `quickscale_core/manifest/social_manifest.py:444–447`. Ships as a mixin (`PublicSystemOrgReadMixin`) and a plain function for non-CBV call sites.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/public_context.py`.
+  *Acceptance:* helper filters by the passed organization and leaves the GUC primed for the duration of the call; unit test confirms a query under the restricted role returns rows when using the helper and `.none()`-equivalent behavior is preserved when no org resolves. TemplateResponse rendering is forced inside `org_scope()` so lazy queryset evaluation during template rendering sees the primed tenant context (CR-SA11.1-001 fix); a dedicated render-lifecycle test with a lazy `QuerySet` in the template context proves this (CR-SA11.1-002 fix; strengthened by CR-SA11.1-003).
 
-  > **2026-07-02 checkpoint — groundwork committed, implementation resuming after decision.**
-  > Code delivered: `resolve_public_org_context()` plain function, `PublicSystemOrgReadMixin` CBV seam (overrides `dispatch()` with `org_scope()`), and 17 unit tests covering org resolution, real tenant-scoped queries, fail-closed no-org path, and mixin dispatch lifecycle.
+  > **2026-07-03 — SA11.1 complete.**
+  > The `.render()`-forcing change is implemented in `PublicSystemOrgReadMixin.dispatch()`: after calling `super().dispatch()`, if the response is an unrendered `TemplateResponse`, the mixin calls `.render()` on it before returning — still inside the `with org_scope():` block, so lazy queryset evaluation happens while the GUC is still primed. Streamed responses are documented as unsupported (not used for public pages today).
   >
-  > **`CR-SA11.1-001` (high) — RESOLVED 2026-07-02.** Root cause: `org_scope()`'s `transaction.atomic()` block (and the `SET LOCAL app.current_org_id` GUC inside it) closes the instant `dispatch()` returns — but template-backed generic views (`ListView`/`DetailView`, SA11.3/SA11.4's target) return an unrendered `TemplateResponse`; Django calls `.render()` on it *after* `dispatch()` returns, so any queryset lazily evaluated during template rendering runs with no GUC set and RLS silently returns zero rows — reproducing Module Finding 1 inside its own fix.
-  > **Decision:** keep `org_scope()` as the mixin's transaction boundary (preserves the one-shared-seam shape Module Finding 1 calls for, instead of pushing transaction discipline back onto every call site). Fix: in `dispatch()`, after calling `super().dispatch()`, if the response is unrendered (has a `.render()` method, e.g. `TemplateResponse`), call `.render()` on it before returning — still inside the `with org_scope():` block, so lazy queryset evaluation happens while the GUC is still primed. Does not cover genuinely streamed responses (not in use for QuickScale's public pages today — note this as a documented limitation in the mixin's docstring).
+  > `CR-SA11.1-002` is closed by `test_mixin_forces_template_response_render`, a `TemplateResponse`-based test that proves the fix works: the view returns an unrendered `TemplateResponse` and the test asserts the rendered content is correct — confirming the lazy queryset executed with the tenant GUC primed. The test was strengthened in `CR-SA11.1-003` to use a **lazy** `QuerySet` (the `ListView`/`DetailView` pattern) that evaluates only during template rendering rather than an eagerly-evaluated `count()` in the context dict, so a regression that moves `.render()` outside `org_scope()` would now correctly fail.
   >
-  > **Remaining before SA11.1 closes (implementation, not a decision):**
-  > - Implement the `.render()`-forcing change in `PublicSystemOrgReadMixin.dispatch()`.
-  > - `CR-SA11.1-002` (medium, still open) — add a test that exercises a real `ListView`/`TemplateResponse` render lifecycle under the mixin (not just the unit tests against plain views/functions) to prove the fix actually closes the gap for the views SA11.3/SA11.4 will build.
+  > SA11.1 is complete. SA11.2/SA11.3/SA11.4 can now proceed.
 
 - [ ] **SA11.2 — Restricted-role anonymous-read E2E smoke.** `Tier 2 · Track 1 · deps: SA11.1 · RISK LEVEL: medium`
   Add an integration test that runs against the restricted `NOBYPASSRLS` runtime role (not the superuser test posture used elsewhere) and asserts an anonymous request to a public blog page returns a published System-org post. This is the single test that covers the whole defect class.
@@ -206,10 +201,10 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
   **`CR-SA7.2-001` (high) — RESOLVED 2026-07-03.** The code changes (SA7.2 initial) introduced an unconditional `from quickscale_modules_auth.adapters import QuickscaleAccountAdapter` but the orgs module metadata still declared no first-party auth dependency. **Fix:** declared `required_modules: [auth]` in both `orgs/module.yml` manifests (module-owned and core data mirror), and added `quickscale-module-auth = ">=0.71.0,<0.87.0"` to `orgs/pyproject.toml`. The `implies` section was left unchanged — auth is gated by the apply-time `_validate_module_prerequisites` check rather than auto-resolved via implications, so users must explicitly include auth in their module selection.
   *Acceptance:* omitting the auth module from the Python path raises `ModuleNotFoundError` at import time (fail-hard); orgs unit tests: 677 passed, 3 failed (pre-existing FORCE-RLS failures in `test_management_commands.py`, unrelated to SA7.2), 5 skipped; CLI orgs contract tests: 7 passed. Module metadata now declares the auth dependency explicitly, matching the code.
 
-- [ ] **SA7.3 — De-duplicate notifications defaults out of orgs' manifest.** `Tier 1 · Track 3 · deps: none`
-  Remove the inlined `default_config` block for notifications from `orgs/module.yml`'s `implies:` section; reference notifications' own canonical defaults instead of copying them.
-  *Files:* `quickscale_modules/orgs/module.yml`, `quickscale_modules/notifications/module.yml`.
-  *Acceptance:* embedding orgs still applies the same notifications defaults as before, sourced from one place; a doc/test asserts the two files can't drift (mirroring the SA3.2 doc-consistency gate pattern).
+- [x] **SA7.3 — De-duplicate notifications defaults out of orgs' manifest.** `Tier 1 · Track 3 · completed 2026-07-03`
+  Removed the inlined `default_config` block for notifications from both `orgs/module.yml` manifests (module-owned and core data mirror). Notifications' implied entry now carries no inline defaults — the notifications module's own `module.yml` config defaults are the sole source of truth. The existing `test_orgs_implies_notifications_default_config_parity` drift-prevention test was updated to assert that the `default_config` is empty, preventing re-duplication. All implication tests updated to expect empty config dicts for notifications. Acceptance criteria satisfied: behavior is preserved because both the old inline defaults and the canonical notifications defaults were identical, and downstream apply/plan flow falls through to notifications' own manifest defaults when the implied config is empty.
+  *Files:* `quickscale_modules/orgs/module.yml`, `quickscale_core/src/quickscale_core/data/manifests/orgs/module.yml`, `quickscale_core/tests/test_manifest_loader.py`, `quickscale_core/tests/test_manifest_implications.py`, `quickscale_cli/tests/commands/test_implied_module_defaults.py`.
+  *Findings/blockers:* None. The inline duplicated defaults were an exact copy of the canonical notifications defaults, so removing them is a pure deduplication with zero behavior change.
 
 - [ ] **SA7.4 — Version-range constraints on `required_modules`.** `Tier 2 · Track 3 · deps: none`
   Add a minimum-version constraint to each module's `required_modules: [orgs]` declaration (billing, blog, crm, social — the four modules that declare it today) and make `_validate_module_prerequisites` in `apply_command.py` fail closed when an installed module's required-module version is below the declared minimum.
