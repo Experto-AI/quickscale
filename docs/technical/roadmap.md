@@ -66,8 +66,7 @@ Diagram below shows only remaining open work.
 ```
 Track 1 (tenant-context surface)     Track 2                                   Track 3
 ───────────────────────────────      ───────────────────────────────────      ───────
-SA11.6 (no deps)                    No open tasks                             —
-SA11.7 (no deps)
+SA11.7 (no deps)                    No open tasks                             —
 ```
 
 No cross-track dependencies. Tracks 2 and 3 have no remaining open tasks.
@@ -76,7 +75,7 @@ No cross-track dependencies. Tracks 2 and 3 have no remaining open tasks.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — CRM `_resolve_active_org` cleanup + auth fail-hard default |
+| **1** | SA11.7 *(no deps)* | Auth fail-hard default |
 | **2** | No open tasks | All SA9.x/SA10.x complete |
 | **3** | No open tasks | All SA7.x complete |
 
@@ -96,16 +95,8 @@ No cross-track dependencies. Tracks 2 and 3 have no remaining open tasks.
 - [x] **SA11.4 — Migrate listings public views to the helper (complete).** `Tier 1 · Track 1 · deps: SA11.1`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA11.6 — Clean up CRM's `_resolve_active_org`.** `Tier 1 · Track 1 · deps: none`
-  Remove the "for tests that bypass middleware" personal-org fallback from production code (move it into test fixtures/middleware instead) and stop performing the stage-seeding write as a side effect of every org resolution — seed once at org-creation time instead.
-
-  **Pre-implementation decisions (resolved 2026-07-03):**
-  1. **Personal-org seeding gap:** `create_personal_for()` (`orgs/managers.py:132`) does not fire `organization_created`, so removing the read-path `ensure_org_default_stages()` call would leave solo-mode/personal orgs permanently unseeded. Fix: dispatch `organization_created.send(sender=Organization, organization=organization)` inside `create_personal_for()` after the org row is created — mirrors the existing dispatch in `OrgCreateForm.save()` (`orgs/forms.py:117-121`) and reuses CRM's existing receiver (`crm/signals.py`) instead of adding a second seeding path. Requires updating the org-bootstrap test that currently asserts `create_personal_for()` does *not* emit the signal.
-  2. **Legacy warm-on-read removal is strict, no backfill:** no production orgs exist yet (global "no existing users, no migration path" constraint), so there is no real data needing self-heal. Remove the warm-on-read behavior and its tests outright; do not add a compatibility path or a backfill step to this task.
-  3. **Test `request.org` fixture:** attach `request.org` directly inside the CRM test suite's custom test-client request path (smallest targeted fix, preserves existing test style) rather than wiring `TenantMiddleware` into CRM's test settings or converting tests to middleware-backed requests.
-
-  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/views.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/managers.py`, CRM test client / fixtures, org-bootstrap test asserting personal-org signal behavior.
-  *Acceptance:* `_resolve_active_org` only resolves and primes context (no seeding call, no personal-org fallback); `create_personal_for()` dispatches `organization_created` and personal orgs are seeded via the same CRM receiver as SaaS-created orgs; CRM test suite stays green with the test client setting `request.org` directly.
+- [x] **SA11.6 — Clean up CRM's `_resolve_active_org` (complete — 2026-07-03).** `Tier 1 · Track 1 · deps: none`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA11.7 — Fail-hard the auth signup-open default.** `Tier 1 · Track 1 · deps: none`
   Replace the permissive `getattr(settings, "ACCOUNT_ALLOW_REGISTRATION", True)` fallback with a required-setting read (raise `ImproperlyConfigured` if unset), consistent with the fail-hard principle.
@@ -131,8 +122,8 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA11.6 (no deps)                     SA15.2 → SA15.3                            SA16.1 (no deps)
-SA11.7 (no deps)                     SA17.1 (no deps)                          SA16.2 (no deps)
+SA11.7 (no deps)                     SA15.2 → SA15.3                            SA16.1 (no deps)
+                                     SA17.1 (no deps)                          SA16.2 (no deps)
 SA13.1 (no deps)                     SA17.2 (no deps)                          SA18.1 (no deps)
 SA13.2 (deps: SA13.1)                SA17.3 (no deps)                          SA18.2 (no deps)
 SA13.3 (deps: SA13.1)                SA17.4 (no deps)                          SA18.3 (no deps)
@@ -152,7 +143,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.6 → SA11.7 *(carried over)*, then SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
+| **1** | SA11.7 *(carried over)*, then SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA15.2 → SA15.3 *(SA15.1 complete)*, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
 | **3** | SA16.1, SA16.2, plus SA18.1–SA18.11 | Manifest-snapshot drift (Finding 4) + core/CLI fail-hard plumbing |
 
