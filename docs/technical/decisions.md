@@ -1142,7 +1142,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` | One-time M2 consolidation path: pre-M2 projects have `config.yml` + `file_hashes.yml` but lack consolidated `state.yml` fields; failing hard on stale legacy files would block the M2 migration. Failures are logged and import is skipped. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
 
-**Known violations:** `arch-audit.md §Finding-8`/`roadmap.md §AF8` (referenced here previously) no longer exist — that batch closed and was archived to CHANGELOG.md. Current fail-hard violations awaiting remediation are tracked as roadmap tasks SA7.2 (orgs auth-adapter silent import fallback) and SA11.7 (auth signup-open permissive default); see [arch-audit.md](../../arch-audit.md#module-by-module-autopsy--2026-07-02) Module Finding 1 for the underlying analysis.
+**Known violations:** `arch-audit.md §Finding-8`/`roadmap.md §AF8` (referenced here previously) no longer exist — that batch closed and was archived to CHANGELOG.md. The remaining fail-hard violation awaiting remediation is SA11.7 (auth signup-open permissive default); see [arch-audit.md](../../arch-audit.md#module-by-module-autopsy--2026-07-02) Module Finding 1 for the underlying analysis. SA7.2 was resolved as part of the v0.87.0 hardening release — see [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
