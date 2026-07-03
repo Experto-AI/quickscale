@@ -28,7 +28,13 @@ INVITABLE_ORG_ROLE_CHOICES = tuple(
 
 
 class Organization(models.Model):
-    """An organization that owns tenant-scoped resources."""
+    """An organization that owns tenant-scoped resources.
+
+    Control-plane model: the tenant definition table itself is not
+    tenant-scoped.
+    """
+
+    tenant_excluded = "Control-plane model: tenant definition table, not tenant-scoped."
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
@@ -92,7 +98,16 @@ class Organization(models.Model):
 
 
 class OrganizationMembership(models.Model):
-    """A user's membership and role within an organization."""
+    """A user's membership and role within an organization.
+
+    Control-plane model: membership tracks the user-org relationship;
+    it is not tenant-scoped data.
+    """
+
+    tenant_excluded = (
+        "Control-plane model: membership tracks the user-org "
+        "relationship; it is not tenant-scoped data."
+    )
 
     LAST_OWNER_DEMOTION_MESSAGE = "You cannot demote the last owner."
     LAST_OWNER_REMOVAL_MESSAGE = "You cannot remove the last owner."
@@ -240,7 +255,15 @@ class OrganizationMembership(models.Model):
 
 
 class OrganizationInvitation(models.Model):
-    """An invitation for a user to join an organization."""
+    """An invitation for a user to join an organization.
+
+    Control-plane model: pending invitations are tenancy-infrastructure
+    records, not tenant-scoped data.
+    """
+
+    tenant_excluded = (
+        "Control-plane model: pending invitations are tenancy-infrastructure records."
+    )
 
     INVALID_OWNER_ROLE_MESSAGE = (
         "Owner invitations are not supported because ownership transfer is not "
@@ -353,7 +376,15 @@ class OrganizationTombstone(models.Model):
     The payload stays minimal per CR-PR-T117-004 — only the deleted org's
     UUID, the purge timestamp, and strictly necessary operator metadata.
     Slug and name are explicitly excluded.
+
+    Control-plane model: purge-tracking records are tenancy-infrastructure,
+    not tenant-owned data.
     """
+
+    tenant_excluded = (
+        "Control-plane model: purge-tracking records are "
+        "tenancy-infrastructure, not tenant-owned data."
+    )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization_id = models.UUIDField(

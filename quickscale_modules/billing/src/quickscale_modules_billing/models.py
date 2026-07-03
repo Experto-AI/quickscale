@@ -30,7 +30,12 @@ def current_subscription_status_q(*, field_name: str = "status") -> models.Q:
 
 
 class Plan(models.Model):
-    """QuickScale-owned plan metadata that points at a Stripe price."""
+    """QuickScale-owned plan metadata that points at a Stripe price.
+
+    System-wide plan definition — not tenant-owned.
+    """
+
+    tenant_excluded = "System-wide plan definition, not tenant-owned."
 
     class BillingInterval(models.TextChoices):
         MONTHLY = "monthly", "Monthly"
@@ -258,7 +263,12 @@ class Subscription(models.Model):
 
 
 class WebhookEvent(models.Model):
-    """Transport-level idempotency record for future Stripe webhook handling."""
+    """Transport-level idempotency record for future Stripe webhook handling.
+
+    System-wide webhook idempotency record — not tenant-owned.
+    """
+
+    tenant_excluded = "System-wide webhook idempotency record, not tenant-owned."
 
     stripe_event_id = models.CharField(max_length=255, db_index=True)
     event_type = models.CharField(max_length=100)
