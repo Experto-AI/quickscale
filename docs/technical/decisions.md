@@ -1095,7 +1095,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 **Chosen shape:**
 - ✅ Single Railway project (one app + one PostgreSQL 18 service); Railway bill is flat regardless of tenant count
-- ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS on the 21 `TENANT_TABLE_REGISTRY` ENROLLED models plus ContextVar-driven `TenantManager` scoping
+- ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS on the 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) plus ContextVar-driven `TenantManager` scoping — the authoritative registry overview is derived from model markers (SA15.3)
 - ✅ Billing unit: `Subscription → Organization` (not per-user)
 - ✅ URL routing: flat routes only — `/crm/`, `/blog/`; no `/orgs/<slug>/` content routes
 - ✅ Users may belong to multiple organizations; org-switcher in the React UI
@@ -1110,8 +1110,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate`; `runserver`/`gunicorn` must still use the restricted runtime role
 
 **Isolation architecture rules (permanent):**
-- Registry authority: `TENANT_TABLE_REGISTRY` is the SSOT for the shipped tenant-table surface. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct `organization_id`, `objects = TenantManager()`, `all_objects = TenantManager(super_scope=True)`, and a live FORCE-RLS policy.
-  <!-- enrolled-models assertion: total=21, quickscale_modules_crm=7, quickscale_modules_forms=4, quickscale_modules_billing=3, quickscale_modules_blog=4, quickscale_modules_listings=1, quickscale_modules_social=2 -->
+- Registry authority: the marker-based derived registry overview (:func:`get_derived_registry_overview`) is the authoritative human-readable view of the shipped tenant-table surface. The derived view is purely marker-driven (``tenant_excluded`` attributes, ``TenantManager``/``TenantModel`` detection, and implicit M2M through inference) with no fallback to the literal ``TENANT_TABLE_REGISTRY`` (SA15.3 follow-up). The literal ``TENANT_TABLE_REGISTRY`` remains in place as a cross-check target so CI can confirm the two views stay in agreement. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and a live FORCE-RLS policy.
 - Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.
 - Ambient scoping: request-scoped tenant reads flow through `request.org` → ContextVar (`app.current_org_id`) → `TenantManager`; the authoritative tenant-facing API is ambient manager scoping, not `.for_org(...)` query chaining.
 - Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract.

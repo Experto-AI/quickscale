@@ -1237,6 +1237,182 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
 
 
 # ---------------------------------------------------------------------------
+# Marker-based derived registry overview (SA15.3)
+# ---------------------------------------------------------------------------
+# This function produces a human-readable tenant-table registry from model
+# markers, replacing the hand-maintained HTML count assertions that were
+# previously embedded in the technical docs.  The old literal
+# ``TENANT_TABLE_REGISTRY`` is kept temporarily as a cross-check target.
+#
+# A model's status is determined as follows:
+#   1. ``tenant_excluded`` marker → ``EXCLUDED_REVIEWED``
+#   2. Auto-created implicit M2M through model → ``EXCLUDED_REVIEWED``
+#   3. ``TenantManager`` / ``TenantModel`` owner → ``ENROLLED``
+#   4. Otherwise → not included in the marker-driven overview.
+#
+# The derived overview uses ``_is_classified_by_marker_only`` — a marker-only
+# classification path that does NOT consult ``REGISTRY_LOOKUP`` or
+# ``TENANT_TABLE_REGISTRY``.  This ensures the derived view is purely
+# marker-driven: every model must be detectable by markers alone, with
+# no registry fallback at any layer (SA15.3 — follow-up).
+# ---------------------------------------------------------------------------
+
+
+def _get_m2m_through_classification_marker_only(
+    model: type[models.Model],
+) -> bool:
+    """Check if an implicit M2M through model is classifiable via marker-only checks.
+
+    Like :func:`_get_m2m_through_classification`, but uses
+    :func:`_is_classified_by_marker_only` instead of
+    :func:`is_classified_in_registry` to avoid consulting
+    ``REGISTRY_LOOKUP``.
+
+    This is the marker-only variant used by
+    :func:`get_derived_registry_overview` to ensure the derived view
+    is purely marker-driven with no registry fallback.
+
+    Only **project-owned** endpoints must be marker-classified.
+    Non-project endpoints (Django contrib models, third-party packages)
+    are treated as externally classified — they exist outside the
+    tenant-registry contract and do not need markers.  This ensures
+    auto-created through tables like ``quickscale_modules_auth.User_groups``
+    (project-owned ``User`` with ``tenant_excluded`` → contrib ``Group``)
+    are classifiable by the marker-only path without ``REGISTRY_LOOKUP``.
+
+    Args:
+        model: A Django ``Model`` subclass (expected to be an implicit
+            M2M through model).
+
+    Returns:
+        ``True`` if every project-owned model participating in the M2M
+        relationship is marker-classified.  Non-project endpoints are
+        always considered acceptable.
+    """
+    if not _is_implicit_m2m_through(model):
+        return False
+
+    from django.apps import apps
+
+    for candidate in apps.get_models():
+        for field in candidate._meta.many_to_many:
+            if field.remote_field.through is model:
+                source_model = candidate
+                target_model = field.remote_field.model
+                # Only project-owned models must be marker-classified.
+                # Non-project models (Django contrib, third-party) are
+                # outside the tenant-registry contract.
+                source_ok = not is_project_app(
+                    source_model._meta.app_label
+                ) or _is_classified_by_marker_only(source_model)
+                target_ok = not is_project_app(
+                    target_model._meta.app_label
+                ) or _is_classified_by_marker_only(target_model)
+                return source_ok and target_ok
+    return False
+
+
+def _is_classified_by_marker_only(model: type[models.Model]) -> bool:
+    """Return ``True`` if *model* is classifiable via markers only.
+
+    Unlike :func:`is_classified_in_registry`, this function does NOT
+    consult ``REGISTRY_LOOKUP``.  It uses the same marker-based checks
+    that :func:`get_derived_registry_overview` relies on:
+
+    * :func:`has_tenant_excluded_marker` for exclusion markers.
+    * :func:`is_tenant_model` for ENROLLED detection.
+    * For auto-created implicit M2M through models, whether the source
+      and target models are themselves marker-classified.
+
+    Args:
+        model: A Django ``Model`` subclass.
+
+    Returns:
+        ``True`` if the model is classifiable using markers alone,
+        without consulting ``TENANT_TABLE_REGISTRY``.
+    """
+    if has_tenant_excluded_marker(model):
+        return True
+    if is_tenant_model(model):
+        return True
+    if _get_m2m_through_classification_marker_only(model):
+        return True
+    return False
+
+
+def get_derived_registry_overview() -> list[TenantTableEntry]:
+    """Derive a tenant-table registry overview from model markers.
+
+    Inspects every installed concrete project model and produces a
+    ``TenantTableEntry`` for each marker-detectable model, using the
+    marker-based infrastructure:
+
+    * :func:`has_tenant_excluded_marker` for explicit exclusion markers.
+    * :func:`_is_implicit_m2m_through` for auto-created M2M through tables.
+    * :func:`is_tenant_model` for ENROLLED detection via ``TenantManager``
+      or ``TenantModel`` inheritance.
+
+    This is the **derived** alternative to the hand-maintained
+    ``TENANT_TABLE_REGISTRY`` literal.  A cross-check test asserts that
+    the two views agree for the installed concrete model set — every
+    model must be detectable by markers alone, with no registry fallback.
+
+    Returns:
+        A list of ``TenantTableEntry`` objects sorted by
+        ``(status, app_label, model_name)``.
+    """
+    result: list[TenantTableEntry] = []
+    for model in get_concrete_project_models():
+        if not _is_classified_by_marker_only(model):
+            continue
+
+        app_label = model._meta.app_label
+        model_name = model.__name__
+
+        if has_tenant_excluded_marker(model):
+            reason = str(getattr(model, "tenant_excluded", ""))
+            result.append(
+                TenantTableEntry(
+                    app_label=app_label,
+                    model_name=model_name,
+                    status=TenantTableStatus.EXCLUDED_REVIEWED,
+                    reason=reason,
+                )
+            )
+        elif _is_implicit_m2m_through(model):
+            result.append(
+                TenantTableEntry(
+                    app_label=app_label,
+                    model_name=model_name,
+                    status=TenantTableStatus.EXCLUDED_REVIEWED,
+                    reason="Auto-created ManyToMany through table — "
+                    "no tenant-scoped data.",
+                )
+            )
+        elif is_tenant_model(model):
+            result.append(
+                TenantTableEntry(
+                    app_label=app_label,
+                    model_name=model_name,
+                    status=TenantTableStatus.ENROLLED,
+                )
+            )
+        else:
+            # Model is classified in the literal registry but is not
+            # marker-detectable (no ``tenant_excluded`` attribute,
+            # not an implicit M2M through, and not a tenant model).
+            # After the SA15.3 marker backfill every excluded model
+            # carries an explicit marker, so this fallback should no
+            # longer be needed.  Skip such models from the marker-
+            # driven overview — they do not belong unless a marker
+            # is added.
+            continue
+
+    result.sort(key=lambda e: (e.status.value, e.app_label, e.model_name))
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Tenant-model detection helpers (SA1.3)
 # ---------------------------------------------------------------------------
 # These helpers discover tenant-owned models across **all** installed app
