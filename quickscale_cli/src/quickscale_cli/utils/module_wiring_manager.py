@@ -18,8 +18,8 @@ from quickscale_core.manifest.entry_point import (
 )
 from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
-from quickscale_cli.schema.config_schema import validate_config
-from quickscale_cli.schema.state_schema import StateManager
+from quickscale_core.schema.config_schema import validate_config
+from quickscale_core.schema.state_schema import StateManager
 from quickscale_core.module_wiring import write_managed_wiring
 from quickscale_core.utils.project_identity import (
     ProjectIdentityResolutionError,

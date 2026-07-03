@@ -225,10 +225,10 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_core/tests/test_manifest_entry_point.py`, `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`, `quickscale_cli/tests/test_module_wiring_manager_manifest.py`.
   *Acceptance:* an empty-after-resolution analytics config raises a descriptive error through `build_manifest_wiring_spec` *and* through the `regenerate_managed_wiring`/apply seam; the disabled short-circuit behaviour is unaffected.
 
-- [ ] **SA18.3 — Delete the `quickscale_cli.schema` compat shim.** `Tier 2 · Track 3 · deps: none · (why → TA5)`
-  Migrate the CLI's own internal imports (`utils/project_manager.py`, `utils/module_wiring_manager.py`, `commands/plan_command.py`, `commands/remove_command.py`) to `quickscale_core.schema` directly, then delete the undocumented `quickscale_cli/src/quickscale_cli/schema/` shim package.
-  *Files:* `quickscale_cli/src/quickscale_cli/schema/*`, the four internal-import call sites listed above.
-  *Acceptance:* `quickscale_cli/src/quickscale_cli/schema/` no longer exists; all CLI code imports schema types from `quickscale_core.schema`.
+- [x] **SA18.3 — Delete the `quickscale_cli.schema` compat shim (complete).** `Tier 2 · Track 3 · deps: none · (why → TA5)`
+  Migrated all CLI internal imports (8 source callers across 6 files — not just the 4 listed in the task prose) and 11 test files from `quickscale_cli.schema.*` to `quickscale_core.schema.*`. Deleted the 4-file `quickscale_cli/src/quickscale_cli/schema/` shim package. Updated `test_beta_migration.py` to import `quickscale_core.schema` directly. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `quickscale_cli/src/quickscale_cli/schema/*` (deleted), 8 source files, 11 test files.
+  *Acceptance:* `quickscale_cli/src/quickscale_cli/schema/` no longer exists; all CLI code imports schema types from `quickscale_core.schema`; test suite green.
 
 - [ ] **SA18.4 — Fix generator template-resolution fallback chains.** `Tier 2 · Track 3 · deps: none · (why → TA6)`
   Replace the template-dir discovery guess chain (dev dir → package dir → cwd-relative guesses) with a single deterministic resolution rule (installed package path, with an explicit override param for dev use); delete the "backward compatibility" root-template fallback tier in `_get_theme_template_path` and raise immediately with the attempted path on a miss instead of deferring to a later `TemplateNotFound`.

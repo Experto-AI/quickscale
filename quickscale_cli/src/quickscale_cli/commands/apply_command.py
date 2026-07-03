@@ -70,15 +70,15 @@ from quickscale_cli.utils.railway_utils import (
     deploy_railway_service,
     get_app_service_name,
 )
-from quickscale_cli.schema.config_schema import (
+from quickscale_core.schema.config_schema import (
     ConfigValidationError,
     ModuleConfig,
     QuickScaleConfig,
     generate_yaml,
     validate_config,
 )
-from quickscale_cli.schema.delta import ConfigDelta, compute_delta, format_delta
-from quickscale_cli.schema.state_schema import (
+from quickscale_core.schema.delta import ConfigDelta, compute_delta, format_delta
+from quickscale_core.schema.state_schema import (
     ManagedFileRecord,
     ModuleState,
     ProjectState,

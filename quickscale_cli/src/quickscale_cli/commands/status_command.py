@@ -13,13 +13,17 @@ from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
 )
-from quickscale_cli.schema.config_schema import (
+from quickscale_core.schema.config_schema import (
     ConfigValidationError,
     QuickScaleConfig,
     validate_config,
 )
-from quickscale_cli.schema.delta import compute_delta, format_delta
-from quickscale_cli.schema.state_schema import QuickScaleState, StateError, StateManager
+from quickscale_core.schema.delta import compute_delta, format_delta
+from quickscale_core.schema.state_schema import (
+    QuickScaleState,
+    StateError,
+    StateManager,
+)
 from quickscale_core.config import ConfigError
 from quickscale_core.manifest import ModuleManifest, parse_version_tuple
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
