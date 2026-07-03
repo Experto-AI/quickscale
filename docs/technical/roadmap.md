@@ -122,18 +122,18 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA13.1 (no deps)                     SA15.2 → SA15.3                            SA16.1 ✅ (complete)
-SA13.2 (deps: SA13.1)                SA17.1 (no deps)                          SA16.2 (no deps)
-SA13.3 (deps: SA13.1)                SA17.2 (no deps)                          SA18.1 (no deps)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.3 (no deps)                          SA18.2 (no deps)
-SA14.1 (deps: SA13.1)                SA17.4 (no deps)                          SA18.3 (no deps)
-SA14.2 (deps: SA14.1)                SA17.5 (no deps)                          SA18.4 (no deps)
-SA14.3 (deps: SA14.1)                SA17.6 (no deps)                          SA18.5 (no deps)
-SA14.4 (deps: SA14.2, SA14.3)        SA17.7 (deps: SA17.2, SA17.5)             SA18.6 (no deps)
-SA14.5 (deps: SA13.1)                SA17.8 (no deps)                          SA18.7 (no deps)
-SA14.6 (no deps)                                                               SA18.8 (no deps)
-                                                                                SA18.9 (no deps)
-                                                                                SA18.10 (deps: SA18.6, SA18.9)
+SA11.7 (no deps)                     SA15.2 → SA15.3                            SA16.1 ✅ (complete)
+                                     SA17.1 (no deps)                          SA16.2 ✅ (complete)
+SA13.1 (no deps)                     SA17.2 (no deps)                          SA18.1 (no deps)
+SA13.2 (deps: SA13.1)                SA17.3 (no deps)                          SA18.2 (no deps)
+SA13.3 (deps: SA13.1)                SA17.4 (no deps)                          SA18.3 (no deps)
+SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps)                          SA18.4 (no deps)
+SA14.1 (deps: SA13.1)                SA17.6 (no deps)                          SA18.5 (no deps)
+SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.2, SA17.5)             SA18.6 (no deps)
+SA14.3 (deps: SA14.1)                SA17.8 (no deps)                          SA18.7 (no deps)
+SA14.4 (deps: SA14.2, SA14.3)                                                  SA18.8 (no deps)
+SA14.5 (deps: SA13.1)                                                          SA18.9 (no deps)
+SA14.6 (no deps)                                                               SA18.10 (deps: SA18.6, SA18.9)
                                                                                 SA18.11 (no deps)
 ```
 
@@ -143,9 +143,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
+| **1** | SA11.7 *(carried over)*, then SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA15.2 → SA15.3 *(SA15.1 complete)*, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
-| **3** | ~~SA16.1~~ ✅, SA16.2, plus SA18.1–SA18.11 | Manifest-snapshot drift (Finding 4) + core/CLI fail-hard plumbing |
+| **3** | ~~SA16.1~~ ✅, ~~SA16.2~~ ✅, plus SA18.1–SA18.11 | Manifest-snapshot drift (Finding 4) + core/CLI fail-hard plumbing |
 
 ---
 
@@ -233,10 +233,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
   *Files:* new `scripts/sync_module_manifests.py`, `quickscale_core/src/quickscale_core/data/manifests/{backups,blog,billing,crm,listings,social}/module.yml`, `Makefile`, `.github/workflows/ci.yml`, `scripts/check_ci_locally.sh`.
   *Acceptance:* `diff`-ing module-owned and core-snapshot `module.yml` files is empty; CI fails if a future PR reintroduces drift.
 
-- [ ] **SA16.2 — Fix SSOT doc drift on shipped features.** `Tier 1 · Track 3 · deps: none`
-  Update `decisions.md` §module-derivation-schema (currently says YAML loading is "deferred" though SA6.1 shipped it and blog's `module.yml` has a full `derivation:` section) and its apply-recovery-ledger description (currently "future Phase 12 work" though it's shipped, per `core/apply/executor.py`/`ledger.py`).
-  *Files:* `docs/technical/decisions.md`.
-  *Acceptance:* both passages describe the shipped state; no remaining reference to either feature as future/deferred work.
+- [x] **SA16.2 — Fix SSOT doc drift on shipped features (complete — 2026-07-03).** `Tier 1 · Track 3 · deps: none`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Finding:* after syncing `wt-track3` with `v87`, the shipped-state wording was already present in `decisions.md`; this phase closes the stale roadmap status and changelog alignment.
 
 ---
 
