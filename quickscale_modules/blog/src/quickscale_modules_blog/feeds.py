@@ -17,6 +17,26 @@ class LatestPostsFeed(Feed):
     link = "/blog/"
     description = "Latest posts from our blog"
 
+    def __call__(self, request, *args, **kwargs):  # type: ignore[no-untyped-def]
+        """Wrap the feed in org context for RLS-safe execution.
+
+        Primes both the Python ContextVar and the PostgreSQL GUC
+        ``app.current_org_id`` to the System org so that tenant-scoped
+        queries (items, tags, categories) execute correctly under
+        restricted RLS roles.  Follows the same pattern as
+        ``PublicSystemOrgReadMixin.dispatch()``.
+        """
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        try:
+            org = Organization.objects.get_system_org()
+        except Exception:
+            org = None
+
+        with org_scope(org):
+            return super().__call__(request, *args, **kwargs)
+
     def items(self):  # type: ignore[no-untyped-def]
         """Return the 20 most recent published System-org posts."""
         from quickscale_modules_orgs.models import Organization
