@@ -73,12 +73,14 @@ class TestProjectState:
             slug="myapp",
             package="myapp",
             theme="showcase_html",
+            project_contract="0.87.0",
             created_at="2025-01-01T00:00:00",
             last_applied="2025-01-02T00:00:00",
         )
 
         assert project.slug == "myapp"
         assert project.theme == "showcase_html"
+        assert project.project_contract == "0.87.0"
         assert project.created_at == "2025-01-01T00:00:00"
         assert project.last_applied == "2025-01-02T00:00:00"
 
@@ -88,6 +90,7 @@ class TestProjectState:
 
         assert project.slug == "myapp"
         assert project.theme == "showcase_html"
+        assert project.project_contract is None
         assert isinstance(project.created_at, str)
         assert isinstance(project.last_applied, str)
 
@@ -182,6 +185,7 @@ class TestStateManager:
             assert loaded_state.version == "1"
             assert loaded_state.project.slug == "myapp"
             assert loaded_state.project.theme == "showcase_html"
+            assert loaded_state.project.project_contract is None
             assert "auth" in loaded_state.modules
             assert loaded_state.modules["auth"].name == "auth"
             assert loaded_state.modules["auth"].version == "1.0.0"
