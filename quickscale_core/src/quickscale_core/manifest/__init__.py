@@ -54,6 +54,10 @@ from quickscale_core.manifest.loader import (
     load_manifest,
     load_manifest_from_path,
 )
+from quickscale_core.manifest.required_modules import (
+    check_required_module_versions,
+    parse_required_module_entry,
+)
 from quickscale_core.manifest.resolver import (
     ResolverResult,
     resolve_module_config,
@@ -92,6 +96,7 @@ from quickscale_core.manifest.schema import (
 )
 
 __all__ = [
+    "check_required_module_versions",
     "ConfigOption",
     "DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST",
     "DEFAULT_SOCIAL_PROVIDER_ALLOWLIST",
@@ -108,6 +113,7 @@ __all__ = [
     "ModuleManifest",
     "NormalizationRule",
     "OptionDerivation",
+    "parse_required_module_entry",
     "PostResolutionHook",
     "ResolvedSocialTarget",
     "ResolverResult",
