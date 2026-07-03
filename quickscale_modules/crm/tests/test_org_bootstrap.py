@@ -163,6 +163,41 @@ def test_api_org_create_flow_seeds_canonical_stages(client, staff_user) -> None:
 
 
 @pytest.mark.django_db
+def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
+    client, staff_user
+) -> None:
+    """Prove installed-app wiring: stages exist immediately after org creation,
+    before any CRM API access.
+
+    The warm-on-read fallback in crm/views.py could mask a wiring regression
+    where the organization_created signal receiver is not connected through
+    normal app startup (QuickscaleCrmConfig.ready()). This test breaks that
+    masking by checking the database directly — no CRM endpoint is touched,
+    so the seeding must come from the signal/receiver path alone.
+    """
+    client.force_login(staff_user)
+
+    create_response = client.post("/orgs/new/", {"name": "Wiring Proof Org"})
+    assert create_response.status_code == 302
+
+    organization = Organization.objects.get(slug="wiring-proof-org")
+
+    # Direct DB check — no CRM API access. If the signal/receiver wiring
+    # is working through normal app startup, stages are seeded at creation.
+    stages = list(
+        Stage.all_objects.filter(organization=organization).order_by("order", "id")
+    )
+    assert len(stages) == 4
+    assert [stage.name for stage in stages] == [
+        "Prospecting",
+        "Negotiation",
+        "Closed-Won",
+        "Closed-Lost",
+    ]
+    assert all(stage.terminal_semantic is None for stage in stages)
+
+
+@pytest.mark.django_db
 def test_migrated_zero_local_org_bootstraps_on_first_crm_access(
     client, staff_user
 ) -> None:
