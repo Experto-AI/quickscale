@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import pytest
 
+import quickscale_core.manifest.entry_point as entry_point_module
 from quickscale_core.manifest import (
+    MANIFEST_ADAPTER_REGISTRY,
     build_manifest_wiring_spec,
 )
 from quickscale_core.module_wiring import ModuleWiringSpec
@@ -613,3 +615,89 @@ class TestFormsManifestEntryPoint:
         }
         for key in expected_keys:
             assert key in spec.settings, f"Missing expected setting: {key}"
+
+
+# ---------------------------------------------------------------------------
+# Caller-parity coverage (CR-SA18.1-001, CR-SA18.1-002): verify that
+# repeated build_manifest_wiring_spec calls through the public entry-point
+# seam continue surfacing managed-adapter failures when the lazy-init path
+# cannot complete (i.e. the fix for the _ADAPTERS_INITIALIZED latch bug).
+# ---------------------------------------------------------------------------
+
+
+class TestLazyInitCallerParity:
+    """Caller-parity evidence for the public manifest entry-point seam:
+    repeated ``build_manifest_wiring_spec`` attempts must surface the
+    managed-adapter failure on every call, not silently skip after the
+    first failure (CR-SA18.1-002 latch fix).
+
+    This test simulates what happens when:
+    1. Import-time init is deferred (e.g. circular import).
+    2. The lazy init in ``_ensure_adapters_initialized`` fails because a
+       managed module's Python adapter package is not importable.
+    3. The caller retries — the failure must still be surfaced.
+    """
+
+    def test_repeated_build_attempts_surface_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Calling build_manifest_wiring_spec twice when the lazy-init path
+        fails must raise ImproperlyConfigured both times."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        # Simulate deferred import-time init (e.g. circular import).
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+
+        # Prevent refresh_managed_adapters from succeeding — simulate a
+        # managed module whose Python adapter package is not importable.
+        def _raise() -> None:
+            raise ImproperlyConfigured(
+                "Managed adapter for 'test_billing' not importable"
+            )
+
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            _raise,
+        )
+
+        # Remove billing from the registry so the adapter lookup path is
+        # exercised (without a registered adapter, build_manifest_wiring_spec
+        # raises ManifestAdapterNotFound before reaching the lazy-init path).
+        # Save/restore to avoid leaking state to sibling tests.
+        _orig_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        try:
+            MANIFEST_ADAPTER_REGISTRY.pop("billing", None)
+
+            # First call: must raise (lazy init fails).
+            with pytest.raises(ImproperlyConfigured, match="not importable"):
+                build_manifest_wiring_spec("billing", {})
+
+            # _ADAPTERS_INITIALIZED must remain False.
+            assert entry_point_module._ADAPTERS_INITIALIZED is False
+
+            # Second call: must also raise (was not latched).
+            with pytest.raises(ImproperlyConfigured, match="not importable"):
+                build_manifest_wiring_spec("billing", {})
+
+            # Flag still False after second attempt.
+            assert entry_point_module._ADAPTERS_INITIALIZED is False
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
+
+    def test_success_path_still_works(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When the lazy-init path succeeds, subsequent calls use the
+        adapter normally — verify the happy path is preserved."""
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+
+        # Patch refresh_managed_adapters to succeed.
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            lambda: None,
+        )
+
+        spec = build_manifest_wiring_spec("analytics", {"enabled": True})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_analytics" in spec.apps
