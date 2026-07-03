@@ -30,6 +30,7 @@ from quickscale_core.manifest import (
     load_module_manifest,
     refresh_managed_adapters,
 )
+import quickscale_core.manifest.entry_point as entry_point_module
 from quickscale_core.manifest.entry_point import (
     MANIFEST_ADAPTER_REGISTRY as REGISTRY_DIRECT,
     MANAGED_ADAPTER_ORIGINS,
@@ -559,3 +560,160 @@ class TestRefreshManagedAdaptersFailure:
             MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
+
+
+class TestImportTimeManagedAdapterInitialization:
+    """Import-time managed-adapter init only defers the known circular import."""
+
+    def test_circular_import_is_deferred_to_lazy_init(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from django.core.exceptions import ImproperlyConfigured
+
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+
+        circular_import = ImportError(
+            "cannot import name 'build_generic_manifest_spec' from partially "
+            "initialized module 'quickscale_core.manifest.entry_point' "
+            "(most likely due to a circular import)"
+        )
+
+        def _raise_circular_import() -> None:
+            raise ImproperlyConfigured("circular import during adapter init") from (
+                circular_import
+            )
+
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            _raise_circular_import,
+        )
+
+        entry_point_module._initialize_managed_adapters_at_import()
+
+        assert entry_point_module._ADAPTERS_INITIALIZED is False
+
+    def test_non_circular_improperly_configured_is_not_swallowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from django.core.exceptions import ImproperlyConfigured
+
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+
+        missing_dependency = ImportError("No module named 'missing_dependency'")
+
+        def _raise_missing_dependency() -> None:
+            raise ImproperlyConfigured("broken adapter import") from missing_dependency
+
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            _raise_missing_dependency,
+        )
+
+        with pytest.raises(ImproperlyConfigured, match="broken adapter import"):
+            entry_point_module._initialize_managed_adapters_at_import()
+
+        assert entry_point_module._ADAPTERS_INITIALIZED is False
+
+    def test_success_marks_import_time_initialization_complete(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[str] = []
+
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            lambda: calls.append("called"),
+        )
+
+        entry_point_module._initialize_managed_adapters_at_import()
+
+        assert calls == ["called"]
+        assert entry_point_module._ADAPTERS_INITIALIZED is True
+
+
+# ---------------------------------------------------------------------------
+# Lazy-init regression (CR-SA18.1-002): _ensure_adapters_initialized must not
+# latch _ADAPTERS_INITIALIZED across a failed lazy refresh after the deferred
+# circular-import path.  Repeated build attempts must continue surfacing the
+# real managed-adapter failure.
+# ---------------------------------------------------------------------------
+
+
+class TestLazyInitFailureDoesNotLatch:
+    """When lazy init (via _ensure_adapters_initialized) fails,
+    _ADAPTERS_INITIALIZED must remain False so subsequent calls retry and
+    continue surfacing the real managed-adapter failure (CR-SA18.1-002)."""
+
+    def test_failure_does_not_latch_adapter_flag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_ensure_adapters_initialized must not set _ADAPTERS_INITIALIZED
+        when refresh_managed_adapters raises."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+
+        def _raise() -> None:
+            raise ImproperlyConfigured("managed adapter failure")
+
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            _raise,
+        )
+
+        with pytest.raises(ImproperlyConfigured, match="managed adapter failure"):
+            entry_point_module._ensure_adapters_initialized()
+
+        # Flag must still be False — not latched.
+        assert entry_point_module._ADAPTERS_INITIALIZED is False
+
+    def test_repeated_calls_still_surface_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Repeated calls to _ensure_adapters_initialized must continue
+        raising when refresh_managed_adapters has not recovered."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+
+        call_count = 0
+
+        def _raise() -> None:
+            nonlocal call_count
+            call_count += 1
+            raise ImproperlyConfigured("managed adapter failure")
+
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            _raise,
+        )
+
+        # First call raises.
+        with pytest.raises(ImproperlyConfigured, match="managed adapter failure"):
+            entry_point_module._ensure_adapters_initialized()
+        assert call_count == 1
+        assert entry_point_module._ADAPTERS_INITIALIZED is False
+
+        # Second call also raises (was not latched).
+        with pytest.raises(ImproperlyConfigured, match="managed adapter failure"):
+            entry_point_module._ensure_adapters_initialized()
+        assert call_count == 2
+        assert entry_point_module._ADAPTERS_INITIALIZED is False
+
+    def test_success_sets_adapter_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When refresh_managed_adapters succeeds, _ADAPTERS_INITIALIZED
+        is set to True."""
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            lambda: None,
+        )
+
+        entry_point_module._ensure_adapters_initialized()
+        assert entry_point_module._ADAPTERS_INITIALIZED is True

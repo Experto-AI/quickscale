@@ -12,6 +12,12 @@ class User(AbstractUser):
     Uses email and username for authentication (configurable via AUTH_USER_MODEL).
     """
 
+    #: Excluded from tenant isolation: user identities are cross-tenant,
+    #: not tenant-scoped data.  The auth module is a system-wide service.
+    tenant_excluded = (
+        "System-wide user model: identities are cross-tenant, not tenant-scoped."
+    )
+
     # Optional: Add custom fields here
     # For MVP, we keep it simple and extend AbstractUser without custom fields
     # Users can add custom fields in their project if needed

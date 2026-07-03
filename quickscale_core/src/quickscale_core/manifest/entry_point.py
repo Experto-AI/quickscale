@@ -236,12 +236,12 @@ def refresh_managed_adapters() -> None:
             adapter_module = importlib.import_module(
                 f"quickscale_modules_{module_name}.adapter"
             )
-        except ImportError:
+        except ImportError as exc:
             raise ImproperlyConfigured(
                 f"Managed adapter for '{module_name}' not importable: "
                 f"quickscale_modules_{module_name}.adapter could not be loaded. "
                 f"The module package must be installed and importable."
-            )
+            ) from exc
 
         sentinel = getattr(adapter_module, "get_manifest_adapter", None)
         if sentinel is not None:
@@ -1378,16 +1378,64 @@ MANAGED_ADAPTER_ORIGINS.add("social")
 _ADAPTERS_INITIALIZED: bool = False
 
 
+def _is_import_time_adapter_circular_import(error: Exception) -> bool:
+    """Return True when *error* is the documented lazy-init circular import.
+
+    The only tolerated import-time failure is the known partially-initialized
+    core-module cycle encountered while module-owned adapters import
+    ``build_generic_manifest_spec`` during entry-point initialisation.
+    """
+    cause = error.__cause__
+    if not isinstance(cause, ImportError):
+        return False
+
+    message = str(cause)
+    return (
+        "partially initialized module" in message
+        and "circular import" in message
+        and (
+            "quickscale_core.manifest.entry_point" in message
+            or "quickscale_core.contracts.resolvers" in message
+        )
+    )
+
+
 def _ensure_adapters_initialized() -> None:
     """One-time lazy initialisation of managed adapters.
 
     Called by :func:`build_manifest_wiring_spec` when the import-time
     refresh failed (circular import during module initialisation).
+
+    If the refresh fails (e.g. a managed module's Python adapter package
+    is not importable), the ``_ADAPTERS_INITIALIZED`` flag is NOT set so
+    that subsequent calls retry the initialisation and continue surfacing
+    the real managed-adapter failure (CR-SA18.1-002).
     """
     global _ADAPTERS_INITIALIZED
     if not _ADAPTERS_INITIALIZED:
-        _ADAPTERS_INITIALIZED = True
         refresh_managed_adapters()
+        _ADAPTERS_INITIALIZED = True
+
+
+def _initialize_managed_adapters_at_import() -> None:
+    """Eagerly initialise managed adapters unless the known circular import hits.
+
+    Broken adapter imports must fail at import time. Only the documented
+    partially-initialized core-module circular import is deferred to
+    :func:`build_manifest_wiring_spec`'s lazy initialisation path.
+    """
+    from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
+
+    global _ADAPTERS_INITIALIZED
+
+    try:
+        refresh_managed_adapters()
+    except ImproperlyConfigured as exc:
+        if _is_import_time_adapter_circular_import(exc):
+            return
+        raise
+
+    _ADAPTERS_INITIALIZED = True
 
 
 # Initialise all managed adapters (social, billing, CRM) in one pass so
@@ -1396,11 +1444,7 @@ def _ensure_adapters_initialized() -> None:
 # package imports, then re-raised as ImproperlyConfigured by
 # refresh_managed_adapters) — the adapters are lazily initialised on the
 # first call to :func:`build_manifest_wiring_spec`.
-try:
-    refresh_managed_adapters()
-    _ADAPTERS_INITIALIZED = True
-except Exception:
-    pass
+_initialize_managed_adapters_at_import()
 
 
 # ---------------------------------------------------------------------------

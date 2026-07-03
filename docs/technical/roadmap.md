@@ -124,17 +124,16 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA11.7 (no deps)                     SA15.2 → SA15.3                            SA16.1 ✅ (complete)
                                      SA17.1 (no deps)                          SA16.2 ✅ (complete)
-SA13.1 (no deps)                     SA17.2 (no deps)                          SA18.1 (no deps)
-SA13.2 (deps: SA13.1)                SA17.3 (no deps)                          SA18.2 (no deps)
-SA13.3 (deps: SA13.1)                SA17.4 (no deps)                          SA18.3 (no deps)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps)                          SA18.4 (no deps)
-SA14.1 (deps: SA13.1)                SA17.6 (no deps)                          SA18.5 (no deps)
-SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.2, SA17.5)             SA18.6 (no deps)
-SA14.3 (deps: SA14.1)                SA17.8 (no deps)                          SA18.7 (no deps)
-SA14.4 (deps: SA14.2, SA14.3)                                                  SA18.8 (no deps)
-SA14.5 (deps: SA13.1)                                                          SA18.9 (no deps)
-SA14.6 (no deps)                                                               SA18.10 (deps: SA18.6, SA18.9)
-                                                                                SA18.11 (no deps)
+SA13.1 (no deps)                     SA17.2 (no deps)                          SA18.2 (no deps)
+SA13.2 (deps: SA13.1)                SA17.3 (no deps)                          SA18.3 (no deps)
+SA13.3 (deps: SA13.1)                SA17.4 (no deps)                          SA18.4 (no deps)
+SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps)                          SA18.5 (no deps)
+SA14.1 (deps: SA13.1)                SA17.6 (no deps)                          SA18.6 (no deps)
+SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.2, SA17.5)             SA18.7 (no deps)
+SA14.3 (deps: SA14.1)                SA17.8 (no deps)                          SA18.8 (no deps)
+SA14.4 (deps: SA14.2, SA14.3)                                                  SA18.9 (no deps)
+SA14.5 (deps: SA13.1)                                                          SA18.10 (deps: SA18.6, SA18.9)
+SA14.6 (no deps)                                                               SA18.11 (no deps)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -145,7 +144,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 |-------|------------------|-------|
 | **1** | SA11.7 *(carried over)*, then SA13.1 → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA15.2 → SA15.3 *(SA15.1 complete)*, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
-| **3** | ~~SA16.1~~ ✅, ~~SA16.2~~ ✅, plus SA18.1–SA18.11 | Manifest-snapshot drift (Finding 4) + core/CLI fail-hard plumbing |
+| **3** | ~~SA16.1~~ ✅, ~~SA16.2~~ ✅, ~~SA18.1~~ ✅, plus SA18.2–SA18.11 | Manifest-snapshot drift (Finding 4) + core/CLI fail-hard plumbing |
 
 ---
 
@@ -216,10 +215,8 @@ No cross-track dependencies — all three tracks can run fully in parallel.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/check_tenant_isolation.py`, `quickscale_modules/orgs/tests/test_checks.py`, `quickscale_modules/orgs/tests/test_management_commands.py`, `quickscale_core/tests/test_generator/test_templates.py`.
   *Acceptance:* the classification check now considers any installed concrete model (not just `quickscale_modules_*`); models can declare exclusion via the new attribute; auto-created M2M through models are auto-classified when their related models are classified; W005 and CLI output provide actionable remediation guidance.
 
-- [ ] **SA15.2 — Backfill markers on auth/backups/notifications/storage models.** `Tier 2 · Track 2 · deps: SA15.1 · RISK LEVEL: medium`
-  Classify the concrete models `TENANT_TABLE_REGISTRY` currently omits (auth's `User` + M2M through-tables, backups' 3 models, notifications' 4 models, storage's models) as ENROLLED or `tenant_excluded`, so orgs+auth / orgs+backups / orgs+notifications generated projects stop failing `check_tenant_isolation` in CI.
-  *Files:* `quickscale_modules/{auth,backups,notifications,storage}/src/**/models.py`.
-  *Acceptance:* generating an orgs+auth project and running `manage.py check_tenant_isolation --postgres-only` exits 0.
+- [x] **SA15.2 — Backfill markers on auth/backups/notifications/storage models (complete).** `Tier 2 · Track 2 · deps: SA15.1 · RISK LEVEL: medium`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA15.3 — Derive the human-readable registry as a generated artifact.** `Tier 1 · Track 2 · deps: SA15.2`
   Generate the reviewable registry overview from the markers rather than hand-maintaining it; keep the old literal `TENANT_TABLE_REGISTRY` temporarily as a cross-check test against the derived view (retire it once confidence is established), and drop the manual `decisions.md:1114-1115` enrolled-model count assertion in favor of the generated view.
@@ -289,10 +286,12 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md) (`TA1`–`TA15`). `SA
 
 #### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3)
 
-- [ ] **SA18.1 — Narrow the import-time `except Exception: pass` in manifest adapter init.** `Tier 1 · Track 3 · deps: none · (why → TA3)`
-  Narrow the exception clause around `refresh_managed_adapters()` to the specific circular-import case it's meant to handle (or eliminate the import-time eager init entirely), so a genuinely broken adapter fails at the point of the break instead of being masked.
-  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py:1399-1403`.
-  *Acceptance:* a deliberately broken adapter registration raises at import time; only the documented circular-import case is swallowed (or none is, if the eager init is removed).
+- [x] **SA18.1 — Narrow the import-time `except Exception: pass` in manifest adapter init (complete — 2026-07-03).** `Tier 1 · Track 3 · deps: none · (why → TA3)`
+  Replaced the module-level broad swallow with a targeted import-time initializer that defers only the documented partially-initialized core circular-import case. `refresh_managed_adapters()` now preserves the underlying `ImportError` as the `ImproperlyConfigured` cause, so genuinely broken managed adapters fail at import time instead of being masked.
+  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_core/tests/test_manifest_entry_point.py`.
+  *Acceptance:* a deliberately broken adapter registration raises at import time; only the documented circular-import case is swallowed.
+  *Finding:* the tolerated import-time cycle is narrower than the old comment implied — the defer path is now limited to partially initialized `quickscale_core.manifest.entry_point` / `quickscale_core.contracts.resolvers` imports. No blockers discovered.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA18.2 — Raise instead of silently defaulting empty analytics manifest settings.** `Tier 1 · Track 3 · deps: none · (why → TA4)`
   Empty-after-resolution analytics settings currently get silently replaced with hardcoded defaults ("fallback defaults matching legacy behaviour"); an empty result after resolution means the derivation produced an invalid result and should raise.
