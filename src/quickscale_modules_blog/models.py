@@ -186,7 +186,12 @@ class Tag(TenantModel):
 
 
 class AuthorProfile(models.Model):
-    """Extended profile for blog post authors"""
+    """Extended profile for blog post authors
+
+    User-profile extension linked to auth.User — not tenant-scoped.
+    """
+
+    tenant_excluded = "User-profile extension linked to auth.User, not tenant-scoped."
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
