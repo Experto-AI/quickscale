@@ -64,10 +64,10 @@ Diagram below shows only remaining open work.
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + deps)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────
-SA11.4 (←11.1, unblocked)           SA9.4  (←9.3)                             SA7.4  (no deps)
-SA11.5 (no deps)                    SA9.5  (←9.3)
-SA11.6 (no deps)                    └─ SA9.6 (←9.4 & 9.5)
-SA11.7 (no deps)                    SA10.1 (no deps)
+SA11.5 (no deps)                    SA9.4  (←9.3)                             SA7.4  (no deps)
+SA11.6 (no deps)                    SA9.5  (←9.3)
+SA11.7 (no deps)                    └─ SA9.6 (←9.4 & 9.5)
+                                    SA10.1 (no deps)
                                       └─ SA10.2 (←10.1)
 ```
 
@@ -77,7 +77,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.4 *(unblocked)* → SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
+| **1** | SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
 | **2** | SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
 | **3** | SA7.4 *(no deps)* | Declarative-wiring migration slice + orgs god-module de-coupling version-range constraints |
 
@@ -94,10 +94,8 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 - [x] **SA11.3 — Migrate blog public views to the helper (complete).** `Tier 1 · Track 1 · deps: SA11.1`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA11.4 — Migrate listings public views to the helper.** `Tier 1 · Track 1 · deps: SA11.1`
-  Same conversion for the listings module's public list/detail views.
-  *Files:* `quickscale_modules/listings/src/quickscale_modules_listings/views.py`.
-  *Acceptance:* restricted-role anonymous read of a published System-org listing returns rows; existing listings tests stay green.
+- [x] **SA11.4 — Migrate listings public views to the helper (complete).** `Tier 1 · Track 1 · deps: SA11.1`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA11.5 — Generated-project DRF permission baseline.** `Tier 1 · Track 1 · deps: none`
   Emit `REST_FRAMEWORK = {"DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"]}` from the generator's settings wiring so module APIs default to authenticated-only unless a view explicitly opts into public access, instead of relying on DRF's `AllowAny` default.

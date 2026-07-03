@@ -3,16 +3,27 @@
 from django.db import models
 
 from quickscale_modules_listings.models import AbstractListing
+from quickscale_modules_orgs.managers import TenantManager
 
 
 class ConcreteListing(AbstractListing):
-    """Concrete listing model for testing AbstractListing"""
+    """Concrete listing model for testing AbstractListing
+
+    SA11.4: Requires ``TenantManager`` as the default ``objects`` manager
+    so that views using ``ListingsPublicReadMixin`` + ``org_scope()``
+    correctly auto-scope queries through the tenant-scoped manager's
+    ``get_queryset()``.
+    """
+
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
 
     class Meta(AbstractListing.Meta):
         abstract = False
         app_label = "tests"
         verbose_name = "Test Listing"
         verbose_name_plural = "Test Listings"
+        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],
@@ -29,11 +40,15 @@ class AlternateListing(AbstractListing):
     can coexist without reverse-accessor collision.
     """
 
+    objects = TenantManager()
+    all_objects = TenantManager(super_scope=True)
+
     class Meta(AbstractListing.Meta):
         abstract = False
         app_label = "tests"
         verbose_name = "Alternate Listing"
         verbose_name_plural = "Alternate Listings"
+        base_manager_name = "all_objects"
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "organization"],

@@ -44,15 +44,11 @@ def test_org_a_cannot_see_org_b_listings(
         organization=org_b,
     )
 
-    # Set the ambient org context to Org A (bypassing middleware for isolation)
-    from quickscale_modules_orgs.current_org import set_current_org_id
-
-    set_current_org_id(org_a.pk)
-
     factory = RequestFactory()
     url = reverse("quickscale_listings:listing_list")
     request = factory.get(url)
     request.user = org_a_admin
+    request.org = org_a  # Set request.org for mixin tenant-context resolution
 
     view = ListingListView.as_view()
     response = view(request)
