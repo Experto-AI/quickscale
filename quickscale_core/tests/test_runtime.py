@@ -1,4 +1,4 @@
-"""Tests for quickscale_core.runtime — SA9.3 public re-export facade.
+"""Tests for quickscale_core.runtime — SA9.3/SA9.4 public re-export facade.
 
 Verifies that all expected symbols are importable through the facade and
 that the ``__all__`` export list matches the declared re-export surface.
@@ -41,6 +41,42 @@ class TestRuntimeAllExport:
             f"Missing DR symbols: {dr_symbols - set(runtime.__all__)}"
         )
 
+    def test_all_contains_backup_orchestration_surface(self) -> None:
+        backup_symbols = {
+            "BackupLockError",
+            "StagedAdminRestoreUpload",
+            "build_backup_filename",
+            "build_backup_snapshot_report",
+            "clear_backup_snapshot_rollback_pin",
+            "create_backup",
+            "delete_artifact_files",
+            "download_backup_path",
+            "get_backup_snapshot",
+            "get_local_backup_directory",
+            "prune_expired_backups",
+            "record_backup_snapshot_verification",
+            "report_backup_snapshot",
+            "restore_admin_uploaded_backup",
+            "restore_backup_artifact",
+            "restore_backup_source",
+            "set_backup_snapshot_rollback_pin",
+            "sync_backup_snapshot_media",
+            "validate_backup_artifact",
+            "BackupConfigurationError",
+            "BackupPolicySnapshot",
+            "ShellCommandRunner",
+            "ArtifactLike",
+            "BackupRestoreBlocked",
+            "RemoteMaterializer",
+            "ResolvedRestoreSource",
+            "RestoreResult",
+            "RestoreSourceResolutionMode",
+            "RestoreWarning",
+        }
+        assert backup_symbols.issubset(runtime.__all__), (
+            f"Missing backup symbols: {backup_symbols - set(runtime.__all__)}"
+        )
+
     def test_all_contains_social_surface(self) -> None:
         social_symbols = {
             "SOCIAL_EMBEDS_PATH",
@@ -69,27 +105,56 @@ class TestRuntimeAllExport:
         """
         expected = {
             "ADAPTER_FUNCTIONS",
+            "ArtifactLike",
+            "BackupConfigurationError",
             "BackupError",
+            "BackupLockError",
+            "BackupPolicySnapshot",
+            "BackupRestoreBlocked",
             "ModuleWiringSpec",
+            "RemoteMaterializer",
             "ResolverResult",
+            "ResolvedRestoreSource",
+            "RestoreResult",
+            "RestoreSourceResolutionMode",
+            "RestoreWarning",
             "SOCIAL_EMBEDS_PATH",
             "SOCIAL_INTEGRATION_BASE_PATH",
             "SOCIAL_INTEGRATION_EMBEDS_PATH",
             "SOCIAL_LINK_TREE_PATH",
+            "ShellCommandRunner",
+            "StagedAdminRestoreUpload",
             "assemble_wiring_spec",
+            "build_backup_filename",
+            "build_backup_snapshot_report",
             "build_database_plan",
             "capture_snapshot",
+            "clear_backup_snapshot_rollback_pin",
+            "create_backup",
+            "delete_artifact_files",
+            "download_backup_path",
             "execute_database_restore",
             "fetch_snapshot_report",
+            "get_backup_snapshot",
+            "get_local_backup_directory",
             "load_social_manifest",
+            "prune_expired_backups",
+            "record_backup_snapshot_verification",
             "record_verification",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
+            "report_backup_snapshot",
             "resolve_social_module_options",
+            "restore_admin_uploaded_backup",
+            "restore_backup_artifact",
+            "restore_backup_source",
+            "set_backup_snapshot_rollback_pin",
             "set_rollback_pin",
             "social_provider_supports_embeds",
+            "sync_backup_snapshot_media",
             "sync_media",
+            "validate_backup_artifact",
         }
         actual = set(runtime.__all__)
         assert actual == expected, (

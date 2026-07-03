@@ -64,12 +64,11 @@ Diagram below shows only remaining open work.
 ```
 Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + deps)
 ───────────────────────────────      ───────────────────────────────────      ────────────────────────────────
-SA11.2 (←11.1, unblocked)           SA9.4  (←9.3)                             SA7.4  (no deps)
-├─ SA11.3 (←11.1, unblocked)        SA9.5  (←9.3)
-└─ SA11.4 (←11.1, unblocked)        └─ SA9.6 (←9.4 & 9.5)
-SA11.5 (no deps)                    SA10.1 (no deps)
-SA11.6 (no deps)                      └─ SA10.2 (←10.1)
-SA11.7 (no deps)
+SA11.4 (←11.1, unblocked)           SA9.4  (←9.3)                             SA7.4  (no deps)
+SA11.5 (no deps)                    SA9.5  (←9.3)
+SA11.6 (no deps)                    └─ SA9.6 (←9.4 & 9.5)
+SA11.7 (no deps)                    SA10.1 (no deps)
+                                      └─ SA10.2 (←10.1)
 ```
 
 No cross-track dependencies. Cross-track file-ownership note: `quickscale_modules/crm/` is touched by **both** Track 1 (`SA11.6` — `views.py` cleanup) and Track 3 (`SA7.x` — signals/wiring); the two tasks touch disjoint files inside the package, but track owners should confirm no overlap before merge-back.
@@ -78,7 +77,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA11.2/SA11.3/SA11.4 *(unblocked)* → SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
+| **1** | SA11.4 *(unblocked)* → SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
 | **2** | SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
 | **3** | SA7.4 *(complete)* → SA7.5 *(no deps — future)* | Declarative-wiring migration slice + orgs god-module de-coupling version-range constraints |
 
@@ -89,15 +88,11 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 - [x] **SA11.1 — Orgs-owned public-read context helper (complete — 2026-07-03).** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA11.2 — Restricted-role anonymous-read E2E smoke.** `Tier 2 · Track 1 · deps: SA11.1 · RISK LEVEL: medium`
-  Add an integration test that runs against the restricted `NOBYPASSRLS` runtime role (not the superuser test posture used elsewhere) and asserts an anonymous request to a public blog page returns a published System-org post. This is the single test that covers the whole defect class.
-  *Files:* new test under `quickscale_modules/blog/tests/` (or a shared restricted-role harness in `tests_shared/isolation.py`).
-  *Acceptance:* test fails on current `main` (proving it reproduces the defect) and passes once SA11.3 lands.
+- [x] **SA11.2 — Restricted-role anonymous-read E2E smoke (complete).** `Tier 2 · Track 1 · deps: SA11.1 · RISK LEVEL: medium`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA11.3 — Migrate blog public views to the helper.** `Tier 1 · Track 1 · deps: SA11.1`
-  Convert `_resolve_org_for_read`/`_scope_by_org` to use SA11.1's helper so anonymous reads prime the GUC instead of only filtering.
-  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py`.
-  *Acceptance:* SA11.2 passes; existing blog test suite stays green.
+- [x] **SA11.3 — Migrate blog public views to the helper (complete).** `Tier 1 · Track 1 · deps: SA11.1`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA11.4 — Migrate listings public views to the helper.** `Tier 1 · Track 1 · deps: SA11.1`
   Same conversion for the listings module's public list/detail views.
@@ -129,10 +124,8 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 - [x] **SA9.3 — `quickscale_core.runtime` public facade (completed 2026-07-03).** `Tier 2 · Track 2 · deps: none`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade.** `Tier 2 · Track 2 · deps: SA9.3`
-  Repoint `services.py` and the seven management commands from `quickscale_core.dr_engine.{orchestration,primitives,recovery,verification,adapter}` to `quickscale_core.runtime`.
-  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/services.py`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/*.py`.
-  *Acceptance:* backups test suite green with zero remaining `from quickscale_core.dr_engine` imports outside `quickscale_core` itself.
+- [x] **SA9.4 — Migrate backups' deep `dr_engine` imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA9.5 — Migrate social's deep core imports to the facade.** `Tier 2 · Track 2 · deps: SA9.3`
   Repoint `social/adapter.py` from `quickscale_core.contracts.{module_options,resolvers}` and `quickscale_core.manifest.{assembler,resolver,social_manifest}` to `quickscale_core.runtime`.

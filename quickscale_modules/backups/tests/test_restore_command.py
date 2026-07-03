@@ -63,7 +63,7 @@ class TestBackupsRestoreCommand:
         )
 
         with patch.dict(
-            "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+            "quickscale_core.runtime.ADAPTER_FUNCTIONS",
             {"restore_backup": mock_restore},
         ):
             call_command(
@@ -97,7 +97,7 @@ class TestBackupsRestoreCommand:
         )
 
         with patch.dict(
-            "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+            "quickscale_core.runtime.ADAPTER_FUNCTIONS",
             {"restore_backup": mock_restore},
         ):
             call_command(
@@ -145,7 +145,7 @@ class TestBackupsRestoreCommand:
         )
 
         with patch.dict(
-            "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+            "quickscale_core.runtime.ADAPTER_FUNCTIONS",
             {"restore_backup": mock_restore},
         ):
             call_command(
