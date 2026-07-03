@@ -4,6 +4,8 @@
 > **Policy audited against:** [decisions.md §fail-hard-principle](docs/technical/decisions.md#fail-hard-principle) — no silent fallbacks, no best-effort defaults, no graceful degradation, no backward-compat shims; every misconfiguration must raise an explicit, descriptive error.
 >
 > This file records **found-not-yet-fixed** violations for later remediation planning. Structural findings live in [arch-audit.md](arch-audit.md); once a finding here is remediated, drop it and log the closeout in [CHANGELOG.md](CHANGELOG.md).
+>
+> **Closed 2026-07-04:** `TA3` (import-time `except Exception: pass` in manifest adapter init) — remediated by `e4183e52` (SA18.1, 2026-07-03). Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 
 **Scope swept:** `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `scripts/`, generator templates. Patterns: broad/silent `except`, fallback chains, legacy/compat keywords, `getattr(settings, X, default)`, env-var defaults.
 
@@ -17,7 +19,6 @@
 |----|----------|----------|-----------|
 | TA1 | High | `quickscale_core/contracts/resolvers.py` | Legacy config keys silently translated/dropped instead of rejected |
 | TA2 | High | `quickscale_modules/*/src` (pervasive) | `getattr(settings, X, permissive-default)` — features fail-open when settings are missing (generalizes SA11.7) |
-| TA3 | High | `quickscale_core/manifest/entry_point.py:1399` | Import-time `except Exception: pass` around adapter registry init |
 | TA4 | Medium | `quickscale_core/manifest/entry_point.py:302` | Analytics "fallback defaults matching legacy behaviour" silently fill empty settings |
 | TA5 | Medium | `quickscale_cli/src/quickscale_cli/schema/` | Undocumented backward-compat shim package; CLI's own code still imports through it |
 | TA6 | Medium | `quickscale_core/generator/generator.py` | Template-dir discovery fallback chain + root-template compat fallback |
@@ -51,10 +52,6 @@ SA11.7 (tracked in decisions.md Known violations) covers `auth/adapters.py:14` (
 - `notifications/services.py:155-157` — enabled defaults `True`, provider defaults `"resend"`
 
 Since modules are creation-time assembled and the generator owns settings emission, every one of these settings is knowable at generation time; the defaults exist only to mask incomplete wiring. **Fix direction:** module `apps.py` startup checks (Django system checks) that raise on missing required settings; generator guarantees emission.
-
-### TA3 (High) — Import-time `except Exception: pass` in manifest adapter init
-
-`manifest/entry_point.py:1399-1403`: module-level `try: refresh_managed_adapters() ... except Exception: pass`. The comment justifies swallowing *circular-import* errors with lazy re-init on first `build_manifest_wiring_spec()` call, but the clause swallows **all** exceptions — a genuinely broken adapter (syntax error, bad registration) is masked at import and resurfaces later, farther from the root cause. This is the literal prohibited pattern ("no `except Exception: pass` in … discovery paths"). **Fix direction:** narrow to the specific circular-import case (or eliminate the import-time eager init entirely) and add an F-EXCEPTION entry if any swallowing must remain.
 
 ### TA4 (Medium) — Analytics fallback defaults in manifest resolution
 
@@ -133,7 +130,6 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 |----|--------|------|
 | TA1 | **still-open** | Legacy-key silent translate/drop still present (`resolvers.py:252`, `:780`). |
 | TA2 | **still-open** | Permissive `getattr(settings, …, default)` still pervasive (analytics/billing/crm/forms/blog/notifications). Auth's `ACCOUNT_ALLOW_REGISTRATION` (SA11.7) is now fixed and raises `ImproperlyConfigured` — the *pattern* remains open elsewhere. |
-| TA3 | **resolved** | Fixed by `e4183e52` (SA18.1, 2026-07-03): import-time swallow narrowed to the documented circular-import case; broken managed adapters now re-raise with `ImportError` as cause. Regression tests added. |
 | TA4 | **still-open** | Analytics "fallback defaults matching legacy behaviour" still at `entry_point.py:302-311`. (Tracked as SA18.2.) |
 | TA5 | **still-open** | `quickscale_cli.schema` shim package still present; CLI still imports through it (`status_command.py`, `plan_command.py`, `module_commands.py`, `module_wiring_manager.py`). |
 | TA6 | **still-open** | `Path.cwd()` template-dir fallback (`generator.py:117`) + backward-compat root-template tier (`:178`) still present. |
@@ -194,7 +190,7 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 ## Tooling gaps
 
 - **No dependency-vulnerability gate in CI.** Add `pip-audit` (or `safety`) as a read-only CI step — would systematically catch the dependency-hygiene class this sweep could only inspect by hand. (Prevents future CVE drift on the Stripe/Django/Pillow trust-boundary deps.)
-- **No security-lint gate.** A `bandit` (or `semgrep`) CI step configured for the broad-`except`/`subprocess`-argv/weak-default families would flag TA3-style and TA10/TA15 swallows and TA17-style argv exposure automatically. Ties to `TA3`, `TA7`, `TA8`, `TA10`, `TA15`, `TA17`.
+- **No security-lint gate.** A `bandit` (or `semgrep`) CI step configured for the broad-`except`/`subprocess`-argv/weak-default families would flag TA10/TA15 swallows and TA17-style argv exposure automatically. Ties to `TA7`, `TA8`, `TA10`, `TA15`, `TA17`.
 - **`vulture`/`pylint` are dev-declared but not CI-wired.** Wiring the existing `pylint` duplication config into CI would keep the collapsed-class habits from regressing; `vulture` would surface the dead compat delegates behind `TA12`.
 - **A grep-based CI check for the mandated `# F-EXCEPTION:` tag** (decisions.md §fail-hard-principle) would close `TA14`'s SSOT↔code traceability drift cheaply.
 
@@ -248,7 +244,6 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 |----|--------|------|
 | TA1 | still-open | Legacy-key silent translation unchanged (`resolvers.py`, `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS` at :780) |
 | TA2 | still-open (partially remediated) | `auth/adapters.py` now **raises** `ImproperlyConfigured` when `ACCOUNT_ALLOW_REGISTRATION` unset (SA11.7 done); all other listed module defaults remain (verified notifications :157, forms, blog, crm, analytics, billing) |
-| TA3 | **resolved** | Commit `e4183e52` (SA18.1): defer path narrowed to the documented circular-import case; regression tests added |
 | TA4 | still-open | Posthog fallback defaults verified at `entry_point.py:302-311` |
 | TA5 | still-open | Shim package present; 4+ internal CLI files still import through it |
 | TA6 | still-open | `Path.cwd()` guess at `generator.py:117`, root-template compat at :178 |
@@ -308,7 +303,6 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 |----|--------|------|
 | TA1 | still-open | `resolvers.py` legacy-key silent translate/drop; `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS` at `:780`. |
 | TA2 | still-open (partial) | `auth/adapters.py` now raises (SA11.7 done); permissive `getattr(settings, …, default)` remains — verified `billing/services.py:117`, `analytics/services.py:61`, `crm/views.py:204,223,231`, `forms/throttles.py:16`, `forms/views.py:134,146`, `blog/views.py:175,280`, `orgs/views.py:63`+`middleware.py:268` (see TA19). |
-| TA3 | **resolved** | `e4183e52` (SA18.1) — narrowed to circular-import case, regression tests added. |
 | TA4 | still-open | Posthog fallback defaults `entry_point.py:302-311`. |
 | TA5 | still-open | `quickscale_cli.schema` shim still imported internally. |
 | TA6 | still-open | `generator.py` `Path.cwd()` guess `:117`, root-template compat `:178`. |
