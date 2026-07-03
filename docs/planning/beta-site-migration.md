@@ -652,17 +652,7 @@ Set in Railway dashboard before deploying. Required only for the listed modules.
 
 ### `storage`
 
-```
-QUICKSCALE_STORAGE_BACKEND=s3          # or: r2
-AWS_STORAGE_BUCKET_NAME=<bucket>
-AWS_ACCESS_KEY_ID=<key>
-AWS_SECRET_ACCESS_KEY=<secret>
-AWS_S3_REGION_NAME=eu-west-1           # R2: auto
-AWS_QUERYSTRING_AUTH=false
-QUICKSCALE_STORAGE_PUBLIC_BASE_URL=https://cdn.yourdomain.com
-# R2 only:
-AWS_S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
-```
+See [railway.md § Minimum environment variable contract](../deployment/railway.md#media-storage-on-railway) for the canonical env var list (S3 and R2 variants).
 
 ### `notifications`
 

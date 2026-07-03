@@ -2400,8 +2400,14 @@ class TestSaveProjectState:
         assert _save_project_state(tmp_path, config, None, ["auth"], delta) is True
         assert (tmp_path / ".quickscale" / "state.yml").exists()
 
+        # SA10.1: new project state should include project_contract
+        state_data = yaml.safe_load(
+            (tmp_path / ".quickscale" / "state.yml").read_text()
+        )
+        assert "project_contract" in state_data.get("project", {})
+
     def test_existing_project_state(self, tmp_path):
-        """Test saving state for existing project"""
+        """Test saving state for existing project (legacy-missing project_contract)."""
         # Pre-create state dir
         (tmp_path / ".quickscale").mkdir()
 
@@ -2416,6 +2422,8 @@ class TestSaveProjectState:
             ),
             modules={},
         )
+        # Sanity: legacy state has no project_contract
+        assert existing_state.project.project_contract is None
 
         config = Mock()
         config.project.slug = "myapp"
@@ -2429,6 +2437,46 @@ class TestSaveProjectState:
             _save_project_state(tmp_path, config, existing_state, ["blog"], delta)
             is True
         )
+        # SA10.1: legacy-missing project_contract must remain None (unknown
+        # vintage) — the apply-state snapshot must not backfill it.
+        state_data = yaml.safe_load(
+            (tmp_path / ".quickscale" / "state.yml").read_text()
+        )
+        project_data = state_data.get("project", {})
+        assert "project_contract" in project_data
+        assert project_data["project_contract"] is None
+
+    def test_existing_project_state_preserves_set_contract(self, tmp_path):
+        """Existing state with a non-null project_contract is preserved."""
+        (tmp_path / ".quickscale").mkdir()
+
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_html",
+                project_contract="0.87.0",
+                created_at="2025-01-01T00:00:00",
+                last_applied="2025-01-01T00:00:00",
+            ),
+            modules={},
+        )
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        assert _save_project_state(tmp_path, config, existing_state, [], delta) is True
+        state_data = yaml.safe_load(
+            (tmp_path / ".quickscale" / "state.yml").read_text()
+        )
+        project_data = state_data.get("project", {})
+        assert project_data.get("project_contract") == "0.87.0"
 
     def test_save_state_error(self, tmp_path):
         """Test state save error handling"""

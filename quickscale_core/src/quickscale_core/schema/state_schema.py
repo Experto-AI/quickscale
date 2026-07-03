@@ -103,11 +103,17 @@ class ManagedFileRecord:
 
 @dataclass
 class ProjectState:
-    """State tracking for the generated project"""
+    """State tracking for the generated project.
+
+    SA10.1 adds ``project_contract``: the QuickScale contract version that
+    the project was generated (or last applied) against.  Absent on legacy
+    state files — loaded as ``None`` for backward compatibility.
+    """
 
     slug: str
     package: str
     theme: str
+    project_contract: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_applied: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -214,6 +220,7 @@ class StateManager:
                 slug=project_slug,
                 package=project_package,
                 theme=project_theme,
+                project_contract=project_data.get("project_contract"),
                 created_at=project_data.get("created_at", datetime.now().isoformat()),
                 last_applied=project_data.get(
                     "last_applied", datetime.now().isoformat()
@@ -304,6 +311,7 @@ class StateManager:
                     "slug": state.project.slug,
                     "package": state.project.package,
                     "theme": state.project.theme,
+                    "project_contract": state.project.project_contract,
                     "created_at": state.project.created_at,
                     "last_applied": state.project.last_applied,
                 },

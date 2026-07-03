@@ -124,19 +124,20 @@ No cross-track dependencies. Track 3's `SA7.x` work in `quickscale_modules/crm/`
 - [x] **SA9.5 — Migrate social's deep core imports to the facade (completed — 2026-07-03).** `Tier 2 · Track 2 · deps: SA9.3`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA9.6 — CI import-linter gate.** `Tier 1 · Track 2 · deps: SA9.4 & SA9.5`
-  Add a CI check that fails if any file under `quickscale_modules/*/src/` imports `quickscale_core` from outside `quickscale_core.runtime` (or another explicitly documented allowlist entry).
-  *Files:* new CI script (e.g. `scripts/check_module_core_imports.py`).
-  *Acceptance:* introducing a new deep-internal import from a module fails CI; the current (post-SA9.4/9.5) import set passes.
+- [x] **SA9.6 — CI import-linter gate (completed — 2026-07-03).** `Tier 1 · Track 2 · deps: SA9.4 & SA9.5`
+  Added `scripts/check_module_core_imports.py` — an AST-based import linter that scans `quickscale_modules/*/src/` and rejects any `quickscale_core` import that targets a module other than `quickscale_core.runtime` (with per-module legacy exceptions for billing/crm adapter seams only). Two framework-seam imports (`quickscale_core.manifest.entry_point`, `quickscale_core.module_wiring`) are scoped to billing and CRM via the `LEGACY_ALLOWED_IMPORTS` dict — no other module may use them. Wired as `make check-module-core-imports`, included in `make check` and in `scripts/check_ci_locally.sh` (step 4/7). Added a `module-core-import-linter` gate job in `.github/workflows/ci.yml` that the `test` CI job depends on.
+  *Findings:* CR-SA9.6-001 (global allowlist too broad) — resolved: exceptions now scoped per module. CR-SA9.6-002 (docs/policy inconsistency) — resolved: roadmap, changelog, Makefile help, and implementation contract aligned with the scoped policy. CR-SA9.6-003 (advisory test-gap) — remains visible for future follow-up.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 ---
 
 #### Finding — Repo Finding 5: module↔generated-project contract drift (`why →` [Finding 5](../../arch-audit.md#finding-5-the-modulegenerated-project-contract-drifts-by-design--every-release-accretes-existing-projects-must-manually-adopt-steps-with-no-mechanism-to-apply-them))
 
-- [ ] **SA10.1 — `project_contract` version in state.yml.** `Tier 1 · Track 2 · deps: none`
+- [x] **SA10.1 — `project_contract` version in state.yml (complete).** `Tier 1 · Track 2 · deps: none`
   Record the generator/contract version a project was generated against in `.quickscale/state.yml` at generation time.
   *Files:* `quickscale_core/src/quickscale_core/schema/state_schema.py`, generator state-writing path.
   *Acceptance:* a fresh generation's `state.yml` includes `project_contract`; existing state-file tests updated for the new field.
+  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA10.2 — `quickscale status` contract-vintage check.** `Tier 2 · Track 2 · deps: SA10.1`
   Compare each installed module's declared minimum project-contract requirement against the project's recorded `project_contract` and print the specific manual-adoption steps when the project is behind.

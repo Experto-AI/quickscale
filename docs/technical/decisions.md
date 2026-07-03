@@ -84,16 +84,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 <a id="mvp-vs-post-mvp-scope"></a>
 ## Current Implementation Scope
 
-**Current Contract:**
-- ✅ `quickscale_core`: scaffolding and shared generator/runtime support
-- ✅ `quickscale_cli`: plan/apply plus development, deployment, and module-management workflows
-- ✅ Generated project: standalone Django application that the user owns completely
-- ✅ Settings: standalone settings by default (no automatic inheritance from core)
-- ✅ First-party modules and starter themes that are implemented in-repo and documented per release
-
-**Historical note:** Older docs may still use legacy release-era shorthand from earlier planning. Treat those labels as historical context only; active documentation should describe the implemented surface directly.
-
-**Current Generated Output:** See [scaffolding.md §3](./scaffolding.md#mvp-structure)
+See [implementation_contract.md § Current Implementation Scope](./implementation_contract.md#mvp-vs-post-mvp-scope) for the canonical current-contract summary and generated-output pointer. This file remains the tie-breaker for cross-cutting policy; that file owns the shipped-surface description.
 
 ### Module & Theme Architecture {#module-theme-architecture}
 
@@ -376,24 +367,7 @@ Projects are managed through two configuration files with clear separation of co
 
 #### **Desired State Schema** (`quickscale.yml`)
 
-User-editable configuration file with this structure:
-
-```yaml
-version: 0.86.0
-project:
-  slug: myapp
-  package: myapp
-  theme: showcase_react
-modules:
-  auth: {}
-  listings: {}
-  storage:
-    backend: s3
-    public_base_url: https://cdn.example.com
-docker:
-  build: true
-  start: true
-```
+User-editable configuration file. See [plan-apply-system.md § Schema Definitions](./plan-apply-system.md#quickscaleyml-desired-state) for the canonical shape.
 
 **Constraints**:
 - ✅ Version-controllable (stored in git)
@@ -406,42 +380,7 @@ docker:
 
 #### **Applied State Schema** (`.quickscale/state.yml`, v0.69.0+; consolidated sub-sections in Phase 2 / M2)
 
-System-managed state file tracking what has been applied. `.quickscale/state.yml` is the sole authoritative applied-state store:
-
-```yaml
-version: 0.86.0
-project:
-  slug: myapp
-  package: myapp
-  theme: showcase_react
-  created_at: 2025-12-03T14:30:00
-  last_applied: 2025-12-03T14:32:00
-modules:
-  auth:
-    version: 0.86.0
-    commit_sha: abc123def456
-    embedded_at: 2025-12-03T14:30:00
-    options:
-      registration_enabled: true
-      email_verification: none
-      authentication_method: email
-    # Consolidated tracking fields (Phase 2 / M2):
-    prefix: splits
-    branch: splits/auth-module
-    installed_at: 2025-12-03T14:30:00
-  listings:
-    version: 0.86.0
-    commit_sha: xyz789uvw012
-    embedded_at: 2025-12-03T14:31:00
-    options: null
-    prefix: splits
-    branch: splits/listings-module
-    installed_at: 2025-12-03T14:31:00
-managed_files:
-  - path: myapp/settings/base.py
-    hash: sha256hex...
-    applied_at: 2025-12-03T14:32:00
-```
+System-managed state file tracking what has been applied. `.quickscale/state.yml` is the sole authoritative applied-state store. See [plan-apply-system.md § Schema Definitions](./plan-apply-system.md#quickscalestateyml-applied-state--sole-authoritative-store) for the canonical shape, including the consolidated per-module tracking fields (`prefix`, `branch`, `installed_at`) and `managed_files` sub-section.
 
 Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: they are read-through imported when the consolidated sections above are absent from `state.yml`, and ignored when consolidated sections are present. Leftover legacy files may remain on disk as ignored compatibility debris after a successful authoritative save.
 
@@ -655,21 +594,7 @@ workflow coverage are aligned to it.
 
 **Architectural Decision (v0.71.0):** Each module includes `module.yml` declaring configuration options as mutable or immutable.
 
-**Manifest Schema:**
-```yaml
-name: auth
-version: 0.86.0
-config:
-  mutable:
-    registration_enabled:
-      type: boolean
-      default: true
-      django_setting: ACCOUNT_ALLOW_REGISTRATION
-  immutable:
-    authentication_method:
-      type: string
-      default: email
-```
+**Manifest Schema:** See [plan-apply-system.md § Module Manifest](./plan-apply-system.md#module-manifest-moduleyml) for the canonical shape.
 
 **Configuration Rules:**
 

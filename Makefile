@@ -55,7 +55,7 @@
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
         check-llm lint-llm typecheck-llm test-llm test-cov-llm \
-        check-core-compat \
+        check-core-compat check-module-core-imports \
         help
 
 # Default Python command (uses root Poetry environment)
@@ -150,6 +150,9 @@ help:
 	@echo "Module-to-Core Compatibility:"
 	@echo "  make check-core-compat    - Verify each module's quickscale_core imports"
 	@echo "                               resolve against the current core API"
+	@echo "  make check-module-core-imports - Verify module code imports only from"
+	@echo "                               quickscale_core.runtime (with per-module"
+	@echo "                               legacy exceptions for billing/crm adapters)"
 	@echo ""
 	@echo "LLM Optimized Checks (Quiet on success):"
 	@echo "  make check-llm            - Run all checks quietly"
@@ -526,10 +529,18 @@ format:
 check-core-compat:
 	@$(PYTHON) scripts/check_module_core_compatibility.py
 
+# --- Module-Core Import Linter ---
+
+# Check that module code only imports from quickscale_core.runtime
+# (not from internal subpackages like dr_engine, contracts, manifest, etc.).
+# Per-module legacy exceptions exist for billing/crm adapter seams only.
+check-module-core-imports:
+	@$(PYTHON) scripts/check_module_core_imports.py
+
 # --- Combined Checks ---
 
-# Run all checks (lint + typecheck + test + core-compat)
-check: lint typecheck test check-core-compat
+# Run all checks (lint + typecheck + test + core-compat + import-linter)
+check: lint typecheck test check-core-compat check-module-core-imports
 	@echo ""
 	@echo "🎉 All checks passed!"
 
