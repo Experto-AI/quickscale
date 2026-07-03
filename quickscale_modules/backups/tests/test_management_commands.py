@@ -11,7 +11,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from quickscale_modules_backups.models import BackupArtifact
-from quickscale_core.dr_engine.primitives import BackupError
+from quickscale_core.runtime import BackupError
 
 
 def test_backups_create_command_reports_created_artifact() -> None:
@@ -31,7 +31,7 @@ def test_backups_create_command_reports_created_artifact() -> None:
     mock_capture = MagicMock(return_value=report)
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_capture},
     ):
         call_command("backups_create", stdout=stdout, stderr=StringIO())
@@ -65,7 +65,7 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
     mock_capture = MagicMock(return_value=report)
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_capture},
     ):
         call_command(
@@ -103,7 +103,7 @@ def test_backups_create_command_routes_resume_snapshot_id() -> None:
     mock_capture = MagicMock(return_value=report)
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_capture},
     ):
         call_command(
@@ -140,7 +140,7 @@ def test_backups_create_command_outputs_json_report() -> None:
     mock_capture = MagicMock(return_value=report)
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_capture},
     ):
         call_command("backups_create", "--json", stdout=stdout, stderr=StringIO())
@@ -152,7 +152,7 @@ def test_backups_create_command_wraps_backup_errors() -> None:
     mock_capture = MagicMock(side_effect=BackupError("pg_dump exploded"))
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"capture_snapshot": mock_capture},
     ):
         with pytest.raises(CommandError, match="pg_dump exploded"):
@@ -164,7 +164,7 @@ def test_backups_prune_command_reports_deleted_count() -> None:
     mock_prune = MagicMock(return_value={"deleted_count": 3})
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"prune_backups": mock_prune},
     ):
         call_command("backups_prune", stdout=stdout, stderr=StringIO())
@@ -177,7 +177,7 @@ def test_backups_prune_command_wraps_backup_errors() -> None:
     mock_prune = MagicMock(side_effect=BackupError("prune backend unavailable"))
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"prune_backups": mock_prune},
     ):
         with pytest.raises(CommandError, match="prune backend unavailable"):
@@ -190,7 +190,7 @@ def test_backups_validate_command_requires_existing_artifact() -> None:
         side_effect=BackupError("Backup artifact not found: 999999")
     )
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"validate_artifact": mock_validate},
     ):
         with pytest.raises(CommandError, match="Backup artifact not found"):
@@ -211,7 +211,7 @@ def test_backups_validate_command_reports_validation_issues(
         }
     )
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"validate_artifact": mock_validate},
     ):
         with pytest.raises(
@@ -241,7 +241,7 @@ def test_backups_validate_command_reports_success(
         }
     )
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"validate_artifact": mock_validate},
     ):
         call_command(
@@ -286,7 +286,7 @@ def test_backups_report_command_renders_snapshot_summary() -> None:
     )
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"fetch_snapshot_report": mock_report},
     ):
         call_command("backups_report", "snap-report", stdout=stdout, stderr=StringIO())
@@ -322,7 +322,7 @@ def test_backups_pin_command_sets_rollback_pin() -> None:
     )
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"set_rollback_pin": mock_pin},
     ):
         call_command(
@@ -363,7 +363,7 @@ def test_backups_pin_command_clears_rollback_pin() -> None:
     )
 
     with patch.dict(
-        "quickscale_core.dr_engine.adapter.ADAPTER_FUNCTIONS",
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
         {"clear_rollback_pin": mock_clear},
     ):
         call_command(

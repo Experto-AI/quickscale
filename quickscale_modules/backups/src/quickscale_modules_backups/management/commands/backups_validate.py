@@ -2,8 +2,7 @@
 
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_core.dr_engine.adapter import ADAPTER_FUNCTIONS
-from quickscale_core.dr_engine.primitives import BackupError
+from quickscale_core.runtime import ADAPTER_FUNCTIONS, BackupError
 
 
 class Command(BaseCommand):

@@ -97,7 +97,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | `quickscale plan <project>` and `quickscale apply` | IN (v0.68.0+) | Primary workflow. Terraform-style declarative configuration. Creates `quickscale.yml`, then executes it. |
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in the current implementation (explicit `__init__.py`). |
-| `quickscale_core.runtime` public facade | IN (SA9.3, v0.87.0+) | Additive pure re-export seam for module-facing core symbols (DR adapter surface, manifest/resolver types, social-manifest surface). No existing imports are removed yet — deep-import migration (SA9.4, SA9.5) and CI enforcement (SA9.6) remain staged as follow-on work. |
+| `quickscale_core.runtime` public facade | IN (SA9.3+SA9.4, v0.87.0+) | Additive pure re-export seam for module-facing core symbols (DR adapter surface, manifest/resolver types, social-manifest surface). Backups' deep `dr_engine` imports now route through the facade (SA9.4); the facade carries the DR orchestration, primitives, recovery, and verification compatibility surface (backups-module-internal) via lazy `__getattr__` loading, while the public DR adapter and social-manifest symbols are eagerly available. SA9.5 (social deep-import migration) and SA9.6 (CI import-linter gate) remain staged as follow-on work. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker and Django operations. |
 | CLI module management commands (`update`, `push`) | IN (v0.62.0) | Module update and push via split branches. Module embedding now happens through `quickscale apply`. |
@@ -175,7 +175,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 - Proven Django foundations stay preferred over custom abstractions.
 
 **Current Shipped Surfaces:**
-- `quickscale_core`: scaffolding, templates, and shared generator/runtime support, plus the `quickscale_core.runtime` public re-export facade (SA9.3).
+- `quickscale_core`: scaffolding, templates, and shared generator/runtime support, plus the `quickscale_core.runtime` public re-export facade (SA9.3, extended with the backups-module-facing DR orchestration/compatibility surface in SA9.4).
 - Directory-based frontends: scaffolded templates and starter-theme assets.
 - `quickscale_modules/*`: first-party module workspace inside the repository, with released modules documented per version.
 - Some first-party modules ship documented module-owned routed surfaces that QuickScale wires into generated projects, currently including blog, listings, CRM, forms, notifications, and billing pricing/dashboard routes plus billing and notifications webhook surfaces.
