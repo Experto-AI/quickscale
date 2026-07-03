@@ -31,7 +31,7 @@ config:
   immutable: {}
 
 required_modules:
-  - orgs
+  - orgs>=0.86.0
 
 implies:
   - name: orgs
