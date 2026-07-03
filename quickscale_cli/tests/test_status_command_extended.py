@@ -12,6 +12,7 @@ import pytest
 from quickscale_cli.schema.config_schema import ConfigValidationError
 from quickscale_cli.commands.status_command import (
     _build_json_output,
+    _check_contract_vintage,
     _compute_drift_diagnostics,
     _detect_project_context,
     _display_docker_status,
@@ -812,3 +813,205 @@ class TestDisplayDriftDiagnostics:
         }
         # Should not raise.
         _display_drift_diagnostics(diagnostics)
+
+
+# ============================================================================
+# SA10.2: Contract-vintage detection
+# ============================================================================
+
+
+class TestCheckContractVintage:
+    """Tests for _check_contract_vintage detection."""
+
+    def test_no_manifests(self) -> None:
+        """When no manifests exist, result shows zero modules."""
+        result = _check_contract_vintage("0.87.0", None)
+        assert result["module_count"] == 0
+        assert result["modules_behind_count"] == 0
+        assert result["project_contract"] == "0.87.0"
+
+    def test_empty_manifests(self) -> None:
+        """When manifests are empty, result shows zero modules."""
+        result = _check_contract_vintage("0.87.0", {})
+        assert result["module_count"] == 0
+        assert result["project_contract"] == "0.87.0"
+
+    def test_no_vintage_declared(self) -> None:
+        """Modules without contract_vintage are skipped."""
+        from unittest.mock import Mock
+
+        manifests = {
+            "auth": Mock(spec=["contract_vintage"], contract_vintage=None),
+        }
+        result = _check_contract_vintage("0.87.0", manifests)
+        assert result["module_count"] == 0
+        assert result["modules_behind_count"] == 0
+
+    def test_module_behind_unknown_contract(self) -> None:
+        """Legacy project (project_contract=None) is behind any minimum."""
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        vintage = ContractVintage(
+            minimum="0.87.0",
+            manual_adoption_steps=["Step one: update Docker"],
+        )
+        manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"backups": manifest}
+        result = _check_contract_vintage(None, manifests)
+        assert result["module_count"] == 1
+        assert result["modules_behind_count"] == 1
+        assert result["modules_behind"][0]["module"] == "backups"
+
+    def test_module_meets_requirement(self) -> None:
+        """Project with sufficient contract version is not behind."""
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        vintage = ContractVintage(minimum="0.87.0")
+        manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"social": manifest}
+        # project_contract >= minimum
+        result = _check_contract_vintage("0.87.0", manifests)
+        assert result["module_count"] == 1
+        assert result["modules_behind_count"] == 0
+
+    def test_module_strictly_ahead(self) -> None:
+        """Project contract > minimum is fine (ahead of requirement)."""
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        vintage = ContractVintage(minimum="0.86.0")
+        manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"social": manifest}
+        result = _check_contract_vintage("0.87.0", manifests)
+        assert result["module_count"] == 1
+        assert result["modules_behind_count"] == 0
+
+    def test_module_behind_exact_version(self) -> None:
+        """Project behind minimum is flagged with correct steps."""
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        steps = ["Manual step A", "Manual step B"]
+        vintage = ContractVintage(minimum="0.88.0", manual_adoption_steps=steps)
+        manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"billing": manifest}
+        result = _check_contract_vintage("0.87.0", manifests)
+        assert result["module_count"] == 1
+        assert result["modules_behind_count"] == 1
+        entry = result["modules_behind"][0]
+        assert entry["module"] == "billing"
+        assert entry["minimum"] == "0.88.0"
+        assert entry["manual_adoption_steps"] == steps
+
+    def test_multiple_modules_mixed(self) -> None:
+        """Mixed state: some satisfied, some behind."""
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        social_vintage = ContractVintage(minimum="0.86.0")
+        billing_vintage = ContractVintage(minimum="0.88.0")
+        social = Mock(spec=["contract_vintage"], contract_vintage=social_vintage)
+        billing = Mock(spec=["contract_vintage"], contract_vintage=billing_vintage)
+        no_vintage = Mock(spec=["contract_vintage"], contract_vintage=None)
+        manifests = {
+            "social": social,
+            "billing": billing,
+            "auth": no_vintage,
+        }
+        result = _check_contract_vintage("0.87.0", manifests)
+        assert result["module_count"] == 2  # social + billing
+        assert result["modules_behind_count"] == 1
+        assert result["modules_behind"][0]["module"] == "billing"
+
+    # ------------------------------------------------------------------ #
+    # has_state flag for UX distinction (CR-SA10.2-002)
+    # ------------------------------------------------------------------ #
+
+    def test_contract_vintage_legacy_state_has_state_true(self) -> None:
+        """When state exists but project_contract is None, has_state=True
+        and the display message says 'legacy project'."""
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        vintage = ContractVintage(minimum="0.87.0")
+        manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"social": manifest}
+
+        # Simulate state existing but project_contract = None (legacy)
+        project_contract = None
+        result = _check_contract_vintage(project_contract, manifests)
+        result["has_state"] = True  # set by _compute_drift_diagnostics
+
+        assert result["has_state"] is True
+        assert result["project_contract"] is None
+        # Module should still be flagged as behind
+        assert result["module_count"] == 1
+        assert result["modules_behind_count"] == 1
+
+    def test_contract_vintage_no_state_has_state_false(self) -> None:
+        """When state does not exist, has_state=False and the display
+        message says 'no state yet'."""
+        result = _check_contract_vintage(None, None)
+        result["has_state"] = False  # set by _compute_drift_diagnostics
+
+        assert result["has_state"] is False
+        assert result["project_contract"] is None
+        assert result["module_count"] == 0
+
+    def test_contract_vintage_with_contract_has_state_true(self) -> None:
+        """When project_contract is set, has_state is True."""
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        vintage = ContractVintage(minimum="0.87.0")
+        manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"social": manifest}
+
+        result = _check_contract_vintage("0.87.0", manifests)
+        result["has_state"] = True
+
+        assert result["has_state"] is True
+        assert result["project_contract"] == "0.87.0"
+        assert result["modules_behind_count"] == 0
+
+
+class TestContractVintageInDiagnostics:
+    """Contract-vintage must appear in drift diagnostics."""
+
+    def test_diagnostics_includes_contract_vintage(self, tmp_path):
+        """_compute_drift_diagnostics output includes contract_vintage."""
+        from quickscale_core.manifest.schema import ContractVintage
+        from unittest.mock import Mock
+
+        state_dir = tmp_path / ".quickscale"
+        state_dir.mkdir()
+        (state_dir / "state.yml").write_text(
+            "version: '1'\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "  project_contract: '0.86.0'\n"
+            "modules: {}\n"
+        )
+
+        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.project_state import ProjectStateManager
+
+        sm = StateManager(tmp_path)
+        psm = ProjectStateManager(tmp_path)
+        state = sm.load()
+
+        vintage = ContractVintage(minimum="0.87.0", manual_adoption_steps=["Do X"])
+        mock_manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"social": mock_manifest}
+
+        result = _compute_drift_diagnostics(
+            tmp_path, state, psm, sm, manifests=manifests
+        )
+
+        assert "contract_vintage" in result
+        cv = result["contract_vintage"]
+        assert cv["project_contract"] == "0.86.0"
+        assert cv["module_count"] == 1
+        assert cv["modules_behind_count"] == 1
+        assert cv["modules_behind"][0]["module"] == "social"

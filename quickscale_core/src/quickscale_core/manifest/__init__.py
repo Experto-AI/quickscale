@@ -90,14 +90,17 @@ from quickscale_core.manifest.social_manifest import (  # noqa: F401
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
+    ContractVintage,
     ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
+    parse_version_tuple,
 )
 
 __all__ = [
     "check_required_module_versions",
     "ConfigOption",
+    "ContractVintage",
     "DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST",
     "DEFAULT_SOCIAL_PROVIDER_ALLOWLIST",
     "DerivedSetting",
@@ -114,6 +117,7 @@ __all__ = [
     "NormalizationRule",
     "OptionDerivation",
     "parse_required_module_entry",
+    "parse_version_tuple",
     "PostResolutionHook",
     "ResolvedSocialTarget",
     "ResolverResult",

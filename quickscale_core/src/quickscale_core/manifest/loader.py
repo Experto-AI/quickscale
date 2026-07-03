@@ -15,6 +15,7 @@ import yaml
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
+    ContractVintage,
     ImpliesEntry,
     ManagedFileDeclaration,
     ModuleManifest,
@@ -365,6 +366,78 @@ def _parse_implies(data: dict[str, Any], module_name: str | None) -> list[Implie
     return entries
 
 
+# ---------------------------------------------------------------------------
+# Contract-vintage section parsing (SA10.2)
+# ---------------------------------------------------------------------------
+
+
+def _parse_contract_vintage(
+    data: dict[str, Any],
+    module_name: str | None,
+) -> ContractVintage | None:
+    """Parse the optional ``contract_vintage`` section from manifest data.
+
+    Returns a :class:`ContractVintage` instance when the section is present,
+    or ``None`` when absent.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        module_name: Optional module name for error messages.
+
+    Returns:
+        :class:`ContractVintage` or ``None``.
+
+    Raises:
+        ManifestError: If the section is malformed.
+    """
+    raw = data.get("contract_vintage")
+    if raw is None:
+        return None
+
+    if not isinstance(raw, dict):
+        raise ManifestError("'contract_vintage' must be a mapping", module_name)
+
+    minimum = raw.get("minimum")
+    if not isinstance(minimum, str) or not minimum:
+        raise ManifestError(
+            "'contract_vintage.minimum' must be a non-empty string",
+            module_name,
+        )
+
+    # Validate that minimum is a well-formed dotted-numeric version string.
+    # A malformed value like "abc" would parse as (0,) via parse_version_tuple
+    # and fail open, so we reject it early at load time.
+    try:
+        core = minimum.split("-")[0]
+        [int(p) for p in core.split(".")]
+    except (ValueError, AttributeError):
+        raise ManifestError(
+            "'contract_vintage.minimum' must be a valid dotted-numeric "
+            "version string (e.g. '0.87.0')",
+            module_name,
+        )
+
+    steps_raw = raw.get("manual_adoption_steps", [])
+    if steps_raw is None:
+        steps_raw = []
+    if not isinstance(steps_raw, list):
+        raise ManifestError(
+            "'contract_vintage.manual_adoption_steps' must be a list",
+            module_name,
+        )
+
+    steps: list[str] = []
+    for i, step in enumerate(steps_raw):
+        if not isinstance(step, str):
+            raise ManifestError(
+                f"'contract_vintage.manual_adoption_steps[{i}]' must be a string",
+                module_name,
+            )
+        steps.append(step)
+
+    return ContractVintage(minimum=minimum, manual_adoption_steps=steps)
+
+
 def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleManifest:
     """Load and validate a module manifest from YAML content
 
@@ -408,6 +481,9 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     # Parse derivation section (T2.3+; additive; every field defaults to [])
     derivation = _parse_derivation_section(data, module_name)
 
+    # Parse contract-vintage section (SA10.2; additive; None when absent)
+    contract_vintage = _parse_contract_vintage(data, module_name)
+
     return ModuleManifest(
         name=name,
         version=version,
@@ -425,6 +501,7 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         derived_settings=derivation.get("derived_settings", []),
         wiring_projections=derivation.get("wiring_projections", []),
         option_derivations=derivation.get("option_derivations", {}),
+        contract_vintage=contract_vintage,
     )
 
 

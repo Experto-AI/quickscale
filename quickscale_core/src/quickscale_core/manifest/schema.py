@@ -62,6 +62,56 @@ class ConfigOption:
         return self.mutability == "mutable" and self.django_setting is not None
 
 
+def parse_version_tuple(version_str: str) -> tuple[int, ...]:
+    """Parse a dotted version string into a comparable integer tuple.
+
+    Strips pre-release suffixes (e.g. ``"0.87.0-alpha"`` → ``"0.87.0"``)
+    and maps each numeric component.  Returns ``(0,)`` for unparseable
+    input so callers can fail safe (unknown < known) rather than raise.
+
+    Example::
+
+        >>> parse_version_tuple("0.87.0")
+        (0, 87, 0)
+        >>> parse_version_tuple(None)  # legacy / unknown
+        (0,)
+    """
+    if not version_str or not isinstance(version_str, str):
+        return (0,)
+    try:
+        core = version_str.split("-")[0]
+        return tuple(int(p) for p in core.split("."))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
+@dataclass
+class ContractVintage:
+    """Declares a module's minimum project-contract requirement.
+
+    When the project's recorded ``project_contract`` (from ``state.yml``)
+    is less than ``minimum``, the project is behind the module's contract
+    and should follow ``manual_adoption_steps`` before the module is fully
+    supported.
+
+    This is the additive metadata block that powers SA10.2 detection:
+    ``quickscale status`` compares each installed module's vintage
+    declaration against the project's generation contract and surfaces
+    the gap.
+
+    Attributes:
+        minimum: Minimum ``project_contract`` version the module expects.
+            Projects with a lower (or unknown/``None``) contract value
+            are flagged as behind.
+        manual_adoption_steps: Human-readable list of steps an existing
+            project must follow to catch up to the module's current
+            contract.  Empty when no specific manual action is required.
+    """
+
+    minimum: str
+    manual_adoption_steps: list[str] = field(default_factory=list)
+
+
 @dataclass
 class ImpliesEntry:
     """Declares that this module implies another module should also be included.
@@ -123,6 +173,21 @@ class ModuleManifest:
     ``legacy_aliases``, ``derived_settings``, and ``wiring_projections``
     sub-lists.  Populated from the ``derivation.option_derivations`` section
     in the manifest YAML."""
+
+    # ------------------------------------------------------------------ #
+    # Contract-vintage metadata (SA10.2)
+    #
+    # This optional field carries the module's minimum project-contract
+    # requirement and the manual-adoption steps an existing project must
+    # follow when its generation contract predates the module's current
+    # vintage.  Populated when the loader encounters a
+    # ``contract_vintage`` section in the manifest YAML.  Existing
+    # ``module.yml`` files without that section leave this field as
+    # ``None``.
+    # ------------------------------------------------------------------ #
+    contract_vintage: ContractVintage | None = None
+    """Optional contract-vintage requirement for this module.
+    ``None`` when the module has not declared a vintage boundary."""
 
     # ------------------------------------------------------------------ #
     # Readiness / lifecycle metadata
