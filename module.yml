@@ -35,7 +35,7 @@ config:
       description: "ISO 4217 billing currency code used for plan metadata and Checkout validation."
 
 required_modules:
-  - orgs
+  - orgs>=0.86.0
 
 implies:
   - name: orgs
