@@ -673,7 +673,15 @@ def test_tenant_model_declares_org_foreign_key() -> None:
 
 
 class ConcreteTenantResource(TenantModel):
-    """Concrete tenant model used exclusively for manager behaviour tests."""
+    """Concrete tenant model used exclusively for manager behaviour tests.
+
+    Test-only model — not a real tenant table.
+    """
+
+    tenant_excluded = (
+        "Test-only model defined in test_models.py for "
+        "TenantManager behaviour tests; not a real tenant table."
+    )
 
     name: models.CharField = models.CharField(max_length=100)
 
@@ -682,7 +690,16 @@ class ConcreteTenantResource(TenantModel):
 
 
 class ForwardFKChild(models.Model):
-    """Test-only model with a FK to ConcreteTenantResource for FK traversal tests."""
+    """Test-only model with a FK to ConcreteTenantResource for FK traversal tests.
+
+    Test-only model — not a real tenant table.
+    """
+
+    tenant_excluded = (
+        "Test-only model defined in test_models.py for "
+        "AF2 Phase 1 forward-FK traversal regression tests; "
+        "not a real tenant table."
+    )
 
     organization: models.ForeignKey = models.ForeignKey(
         "quickscale_modules_orgs.Organization",
