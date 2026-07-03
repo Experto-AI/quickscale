@@ -1,6 +1,7 @@
 """Tests for auth module adapters"""
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory
 from quickscale_modules_auth.adapters import QuickscaleAccountAdapter
 
@@ -14,16 +15,24 @@ class TestQuickscaleAccountAdapter:
         self.adapter = QuickscaleAccountAdapter()
         self.factory = RequestFactory()
 
-    def test_is_open_for_signup_default(self):
-        """Test signup is open by default"""
+    def test_is_open_for_signup_enabled(self, settings):
+        """Test signup respects ACCOUNT_ALLOW_REGISTRATION=True"""
+        settings.ACCOUNT_ALLOW_REGISTRATION = True
         request = self.factory.get("/")
         assert self.adapter.is_open_for_signup(request) is True
 
     def test_is_open_for_signup_disabled(self, settings):
-        """Test signup respects ACCOUNT_ALLOW_REGISTRATION setting"""
+        """Test signup respects ACCOUNT_ALLOW_REGISTRATION=False"""
         settings.ACCOUNT_ALLOW_REGISTRATION = False
         request = self.factory.get("/")
         assert self.adapter.is_open_for_signup(request) is False
+
+    def test_is_open_for_signup_missing_setting(self, settings):
+        """Test signup raises ImproperlyConfigured when setting is absent"""
+        del settings.ACCOUNT_ALLOW_REGISTRATION
+        request = self.factory.get("/")
+        with pytest.raises(ImproperlyConfigured, match="ACCOUNT_ALLOW_REGISTRATION"):
+            self.adapter.is_open_for_signup(request)
 
     def test_get_login_redirect_url(self):
         """Test login redirect URL"""
