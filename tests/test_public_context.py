@@ -264,6 +264,70 @@ class TestPublicSystemOrgReadMixinDispatch:
         assert captured["rows"] == []
         assert captured["count"] == 0
 
+    def test_mixin_forces_template_response_render(self) -> None:
+        """Prove ``TemplateResponse.render()`` is called inside
+        ``org_scope()`` so lazy queryset evaluation during template
+        rendering sees the primed tenant context.  (Closes
+        CR-SA11.1-002; strengthened by CR-SA11.1-003.)
+
+        Without the render-forcing fix, a ``TemplateResponse`` returned
+        from ``dispatch()`` would be rendered *after* the
+        ``with org_scope():`` block exits, meaning the PostgreSQL GUC
+        ``app.current_org_id`` (``SET LOCAL`` — transaction-scoped)
+        would be gone when the template engine evaluates lazy querysets.
+
+        Unlike the original CR-SA11.1-002 test (which used an eagerly-
+        evaluated ``Category.objects.count()`` in the context dict),
+        this version passes a **lazy** ``QuerySet`` that evaluates only
+        during template rendering — exactly the pattern that
+        ``ListView`` and ``DetailView`` use with ``object_list``.
+        """
+        from django.template import engines
+        from django.template.response import TemplateResponse
+        from quickscale_modules_blog.models import Category
+
+        org = Organization.objects.create(
+            name="LazyRenderTest",
+            slug="lazy-render-test",
+        )
+        Category.all_objects.create(
+            organization=org,
+            name="Lazy Cat",
+            slug="lazy-cat",
+        )
+
+        class TestView(PublicSystemOrgReadMixin, View):
+            def get_public_org(self) -> Organization:
+                return org
+
+            def get(self, request: object) -> TemplateResponse:
+                # Pass a lazy QuerySet that evaluates only during
+                # TemplateResponse.render() — ListView/DetailView do this
+                # with object_list / queryset.
+                template = engines["django"].from_string(
+                    "{% for cat in cats %}{{ cat.name }}{% endfor %}"
+                )
+                return TemplateResponse(
+                    request,
+                    template,
+                    {"cats": Category.objects.all()},
+                )
+
+        request = RequestFactory().get("/")
+        response = TestView.as_view()(request)
+
+        assert response.status_code == 200
+        # If TemplateResponse.render() moved outside org_scope(), the
+        # lazy queryset would evaluate without the tenant GUC primed,
+        # tenant-scoped managers would return .none(), and the content
+        # would be empty.  This test would then fail — catching the
+        # regression.
+        assert response.content == b"Lazy Cat", (
+            "Lazy queryset must have been evaluated inside org_scope() "
+            "during render(), yielding the correct tenant-scoped row. "
+            f"Got {response.content!r}"
+        )
+
 
 # =========================================================================
 # PublicSystemOrgReadMixin — interface helpers
