@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import UUID
 
-from allauth.account.adapter import DefaultAccountAdapter
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
@@ -16,12 +15,9 @@ from .constants import (
 )
 from .models import Organization, OrganizationInvitation, OrganizationMembership
 
-try:
-    from quickscale_modules_auth.adapters import (  # type: ignore
-        QuickscaleAccountAdapter as _BaseAccountAdapter,
-    )
-except ImportError:  # pragma: no cover - auth is optional in isolated module tests
-    _BaseAccountAdapter = DefaultAccountAdapter
+from quickscale_modules_auth.adapters import (  # type: ignore[import-not-found]
+    QuickscaleAccountAdapter as _BaseAccountAdapter,
+)
 
 
 class OrgsAccountAdapter(_BaseAccountAdapter):
