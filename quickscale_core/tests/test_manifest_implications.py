@@ -136,9 +136,9 @@ class TestBillingImplications:
         assert "orgs" in result
         assert "notifications" in result
         assert result["orgs"] == {}
-        # notifications gets the inlined default config from orgs/module.yml
+        # notifications has no inline defaults — they come from its own manifest
         assert isinstance(result["notifications"], dict)
-        assert result["notifications"] != {}
+        assert result["notifications"] == {}
 
     def test_billing_chain_with_notifications_already_selected(
         self, modules_base_path: Path
@@ -231,7 +231,7 @@ class TestOrgsImplications:
     """orgs → notifications chain."""
 
     def test_orgs_implies_notifications(self, modules_base_path: Path) -> None:
-        """Selecting orgs should materialize notifications with default config."""
+        """Selecting orgs should materialize notifications (defaults from own manifest)."""
         result = resolve_module_implications(
             ["orgs"],
             modules_base_path=modules_base_path,
@@ -239,7 +239,8 @@ class TestOrgsImplications:
         assert "notifications" in result
         config = result["notifications"]
         assert isinstance(config, dict)
-        assert config != {}  # not an empty dict — has inlined defaults
+        # SA7.3: inline defaults removed — notifications provides its own
+        assert config == {}
 
     def test_orgs_with_notifications_already_selected(
         self, modules_base_path: Path

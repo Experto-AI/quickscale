@@ -90,13 +90,13 @@ class TestResolveModuleImplications:
     # --- orgs -> notifications ---
 
     def test_orgs_implies_notifications(self) -> None:
-        """Selecting orgs should materialize notifications with default config."""
+        """Selecting orgs should materialize notifications (defaults from own manifest)."""
         result = resolve_module_implications(["orgs"])
         assert "notifications" in result
         config = result["notifications"]
         assert isinstance(config, dict)
-        # notifications gets a non-empty default config dict
-        assert config != {}
+        # SA7.3: inline defaults removed — notifications provides its own
+        assert config == {}
 
     def test_orgs_with_notifications_already_selected(self) -> None:
         """orgs with notifications already present should not duplicate."""
