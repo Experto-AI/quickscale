@@ -55,6 +55,7 @@
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
         check-llm lint-llm typecheck-llm test-llm test-cov-llm \
+        check-core-compat \
         help
 
 # Default Python command (uses root Poetry environment)
@@ -145,6 +146,10 @@ help:
 	@echo "  make legacy-mount         - Create symlink to ../quickscale-legacy"
 	@echo "  make legacy-unmount       - Remove legacy symlink"
 	@echo "  make legacy-status        - Show legacy symlink status"
+	@echo ""
+	@echo "Module-to-Core Compatibility:"
+	@echo "  make check-core-compat    - Verify each module's quickscale_core imports"
+	@echo "                               resolve against the current core API"
 	@echo ""
 	@echo "LLM Optimized Checks (Quiet on success):"
 	@echo "  make check-llm            - Run all checks quietly"
@@ -512,10 +517,19 @@ format:
 	fi
 	@echo "✅ Formatting done!"
 
+# --- Core Compatibility Check ---
+
+# Check each module's quickscale_core imports against the current core API.
+# This verifies that every import from quickscale_core in a module's source
+# resolves to an existing symbol, and that the module's claimed minimum core
+# version is <= the repository's current core version.
+check-core-compat:
+	@$(PYTHON) scripts/check_module_core_compatibility.py
+
 # --- Combined Checks ---
 
-# Run all checks (lint + typecheck + test)
-check: lint typecheck test
+# Run all checks (lint + typecheck + test + core-compat)
+check: lint typecheck test check-core-compat
 	@echo ""
 	@echo "🎉 All checks passed!"
 
