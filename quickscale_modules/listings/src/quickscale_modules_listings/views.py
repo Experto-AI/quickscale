@@ -21,6 +21,7 @@ from markdownx.utils import markdownify
 
 from quickscale_modules_orgs.current_org import get_current_org_id
 from quickscale_modules_orgs.models import Organization
+from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 
 from .filters import get_listing_filter
 from .models import Listing
@@ -205,22 +206,32 @@ def publish_listing_api(request: HttpRequest) -> JsonResponse:
 # ---------------------------------------------------------------------------
 
 
-def _scope_queryset(qs: QuerySet, request: HttpRequest) -> QuerySet:
-    """Scope *qs* to the current user's org or the System org for anonymous users.
+class ListingsPublicReadMixin(PublicSystemOrgReadMixin):
+    """Mixin for listings public read views that resolves org context.
 
-    Authenticated users get their ambient org (set by ``TenantMiddleware``).
-    Anonymous users get the System org (D2).
+    Anonymous/public readers see System-org content (D2).
+    Authenticated readers see their active org via ``request.org``.
+
+    Wraps ``dispatch()`` in ``org_scope()`` to prime both the Python
+    ContextVar and the PostgreSQL GUC ``app.current_org_id``, so that
+    tenant-scoped default managers auto-scope queries correctly and
+    RLS policies see the correct org context.
     """
-    if request.user.is_authenticated:
-        org_id = get_current_org_id()
-        if org_id is not None:
-            return qs.filter(organization_id=org_id)
-        return qs.none()
-    system_org = Organization.objects.get_system_org()
-    return qs.filter(organization=system_org)
+
+    def get_public_org(self) -> Any | None:  # type: ignore[override]
+        """Return the organization for this request.
+
+        Authenticated readers are scoped to their active org via
+        ``request.org``.  Anonymous/public readers default to the
+        System org singleton.
+        """
+        user = getattr(self.request, "user", None)
+        if user is not None and user.is_authenticated:
+            return getattr(self.request, "org", None)
+        return super().get_public_org()
 
 
-class ListingListView(ListView):
+class ListingListView(ListingsPublicReadMixin, ListView):
     """Display paginated list of published listings with filtering"""
 
     model = Listing
@@ -244,15 +255,13 @@ class ListingListView(ListView):
         return get_listing_filter(self.model)
 
     def get_queryset(self) -> QuerySet:
-        """Return published listings scoped to the user's org or System for anonymous"""
-        # Use all_objects (operator bypass) if available, otherwise fall back
-        # to _default_manager — we want an unfiltered base queryset so
-        # _scope_queryset can apply the correct org filter.
-        model_manager = (
-            getattr(self.model, "all_objects", None) or self.model._default_manager
-        )
-        queryset = model_manager.filter(status="published")
-        queryset = _scope_queryset(queryset, self.request)
+        """Return published listings scoped to the user's org or System for anonymous.
+
+        The org context is already primed by ``ListingsPublicReadMixin.dispatch()``
+        via ``org_scope()``, so the default tenant-scoped manager automatically
+        filters to the correct organization.
+        """
+        queryset = self.model.objects.filter(status="published")
         filterset_class = self.get_filterset_class()
         self.filterset = filterset_class(
             data=self.request.GET or None,
@@ -272,7 +281,7 @@ class ListingListView(ListView):
         return context
 
 
-class ListingDetailView(DetailView):
+class ListingDetailView(ListingsPublicReadMixin, DetailView):
     """Display single listing detail"""
 
     model = Listing
@@ -281,12 +290,13 @@ class ListingDetailView(DetailView):
     slug_url_kwarg = "slug"
 
     def get_queryset(self) -> QuerySet:
-        """Return published listings only, scoped to the user's org or System for anonymous"""
-        model_manager = (
-            getattr(self.model, "all_objects", None) or self.model._default_manager
-        )
-        queryset = model_manager.filter(status="published")
-        return _scope_queryset(queryset, self.request)
+        """Return published listings only, scoped to the user's org or System for anonymous.
+
+        The org context is already primed by ``ListingsPublicReadMixin.dispatch()``
+        via ``org_scope()``, so the default tenant-scoped manager automatically
+        filters to the correct organization.
+        """
+        return self.model.objects.filter(status="published")
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         """Add rendered markdown description to context"""

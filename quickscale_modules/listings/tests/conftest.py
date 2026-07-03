@@ -23,10 +23,21 @@ from tests.models import ConcreteListing
 
 @pytest.fixture(scope="session")
 def django_db_setup(django_db_blocker):
-    """Set up test database with migrations"""
+    """Set up test database with migrations.
+
+    Run ``migrate`` first so that all migration-backed apps
+    (especially ``quickscale_modules_orgs``) have their tables
+    created before the ``--run-syncdb`` step.  Without this
+    ordering, ``--run-syncdb`` tries to create the ``tests``
+    app's FK-dependent tables (e.g. ``tests_concretelisting``
+    referencing ``quickscale_modules_orgs_organization``) before
+    the orgs migrations have run, causing:
+      ``ProgrammingError: relation "quickscale_modules_orgs_organization" does not exist``
+    """
     from django.core.management import call_command
 
     with django_db_blocker.unblock():
+        call_command("migrate", verbosity=0)
         call_command("migrate", "--run-syncdb", verbosity=0)
 
 
@@ -100,6 +111,14 @@ def sold_listing(listing_factory):
 # ---------------------------------------------------------------------------
 # Organization fixtures for tenant-scoped listings
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def system_org(db):
+    """Return the singleton System organization (reserved slug __system__)."""
+    from quickscale_modules_orgs.models import Organization
+
+    return Organization.objects.get_system_org()
 
 
 @pytest.fixture

@@ -171,9 +171,10 @@ class TestListingAdminOperatorPath:
         )
         qs = admin_instance.get_queryset(request)
         assert qs.model == ConcreteListing
-        # ConcreteListing does not define all_objects (abstract base model),
-        # so the admin falls back to _default_manager.
-        assert str(qs.query) == str(ConcreteListing._default_manager.all().query)
+        # ConcreteListing now defines all_objects (TenantManager, super_scope)
+        # and _default_manager is the scoped TenantManager. The admin's
+        # get_queryset retrieves the operator-manager queryset.
+        assert str(qs.query) == str(ConcreteListing.all_objects.all().query)
 
     def test_listing_admin_registered_uses_operator_queryset(self):
         """ListingAdmin (concrete) inherits operator queryset from AbstractListingAdmin."""

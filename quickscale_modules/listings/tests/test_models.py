@@ -101,7 +101,7 @@ class TestAbstractListingViaConcreteModel:
         listing1 = listing_factory(title="First", status="published")
         listing2 = listing_factory(title="Second", status="published")
 
-        listings = list(ConcreteListing.objects.filter(status="published"))
+        listings = list(ConcreteListing.all_objects.filter(status="published"))
         # Most recently published should be first
         assert listings[0].pk == listing2.pk
         assert listings[1].pk == listing1.pk
@@ -238,11 +238,13 @@ class TestListingModel:
             title="Alternate One", slug="alt-one", organization=system_org
         )
 
-        assert ConcreteListing.objects.count() == 1, "ConcreteListing should have 1 row"
-        assert AlternateListing.objects.count() == 1, (
+        assert ConcreteListing.all_objects.count() == 1, (
+            "ConcreteListing should have 1 row"
+        )
+        assert AlternateListing.all_objects.count() == 1, (
             "AlternateListing should have 1 row"
         )
         assert (
-            ConcreteListing.objects.first() is not None
-            and AlternateListing.objects.first() is not None
+            ConcreteListing.all_objects.first() is not None
+            and AlternateListing.all_objects.first() is not None
         ), "Both subclass instances should exist"
