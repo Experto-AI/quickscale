@@ -15,6 +15,7 @@ from quickscale_modules_crm.models import (
     Stage,
     Tag,
 )
+from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
@@ -109,8 +110,10 @@ def api_client():
 def authenticated_client(staff_user):
     """Create a staff-authenticated API client with personal org context.
 
-    T1.5: sets the org contextvar before each request so that TenantManager
-    auto-scoping works correctly even without middleware.
+    SA11.6: uses session-based auth (``force_login``) and sets the active
+    org in the session so ``TenantMiddleware`` resolves ``request.org``.
+    Also primes the ContextVar for TenantManager auto-scoping at the DB
+    level.
     """
     from quickscale_modules_orgs.models import Organization
 
@@ -120,7 +123,7 @@ def authenticated_client(staff_user):
     personal_org_id = personal_org.id
 
     class OrgEnrichedAPIClient(APIClient):
-        """APIClient that sets contextvar for TenantManager auto-scoping."""
+        """APIClient that sets session org and ContextVar for org scoping."""
 
         def request(self, **kwargs):
             set_current_org_id(personal_org_id)
@@ -130,7 +133,11 @@ def authenticated_client(staff_user):
                 reset_current_org_id()
 
     client = OrgEnrichedAPIClient()
-    client.force_authenticate(user=staff_user)
+    client.force_login(staff_user)
+    # Set the active org in the session so TenantMiddleware resolves it.
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(personal_org_id)
+    session.save()
     client._personal_org = personal_org
     return client
 

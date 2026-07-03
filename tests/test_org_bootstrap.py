@@ -37,24 +37,36 @@ def _assert_canonical_stage_set(organization: Organization) -> list[Stage]:
 
 @pytest.mark.django_db
 @override_settings(QUICKSCALE_MODE="solo")
-def test_solo_crm_route_seeds_personal_org_stages_on_first_access(
-    client, staff_user
-) -> None:
-    """First solo CRM access seeds canonical stages on the user's personal org."""
+def test_solo_personal_org_has_stages_at_creation(client, staff_user) -> None:
+    """Personal org stages are seeded at creation time (SA11.6), not on first CRM access.
+
+    ``create_personal_for`` now dispatches ``organization_created``, which
+    triggers CRM's ``seed_crm_default_stages_on_org_created`` receiver.
+    The personal-org pipeline stages exist immediately after the fixture
+    creates the user — no CRM access needed.
+    """
 
     client.force_login(staff_user)
 
     organization = Organization.objects.get(
         is_personal=True, memberships__user=staff_user
     )
-    # No stages yet before first CRM access.
-    assert Stage.all_objects.filter(organization=organization).count() == 0
-
-    response = client.get("/crm/api/stages/")
-
-    assert response.status_code == 200
-    # Personal org should now have the 4 canonical stages.
+    # Stages are seeded at org creation — they exist before any CRM access.
     assert Stage.all_objects.filter(organization=organization).count() == 4
+    stages = list(
+        Stage.all_objects.filter(organization=organization).order_by("order", "id")
+    )
+    assert [stage.name for stage in stages] == [
+        "Prospecting",
+        "Negotiation",
+        "Closed-Won",
+        "Closed-Lost",
+    ]
+    assert all(stage.terminal_semantic is None for stage in stages)
+
+    # CRM API access returns the pre-seeded stages.
+    response = client.get("/crm/api/stages/")
+    assert response.status_code == 200
     stages_data = response.json()
     assert [item["name"] for item in stages_data] == [
         "Prospecting",
@@ -62,13 +74,12 @@ def test_solo_crm_route_seeds_personal_org_stages_on_first_access(
         "Closed-Won",
         "Closed-Lost",
     ]
-    # All returned stages belong to the personal org (no NULL-org stages).
     for item in stages_data:
         assert Stage.all_objects.get(pk=item["id"]).organization_id == organization.id
 
     dashboard_response = client.get("/crm/dashboard/")
     assert dashboard_response.status_code == 200
-    # Dashboard should not have created extra stages beyond the seeded set.
+    # Dashboard should not have created extra stages.
     assert Stage.all_objects.filter(organization=organization).count() == 4
 
 
@@ -198,15 +209,16 @@ def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
 
 
 @pytest.mark.django_db
-def test_migrated_zero_local_org_bootstraps_on_first_crm_access(
-    client, staff_user
-) -> None:
-    """A migrated org with zero local stages should self-bootstrap on first CRM read.
+def test_migrated_org_needs_explicit_seeding_for_crm_access(client, staff_user) -> None:
+    """A migrated org with zero local stages must be explicitly seeded.
 
-    Phase 3: removed legacy NULL-org stage setup (post-0006, NULL-owned
-    stages cannot be created).  The bootstrap behavior is the same: zero
-    org-local stages triggers seeding on first CRM access.
+    SA11.6 removes the warm-on-read bootstrap — stages are only seeded at
+    org-creation time via the ``organization_created`` signal.  Migrated
+    orgs (created before CRM was installed) need a one-time data migration
+    or explicit ``ensure_org_default_stages`` call.  This test proves a
+    migrated org returns stages after explicit seeding.
     """
+    from quickscale_modules_crm.services import ensure_org_default_stages
 
     organization = Organization.objects.create(name="Migrated Org", slug="migrated-org")
     OrganizationMembership.objects.create(
@@ -217,13 +229,20 @@ def test_migrated_zero_local_org_bootstraps_on_first_crm_access(
     client.force_login(staff_user)
     _activate_org_in_session(client, organization)
 
-    first_response = client.get("/crm/api/stages/")
-    second_response = client.get("/crm/api/stages/")
+    # No warm-on-read anymore — seed explicitly (simulating a data migration).
+    ensure_org_default_stages(organization)
 
-    assert first_response.status_code == 200
-    assert second_response.status_code == 200
+    response = client.get("/crm/api/stages/")
+    assert response.status_code == 200
     seeded_stages = _assert_canonical_stage_set(organization)
-    assert len(second_response.json()) == 4
+    assert len(response.json()) == 4
+    assert {item["id"] for item in response.json()} == {
+        stage.id for stage in seeded_stages
+    }
+
+    # Second read returns the same set (no additional seeding).
+    second_response = client.get("/crm/api/stages/")
+    assert second_response.status_code == 200
     assert {item["id"] for item in second_response.json()} == {
         stage.id for stage in seeded_stages
     }

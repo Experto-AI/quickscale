@@ -37,15 +37,15 @@ from .serializers import (
     StageSerializer,
     TagSerializer,
 )
-from .services import ensure_org_default_stages
 
 
 def _resolve_active_org(request: Request | HttpRequest) -> Any:
     """Return the active organization for the current request.
 
-    T1.5 flat-route contract: the active org is resolved from ``request.org``
-    (set by ``TenantMiddleware``).  When request.org is unavailable (e.g.,
-    tests that bypass middleware), a personal-org fallback is used.
+    SA11.6 flat-route contract: the active org is resolved strictly from
+    ``request.org`` (set by ``TenantMiddleware``).  No personal-org fallback
+    or warm-on-read stage-seeding side effect is performed — stages are
+    seeded once at org-creation time via the ``organization_created`` signal.
 
     Raises ``PermissionDenied`` when no org context is available.
     """
@@ -54,22 +54,7 @@ def _resolve_active_org(request: Request | HttpRequest) -> Any:
     org = getattr(request, "org", None)
     if org is not None:
         set_current_org_id(org.id)
-        ensure_org_default_stages(org)
         return org
-
-    # Fallback: look up the user's personal org (for tests that bypass middleware).
-    user = getattr(request, "user", None)
-    if user is not None and getattr(user, "is_authenticated", False):
-        from quickscale_modules_orgs.models import Organization
-
-        personal_org = Organization.objects.filter(
-            is_personal=True, memberships__user=user
-        ).first()
-        if personal_org is not None:
-            request.org = personal_org  # type: ignore[union-attr]
-            set_current_org_id(personal_org.id)
-            ensure_org_default_stages(personal_org)
-            return personal_org
 
     raise PermissionDenied("Organization context is required for this route.")
 

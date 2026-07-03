@@ -127,14 +127,20 @@ class TestCRMDashboardView:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @override_settings(
-        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     def test_dashboard_returns_200_for_staff_user(self, client, user, contact, deal):
         """Staff users should be able to render the dashboard."""
+        from quickscale_modules_orgs.models import Organization
+
         user.is_staff = True
         user.save(update_fields=["is_staff"])
         client.force_login(user)
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=user
+        )
+        _activate_org_in_session(client, personal_org)
 
         response = client.get(reverse("quickscale_crm:dashboard"))
 
@@ -442,16 +448,22 @@ class TestCRMAPIPermissions:
 
     @override_settings(CRM_ENABLE_API=False)
     @override_settings(
-        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     def test_dashboard_stays_available_to_staff_when_api_is_disabled(
         self, client, user, contact, deal
     ):
         """Disabling the API should not disable the separate staff-only HTML dashboard."""
+        from quickscale_modules_orgs.models import Organization
+
         user.is_staff = True
         user.save(update_fields=["is_staff"])
         client.force_login(user)
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=user
+        )
+        _activate_org_in_session(client, personal_org)
 
         response = client.get(reverse("quickscale_crm:dashboard"))
 
@@ -993,7 +1005,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
     """
 
     @override_settings(
-        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     @override_settings(QUICKSCALE_MODE="solo")
@@ -1054,7 +1066,7 @@ class TestF1110SoloDashboardNullOwnedCoverage:
         assert "1,000" in content or "1000" in content
 
     @override_settings(
-        MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
+        MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
     @override_settings(QUICKSCALE_MODE="solo")

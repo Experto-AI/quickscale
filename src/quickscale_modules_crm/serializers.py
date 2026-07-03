@@ -9,10 +9,10 @@ from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
     """Return the current organization ID for create stamping.
 
-    T1.5 flat-route contract: resolves ``request.org`` (set by
-    ``TenantMiddleware``).  Falls back to personal-org lookup for tests
-    that bypass middleware.  Raises ``ValidationError`` when no org
-    context is available.
+    SA11.6 flat-route contract: resolves ``request.org`` (set by
+    ``TenantMiddleware``).  No personal-org fallback is performed — callers
+    must ensure ``request.org`` is set before invoking the serializer.
+    Raises ``ValidationError`` when no org context is available.
 
     The contextvar is already set by ``TenantMiddleware._call_with_org``
     via ``org_scope()``; this function only reads the org ID for stamping
@@ -26,18 +26,6 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
     org = getattr(request, "org", None)
     if org is not None:
         return org.id
-
-    # Fallback: look up the user's personal org (for tests).
-    user = getattr(request, "user", None)
-    if user is not None and getattr(user, "is_authenticated", False):
-        from quickscale_modules_orgs.models import Organization
-
-        personal_org = Organization.objects.filter(
-            is_personal=True, memberships__user=user
-        ).first()
-        if personal_org is not None:
-            request.org = personal_org
-            return personal_org.id
 
     raise serializers.ValidationError(
         "Organization context is required for this route.",
@@ -354,8 +342,8 @@ class ContactDetailSerializer(serializers.ModelSerializer):
         When creating or updating, the related company and tags must belong
         to the same organization (or have NULL organization for legacy/solo
         compatibility). Foreign-org references are rejected.  The active
-        organization is resolved from ``request.org`` (set by middleware) or
-        the personal-org fallback for solo routes.
+        organization is resolved from ``request.org`` (set by
+        middleware). No personal-org fallback is performed.
         """
         org_id = _request_org_id(self)
         if org_id is None:
@@ -636,7 +624,7 @@ class DealDetailSerializer(serializers.ModelSerializer):
         must belong to the same organization (or have NULL organization for
         legacy/solo compatibility). Foreign-org references are rejected.
         The active organization is resolved from ``request.org`` (set by
-        middleware) or the personal-org fallback for solo routes.
+        middleware). No personal-org fallback is performed.
         """
         org_id = _request_org_id(self)
         if org_id is None:
@@ -703,27 +691,15 @@ class BulkUpdateStageSerializer(serializers.Serializer):
     def validate_stage_id(self, value: Stage) -> Stage:
         """Reject non-owned stages.
 
-        T1.5 flat-route contract: the target stage must belong to the active
-        organization resolved from ``request.org`` (set by middleware) or the
-        personal-org fallback.
+        SA11.6 flat-route contract: the target stage must belong to the
+        active organization resolved from ``request.org`` (set by
+        middleware).  No personal-org fallback is performed.
         """
         request = self.context.get("request")
         if request is None:
             return value
 
         org = getattr(request, "org", None)
-        if org is None:
-            user = getattr(request, "user", None)
-            if user is not None and getattr(user, "is_authenticated", False):
-                from quickscale_modules_orgs.models import Organization
-
-                personal_org = Organization.objects.filter(
-                    is_personal=True, memberships__user=user
-                ).first()
-                if personal_org is not None:
-                    org = personal_org
-                    request.org = personal_org  # type: ignore[union-attr]
-
         if org is None:
             raise serializers.ValidationError(
                 "Organization context is required for this route.",
