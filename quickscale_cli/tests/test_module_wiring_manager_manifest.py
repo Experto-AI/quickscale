@@ -92,6 +92,37 @@ class TestRegenerateManagedWiringManifestPath:
         # The resolver normalises "Twitter" -> "x"; check for either form.
         assert "x" in views_content or "youtube" in views_content.lower()
 
+        # SA13.1 regeneration evidence (CR-SA13.1-003): verify the generated
+        # views use org_scope and avoid tenant_context/manual transaction
+        # patterns — this confirms the template change propagates through the
+        # full regenerate_managed_wiring pipeline to the on-disk file.
+        assert "org_scope(resolved_org)" in views_content, (
+            "Generated social_views.py must use org_scope() for unified "
+            "tenant-context activation (SA13.1)."
+        )
+        assert (
+            "from quickscale_modules_orgs.current_org import get_current_org, org_scope"
+            in views_content
+        )
+        assert "get_system_org()" in views_content, (
+            "Generated views must resolve System org for anonymous requests per D2."
+        )
+        assert "build_social_link_tree_payload()" in views_content
+        assert "build_social_embeds_payload()" in views_content
+        # Explicit transaction.atomic() and tenant_context must be absent
+        # because org_scope() wraps atomic internally.
+        assert "from django.db import transaction" not in views_content, (
+            "org_scope() wraps transaction.atomic() internally."
+        )
+        assert "tenant_context" not in views_content, (
+            "org_scope() is the unified replacement for tenant_context."
+        )
+        # organization_id kwarg was removed in T1.9
+        assert "organization_id" not in views_content
+        # No manual ContextVar management remains
+        assert "set_current_org_id" not in views_content
+        assert "set_db_current_org_id" not in views_content
+
     def test_multiple_known_modules(self, tmp_path: Path) -> None:
         """Multiple registered modules should all be built via the manifest path."""
         project = tmp_path / "myapp"
