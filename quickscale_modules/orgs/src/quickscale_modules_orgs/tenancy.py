@@ -308,19 +308,72 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Auto-created ManyToMany through table — no tenant-scoped data.",
     ),
+    # -- Auth (system-wide user model, not tenant-scoped) --
+    TenantTableEntry(
+        app_label="quickscale_modules_auth",
+        model_name="User",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="System-wide user model: identities are cross-tenant, not tenant-scoped.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_auth",
+        model_name="User_groups",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Auto-created ManyToMany through table for auth.User.groups — "
+        "no tenant-scoped data.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_auth",
+        model_name="User_user_permissions",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Auto-created ManyToMany through table for auth.User.user_permissions "
+        "-- no tenant-scoped data.",
+    ),
+    # -- Backups (operational/DR records, not tenant-scoped) --
+    TenantTableEntry(
+        app_label="quickscale_modules_backups",
+        model_name="BackupPolicy",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Operational backup policy — singleton config, not tenant-scoped.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_backups",
+        model_name="BackupArtifact",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Operational backup artifact metadata — not tenant-scoped.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_backups",
+        model_name="BackupSnapshot",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Internal DR snapshot metadata — not tenant-scoped.",
+    ),
+    # -- Notifications (system-wide operational records, not tenant-scoped) --
+    TenantTableEntry(
+        app_label="quickscale_modules_notifications",
+        model_name="NotificationSettings",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Operational notification configuration — not tenant-scoped.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_notifications",
+        model_name="NotificationMessage",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="System-wide notification send-request — not tenant-scoped.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_notifications",
+        model_name="NotificationDelivery",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Recipient delivery tracking — not tenant-scoped.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_notifications",
+        model_name="NotificationDeliveryEvent",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Provider delivery event history — not tenant-scoped.",
+    ),
     # -- Abstract base models --
-    TenantTableEntry(
-        app_label="quickscale_modules_listings",
-        model_name="AbstractListing",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Abstract base model — not concrete.",
-    ),
-    TenantTableEntry(
-        app_label="quickscale_modules_social",
-        model_name="BaseSocialItem",
-        status=TenantTableStatus.EXCLUDED_REVIEWED,
-        reason="Abstract base model — not concrete.",
-    ),
     # -- Test-only models --
     TenantTableEntry(
         app_label="quickscale_modules_orgs",
@@ -335,6 +388,14 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="Test-only model defined in test_models.py for "
         "AF2 Phase 1 forward-FK traversal regression tests; "
+        "not a real tenant table.",
+    ),
+    TenantTableEntry(
+        app_label="quickscale_modules_orgs",
+        model_name="TenantExcludedModel",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason="Test-only model defined in test_management_commands.py for "
+        "SA15.1 tenant_excluded marker classification tests; "
         "not a real tenant table.",
     ),
     # ====== PENDING REMEDIATION ==========================================

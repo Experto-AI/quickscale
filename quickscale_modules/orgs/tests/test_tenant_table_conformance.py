@@ -112,6 +112,10 @@ def test_registry_covers_all_concrete_qs_models() -> None:
     # Also filter out test-only models (reason starts with "Test-only")
     # which are defined in test_models.py and only registered when that
     # module is imported.
+    # Also filter out entries whose app is not installed in this test
+    # environment — they belong to modules (auth, backups, notifications,
+    # storage) that are registered at design time in TENANT_TABLE_REGISTRY
+    # but not installed in the orgs test suite (SA15.2).
     exempt_keys: set[tuple[str, str]] = set()
     for entry in TENANT_TABLE_REGISTRY:
         if entry.model_name in (
@@ -121,6 +125,13 @@ def test_registry_covers_all_concrete_qs_models() -> None:
         ):
             exempt_keys.add((entry.app_label, entry.model_name))
         if entry.reason.startswith("Test-only"):
+            exempt_keys.add((entry.app_label, entry.model_name))
+        # Exempt entries whose app is not installed in this test
+        # environment.  Use try/except since get_app_config raises
+        # LookupError for unknown app labels.
+        try:
+            apps.get_app_config(entry.app_label)
+        except LookupError:
             exempt_keys.add((entry.app_label, entry.model_name))
     stale -= exempt_keys
     assert not stale, (
@@ -338,7 +349,9 @@ def test_excluded_model_lacks_tenant_manager(entry: Any) -> None:
     Abstract bases are skipped because they are not independently
     instantiable and their manager resolution depends on concrete
     subclasses.  Test-only models that happen to use TenantModel for
-    behaviour testing are also skipped.
+    behaviour testing are also skipped.  Entries from non-installed
+    modules (e.g. auth, backups, notifications when not in the test
+    environment) are skipped as well (SA15.2).
     """
     # Abstract models (TenantModel, AbstractListing, BaseSocialItem)
     # cannot be resolved via apps.get_model() — they are not in the
@@ -349,6 +362,11 @@ def test_excluded_model_lacks_tenant_manager(entry: Any) -> None:
     # may legitimately use TenantModel for behaviour tests even though
     # they are not real tenant tables.
     if "Test-only" in entry.reason:
+        return
+    # Skip entries whose app is not installed in this test environment.
+    try:
+        apps.get_app_config(entry.app_label)
+    except LookupError:
         return
 
     model = apps.get_model(entry.app_label, entry.model_name)
@@ -834,7 +852,13 @@ def test_registry_entry_model_exists(entry: Any) -> None:
     they are only registered when that module is imported during full-suite
     test runs.  Their existence is verified by ``test_registry_covers_all_concrete_qs_models``
     (stale-entry check) and ``test_excluded_model_lacks_tenant_manager`` instead.
+
+    Entries from non-installed modules are skipped at runtime (SA15.2).
     """
+    try:
+        apps.get_app_config(entry.app_label)
+    except LookupError:
+        return
     model = apps.get_model(entry.app_label, entry.model_name)
     assert model is not None, (
         f"Registry entry {entry.app_label}.{entry.model_name} does not "
