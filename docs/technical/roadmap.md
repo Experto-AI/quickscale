@@ -98,8 +98,14 @@ No cross-track dependencies. Tracks 2 and 3 have no remaining open tasks.
 
 - [ ] **SA11.6 — Clean up CRM's `_resolve_active_org`.** `Tier 1 · Track 1 · deps: none`
   Remove the "for tests that bypass middleware" personal-org fallback from production code (move it into test fixtures/middleware instead) and stop performing the stage-seeding write as a side effect of every org resolution — seed once at org-creation time instead.
-  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/views.py`.
-  *Acceptance:* `_resolve_active_org` only resolves and primes context; CRM test suite stays green with fixtures updated to set `request.org` directly.
+
+  **Pre-implementation decisions (resolved 2026-07-03):**
+  1. **Personal-org seeding gap:** `create_personal_for()` (`orgs/managers.py:132`) does not fire `organization_created`, so removing the read-path `ensure_org_default_stages()` call would leave solo-mode/personal orgs permanently unseeded. Fix: dispatch `organization_created.send(sender=Organization, organization=organization)` inside `create_personal_for()` after the org row is created — mirrors the existing dispatch in `OrgCreateForm.save()` (`orgs/forms.py:117-121`) and reuses CRM's existing receiver (`crm/signals.py`) instead of adding a second seeding path. Requires updating the org-bootstrap test that currently asserts `create_personal_for()` does *not* emit the signal.
+  2. **Legacy warm-on-read removal is strict, no backfill:** no production orgs exist yet (global "no existing users, no migration path" constraint), so there is no real data needing self-heal. Remove the warm-on-read behavior and its tests outright; do not add a compatibility path or a backfill step to this task.
+  3. **Test `request.org` fixture:** attach `request.org` directly inside the CRM test suite's custom test-client request path (smallest targeted fix, preserves existing test style) rather than wiring `TenantMiddleware` into CRM's test settings or converting tests to middleware-backed requests.
+
+  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/views.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/managers.py`, CRM test client / fixtures, org-bootstrap test asserting personal-org signal behavior.
+  *Acceptance:* `_resolve_active_org` only resolves and primes context (no seeding call, no personal-org fallback); `create_personal_for()` dispatches `organization_created` and personal orgs are seeded via the same CRM receiver as SaaS-created orgs; CRM test suite stays green with the test client setting `request.org` directly.
 
 - [ ] **SA11.7 — Fail-hard the auth signup-open default.** `Tier 1 · Track 1 · deps: none`
   Replace the permissive `getattr(settings, "ACCOUNT_ALLOW_REGISTRATION", True)` fallback with a required-setting read (raise `ImproperlyConfigured` if unset), consistent with the fail-hard principle.
