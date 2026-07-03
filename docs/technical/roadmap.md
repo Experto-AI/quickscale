@@ -78,7 +78,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 |-------|------------------|-------|
 | **1** | SA11.4 *(unblocked)* → SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
 | **2** | SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA7.4 *(no deps)* | Declarative-wiring migration slice + orgs god-module de-coupling version-range constraints |
+| **3** | SA7.4 *(complete)* → SA7.5 *(no deps — future)* | Declarative-wiring migration slice + orgs god-module de-coupling version-range constraints |
 
 ---
 
@@ -161,10 +161,8 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 - [x] **SA7.3 — De-duplicate notifications defaults out of orgs' manifest (completed 2026-07-03).** `Tier 1 · Track 3`
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA7.4 — Version-range constraints on `required_modules`.** `Tier 2 · Track 3 · deps: none`
-  Add a minimum-version constraint to each module's `required_modules: [orgs]` declaration (billing, blog, crm, social — the four modules that declare it today) and make `_validate_module_prerequisites` in `apply_command.py` fail closed when an installed module's required-module version is below the declared minimum.
-  *Files:* `quickscale_modules/{billing,blog,crm,social}/module.yml`, `quickscale_cli/src/quickscale_cli/commands/apply_command.py` (`_validate_module_prerequisites`).
-  *Acceptance:* `quickscale apply` refuses to proceed when an installed `orgs` version is older than a dependent module's declared minimum, with an explicit error naming both versions.
+- [x] **SA7.4 — Version-range constraints on `required_modules` (complete — 2026-07-03, review follow-up 2026-07-03).** `Tier 2 · Track 3 · deps: none`
+  Added a `>=0.86.0` version floor to the `required_modules: [orgs]` declaration in billing, blog, crm, social, **and listings** module manifests.  Created `quickscale_core.manifest.required_modules` with `parse_required_module_entry()` and `check_required_module_versions()` for parsing inline `name>=version` specs and comparing installed module versions.  Wired the version-floor check into `_prepare_apply_context`, `_refresh_context_after_lock`, and (post-embed) in `_execute_apply_steps_locked` in `apply_command.py` so `quickscale apply` fails closed with an explicit error naming the dependent module, required module, required minimum version, and installed version — including modules embedded in the same run.  Updated `test_module_manifest_contract.py`'s `_required_module_package_names` to strip version specs when comparing against pyproject first-party dependencies.  Added 22 unit tests for `parse_required_module_entry`, `_parse_version_parts`, and `check_required_module_versions` in `quickscale_core/tests/test_required_modules.py`, plus **five** version-floor contract tests in `test_module_manifest_contract.py`.  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 ---
 

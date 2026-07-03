@@ -6,6 +6,8 @@ import re
 import tomllib
 from pathlib import Path
 
+from packaging.version import Version
+
 from quickscale_cli.commands.module_config import (
     get_default_analytics_config,
     get_default_auth_config,
@@ -19,6 +21,9 @@ from quickscale_cli.commands.module_config import (
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
 from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.required_modules import (
+    parse_required_module_entry,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULES_ROOT = REPO_ROOT / "quickscale_modules"
@@ -155,10 +160,11 @@ def _runtime_module_dependency_names(module_name: str) -> set[str]:
 
 def _required_module_package_names(module_name: str) -> set[str]:
     manifest = load_manifest_from_path(_manifest_path(module_name))
-    return {
-        f"{FIRST_PARTY_MODULE_PACKAGE_PREFIX}{required_module}".lower()
-        for required_module in manifest.required_modules
-    }
+    package_names: set[str] = set()
+    for entry in manifest.required_modules:
+        name, _version = parse_required_module_entry(entry)
+        package_names.add(f"{FIRST_PARTY_MODULE_PACKAGE_PREFIX}{name}".lower())
+    return package_names
 
 
 def test_ready_modules_have_valid_manifest() -> None:
@@ -485,4 +491,69 @@ def test_html_theme_empty_state_includes_all_card_modules() -> None:
     assert not not_in_empty_state, (
         f"Modules with cards but absent from HTML empty-state guard: {not_in_empty_state!r}. "
         "Add each module to the final {% if ... not in ... %} empty-state condition."
+    )
+
+
+# ---------------------------------------------------------------------------
+# SA7.4 — required_modules version-floor contract
+# ---------------------------------------------------------------------------
+
+
+def test_billing_required_modules_has_orgs_version_floor() -> None:
+    """Billing module requires orgs with a >=0.86.0 version floor."""
+    manifest = load_manifest_from_path(_manifest_path("billing"))
+    assert len(manifest.required_modules) == 1
+    name, version = parse_required_module_entry(manifest.required_modules[0])
+    assert name == "orgs"
+    assert version is not None, "Expected a version floor"
+    assert Version(version) >= Version("0.86.0"), (
+        f"Expected floor >= 0.86.0, got {version}"
+    )
+
+
+def test_blog_required_modules_has_orgs_version_floor() -> None:
+    """Blog module requires orgs with a >=0.86.0 version floor."""
+    manifest = load_manifest_from_path(_manifest_path("blog"))
+    assert len(manifest.required_modules) == 1
+    name, version = parse_required_module_entry(manifest.required_modules[0])
+    assert name == "orgs"
+    assert version is not None, "Expected a version floor"
+    assert Version(version) >= Version("0.86.0"), (
+        f"Expected floor >= 0.86.0, got {version}"
+    )
+
+
+def test_crm_required_modules_has_orgs_version_floor() -> None:
+    """CRM module requires orgs with a >=0.86.0 version floor."""
+    manifest = load_manifest_from_path(_manifest_path("crm"))
+    assert len(manifest.required_modules) == 1
+    name, version = parse_required_module_entry(manifest.required_modules[0])
+    assert name == "orgs"
+    assert version is not None, "Expected a version floor"
+    assert Version(version) >= Version("0.86.0"), (
+        f"Expected floor >= 0.86.0, got {version}"
+    )
+
+
+def test_social_required_modules_has_orgs_version_floor() -> None:
+    """Social module requires orgs with a >=0.86.0 version floor."""
+    manifest = load_manifest_from_path(_manifest_path("social"))
+    assert len(manifest.required_modules) == 1
+    name, version = parse_required_module_entry(manifest.required_modules[0])
+    assert name == "orgs"
+    assert version is not None, "Expected a version floor"
+    assert Version(version) >= Version("0.86.0"), (
+        f"Expected floor >= 0.86.0, got {version}"
+    )
+
+
+def test_listings_required_modules_has_orgs_version_floor() -> None:
+    """Listings module requires orgs with a >=0.86.0 version floor."""
+    manifest = load_manifest_from_path(_manifest_path("listings"))
+    assert len(manifest.required_modules) == 1
+    name, version = parse_required_module_entry(manifest.required_modules[0])
+    assert name == "orgs"
+    assert version is not None, "Expected a version floor"
+    assert Version(version) >= Version("0.86.0"), (
+        f"Expected floor >= 0.86.0, got {version}"
     )
