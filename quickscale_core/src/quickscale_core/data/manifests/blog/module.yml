@@ -28,7 +28,7 @@ config:
   immutable: {}
 
 required_modules:
-  - orgs
+  - orgs>=0.86.0
 
 dependencies:
   - django-markdownx>=4.0
