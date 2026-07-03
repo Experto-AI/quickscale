@@ -62,12 +62,12 @@ Fix plan derived from the [2026-07-02 repo-level autopsy](../../arch-audit.md#au
 Diagram below shows only remaining open work.
 
 ```
-Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + org-switch)
-───────────────────────────────      ───────────────────────────────────      ────────────────────────────────────────
+Track 1 (tenant-context surface)     Track 2 (money ledger + core boundary)    Track 3 (wiring governance + deps)
+───────────────────────────────      ───────────────────────────────────      ────────────────────────────────
 SA11.2 (←11.1, unblocked)           SA9.4  (←9.3)                             SA7.4  (no deps)
-├─ SA11.3 (←11.1, unblocked)        SA9.5  (←9.3)                             SA8.1  ⚠ DECISION (no deps)
-└─ SA11.4 (←11.1, unblocked)        └─ SA9.6 (←9.4 & 9.5)                       └─ SA8.2 (←8.1)
-SA11.5 (no deps)                    SA10.1 (no deps)                              └─ SA8.3 (←8.2)
+├─ SA11.3 (←11.1, unblocked)        SA9.5  (←9.3)
+└─ SA11.4 (←11.1, unblocked)        └─ SA9.6 (←9.4 & 9.5)
+SA11.5 (no deps)                    SA10.1 (no deps)
 SA11.6 (no deps)                      └─ SA10.2 (←10.1)
 SA11.7 (no deps)
 ```
@@ -80,7 +80,7 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 |-------|------------------|-------|
 | **1** | SA11.2/SA11.3/SA11.4 *(unblocked)* → SA11.5 → SA11.6 → SA11.7 *(no deps)* | Tenant-context request boundary — fixes the live public-page defect |
 | **2** | SA9.4/SA9.5 → SA9.6 · SA10.1 → SA10.2 | Billing ledger idempotency + core-as-runtime-API boundary + contract-vintage detection |
-| **3** | SA7.4 · SA8.1 ⚠ → SA8.2 → SA8.3 | Declarative-wiring migration slice + orgs god-module de-coupling + D1 explicit-org contract |
+| **3** | SA7.4 *(no deps)* | Declarative-wiring migration slice + orgs god-module de-coupling version-range constraints |
 
 ---
 
@@ -177,41 +177,15 @@ No cross-track dependencies. Cross-track file-ownership note: `quickscale_module
 
 #### Finding — Repo Finding 3: dual source of truth for active organization (`why →` [Finding 3](../../arch-audit.md#finding-3-active-organization-has-two-sources-of-truth-in-generated-saas-apps--the-server-session-and-the-spas-client-state--and-the-shipped-resolution-was-to-amputate-features-d1-option-b))
 
-- [ ] **SA8.1 ⚠ DECISION REQUIRED — D1 Option A decision record: explicit-org API contract.** `Tier 1 · Track 3 · deps: none`
-  Write the deferred D1 Option A decision: org-scoped JSON APIs take the org slug/id explicitly in the request (path or body) and the server validates membership per request; ambient session scoping is reserved for server-rendered flat routes only. Update `decisions.md` §D1 to record this as the chosen direction (superseding "Option A deferred").
-  *Files:* `docs/technical/decisions.md`.
-  *Acceptance:* `decisions.md` §D1 states the explicit-org contract as decided, with the scope of "org-scoped API" defined precisely enough for SA8.2 to implement against.
-  > **See decision context below.**
+- [x] **RESOLVED 2026-07-03 by product decision — no multi-org membership for regular users.**
+  Regular SaaS users belong to exactly one organization. The server session is the sole authority for org resolution, eliminating the dual-source-of-truth problem. No org switcher in the user-facing UI. VIEW-AS (superuser-only) remains the debug path for operator org-scope switching — already shipped.
 
-- [ ] **SA8.2 — Membership-validating request wrapper for org-scoped endpoints.** `Tier 2 · Track 3 · deps: SA8.1 · RISK LEVEL: medium`
-  Add a reusable server-side decorator/mixin (extending the existing `require_org_role`/`OrgRoleMixin` pattern in `permissions.py`) that resolves the org from an explicit request parameter (not the session), validates the requesting user's membership, and sets tenant context for the duration of the request.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/permissions.py`.
-  *Acceptance:* a request naming an org the user is not a member of is rejected regardless of the session's active org; a request naming an org the user belongs to succeeds even if it differs from the session's active org.
+  **Consequences:**
+  - SA8.1/SA8.2/SA8.3 (explicit-org API contract) are unnecessary — cancelled.
+  - Billing SPA entry points are no longer blocked by the D1 org-switch problem and can be restored as separate implementation work.
+  - The D1 decision record in `decisions.md` §D1 has been updated to reflect this resolution.
 
-- [ ] **SA8.3 — Theme `useApi`/`useOrgs` explicit-org contract.** `Tier 2 · Track 3 · deps: SA8.2`
-  Update the generated React theme's API hooks to pass the explicit org (from client state) on every org-scoped request instead of relying on the ambient session, using SA8.2's validated endpoints.
-  *Files:* `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/hooks/{useApi.ts.j2,useOrgs.ts.j2}`.
-  *Acceptance:* switching org client-side and immediately firing an org-scoped query resolves the newly-selected org, not the previous session org (manual verification: switch org, inspect the next request's resolved org server-side).
-
----
-
-## Decision Gate: SA8.1 — D1 Explicit-Org API Contract
-
-**Context (from arch-audit.md Finding 3):** Generated SaaS apps have two sources of truth for the active organization — the server session (`ACTIVE_ORG_SESSION_KEY` → middleware → ContextVar → RLS GUC) and the React SPA's client state. The shipped resolution (D1 Option B) was to amputate features (remove billing SPA entry points) rather than fix the root cause. Every org-scoped SPA surface re-triggers this collision — and the `useOrgs.ts` hooks already build slug-scoped paths (the client-side pattern), but the server still resolves org from the session, so a client-side switch silently serves the wrong org until the next full navigation.
-
-**SA8.1 proposes:** All org-scoped JSON APIs take the org slug/id explicitly in the request (path or body); the server validates membership per request; ambient session scoping is reserved for server-rendered flat routes only. This supersedes D1 Option B and closes the deferral.
-
-**Three alternatives:**
-
-| # | Approach | Effort | Pros | Cons | Precedent fit |
-|---|----------|--------|------|------|---------------|
-| 1 | **Explicit-org API contract** (SA8.1 proposal) | Medium | Structural fix — org is an explicit, validated parameter per request; no sync step to forget; matches the slug-scoped `/api/orgs/<slug>/` pattern already shipped and permitted by `decisions.md:1227`; fixes root cause permanently | Requires migrating all org-scoped endpoints to the wrapper (SA8.2) and client hooks (SA8.3) | **Best fit.** Arch-audit Finding 3 preferred option (1); the client-side pattern in `useOrgs.ts` already builds slug-scoped paths — SA8.1 finishes it server-side |
-| 2 | **Session-sync endpoint** (original D1 Option A) | Low–Medium | Lower effort; keeps ambient scoping for existing routes | Per-callsite discipline ("await the sync") degrades exactly like procedural tenant filtering; doesn't solve dual authority, just syncs it on switch | Acceptable bridge, but re-introduces a forget-prone step every org-scoped SPA surface must remember |
-| 3 | **Server-driven switching** (full navigation) | Low | Lowest effort; client state never diverges | Costs SPA fluidity; contradicts the SPA-in-React direction | Stopgap only; contradicts the product direction |
-
-**Decision needed:** Confirm Option 1 (explicit-org API contract) as the chosen direction, which unlocks SA8.2/SA8.3. Option 2 is a valid fallback if Option 1 scope feels too large for this batch.
-
----
+  > **Implementation note:** Removing the org switcher from the user-facing React UI and restoring billing SPA entry points are tracked separately — not part of this SA hardening batch.
 
 ## References
 

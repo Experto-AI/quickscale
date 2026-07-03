@@ -24,9 +24,9 @@ QuickScale supports two first-class deployment modes, switchable at runtime with
 | Aspect | Solo mode | SaaS-Organizations mode |
 |---|---|---|
 | Target use case | Personal tools, internal apps, indie developers | Multi-tenant SaaS sold to paying clients |
-| Organizations per user | 1 (personal org, auto-created) | Many (user may belong to multiple) |
+| Organizations per user | 1 (personal org, auto-created) | 1 |
 | Org management UI | Hidden | Full (create, invite, settings, billing) |
-| Org switcher | Not shown | Shown in sidebar |
+| Org switcher | Not shown | Not shown (VIEW-AS only for superusers) |
 | Invitations | Disabled | Enabled |
 | URL structure | Flat module routes such as `/blog/`, `/crm/dashboard/`, `/forms/`, `/listings/` (no tenant slug in content routes) | Org-management pages under `/orgs/...`; shipped server content routes stay flat, while fresh `showcase_react` SaaS pages keep org-slug blog/listings pages plus flat redirect shims |
 | Billing scope | Per-org (the personal org is the billing owner) | Per-org (team billing contact) |
@@ -54,7 +54,7 @@ QUICKSCALE_MODE = 'solo'   # or 'saas'
 
 `TenantMiddleware` reads this setting and changes two behaviours:
 
-- **URL resolution**: In solo mode, middleware auto-resolves the org from the user's personal org. In SaaS mode, the org is resolved from the **session** (`ACTIVE_ORG_SESSION_KEY`) set by the org-switcher. The org-management pages live under `/orgs/...`; the shipped module content routes are flat and rely on `request.org` / the current-org ContextVar rather than URL kwargs.
+- **URL resolution**: In solo mode, middleware auto-resolves the org from the user's personal org. In SaaS mode, the org is resolved from the **session** (`ACTIVE_ORG_SESSION_KEY`), set at signup/org-creation and stable for the session lifetime. The org-management pages live under `/orgs/...`; the shipped module content routes are flat and rely on `request.org` / the current-org ContextVar rather than URL kwargs.
 - **Guard behaviour**: In solo mode, the post-signup guard auto-creates a personal org silently. In SaaS mode, it redirects the user to `/orgs/new/` to name their organization.
 
 The orgs module now ships a single URL module. The deployment mode changes request behavior, not which Django URL module is imported:
@@ -156,7 +156,7 @@ In the current shipped foundation slice, that platform-owner `✅` for org-scope
 | **Invitation** | A pending email-based request to join an organization before the recipient has a user account. |
 | **Personal Org** | In Solo mode, the single organization auto-created for each user at signup. |
 
-A user account is global (one email, one login). A user's role is org-scoped — the same person can be an Owner in one organization and a Member in another. A user may belong to multiple organizations simultaneously; an org switcher in the UI tracks the active context (SaaS mode only).
+A user account is global (one email, one login). A user's role is org-scoped. Regular users belong to exactly one organization. The server session is the sole authority for org resolution — no org switcher in the user-facing UI. VIEW-AS (superuser-only) provides operator org-scope switching for debugging; see `docs/technical/decisions.md` §D1.
 
 ---
 
@@ -281,8 +281,9 @@ OrganizationMembership
 
   class Meta:
       unique_together = [('user', 'organization')]
-      # A user may belong to multiple organizations. unique_together is (user, organization),
-      # NOT just (user). An org switcher in the UI tracks the active context.
+      # One org per regular user. The unique_together constraint prevents accidental
+      # duplicates. Multi-org membership for a single user is possible at the DB level
+      # but is not exposed in the regular UI — VIEW-AS handles operator debug needs.
 
 OrganizationInvitation
   id            UUID (PK)
@@ -530,7 +531,7 @@ No org management pages are exposed in solo mode.
 
 **Note:** The generated `showcase_react` SaaS surface keeps org-management pages under `/orgs/:orgSlug/...`, serves CRM and forms at flat routes, and uses legacy redirect shims (`/blog`, `/listings`, `/settings`) to land the user on the active-org route when needed. Billing remains Django-page navigation (`/billing/dashboard/`, `/billing/pricing/`) rather than a generated React billing page.
 
-`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into the generated org pages. An org switcher in the sidebar shows the active organization and lets the user navigate to another by changing the slug in the URL.
+`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into the generated org pages. No org switcher is rendered in the user-facing UI — regular users belong to exactly one org. VIEW-AS (superuser-only) provides the debug path for operators; see `docs/technical/decisions.md` §D1.
 
 #### Solo mode
 
@@ -636,7 +637,7 @@ All open questions from the original design were resolved before implementation 
 
 | Question | Decision | Rationale |
 |----------|----------|-----------|
-| Multi-org membership? | **Yes** — user may belong to multiple orgs (SaaS mode) | Supports consultants and agencies working across clients; org switcher in UI handles context |
+| Multi-org membership? | **No** — regular SaaS users belong to exactly one org | Eliminates the dual-source-of-truth problem (session is sole authority); removes need for explicit-org API contract. Multi-org membership at the DB level is not precluded but is not exposed in the UI. VIEW-AS handles operator debug needs. |
 | `Organization` model location? | **`quickscale_modules_orgs`** | Auth stays minimal and standalone; orgs depends on auth, not the reverse |
 | Solo vs SaaS resolution? | **Runtime** — `QUICKSCALE_MODE` setting | Start solo, scale to SaaS without code regeneration; one schema, one codebase |
 | Billing migration path? | **Auto-create personal org per user** | Management command `migrate_billing_to_orgs`; idempotent; zero manual operator work |

@@ -152,7 +152,7 @@ myproject/
   └── base.py            # INSTALLED_APPS = [..., "modules.auth", "modules.blog"]
 ```
 
-Billing now has a public-ready implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide. Public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows now surface billing. The generated `showcase_react` SPA surfaces billing as a module flag only (`modules.billing`); it does not include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages. Teams remains placeholder inventory only.
+Billing now has a public-ready implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide. Public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows now surface billing. The generated `showcase_react` SPA surfaces billing as a module flag only (`modules.billing`); it does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages. The D1 org-switch blocker that originally prevented these entry points is now resolved — see §D1; restoration is separate implementation work. Teams remains placeholder inventory only.
 
 **Key Characteristics:**
 - ✅ Runtime dependencies (in INSTALLED_APPS)
@@ -192,13 +192,13 @@ current shipped generator surface until a release note and this file explicitly 
 them.
 
 Generated starter output surfaces billing as a module flag only (`modules.billing`).
-The generated `showcase_react` SPA does not include billing dashboard cards, sidebar
+The generated `showcase_react` SPA does not currently include billing dashboard cards, sidebar
 navigation entries, org-dashboard billing cards/links, module paths for billing, or
-full-document links into billing Django pages until a session-sync contract (D1 Option A)
-explicitly syncs the server session's active org after client-side org switches.
-QuickScale does not generate a starter-owned billing React page. Teams routes, flags, dashboard cards,
-and navigation remain excluded until teams ships as a valid public `quickscale plan` /
-`quickscale.yml` / `quickscale apply` selection.
+full-document links into billing Django pages. The D1 org-switch blocker that originally
+prevented these entry points is now resolved — see §D1; restoration is separate
+implementation work. QuickScale does not generate a starter-owned billing React page.
+Teams routes, flags, dashboard cards, and navigation remain excluded until teams ships
+as a valid public `quickscale plan` / `quickscale.yml` / `quickscale apply` selection.
 
 **Default React Theme Tech Stack (v0.74.0):**
 
@@ -311,24 +311,34 @@ Fresh generations copy `showcase_react/src/**` into the generated project's
 - ✅ Fresh `showcase_html` generations do not scaffold public social pages; non-React
   themes rely on manual adoption for that public page surface
 - ✅ Generated starter output surfaces billing as a module flag only (`modules.billing`);
-  the generated SPA does not include billing dashboard cards, sidebar navigation entries,
+  the generated SPA does not currently include billing dashboard cards, sidebar navigation entries,
   org-dashboard billing cards/links, module paths for billing, or full-document links into
-  billing Django pages. Teams routes, navigation, flags, and dashboard cards remain excluded until teams ships
+  billing Django pages. The D1 org-switch blocker is resolved — see §D1; these entry points
+  can now be restored. Teams routes, navigation, flags, and dashboard cards remain excluded until teams ships
 - ❌ Complete vertical themes are not part of the current shipped CLI surface yet
 - ✅ Module releases may extend managed backend/runtime surfaces in existing projects, but newly scaffolded theme-owned routes, navigation, registries, and page source are only guaranteed on fresh generation or explicit manual adoption
 
-**D1 — Generated showcase_react SSA org-switch billing parity (Option B locked):**
-The generated `showcase_react` SPA performs org-switches client-side, but the server
-session `ACTIVE_ORG_SESSION_KEY` is not explicitly synced before billing API calls
-fire. This means billing pages can resolve the wrong org after a client-side switch.
-QuickScale has locked **Option B** — remove generated SPA billing entry points
-(dashboard cards, sidebar navigation, org-dashboard billing cards/links, and
-`modulePaths.billing` from the React hook contract) until a session-sync contract
-(Option A) is designed and implemented. The module flags (`modules.billing`) remain
-in the generated config so the frontend can still detect whether billing is installed.
-Option A (session-sync endpoint) is deferred; the D1 decision applies to the current
-shipped surface in `showcase_react` templates and will be revisited when a session-sync
-contract is ready.
+**D1 — Multi-org membership and org-switch (resolved 2026-07-03):**
+Previously, the `showcase_react` SPA performed org-switches client-side while the
+server resolved the org from the session, creating a dual-authority problem (a
+client-side switch could silently operate on the previous session org). QuickScale
+locked Option B — amputated billing SPA entry points.
+
+**Resolution by product decision (2026-07-03):** Regular SaaS users belong to
+exactly one organization. There is no org switcher in the user-facing UI. The
+server session (`ACTIVE_ORG_SESSION_KEY`) is the sole authority for org resolution
+for regular users, eliminating the dual-source-of-truth problem.
+
+Consequences:
+- Billing SPA entry points (dashboard cards, sidebar navigation,
+  `modulePaths.billing`) can be restored — the wrong-org-after-switch bug does
+  not exist when there is no switch
+- The org switcher is removed from the regular user UI
+- VIEW-AS (superuser-only session override, already shipped) remains the sole
+  path for operator org-scope debugging
+- No explicit-org API contract or session-sync endpoint is needed
+- Future multi-org membership is not precluded, but would require revisiting
+  this decision and implementing the explicit-org API contract at that time
 
 ---
 

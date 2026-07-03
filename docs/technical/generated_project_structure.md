@@ -17,7 +17,7 @@ Key rules:
 - Fresh generations include a root `Makefile` with generic `setup`, `lint`, `format`, `test`, `check`, and `ci` entrypoints; frontend-only targets guard on `frontend/package.json` and skip cleanly for `showcase_html`.
 - Fresh generations also ship `scripts/lint.sh` as the shared helper surface behind `make lint` and `make check`.
 - Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages in v0.83.0.
-- Generated starter output surfaces billing as a module flag only (`modules.billing`); the generated SPA does not include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages. Teams placeholder routes, navigation, cards, and flags remain excluded.
+- Generated starter output surfaces billing as a module flag only (`modules.billing`); the generated SPA does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages — the D1 org-switch blocker is now resolved; see `docs/technical/decisions.md` §D1. Teams placeholder routes, navigation, cards, and flags remain excluded.
 - Modules embed into the generated project and can later be updated through the documented git-subtree workflow.
 - QuickScale does not generate a maintainer-style `quickscale_modules/` workspace inside client projects.
 
@@ -167,7 +167,7 @@ myapp/
 Notes:
 - Fresh `showcase_react` generations include `frontend/src/lib/analytics.ts` as dormant PostHog starter wiring. It initializes only when `VITE_POSTHOG_KEY` contains a real key.
 - Fresh `showcase_react` generations also include `frontend/src/pages/SocialLinkTreePublicPage.tsx` and `frontend/src/pages/SocialEmbedsPublicPage.tsx`, plus Django `templates/social/*.html` wrappers that keep `/social` and `/social/embeds` under Django ownership while hydrating the shared React bundle through `window.__QUICKSCALE__.publicPage`.
-- Fresh `showcase_react` generations surface billing as a module flag only (`modules.billing`). The generated SPA does not include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards, module paths for billing, or full-document links into billing Django pages. QuickScale does not generate a starter-owned `BillingPage.tsx`.
+- Fresh `showcase_react` generations surface billing as a module flag only (`modules.billing`). The generated SPA does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards, module paths for billing, or full-document links into billing Django pages — the D1 org-switch blocker is now resolved; see `docs/technical/decisions.md` §D1. QuickScale does not generate a starter-owned `BillingPage.tsx`.
 - That public-page scaffolding is fresh-generation-only; existing projects and non-React themes must manually adopt any equivalent public pages they want.
 
 ### HTML Starter Output
