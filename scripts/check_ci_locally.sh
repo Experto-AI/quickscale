@@ -31,9 +31,10 @@ for arg in "$@"; do
             echo "  1. Install dependencies"
             echo "  2. Lint (ruff check + format)"
             echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
-            echo "  4. Type check (mypy)"
-            echo "  5. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
-            echo "  6. E2E tests (optional, with --e2e flag)"
+            echo "  4. Module-core import linter (check_module_core_imports)"
+            echo "  5. Type check (mypy)"
+            echo "  6. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
+            echo "  7. E2E tests (optional, with --e2e flag)"
             exit 0
             ;;
     esac
@@ -68,12 +69,24 @@ fi
 echo "✓ Module-to-core compatibility passed"
 
 echo ""
-echo "[4/6] Running type checks (mypy)..."
+echo "[4/7] Running module-core import linter..."
+make check-module-core-imports || FAILED=true
+if [ "$FAILED" = true ]; then
+    echo ""
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✗ Module-Core Import Linter Failed   ║"
+    echo "╚════════════════════════════════════════╝"
+    exit 1
+fi
+echo "✓ Module-core import linter passed"
+
+echo ""
+echo "[5/7] Running type checks (mypy)..."
 make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""
-echo "[5/6] Running unit/integration tests..."
+echo "[6/7] Running unit/integration tests..."
 ./scripts/test_unit.sh || FAILED=true
 
 if [ "$FAILED" = true ]; then
@@ -88,7 +101,7 @@ echo "✓ All unit/integration tests passed"
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then
     echo ""
-    echo "[6/6] Running E2E tests (this may take several minutes)..."
+    echo "[7/7] Running E2E tests (this may take several minutes)..."
     ./scripts/test_e2e.sh || FAILED=true
 
     if [ "$FAILED" = true ]; then
@@ -101,7 +114,7 @@ if [ "$RUN_E2E" = true ]; then
     echo "✓ E2E tests passed"
 else
     echo ""
-    echo "[6/6] Skipping E2E tests (use --e2e to include)"
+    echo "[7/7] Skipping E2E tests (use --e2e to include)"
 fi
 
 echo ""
