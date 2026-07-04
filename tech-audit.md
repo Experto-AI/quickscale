@@ -9,6 +9,8 @@
 >
 > **Closed 2026-07-04:** `TA1` (legacy config keys silently translated/dropped) — remediated by `aea5e3bd` (SA17.1). `normalize_auth_module_options`, `normalize_crm_module_options`, and `normalize_notifications_module_options` now raise `ConfigValidationError` naming the dead key and its replacement for every legacy key named in this finding (`allow_registration`, `social_providers`, `default_pipeline_stages`, `resend_api_key`, `webhook_secret`). Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
+> **Closed 2026-07-04:** `TA2` (pervasive permissive Django settings defaults across modules) — remediated by SA17.2–SA17.6. Analytics/billing, CRM, forms, blog, and notifications now fail hard through explicit startup guards and/or direct required-setting reads instead of silently defaulting missing settings. The remaining permissive `QUICKSCALE_MODE` defaults are tracked separately under `TA19`. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
 > **Closed 2026-07-04:** `TA5` (undocumented `quickscale_cli.schema` compat shim) — remediated by `ab32f272` (SA18.3). The shim package is deleted; all internal CLI imports and tests were migrated to `quickscale_core.schema`. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
 > **Closed 2026-07-04:** `TA8` (project-metadata resolution swallows validation errors) — remediated by SA18.6. Removed `except Exception: return None` from `resolve_authoritative_project_metadata`'s quickscale.yml branch; `_load_managed_file_records_for_drift` is explicitly outside F12.2 scope. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
@@ -29,7 +31,7 @@
 
 | ID | Severity | Location | One-liner |
 |----|----------|----------|-----------|
-| TA2 | High | `quickscale_modules/*/src` (pervasive) | `getattr(settings, X, permissive-default)` — features fail-open when settings are missing (generalizes SA11.7) |
+| ~~TA2~~ | ~~High~~ | ~~`quickscale_modules/*/src` (pervasive)~~ | closed 2026-07-04 — see header note |
 | TA9 | Medium | `analytics/services.py:218`, `forms/views.py:92` | Missing SDK / missing sibling module degrades silently instead of failing |
 | ~~TA10~~ | ~~Medium~~ | ~~`quickscale_cli/utils/railway_utils.py`~~ | closed 2026-07-04 — see header note |
 | ~~TA11~~ | ~~Low~~ | ~~`quickscale_cli/utils/docker_utils.py:164`~~ | closed 2026-07-04 — see header note |
@@ -42,18 +44,9 @@
 
 ## Findings detail
 
-### TA2 (High) — Pervasive permissive settings defaults across modules
+### ~~TA2 (High)~~ — ~~Pervasive permissive settings defaults across modules~~ (closed 2026-07-04 — see header note)
 
-SA11.7 (tracked in decisions.md Known violations) covers `auth/adapters.py:14` (`ACCOUNT_ALLOW_REGISTRATION` defaults `True`), but the pattern is systemic — missing Django settings silently enable features or invent values instead of raising `ImproperlyConfigured`:
-
-- ~~`analytics/services.py:61` — `QUICKSCALE_ANALYTICS_ENABLED` defaults `True`~~ — resolved by SA17.2 (AppConfig.ready() guard), see CHANGELOG.md
-- ~~`billing/services.py:117` — `QUICKSCALE_BILLING_ENABLED` defaults `True`~~ — resolved by SA17.2 (AppConfig.ready() guard), see CHANGELOG.md
-- ~~`crm/views.py:219,238,246` — `CRM_ENABLE_API` defaults `True`; page sizes `int(getattr(...) or 50)` also swallow invalid values~~ — resolved by SA17.3 (AppConfig.ready() guard + explicit page-size validation), see CHANGELOG.md
-- ~~`forms/views.py:134,146`, `forms/throttles.py:16`, `forms/models.py:32` — submissions API on, rate limit `"5/hour"`, spam protection flag defaulted~~ — resolved by SA17.4 (AppConfig.ready() guard), see CHANGELOG.md
-- `blog/urls.py:18`, `blog/views.py:175,280`, `blog/models.py:46-48` — RSS on by default; `BLOG_API_TOKENS` defaults `[]` with malformed entries silently `continue`-skipped (`views.py:181-190`); media URL invented (open — `why →` SA17.5)
-- `notifications/services.py:155-157` — enabled defaults `True`, provider defaults `"resend"` (open — `why →` SA17.6)
-
-Since modules are creation-time assembled and the generator owns settings emission, every one of these settings is knowable at generation time; the defaults exist only to mask incomplete wiring. **Fix direction:** module `apps.py` `AppConfig.ready()` startup guards that raise on missing required settings; generator guarantees emission.
+~~Tracked the systemic `getattr(settings, X, permissive-default)` pattern across module runtime settings. Resolved by SA17.2–SA17.6; the remaining permissive `QUICKSCALE_MODE` default is tracked separately under TA19.~~
 
 ### TA9 (Medium) — Optional-dependency graceful degradation in modules
 
@@ -107,7 +100,7 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 | ID | Status | Note |
 |----|--------|------|
 | TA1 | **closed 2026-07-04** | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
-| TA2 | **still-open (partial)** | Permissive `getattr(settings, …, default)` remains in blog/notifications (pending SA17.5/SA17.6); analytics/billing resolved by SA17.2, crm/forms resolved by SA17.3/SA17.4 (AppConfig.ready() guards). Auth's `ACCOUNT_ALLOW_REGISTRATION` (SA11.7) is also fixed — the *pattern* remains open only for blog/notifications. |
+| TA2 | **closed 2026-07-04** | Remediated by SA17.2–SA17.6. Analytics/billing, crm, forms, blog, and notifications now fail hard on missing runtime settings; the remaining permissive `QUICKSCALE_MODE` default is tracked under TA19. |
 | TA4 | **closed 2026-07-04** | Remediated by SA18.2 — see header note. |
 | TA5 | **closed 2026-07-04** | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | **closed 2026-07-04** | Remediated by SA18.4 — see header note. |
@@ -221,7 +214,7 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 | ID | Status | Note |
 |----|--------|------|
 | TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
-| TA2 | still-open (partial) | `auth/adapters.py` now **raises** `ImproperlyConfigured` when `ACCOUNT_ALLOW_REGISTRATION` unset (SA11.7 done); analytics/billing resolved by SA17.2, crm/forms resolved by SA17.3/SA17.4; remaining open defaults: notifications (:155-157, pending SA17.6), blog (pending SA17.5) |
+| TA2 | closed 2026-07-04 | Remediated by SA17.2–SA17.6; the remaining permissive `QUICKSCALE_MODE` default is tracked separately under TA19. |
 | TA4 | closed 2026-07-04 | Remediated by SA18.2 — see header note. |
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | closed 2026-07-04 | Remediated by SA18.4 — see header note. |
@@ -280,7 +273,7 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 | ID | Status | Note (re-verified 2026-07-04) |
 |----|--------|------|
 | TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
-| TA2 | still-open (partial) | `auth/adapters.py` now raises (SA11.7 done); analytics/billing resolved by SA17.2, crm resolved by SA17.3 (`crm/apps.py` ready() guard), forms resolved by SA17.4 (`forms/apps.py` ready() guard) — all four now AppConfig.ready()-gated. Permissive `getattr(settings, …, default)` remains only in `blog/views.py:175,280` (pending SA17.5) and `orgs/views.py:63`+`middleware.py:268` (see TA19). |
+| TA2 | closed 2026-07-04 | Remediated by SA17.2–SA17.6. The blog and notifications defaults cited in the original finding are fixed; the remaining permissive `QUICKSCALE_MODE` reads are tracked separately under TA19. |
 | TA4 | closed 2026-07-04 | Remediated by SA18.2 — see header note. |
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | closed 2026-07-04 | Remediated by SA18.4 — see header note. |
