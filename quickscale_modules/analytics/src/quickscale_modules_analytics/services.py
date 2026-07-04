@@ -58,7 +58,7 @@ class AnalyticsRuntimeSettingsSnapshot:
     def from_settings(cls) -> AnalyticsRuntimeSettingsSnapshot:
         """Create a runtime snapshot from Django settings."""
         return cls(
-            enabled=bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", True)),
+            enabled=bool(settings.QUICKSCALE_ANALYTICS_ENABLED),
             provider=str(
                 getattr(
                     settings,

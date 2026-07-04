@@ -5,6 +5,10 @@ from __future__ import annotations
 from importlib import import_module
 from unittest.mock import patch
 
+import pytest
+from django.core.exceptions import ImproperlyConfigured
+from django.test import override_settings
+
 from quickscale_modules_analytics.apps import QuickscaleAnalyticsConfig
 
 
@@ -37,3 +41,23 @@ def test_ready_never_raises_when_configuration_fails(
     config.ready()
 
     mock_configure_analytics_client.assert_called_once_with()
+
+
+@override_settings()  # clear QUICKSCALE_ANALYTICS_ENABLED from overrides
+def test_ready_raises_improperly_configured_when_enabled_setting_missing(
+    settings,
+) -> None:
+    """Missing QUICKSCALE_ANALYTICS_ENABLED must raise at startup."""
+    # Ensure the setting is not present
+    del settings.QUICKSCALE_ANALYTICS_ENABLED
+
+    config = QuickscaleAnalyticsConfig(
+        "quickscale_modules_analytics",
+        import_module("quickscale_modules_analytics"),
+    )
+
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="QUICKSCALE_ANALYTICS_ENABLED",
+    ):
+        config.ready()

@@ -73,3 +73,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 QUICKSCALE_MODE = "saas"
 
 LOGIN_URL = "/accounts/login/"
+
+# SA17.3 — Required CRM settings (fail-hard: no silent defaults)
+CRM_ENABLE_API = True
+CRM_DEALS_PER_PAGE = 25
+CRM_CONTACTS_PER_PAGE = 50

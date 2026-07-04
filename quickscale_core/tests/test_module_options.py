@@ -7,6 +7,8 @@ central module-options contract surface.
 from __future__ import annotations
 
 
+import pytest
+
 from quickscale_core.contracts.module_options import (
     ANALYTICS_PROVIDERS,
     AUTH_REGISTRATION_ENABLED_OPTION,
@@ -15,15 +17,10 @@ from quickscale_core.contracts.module_options import (
     BILLING_SUPPORTED_CURRENCIES,
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
-    DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
-    DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
     ENV_VAR_PORTABILITY_IGNORED,
     ENV_VAR_PORTABILITY_MANUAL,
     ENV_VAR_PORTABILITY_PORTABLE,
-    LEGACY_AUTH_ALLOW_REGISTRATION_OPTION,
-    LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION,
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
-    NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     format_auth_desired_config_contract,
     get_env_var_portability,
     has_legacy_backups_secret_values,
@@ -46,6 +43,7 @@ from quickscale_core.contracts.module_options import (
     validate_notifications_module_options,
     validate_social_module_options,
 )
+from quickscale_core.schema.config_schema import ConfigValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -100,18 +98,20 @@ class TestNormalizeAuth:
     def test_none_options_returns_empty(self) -> None:
         assert normalize_auth_module_options(None) == {}
 
-    def test_legacy_allow_registration_migrated(self) -> None:
-        result = normalize_auth_module_options({"allow_registration": False})
-        assert result[AUTH_REGISTRATION_ENABLED_OPTION] is False
-        assert LEGACY_AUTH_ALLOW_REGISTRATION_OPTION not in result
+    def test_legacy_allow_registration_raises(self) -> None:
+        """allow_registration raises ConfigValidationError instead of silent migration."""
+        with pytest.raises(ConfigValidationError, match="allow_registration"):
+            normalize_auth_module_options({"allow_registration": False})
 
-    def test_legacy_social_providers_removed(self) -> None:
-        result = normalize_auth_module_options({"social_providers": ["google"]})
-        assert LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION not in result
+    def test_legacy_social_providers_raises(self) -> None:
+        """social_providers raises ConfigValidationError instead of silent drop."""
+        with pytest.raises(ConfigValidationError, match="social_providers"):
+            normalize_auth_module_options({"social_providers": ["google"]})
 
-    def test_canonical_key_not_overwritten_by_legacy(self) -> None:
+    def test_canonical_keys_pass_through(self) -> None:
+        """Canonical keys pass through without error."""
         result = normalize_auth_module_options(
-            {"registration_enabled": True, "allow_registration": False}
+            {"registration_enabled": True, "email_verification": "none"}
         )
         assert result[AUTH_REGISTRATION_ENABLED_OPTION] is True
 
@@ -192,11 +192,10 @@ class TestNormalizeCrm:
     def test_none_options_returns_empty(self) -> None:
         assert normalize_crm_module_options(None) == {}
 
-    def test_legacy_pipeline_stages_removed(self) -> None:
-        result = normalize_crm_module_options(
-            {"default_pipeline_stages": ["new", "won"]}
-        )
-        assert "default_pipeline_stages" not in result
+    def test_legacy_pipeline_stages_raises(self) -> None:
+        """default_pipeline_stages raises ConfigValidationError instead of silent drop."""
+        with pytest.raises(ConfigValidationError, match="default_pipeline_stages"):
+            normalize_crm_module_options({"default_pipeline_stages": ["new", "won"]})
 
     def test_other_keys_preserved(self) -> None:
         result = normalize_crm_module_options({"deals_per_page": 50})
@@ -213,36 +212,26 @@ class TestNormalizeNotifications:
         result = normalize_notifications_module_options(None)
         assert result.get("reply_to_email") == ""
 
-    def test_legacy_resend_api_key_converted(self) -> None:
-        result = normalize_notifications_module_options(
-            {"resend_api_key": "re_secret_123"}
-        )
-        assert (
-            result[NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION]
-            == DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
-        )
-        assert "resend_api_key" not in result
+    def test_legacy_resend_api_key_raises(self) -> None:
+        """Legacy resend_api_key raises ConfigValidationError instead of silent conversion."""
+        with pytest.raises(ConfigValidationError, match="resend_api_key"):
+            normalize_notifications_module_options({"resend_api_key": "re_secret_123"})
 
-    def test_legacy_webhook_secret_converted(self) -> None:
-        result = normalize_notifications_module_options({"webhook_secret": "whsec_123"})
-        assert (
-            result[NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION]
-            == DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
-        )
-        assert "webhook_secret" not in result
-
-    def test_existing_env_var_not_overwritten(self) -> None:
-        result = normalize_notifications_module_options(
-            {
-                "resend_api_key": "re_secret_123",
-                NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION: "MY_VAR",
-            }
-        )
-        assert result[NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION] == "MY_VAR"
+    def test_legacy_webhook_secret_raises(self) -> None:
+        """Legacy webhook_secret raises ConfigValidationError instead of silent conversion."""
+        with pytest.raises(ConfigValidationError, match="webhook_secret"):
+            normalize_notifications_module_options({"webhook_secret": "whsec_123"})
 
     def test_reply_to_email_none_becomes_empty(self) -> None:
         result = normalize_notifications_module_options({"reply_to_email": None})
         assert result["reply_to_email"] == ""
+
+    def test_canonical_keys_pass_through(self) -> None:
+        """Canonical notifications keys pass through without error."""
+        result = normalize_notifications_module_options(
+            {NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION: "MY_VAR"}
+        )
+        assert result[NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION] == "MY_VAR"
 
 
 # ---------------------------------------------------------------------------
@@ -511,9 +500,15 @@ class TestSanitizeDispatcher:
         result = sanitize_module_options("analytics", {"provider": "  PostHog "})
         assert result["provider"] == "posthog"
 
-    def test_auth_dispatch(self) -> None:
-        result = sanitize_module_options("auth", {"allow_registration": True})
-        assert AUTH_REGISTRATION_ENABLED_OPTION in result
+    def test_auth_dispatch_with_legacy_raises(self) -> None:
+        """Legacy auth keys raise through sanitize dispatcher."""
+        with pytest.raises(ConfigValidationError, match="allow_registration"):
+            sanitize_module_options("auth", {"allow_registration": True})
+
+    def test_auth_dispatch_with_canonical(self) -> None:
+        """Canonical auth keys pass through sanitize dispatcher."""
+        result = sanitize_module_options("auth", {"registration_enabled": True})
+        assert result[AUTH_REGISTRATION_ENABLED_OPTION] is True
 
     def test_backups_dispatch(self) -> None:
         result = sanitize_module_options("backups", {"remote_access_key_id": "key123"})
@@ -523,13 +518,27 @@ class TestSanitizeDispatcher:
         result = sanitize_module_options("billing", {"billing_currency": " USD "})
         assert result["billing_currency"] == "usd"
 
-    def test_crm_dispatch(self) -> None:
-        result = sanitize_module_options("crm", {"default_pipeline_stages": ["a"]})
-        assert "default_pipeline_stages" not in result
+    def test_crm_dispatch_with_legacy_raises(self) -> None:
+        """Legacy CRM keys raise through sanitize dispatcher."""
+        with pytest.raises(ConfigValidationError, match="default_pipeline_stages"):
+            sanitize_module_options("crm", {"default_pipeline_stages": ["a"]})
 
-    def test_notifications_dispatch(self) -> None:
-        result = sanitize_module_options("notifications", {"resend_api_key": "re_123"})
-        assert NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION in result
+    def test_crm_dispatch_with_canonical(self) -> None:
+        """Canonical CRM keys pass through sanitize dispatcher."""
+        result = sanitize_module_options("crm", {"deals_per_page": 50})
+        assert result["deals_per_page"] == 50
+
+    def test_notifications_dispatch_with_legacy_raises(self) -> None:
+        """Legacy notifications keys raise through sanitize dispatcher."""
+        with pytest.raises(ConfigValidationError, match="resend_api_key"):
+            sanitize_module_options("notifications", {"resend_api_key": "re_123"})
+
+    def test_notifications_dispatch_with_canonical(self) -> None:
+        """Canonical notifications keys pass through sanitize dispatcher."""
+        result = sanitize_module_options(
+            "notifications", {NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION: "MY_VAR"}
+        )
+        assert result[NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION] == "MY_VAR"
 
     def test_social_dispatch(self) -> None:
         result = sanitize_module_options("social", {"provider_allowlist": ["Facebook"]})

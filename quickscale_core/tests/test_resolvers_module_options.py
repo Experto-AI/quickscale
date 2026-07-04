@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from quickscale_core.contracts.resolvers import (
     # Analytics
     analytics_production_targeted,
@@ -75,6 +77,8 @@ from quickscale_core.contracts.resolvers import (
     resolve_storage_module_options,
     validate_storage_module_options,
 )
+from quickscale_core.schema.config_schema import ConfigValidationError
+
 from quickscale_core.manifest.schema import ModuleManifest
 
 
@@ -229,15 +233,10 @@ class TestResolversAuth:
         result = resolve_auth_module_options(None)
         assert result["registration_enabled"] is True
 
-    @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_auth_with_legacy_migration(self, mock_load: MagicMock) -> None:
-        """resolve_auth_module_options migrates legacy allow_registration."""
-        mock_load.return_value = _make_mock_manifest(
-            "auth", {"registration_enabled": True}
-        )
-        result = resolve_auth_module_options({"allow_registration": False})
-        assert "allow_registration" not in result
-        assert result["registration_enabled"] is False
+    def test_resolve_auth_with_legacy_key_raises(self) -> None:
+        """resolve_auth_module_options raises on legacy allow_registration."""
+        with pytest.raises(ConfigValidationError, match="allow_registration"):
+            resolve_auth_module_options({"allow_registration": False})
 
     def test_format_auth_contract(self) -> None:
         """format_auth_desired_config_contract returns expected text."""
@@ -442,11 +441,16 @@ class TestResolversCrm:
     def test_legacy_constant(self) -> None:
         assert LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION == "default_pipeline_stages"
 
-    def test_normalize_crm_removes_legacy(self) -> None:
-        result = normalize_crm_module_options(
-            {"default_pipeline_stages": ["new"], "deals_per_page": 25}
-        )
-        assert "default_pipeline_stages" not in result
+    def test_normalize_crm_legacy_raises(self) -> None:
+        """normalize_crm_module_options raises on default_pipeline_stages."""
+        with pytest.raises(ConfigValidationError, match="default_pipeline_stages"):
+            normalize_crm_module_options(
+                {"default_pipeline_stages": ["new"], "deals_per_page": 25}
+            )
+
+    def test_normalize_crm_canonical_keys_preserved(self) -> None:
+        """Canonical CRM keys pass through normalize_crm_module_options."""
+        result = normalize_crm_module_options({"deals_per_page": 25})
         assert result["deals_per_page"] == 25
 
     @patch(_MANIFEST_PATCH_PATH)

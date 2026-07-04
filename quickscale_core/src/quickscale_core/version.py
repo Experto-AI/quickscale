@@ -17,14 +17,17 @@ try:
     # This import is local to package; it will work in installed wheels if the
     # build step wrote src/quickscale_core/_version.py
     from ._version import __version__
-except Exception:
+except ImportError as exc:
     # Fallback to reading the repository-level VERSION file (development)
     _root = Path(__file__).resolve().parents[3]
     _version_file = _root / "VERSION"
-    if _version_file.exists():
-        __version__ = _version_file.read_text(encoding="utf8").strip()
-    else:
-        __version__ = "0.0.0"
+    if not _version_file.exists():
+        raise FileNotFoundError(
+            "Could not determine quickscale_core version: embedded _version.py "
+            f"import failed and VERSION file was not found at {_version_file}"
+        ) from exc
+
+    __version__ = _version_file.read_text(encoding="utf8").strip()
 
 # Version tuple for programmatic access
 # Extract numeric parts to handle pre-release versions (e.g., "0.52.0-alpha")

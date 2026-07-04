@@ -418,19 +418,28 @@ def normalize_analytics_module_options(
 def normalize_auth_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Return auth options with legacy keys normalized or removed."""
+    """Return auth options with legacy keys raising instead of silent translation.
+
+    Raises:
+        ConfigValidationError: if any legacy key is present, naming the dead key
+            and its replacement.
+    """
+    from quickscale_core.schema.config_schema import ConfigValidationError
+
     normalized = dict(options or {})
 
-    if (
-        AUTH_REGISTRATION_ENABLED_OPTION not in normalized
-        and LEGACY_AUTH_ALLOW_REGISTRATION_OPTION in normalized
-    ):
-        normalized[AUTH_REGISTRATION_ENABLED_OPTION] = normalized[
-            LEGACY_AUTH_ALLOW_REGISTRATION_OPTION
-        ]
+    if LEGACY_AUTH_ALLOW_REGISTRATION_OPTION in normalized:
+        raise ConfigValidationError(
+            f"Legacy config key '{LEGACY_AUTH_ALLOW_REGISTRATION_OPTION}' is "
+            f"no longer supported. Use '{AUTH_REGISTRATION_ENABLED_OPTION}' instead."
+        )
 
-    normalized.pop(LEGACY_AUTH_ALLOW_REGISTRATION_OPTION, None)
-    normalized.pop(LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION, None)
+    if LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION in normalized:
+        raise ConfigValidationError(
+            f"Legacy config key '{LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION}' is "
+            "no longer supported. Remove it from the auth module options."
+        )
+
     return normalized
 
 
@@ -489,34 +498,47 @@ def normalize_billing_module_options(
 def normalize_crm_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Return CRM options with retired legacy keys removed."""
+    """Return CRM options with retired legacy keys raising instead of silent drop.
+
+    Raises:
+        ConfigValidationError: if a legacy key is present, naming the dead key.
+    """
+    from quickscale_core.schema.config_schema import ConfigValidationError
+
     normalized = dict(options or {})
-    normalized.pop("default_pipeline_stages", None)
+
+    if "default_pipeline_stages" in normalized:
+        raise ConfigValidationError(
+            "Legacy config key 'default_pipeline_stages' is no longer supported. "
+            "Remove it from the CRM module options."
+        )
+
     return normalized
 
 
 def normalize_notifications_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Return notifications options with raw-secret keys removed."""
+    """Return notifications options with legacy raw-secret keys raising.
+
+    Raises:
+        ConfigValidationError: if a legacy raw-secret key is present, naming the
+            dead key and its env-var replacement.
+    """
+    from quickscale_core.schema.config_schema import ConfigValidationError
+
     normalized = dict(options or {})
 
-    legacy_secret_options = {
-        "resend_api_key": (
-            DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
-            NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
-        ),
-        "webhook_secret": (
-            DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
-            NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
-        ),
-    }
-
-    for legacy_key, (default_env_var, env_var_option) in legacy_secret_options.items():
-        legacy_value = str(normalized.pop(legacy_key, "")).strip()
-        current_env_var = str(normalized.get(env_var_option, "")).strip()
-        if legacy_value and not current_env_var:
-            normalized[env_var_option] = default_env_var
+    for legacy_key in ("resend_api_key", "webhook_secret"):
+        if legacy_key in normalized:
+            env_var_option = {
+                "resend_api_key": (NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION),
+                "webhook_secret": (NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION),
+            }[legacy_key]
+            raise ConfigValidationError(
+                f"Legacy config key '{legacy_key}' is no longer supported. "
+                f"Use '{env_var_option}' to reference an environment variable instead."
+            )
 
     if normalized.get("reply_to_email") is None:
         normalized["reply_to_email"] = ""

@@ -207,32 +207,22 @@ def test_configure_analytics_client_disables_when_runtime_is_off() -> None:
     assert services._ANALYTICS_DISABLED_REASON == "disabled"
 
 
-def test_configure_analytics_client_defaults_missing_enabled_setting_to_enabled(
+def test_configure_analytics_client_missing_enabled_setting_raises_attribute_error(
     monkeypatch,
 ) -> None:
-    """Missing analytics wiring should preserve the shipped enabled-by-default runtime."""
+    """Missing QUICKSCALE_ANALYTICS_ENABLED should raise AttributeError."""
     runtime_settings = SimpleNamespace(
         DEBUG=False,
         QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False,
     )
-    fake_posthog = DummyPosthogModule()
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
-    with (
-        patch(
-            "quickscale_modules_analytics.services.settings",
-            runtime_settings,
-        ),
-        patch(
-            "quickscale_modules_analytics.services.import_module",
-            return_value=fake_posthog,
-        ),
+    with patch(
+        "quickscale_modules_analytics.services.settings",
+        runtime_settings,
     ):
-        assert services.get_analytics_runtime_settings().enabled is True
-        assert services.configure_analytics_client() is True
-        assert services.is_analytics_active() is True
-
-    assert len(fake_posthog.clients) == 1
+        with pytest.raises(AttributeError, match="QUICKSCALE_ANALYTICS_ENABLED"):
+            services.get_analytics_runtime_settings()
 
 
 @override_settings(
