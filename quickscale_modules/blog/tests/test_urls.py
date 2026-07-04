@@ -60,15 +60,16 @@ class TestBlogUrls:
 
     @pytest.mark.parametrize(
         "configured_value",
-        [None, True, "true", "yes", "1", "on"],
+        [True, "true", "yes", "1", "on"],
     )
     def test_feed_url(self, settings, configured_value):
-        """Test RSS feed URL resolves correctly when enabled or unset."""
-        if configured_value is None:
-            if hasattr(settings, "BLOG_ENABLE_RSS"):
-                delattr(settings, "BLOG_ENABLE_RSS")
-        else:
-            settings.BLOG_ENABLE_RSS = configured_value
+        """Test RSS feed URL resolves correctly when enabled.
+
+        Note: ``BLOG_ENABLE_RSS`` is now required (SA17.5) — the
+        ``None``/unset case is no longer valid and is covered by
+        startup validation in ``AppConfig.ready()``.
+        """
+        settings.BLOG_ENABLE_RSS = configured_value
 
         with _reloaded_blog_test_urlconf():
             url = reverse("quickscale_blog:feed")

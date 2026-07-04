@@ -9,11 +9,17 @@
 >
 > **Closed 2026-07-04:** `TA1` (legacy config keys silently translated/dropped) — remediated by `aea5e3bd` (SA17.1). `normalize_auth_module_options`, `normalize_crm_module_options`, and `normalize_notifications_module_options` now raise `ConfigValidationError` naming the dead key and its replacement for every legacy key named in this finding (`allow_registration`, `social_providers`, `default_pipeline_stages`, `resend_api_key`, `webhook_secret`). Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
+> **Closed 2026-07-04:** `TA2` (pervasive permissive Django settings defaults across modules) — remediated by SA17.2–SA17.6. Analytics/billing, CRM, forms, blog, and notifications now fail hard through explicit startup guards and/or direct required-setting reads instead of silently defaulting missing settings. The remaining permissive `QUICKSCALE_MODE` defaults are tracked separately under `TA19`. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
 > **Closed 2026-07-04:** `TA5` (undocumented `quickscale_cli.schema` compat shim) — remediated by `ab32f272` (SA18.3). The shim package is deleted; all internal CLI imports and tests were migrated to `quickscale_core.schema`. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
 > **Closed 2026-07-04:** `TA8` (project-metadata resolution swallows validation errors) — remediated by SA18.6. Removed `except Exception: return None` from `resolve_authoritative_project_metadata`'s quickscale.yml branch; `_load_managed_file_records_for_drift` is explicitly outside F12.2 scope. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
 > **Closed 2026-07-04:** `TA4` (analytics manifest fallback defaults) — remediated by SA18.2. `entry_point.py`'s `_analytics_post_hook` now raises `ManifestError` on empty-after-resolution settings instead of silently filling legacy defaults. `TA6` (generator template fallback chains) — remediated by SA18.4. `generator.py.__init__` resolves templates deterministically from the installed package path (no `Path.cwd()` guessing) and `_get_theme_template_path` raises `FileNotFoundError` immediately instead of falling through a backward-compat root tier. `TA7` (version fallback ending in `"0.0.0"`) — remediated by SA18.5. `version.py` narrowed to `except ImportError` and raises `FileNotFoundError` when both the embedded `_version.py` and the dev-tree `VERSION` file are unavailable. All three verified against current source 2026-07-04. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA10` (`railway_utils.py` broad exception swallowing) — remediated by SA18.7. All four functions this finding originally cited by line number (`get_deployment_url`, `generate_railway_domain`, `get_railway_variables`, `_get_railway_variables_json`) plus `link_database_to_service` now narrow their catches to `(TimeoutError, FileNotFoundError)` and raise `ValueError` on successful-but-unparseable Railway output instead of collapsing to `None`/`{}`; deploy/DR callers surface these as descriptive non-zero failures. Verified against current source 2026-07-04: 5 broad `except Exception` sites remain in the file (`set_railway_variable`, `set_railway_variables_batch`, `verify_railway_json`, `verify_railway_dependencies`) but these are write-path or local-pyproject-file-read functions outside TA10's original scope (Railway CLI output parsing), not a residual of this finding. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA11` (invalid `PORT` env value silently coerced to 8000) — remediated by SA18.8. `get_port_from_env()` now defaults to `8000` only when `PORT` is unset; a present but non-numeric `PORT` raises `ValueError` naming the invalid value. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 
 **Scope swept:** `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `scripts/`, generator templates. Patterns: broad/silent `except`, fallback chains, legacy/compat keywords, `getattr(settings, X, default)`, env-var defaults.
 
@@ -25,10 +31,10 @@
 
 | ID | Severity | Location | One-liner |
 |----|----------|----------|-----------|
-| TA2 | High | `quickscale_modules/*/src` (pervasive) | `getattr(settings, X, permissive-default)` — features fail-open when settings are missing (generalizes SA11.7) |
+| ~~TA2~~ | ~~High~~ | ~~`quickscale_modules/*/src` (pervasive)~~ | closed 2026-07-04 — see header note |
 | TA9 | Medium | `analytics/services.py:218`, `forms/views.py:92` | Missing SDK / missing sibling module degrades silently instead of failing |
-| TA10 | Medium | `quickscale_cli/utils/railway_utils.py` | Broad `except Exception: return None` hides Railway CLI errors |
-| TA11 | Low | `quickscale_cli/utils/docker_utils.py:164` | Invalid `PORT` env value silently coerced to 8000 |
+| ~~TA10~~ | ~~Medium~~ | ~~`quickscale_cli/utils/railway_utils.py`~~ | closed 2026-07-04 — see header note |
+| ~~TA11~~ | ~~Low~~ | ~~`quickscale_cli/utils/docker_utils.py:164`~~ | closed 2026-07-04 — see header note |
 | TA12 | Low | `quickscale_core/contracts/module_catalog.py` | Deprecated compat delegates still in public API; unknown module names fail-open in readiness check |
 | TA13 | Low | `quickscale_core/apply/steps/wiring.py:71` | Best-effort hash-capture step always reports success |
 | TA14 | Low | repo-wide | `# F-EXCEPTION:` tag mandated by decisions.md appears nowhere in code |
@@ -38,31 +44,22 @@
 
 ## Findings detail
 
-### TA2 (High) — Pervasive permissive settings defaults across modules
+### ~~TA2 (High)~~ — ~~Pervasive permissive settings defaults across modules~~ (closed 2026-07-04 — see header note)
 
-SA11.7 (tracked in decisions.md Known violations) covers `auth/adapters.py:14` (`ACCOUNT_ALLOW_REGISTRATION` defaults `True`), but the pattern is systemic — missing Django settings silently enable features or invent values instead of raising `ImproperlyConfigured`:
-
-- ~~`analytics/services.py:61` — `QUICKSCALE_ANALYTICS_ENABLED` defaults `True`~~ — resolved by SA17.2 (AppConfig.ready() guard), see CHANGELOG.md
-- ~~`billing/services.py:117` — `QUICKSCALE_BILLING_ENABLED` defaults `True`~~ — resolved by SA17.2 (AppConfig.ready() guard), see CHANGELOG.md
-- `crm/views.py:219,238,246` — `CRM_ENABLE_API` defaults `True`; page sizes `int(getattr(...) or 50)` also swallow invalid values
-- `forms/views.py:134,146`, `forms/throttles.py:16`, `forms/models.py:32` — submissions API on, rate limit `"5/hour"`, spam protection flag defaulted
-- `blog/urls.py:18`, `blog/views.py:175,280`, `blog/models.py:46-48` — RSS on by default; `BLOG_API_TOKENS` defaults `[]` with malformed entries silently `continue`-skipped (`views.py:181-190`); media URL invented
-- `notifications/services.py:155-157` — enabled defaults `True`, provider defaults `"resend"`
-
-Since modules are creation-time assembled and the generator owns settings emission, every one of these settings is knowable at generation time; the defaults exist only to mask incomplete wiring. **Fix direction:** module `apps.py` `AppConfig.ready()` startup guards that raise on missing required settings; generator guarantees emission.
+~~Tracked the systemic `getattr(settings, X, permissive-default)` pattern across module runtime settings. Resolved by SA17.2–SA17.6; the remaining permissive `QUICKSCALE_MODE` default is tracked separately under TA19.~~
 
 ### TA9 (Medium) — Optional-dependency graceful degradation in modules
 
 - `analytics/services.py:218-223`: PostHog SDK import failure → `logger.warning(... "Analytics capture remains disabled.")` — textbook graceful degradation. If analytics is assembled into the project, its SDK is a required dependency.
 - `forms/views.py:92-97`: `import_module("quickscale_modules_analytics.services")` with `except ImportError: return`, then `getattr(..., None)` probing — a soft dependency probe. Creation-time assembly means the generator *knows* whether analytics is present; the integration should be wired (or not) at generation time, not runtime-probed.
 
-### TA10 (Medium) — `railway_utils.py` broad exception swallowing
+### ~~TA10 (Medium)~~ — ~~`railway_utils.py` broad exception swallowing~~ (closed 2026-07-04 — see header note)
 
-`quickscale_cli/utils/railway_utils.py:469,534,774` (and narrower variants at `:52,:236`): `except Exception: return None` around URL extraction, variable parsing, and status queries. Callers cannot distinguish "not deployed yet" from "railway CLI crashed / output format changed," so deployment problems surface as silent `None`s in status output. The narrow `subprocess`-error catches for "is the CLI installed" probes are defensible; the broad `Exception` catches are not.
+~~`quickscale_cli/utils/railway_utils.py:469,534,774` (and narrower variants at `:52,:236`): `except Exception: return None` around URL extraction, variable parsing, and status queries. Callers cannot distinguish "not deployed yet" from "railway CLI crashed / output format changed," so deployment problems surface as silent `None`s in status output. The narrow `subprocess`-error catches for "is the CLI installed" probes are defensible; the broad `Exception` catches are not.~~
 
-### TA11 (Low) — Invalid `PORT` silently coerced to 8000
+### ~~TA11 (Low)~~ — ~~Invalid `PORT` silently coerced to 8000~~ (closed 2026-07-04 — see header note)
 
-`docker_utils.py:164-173` `get_port_from_env()`: `PORT` defaults to `"8000"` (acceptable dev convention, mirrors docker-compose) **but** a non-numeric `PORT` hits `except ValueError: return 8000` — a misconfigured value is silently replaced rather than reported. Also `generator/templates/Dockerfile.j2:160` healthcheck defaults PORT (consistent with Railway convention; note only).
+~~`docker_utils.py:164-173` `get_port_from_env()`: `PORT` defaults to `"8000"` (acceptable dev convention, mirrors docker-compose) **but** a non-numeric `PORT` hits `except ValueError: return 8000` — a misconfigured value is silently replaced rather than reported. Also `generator/templates/Dockerfile.j2:160` healthcheck defaults PORT (consistent with Railway convention; note only).~~
 
 ### TA12 (Low) — Deprecated catalog compat delegates; fail-open readiness for unknown names
 
@@ -103,15 +100,15 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 | ID | Status | Note |
 |----|--------|------|
 | TA1 | **closed 2026-07-04** | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
-| TA2 | **still-open** | Permissive `getattr(settings, …, default)` still pervasive (crm/forms/blog/notifications); analytics/billing resolved by SA17.2 (AppConfig.ready() guards). Auth's `ACCOUNT_ALLOW_REGISTRATION` (SA11.7) is now fixed and raises `ImproperlyConfigured` — the *pattern* remains open elsewhere. |
+| TA2 | **closed 2026-07-04** | Remediated by SA17.2–SA17.6. Analytics/billing, crm, forms, blog, and notifications now fail hard on missing runtime settings; the remaining permissive `QUICKSCALE_MODE` default is tracked under TA19. |
 | TA4 | **closed 2026-07-04** | Remediated by SA18.2 — see header note. |
 | TA5 | **closed 2026-07-04** | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | **closed 2026-07-04** | Remediated by SA18.4 — see header note. |
 | TA7 | **closed 2026-07-04** | Remediated by SA18.5 — see header note. |
 | TA8 | **closed 2026-07-04** | Remediated by SA18.6 — see header note. |
 | TA9 | **still-open** | Analytics missing-SDK warn-and-disable (`services.py:218`), forms soft analytics probe (`views.py:94`) still present. |
-| TA10 | **still-open** | 8× `except Exception` in `railway_utils.py`. |
-| TA11 | **still-open** | `docker_utils.get_port_from_env()` still coerces invalid `PORT`→8000. |
+| TA10 | **closed 2026-07-04** | Remediated by SA18.7 — see header note. |
+| TA11 | **closed 2026-07-04** | Remediated by SA18.8 — see header note. |
 | TA12 | **still-open** | Deprecated-D2 catalog delegates still exported; unknown-name readiness still fail-open. |
 | TA13 | **still-open** | `apply/steps/wiring.py` best-effort step still returns `success=True` on `OSError`. |
 | TA14 | **still-open** | Zero `# F-EXCEPTION:` tags in code (grep confirms 0 hits). |
@@ -217,15 +214,15 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 | ID | Status | Note |
 |----|--------|------|
 | TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
-| TA2 | still-open (partially remediated) | `auth/adapters.py` now **raises** `ImproperlyConfigured` when `ACCOUNT_ALLOW_REGISTRATION` unset (SA11.7 done); analytics/billing resolved by SA17.2; remaining listed module defaults (notifications :157, forms, blog, crm) verified still open |
+| TA2 | closed 2026-07-04 | Remediated by SA17.2–SA17.6; the remaining permissive `QUICKSCALE_MODE` default is tracked separately under TA19. |
 | TA4 | closed 2026-07-04 | Remediated by SA18.2 — see header note. |
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | closed 2026-07-04 | Remediated by SA18.4 — see header note. |
 | TA7 | closed 2026-07-04 | Remediated by SA18.5 — see header note. |
 | TA8 | closed 2026-07-04 | Remediated by SA18.6 — see header note. |
 | TA9 | still-open | Verified `analytics/services.py:218` warning-and-continue, `forms/views.py:94` |
-| TA10 | still-open | 8 `except Exception` sites in `railway_utils.py` |
-| TA11 | still-open | `docker_utils.py:164-173` unchanged |
+| TA10 | closed 2026-07-04 | Remediated by SA18.7 — see header note. |
+| TA11 | closed 2026-07-04 | Remediated by SA18.8 — see header note. |
 | TA12 | still-open | Deprecated delegates at `module_catalog.py:132,162` |
 | TA13 | still-open | `wiring.py` best-effort `success=True` unchanged |
 | TA14 | still-open | `F-EXCEPTION` grep: 0 hits |
@@ -276,15 +273,15 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 | ID | Status | Note (re-verified 2026-07-04) |
 |----|--------|------|
 | TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
-| TA2 | still-open (partial) | `auth/adapters.py` now raises (SA11.7 done); permissive `getattr(settings, …, default)` remains — verified `crm/views.py:204,223,231`, `forms/throttles.py:16`, `forms/views.py:134,146`, `blog/views.py:175,280`, `orgs/views.py:63`+`middleware.py:268` (see TA19). Analytics/billing resolved by SA17.2 (AppConfig.ready() guards removed the `True` defaults). |
+| TA2 | closed 2026-07-04 | Remediated by SA17.2–SA17.6. The blog and notifications defaults cited in the original finding are fixed; the remaining permissive `QUICKSCALE_MODE` reads are tracked separately under TA19. |
 | TA4 | closed 2026-07-04 | Remediated by SA18.2 — see header note. |
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | closed 2026-07-04 | Remediated by SA18.4 — see header note. |
 | TA7 | closed 2026-07-04 | Remediated by SA18.5 — see header note. |
 | TA8 | closed 2026-07-04 | Remediated by SA18.6 — see header note. |
 | TA9 | still-open | `analytics/services.py:218`, `forms/views.py:94` warning-and-continue. |
-| TA10 | still-open | 8× `except Exception` in `railway_utils.py`. |
-| TA11 | still-open | `docker_utils.py:170-173` — invalid `PORT` silently → 8000. |
+| TA10 | closed 2026-07-04 | Remediated by SA18.7 — see header note. |
+| TA11 | closed 2026-07-04 | Remediated by SA18.8 — see header note. |
 | TA12 | still-open | Deprecated delegates `module_catalog.py:132,162`. |
 | TA13 | still-open | `wiring.py` best-effort `success=True`. |
 | TA14 | still-open | `# F-EXCEPTION:` tag: 0 hits repo-wide. |

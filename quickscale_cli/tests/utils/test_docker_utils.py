@@ -324,15 +324,18 @@ class TestGetPortFromEnv:
             else:
                 os.environ.pop("PORT", None)
 
-    def test_invalid_port_falls_back_to_default(self):
-        """Test that invalid port value falls back to 8000."""
+    def test_invalid_port_raises_value_error(self):
+        """Test that invalid port values fail hard with a descriptive error."""
         import os
 
         original = os.environ.get("PORT")
         try:
             os.environ["PORT"] = "invalid"
-            result = get_port_from_env()
-            assert result == 8000
+            with pytest.raises(
+                ValueError,
+                match=r"PORT environment variable must be an integer, got 'invalid'",
+            ):
+                get_port_from_env()
         finally:
             if original is not None:
                 os.environ["PORT"] = original

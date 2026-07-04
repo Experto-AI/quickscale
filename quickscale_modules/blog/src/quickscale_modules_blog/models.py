@@ -45,7 +45,7 @@ def _build_public_media_url(stored_reference: str) -> str:
     public_base_url = str(
         getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
     ).strip()
-    media_url = str(getattr(settings, "MEDIA_URL", "/media/")).strip() or "/media/"
+    media_url = str(settings.MEDIA_URL).strip()
 
     if storage_build_public_media_url is not None:
         return storage_build_public_media_url(

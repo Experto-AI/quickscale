@@ -54,7 +54,7 @@ _EXPECTED_LABELS: tuple[str | None, ...] = (
     "module embedding",  # step 1
     "post-embed state snapshot",  # step 2
     "managed module wiring generation",  # step 3
-    None,  # step 4 — best-effort
+    "capture managed file hashes",  # step 4
     "backups gitignore hardening",  # step 5
     "notifications env example sync",  # step 6
     "analytics env example sync",  # step 7
@@ -71,21 +71,26 @@ _EXPECTED_LABELS: tuple[str | None, ...] = (
 
 
 class TestApplyStepsLabels:
-    """failed_step_label values must match the authoritative list verbatim."""
+    """failed_step_label values must match the authoritative list verbatim.
+
+    SA18.9 promoted step 4 from ``None`` (best-effort) to
+    ``"capture managed file hashes"``, reducing the None count from 3 to 2
+    and increasing the labeled count from 13 to 14.
+    """
 
     def test_full_label_sequence_matches(self) -> None:
         actual = tuple(step.failed_step_label for step in APPLY_STEPS)
         assert actual == _EXPECTED_LABELS
 
-    def test_none_positions_are_4_11_16(self) -> None:
+    def test_none_positions_are_11_16(self) -> None:
         none_orders = [
             step.order for step in APPLY_STEPS if step.failed_step_label is None
         ]
-        assert none_orders == [4, 11, 16]
+        assert none_orders == [11, 16]
 
-    def test_labeled_steps_count_is_13(self) -> None:
+    def test_labeled_steps_count_is_14(self) -> None:
         labeled = [step for step in APPLY_STEPS if step.failed_step_label is not None]
-        assert len(labeled) == 13
+        assert len(labeled) == 14
 
 
 # ---------------------------------------------------------------------------
@@ -165,10 +170,10 @@ class TestStepById:
         assert step.order == 1
         assert step.failed_step_label == "module embedding"
 
-    def test_lookup_none_label_step_by_descriptive_id(self) -> None:
+    def test_lookup_step_4_by_descriptive_id(self) -> None:
         step = step_by_id("capture managed file hashes")
         assert step.order == 4
-        assert step.failed_step_label is None
+        assert step.failed_step_label == "capture managed file hashes"
 
     def test_lookup_railway_deploy_step(self) -> None:
         step = step_by_id("railway deploy")
