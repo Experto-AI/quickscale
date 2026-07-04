@@ -65,8 +65,8 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA13.1 (no deps — ready)             SA15.3 (no deps — SA15.1/15.2 complete)   SA18.2 ✅ (no deps)
-SA13.2 (deps: SA13.1)                SA17.1 (no deps)                          SA18.3 (no deps)
-SA13.3 (deps: SA13.1)                SA17.2 (no deps)                          SA18.4 (no deps)
+SA13.2 (deps: SA13.1)                SA17.1 (no deps)                          SA18.3 ✅ (no deps)
+SA13.3 (deps: SA13.1)                SA17.2 (no deps)                          SA18.4 ✅ (no deps)
 SA13.4 (deps: SA13.2, SA13.3)        SA17.3 (no deps)                          SA18.5 (no deps)
 SA14.1 (deps: SA13.1)                SA17.4 (no deps)                          SA18.6 (no deps)
 SA14.2 (deps: SA14.1)                SA17.5 (no deps)                          SA18.7 (no deps)
@@ -230,10 +230,8 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `quickscale_cli/src/quickscale_cli/schema/*` (deleted), 8 source files, 11 test files.
   *Acceptance:* `quickscale_cli/src/quickscale_cli/schema/` no longer exists; all CLI code imports schema types from `quickscale_core.schema`; test suite green.
 
-- [ ] **SA18.4 — Fix generator template-resolution fallback chains.** `Tier 2 · Track 3 · deps: none · (why → TA6)`
-  Replace the template-dir discovery guess chain (dev dir → package dir → cwd-relative guesses) with a single deterministic resolution rule (installed package path, with an explicit override param for dev use); delete the "backward compatibility" root-template fallback tier in `_get_theme_template_path` and raise immediately with the attempted path on a miss instead of deferring to a later `TemplateNotFound`.
-  *Files:* `quickscale_core/src/quickscale_core/generator/generator.py:96-131,165-178`.
-  *Acceptance:* template resolution follows one deterministic rule; a missing template raises immediately naming the attempted path, not a downstream Jinja `TemplateNotFound`.
+- [x] **SA18.4 — Fix generator template-resolution fallback chains (complete).** `Tier 2 · Track 3 · deps: none · (why → TA6)`
+  Replaced the template-dir discovery guess chain (dev dir → package dir → cwd-relative guesses) with a single deterministic resolution rule (installed package path, with an explicit override param for dev use). Deleted the "backward compatibility" root-template fallback tier in `_get_theme_template_path` and raises `FileNotFoundError` immediately with the attempted path on a miss instead of deferring to a later Jinja `TemplateNotFound`. Added `common/templates/admin/` directory with copies of the shared Django admin templates so the common fallback resolves them correctly. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA18.5 — Remove the version fallback chain's terminal `"0.0.0"` default.** `Tier 1 · Track 3 · deps: none · (why → TA7)`
   Narrow the `except Exception` around `from ._version import __version__` to `ImportError` (or the specific expected failure), keep the legitimate dev-tree `VERSION`-file read, but raise instead of silently returning `"0.0.0"` when both resolution paths fail.
