@@ -158,9 +158,9 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `analytics/apps.py`, `analytics/services.py`, `analytics/tests/test_apps.py`, `analytics/tests/test_services.py`, `billing/apps.py`, `billing/services.py`, `billing/adapter.py`, `billing/tests/settings.py`, `billing/tests/test_apps.py`, `billing/tests/test_services.py`.
   *Acceptance:* omitting either setting from a generated project raises at startup instead of silently enabling the feature.
 
-- [ ] **SA17.3 — Fail-hard CRM's API-enable flag and page-size settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  `CRM_ENABLE_API` required (no `True` default); replace `int(getattr(...) or 50)` page-size reads with explicit validation that rejects non-numeric values instead of silently swallowing them to `50`.
-  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/views.py:219,238,246`.
+- [x] **SA17.3 — Fail-hard CRM's API-enable flag and page-size settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
+  `CRM_ENABLE_API` required (no `True` default); replaced `int(getattr(...) or 50)` page-size reads with explicit validation that rejects non-numeric values instead of silently swallowing them to `50`. Added `AppConfig.ready()` startup guard to `crm/apps.py` that raises `ImproperlyConfigured` when `CRM_ENABLE_API` is missing. Removed default-`True` fallback in `CRMApiEnabledMixin.initial()` and default-`25`/`50` fallbacks in `ContactPagination.get_page_size()` / `DealPagination.get_page_size()`. Removed fallback defaults in `adapter.py` `_crm_post_hook` — all three settings now use direct key access (must be present from `module.yml` derivation). Updated test settings with the required settings. Added `ready()`-method guard test to `crm/tests/test_apps.py`. Added four page-size fail-hard tests to `crm/tests/test_views.py`. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `crm/apps.py`, `crm/adapter.py`, `crm/views.py`, `crm/tests/settings.py`, `crm/tests/test_apps.py` (new), `crm/tests/test_views.py`.
   *Acceptance:* missing `CRM_ENABLE_API` or a malformed page-size setting raises at startup/request time with a descriptive error.
 
 - [ ] **SA17.4 — Fail-hard forms module settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`

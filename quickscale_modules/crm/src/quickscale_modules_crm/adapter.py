@@ -27,13 +27,18 @@ def _crm_post_hook(
     Reproduces the legacy coercion behaviour that the declarative resolver
     cannot express: per-page counts are forced to ``int`` and the API
     enabled flag is forced to ``bool``.
+
+    SA17.3 — no default fallbacks: all three settings must be present in
+    the resolved configuration (``module.yml`` derivation provides them;
+    ``AppConfig.ready()`` enforces presence at Django startup).
     """
     settings = dict(spec.settings)
 
-    # Legacy int()/bool() coercions.
-    settings["CRM_DEALS_PER_PAGE"] = int(settings.get("CRM_DEALS_PER_PAGE", 25))
-    settings["CRM_CONTACTS_PER_PAGE"] = int(settings.get("CRM_CONTACTS_PER_PAGE", 50))
-    settings["CRM_ENABLE_API"] = bool(settings.get("CRM_ENABLE_API", True))
+    # SA17.3 — Legacy int()/bool() coercions on required settings.
+    # The keys must already be present (AppConfig.ready() enforces it).
+    settings["CRM_DEALS_PER_PAGE"] = int(settings["CRM_DEALS_PER_PAGE"])
+    settings["CRM_CONTACTS_PER_PAGE"] = int(settings["CRM_CONTACTS_PER_PAGE"])
+    settings["CRM_ENABLE_API"] = bool(settings["CRM_ENABLE_API"])
 
     return ModuleWiringSpec(
         apps=spec.apps,
