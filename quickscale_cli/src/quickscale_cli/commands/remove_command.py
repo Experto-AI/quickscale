@@ -132,6 +132,10 @@ def _load_apply_recovery_state(project_path: Path) -> QuickScaleState | None:
 
 def _load_legacy_tracking(project_path: Path) -> set[str]:
     """Strictly load legacy module tracking when present."""
+    # F-EXCEPTION: F12.2
+    # Pre-M2 projects may still carry module-tracking metadata in legacy
+    # .quickscale/config.yml. Remove keeps this bounded compatibility read so
+    # rollback-safe planning can preserve that data until consolidated state is universal.
     try:
         legacy_config = load_legacy_module_config(project_path)
     except Exception as error:
@@ -342,6 +346,10 @@ def _record_mutation_snapshots(
             ("apply-recovery-yml", apply_recovery_path(project_path))
         )
     if plan.legacy_tracking_needs_update:
+        # F-EXCEPTION: F12.2
+        # While pre-M2 compatibility tracking still exists, keep a rollback
+        # snapshot of legacy .quickscale/config.yml so remove does not strand
+        # the compatibility ledger during the M2 sunset window.
         snapshot_targets.append(("legacy-config-yml", legacy_config_path(project_path)))
 
     return [
