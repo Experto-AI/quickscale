@@ -30,9 +30,10 @@ def _billing_post_hook(
     """
     settings = dict(spec.settings)
 
-    # Legacy bool() coercion on enabled flag.
+    # SA17.2 — Legacy bool() coercion on required enabled flag.
+    # The key must already be present (AppConfig.ready() enforces it).
     settings["QUICKSCALE_BILLING_ENABLED"] = bool(
-        settings.get("QUICKSCALE_BILLING_ENABLED", True)
+        settings["QUICKSCALE_BILLING_ENABLED"]
     )
 
     # Legacy str() coercion on string fields.
