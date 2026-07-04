@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 is complete, so SA13.2 and SA13.3 are now unblocked and ready to start. Track 2: SA15 (entire finding) and SA17.1 are complete; SA17.2–SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.2/SA17.5 within the track. Track 3: SA18.2, SA18.3, SA18.4, and SA18.5 are complete; SA18.6–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.6/SA18.9 within the track.
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 (dead context API deletion) landed already, so SA13.2 and SA13.3 are unblocked and ready to start now. Track 2: SA15 (entire finding), SA17.1, and SA17.2 are complete; SA17.3–SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.9 within the track.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -64,16 +64,15 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA13.1 ✅ (complete)                  SA17.1 ✅ (complete)                      SA18.2 ✅ (complete)
-SA13.2 (deps: SA13.1 ✅ — ready)      SA17.2 (no deps — ready)                  SA18.3 ✅ (complete)
-SA13.3 (deps: SA13.1 ✅ — ready)      SA17.3 (no deps — ready)                  SA18.4 ✅ (complete)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.4 (no deps — ready)                  SA18.5 ✅ (complete)
-SA14.1 (deps: SA13.1 ✅ — ready)      SA17.5 (no deps — ready)                  SA18.6 (no deps — ready)
-SA14.2 (deps: SA14.1)                SA17.6 (no deps — ready)                  SA18.7 (no deps — ready)
-SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.2, SA17.5)             SA18.8 (no deps — ready)
-SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — ready)
-SA14.5 (deps: SA13.1 ✅ — ready)                                               SA18.10 (deps: SA18.6, SA18.9)
-SA14.6 (no deps — ready)                                                       SA18.11 (no deps — ready)
+SA13.2 (no deps — ready)             SA17.3 (no deps — ready)               SA18.6 (no deps — complete)
+SA13.3 (no deps — ready)             SA17.4 (no deps — ready)                  SA18.7 (no deps — ready)
+SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — ready)                  SA18.8 (no deps — ready)
+SA14.1 (no deps — ready)             SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
+SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (deps: SA18.9)
+SA14.3 (deps: SA14.1)                SA17.8 (no deps — ready)                  SA18.11 (no deps — ready)
+SA14.4 (deps: SA14.2, SA14.3)
+SA14.5 (no deps — ready)
+SA14.6 (no deps — ready)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -82,23 +81,20 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA13.1 ✅ complete → {SA13.2, SA13.3} ready → SA13.4, then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
-| **2** | SA17.1 ✅ complete, plus SA17.2–SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.2, SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
-| **3** | SA18.2 ✅, SA18.3 ✅, SA18.4 ✅, SA18.5 ✅ complete, plus SA18.6–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.6, SA18.9) | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
+| **1** | {SA13.2, SA13.3} ready → SA13.4, then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
+| **2** | SA17.3–SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
+| **3** | SA18.6 (complete), SA18.7–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.9) | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
 
 ---
 
 #### Finding — `org-context-api-accretion` (`why →` [Finding 3](../../arch-audit.md#finding-3-org-context-entry-is-a-five-api-accretion-every-non-request-path-hand-picks-its-idiom))
 
-- [x] **SA13.1 — Delete the dead context API and gate the rest (complete).** `Tier 2 · Track 1 · deps: none`
-  Deleted `resolve_public_org_context`; privatized `set_db_current_org_id`/`set_current_org_for_context`/`tenant_context` behind `org_scope`; added the `check_org_context_primitives.py` warn-only lint gate (flips to hard-fail in SA13.4 once SA13.2/13.3 land). See [CHANGELOG.md](../../CHANGELOG.md) for closeout, the scope decision, and CR follow-up detail.
-
-- [ ] **SA13.2 — Migrate view/service callsites to `org_scope`.** `Tier 2 · Track 1 · deps: SA13.1 · RISK LEVEL: medium`
+- [ ] **SA13.2 — Migrate view/service callsites to `org_scope`.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
   Migrate the `tenant_context`/`org_scope`-eligible callsites in module views and services (the majority of the 26 `tenant_context` + 13 `org_scope` callsites) to the blessed `org_scope`/`PublicSystemOrgReadMixin` API.
   *Files:* views/services across `crm`, `billing`, `blog`, `listings`, `notifications` (per arch-audit's caller census).
   *Acceptance:* no view/service module imports the underscored primitives directly; module test suites stay green.
 
-- [ ] **SA13.3 — Migrate serializer/admin/feed/management-command callsites.** `Tier 2 · Track 1 · deps: SA13.1 · RISK LEVEL: medium`
+- [ ] **SA13.3 — Migrate serializer/admin/feed/management-command callsites.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
   Same migration as SA13.2, scoped to the remaining callsite classes: `crm/serializers.py`, feeds, admin modules, notifications helpers, management commands (the audit's "13 files across 7 modules" spanning non-view surfaces). Runs in parallel with SA13.2 — disjoint file sets.
   *Files:* `crm/serializers.py`, module admin.py files, feed classes, management commands.
   *Acceptance:* same as SA13.2 for this file set; the SA13.1 lint gate flips from warn to **fail** once both SA13.2 and SA13.3 land (tracked as part of SA13.4).
@@ -112,7 +108,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 #### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../../arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
 
-- [ ] **SA14.1 — Build the orgs-owned `TenantModelAdmin` base.** `Tier 2 · Track 1 · deps: SA13.1 · RISK LEVEL: medium`
+- [ ] **SA14.1 — Build the orgs-owned `TenantModelAdmin` base.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
   Add an org-resolving, `org_scope`-wrapping `TenantModelAdmin` (or `AdminSite`) to `orgs` that resolves the VIEW-AS/session org and wraps changelist/change views accordingly — generalizing the pattern social's admin already proves works under RLS.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py` (new base class).
   *Acceptance:* a model admin subclassing `TenantModelAdmin` shows the VIEW-AS-resolved org's rows under the restricted `NOBYPASSRLS` role and denies cross-tenant rows without an explicit operator grant.
@@ -132,7 +128,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
   *Files:* `*/tests/settings.py` across modules.
   *Acceptance:* module test suites pass by default under the restricted role; only explicitly-marked tests opt into superuser/BYPASSRLS.
 
-- [ ] **SA14.5 — Implement `operator_access(reason=...)` as a real, audited RLS predicate.** `Tier 2 · Track 1 · deps: SA13.1 · RISK LEVEL: medium`
+- [ ] **SA14.5 — Implement `operator_access(reason=...)` as a real, audited RLS predicate.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
   Add `OR NULLIF(current_setting('app.operator_access', true), '') = 'on'` to the FORCE RLS policy template and implement `operator_access(reason=...)` (superuser-gated, audit-logged context manager) as the only setter — finally implementing the contract `decisions.md` already documents as a "permanent rule" but which exists in no code today.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py` (policy template), `current_org.py` (new context manager).
   *Acceptance:* `operator_access(reason=...)` grants true cross-tenant reads for its duration only, is audit-logged, and requires superuser; without it, no code path bypasses RLS.
@@ -149,14 +145,6 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module-side settings defaults (Track 2); `SA18` covers core/CLI/generator plumbing (Track 3). Both continue the `SAn.m` sequence.
 
 #### `SA17` — Module-side settings and config fail-hard fixes (Track 2)
-
-- [x] **SA17.1 — Reject legacy config keys instead of silently translating/dropping them (complete).** `Tier 2 · Track 2 · deps: none · (why → TA1, closed)`
-  `normalize_auth_module_options`/`normalize_crm_module_options`/`normalize_notifications_module_options` now raise `ConfigValidationError` naming the legacy key and its replacement instead of silently mapping or dropping it. Closes tech-audit TA1. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA17.2 — Fail-hard analytics/billing enabled-flag settings (complete).** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium (billing) · (why → TA2)`
-  Added AppConfig.ready() startup guards to `analytics/apps.py` and `billing/apps.py` that raise `ImproperlyConfigured` at startup when `QUICKSCALE_ANALYTICS_ENABLED` / `QUICKSCALE_BILLING_ENABLED` are missing. Removed default-`True` fallbacks in `analytics/services.py`, `billing/services.py`, and `billing/adapter.py`. Updated test settings (`billing/tests/settings.py`) with the required enabled-flag. Rewrote the analytics `test_configure_analytics_client_defaults_missing_enabled_setting_to_enabled` test as `test_configure_analytics_client_missing_enabled_setting_raises_attribute_error`. Added ready()-method tests to both modules' `test_apps.py` (analytics: `test_ready_raises_improperly_configured_when_enabled_setting_missing`, billing: `test_app_config_ready_raises_improperly_configured_when_enabled_setting_missing`). Added `test_billing_settings_snapshot_missing_enabled_setting_raises_attribute_error` to billing `test_services.py`. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `analytics/apps.py`, `analytics/services.py`, `analytics/tests/test_apps.py`, `analytics/tests/test_services.py`, `billing/apps.py`, `billing/services.py`, `billing/adapter.py`, `billing/tests/settings.py`, `billing/tests/test_apps.py`, `billing/tests/test_services.py`.
-  *Acceptance:* omitting either setting from a generated project raises at startup instead of silently enabling the feature.
 
 - [ ] **SA17.3 — Fail-hard CRM's API-enable flag and page-size settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
   `CRM_ENABLE_API` required (no `True` default); replace `int(getattr(...) or 50)` page-size reads with explicit validation that rejects non-numeric values instead of silently swallowing them to `50`.
@@ -178,8 +166,8 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `notifications/services.py:155-157`.
   *Acceptance:* omitting either setting raises at startup instead of silently enabling the "resend" provider.
 
-- [ ] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring.** `Tier 2 · Track 2 · deps: SA17.2, SA17.5 · (why → TA9)`
-  Analytics' PostHog SDK import failure currently logs a warning and disables capture; forms' analytics integration currently probes for the sibling module via a soft `ImportError`/`getattr(None)` chain. Since module assembly happens at generation time, wire the analytics↔forms integration (and the PostHog SDK requirement) as a hard dependency the generator resolves, not a runtime probe. Depends on SA17.2/17.5 landing the surrounding settings checks first so the two changes don't fight over the same code paths.
+- [ ] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring.** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
+  Analytics' PostHog SDK import failure currently logs a warning and disables capture; forms' analytics integration currently probes for the sibling module via a soft `ImportError`/`getattr(None)` chain. Since module assembly happens at generation time, wire the analytics↔forms integration (and the PostHog SDK requirement) as a hard dependency the generator resolves, not a runtime probe. Depends on SA17.5 landing the surrounding settings checks first so the two changes don't fight over the same code paths (SA17.2's half of this ordering is already satisfied — it's complete).
   *Files:* `analytics/services.py:218-223`, `forms/views.py:92-97`.
   *Acceptance:* if analytics is assembled into a project, a missing PostHog SDK raises at startup (not a warning); forms' analytics integration is generation-time wired, not runtime-probed.
 
@@ -214,7 +202,6 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   Removed `except Exception: return None` from `resolve_authoritative_project_metadata`'s `quickscale.yml` branch — `validate_config` errors now propagate as `ConfigValidationError` instead of being indistinguishable from "no project here." `_load_managed_file_records_for_drift` is explicitly documented as outside F12.2 scope (its legacy `file_hashes.yml` fallback is a drift-detection design choice, not an M2 migration compatibility path). The F12.2 exception table entry now carries the SA18.6 annotation. Closes tech-audit TA8. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
   *Files:* `quickscale_core/src/quickscale_core/project_state.py`, `quickscale_core/tests/test_project_state.py`, `docs/technical/decisions.md`.
   *Acceptance:* a malformed `quickscale.yml` raises `ConfigValidationError`; `_load_managed_file_records_for_drift` is explicitly outside F12.2; targeted tests updated to expect fail-hard behavior.
-
 - [ ] **SA18.7 — Narrow `railway_utils.py`'s broad exception swallowing.** `Tier 1 · Track 3 · deps: none · (why → TA10)`
   Narrow the `except Exception: return None` clauses around URL extraction, variable parsing, and status queries to the specific expected failure modes; keep the narrower `subprocess`-error "is the CLI installed" probes as-is.
   *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:469,534,774` (and `:52,236` for comparison).
@@ -230,8 +217,8 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `quickscale_core/src/quickscale_core/apply/steps/wiring.py:71-120`.
   *Acceptance:* either the step now fails on `OSError` (and `quickscale apply` reports failure, not silent success), or the step carries a `# F-EXCEPTION:` tag and a decisions.md entry justifying it.
 
-- [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: SA18.6, SA18.9 · (why → TA14)`
-  Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. Depends on SA18.6 and SA18.9 since both may add or reshape exception entries this task must tag.
+- [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: SA18.9 · (why → TA14)`
+  Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. SA18.6 is already complete (its exception entries are in place), so SA18.10 now waits only on SA18.9 reshaping any remaining exception entries this task must tag.
   *Files:* `quickscale_core/src/quickscale_core/project_state.py:415`, `quickscale_cli/src/quickscale_cli/commands/remove_command.py`, `docs/technical/decisions.md`.
   *Acceptance:* `grep -rn "F-EXCEPTION"` returns a hit for every exception decisions.md documents, and decisions.md's exception table lists every exception the grep finds.
 
