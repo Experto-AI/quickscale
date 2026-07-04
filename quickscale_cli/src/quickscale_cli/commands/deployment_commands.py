@@ -295,7 +295,11 @@ def _link_database_step(app_service: str) -> bool:
 
 def _generate_domain_step(app_service: str) -> str | None:
     """Generate public domain and return the domain name."""
-    domain_url = generate_railway_domain(app_service)
+    try:
+        domain_url = generate_railway_domain(app_service)
+    except ValueError as exc:
+        click.secho(f"❌ Error: {exc}", fg="red", err=True)
+        sys.exit(1)
 
     if domain_url:
         click.secho(f"✅ Domain generated: {domain_url}", fg="green")
@@ -382,7 +386,11 @@ def _deploy_app_step(app_service: str) -> None:
 
 def _verify_deployment_step(app_service: str) -> bool:
     """Verify environment variables were set correctly."""
-    deployed_vars = get_railway_variables(app_service)
+    try:
+        deployed_vars = get_railway_variables(app_service)
+    except ValueError as exc:
+        click.secho(f"❌ Error: {exc}", fg="red", err=True)
+        sys.exit(1)
     database_url_present = False
 
     if deployed_vars:
