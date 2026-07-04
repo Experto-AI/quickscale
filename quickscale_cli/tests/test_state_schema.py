@@ -8,7 +8,7 @@ import yaml
 
 from quickscale_core.schema.config_schema import ConfigValidationError
 
-from quickscale_cli.schema.state_schema import (
+from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
     QuickScaleState,

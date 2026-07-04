@@ -5,7 +5,7 @@ from quickscale_core.contracts.module_catalog import (
     get_module_entry,
 )
 from quickscale_core.manifest.entry_point import build_manifest_wiring_spec
-from quickscale_cli.schema.config_schema import validate_config
+from quickscale_core.schema.config_schema import validate_config
 from quickscale_core.module_wiring import collect_wiring
 
 

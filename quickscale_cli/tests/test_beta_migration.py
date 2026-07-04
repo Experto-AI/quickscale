@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import quickscale_cli.schema as schema_module
+import quickscale_core.schema as schema_module
 
 from quickscale_devtools.beta_migration import (
     BetaMigrationInput,

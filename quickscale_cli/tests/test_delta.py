@@ -1,13 +1,13 @@
 """Tests for delta detection"""
 
-from quickscale_cli.schema.config_schema import (
+from quickscale_core.schema.config_schema import (
     DockerConfig,
     ModuleConfig,
     ProjectConfig,
     QuickScaleConfig,
 )
-from quickscale_cli.schema.delta import compute_delta, format_delta
-from quickscale_cli.schema.state_schema import (
+from quickscale_core.schema.delta import compute_delta, format_delta
+from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
     QuickScaleState,

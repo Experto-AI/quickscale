@@ -46,39 +46,40 @@ def test_generated_social_embeds_view_drops_organization_id_kwarg() -> None:
     )
 
 
-def test_generated_views_use_tenant_context() -> None:
-    """The generated views must activate tenant context via tenant_context()."""
+def test_generated_views_use_org_scope() -> None:
+    """The generated views must activate tenant context via org_scope()."""
     content = _render()
-    assert "tenant_context" in content
+    assert "org_scope" in content
 
 
 def test_generated_views_preserve_and_restore_prior_context() -> None:
-    """The generated views delegate context save/restore to tenant_context().
+    """The generated views delegate context save/restore to org_scope().
 
-    Phase 3: tenant_context() handles prior-context capture, ContextVar set,
-    DB SET LOCAL, and prior-context restore internally — no manual
-    try/finally is needed in the generated view code.
+    SA13.1 follow-up (CR-SA13.1-001): org_scope() replaces tenant_context
+    as the unified context manager.  org_scope() handles prior-context
+    capture, ContextVar set, DB SET LOCAL, transaction.atomic() wrapping,
+    and prior-context restore internally — no manual try/finally is needed
+    in the generated view code.
     """
     content = _render()
 
-    # tenant_context is the unified activation helper.
-    assert "tenant_context(resolved_org_id)" in content
+    # org_scope is the permanent public API context manager.
+    assert "org_scope(resolved_org)" in content
 
-    # Manual prior-context management should be absent since tenant_context
+    # Manual prior-context management should be absent since org_scope
     # owns the save/restore contract.
     assert "_prior_org_id" not in content, (
-        "Phase 3: tenant_context() handles prior-context save/restore "
+        "org_scope() handles prior-context save/restore "
         "internally. Manual _prior_org_id management is no longer needed."
     )
     assert "get_current_org_id()" not in content, (
-        "Phase 3: get_current_org_id() is not needed in the generated "
-        "views — tenant_context() manages the ContextVar lifecycle."
+        "get_current_org_id() is not needed in the generated "
+        "views — org_scope() manages the ContextVar lifecycle."
     )
 
     # No bare reset_current_org_id remains.
     assert "reset_current_org_id" not in content, (
-        "reset_current_org_id() is not needed — tenant_context() handles "
-        "context lifecycle."
+        "reset_current_org_id() is not needed — org_scope() handles context lifecycle."
     )
 
 
@@ -94,14 +95,14 @@ def test_generated_views_resolve_system_org_for_anonymous() -> None:
 def test_generated_views_conditionally_resolve_org_context() -> None:
     """The generated views must conditionally resolve org context (auth vs anonymous).
 
-    T1.15: the resolved_org_id ternary replaces the old inline if/else
-    so the org id is established before the transaction.atomic() block,
-    making it reusable for both ContextVar and SET LOCAL.
+    SA13.1 follow-up (CR-SA13.1-001): resolved_org is the resolved
+    Organization instance (not just the ID) because org_scope() takes
+    the model object directly.
     """
     content = _render()
-    assert "resolved_org_id" in content
-    assert "org.id if org is not None" in content
-    assert "get_system_org().id" in content
+    assert "resolved_org" in content
+    assert "org if org is not None" in content  # no .id — object reference
+    assert "get_system_org()" in content  # no .id — object reference
     assert "build_social_link_tree_payload()" in content
     assert "build_social_embeds_payload()" in content
 
@@ -111,50 +112,50 @@ def test_generated_views_conditionally_resolve_org_context() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_generated_views_import_transaction() -> None:
-    """The generated views must import django.db.transaction for SET LOCAL scope."""
+def test_generated_views_import_org_scope() -> None:
+    """The generated views must import org_scope for the unified activation."""
     content = _render()
-    assert "from django.db import transaction" in content
+    assert (
+        "from quickscale_modules_orgs.current_org import get_current_org, org_scope"
+        in content
+    )
 
 
-def test_generated_views_import_tenant_context() -> None:
-    """The generated views must import tenant_context for the unified activation."""
-    content = _render()
-    assert "from quickscale_modules_orgs.current_org import tenant_context" in content
+def test_generated_views_use_org_scope_activation() -> None:
+    """The generated views must call org_scope(resolved_org) for unified activation.
 
-
-def test_generated_views_use_transaction_atomic() -> None:
-    """The generated views must wrap org activation in transaction.atomic()."""
-    content = _render()
-    assert "transaction.atomic()" in content
-
-
-def test_generated_views_call_tenant_context() -> None:
-    """The generated views must call tenant_context(resolved_org_id) for unified activation.
-
-    Phase 3: tenant_context() sets both the ContextVar and DB app.current_org_id
-    (via SET LOCAL) inside the caller's transaction.atomic() block.
+    SA13.1 follow-up (CR-SA13.1-001): org_scope() replaces the
+    transaction.atomic() + tenant_context() pairing.  org_scope() wraps
+    in atomic internally, sets both the ContextVar and DB app.current_org_id
+    (via SET LOCAL), and restores prior context on exit.
     """
     content = _render()
-    assert "tenant_context(resolved_org_id)" in content
+    assert "org_scope(resolved_org)" in content
 
 
-def test_generated_views_set_both_contextvar_and_db() -> None:
-    """The generated views use tenant_context() which sets both ContextVar and DB.
+def test_generated_views_no_explicit_transaction_or_tenant_context() -> None:
+    """The generated views rely on org_scope() for atomic/context; no explicit
+    transaction.atomic() or tenant_context() calls remain.
 
-    Phase 3: tenant_context(resolved_org_id) is the unified seam that
-    handles both Python-level ContextVar and DB-level SET LOCAL
-    app.current_org_id — no manual set_current_org_id/set_db_current_org_id
-    calls are needed in generated view code.
+    SA13.1 follow-up (CR-SA13.1-001): org_scope() is the permanent
+    public API that handles transaction.atomic(), ContextVar, DB SET LOCAL,
+    and prior-context restore internally.
     """
     content = _render()
-    assert "tenant_context(resolved_org_id)" in content
-    # Manual calls should not appear — tenant_context() handles both.
+    assert "org_scope(resolved_org)" in content
+    # org_scope handles atomic internally — no explicit transaction needed.
+    assert "from django.db import transaction" not in content, (
+        "org_scope() wraps in transaction.atomic() internally."
+    )
+    assert "tenant_context" not in content, (
+        "org_scope() is the unified replacement for tenant_context."
+    )
+    # Manual calls should not appear — org_scope handles both.
     assert "set_current_org_id(resolved_org_id)" not in content, (
-        "Phase 3: tenant_context() handles ContextVar internally; "
+        "org_scope() handles ContextVar internally; "
         "manual set_current_org_id is no longer needed."
     )
     assert "set_db_current_org_id(resolved_org_id)" not in content, (
-        "Phase 3: tenant_context() handles DB SET LOCAL internally; "
+        "org_scope() handles DB SET LOCAL internally; "
         "manual set_db_current_org_id is no longer needed."
     )

@@ -2,7 +2,7 @@
 
 import pytest
 
-from quickscale_cli.schema.config_schema import (
+from quickscale_core.schema.config_schema import (
     ConfigValidationError,
     DockerConfig,
     ModuleConfig,

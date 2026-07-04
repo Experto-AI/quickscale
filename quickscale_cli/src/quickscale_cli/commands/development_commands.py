@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from quickscale_cli.schema.config_schema import QuickScaleConfig
+from quickscale_core.schema.config_schema import QuickScaleConfig
 from quickscale_cli.utils.docker_utils import (
     DockerComposePluginRequiredError,
     get_docker_compose_command,

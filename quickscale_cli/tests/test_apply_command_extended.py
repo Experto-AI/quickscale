@@ -77,7 +77,7 @@ from quickscale_cli.commands.apply_command import (
     _update_module_config_in_state,
 )
 from quickscale_cli.commands.module_commands import _update_single_module
-from quickscale_cli.schema.state_schema import (
+from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
     QuickScaleState,
@@ -6204,7 +6204,7 @@ class TestCallerParityAcrossProvenancePaths:
     def test_update_path_resolves_source_ref_once_and_persists_triple(self, tmp_path):
         """Update path: _update_single_module resolves source_ref once and
         persists the full triple via _sync_state_module_version."""
-        from quickscale_cli.schema.state_schema import StateManager
+        from quickscale_core.schema.state_schema import StateManager
 
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)

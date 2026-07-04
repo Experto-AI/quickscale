@@ -2682,7 +2682,7 @@ class TestSyncStateModuleVersionTriple:
     def test_sync_refreshes_full_triple(self, tmp_path):
         """Update path: _sync_state_module_version writes version,
         commit_sha, and refreshes embedded_at."""
-        from quickscale_cli.schema.state_schema import (
+        from quickscale_core.schema.state_schema import (
             ModuleState,
             ProjectState,
             QuickScaleState,
@@ -2746,7 +2746,7 @@ class TestCallerParityUpdateSyncHelper:
     def test_sync_helper_produces_same_triple_as_other_paths(self, tmp_path):
         """_sync_state_module_version writes version, commit_sha, and
         embedded_at — the same triple that apply and no-op repair persist."""
-        from quickscale_cli.schema.state_schema import (
+        from quickscale_core.schema.state_schema import (
             ModuleState,
             ProjectState,
             QuickScaleState,

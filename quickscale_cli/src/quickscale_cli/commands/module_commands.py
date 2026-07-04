@@ -14,8 +14,8 @@ from quickscale_core.contracts.module_catalog import (
     get_discovered_module_names,
     get_module_readiness_reason,
 )
-from quickscale_cli.schema.config_schema import validate_config
-from quickscale_cli.schema.state_schema import StateError, StateManager
+from quickscale_core.schema.config_schema import validate_config
+from quickscale_core.schema.state_schema import StateError, StateManager
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
     resolve_embedded_module_install_path as _resolve_install_path_from_dependency_sync,

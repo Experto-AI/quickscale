@@ -14,7 +14,7 @@ from quickscale_cli.commands.remove_command import (
     _remove_module_directory,
     remove,
 )
-from quickscale_cli.schema.state_schema import StateManager
+from quickscale_core.schema.state_schema import StateManager
 
 
 def _write_valid_remove_project(project_path: Path) -> None:

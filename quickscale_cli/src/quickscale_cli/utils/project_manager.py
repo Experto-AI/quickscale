@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-from quickscale_cli.schema.config_schema import QuickScaleConfig, validate_config
+from quickscale_core.schema.config_schema import QuickScaleConfig, validate_config
 from .docker_utils import find_docker_compose, get_running_containers
 
 
