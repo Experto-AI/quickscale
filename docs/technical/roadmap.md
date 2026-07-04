@@ -102,7 +102,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
   > - **CR-SA13.1-002 resolved:** `get_public_org_context()` now wraps `_tenant_context()` and yields the resolved org UUID instead of delegating directly (which yielded `None`). The documented `Iterator[uuid.UUID | None]` contract is now fulfilled. Regression tests added proving the yield value matches the expected org UUID, and fail-closed behavior yields `None`.
   > - **CR-SA13.1-003 resolved:** Added regeneration evidence to `test_social_module_produces_managed_files` in `test_module_wiring_manager_manifest.py`. The test now reads the regenerated `social_views.py` file produced by `regenerate_managed_wiring` and asserts the SA13.1 contract: `org_scope(resolved_org)` is present; `tenant_context`, `organization_id`, `set_current_org_id`, `set_db_current_org_id`, and `from django.db import transaction` are all absent — confirming the template change propagates through the full regeneration pipeline to the on-disk managed file.
 
-- [ ] **SA13.2 — Migrate view/service callsites to `org_scope`.** `Tier 2 · Track 1 · deps: SA13.1 · RISK LEVEL: medium`
+- [x] **SA13.2 — Migrate view/service callsites to `org_scope`.** `Tier 2 · Track 1 · deps: SA13.1 · RISK LEVEL: medium`
   Migrate the `tenant_context`/`org_scope`-eligible callsites in module views and services (the majority of the 26 `tenant_context` + 13 `org_scope` callsites) to the blessed `org_scope`/`PublicSystemOrgReadMixin` API.
   *Files:* views/services across `crm`, `billing`, `blog`, `listings`, `notifications` (per arch-audit's caller census).
   *Acceptance:* no view/service module imports the underscored primitives directly; module test suites stay green.
