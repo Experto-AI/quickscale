@@ -47,9 +47,9 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.9` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture fail-hard fixes, closes TA3–TA8, TA10, TA11, and TA13) are closed — see CHANGELOG.md.
+> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.10` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, and TA14) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.5, SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.10 are complete; SA18.11 is ready now — plus new SA19, SA21.1, SA22, SA25 (all ready now).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.10 are complete; SA18.11 is ready now — plus new SA19, SA21.1, SA22, SA25 (all ready now).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -64,12 +64,12 @@ Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batch
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.1 (no deps — ready)             SA17.7 (deps: SA17.5 — ready)              SA18.11 (no deps — ready)
-SA14.2 (deps: SA14.1)                SA17.8 (no deps — ready)
-SA14.3 (deps: SA14.1)
-SA14.4 (deps: SA14.2, SA14.3)
-SA14.5 (no deps — ready)
-SA14.6 (no deps — ready)
+SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.6 (no deps — complete)
+SA14.2 (deps: SA14.1)                SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
+SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
+SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — complete)
+SA14.5 (no deps — ready)                                                  SA18.10 (no deps — complete)
+SA14.6 (no deps — ready)                                                  SA18.11 (no deps — ready)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -78,9 +78,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (SA17.1–SA17.6 complete, TA2 closed; remaining work is TA9/TA12) |
-| **3** | SA18.11 (ready) | Core/CLI fail-hard plumbing (SA18.1–SA18.10 complete) |
+| **1** | SA14.1 (complete) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
+| **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
+| **3** | SA18.1–SA18.10 (complete), SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
 
 ---
 
@@ -88,9 +88,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 #### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../../arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
 
-- [ ] **SA14.1 — Build the orgs-owned `TenantModelAdmin` base.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
-  Add an org-resolving, `org_scope`-wrapping `TenantModelAdmin` (or `AdminSite`) to `orgs` that resolves the VIEW-AS/session org and wraps changelist/change views accordingly — generalizing the pattern social's admin already proves works under RLS.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py` (new base class).
+- [x] **SA14.1 — Build the orgs-owned `TenantModelAdmin` base.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
+  Added `TenantModelAdmin(admin.ModelAdmin)` to `orgs/admin.py` — a generalized per-org admin base that resolves the active org from VIEW-AS session (priority 1), explicit POST/GET selection (priority 2), or session persistence (priority 3), wraps `changelist_view`, `add_view`, `change_view`, `delete_view`, and `history_view` in `org_scope()` via `_org_db_context`, and scopes `get_queryset` to the validated org (fail-closed). Four private helper functions (`_explicit_org_from_request`, `_persist_org_to_session`, `_resolve_active_org_id`, `_org_db_context`) support the base. Social module's local `PerOrgAdminMixin` pattern is preserved unchanged (will be replaced during SA14.2/SA14.3 porting).   Added 40 focused tests covering the helpers, `_org_db_context` lifecycle, `get_queryset` scoping, cross-org rejection, and changelist/change-view end-to-end behavior via the admin site. Three cross-track blocking pre-existing failures in `test_management_commands.py` (check_tenant_isolation) are present but predate this change.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py` (new base class and helpers), `quickscale_modules/orgs/tests/conftest.py` (new, shared fixtures), `quickscale_modules/orgs/tests/test_admin.py` (extended).
   *Acceptance:* a model admin subclassing `TenantModelAdmin` shows the VIEW-AS-resolved org's rows under the restricted `NOBYPASSRLS` role and denies cross-tenant rows without an explicit operator grant.
 
 - [ ] **SA14.2 — Port CRM's 8 admins to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
