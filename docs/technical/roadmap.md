@@ -47,33 +47,33 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III (below), Finding `registry-universe-mismatch`'s SA15.1/SA15.2 and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding) are also fully resolved — see CHANGELOG.md.
+> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are now clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1 was blocked on an SA13.1 scope ambiguity (lint-gate coverage); resolved 2026-07-04, see the scope-decision note under SA13.1 below.
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 is complete, so SA13.2 and SA13.3 are now unblocked and ready to start. Track 2: SA15 (entire finding) and SA17.1 are complete; SA17.2–SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.2/SA17.5 within the track. Track 3: SA18.2, SA18.3, and SA18.4 are complete; SA18.5–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.6/SA18.9 within the track.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
-Fix plan derived from the [2026-07-03 fresh-pass autopsy](../../arch-audit.md#autopsy--2026-07-03-fresh-full-pass) (4 structural findings) and [tech-audit.md](../../tech-audit.md) (fail-hard findings). Each task below is sized Adaptive **Tier 1 or Tier 2**; every task touching `orgs`/tenancy/RLS or billing floors at Tier 2 per the sensitive-domain rule.
+Fix plan derived from the [2026-07-03 fresh-pass autopsy](../../arch-audit.md#autopsy--2026-07-03-fresh-full-pass) (4 structural findings, 2 now closed) and [tech-audit.md](../../tech-audit.md) (fail-hard findings). Each task below is sized Adaptive **Tier 1 or Tier 2**; every task touching `orgs`/tenancy/RLS or billing floors at Tier 2 per the sensitive-domain rule.
 
-**Naming:** continues the `SAn.m` sequence from `SA12` (last used). `SA13`–`SA16` close the 2026-07-03 structural findings (`SA15` and `SA16` mostly closed — see above); `SA17`–`SA18` close the tech-audit fail-hard findings (`SA17` = module-side settings, `SA18` = core/CLI plumbing).
+**Naming:** continues the `SAn.m` sequence from `SA12` (last used). `SA13`–`SA16` close the 2026-07-03 structural findings (`SA15` and `SA16` fully closed — see above); `SA17`–`SA18` close the tech-audit fail-hard findings (`SA17` = module-side settings, `SA18` = core/CLI plumbing).
 
 #### Dependency & parallelization overview (2026-07-04)
 
-Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accretion`) must land before Finding 1 (`operator-read-path-undefined`), since the admin/operator contract should be built on the *consolidated* `org_scope` seam — so SA13 → SA14 remains one intra-track dependency chain. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16, now closed) were independent chains. The fail-hard tasks (SA17, SA18) are file-scoped and independent of the structural work and of each other, aside from two noted internal orderings.
+Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accretion`) must land before Finding 1 (`operator-read-path-undefined`), since the admin/operator contract should be built on the *consolidated* `org_scope` seam — so SA13 → SA14 remains one intra-track dependency chain. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are now closed — see the closed-batches note above. The fail-hard tasks (SA17, SA18) are file-scoped and independent of the structural work and of each other, aside from two noted internal orderings.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA13.1 (no deps — ready)             SA15.3 (no deps — SA15.1/15.2 complete)   SA18.2 ✅ (no deps)
-SA13.2 (deps: SA13.1)                SA17.1 (no deps)                          SA18.3 ✅ (no deps)
-SA13.3 (deps: SA13.1)                SA17.2 (no deps)                          SA18.4 ✅ (no deps)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.3 (no deps)                          SA18.5 (no deps)
-SA14.1 (deps: SA13.1)                SA17.4 (no deps)                          SA18.6 (no deps)
-SA14.2 (deps: SA14.1)                SA17.5 (no deps)                          SA18.7 (no deps)
-SA14.3 (deps: SA14.1)                SA17.6 (no deps)                          SA18.8 (no deps)
-SA14.4 (deps: SA14.2, SA14.3)        SA17.7 (deps: SA17.2, SA17.5)             SA18.9 (no deps)
-SA14.5 (deps: SA13.1)                SA17.8 (no deps)                          SA18.10 (deps: SA18.6, SA18.9)
-SA14.6 (no deps)                                                               SA18.11 (no deps)
+SA13.1 ✅ (complete)                  SA17.1 ✅ (complete)                      SA18.2 ✅ (complete)
+SA13.2 (deps: SA13.1 ✅ — ready)      SA17.2 (no deps — ready)                  SA18.3 ✅ (complete)
+SA13.3 (deps: SA13.1 ✅ — ready)      SA17.3 (no deps — ready)                  SA18.4 ✅ (complete)
+SA13.4 (deps: SA13.2, SA13.3)        SA17.4 (no deps — ready)                  SA18.5 (no deps — ready)
+SA14.1 (deps: SA13.1 ✅ — ready)      SA17.5 (no deps — ready)                  SA18.6 (no deps — ready)
+SA14.2 (deps: SA14.1)                SA17.6 (no deps — ready)                  SA18.7 (no deps — ready)
+SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.2, SA17.5)             SA18.8 (no deps — ready)
+SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — ready)
+SA14.5 (deps: SA13.1 ✅ — ready)                                               SA18.10 (deps: SA18.6, SA18.9)
+SA14.6 (no deps — ready)                                                       SA18.11 (no deps — ready)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -82,20 +82,16 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA13.1 (ready — scope decision resolved 2026-07-04) → {SA13.2, SA13.3} → SA13.4, then SA14.1 → {SA14.2, SA14.3} → SA14.4, plus SA14.5, SA14.6 | Tenant-context request/admin boundary (Finding 3, Finding 1) |
-| **2** | SA15.3 *(SA15.1, SA15.2 complete)*, plus SA17.1–SA17.8 | Default-deny registry (Finding 2) + module-side fail-hard settings |
-| **3** | SA18.2 ✅, plus SA18.3–SA18.11 | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
+| **1** | SA13.1 ✅ complete → {SA13.2, SA13.3} ready → SA13.4, then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
+| **2** | SA17.1 ✅ complete, plus SA17.2–SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.2, SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
+| **3** | SA18.2 ✅, SA18.3 ✅, SA18.4 ✅ complete, plus SA18.5–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.6, SA18.9) | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
 
 ---
 
 #### Finding — `org-context-api-accretion` (`why →` [Finding 3](../../arch-audit.md#finding-3-org-context-entry-is-a-five-api-accretion-every-non-request-path-hand-picks-its-idiom))
 
-- [ ] **SA13.1 — Delete the dead context API and gate the rest.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  Delete `resolve_public_org_context` (0 module+core src callers per the Finding 3 census; internal/test references remain). Underscore-privatize `set_db_current_org_id`, `set_current_org_for_context`, and `tenant_context` as internal helpers behind the public `org_scope`/`PublicSystemOrgReadMixin` surface, kept importable for the callsite migrations in SA13.2/13.3. Add an AST/import-lint gate (reuse the SA9.6 `check_module_core_imports.py` pattern) that *warns* (not yet fails) on direct external use of the three privatized primitives only.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py`, new `scripts/check_org_context_primitives.py`.
-  *Acceptance:* `resolve_public_org_context` is gone; the three primitives are renamed with a leading underscore but remain importable; the new lint script runs in warn-only mode and flags direct use of `_tenant_context` / `_set_current_org_for_context` / `_set_db_current_org_id` only — 31 pre-migration callsites (`tenant_context` 26 + `set_current_org_for_context` 5) — without failing CI; `org_scope` usage is never flagged, since it is the permanent public API, not a migration source.
-
-  > **Scope decision (2026-07-04):** Resolved the discovery-note ambiguity between the task text (gate the 3 privatized primitives only) and the acceptance text's broader "44-count" (which wrongly folded in `org_scope`'s 13 callers). **Decision: gate the 3 privatized primitives only.** `org_scope` stays public and exempt — it's the permanent target API under arch-audit Finding 3's locked-in "Consolidate + gate" option, so flagging it would contradict the chosen design and would immediately self-conflict with SA13.2/13.3 (which migrate callers *to* `org_scope`). Also decided: keep the **warn-now / fail-later staging** (SA13.1 warns, SA13.4 flips to hard-fail once SA13.2/13.3 finish migrating callsites) rather than failing immediately — an immediate hard-fail would break CI on the ~31 not-yet-migrated callsites before the migration work has even started, which is a sequencing self-inflicted break, not a real misconfiguration. This staging does not conflict with the fail-hard principle: that principle governs runtime/production misconfiguration behavior, not an in-flight internal lint-gate rollout, and this project has staged an equivalent guardrail before (SA6.3's imperative-freeze test). **Implementation is unblocked.**
+- [x] **SA13.1 — Delete the dead context API and gate the rest (complete).** `Tier 2 · Track 1 · deps: none`
+  Deleted `resolve_public_org_context`; privatized `set_db_current_org_id`/`set_current_org_for_context`/`tenant_context` behind `org_scope`; added the `check_org_context_primitives.py` warn-only lint gate (flips to hard-fail in SA13.4 once SA13.2/13.3 land). See [CHANGELOG.md](../../CHANGELOG.md) for closeout, the scope decision, and CR follow-up detail.
 
 - [ ] **SA13.2 — Migrate view/service callsites to `org_scope`.** `Tier 2 · Track 1 · deps: SA13.1 · RISK LEVEL: medium`
   Migrate the `tenant_context`/`org_scope`-eligible callsites in module views and services (the majority of the 26 `tenant_context` + 13 `org_scope` callsites) to the blessed `org_scope`/`PublicSystemOrgReadMixin` API.
@@ -148,36 +144,14 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 ---
 
-#### Finding — `registry-universe-mismatch` (`why →` [Finding 2](../../arch-audit.md#finding-2-the-default-deny-registrys-universe-is-the-orgs-test-matrix-not-the-module-set-users-can-deploy))
-
-- [x] **SA15.1 — Add the `tenant_excluded` marker; widen classification scope; add implicit M2M inference (complete).** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA15.2 — Backfill markers on auth/backups/notifications/storage models (complete).** `Tier 2 · Track 2 · deps: SA15.1 · RISK LEVEL: medium`
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA15.3 — Derive the human-readable registry as a generated artifact; backfill excluded-model markers; remove registry fallback (complete — SA15.3 follow-up).** `Tier 1 · Track 2 · deps: SA15.2`
-  Added `get_derived_registry_overview()` to `tenancy.py` — a runtime-computed registry overview derived from the `tenant_excluded` marker, implicit M2M through classification, and `TenantManager`/`TenantModel` detection instead of hand-maintaining the HTML count assertions. The literal `TENANT_TABLE_REGISTRY` is retained as a cross-check target. Replaced the doc-assertion tests in `test_doc_consistency.py` with cross-check tests that verify the derived ENROLLED set matches the literal registry for all project-owned apps. Removed the manual `<!-- enrolled-models assertion: ... -->` HTML comments from both `decisions.md` and `organizations.md`, and updated the prose in both docs to reference the marker-based derived view as the authoritative human-readable overview.
-  **SA15.3 follow-up (2026-07-04):** Backfilled `tenant_excluded` markers on all excluded concrete models that lacked them: orgs control-plane models (``Organization``, ``OrganizationMembership``, ``OrganizationInvitation``, ``OrganizationTombstone``), billing system-wide metadata (``Plan``, ``WebhookEvent``), blog user-profile (``AuthorProfile``), and test-only models (``ConcreteTenantResource``, ``ForwardFKChild``). Removed the ``REGISTRY_LOOKUP`` fallback from ``get_derived_registry_overview()`` — the `else` branch that silently classified non-marker-detectable models as ``EXCLUDED_REVIEWED`` now issues ``continue`` instead. Strengthened ``test_doc_consistency.py`` with three new cross-check tests: ``test_derived_registry_full_overview_matches_literal`` (full status/app_label/model_name parity for installed models), ``test_derived_registry_no_fallback_reason`` (asserts no entry uses a registry-fallback reason string), and ``test_derived_registry_covers_installed_exclusions`` (every model with a ``tenant_excluded`` marker appears in derived overview). Updated docs to reflect the purely marker-driven derivation.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/models.py`, `quickscale_modules/orgs/tests/test_models.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`, `quickscale_modules/orgs/tests/test_doc_consistency.py`, `quickscale_modules/billing/src/quickscale_modules_billing/models.py`, `quickscale_modules/blog/src/quickscale_modules_blog/models.py`, `docs/technical/decisions.md`, `docs/technical/organizations.md`, `docs/technical/roadmap.md`, `CHANGELOG.md`.
-  *Acceptance:* the registry overview is generated from model markers **with no registry fallback**; every excluded model declares its own marker; the cross-check test suite (ENROLLED parity, full overview parity, no-fallback-reason, and exclusion coverage) passes in CI.
-
----
-
-> **Finding `per-module-knowledge-fanout` (Finding 4) is fully closed** — its urgent slice (SA16.1: manifest sync gate + snapshot remediation, SA16.2: SSOT doc drift closeout) is complete with no open tasks; see [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
 ### Fail-Hard Remediation (opened 2026-07-03)
 
-Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module-side settings defaults (Track 2, pairs naturally with the registry work); `SA18` covers core/CLI/generator plumbing (Track 3, pairs with the manifest-fanout work). Both continue the `SAn.m` sequence.
+Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module-side settings defaults (Track 2); `SA18` covers core/CLI/generator plumbing (Track 3). Both continue the `SAn.m` sequence.
 
 #### `SA17` — Module-side settings and config fail-hard fixes (Track 2)
 
-- [ ] **SA17.1 — Reject legacy config keys instead of silently translating/dropping them.** `Tier 2 · Track 2 · deps: none · (why → TA1)`
-  In `normalize_auth_module_options()` and the CRM/notifications equivalents, raise `ConfigValidationError` naming the legacy key and its replacement instead of silently mapping (`allow_registration` → `registration_enabled`) or dropping (`social_providers`, `default_pipeline_stages`, `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS`) the key.
-  *Files:* `quickscale_core/src/quickscale_core/contracts/resolvers.py` (~:222-233, :556, :780).
-  *Acceptance:* a `quickscale.yml` containing any of the named legacy keys fails `quickscale plan`/`apply` with an error naming the dead key and its replacement, instead of silently changing behavior.
+- [x] **SA17.1 — Reject legacy config keys instead of silently translating/dropping them (complete).** `Tier 2 · Track 2 · deps: none · (why → TA1, closed)`
+  `normalize_auth_module_options`/`normalize_crm_module_options`/`normalize_notifications_module_options` now raise `ConfigValidationError` naming the legacy key and its replacement instead of silently mapping or dropping it. Closes tech-audit TA1. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA17.2 — Fail-hard analytics/billing enabled-flag settings.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium (billing) · (why → TA2)`
   Add module `apps.py` Django system checks that raise `ImproperlyConfigured` when `QUICKSCALE_ANALYTICS_ENABLED` / `QUICKSCALE_BILLING_ENABLED` are missing, instead of defaulting `True`; the generator already knows these values at generation time and must guarantee emission.
@@ -225,10 +199,8 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_core/tests/test_manifest_entry_point.py`, `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`, `quickscale_cli/tests/test_module_wiring_manager_manifest.py`.
   *Acceptance:* an empty-after-resolution analytics config raises a descriptive error through `build_manifest_wiring_spec` *and* through the `regenerate_managed_wiring`/apply seam; the disabled short-circuit behaviour is unaffected.
 
-- [x] **SA18.3 — Delete the `quickscale_cli.schema` compat shim (complete).** `Tier 2 · Track 3 · deps: none · (why → TA5)`
-  Migrated all CLI internal imports (8 source callers across 6 files — not just the 4 listed in the task prose) and 11 test files from `quickscale_cli.schema.*` to `quickscale_core.schema.*`. Deleted the 4-file `quickscale_cli/src/quickscale_cli/schema/` shim package. Updated `test_beta_migration.py` to import `quickscale_core.schema` directly. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `quickscale_cli/src/quickscale_cli/schema/*` (deleted), 8 source files, 11 test files.
-  *Acceptance:* `quickscale_cli/src/quickscale_cli/schema/` no longer exists; all CLI code imports schema types from `quickscale_core.schema`; test suite green.
+- [x] **SA18.3 — Delete the `quickscale_cli.schema` compat shim (complete).** `Tier 2 · Track 3 · deps: none · (why → TA5, closed)`
+  Migrated all CLI internal imports and tests from `quickscale_cli.schema.*` to `quickscale_core.schema.*`; deleted the shim package. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [x] **SA18.4 — Fix generator template-resolution fallback chains (complete).** `Tier 2 · Track 3 · deps: none · (why → TA6)`
   Replaced the template-dir discovery guess chain (dev dir → package dir → cwd-relative guesses) with a single deterministic resolution rule (installed package path, with an explicit override param for dev use). Deleted the "backward compatibility" root-template fallback tier in `_get_theme_template_path` and raises `FileNotFoundError` immediately with the attempted path on a miss instead of deferring to a later Jinja `TemplateNotFound`. Added `common/templates/admin/` directory with copies of the shared Django admin templates so the common fallback resolves them correctly. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.

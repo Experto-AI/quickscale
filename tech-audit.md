@@ -6,6 +6,10 @@
 > This file records **found-not-yet-fixed** violations for later remediation planning. Structural findings live in [arch-audit.md](arch-audit.md); once a finding here is remediated, drop it and log the closeout in [CHANGELOG.md](CHANGELOG.md).
 >
 > **Closed 2026-07-04:** `TA3` (import-time `except Exception: pass` in manifest adapter init) — remediated by `e4183e52` (SA18.1, 2026-07-03). Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA1` (legacy config keys silently translated/dropped) — remediated by `aea5e3bd` (SA17.1). `normalize_auth_module_options`, `normalize_crm_module_options`, and `normalize_notifications_module_options` now raise `ConfigValidationError` naming the dead key and its replacement for every legacy key named in this finding (`allow_registration`, `social_providers`, `default_pipeline_stages`, `resend_api_key`, `webhook_secret`). Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA5` (undocumented `quickscale_cli.schema` compat shim) — remediated by `ab32f272` (SA18.3). The shim package is deleted; all internal CLI imports and tests were migrated to `quickscale_core.schema`. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 
 **Scope swept:** `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `scripts/`, generator templates. Patterns: broad/silent `except`, fallback chains, legacy/compat keywords, `getattr(settings, X, default)`, env-var defaults.
 
@@ -17,10 +21,8 @@
 
 | ID | Severity | Location | One-liner |
 |----|----------|----------|-----------|
-| TA1 | High | `quickscale_core/contracts/resolvers.py` | Legacy config keys silently translated/dropped instead of rejected |
 | TA2 | High | `quickscale_modules/*/src` (pervasive) | `getattr(settings, X, permissive-default)` — features fail-open when settings are missing (generalizes SA11.7) |
 | TA4 | Medium | `quickscale_core/manifest/entry_point.py:302` | Analytics "fallback defaults matching legacy behaviour" silently fill empty settings |
-| TA5 | Medium | `quickscale_cli/src/quickscale_cli/schema/` | Undocumented backward-compat shim package; CLI's own code still imports through it |
 | TA6 | Medium | `quickscale_core/generator/generator.py` | Template-dir discovery fallback chain + root-template compat fallback |
 | TA7 | Medium | `quickscale_core/version.py:16` | Version fallback chain ending in silent `"0.0.0"` default |
 | TA8 | Medium | `quickscale_core/project_state.py:655` | Metadata resolution falls back state.yml → quickscale.yml → `None`, swallowing validation errors |
@@ -35,10 +37,6 @@
 ---
 
 ## Findings detail
-
-### TA1 (High) — Legacy config keys silently translated or dropped
-
-`contracts/resolvers.py`: `normalize_auth_module_options()` (≈:222–233) silently maps legacy `modules.auth.allow_registration` → `registration_enabled` and silently **drops** `modules.auth.social_providers`. Same pattern for CRM `default_pipeline_stages` (`:556`) and `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS` (`:780`). The "Remove legacy keys like…" guidance exists only in `format_auth_desired_config_contract()` (`:252`), a help formatter — normalization itself never raises. A user with a stale `quickscale.yml` gets no signal that their keys are dead; a dropped `social_providers` key changes behavior with zero feedback. Contradicts the "clean break, no migration path" constraint. **Fix direction:** raise `ConfigValidationError` naming the legacy key and its replacement.
 
 ### TA2 (High) — Pervasive permissive settings defaults across modules
 
@@ -56,10 +54,6 @@ Since modules are creation-time assembled and the generator owns settings emissi
 ### TA4 (Medium) — Analytics fallback defaults in manifest resolution
 
 `manifest/entry_point.py:302-311`: after resolution, empty analytics settings are silently replaced with hardcoded defaults (`QUICKSCALE_ANALYTICS_PROVIDER="posthog"`, env-var names, `POSTHOG_HOST="https://us.i.posthog.com"`) — commented as "Fallback defaults matching legacy behaviour." Best-effort defaults inside the manifest stack, explicitly in scope for fail-hard. Empty-after-resolution means the manifest/derivation produced an invalid result and should raise.
-
-### TA5 (Medium) — Undocumented backward-compat shim package `quickscale_cli.schema`
-
-`quickscale_cli/src/quickscale_cli/schema/{__init__,config_schema,state_schema,delta}.py` are self-described "backward-compatible shims" re-exporting the relocated `quickscale_core.schema` package. Not in the decisions.md F-EXCEPTION table (which is mandatory for shims), has no sunset plan, and — worse — the CLI's **own internal code** still imports through it (`utils/project_manager.py:6`, `utils/module_wiring_manager.py:21-22`, `commands/plan_command.py:27,36`, `commands/remove_command.py`), so the "temporary" indirection has become load-bearing. With no external users (per the global no-users constraint), there is nothing to be compatible *with*. **Fix direction:** migrate internal imports to `quickscale_core.schema` and delete the shim package.
 
 ### TA6 (Medium) — Generator template fallback chains
 
@@ -128,10 +122,10 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 
 | ID | Status | Note |
 |----|--------|------|
-| TA1 | **still-open** | Legacy-key silent translate/drop still present (`resolvers.py:252`, `:780`). |
+| TA1 | **closed 2026-07-04** | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
 | TA2 | **still-open** | Permissive `getattr(settings, …, default)` still pervasive (analytics/billing/crm/forms/blog/notifications). Auth's `ACCOUNT_ALLOW_REGISTRATION` (SA11.7) is now fixed and raises `ImproperlyConfigured` — the *pattern* remains open elsewhere. |
 | TA4 | **still-open** | Analytics "fallback defaults matching legacy behaviour" still at `entry_point.py:302-311`. (Tracked as SA18.2.) |
-| TA5 | **still-open** | `quickscale_cli.schema` shim package still present; CLI still imports through it (`status_command.py`, `plan_command.py`, `module_commands.py`, `module_wiring_manager.py`). |
+| TA5 | **closed 2026-07-04** | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | **still-open** | `Path.cwd()` template-dir fallback (`generator.py:117`) + backward-compat root-template tier (`:178`) still present. |
 | TA7 | **still-open** | `version.py:19-27` broad `except Exception` + terminal `"0.0.0"` still present. |
 | TA8 | **still-open** | `project_state.py:244`, `:676` `except Exception` swallows still present. |
@@ -242,10 +236,10 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 
 | ID | Status | Note |
 |----|--------|------|
-| TA1 | still-open | Legacy-key silent translation unchanged (`resolvers.py`, `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS` at :780) |
+| TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
 | TA2 | still-open (partially remediated) | `auth/adapters.py` now **raises** `ImproperlyConfigured` when `ACCOUNT_ALLOW_REGISTRATION` unset (SA11.7 done); all other listed module defaults remain (verified notifications :157, forms, blog, crm, analytics, billing) |
 | TA4 | still-open | Posthog fallback defaults verified at `entry_point.py:302-311` |
-| TA5 | still-open | Shim package present; 4+ internal CLI files still import through it |
+| TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | still-open | `Path.cwd()` guess at `generator.py:117`, root-template compat at :178 |
 | TA7 | still-open | `version.py:16-27` unchanged |
 | TA8 | still-open | `except Exception` swallows at `project_state.py:244,676` |
@@ -301,10 +295,10 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 
 | ID | Status | Note (re-verified 2026-07-04) |
 |----|--------|------|
-| TA1 | still-open | `resolvers.py` legacy-key silent translate/drop; `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS` at `:780`. |
+| TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
 | TA2 | still-open (partial) | `auth/adapters.py` now raises (SA11.7 done); permissive `getattr(settings, …, default)` remains — verified `billing/services.py:117`, `analytics/services.py:61`, `crm/views.py:204,223,231`, `forms/throttles.py:16`, `forms/views.py:134,146`, `blog/views.py:175,280`, `orgs/views.py:63`+`middleware.py:268` (see TA19). |
 | TA4 | still-open | Posthog fallback defaults `entry_point.py:302-311`. |
-| TA5 | still-open | `quickscale_cli.schema` shim still imported internally. |
+| TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | still-open | `generator.py` `Path.cwd()` guess `:117`, root-template compat `:178`. |
 | TA7 | still-open | `version.py:20` `except Exception:` → silent `"0.0.0"` floor. |
 | TA8 | still-open | `project_state.py` broad swallows. |

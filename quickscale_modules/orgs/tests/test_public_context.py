@@ -1,161 +1,22 @@
-"""SA11.1 — Tests for orgs-owned public-context helpers.
+"""SA13.1 — Tests for orgs-owned public-context helpers.
 
-Verifies the ``resolve_public_org_context`` context manager, the
-``PublicSystemOrgReadMixin`` CBV seam, and the acceptance contract:
-* Correct org resolution (explicit org, System org fallback).
-* Real tenant-scoped queries return rows under the helper.
-* Fail-closed (``.none()``-equivalent) when no org resolves.
+Verifies the ``PublicSystemOrgReadMixin`` CBV seam, the acceptance
+contract, and the backward-compat alias surface:
 * Mixin ``dispatch()`` wraps the view in ``org_scope()``.
+* System org resolution and fail-closed behavior.
+* ``resolve_public_org_context`` was deleted in SA13.1.
 """
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
-from django.db import transaction
 from django.http import HttpResponse
 from django.test import RequestFactory
 from django.views import View
 
 from quickscale_modules_orgs.current_org import get_current_org_id
 from quickscale_modules_orgs.models import Organization
-from quickscale_modules_orgs.public_context import (
-    PublicSystemOrgReadMixin,
-    resolve_public_org_context,
-)
-
-
-# =========================================================================
-# resolve_public_org_context — resolution and ContextVar priming
-# =========================================================================
-
-
-@pytest.mark.django_db
-class TestResolvePublicOrgContext:
-    """Tests for the ``resolve_public_org_context`` context manager."""
-
-    def test_explicit_org_yields_org_id(self) -> None:
-        """When a concrete org is passed, its pk is yielded."""
-        org = Organization.objects.create(name="Alpha", slug="alpha")
-
-        with transaction.atomic():
-            with resolve_public_org_context(org=org) as resolved_id:
-                assert resolved_id == org.pk
-
-    def test_explicit_org_primes_context_var(self) -> None:
-        """Inside the context the ContextVar reflects the passed org."""
-        org = Organization.objects.create(name="Beta", slug="beta")
-
-        with transaction.atomic():
-            with resolve_public_org_context(org=org):
-                assert get_current_org_id() == org.pk
-
-    def test_no_org_resolves_system_org(self) -> None:
-        """When org is omitted the System org singleton is resolved."""
-        system_org = Organization.objects.get_system_org()
-
-        with transaction.atomic():
-            with resolve_public_org_context() as resolved_id:
-                assert resolved_id == system_org.pk
-
-    def test_no_org_primes_context_var(self) -> None:
-        """Inside the context the ContextVar reflects the System org."""
-        system_org = Organization.objects.get_system_org()
-
-        with transaction.atomic():
-            with resolve_public_org_context():
-                assert get_current_org_id() == system_org.pk
-
-    def test_context_var_restored_after_exit(self) -> None:
-        """After the context exits the ContextVar returns to its prior value."""
-        prior = get_current_org_id()
-        org = Organization.objects.create(name="Gamma", slug="gamma")
-
-        with transaction.atomic():
-            with resolve_public_org_context(org=org):
-                assert get_current_org_id() == org.pk
-
-        assert get_current_org_id() == prior, (
-            "ContextVar should be restored after context exit."
-        )
-
-    def test_explicit_none_falls_back_to_system_org(self) -> None:
-        """When org=None is passed explicitly the System org is resolved."""
-        system_org = Organization.objects.get_system_org()
-
-        with transaction.atomic():
-            with resolve_public_org_context(org=None) as resolved_id:
-                assert resolved_id == system_org.pk
-
-
-# =========================================================================
-# resolve_public_org_context — real tenant-scoped query behaviour
-# =========================================================================
-
-
-@pytest.mark.django_db
-class TestTenantScopedQuery:
-    """Acceptance: a real tenant-scoped query returns rows under the
-    helper, and ``.none()``-equivalent behaviour is preserved when no
-    org resolves."""
-
-    def _create_tenant_category(self, org: Organization) -> object:
-        """Create a tenant-scoped Category for *org* (bypasses scoping)."""
-        from quickscale_modules_blog.models import Category
-
-        return Category.all_objects.create(
-            organization=org,
-            name="Test Category",
-            slug="test-category",
-        )
-
-    def test_tenant_query_returns_rows_with_explicit_org(self) -> None:
-        """Inside the helper context with an explicit org, a tenant-scoped
-        query returns rows belonging to that org."""
-        from quickscale_modules_blog.models import Category
-
-        org = Organization.objects.create(name="Query-Test", slug="query-test")
-        cat = self._create_tenant_category(org)
-
-        with transaction.atomic():
-            with resolve_public_org_context(org=org):
-                assert list(Category.objects.all()) == [cat]
-                assert Category.objects.count() == 1
-
-    def test_tenant_query_excludes_other_org_data(self) -> None:
-        """Inside the helper context, rows from a different org are not
-        visible."""
-        from quickscale_modules_blog.models import Category
-
-        org = Organization.objects.create(name="Query-Own", slug="query-own")
-        other = Organization.objects.create(name="Query-Other", slug="query-other")
-        cat = self._create_tenant_category(org)
-        self._create_tenant_category(other)  # should not appear
-
-        with transaction.atomic():
-            with resolve_public_org_context(org=org):
-                assert list(Category.objects.all()) == [cat]
-
-    def test_fail_closed_when_no_org_resolves(self) -> None:
-        """When the System org cannot be resolved (``get_system_org()``
-        raises), the helper yields ``None`` and tenant-scoped managers
-        return ``.none()``."""
-        from quickscale_modules_blog.models import Category
-
-        org = Organization.objects.create(name="Fail-Closed", slug="fail-closed")
-        self._create_tenant_category(org)
-
-        with patch.object(
-            Organization.objects,
-            "get_system_org",
-            side_effect=Exception("Simulated: system org unavailable"),
-        ):
-            with transaction.atomic():
-                with resolve_public_org_context() as resolved_id:
-                    assert resolved_id is None
-                    assert Category.objects.count() == 0
-                    assert list(Category.objects.all()) == []
+from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 
 
 # =========================================================================
@@ -209,7 +70,7 @@ class TestPublicSystemOrgReadMixinDispatch:
     def test_tenant_scoped_query_in_mixin_view(self) -> None:
         """A view using the mixin can run tenant-scoped queries in its
         handler and see rows for the resolved org."""
-        from quickscale_modules_blog.models import Category
+        from quickscale_modules_blog.models import Category  # type: ignore[import-untyped]  # noqa: F401 — blog stubs not shipped
 
         org = Organization.objects.create(name="CBV-Query", slug="cbv-query")
         cat = Category.all_objects.create(
@@ -238,7 +99,7 @@ class TestPublicSystemOrgReadMixinDispatch:
     def test_fail_closed_mixin_dispatch(self) -> None:
         """When ``get_public_org()`` returns ``None``, the mixin enters
         fail-closed mode — tenant-scoped queries return zero rows."""
-        from quickscale_modules_blog.models import Category
+        from quickscale_modules_blog.models import Category  # noqa: F401 — blog stubs not shipped
 
         org = Organization.objects.create(name="CBV-Fail", slug="cbv-fail")
         Category.all_objects.create(
@@ -284,7 +145,7 @@ class TestPublicSystemOrgReadMixinDispatch:
         """
         from django.template import engines
         from django.template.response import TemplateResponse
-        from quickscale_modules_blog.models import Category
+        from quickscale_modules_blog.models import Category  # noqa: F401 — blog stubs not shipped
 
         org = Organization.objects.create(
             name="LazyRenderTest",
@@ -308,7 +169,7 @@ class TestPublicSystemOrgReadMixinDispatch:
                     "{% for cat in cats %}{{ cat.name }}{% endfor %}"
                 )
                 return TemplateResponse(
-                    request,
+                    request,  # type: ignore[arg-type]
                     template,
                     {"cats": Category.objects.all()},
                 )
@@ -322,10 +183,10 @@ class TestPublicSystemOrgReadMixinDispatch:
         # tenant-scoped managers would return .none(), and the content
         # would be empty.  This test would then fail — catching the
         # regression.
-        assert response.content == b"Lazy Cat", (
+        assert response.content == b"Lazy Cat", (  # type: ignore[attr-defined]
             "Lazy queryset must have been evaluated inside org_scope() "
             "during render(), yielding the correct tenant-scoped row. "
-            f"Got {response.content!r}"
+            f"Got {response.content!r}"  # type: ignore[attr-defined]
         )
 
 
@@ -344,13 +205,6 @@ class TestPublicSystemOrgReadMixinInterface:
         assert hasattr(cm, "__enter__")
         assert hasattr(cm, "__exit__")
 
-    def test_get_public_org_context_forwards_org(self) -> None:
-        """The mixin passes the org argument to the underlying helper."""
-        mixin = PublicSystemOrgReadMixin()
-        cm_direct = resolve_public_org_context()
-        cm_mixin = mixin.get_public_org_context()
-        assert type(cm_direct) is type(cm_mixin)
-
     @pytest.mark.django_db
     def test_get_public_org_resolves_system_org(self) -> None:
         """The default ``get_public_org()`` returns the System org."""
@@ -366,3 +220,48 @@ class TestPublicSystemOrgReadMixinInterface:
         cm1 = mixin.get_public_org_context()
         cm2 = mixin.get_public_org_context()
         assert cm1 is not cm2
+
+    @pytest.mark.django_db
+    def test_get_public_org_context_yields_resolved_org_uuid(self) -> None:
+        """get_public_org_context() yields the resolved org UUID (CR-SA13.1-002).
+
+        The documented/type-annotated contract says it yields ``uuid.UUID or
+        None`` — the resolved organization UUID.  This test proves the enter
+        value matches the expected value so callers binding ``as`` receive
+        the correct org identifier.
+        """
+        from quickscale_modules_orgs.current_org import get_current_org_id
+
+        org = Organization.objects.create(
+            name="YieldValueTest",
+            slug="yield-value-test",
+        )
+        mixin = PublicSystemOrgReadMixin()
+        with mixin.get_public_org_context(org=org) as yielded_id:
+            assert yielded_id is not None
+            assert yielded_id == org.pk
+            # ContextVar should also be primed inside the block.
+            assert get_current_org_id() == org.pk
+
+        # ContextVar restored after exit.
+        assert get_current_org_id() is None
+
+    @pytest.mark.django_db
+    def test_get_public_org_context_yields_none_on_fail_closed(self) -> None:
+        """get_public_org_context() yields None when System org cannot be resolved."""
+        from unittest.mock import patch
+
+        from quickscale_modules_orgs.current_org import get_current_org_id
+        from quickscale_modules_orgs.models import Organization
+
+        mixin = PublicSystemOrgReadMixin()
+        # Mock get_system_org to raise so the except: resolved_id = None path runs.
+        with patch.object(
+            Organization.objects,
+            "get_system_org",
+            side_effect=Exception("No system org"),
+        ):
+            with mixin.get_public_org_context(org=None) as yielded_id:
+                assert yielded_id is None
+                # ContextVar should be None (fail-closed) inside the block.
+                assert get_current_org_id() is None
