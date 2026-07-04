@@ -125,7 +125,8 @@ class TestPublishPostApi:
     """Tests for publish post API"""
 
     def test_get_blog_api_tokens_ignores_invalid_entries(self, settings):
-        """Token config helper should keep only valid token/username mappings."""
+        """Runtime helper silently skips malformed entries (startup
+        validation covers the fail-hard check — see test_apps.py)."""
         settings.BLOG_API_TOKENS = [
             {"token": " valid-token ", "username": " author "},
             {"token": "", "username": "missing-token"},

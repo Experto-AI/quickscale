@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1–SA13.3 are complete; SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7 has substantial implementation landed but remains open on one deploy `DATABASE_URL`-link follow-up; SA18.8, SA18.9 and SA18.11 are ready now (SA18.9 decision made — fail hard on OSError); SA18.10 is unblocked (no longer depends on SA18.9).
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1–SA13.3 are complete; SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.5 are complete; SA17.6 and SA17.8 are ready now; SA17.7 is unblocked (SA17.5 complete). Track 3: SA18.1–SA18.6 are complete; SA18.7 has substantial implementation landed but remains open on one deploy `DATABASE_URL`-link follow-up; SA18.8, SA18.9 and SA18.11 are ready now (SA18.9 decision made — fail hard on OSError); SA18.10 is unblocked (no longer depends on SA18.9).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -66,9 +66,9 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA13.2 (no deps — complete)           SA17.3 (no deps — complete)               SA18.6 (no deps — complete)
 SA13.3 (no deps — complete)           SA17.4 (no deps — complete)                  SA18.7 (partial — 1 deploy follow-up still open)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — ready)                  SA18.8 (no deps — ready)
+SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — complete)                  SA18.8 (no deps — ready)
 SA14.1 (no deps — ready)             SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
-SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (no deps — ready)
+SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)            SA18.10 (no deps — ready)
 SA14.3 (deps: SA14.1)                SA17.8 (no deps — ready)                  SA18.11 (no deps — ready)
 SA14.4 (deps: SA14.2, SA14.3)
 SA14.5 (no deps — ready)
@@ -82,7 +82,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA13.2, SA13.3 (complete) → SA13.4 (deps met), then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
-| **2** | SA17.3–SA17.4 (complete), SA17.5, SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
+| **2** | SA17.3–SA17.5 (complete), SA17.6, SA17.8 (ready) → SA17.7 (ready, deps met) | Module-side fail-hard settings (Finding 2/TA2 not fully closed until SA17.6 lands) |
 | **3** | SA18.6 (complete), SA18.7 (partial — deploy follow-up still open), SA18.8–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing (Finding 4 not fully closed until SA18.7 follow-up lands) |
 
 ---
@@ -185,10 +185,8 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `forms/apps.py`, `forms/views.py`, `forms/throttles.py`, `forms/models.py`, `forms/tests/settings.py`, `forms/tests/test_apps.py` (new), `forms/tests/test_throttles.py`.
   *Acceptance:* omitting any of the three settings raises at startup instead of silently applying the current defaults.
 
-- [ ] **SA17.5 — Fail-hard blog module settings.** `Tier 2 · Track 2 · deps: none · (why → TA2)`
-  Require explicit RSS-enable and media-URL settings; make malformed `BLOG_API_TOKENS` entries raise at startup instead of being silently `continue`-skipped.
-  *Files:* `blog/urls.py:18`, `blog/views.py:175,181-190,280`, `blog/models.py:46-48`.
-  *Acceptance:* a malformed `BLOG_API_TOKENS` entry raises at startup naming the bad entry; RSS-enable and media-URL settings are required, not defaulted.
+- [x] **SA17.5 — Fail-hard blog module settings (complete).** `Tier 2 · Track 2 · deps: none · (why → TA2)`
+  Added `AppConfig.ready()` startup guard to `blog/apps.py` that raises `ImproperlyConfigured` at startup when `BLOG_ENABLE_RSS` is missing, `MEDIA_URL` is empty/unset, or any `BLOG_API_TOKENS` entry is malformed (naming the bad entry). Removed the default-`True` fallback in `urls.py:_blog_enable_rss()` and the `getattr(settings, "MEDIA_URL", "/media/")` fallbacks in `views.py:_build_media_response_url()` and `models.py:_build_public_media_url()`. Updated test settings with the required `BLOG_ENABLE_RSS = True`. Updated `test_urls.py` to remove the `None`-unset parametrize case. Added `blog/tests/test_apps.py` with 9 ready()-method guard tests (3 general + 6 malformed-token variations). Acceptance: a malformed `BLOG_API_TOKENS` entry raises at startup naming the bad entry; RSS-enable and media-URL settings are required, not defaulted. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA17.6 — Fail-hard notifications module settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
   Require explicit enabled-flag and provider settings instead of defaulting to `True`/`"resend"`.
