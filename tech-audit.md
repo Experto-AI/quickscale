@@ -14,6 +14,8 @@
 > **Closed 2026-07-04:** `TA8` (project-metadata resolution swallows validation errors) — remediated by SA18.6. Removed `except Exception: return None` from `resolve_authoritative_project_metadata`'s quickscale.yml branch; `_load_managed_file_records_for_drift` is explicitly outside F12.2 scope. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
 > **Closed 2026-07-04:** `TA4` (analytics manifest fallback defaults) — remediated by SA18.2. `entry_point.py`'s `_analytics_post_hook` now raises `ManifestError` on empty-after-resolution settings instead of silently filling legacy defaults. `TA6` (generator template fallback chains) — remediated by SA18.4. `generator.py.__init__` resolves templates deterministically from the installed package path (no `Path.cwd()` guessing) and `_get_theme_template_path` raises `FileNotFoundError` immediately instead of falling through a backward-compat root tier. `TA7` (version fallback ending in `"0.0.0"`) — remediated by SA18.5. `version.py` narrowed to `except ImportError` and raises `FileNotFoundError` when both the embedded `_version.py` and the dev-tree `VERSION` file are unavailable. All three verified against current source 2026-07-04. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA11` (invalid `PORT` env value silently coerced to 8000) — remediated by SA18.8. `get_port_from_env()` now defaults to `8000` only when `PORT` is unset; a present but non-numeric `PORT` raises `ValueError` naming the invalid value. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 
 **Scope swept:** `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `scripts/`, generator templates. Patterns: broad/silent `except`, fallback chains, legacy/compat keywords, `getattr(settings, X, default)`, env-var defaults.
 
@@ -28,7 +30,6 @@
 | TA2 | High | `quickscale_modules/*/src` (pervasive) | `getattr(settings, X, permissive-default)` — features fail-open when settings are missing (generalizes SA11.7) |
 | TA9 | Medium | `analytics/services.py:218`, `forms/views.py:92` | Missing SDK / missing sibling module degrades silently instead of failing |
 | TA10 | Medium | `quickscale_cli/utils/railway_utils.py` | Broad `except Exception: return None` hides Railway CLI errors |
-| TA11 | Low | `quickscale_cli/utils/docker_utils.py:164` | Invalid `PORT` env value silently coerced to 8000 |
 | TA12 | Low | `quickscale_core/contracts/module_catalog.py` | Deprecated compat delegates still in public API; unknown module names fail-open in readiness check |
 | TA13 | Low | `quickscale_core/apply/steps/wiring.py:71` | Best-effort hash-capture step always reports success |
 | TA14 | Low | repo-wide | `# F-EXCEPTION:` tag mandated by decisions.md appears nowhere in code |
@@ -59,10 +60,6 @@ Since modules are creation-time assembled and the generator owns settings emissi
 ### TA10 (Medium) — `railway_utils.py` broad exception swallowing
 
 `quickscale_cli/utils/railway_utils.py:469,534,774` (and narrower variants at `:52,:236`): `except Exception: return None` around URL extraction, variable parsing, and status queries. Callers cannot distinguish "not deployed yet" from "railway CLI crashed / output format changed," so deployment problems surface as silent `None`s in status output. The narrow `subprocess`-error catches for "is the CLI installed" probes are defensible; the broad `Exception` catches are not.
-
-### TA11 (Low) — Invalid `PORT` silently coerced to 8000
-
-`docker_utils.py:164-173` `get_port_from_env()`: `PORT` defaults to `"8000"` (acceptable dev convention, mirrors docker-compose) **but** a non-numeric `PORT` hits `except ValueError: return 8000` — a misconfigured value is silently replaced rather than reported. Also `generator/templates/Dockerfile.j2:160` healthcheck defaults PORT (consistent with Railway convention; note only).
 
 ### TA12 (Low) — Deprecated catalog compat delegates; fail-open readiness for unknown names
 
@@ -111,7 +108,7 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 | TA8 | **closed 2026-07-04** | Remediated by SA18.6 — see header note. |
 | TA9 | **still-open** | Analytics missing-SDK warn-and-disable (`services.py:218`), forms soft analytics probe (`views.py:94`) still present. |
 | TA10 | **still-open** | 8× `except Exception` in `railway_utils.py`. |
-| TA11 | **still-open** | `docker_utils.get_port_from_env()` still coerces invalid `PORT`→8000. |
+| TA11 | **closed 2026-07-04** | Remediated by SA18.8 — see header note. |
 | TA12 | **still-open** | Deprecated-D2 catalog delegates still exported; unknown-name readiness still fail-open. |
 | TA13 | **still-open** | `apply/steps/wiring.py` best-effort step still returns `success=True` on `OSError`. |
 | TA14 | **still-open** | Zero `# F-EXCEPTION:` tags in code (grep confirms 0 hits). |
@@ -225,7 +222,7 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 | TA8 | closed 2026-07-04 | Remediated by SA18.6 — see header note. |
 | TA9 | still-open | Verified `analytics/services.py:218` warning-and-continue, `forms/views.py:94` |
 | TA10 | still-open | 8 `except Exception` sites in `railway_utils.py` |
-| TA11 | still-open | `docker_utils.py:164-173` unchanged |
+| TA11 | closed 2026-07-04 | Remediated by SA18.8 — see header note. |
 | TA12 | still-open | Deprecated delegates at `module_catalog.py:132,162` |
 | TA13 | still-open | `wiring.py` best-effort `success=True` unchanged |
 | TA14 | still-open | `F-EXCEPTION` grep: 0 hits |
@@ -284,7 +281,7 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 | TA8 | closed 2026-07-04 | Remediated by SA18.6 — see header note. |
 | TA9 | still-open | `analytics/services.py:218`, `forms/views.py:94` warning-and-continue. |
 | TA10 | still-open | 8× `except Exception` in `railway_utils.py`. |
-| TA11 | still-open | `docker_utils.py:170-173` — invalid `PORT` silently → 8000. |
+| TA11 | closed 2026-07-04 | Remediated by SA18.8 — see header note. |
 | TA12 | still-open | Deprecated delegates `module_catalog.py:132,162`. |
 | TA13 | still-open | `wiring.py` best-effort `success=True`. |
 | TA14 | still-open | `# F-EXCEPTION:` tag: 0 hits repo-wide. |

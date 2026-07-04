@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1–SA13.3 are complete; SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.7 are complete; SA18.8, SA18.9 and SA18.11 are ready now (SA18.9 decision made — fail hard on OSError); SA18.10 is unblocked (no longer depends on SA18.9).
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1–SA13.3 are complete; SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.8 are complete; SA18.9, SA18.10 and SA18.11 are ready now (SA18.9 decision made — fail hard on OSError).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -66,7 +66,7 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA13.2 (no deps — complete)           SA17.3 (no deps — complete)               SA18.6 (no deps — complete)
 SA13.3 (no deps — complete)           SA17.4 (no deps — complete)                  SA18.7 (no deps — complete)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — ready)                  SA18.8 (no deps — ready)
+SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — ready)                  SA18.8 (no deps — complete)
 SA14.1 (no deps — ready)             SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
 SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (no deps — ready)
 SA14.3 (deps: SA14.1)                SA17.8 (no deps — ready)                  SA18.11 (no deps — ready)
@@ -83,7 +83,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 |-------|------------------|-------|
 | **1** | SA13.2, SA13.3 (complete) → SA13.4 (deps met), then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA17.3–SA17.4 (complete), SA17.5, SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
-| **3** | SA18.6–SA18.7 (complete), SA18.8–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
+| **3** | SA18.6–SA18.8 (complete), SA18.9–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
 
 ---
 
@@ -241,10 +241,11 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *All follow-up files landed — no pending closeout items remain.*
   *Acceptance:* every Railway caller seam surfaces CLI crashes or output-format drift as a descriptive error, distinguishable from benign "not deployed yet" / empty-output states; successful-but-unparseable output does not collapse to `None`/`{}` anywhere in the deploy/DR Railway helpers.
 
-- [ ] **SA18.8 — Fail-hard invalid `PORT` values.** `Tier 1 · Track 3 · deps: none · (why → TA11)`
-  A non-numeric `PORT` env value should raise a descriptive error instead of silently coercing to `8000`; the default-when-unset behavior (`8000`) is fine and stays.
-  *Files:* `quickscale_cli/src/quickscale_cli/utils/docker_utils.py:164-173`.
+- [x] **SA18.8 — Fail-hard invalid `PORT` values (complete).** `Tier 1 · Track 3 · deps: none · (why → TA11)`
+  `get_port_from_env()` now defaults to `8000` only when `PORT` is unset. A present but non-numeric `PORT` now raises `ValueError` naming the bad value instead of silently coercing to `8000`. Updated the helper docstring to remove the fallback-on-invalid contract and rewrote the focused `TestGetPortFromEnv` regression to assert the fail-hard behavior.
+  *Files:* `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`, `quickscale_cli/tests/utils/test_docker_utils.py`.
   *Acceptance:* `PORT=notanumber` raises a descriptive error; `PORT` unset still defaults to `8000`.
+  *Finding:* Existing focused test coverage already exercised the invalid-`PORT` seam, so the task reduced to changing the helper behavior and updating the assertion from fallback-to-default to fail-hard. No blockers discovered.
 
 - [ ] **SA18.9 — Fail `step_capture_hashes` on `OSError`.** `Tier 1 · Track 3 · deps: none · (why → TA13)`
   Return `StepOutcome(success=False)` on `OSError` with a descriptive error message. Hash capture runs over files the apply pipeline itself just wrote — a read-back failure is a genuine system-level problem (disk full, permissions, filesystem corruption), not a best-effort informational path.
