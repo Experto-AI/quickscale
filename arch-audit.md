@@ -3,6 +3,8 @@
 > **Prior autopsy (2026-06-30): Closed 2026-07-02.** All 5 findings remediated and merged to `v87` (SA1.1–SA5.2); see [CHANGELOG.md](CHANGELOG.md). Closed findings dropped per template rule.
 >
 > **Closed 2026-07-03:** Findings 2 (orgs god-module — SA7.2–SA7.4), 3 (dual active-org truth — product decision D1), and 4 (core-as-runtime-API — SA9.1–SA9.6). Closeout in [CHANGELOG.md](CHANGELOG.md). Sections dropped below per template rule.
+>
+> **Closed 2026-07-04** (from the 2026-07-03 fresh-pass autopsy below): `registry-universe-mismatch` (SA15.1–SA15.3, entire finding) and `per-module-knowledge-fanout` (SA16.1–SA16.2, entire finding). Closeout in [CHANGELOG.md](CHANGELOG.md). Sections dropped below per template rule.
 
 This file is reused as the template for the next structural autopsy — keep the orientation current, drop closed findings once remediated.
 
@@ -138,9 +140,9 @@ QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poe
 | ID | Title | Horizon | Confidence | Size | Problem (one line) |
 |----|-------|---------|------------|------|--------------------|
 | `operator-read-path-undefined` | Elevated/operator reads: Python bypass and DB RLS contradict each other | now | High (structure) / Medium (exact prod symptom) | M | `all_objects` admin querysets promise cross-tenant visibility that FORCE RLS deliberately denies to the runtime role; the documented `operator_access()` contract does not exist in code |
-| `registry-universe-mismatch` | Default-deny registry covers the orgs test matrix, not the deployable module set | now | High (mechanism) / Medium-High (end-to-end) | M | `TENANT_TABLE_REGISTRY` omits auth/backups/notifications concrete models, so advertised module combos fail the generated CI's exit-1 isolation gate, and every new model anywhere must edit orgs' source |
 | `org-context-api-accretion` | Five overlapping org-context entry APIs + per-callsite discipline | now → 6-18mo | High | M | Outside the request path every surface hand-picks among 5 context primitives whose correctness depends on transaction state — the factory for the project's own worst bug class |
-| `per-module-knowledge-fanout` | Module contract still fanned across ≥6 hand-written surfaces + drifting manifest snapshots | 6–18mo | High (structure & drift) / Medium (drift consequence) | S (urgent slice) | Per-module knowledge lives in adapters/resolvers/CLI config across 3 packages plus a second `module.yml` copy in core that already disagrees with the module-owned one (version floors missing) |
+
+`registry-universe-mismatch` and `per-module-knowledge-fanout` (closed 2026-07-04) — see closure note above.
 
 ### Finding 1: Elevated/operator reads are structurally undefined — the Python bypass and the DB backstop disagree
 
@@ -171,36 +173,6 @@ QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poe
 - **Remediation size:** M.
 - **Migration path:** Build `TenantModelAdmin` in orgs (org-resolving, `org_scope`-wrapping) and port CRM's eight admins to it; delete the "cross-tenant visibility" comments as you go.
 
-### Finding 2: The default-deny registry's universe is the orgs test matrix, not the module set users can deploy
-
-- **ID:** `registry-universe-mismatch`
-- **Rank rationale:** Blast = generated projects' CI hard-fails (exit 1) for advertised module combinations (orgs+auth is the canonical SaaS path; billing *requires* auth), and every new concrete model anywhere requires editing another module's source; likelihood = certain on first such generation.
-- **Horizon:** now.
-- **Confidence:** High on mechanism (registry read in full; command exits 1 on unclassified even with `--postgres-only`; generated CI includes the gate whenever orgs is selected; auth's `User` is concrete). Medium-High end-to-end — confirm by generating an orgs+auth project and running `manage.py check_tenant_isolation --postgres-only`.
-- **Context dependence:** wrong-regardless — a default-deny gate whose enforcement universe differs from its deployment universe fails at its one job.
-- **Problem:** `TENANT_TABLE_REGISTRY` — the SSOT for tenant classification — is a hardcoded list in orgs' source populated against the 7 apps installed in orgs' own test settings, while the actual unit of deployment is any user-selected module subset plus the user's own apps.
-- **Evidence:**
-  - `orgs/tenancy.py:119-346`: full registry — CRM/Forms/Billing/Blog/Listings/Social + orgs exclusions only. **No entries** for `quickscale_modules_auth` (concrete `User(AbstractUser)`, `auth/models.py:7`, plus its auto-created M2M through-tables), `quickscale_modules_backups` (3 concrete models), `quickscale_modules_notifications` (4 concrete models).
-  - `orgs/tests/settings.py` `INSTALLED_APPS` = exactly the registry's app set — the gate has never been evaluated against the other modules.
-  - `orgs/.../check_tenant_isolation.py:69-73,134+`: the SA1.4 classification check runs unconditionally ("cannot be skipped" even under `--postgres-only`) and unclassified models → exit 1.
-  - `generator/templates/github/workflows/ci.yml.j2:102-110`: generated CI runs that command whenever `"orgs" in selected_modules` → orgs+auth / orgs+backups / orgs+notifications projects fail their own CI at first push.
-  - `orgs/checks.py:125-137` (W005) tells the user to fix it by editing `TENANT_TABLE_REGISTRY` — i.e., editing embedded module source they receive via subtree.
-  - User-app hole: `tenancy.py:888-904` scopes default-deny to the `quickscale_modules_` prefix; the code users are invited to write ("add your custom Django apps") is invisible to the default-deny guarantee unless they "override or extend" a function inside the embedded orgs module.
-  - Coordination artifact: decisions.md:1114-1115 embeds a manual enrolled-model count assertion (`total=21, crm=7, …`) that must be hand-edited per model change.
-- **Why it compounds:** Every new concrete model in any module = edit orgs' `tenancy.py` + the decisions.md counter (cross-package, cross-split-branch lockstep between independently versioned artifacts); every module pairing outside the tested 7-app set is an untested combination of the isolation gate; third-party or user modules cannot join the contract without patching orgs.
-- **Correct shape:** Classification travels with the model (or its module), and default-deny quantifies over *every installed concrete model in the deployed project* — orgs aggregates declarations and enforces; it does not own the list.
-- **Trigger for urgency:** First user generates orgs+auth (or +backups/+notifications) — CI fails naming models the user didn't write; or first user ships a custom tenant-scoped app believing RLS covers it.
-- **Compounding factor:** 21 ENROLLED + ~15 EXCLUDED entries already centralized; SA1.3/SA1.4 checks, the conformance test suite, and the generated CI gate are all keyed to the registry shape.
-- **Detection signal:** Generated-project CI failures on `check_tenant_isolation` naming auth/backups/notifications models; W005 warnings in generated project logs.
-- **Steelman:** A single reviewable list is an auditability feature — one file shows the whole isolation surface, and unclassified-module combos "aren't supported yet." — Partially holds for auditability (preserve it by *generating* the aggregate view); fails on support: nothing in plan/apply marks orgs+auth unsupported — it is the documented happy path.
-- **Alternative solutions:**
-  1. **Per-module declarations:** each module declares its models' classification (a `tenant_tables:` section in `module.yml`, or a `tenant_classification` attribute on the AppConfig); orgs aggregates at runtime; default-deny = any installed concrete model with no owning declaration fails. Removes cross-module edits; keeps default-deny; M effort.
-  2. **Model-level markers:** ENROLLED is already marker-detectable (`TenantModel`/`TenantManager` — SA1.3); add an explicit `tenant_excluded = "reason"` class attribute for exclusions and widen the check's scope from the `quickscale_modules_` prefix to all non-contrib installed apps (with a third-party allowlist). Classification lives beside the model; also closes the user-app hole; M effort; the single-file overview becomes a generated report.
-  3. **Registry fragments merged at apply time:** modules ship registry fragments; `quickscale apply` materializes a project-local registry. Keeps a literal registry file; adds apply-engine complexity; M–L.
-- **Preferred option + why:** (2) — it makes the invariant self-carrying ("every concrete model must either be a tenant model or say why not"), extends the guarantee to user apps (the product's actual growth surface), and reuses the existing marker detection. Backfill markers on auth/backups/notifications first so the advertised combos stop failing, then derive the human-readable registry as an artifact.
-- **Remediation size:** M.
-- **Migration path:** Add the exclusion marker + widen `get_unclassified_concrete_models()` scope; backfill auth/backups/notifications/storage models; keep the literal registry temporarily as a cross-check test against the derived view.
-
 ### Finding 3: Org-context entry is a five-API accretion; every non-request path hand-picks its idiom
 
 - **ID:** `org-context-api-accretion`
@@ -229,36 +201,9 @@ QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poe
 - **Remediation size:** M (S for the API surface itself; M with the 26 `tenant_context` callsite migrations).
 - **Migration path:** Delete `resolve_public_org_context`, privatize the three mid-level primitives behind `org_scope`, and add the lint gate; migrate callsites module-by-module afterward.
 
-### Finding 4: Per-module contract knowledge is still fanned across ≥6 hand-written surfaces — and the duplicate manifest snapshots already drift
-
-- **ID:** `per-module-knowledge-fanout`
-- **Rank rationale:** Blast = the product's core growth axis (every new module/option) pays an N≈10-file coordination tax across three packages, and the plan-time contract can silently disagree with the apply-time contract; likelihood = tax is paid on every release, and the drift instance already exists.
-- **Horizon:** 6–18 months (the drift slice is *now*).
-- **Confidence:** High on structure and the live drift; Medium on the drift's runtime consequence (which lifecycle stage reads which copy for `required_modules` floors — verify via `manifest/entry_point.py:87` base-path resolution in a plan-vs-apply trace).
-- **Context dependence:** wrong-for-now — a declarative migration is genuinely underway (SA6.1 loader shipped; analytics + listings fully migrated with imperative-freeze guardrail tests); the finding covers what that plan does **not** cover: the duplicated manifest snapshots and the 11 unmigrated modules' interim exposure.
-- **Problem:** The module contract (options, wiring, dependencies, version floors) lives simultaneously in per-module Python adapters/resolvers/CLI-config across `quickscale_core` and `quickscale_cli`, *and* in two YAML copies — the module-owned `module.yml` and a snapshot under `quickscale_core/src/quickscale_core/data/manifests/` — with no gate keeping the copies equal.
-- **Evidence:**
-  - `core/manifest/entry_point.py` (1460 lines): per-module `_<name>_manifest_adapter` + `_<name>_post_hook` ×9 modules; `core/contracts/resolvers.py` (1715 lines): `default_/normalize_/resolve_/validate_<name>_module_options` quintuplets; `cli/commands/module_config.py` (2038 lines); `cli/commands/apply_command.py` (3648 lines, 102 functions, 99 module-name-branching lines — top code-churn file in the repo).
-  - `core/contracts/imperative_inventory.py` — an in-repo catalog of exactly this debt, by symbol and migration phase.
-  - **Live drift:** `quickscale_modules/blog/module.yml` and `billing/module.yml` declare `required_modules: [orgs>=0.86.0]` (SA7.4 floors); the core snapshots `data/manifests/{blog,billing}/module.yml` still say bare `orgs`. No equality gate exists in tests/scripts/CI (searched).
-  - Doc drift on the migration itself: decisions.md §module-derivation-schema still says YAML loading is "deferred," while CHANGELOG SA6.1 records the loader as shipped and blog's `module.yml` carries a full `derivation:` section.
-- **Why it compounds:** Adding a module touches ~10 surfaces (adapter, post-hook, resolver quintuplet, CLI configurator, catalog, snapshot copy, theme navigation, orgs registry [Finding 2], root pyproject + mypy.ini, docs); every option change touches ≥2; each release that edits a module manifest without its snapshot widens the plan/apply contract fork.
-- **Correct shape:** `module.yml` inside the module is the sole contract source; every other representation is generated or generic, and any second physical copy is a build artifact protected by an equality gate.
-- **Trigger for urgency:** Already fired once (the floors); next: any option change landing in one copy, and the teams module being built through the imperative path.
-- **Compounding factor:** 11 modules still on the imperative path; freeze guardrails protect only analytics + listings; Finding 2's preferred fix wants `module.yml`/model-adjacent declarations to be trustworthy.
-- **Detection signal:** `diff quickscale_modules/*/module.yml quickscale_core/src/quickscale_core/data/manifests/*/module.yml` — nonempty today; instrument it as a CI step and it becomes the alarm.
-- **Steelman:** The migration is deliberately incremental with per-module freeze tests — big-bang replacement of a working CLI would be riskier; the snapshots exist because plan-time needs manifests before any module is embedded. — Holds for pacing and for the snapshots' *existence*; does not justify hand-maintained twin copies without a sync gate.
-- **Alternative solutions:**
-  1. **Sync gate now:** a script that copies `quickscale_modules/*/module.yml` → `core/data/manifests/` plus a CI equality check (fail on diff). S effort, kills the fork immediately, no behavior change.
-  2. **Eliminate snapshots:** plan-time reads manifests from the packaged module wheels or split branches. M effort; adds network/packaging coupling to `plan`; only worth it if snapshots prove chronically stale even with the gate.
-  3. **Accelerate the derivation migration** with a per-release module quota until `entry_point.py` adapters and `resolvers.py` quintuplets collapse into the generic path. L effort in aggregate — this is the existing Track-2 direction.
-- **Preferred option + why:** (1) immediately (it is the missing guardrail on an otherwise sound migration), continue (3) at the current cadence, and make **teams** the first module built purely declaratively so the fan-out never grows again.
-- **Remediation size:** S (for the urgent slice — the sync gate + fixing the two drifted snapshots).
-- **Migration path:** `scripts/sync_module_manifests.py` + a `make check` / CI equality step; re-sync blog and billing snapshots in the same change.
-
 ### Fix order and interactions
 
-Do Finding 3 before (or as the first step of) Finding 1: the operator/admin contract should be built on the consolidated `org_scope` seam, otherwise Finding 1 adds a sixth context idiom that Finding 3 must later migrate. Finding 4's sync gate (S) should land before Finding 2's preferred fix if classification metadata ends up riding `module.yml` — otherwise per-module declarations inherit the snapshot-drift problem; with the marker-based option (2b) they are independent. Finding 2 is otherwise independent of 1/3 and can run in parallel. Open roadmap tasks fold in cleanly: SA11.6/SA11.7 become subsumed steps of Finding 3's consolidation; SA10.2 (contract-vintage detection) is unaffected but complements Finding 4.
+Do Finding 3 before (or as the first step of) Finding 1: the operator/admin contract should be built on the consolidated `org_scope` seam, otherwise Finding 1 adds a sixth context idiom that Finding 3 must later migrate. `registry-universe-mismatch` and `per-module-knowledge-fanout` are closed (2026-07-04) and no longer part of the ordering. Open roadmap tasks fold in cleanly: SA11.6/SA11.7 are subsumed steps of Finding 3's consolidation; SA10.2 (contract-vintage detection) is unaffected.
 
 ### Sound load-bearing decisions (protect these during remediation)
 
