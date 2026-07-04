@@ -4,6 +4,8 @@ import builtins
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 
 def test_version_fallback_import_error():
     """Test version module handles import error gracefully."""
@@ -39,14 +41,14 @@ def test_version_fallback_import_error():
 
                 # Verify the module loaded with fallback version
                 assert hasattr(test_module, "__version__")
-                assert isinstance(test_module.__version__, str)
+                assert test_module.__version__ == "1.2.3"
             finally:
                 # Restore original import
                 builtins.__import__ = original_import
 
 
 def test_version_fallback_no_version_file():
-    """Test version module falls back to 0.0.0 when VERSION file missing."""
+    """Test version module raises when VERSION file is also missing."""
     import importlib.util
 
     # Get the path to version.py
@@ -71,11 +73,8 @@ def test_version_fallback_no_version_file():
         builtins.__import__ = mock_import
 
         try:
-            spec.loader.exec_module(test_module)
-
-            # Should fall back to 0.0.0
-            assert hasattr(test_module, "__version__")
-            assert test_module.__version__ == "0.0.0"
+            with pytest.raises(FileNotFoundError, match="VERSION file was not found"):
+                spec.loader.exec_module(test_module)
         finally:
             builtins.__import__ = original_import
 
