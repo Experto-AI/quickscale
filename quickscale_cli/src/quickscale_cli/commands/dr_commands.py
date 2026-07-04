@@ -148,10 +148,18 @@ def _fetch_railway_runtime_variables(
     railway_environment: str | None,
     role: str,
 ) -> dict[str, str]:
-    variables = get_railway_variables(
-        service=service,
-        environment=railway_environment,
-    )
+    try:
+        variables = get_railway_variables(
+            service=service,
+            environment=railway_environment,
+        )
+    except ValueError as exc:
+        label = service
+        if railway_environment:
+            label = f"{service} ({railway_environment})"
+        raise click.ClickException(
+            f"Railway CLI output format error for {role} service '{label}': {exc}"
+        ) from exc
     if variables is None:
         label = service
         if railway_environment:

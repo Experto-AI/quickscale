@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 (dead context API deletion) landed already, so SA13.2 and SA13.3 are unblocked and ready to start now. Track 2: SA15 (entire finding), SA17.1, and SA17.2 are complete; SA17.3–SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.9 within the track.
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1–SA13.3 are complete; SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7 has substantial implementation landed but remains open on one deploy `DATABASE_URL`-link follow-up; SA18.8, SA18.9 and SA18.11 are ready now (SA18.9 decision made — fail hard on OSError); SA18.10 is unblocked (no longer depends on SA18.9).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -64,11 +64,11 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA13.2 (no deps — ready)             SA17.3 (no deps — ready)               SA18.6 (no deps — complete)
-SA13.3 (no deps — ready)             SA17.4 (no deps — ready)                  SA18.7 (no deps — ready)
+SA13.2 (no deps — complete)           SA17.3 (no deps — complete)               SA18.6 (no deps — complete)
+SA13.3 (no deps — complete)           SA17.4 (no deps — complete)                  SA18.7 (partial — 1 deploy follow-up still open)
 SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — ready)                  SA18.8 (no deps — ready)
 SA14.1 (no deps — ready)             SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
-SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (deps: SA18.9)
+SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (no deps — ready)
 SA14.3 (deps: SA14.1)                SA17.8 (no deps — ready)                  SA18.11 (no deps — ready)
 SA14.4 (deps: SA14.2, SA14.3)
 SA14.5 (no deps — ready)
@@ -81,9 +81,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA13.2, SA13.3 complete → SA13.4 (deps met), then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
-| **2** | SA17.3–SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
-| **3** | SA18.6 (complete), SA18.7–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.9) | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
+| **1** | SA13.2, SA13.3 (complete) → SA13.4 (deps met), then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
+| **2** | SA17.3–SA17.4 (complete), SA17.5, SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
+| **3** | SA18.6 (complete), SA18.7 (partial — deploy follow-up still open), SA18.8–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing (Finding 4 not fully closed until SA18.7 follow-up lands) |
 
 ---
 
@@ -181,9 +181,9 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `crm/apps.py`, `crm/adapter.py`, `crm/views.py`, `crm/tests/settings.py`, `crm/tests/test_apps.py` (new), `crm/tests/test_views.py`.
   *Acceptance:* missing `CRM_ENABLE_API` or a malformed page-size setting raises at startup/request time with a descriptive error.
 
-- [ ] **SA17.4 — Fail-hard forms module settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  Require explicit settings for the submissions API toggle, rate limit, and spam-protection flag instead of defaulting them.
-  *Files:* `forms/views.py:134,146`, `forms/throttles.py:16`, `forms/models.py:32`.
+- [x] **SA17.4 — Fail-hard forms module settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
+  Added AppConfig.ready() startup guard to `forms/apps.py` that raises `ImproperlyConfigured` at startup when any of `FORMS_SUBMISSIONS_API`, `FORMS_RATE_LIMIT`, or `FORMS_SPAM_PROTECTION` is missing. Removed default-`True` fallbacks in `views.py` (`FormsAdminApiMixin.initial()`), `throttles.py` (`FormSubmitThrottle.get_rate()`), and `models.py` (`is_form_spam_protection_enabled()`). Updated test settings with the required settings. Replaced the `test_form_submit_throttle_falls_back_to_parent_rate` fallback test with `test_form_submit_throttle_missing_rate_raises_improperly_configured`. Added five ready()-method tests to `forms/tests/test_apps.py` (new). See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `forms/apps.py`, `forms/views.py`, `forms/throttles.py`, `forms/models.py`, `forms/tests/settings.py`, `forms/tests/test_apps.py` (new), `forms/tests/test_throttles.py`.
   *Acceptance:* omitting any of the three settings raises at startup instead of silently applying the current defaults.
 
 - [ ] **SA17.5 — Fail-hard blog module settings.** `Tier 2 · Track 2 · deps: none · (why → TA2)`
@@ -234,21 +234,26 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Acceptance:* a malformed `quickscale.yml` raises `ConfigValidationError`; `_load_managed_file_records_for_drift` is explicitly outside F12.2; targeted tests updated to expect fail-hard behavior.
 - [ ] **SA18.7 — Narrow `railway_utils.py`'s broad exception swallowing.** `Tier 1 · Track 3 · deps: none · (why → TA10)`
   Narrow the `except Exception: return None` clauses around URL extraction, variable parsing, and status queries to the specific expected failure modes; keep the narrower `subprocess`-error "is the CLI installed" probes as-is.
-  *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:469,534,774` (and `:52,236` for comparison).
-  *Acceptance:* a Railway CLI crash or output-format change surfaces as an error in `quickscale` status output, distinguishable from "not deployed yet".
+  **Progress landed (2026-07-04):** `get_deployment_url()`, `generate_railway_domain()`, `get_railway_variables()`, and `_get_railway_variables_json()` now narrow their broad catches to the expected Railway command failure types (`TimeoutError`, `FileNotFoundError`). Successful-but-unparseable Railway output (returncode 0 but unrecognizable format) now raises `ValueError` instead of collapsing to `None`/`{}` across the URL/domain parsing paths and the DR/runtime-variable path. Focused Railway utility tests plus deploy/DR caller-level regression coverage were added for those seams. The narrower `subprocess`-error probes at lines 52 and 236 remain unchanged.
+  **Pending / blocking follow-up (user-directed stop after review cap):** the deploy `DATABASE_URL` link path (`_link_database_step()` → `link_database_to_service()` → `get_railway_variables()`) still needs the same descriptive fail-hard conversion and a caller-level regression test. Today that path can still surface the parse-drift `ValueError` uncaught instead of converting it into the same operator-visible non-zero CLI failure used by the other deploy/DR seams.
+  **Decision status:** no product or design decision remains open here — the remaining work is a narrow implementation follow-up only.
+  *Files landed so far:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py`; `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py`; `quickscale_cli/src/quickscale_cli/commands/dr_commands.py`; `quickscale_cli/tests/utils/test_railway_utils.py`; `quickscale_cli/tests/commands/test_deployment_commands.py`; `quickscale_cli/tests/commands/test_deployment_commands_extended.py`; `quickscale_cli/tests/commands/test_dr_commands.py`.
+  *Pending file for closeout:* `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py` (deploy `DATABASE_URL`-link seam) plus the direct regression coverage for that path.
+  *Acceptance:* every Railway caller seam surfaces CLI crashes or output-format drift as a descriptive error, distinguishable from benign "not deployed yet" / empty-output states; successful-but-unparseable output does not collapse to `None`/`{}` anywhere in the deploy/DR Railway helpers.
 
 - [ ] **SA18.8 — Fail-hard invalid `PORT` values.** `Tier 1 · Track 3 · deps: none · (why → TA11)`
   A non-numeric `PORT` env value should raise a descriptive error instead of silently coercing to `8000`; the default-when-unset behavior (`8000`) is fine and stays.
   *Files:* `quickscale_cli/src/quickscale_cli/utils/docker_utils.py:164-173`.
   *Acceptance:* `PORT=notanumber` raises a descriptive error; `PORT` unset still defaults to `8000`.
 
-- [ ] **SA18.9 — Decide and implement the hash-capture step's failure behavior.** `Tier 1 · Track 3 · deps: none · (why → TA13)`
-  Decide: either fail `step_capture_hashes` on `OSError` (hash capture over files the apply itself just wrote should never fail) or register the current best-effort behavior as a documented `# F-EXCEPTION:` entry. Implement whichever is chosen.
+- [ ] **SA18.9 — Fail `step_capture_hashes` on `OSError`.** `Tier 1 · Track 3 · deps: none · (why → TA13)`
+  Return `StepOutcome(success=False)` on `OSError` with a descriptive error message. Hash capture runs over files the apply pipeline itself just wrote — a read-back failure is a genuine system-level problem (disk full, permissions, filesystem corruption), not a best-effort informational path.
+  **Decision (2026-07-04):** Option 1 (fail hard), per user direction. Consistent with all prior SA17/SA18 precedent (SA17.1–SA17.4, SA18.1–SA18.6). No F-EXCEPTION needed.
   *Files:* `quickscale_core/src/quickscale_core/apply/steps/wiring.py:71-120`.
-  *Acceptance:* either the step now fails on `OSError` (and `quickscale apply` reports failure, not silent success), or the step carries a `# F-EXCEPTION:` tag and a decisions.md entry justifying it.
+  *Acceptance:* `step_capture_hashes` returns `success=False` on `OSError`; docstring updated (remove "always succeeds" contract); `quickscale apply` reports failure instead of silent degradation.
 
-- [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: SA18.9 · (why → TA14)`
-  Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. SA18.6 is already complete (its exception entries are in place), so SA18.10 now waits only on SA18.9 reshaping any remaining exception entries this task must tag.
+- [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: none · (why → TA14)`
+  Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. SA18.6 is already complete (its exception entries are in place); SA18.9 chose the fail-hard path (no new F-EXCEPTION), so no dependency remains.
   *Files:* `quickscale_core/src/quickscale_core/project_state.py:415`, `quickscale_cli/src/quickscale_cli/commands/remove_command.py`, `docs/technical/decisions.md`.
   *Acceptance:* `grep -rn "F-EXCEPTION"` returns a hit for every exception decisions.md documents, and decisions.md's exception table lists every exception the grep finds.
 

@@ -1648,3 +1648,50 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
     assert "Source service: myapp-develop" in captured
     assert "Rollback pin expires at: 2026-04-06T18:00:00+00:00" in captured
     assert "No plan or execute records are stored for this route yet." in captured
+
+
+def test_fetch_railway_runtime_variables_format_drift_converts_to_click_exception() -> (
+    None
+):
+    """Test that ValueError from get_railway_variables becomes ClickException."""
+    with patch(
+        "quickscale_cli.commands.dr_commands.get_railway_variables",
+        side_effect=ValueError(
+            "Railway CLI returned success but output format is unrecognized"
+        ),
+    ):
+        with pytest.raises(
+            click.ClickException,
+            match="Railway CLI output format error for target service 'myapp-production'",
+        ):
+            dr_commands._fetch_railway_runtime_variables(
+                service="myapp-production",
+                railway_environment=None,
+                role="target",
+            )
+
+
+def test_fetch_railway_runtime_variables_unparsable_text_becomes_click_exception() -> (
+    None
+):
+    """Test that text-fallback ValueError (non-empty unparsable output) becomes ClickException.
+
+    CR-SA18.7-002: Non-empty unparsable text output surfaces as a hard failure
+    at the DR caller seam, not silent collapse to {}.
+    """
+    with patch(
+        "quickscale_cli.commands.dr_commands.get_railway_variables",
+        side_effect=ValueError(
+            "Railway CLI returned success with non-empty output but no "
+            "KEY=VALUE pairs could be parsed."
+        ),
+    ):
+        with pytest.raises(
+            click.ClickException,
+            match="Railway CLI output format error for target service 'myapp-production'",
+        ):
+            dr_commands._fetch_railway_runtime_variables(
+                service="myapp-production",
+                railway_environment=None,
+                role="target",
+            )

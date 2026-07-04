@@ -23,6 +23,11 @@ INSTALLED_APPS = [
     "quickscale_modules_forms",
 ]
 
+# SA17.4 — required settings; AppConfig.ready() will fail startup otherwise.
+FORMS_SUBMISSIONS_API = True
+FORMS_RATE_LIMIT = "5/hour"
+FORMS_SPAM_PROTECTION = True
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

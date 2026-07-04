@@ -3,6 +3,7 @@
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework.throttling import ScopedRateThrottle
 
 
@@ -12,11 +13,16 @@ class FormSubmitThrottle(ScopedRateThrottle):
     scope = "form_submit"
 
     def get_rate(self) -> str | None:
-        """Return throttle rate from FORMS_RATE_LIMIT when configured"""
-        configured_rate = getattr(settings, "FORMS_RATE_LIMIT", "5/hour")
-        if configured_rate:
-            return str(configured_rate)
-        return super().get_rate()
+        """Return throttle rate from FORMS_RATE_LIMIT.
+
+        SA17.4 — no silent default: FORMS_RATE_LIMIT must be explicitly set.
+        AppConfig.ready() enforces presence at startup; this is a defensive
+        check so a missing value raises a descriptive error.
+        """
+        configured_rate = getattr(settings, "FORMS_RATE_LIMIT", None)
+        if configured_rate is None:
+            raise ImproperlyConfigured("FORMS_RATE_LIMIT setting is required.")
+        return str(configured_rate)
 
     def get_cache_key(self, request: Any, view: Any) -> str | None:
         """Build throttle cache key using view throttle scope or fallback class scope"""

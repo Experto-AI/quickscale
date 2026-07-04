@@ -208,9 +208,132 @@ class TestRailwayCommand:
 
                                             assert result.exit_code == 0
                                             assert (
-                                                "Railway project initialized"
+                                                "Deployment process completed successfully!"
                                                 in result.output
                                             )
+
+    def test_railway_domain_format_drift_fails_command(self):
+        """Test ValueError from generate_railway_domain surfaces as CLI error."""
+        runner = CliRunner()
+
+        with mock_preflight_checks():
+            with patch(
+                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+            ) as mock_installed:
+                with patch(
+                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                ) as mock_auth:
+                    with patch(
+                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                    ) as mock_project_init:
+                        with patch(
+                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                        ) as mock_run:
+                            with patch(
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
+                                with patch(
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
+                                    with patch(
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            mock_installed.return_value = True
+                                            mock_auth.return_value = True
+                                            mock_project_init.return_value = True
+                                            mock_batch_set.return_value = (True, [])
+                                            mock_secret.return_value = "test-secret-key"
+                                            mock_run.return_value = Mock(
+                                                returncode=0,
+                                                stdout="postgres available",
+                                                stderr="",
+                                            )
+                                            mock_deploy.return_value = Mock(
+                                                returncode=0,
+                                                stdout="Deployment started",
+                                                stderr="",
+                                            )
+                                            # Simulate format drift
+                                            mock_domain.side_effect = ValueError(
+                                                "Found Railway domain pattern in status output"
+                                            )
+
+                                            result = runner.invoke(railway)
+
+                                            assert result.exit_code == 1
+                                            assert (
+                                                "Found Railway domain pattern"
+                                                in result.output
+                                            )
+
+    def test_railway_variables_format_drift_fails_command(self):
+        """Test ValueError from get_railway_variables surfaces as CLI error."""
+        runner = CliRunner()
+
+        with mock_preflight_checks():
+            with patch(
+                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+            ) as mock_installed:
+                with patch(
+                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                ) as mock_auth:
+                    with patch(
+                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                    ) as mock_project_init:
+                        with patch(
+                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                        ) as mock_run:
+                            with patch(
+                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                            ) as mock_deploy:
+                                with patch(
+                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                ) as mock_batch_set:
+                                    with patch(
+                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                    ) as mock_secret:
+                                        with patch(
+                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                        ) as mock_domain:
+                                            with patch(
+                                                "quickscale_cli.commands.deployment_commands.get_railway_variables"
+                                            ) as mock_vars:
+                                                mock_installed.return_value = True
+                                                mock_auth.return_value = True
+                                                mock_project_init.return_value = True
+                                                mock_domain.return_value = (
+                                                    "https://myapp.up.railway.app"
+                                                )
+                                                mock_batch_set.return_value = (True, [])
+                                                mock_secret.return_value = (
+                                                    "test-secret-key"
+                                                )
+                                                mock_run.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="postgres available",
+                                                    stderr="",
+                                                )
+                                                mock_deploy.return_value = Mock(
+                                                    returncode=0,
+                                                    stdout="Deployment started",
+                                                    stderr="",
+                                                )
+                                                # Simulate format drift in verify step
+                                                mock_vars.side_effect = ValueError(
+                                                    "Railway CLI returned success but "
+                                                    "output format is unrecognized"
+                                                )
+
+                                                result = runner.invoke(railway)
+
+                                                assert result.exit_code == 1
+                                                assert (
+                                                    "Railway CLI returned success"
+                                                    in result.output
+                                                )
 
     def test_railway_with_project_name_option(self):
         """Test railway command with --project-name option."""
