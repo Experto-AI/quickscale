@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 (dead context API deletion) landed already, so SA13.2 and SA13.3 are unblocked and ready to start now. Track 2: SA15 (entire finding), SA17.1, and SA17.2 are complete; SA17.3–SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.9 within the track.
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 (dead context API deletion) landed already, so SA13.2 and SA13.3 are unblocked and ready to start now. Track 2: SA15 (entire finding) and SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.9 within the track.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -64,8 +64,8 @@ Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accre
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA13.2 (no deps — ready)             SA17.3 (no deps — ready)               SA18.6 (no deps — complete)
-SA13.3 (no deps — ready)             SA17.4 (no deps — ready)                  SA18.7 (no deps — ready)
+SA13.2 (no deps — ready)             SA17.3 (no deps — complete)               SA18.6 (no deps — complete)
+SA13.3 (no deps — ready)             SA17.4 (no deps — complete)                  SA18.7 (no deps — ready)
 SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — ready)                  SA18.8 (no deps — ready)
 SA14.1 (no deps — ready)             SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
 SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (deps: SA18.9)
@@ -82,7 +82,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | {SA13.2, SA13.3} ready → SA13.4, then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
-| **2** | SA17.3–SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
+| **2** | SA17.3–SA17.4 (complete), SA17.5, SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
 | **3** | SA18.6 (complete), SA18.7–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.9) | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
 
 ---
