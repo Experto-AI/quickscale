@@ -43,7 +43,10 @@ def get_debug_as_org(request: HttpRequest) -> Organization | None:
     * The current user is not a superuser (defence-in-depth — clears the
       key and logs a warning).
     """
-    raw_org_id = request.session.get(DEBUG_AS_ORG_SESSION_KEY)
+    session = getattr(request, "session", None)
+    if session is None:
+        return None
+    raw_org_id = session.get(DEBUG_AS_ORG_SESSION_KEY)
     if raw_org_id is None:
         return None
 

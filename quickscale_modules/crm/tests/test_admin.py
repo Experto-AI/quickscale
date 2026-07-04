@@ -1,5 +1,8 @@
 """Unit tests for CRM module admin configuration"""
 
+import uuid
+from typing import Any
+
 import pytest
 from django.contrib import admin
 from django.test import RequestFactory
@@ -19,6 +22,14 @@ from quickscale_modules_crm.models import (
     Stage,
     Tag,
 )
+from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+
+
+def _set_active_org(client: Any, org_id: uuid.UUID) -> None:
+    """Set the active org session key on a test client."""
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(org_id)
+    session.save()
 
 
 @pytest.mark.django_db
@@ -302,6 +313,7 @@ class TestOperatorPathHTTPAccess:
         """Platform operator can filter Tag changelist by organization."""
         tag.organization = org_a
         tag.save(update_fields=["organization"])
+        _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
             f"/admin/quickscale_modules_crm/tag/?organization={org_a.pk}"
         )
@@ -314,6 +326,7 @@ class TestOperatorPathHTTPAccess:
         """Platform operator can filter Company changelist by organization."""
         company.organization = org_a
         company.save(update_fields=["organization"])
+        _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
             f"/admin/quickscale_modules_crm/company/?organization={org_a.pk}"
         )
@@ -334,6 +347,7 @@ class TestOperatorPathHTTPAccess:
         """Platform operator change forms must show organization read-only."""
         tag.organization = org_a
         tag.save(update_fields=["organization"])
+        _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
             f"/admin/quickscale_modules_crm/tag/{tag.pk}/change/"
         )
@@ -419,7 +433,13 @@ class TestF1110AdminTagFormLevelValidation:
     def test_contact_admin_add_form_rejects_foreign_tag(
         self, admin_client, org_a, org_b
     ):
-        """ContactAdmin add form rejects a foreign-org tag selection."""
+        """ContactAdmin add form rejects a foreign-org tag selection.
+
+        SA14.2: Under TenantModelAdmin, the tags field queryset is scoped to
+        the active org. Django's field-level ``ModelMultipleChoiceField``
+        validation rejects the foreign-org tag (not in the scoped queryset)
+        before the form-level same-org ``clean()`` runs.
+        """
         from quickscale_modules_crm.models import Company, Tag
 
         company = Company.objects.create(name="Org-A Corp", organization=org_a)
@@ -452,7 +472,9 @@ class TestF1110AdminTagFormLevelValidation:
         # Form re-rendered with errors (200), not a redirect (302).
         assert response.status_code == 200
         content = response.content.decode("utf-8")
-        assert "All tags must belong to the same organization" in content
+        # Django's field-level validation rejects the foreign-org tag
+        # because it is not in the org-scoped queryset.
+        assert "Select a valid choice" in content
 
     # -- ContactAdmin add form: same-org tag accepted -------------------------
 
@@ -527,7 +549,13 @@ class TestF1110AdminTagFormLevelValidation:
     # -- DealAdmin add form: foreign tag rejected -----------------------------
 
     def test_deal_admin_add_form_rejects_foreign_tag(self, admin_client, org_a, org_b):
-        """DealAdmin add form rejects a foreign-org tag selection."""
+        """DealAdmin add form rejects a foreign-org tag selection.
+
+        SA14.2: Under TenantModelAdmin, the tags field queryset is scoped to
+        the active org. Django's field-level ``ModelMultipleChoiceField``
+        validation rejects the foreign-org tag before the form-level
+        same-org ``clean()`` runs.
+        """
         from quickscale_modules_crm.models import (
             Company,
             Contact,
@@ -571,7 +599,9 @@ class TestF1110AdminTagFormLevelValidation:
         # Form re-rendered with errors (200), not a redirect (302).
         assert response.status_code == 200
         content = response.content.decode("utf-8")
-        assert "All tags must belong to the same organization" in content
+        # Django's field-level validation rejects the foreign-org tag
+        # because it is not in the org-scoped queryset.
+        assert "Select a valid choice" in content
 
     # -- DealAdmin add form: same-org tag accepted ----------------------------
 
@@ -718,7 +748,13 @@ class TestContactNoteAdminSameOrgValidation:
     """AF1-CR-004: ContactNoteAdmin add form must validate contact/org membership."""
 
     def test_add_form_rejects_cross_org_contact(self, admin_client, org_a, org_b):
-        """ContactNoteAdmin add form rejects a contact from a different organization."""
+        """ContactNoteAdmin add form rejects a contact from a different organization.
+
+        SA14.2: Under TenantModelAdmin, the contact field queryset is scoped to
+        the active org. Django's field-level ``ModelChoiceField`` validation
+        rejects the foreign-org contact before the form-level same-org
+        ``clean()`` runs.
+        """
         from quickscale_modules_crm.models import Company, Contact
 
         company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
@@ -743,7 +779,9 @@ class TestContactNoteAdminSameOrgValidation:
         # Form re-rendered with errors (200), not a redirect (302)
         assert response.status_code == 200
         content = response.content.decode("utf-8")
-        assert "contact must belong to the same organization" in content
+        # Django's field-level validation rejects the foreign-org contact
+        # because it is not in the org-scoped queryset.
+        assert "Select a valid choice" in content
 
     def test_add_form_accepts_same_org_contact(self, admin_client, org_a):
         """ContactNoteAdmin add form accepts a contact from the same organization."""
@@ -802,7 +840,13 @@ class TestDealNoteAdminSameOrgValidation:
     """AF1-CR-004: DealNoteAdmin add form must validate deal/org membership."""
 
     def test_add_form_rejects_cross_org_deal(self, admin_client, org_a, org_b):
-        """DealNoteAdmin add form rejects a deal from a different organization."""
+        """DealNoteAdmin add form rejects a deal from a different organization.
+
+        SA14.2: Under TenantModelAdmin, the deal field queryset is scoped to
+        the active org. Django's field-level ``ModelChoiceField`` validation
+        rejects the foreign-org deal before the form-level same-org
+        ``clean()`` runs.
+        """
         from quickscale_modules_crm.models import (
             Company,
             Contact,
@@ -840,7 +884,9 @@ class TestDealNoteAdminSameOrgValidation:
         # Form re-rendered with errors (200), not a redirect (302)
         assert response.status_code == 200
         content = response.content.decode("utf-8")
-        assert "deal must belong to the same organization" in content
+        # Django's field-level validation rejects the foreign-org deal
+        # because it is not in the org-scoped queryset.
+        assert "Select a valid choice" in content
 
     def test_add_form_accepts_same_org_deal(self, admin_client, org_a):
         """DealNoteAdmin add form accepts a deal from the same organization."""
@@ -919,3 +965,159 @@ class TestDealNoteAdminSameOrgValidation:
 
         # Form re-rendered with errors (missing required organization)
         assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# CR-SA14.2-001: Inline note save_formset must stamp created_by
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestContactAdminInlineNoteCreatedBy:
+    """CR-SA14.2-001: Inline ContactNote creation through ContactAdmin must stamp created_by."""
+
+    def test_contact_admin_inline_note_sets_created_by(self, admin_client, org_a):
+        """ContactAdmin POST with inline ContactNote creates note with created_by."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+
+        company = Company.all_objects.create(name="Test Corp", organization=org_a)
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/contact/add/",
+            data={
+                "first_name": "Inline",
+                "last_name": "Test",
+                "email": "inline-contact@example.com",
+                "phone": "+1234567890",
+                "title": "Manager",
+                "company": company.id,
+                "status": "new",
+                "organization": org_a.id,
+                "notes-TOTAL_FORMS": "1",
+                "notes-INITIAL_FORMS": "0",
+                "notes-MIN_NUM_FORMS": "0",
+                "notes-MAX_NUM_FORMS": "1000",
+                "notes-0-text": "Test inline note from admin",
+                "_save": "Save",
+            },
+        )
+
+        # Successful create redirects to changelist
+        assert response.status_code == 302, (
+            f"Expected redirect, got {response.status_code}"
+        )
+
+        # Verify the note was created with created_by set
+        # Use all_objects to bypass TenantManager auto-scoping
+        # (no org context is active after the POST response)
+        contact = Contact.all_objects.get(email="inline-contact@example.com")
+        note = ContactNote.all_objects.get(contact=contact)
+        assert note.created_by is not None
+        assert note.created_by.is_superuser
+        assert note.text == "Test inline note from admin"
+        assert note.organization_id == org_a.pk
+
+    def test_contact_admin_inline_note_created_by_with_change_form(
+        self, admin_client, org_a
+    ):
+        """ContactAdmin change form with new inline ContactNote stamps created_by."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+
+        company = Company.all_objects.create(name="Test Corp", organization=org_a)
+        contact = Contact.all_objects.create(
+            first_name="Existing",
+            last_name="Contact",
+            email="existing-contact@example.com",
+            company=company,
+            organization=org_a,
+        )
+
+        response = admin_client.post(
+            f"/admin/quickscale_modules_crm/contact/{contact.pk}/change/",
+            data={
+                "first_name": "Existing",
+                "last_name": "Contact",
+                "email": "existing-contact@example.com",
+                "company": company.id,
+                "status": "new",
+                "organization": org_a.id,
+                "notes-TOTAL_FORMS": "1",
+                "notes-INITIAL_FORMS": "0",
+                "notes-MIN_NUM_FORMS": "0",
+                "notes-MAX_NUM_FORMS": "1000",
+                "notes-0-text": "New note on existing contact",
+                "_save": "Save",
+            },
+        )
+
+        # Successful save redirects to changelist
+        assert response.status_code == 302, (
+            f"Expected redirect, got {response.status_code}"
+        )
+
+        # Verify the note was created with created_by set
+        # Use all_objects to bypass TenantManager auto-scoping
+        note = ContactNote.all_objects.get(
+            contact=contact, text="New note on existing contact"
+        )
+        assert note.created_by is not None
+        assert note.created_by.is_superuser
+
+
+@pytest.mark.django_db
+class TestDealAdminInlineNoteCreatedBy:
+    """CR-SA14.2-001: Inline DealNote creation through DealAdmin must stamp created_by."""
+
+    def test_deal_admin_inline_note_sets_created_by(self, admin_client, org_a):
+        """DealAdmin POST with inline DealNote creates note with created_by."""
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            DealNote,
+            Stage,
+        )
+
+        company = Company.all_objects.create(name="Test Corp", organization=org_a)
+        contact = Contact.all_objects.create(
+            first_name="Deal",
+            last_name="Contact",
+            email="deal-contact-inline@example.com",
+            company=company,
+            organization=org_a,
+        )
+        stage = Stage.all_objects.create(
+            name="Prospecting", order=1, organization=org_a
+        )
+
+        response = admin_client.post(
+            "/admin/quickscale_modules_crm/deal/add/",
+            data={
+                "title": "Test Deal with Note",
+                "contact": contact.id,
+                "stage": stage.id,
+                "amount": "5000.00",
+                "probability": 50,
+                "organization": org_a.id,
+                "notes-TOTAL_FORMS": "1",
+                "notes-INITIAL_FORMS": "0",
+                "notes-MIN_NUM_FORMS": "0",
+                "notes-MAX_NUM_FORMS": "1000",
+                "notes-0-text": "Test inline deal note",
+                "_save": "Save",
+            },
+        )
+
+        # Successful create redirects to changelist
+        assert response.status_code == 302, (
+            f"Expected redirect, got {response.status_code}"
+        )
+
+        # Verify the note was created with created_by set
+        # Use all_objects to bypass TenantManager auto-scoping
+        deal = Deal.all_objects.get(title="Test Deal with Note")
+        note = DealNote.all_objects.get(deal=deal)
+        assert note.created_by is not None
+        assert note.created_by.is_superuser
+        assert note.text == "Test inline deal note"
+        assert note.organization_id == org_a.pk
