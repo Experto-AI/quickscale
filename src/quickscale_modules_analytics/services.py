@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import import_module
 import logging
 import os
+import posthog
 from threading import Lock
 from typing import Any, Protocol, cast
 
@@ -215,13 +215,7 @@ def configure_analytics_client() -> bool:
         if not api_key:
             return _set_disabled_state(snapshot, "missing-api-key")
 
-        try:
-            posthog_module = import_module("posthog")
-        except ImportError:
-            logger.warning(
-                "QuickScale analytics could not import the PostHog SDK. Analytics capture remains disabled."
-            )
-            return _set_disabled_state(snapshot, "missing-sdk")
+        posthog_module = posthog
 
         try:
             factory = getattr(posthog_module, "Posthog", None)
