@@ -4758,6 +4758,153 @@ class TestExecuteApplySteps:
         mock_save_state.assert_called_once()
         mock_display_next_steps.assert_called_once()
 
+    # ------------------------------------------------------------------
+    # SA18.9: Step 4 abort path regression
+    # ------------------------------------------------------------------
+
+    @patch("quickscale_cli.commands.apply_command._save_apply_recovery_state")
+    @patch(
+        "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._print_apply_failure_summary")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_step4_hash_capture_failure_aborts_apply(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_print_failure,
+        mock_capture_hashes,
+        mock_save_recovery,
+    ):
+        """SA18.9: Step 4 failure must abort apply with the correct
+        failed_step label through the full CLI pipeline.
+
+        Regression: _execute_apply_steps_locked -> _capture_managed_file_hashes_after_apply
+        -> _abort_after_post_embed_failure.
+        """
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_capture_hashes.return_value = Mock(
+            success=False,
+            message="Simulated hash capture failure",
+            failed_step_label="capture managed file hashes",
+        )
+        mock_save_recovery.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        # Verify step 4 was reached
+        mock_capture_hashes.assert_called_once_with(ctx.output_path, ctx.qs_config, ANY)
+
+        # Verify recovery state was saved (proving _abort_after_post_embed_failure
+        # was reached with the correct failed_step)
+        mock_save_recovery.assert_called_once()
+
+        # Verify the failed_step label propagated correctly
+        mock_print_failure.assert_called_once_with(
+            failed_step="capture managed file hashes",
+            reason=ANY,
+        )
+
+        # Verify subsequent steps were NOT reached
+        mock_regenerate_wiring.assert_called_once()  # step 3 ran
+
+    @patch("quickscale_cli.commands.apply_command._save_apply_recovery_state")
+    @patch(
+        "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply"
+    )
+    @patch("quickscale_cli.commands.apply_command._print_apply_failure_summary")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_step4_hash_failure_recovery_save_fails_still_aborts(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_capture_checkpoint,
+        mock_regenerate_wiring,
+        mock_print_failure,
+        mock_capture_hashes,
+        mock_save_recovery,
+    ):
+        """When recovery state cannot be saved after step 4 failure,
+        apply must still abort with a descriptive message."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_capture_checkpoint.return_value = Mock(tree_id="a" * 40)
+        mock_regenerate_wiring.return_value = True
+        mock_capture_hashes.return_value = Mock(
+            success=False,
+            message="Simulated hash capture failure",
+            failed_step_label="capture managed file hashes",
+        )
+        mock_save_recovery.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        # When recovery state cannot be saved, the failure message must
+        # reference the recovery persistence failure (still aborts).
+        mock_print_failure.assert_called_once_with(
+            failed_step="apply recovery state persistence",
+            reason=ANY,
+        )
+
 
 # ============================================================================
 # _generate_with_existing_config

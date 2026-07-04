@@ -156,11 +156,14 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Acceptance:* `PORT=notanumber` raises a descriptive error; `PORT` unset still defaults to `8000`.
   *Finding:* Existing focused test coverage already exercised the invalid-`PORT` seam, so the task reduced to changing the helper behavior and updating the assertion from fallback-to-default to fail-hard. No blockers discovered.
 
-- [ ] **SA18.9 — Fail `step_capture_hashes` on `OSError`.** `Tier 1 · Track 3 · deps: none · (why → TA13)`
-  Return `StepOutcome(success=False)` on `OSError` with a descriptive error message. Hash capture runs over files the apply pipeline itself just wrote — a read-back failure is a genuine system-level problem (disk full, permissions, filesystem corruption), not a best-effort informational path.
-  **Decision (2026-07-04):** Option 1 (fail hard), per user direction. Consistent with all prior SA17/SA18 precedent (SA17.1–SA17.4, SA18.1–SA18.6). No F-EXCEPTION needed.
-  *Files:* `quickscale_core/src/quickscale_core/apply/steps/wiring.py:71-120`.
-  *Acceptance:* `step_capture_hashes` returns `success=False` on `OSError`; docstring updated (remove "always succeeds" contract); `quickscale apply` reports failure instead of silent degradation.
+- [x] **SA18.9 — Fail `step_capture_hashes` on `OSError` (complete).** `Tier 1 · Track 3 · deps: none · (why → TA13)`
+  `step_capture_hashes` now returns `StepOutcome(success=False, failed_step_label="capture managed file hashes")` on `OSError`. Updated the docstring to remove the best-effort/always-succeeds contract. Added focused regression coverage (13 tests) covering OSError on resolve/compute, no-managed-paths no-op, success recording, and reporter-none edge cases.
+  **Decision (2026-07-04):** Option 1 (fail hard), per user direction. No F-EXCEPTION needed.
+  `step.py` step 4 `failed_step_label` changed from `None` to `"capture managed file hashes"` so the registry entry matches the new fail-hard posture (reduces None entries from 3 to 2, raises labeled count from 13 to 14).
+  `apply_command.py` `_capture_managed_file_hashes_after_apply` updated to return its `StepOutcome` and the step 4 pipeline caller now checks the outcome and calls `_abort_after_post_embed_failure` when it is unsuccessful.
+  *Files:* `quickscale_core/src/quickscale_core/apply/steps/wiring.py:71-130`, `quickscale_core/src/quickscale_core/apply/step.py:89-96`, `quickscale_cli/src/quickscale_cli/commands/apply_command.py`, `quickscale_core/tests/test_apply_wiring_steps.py` (new), `quickscale_core/tests/test_apply_step.py`.
+  *Acceptance:* `step_capture_hashes` returns `success=False` on `OSError` with descriptive message and `failed_step_label`; docstring updated; step registry reflects the fail-hard posture; `quickscale apply` aborts with the correct failure label when the step fails.
+  *Finding:* The step body change alone would not propagate to the CLI — the `_capture_managed_file_hashes_after_apply` wrapper and its step 4 pipeline caller also needed updating to check the outcome and call `_abort_after_post_embed_failure`. No blockers discovered.
 
 - [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: none · (why → TA14)`
   Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. SA18.6 is already complete (its exception entries are in place); SA18.9 chose the fail-hard path (no new F-EXCEPTION), so no dependency remains.
