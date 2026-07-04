@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -220,3 +221,101 @@ def test_known_public_symbols() -> None:
     assert hasattr(compat, "_build_probe_script")
     assert hasattr(compat, "SKIP_INSTALL_PROBE_FLAG")
     assert hasattr(compat, "main")
+
+
+# ---------------------------------------------------------------------------
+# SA18.11 — malformed pyproject.toml raises instead of being silently skipped
+# ---------------------------------------------------------------------------
+
+
+def test_get_module_package_name_raises_on_malformed_toml(tmp_path: Path) -> None:
+    """Malformed module pyproject.toml raises TOMLDecodeError instead of
+    returning None silently."""
+    (tmp_path / "pyproject.toml").write_text("[[unclosed.bracket\n", encoding="utf-8")
+    with pytest.raises(tomllib.TOMLDecodeError):
+        compat._get_module_package_name(tmp_path)
+
+
+def test_get_module_non_core_deps_raises_on_malformed_toml(tmp_path: Path) -> None:
+    """Malformed module pyproject.toml raises TOMLDecodeError instead of
+    returning [] silently."""
+    (tmp_path / "pyproject.toml").write_text("[[unclosed.bracket\n", encoding="utf-8")
+    with pytest.raises(tomllib.TOMLDecodeError):
+        compat._get_module_non_core_deps(tmp_path)
+
+
+def test_get_module_package_name_absent_toml_returns_none(tmp_path: Path) -> None:
+    """Absent pyproject.toml still returns None (no regression)."""
+    assert compat._get_module_package_name(tmp_path) is None
+
+
+def test_get_module_non_core_deps_absent_toml_returns_empty(tmp_path: Path) -> None:
+    """Absent pyproject.toml still returns [] (no regression)."""
+    assert compat._get_module_non_core_deps(tmp_path) == []
+
+
+def test_get_module_package_name_handles_empty_toml(tmp_path: Path) -> None:
+    """Valid but empty pyproject.toml returns None (not an error)."""
+    (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+    assert compat._get_module_package_name(tmp_path) is None
+
+
+def test_get_module_non_core_deps_handles_empty_toml(tmp_path: Path) -> None:
+    """Valid but empty pyproject.toml returns [] (not an error)."""
+    (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+    assert compat._get_module_non_core_deps(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# main() — user-visible malformed-pyproject error path
+# ---------------------------------------------------------------------------
+
+
+def test_main_reports_malformed_pyproject(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``main()`` reports a malformed module pyproject.toml and returns a
+    non-zero exit status.
+
+    Regression guard for the Phase 2 ``_get_module_package_name``
+    ``tomllib.TOMLDecodeError`` handler added in SA18.11.
+    """
+    # Create a minimal mock repository structure that lets a module
+    # reach Phase 2 (install probe) in ``main()``.
+    core_src = tmp_path / "quickscale_core" / "src" / "quickscale_core"
+    core_src.mkdir(parents=True)
+    (core_src / "__init__.py").write_text("# core package\n", encoding="utf-8")
+
+    (tmp_path / "VERSION").write_text("0.86.0\n", encoding="utf-8")
+
+    mod_dir = tmp_path / "quickscale_modules" / "test_mod"
+    mod_dir.mkdir(parents=True)
+
+    # module.yml with a parseable quickscale-core dependency
+    (mod_dir / "module.yml").write_text(
+        "dependencies:\n  - quickscale-core>=0.86.0\n",
+        encoding="utf-8",
+    )
+
+    # A malformed pyproject.toml — this is what should trigger the error.
+    (mod_dir / "pyproject.toml").write_text("[[unclosed.bracket\n", encoding="utf-8")
+
+    # ``src/`` dir with at least one ``.py`` file that imports
+    # quickscale_core, so Phase 1 does not short-circuit with ``continue``.
+    src_pkg = mod_dir / "src" / "quickscale_modules_test_mod"
+    src_pkg.mkdir(parents=True)
+    (src_pkg / "__init__.py").write_text(
+        "import quickscale_core\n",
+        encoding="utf-8",
+    )
+
+    exit_code = compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code != 0, (
+        f"Expected non-zero exit for malformed pyproject.toml, got {exit_code}"
+    )
+    assert "Malformed module pyproject.toml" in captured.out, (
+        f"Expected 'Malformed module pyproject.toml' in output:\n{captured.out}"
+    )

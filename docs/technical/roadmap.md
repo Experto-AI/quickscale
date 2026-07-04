@@ -47,9 +47,9 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.10` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, and TA14) are closed — see CHANGELOG.md.
+> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.11` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture/dev-tooling-parse-failure fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, TA14, and TA15) are closed — `SA18` is now fully closed (Track 3 has no remaining work in Remediation III) — see CHANGELOG.md. Also within Finding `operator-read-path-undefined`: `SA14.1` (the `TenantModelAdmin` base) is complete, unblocking `SA14.2`/`SA14.3` — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 and SA14.2 are complete; SA14.5 and SA14.6 are ready now (no deps), SA14.3 waits on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.10 are complete; SA18.11 is ready now — plus new SA19, SA21.1, SA22, SA25 (all ready now).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 and SA14.2 are complete; SA14.3 is now ready (no remaining deps after SA14.1); SA14.4 waits on SA14.2+SA14.3; SA14.5 and SA14.6 are ready now — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete and TA2 is fully closed; SA17.7 is partial — code changes landed, but the absent-analytics regression test still needs strengthening (**CR-SA17.7-002**, pure test-coverage work, not a design decision) before it can close; SA17.8 is ready now — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: `SA18` (SA18.1–SA18.11) is fully closed, no remaining work from Remediation III — plus new SA19, SA21.1, SA22, SA25 (all ready now).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -59,17 +59,17 @@ Fix plan derived from the [2026-07-03 fresh-pass autopsy](../../arch-audit.md#au
 
 #### Dependency & parallelization overview (2026-07-04)
 
-Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. The fail-hard tasks (SA17, SA18) are file-scoped and independent of the structural work and of each other, aside from two noted internal orderings.
+Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. `SA18` (Track 3) is now fully closed — no remaining work in this batch. The one remaining fail-hard task (`SA17.7`/`SA17.8`, Track 2) is file-scoped and independent of the structural work.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.6 (no deps — complete)
-SA14.2 (deps: SA14.1 — complete)     SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
-SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
-SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — complete)
-SA14.5 (no deps — ready)                                                  SA18.10 (no deps — complete)
-SA14.6 (no deps — ready)                                                  SA18.11 (no deps — ready)
+SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.1–SA18.11 (all complete —
+SA14.2 (deps: SA14.1 — complete)      SA17.6 (no deps — complete)                fully closed, no remaining
+SA14.3 (deps: SA14.1 — ready)         SA17.7 (deps: SA17.5 — partial;            work in this batch)
+SA14.4 (deps: SA14.2, SA14.3)          blocker CR-SA17.7-002)
+SA14.5 (no deps — ready)              SA17.8 (no deps — ready)
+SA14.6 (no deps — ready)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -78,9 +78,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
-| **3** | SA18.1–SA18.10 (complete), SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
+| **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 (ready) → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
+| **2** | SA17.1–SA17.6 (complete); SA17.7 (partial — CR-SA17.7-002 blocking); SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
+| **3** | SA18.1–SA18.11 — fully closed, no remaining work in this batch | Core/CLI fail-hard plumbing |
 
 ---
 
@@ -88,10 +88,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 #### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../../arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
 
-- [x] **SA14.1 — Build the orgs-owned `TenantModelAdmin` base.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
-  Added `TenantModelAdmin(admin.ModelAdmin)` to `orgs/admin.py` — a generalized per-org admin base that resolves the active org from VIEW-AS session (priority 1), explicit POST/GET selection (priority 2), or session persistence (priority 3), wraps `changelist_view`, `add_view`, `change_view`, `delete_view`, and `history_view` in `org_scope()` via `_org_db_context`, and scopes `get_queryset` to the validated org (fail-closed). Four private helper functions (`_explicit_org_from_request`, `_persist_org_to_session`, `_resolve_active_org_id`, `_org_db_context`) support the base. Social module's local `PerOrgAdminMixin` pattern is preserved unchanged (will be replaced during SA14.2/SA14.3 porting).   Added 40 focused tests covering the helpers, `_org_db_context` lifecycle, `get_queryset` scoping, cross-org rejection, and changelist/change-view end-to-end behavior via the admin site. Three cross-track blocking pre-existing failures in `test_management_commands.py` (check_tenant_isolation) are present but predate this change.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py` (new base class and helpers), `quickscale_modules/orgs/tests/conftest.py` (new, shared fixtures), `quickscale_modules/orgs/tests/test_admin.py` (extended).
-  *Acceptance:* a model admin subclassing `TenantModelAdmin` shows the VIEW-AS-resolved org's rows under the restricted `NOBYPASSRLS` role and denies cross-tenant rows without an explicit operator grant.
+> **SA14.1 — Build the orgs-owned `TenantModelAdmin` base (complete).** `Tier 2 · Track 1` — unblocks SA14.2/SA14.3. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 - [x] **SA14.2 — Port CRM's 7 admin classes to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
   Ported all 7 CRM admin classes (TagAdmin, CompanyAdmin, ContactAdmin, StageAdmin, DealAdmin, ContactNoteAdmin, DealNoteAdmin) from `admin.ModelAdmin` to `TenantModelAdmin`. Removed all `get_queryset` overrides that used `all_objects.all()` (TenantModelAdmin scopes querysets via `_org_db_context`). Removed `formfield_for_foreignkey`/`formfield_for_manytomany` overrides that used `all_objects` — related-field querysets now scope correctly via TenantManager under the org context. Removed custom inline formsets (ContactNoteFormSet, DealNoteFormSet) that bypassed TenantManager with `all_objects`. Preserved `_CrmOrgAwareAdminMixin` with same-org form-level validation, organization-required-on-add, organization-readonly-on-change behavior. Added NULL-safe session guard to `debug_helpers.get_debug_as_org()` to prevent `AttributeError` when `request.session` is unavailable (VIEW-AS debug helpers hardening). Updated comments. Updated HTTP-level tests to set session org context for TenantModelAdmin compatibility.
@@ -129,24 +126,21 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 > SA17.1–SA17.6 (legacy config keys, analytics/billing/CRM/forms/blog/notifications fail-hard settings — closes TA1 and fully closes TA2) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring.** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
-  Analytics' PostHog SDK import failure currently logs a warning and disables capture; forms' analytics integration currently probes for the sibling module via a soft `ImportError`/`getattr(None)` chain. Since module assembly happens at generation time, wire the analytics↔forms integration (and the PostHog SDK requirement) as a hard dependency the generator resolves, not a runtime probe. Depends on SA17.5 landing the surrounding settings checks first so the two changes don't fight over the same code paths (SA17.2's half of this ordering is already satisfied — it's complete).
-  *Files:* `analytics/services.py:218-223`, `forms/views.py:92-97`.
-  *Acceptance:* if analytics is assembled into a project, a missing PostHog SDK raises at startup (not a warning); forms' analytics integration is generation-time wired, not runtime-probed.
+- [-] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring (partial — code changes landed; blocker CR-SA17.7-002 remains).** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
+  **Landed code:** Removed the `ImportError` fallback in `analytics/services.py:configure_analytics_client()` (PostHog SDK is now a hard dependency — module-level `import posthog` replaces the `import_module("posthog")`/`except ImportError` probe). Removed the `import_module`/`getattr` runtime probe in `forms/views.py:_capture_submission_analytics()` — analytics' `capture_form_submit` and `get_distinct_id` are now imported lazily inside the function body (after the ``apps.is_installed`` guard), keeping forms importable without analytics on the Python path while removing the soft-degradation probe. Updated analytics test suite: removed dead `test_configure_analytics_client_disables_when_sdk_is_missing` test; changed all patch targets from `services.import_module` to `services.posthog`. Updated forms test suite: removed `test_submission_ignores_missing_analytics_module`; changed remaining analytics patch targets to ``quickscale_modules_analytics.services.*``. SA17.5's settings checks provided the needed ordering so the two changes do not fight over the same code paths.
+  **Remaining blocker (CR-SA17.7-002):** The absent-analytics regression (`test_views.py`) is still too weak — the test must be strengthened to prove that analytics symbols are never imported/resolved when `apps.is_installed("quickscale_modules_analytics")` is false. Currently the test passes even though the import-time resolution path is not fully proven to be dead code under the absent-analytics condition.
+  **Advisory (CR-SA17.7-003):** Low-consistency follow-up coupled to the blocker; should be resolved by accurate roadmap wording (this entry).
+  *Files:* `analytics/services.py`, `analytics/tests/test_services.py`, `forms/views.py`, `forms/tests/test_views.py`.
+  *Partial acceptance:* analytics hard-fails on missing PostHog; forms' analytics integration is generation-time wired; BUT the absent-analytics guard in forms is not proven airtight by the current test coverage.
 
 - [ ] **SA17.8 — Remove or gate deprecated `module_catalog` compat delegates; fix fail-open readiness.** `Tier 1 · Track 2 · deps: none · (why → TA12)`
   Remove `get_module_names()`/`get_module_entries()` from the public `contracts/__init__.py` API (or add the mandated `# F-EXCEPTION:` tag if a caller genuinely still needs them), and make `get_module_readiness_reason()` raise or return an explicit "unknown module" sentinel for unrecognized names instead of `None` (indistinguishable from "ready").
   *Files:* `quickscale_core/src/quickscale_core/contracts/module_catalog.py:128-175,270-289`.
   *Acceptance:* the deprecated delegates are either removed from the public API or carry an `# F-EXCEPTION:` tag; readiness checks on an unknown module name raise/return a distinguishable value from "ready".
 
-#### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3)
+#### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3) — **fully closed 2026-07-04**
 
-> SA18.1–SA18.10 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing, `PORT` fail-hard, `step_capture_hashes` fail-hard on `OSError`, `# F-EXCEPTION:` tags on documented M2 compatibility paths — closes TA3–TA8, TA10, TA11, TA13, and TA14) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [ ] **SA18.11 — Fix dev-tooling silent parse failure in the compatibility checker.** `Tier 1 · Track 3 · deps: none · (why → TA15)`
-  A malformed module `pyproject.toml` should fail the compatibility check loudly, not be silently skipped.
-  *Files:* `scripts/check_module_core_compatibility.py:381-388`.
-  *Acceptance:* a malformed `pyproject.toml` in any module causes the checker to fail/report an error for that module instead of silently skipping it.
+> SA18.1–SA18.11 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing, `PORT` fail-hard, `step_capture_hashes` fail-hard on `OSError`, `# F-EXCEPTION:` tags on documented M2 compatibility paths, dev-tooling silent parse failure — closes TA3–TA8, TA10, TA11, TA13, TA14, and TA15) are complete. Track 3 has no remaining work from Structural Autopsy Remediation III. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 ---
 
