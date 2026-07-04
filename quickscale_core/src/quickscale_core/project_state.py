@@ -423,11 +423,11 @@ class ProjectStateManager:
         The returned state is not persisted; callers should save it if they
         want to materialize the consolidation.
 
-        F12.2: justified fail-open — legacy read-through is a compatibility
-        path for pre-M2 projects.  Failing hard on legacy file issues would
-        block the M2 migration.  Failures are logged and the import is
-        gracefully skipped.
         """
+        # F-EXCEPTION: F12.2
+        # Pre-M2 projects may still need legacy config.yml/file_hashes.yml
+        # read-through import until consolidated state is materialized. Log
+        # and skip stale legacy data so the one-time M2 migration is not blocked.
         # Import legacy module tracking from config.yml.
         try:
             legacy_config = self.load_config()
@@ -745,10 +745,11 @@ class ProjectStateManager:
         Raises:
             StateError: When ``state.yml`` exists but is malformed.
 
-        F12.2: justified fail-open — legacy config.yml and file_hashes.yml
-        reads are compatibility paths.  Failures are logged and the import
-        is gracefully skipped so the M2 migration is not blocked.
         """
+        # F-EXCEPTION: F12.2
+        # Materialization still consumes legacy config.yml/file_hashes.yml
+        # during the bounded M2 compatibility window; log-and-skip behavior
+        # keeps stale legacy inputs from blocking consolidation.
         # Already consolidated — nothing to materialize.
         if self._state_file_has_consolidated_sections():
             return self._state_manager.load()
