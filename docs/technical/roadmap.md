@@ -130,9 +130,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 #### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../../arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
 
-- [ ] **SA14.1 — Build the orgs-owned `TenantModelAdmin` base.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
-  Add an org-resolving, `org_scope`-wrapping `TenantModelAdmin` (or `AdminSite`) to `orgs` that resolves the VIEW-AS/session org and wraps changelist/change views accordingly — generalizing the pattern social's admin already proves works under RLS.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py` (new base class).
+- [x] **SA14.1 — Build the orgs-owned `TenantModelAdmin` base.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
+  Added `TenantModelAdmin(admin.ModelAdmin)` to `orgs/admin.py` — a generalized per-org admin base that resolves the active org from VIEW-AS session (priority 1), explicit POST/GET selection (priority 2), or session persistence (priority 3), wraps `changelist_view`, `add_view`, `change_view`, `delete_view`, and `history_view` in `org_scope()` via `_org_db_context`, and scopes `get_queryset` to the validated org (fail-closed). Four private helper functions (`_explicit_org_from_request`, `_persist_org_to_session`, `_resolve_active_org_id`, `_org_db_context`) support the base. Social module's local `PerOrgAdminMixin` pattern is preserved unchanged (will be replaced during SA14.2/SA14.3 porting).   Added 40 focused tests covering the helpers, `_org_db_context` lifecycle, `get_queryset` scoping, cross-org rejection, and changelist/change-view end-to-end behavior via the admin site. Two cross-track blocking pre-existing failures in `test_management_commands.py` (check_tenant_isolation) are present but predate this change.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py` (new base class and helpers), `quickscale_modules/orgs/tests/conftest.py` (new, shared fixtures), `quickscale_modules/orgs/tests/test_admin.py` (extended).
   *Acceptance:* a model admin subclassing `TenantModelAdmin` shows the VIEW-AS-resolved org's rows under the restricted `NOBYPASSRLS` role and denies cross-tenant rows without an explicit operator grant.
 
 - [ ] **SA14.2 — Port CRM's 8 admins to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`

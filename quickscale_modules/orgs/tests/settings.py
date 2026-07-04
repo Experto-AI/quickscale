@@ -92,3 +92,13 @@ AUTHENTICATION_BACKENDS = [
 ]
 LOGIN_REDIRECT_URL = "/"
 QUICKSCALE_MODE = "solo"
+
+# Required by modules in INSTALLED_APPS that have AppConfig.ready() guards:
+# SA17.2 — billing enabled-flag
+QUICKSCALE_BILLING_ENABLED = True
+# SA17.3 — CRM API-enable flag
+CRM_ENABLE_API = True
+# SA17.4 — forms settings
+FORMS_SUBMISSIONS_API = True
+FORMS_RATE_LIMIT = "5/hour"
+FORMS_SPAM_PROTECTION = True
