@@ -140,13 +140,7 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 #### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3)
 
-> SA18.1–SA18.9 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing, `PORT` fail-hard, `step_capture_hashes` fail-hard on `OSError` — closes TA3–TA8, TA10, TA11, and TA13) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions (complete).** `Tier 1 · Track 3 · deps: none · (why → TA14)`
-  Added `# F-EXCEPTION: F12.2` comments to the two documented M2 compatibility locations in `project_state.py` and to the remove-command legacy `.quickscale/config.yml` compatibility path in `remove_command.py`. Expanded `decisions.md`'s fail-hard exception table so every tagged compatibility path is listed under the shared M2 sunset rule.
-  *Files:* `quickscale_core/src/quickscale_core/project_state.py:415`, `quickscale_cli/src/quickscale_cli/commands/remove_command.py`, `docs/technical/decisions.md`.
-  *Acceptance:* `grep -rn "F-EXCEPTION"` now finds the tagged M2 compatibility paths in `project_state.py` and `remove_command.py`, and `decisions.md`'s exception table lists the same F12.2 locations.
-  *Finding:* Tracing the remove-command compatibility path showed that this slice still reads and snapshots legacy `.quickscale/config.yml`, but no separate legacy-config write helper exists in-file. SA18.10 therefore documents the current compatibility path without broadening behavior. No blockers discovered.
+> SA18.1–SA18.10 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing, `PORT` fail-hard, `step_capture_hashes` fail-hard on `OSError`, `# F-EXCEPTION:` tags on documented M2 compatibility paths — closes TA3–TA8, TA10, TA11, TA13, and TA14) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA18.11 — Fix dev-tooling silent parse failure in the compatibility checker.** `Tier 1 · Track 3 · deps: none · (why → TA15)`
   A malformed module `pyproject.toml` should fail the compatibility check loudly, not be silently skipped.
