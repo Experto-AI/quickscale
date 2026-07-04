@@ -252,9 +252,51 @@ class TestFormSubmitAPIView:
         """Prove forms submits cleanly when analytics is absent from the
         Python path / not installed.  _capture_submission_analytics()
         short-circuits via the apps.is_installed guard; no analytics
-        symbols are imported or resolved."""
+        symbols are imported or resolved.
+
+        CR-SA17.7-002 (resolved): Replaces the analytics services
+        submodule in sys.modules with an import-seam sentinel.  If the
+        guard were bypassed or broken, the lazy import
+        ``from quickscale_modules_analytics.services import ...``
+        would trigger the sentinel's __getattr__, raising
+        ModuleNotFoundError OUTSIDE the except Exception boundary —
+        proving the guard correctly prevents the import under the
+        absent-analytics condition.
+        """
+        import sys
+
+        # Replace the analytics services submodule in sys.modules with
+        # a sentinel that raises ModuleNotFoundError on any attribute
+        # access.  monkeypatch.setitem restores the original module
+        # on teardown so other tests are unaffected.
+        # NOTE: Using monkeypatch.setitem (not setattr with a dotted
+        # path) avoids auto-importing the real analytics module.
+        class _ImportBlocker:
+            """Raises ModuleNotFoundError when accessed — proving the
+            lazy import seam was reached despite the guard."""
+
+            __slots__ = ()
+
+            def __getattr__(self, name):
+                raise ModuleNotFoundError(
+                    "quickscale_modules_analytics.services blocked — "
+                    "guard would have been bypassed"
+                )
+
+        monkeypatch.setitem(
+            sys.modules,
+            "quickscale_modules_analytics.services",
+            _ImportBlocker(),
+        )
+
+        # Patch is_installed to simulate analytics not being a Django
+        # app.  Use direct module-object monkeypatch (NOT dotted-path)
+        # to avoid triggering an auto-import of analytics.
+        import quickscale_modules_forms.views as _forms_views
+
         monkeypatch.setattr(
-            "quickscale_modules_forms.views.apps.is_installed",
+            _forms_views.apps,
+            "is_installed",
             lambda label: False,
         )
 
