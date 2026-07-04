@@ -162,12 +162,19 @@ def wait_for_port_release(
 
 
 def get_port_from_env() -> int:
-    """Get the port number from docker-compose.yml environment or default."""
+    """Get the Docker port from the environment.
+
+    Returns the docker-compose-aligned default (8000) only when ``PORT`` is
+    unset. A present but non-numeric ``PORT`` is treated as a configuration
+    error and raises ``ValueError``.
+    """
     import os
 
     # Check PORT environment variable (matches docker-compose.yml)
     port_str = os.environ.get("PORT", "8000")
     try:
         return int(port_str)
-    except ValueError:
-        return 8000
+    except ValueError as error:
+        raise ValueError(
+            f"PORT environment variable must be an integer, got {port_str!r}"
+        ) from error
