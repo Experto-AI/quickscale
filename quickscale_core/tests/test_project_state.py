@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 from quickscale_core.config import ConfigError, ModuleConfig, ModuleInfo
+from quickscale_core.schema.config_schema import ConfigValidationError
 from quickscale_core.project_state import (
     DEFAULT_MANAGED_WIRING_PATHS,
     FILE_HASHES_FILENAME,
@@ -1376,12 +1377,16 @@ class TestResolveAuthoritativeProjectMetadata:
         result = manager.resolve_authoritative_project_metadata()
         assert result is None
 
-    def test_returns_none_when_quickscale_yml_is_invalid(self, tmp_path: Path) -> None:
-        """Returns None when quickscale.yml exists but is malformed."""
+    def test_raises_when_quickscale_yml_is_invalid(self, tmp_path: Path) -> None:
+        """Raises ConfigValidationError when quickscale.yml is malformed.
+
+        SA18.6: validation errors propagate instead of returning None,
+        making invalid config distinguishable from "no project here."
+        """
         (tmp_path / "quickscale.yml").write_text("- invalid\n- list\n")
         manager = ProjectStateManager(tmp_path)
-        result = manager.resolve_authoritative_project_metadata()
-        assert result is None
+        with pytest.raises(ConfigValidationError, match="must be a YAML mapping"):
+            manager.resolve_authoritative_project_metadata()
 
 
 # ---------------------------------------------------------------------------

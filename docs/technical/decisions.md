@@ -1074,7 +1074,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 | Tag | Location | Justification | Sunset |
 |-----|----------|---------------|--------|
-| F12.2 | `project_state.py:_read_through_import_legacy()` | One-time M2 consolidation path: pre-M2 projects have `config.yml` + `file_hashes.yml` but lack consolidated `state.yml` fields; failing hard on stale legacy files would block the M2 migration. Failures are logged and import is skipped. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
+| F12.2 | `project_state.py:_read_through_import_legacy()` and `materialize_authoritative_state()` (legacy config.yml / file_hashes.yml reads) | One-time M2 consolidation path: pre-M2 projects have `config.yml` + `file_hashes.yml` but lack consolidated `state.yml` fields; failing hard on stale legacy files would block the M2 migration. Failures are logged and import is skipped. Does NOT cover `_load_managed_file_records_for_drift()` (SA18.6) — its legacy `file_hashes.yml` fallback is a drift-detection design choice, not an M2 compatibility path. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
 
 **Known violations:** tracked in [tech-audit.md](../../tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
 
