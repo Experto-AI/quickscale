@@ -967,6 +967,74 @@ class TestCRMPageSizeSettings:
         assert len(response.data) == 1
 
 
+class TestCRMPageSizeFailHard:
+    """SA17.3 — Page-size settings must raise descriptively when missing or malformed."""
+
+    @override_settings(CRM_CONTACTS_PER_PAGE=None)
+    def test_contact_page_size_missing_setting_raises_improperly_configured(
+        self,
+    ) -> None:
+        """Missing CRM_CONTACTS_PER_PAGE should raise at request time."""
+        from django.core.exceptions import ImproperlyConfigured
+        from quickscale_modules_crm.views import ContactPagination
+
+        paginator = ContactPagination()
+
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="CRM_CONTACTS_PER_PAGE",
+        ):
+            paginator.get_page_size(None)  # type: ignore[arg-type]
+
+    @override_settings(CRM_CONTACTS_PER_PAGE="not-a-number")
+    def test_contact_page_size_non_numeric_setting_raises_improperly_configured(
+        self,
+    ) -> None:
+        """Non-numeric CRM_CONTACTS_PER_PAGE should raise at request time."""
+        from django.core.exceptions import ImproperlyConfigured
+        from quickscale_modules_crm.views import ContactPagination
+
+        paginator = ContactPagination()
+
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="CRM_CONTACTS_PER_PAGE",
+        ):
+            paginator.get_page_size(None)  # type: ignore[arg-type]
+
+    @override_settings(CRM_DEALS_PER_PAGE=None)
+    def test_deal_page_size_missing_setting_raises_improperly_configured(
+        self,
+    ) -> None:
+        """Missing CRM_DEALS_PER_PAGE should raise at request time."""
+        from django.core.exceptions import ImproperlyConfigured
+        from quickscale_modules_crm.views import DealPagination
+
+        paginator = DealPagination()
+
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="CRM_DEALS_PER_PAGE",
+        ):
+            paginator.get_page_size(None)  # type: ignore[arg-type]
+
+    @override_settings(CRM_DEALS_PER_PAGE="not-a-number")
+    def test_deal_page_size_non_numeric_setting_raises_improperly_configured(
+        self,
+    ) -> None:
+        """Non-numeric CRM_DEALS_PER_PAGE should raise at request time."""
+        from django.core.exceptions import ImproperlyConfigured
+        from quickscale_modules_crm.views import DealPagination
+
+        paginator = DealPagination()
+
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="CRM_DEALS_PER_PAGE",
+        ):
+            paginator.get_page_size(None)  # type: ignore[arg-type]
+
+
 @pytest.mark.django_db
 class TestFlatRouteCreateStamping:
     """Flat-route create stamps the active organization."""

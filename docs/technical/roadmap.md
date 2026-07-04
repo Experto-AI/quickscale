@@ -146,9 +146,17 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 #### `SA17` — Module-side settings and config fail-hard fixes (Track 2)
 
-- [ ] **SA17.3 — Fail-hard CRM's API-enable flag and page-size settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  `CRM_ENABLE_API` required (no `True` default); replace `int(getattr(...) or 50)` page-size reads with explicit validation that rejects non-numeric values instead of silently swallowing them to `50`.
-  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/views.py:219,238,246`.
+- [x] **SA17.1 — Reject legacy config keys instead of silently translating/dropping them (complete).** `Tier 2 · Track 2 · deps: none · (why → TA1, closed)`
+  `normalize_auth_module_options`/`normalize_crm_module_options`/`normalize_notifications_module_options` now raise `ConfigValidationError` naming the legacy key and its replacement instead of silently mapping or dropping it. Closes tech-audit TA1. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+
+- [x] **SA17.2 — Fail-hard analytics/billing enabled-flag settings (complete).** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium (billing) · (why → TA2)`
+  Added AppConfig.ready() startup guards to `analytics/apps.py` and `billing/apps.py` that raise `ImproperlyConfigured` at startup when `QUICKSCALE_ANALYTICS_ENABLED` / `QUICKSCALE_BILLING_ENABLED` are missing. Removed default-`True` fallbacks in `analytics/services.py`, `billing/services.py`, and `billing/adapter.py`. Updated test settings (`billing/tests/settings.py`) with the required enabled-flag. Rewrote the analytics `test_configure_analytics_client_defaults_missing_enabled_setting_to_enabled` test as `test_configure_analytics_client_missing_enabled_setting_raises_attribute_error`. Added ready()-method tests to both modules' `test_apps.py` (analytics: `test_ready_raises_improperly_configured_when_enabled_setting_missing`, billing: `test_app_config_ready_raises_improperly_configured_when_enabled_setting_missing`). Added `test_billing_settings_snapshot_missing_enabled_setting_raises_attribute_error` to billing `test_services.py`. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `analytics/apps.py`, `analytics/services.py`, `analytics/tests/test_apps.py`, `analytics/tests/test_services.py`, `billing/apps.py`, `billing/services.py`, `billing/adapter.py`, `billing/tests/settings.py`, `billing/tests/test_apps.py`, `billing/tests/test_services.py`.
+  *Acceptance:* omitting either setting from a generated project raises at startup instead of silently enabling the feature.
+
+- [x] **SA17.3 — Fail-hard CRM's API-enable flag and page-size settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
+  `CRM_ENABLE_API` required (no `True` default); replaced `int(getattr(...) or 50)` page-size reads with explicit validation that rejects non-numeric values instead of silently swallowing them to `50`. Added `AppConfig.ready()` startup guard to `crm/apps.py` that raises `ImproperlyConfigured` when `CRM_ENABLE_API` is missing. Removed default-`True` fallback in `CRMApiEnabledMixin.initial()` and default-`25`/`50` fallbacks in `ContactPagination.get_page_size()` / `DealPagination.get_page_size()`. Removed fallback defaults in `adapter.py` `_crm_post_hook` — all three settings now use direct key access (must be present from `module.yml` derivation). Updated test settings with the required settings. Added `ready()`-method guard test to `crm/tests/test_apps.py`. Added four page-size fail-hard tests to `crm/tests/test_views.py`. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `crm/apps.py`, `crm/adapter.py`, `crm/views.py`, `crm/tests/settings.py`, `crm/tests/test_apps.py` (new), `crm/tests/test_views.py`.
   *Acceptance:* missing `CRM_ENABLE_API` or a malformed page-size setting raises at startup/request time with a descriptive error.
 
 - [ ] **SA17.4 — Fail-hard forms module settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
