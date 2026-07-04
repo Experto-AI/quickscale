@@ -10,6 +10,8 @@
 > **Closed 2026-07-04:** `TA1` (legacy config keys silently translated/dropped) — remediated by `aea5e3bd` (SA17.1). `normalize_auth_module_options`, `normalize_crm_module_options`, and `normalize_notifications_module_options` now raise `ConfigValidationError` naming the dead key and its replacement for every legacy key named in this finding (`allow_registration`, `social_providers`, `default_pipeline_stages`, `resend_api_key`, `webhook_secret`). Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
 > **Closed 2026-07-04:** `TA5` (undocumented `quickscale_cli.schema` compat shim) — remediated by `ab32f272` (SA18.3). The shim package is deleted; all internal CLI imports and tests were migrated to `quickscale_core.schema`. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA4` (analytics manifest fallback defaults) — remediated by SA18.2. `entry_point.py`'s `_analytics_post_hook` now raises `ManifestError` on empty-after-resolution settings instead of silently filling legacy defaults. `TA6` (generator template fallback chains) — remediated by SA18.4. `generator.py.__init__` resolves templates deterministically from the installed package path (no `Path.cwd()` guessing) and `_get_theme_template_path` raises `FileNotFoundError` immediately instead of falling through a backward-compat root tier. `TA7` (version fallback ending in `"0.0.0"`) — remediated by SA18.5. `version.py` narrowed to `except ImportError` and raises `FileNotFoundError` when both the embedded `_version.py` and the dev-tree `VERSION` file are unavailable. All three verified against current source 2026-07-04. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 
 **Scope swept:** `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `scripts/`, generator templates. Patterns: broad/silent `except`, fallback chains, legacy/compat keywords, `getattr(settings, X, default)`, env-var defaults.
 
@@ -22,9 +24,6 @@
 | ID | Severity | Location | One-liner |
 |----|----------|----------|-----------|
 | TA2 | High | `quickscale_modules/*/src` (pervasive) | `getattr(settings, X, permissive-default)` — features fail-open when settings are missing (generalizes SA11.7) |
-| TA4 | Medium | `quickscale_core/manifest/entry_point.py:302` | Analytics "fallback defaults matching legacy behaviour" silently fill empty settings |
-| TA6 | Medium | `quickscale_core/generator/generator.py` | Template-dir discovery fallback chain + root-template compat fallback |
-| TA7 | Medium | `quickscale_core/version.py:16` | Version fallback chain ending in silent `"0.0.0"` default |
 | TA8 | Medium | `quickscale_core/project_state.py:655` | Metadata resolution falls back state.yml → quickscale.yml → `None`, swallowing validation errors |
 | TA9 | Medium | `analytics/services.py:218`, `forms/views.py:92` | Missing SDK / missing sibling module degrades silently instead of failing |
 | TA10 | Medium | `quickscale_cli/utils/railway_utils.py` | Broad `except Exception: return None` hides Railway CLI errors |
@@ -50,22 +49,6 @@ SA11.7 (tracked in decisions.md Known violations) covers `auth/adapters.py:14` (
 - `notifications/services.py:155-157` — enabled defaults `True`, provider defaults `"resend"`
 
 Since modules are creation-time assembled and the generator owns settings emission, every one of these settings is knowable at generation time; the defaults exist only to mask incomplete wiring. **Fix direction:** module `apps.py` `AppConfig.ready()` startup guards that raise on missing required settings; generator guarantees emission.
-
-### TA4 (Medium) — Analytics fallback defaults in manifest resolution
-
-`manifest/entry_point.py:302-311`: after resolution, empty analytics settings are silently replaced with hardcoded defaults (`QUICKSCALE_ANALYTICS_PROVIDER="posthog"`, env-var names, `POSTHOG_HOST="https://us.i.posthog.com"`) — commented as "Fallback defaults matching legacy behaviour." Best-effort defaults inside the manifest stack, explicitly in scope for fail-hard. Empty-after-resolution means the manifest/derivation produced an invalid result and should raise.
-
-### TA6 (Medium) — Generator template fallback chains
-
-`generator/generator.py`:
-- `__init__` (`:96-131`): template-dir discovery tries dev dir → package dir → three guessed layouts including `Path.cwd()`-relative — silently picks the first hit. A `FileNotFoundError` is raised only if *all* guesses miss; a wrong-but-existing hit (e.g. cwd-dependent) is used without a word.
-- `_get_theme_template_path` (`:165-178`): theme → common → root fallback, the last explicitly "for backward compatibility" and returned **without an existence check** (error surfaces later as a Jinja `TemplateNotFound` far from the cause).
-
-**Fix direction:** single deterministic resolution rule (installed package path, explicit override param), raise immediately with the attempted path on miss; delete the root-template compat tier.
-
-### TA7 (Medium) — Version fallback chain ending in `"0.0.0"`
-
-`quickscale_core/version.py:16-27`: `from ._version import __version__` wrapped in `except Exception` (not `ImportError`), falling back to the repo `VERSION` file, falling back to hardcoded `"0.0.0"`. A broken build (missing `_version.py` in a wheel, missing VERSION file) silently reports version `0.0.0` instead of failing — poisoning version-gated behavior and support diagnostics. The dev-tree read is legitimate; the terminal `"0.0.0"` default and the over-broad except are not.
 
 ### TA8 (Medium) — Project-metadata resolution swallows validation errors
 
@@ -124,10 +107,10 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 |----|--------|------|
 | TA1 | **closed 2026-07-04** | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
 | TA2 | **still-open** | Permissive `getattr(settings, …, default)` still pervasive (crm/forms/blog/notifications); analytics/billing resolved by SA17.2 (AppConfig.ready() guards). Auth's `ACCOUNT_ALLOW_REGISTRATION` (SA11.7) is now fixed and raises `ImproperlyConfigured` — the *pattern* remains open elsewhere. |
-| TA4 | **still-open** | Analytics "fallback defaults matching legacy behaviour" still at `entry_point.py:302-311`. (Tracked as SA18.2.) |
+| TA4 | **closed 2026-07-04** | Remediated by SA18.2 — see header note. |
 | TA5 | **closed 2026-07-04** | Remediated by SA18.3 (`ab32f272`) — see header note. |
-| TA6 | **still-open** | `Path.cwd()` template-dir fallback (`generator.py:117`) + backward-compat root-template tier (`:178`) still present. |
-| TA7 | **still-open** | `version.py:19-27` broad `except Exception` + terminal `"0.0.0"` still present. |
+| TA6 | **closed 2026-07-04** | Remediated by SA18.4 — see header note. |
+| TA7 | **closed 2026-07-04** | Remediated by SA18.5 — see header note. |
 | TA8 | **still-open** | `project_state.py:244`, `:676` `except Exception` swallows still present. |
 | TA9 | **still-open** | Analytics missing-SDK warn-and-disable (`services.py:218`), forms soft analytics probe (`views.py:94`) still present. |
 | TA10 | **still-open** | 8× `except Exception` in `railway_utils.py`. |
@@ -238,10 +221,10 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 |----|--------|------|
 | TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
 | TA2 | still-open (partially remediated) | `auth/adapters.py` now **raises** `ImproperlyConfigured` when `ACCOUNT_ALLOW_REGISTRATION` unset (SA11.7 done); analytics/billing resolved by SA17.2; remaining listed module defaults (notifications :157, forms, blog, crm) verified still open |
-| TA4 | still-open | Posthog fallback defaults verified at `entry_point.py:302-311` |
+| TA4 | closed 2026-07-04 | Remediated by SA18.2 — see header note. |
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
-| TA6 | still-open | `Path.cwd()` guess at `generator.py:117`, root-template compat at :178 |
-| TA7 | still-open | `version.py:16-27` unchanged |
+| TA6 | closed 2026-07-04 | Remediated by SA18.4 — see header note. |
+| TA7 | closed 2026-07-04 | Remediated by SA18.5 — see header note. |
 | TA8 | still-open | `except Exception` swallows at `project_state.py:244,676` |
 | TA9 | still-open | Verified `analytics/services.py:218` warning-and-continue, `forms/views.py:94` |
 | TA10 | still-open | 8 `except Exception` sites in `railway_utils.py` |
@@ -297,10 +280,10 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 |----|--------|------|
 | TA1 | closed 2026-07-04 | Remediated by SA17.1 (`aea5e3bd`) — see header note. |
 | TA2 | still-open (partial) | `auth/adapters.py` now raises (SA11.7 done); permissive `getattr(settings, …, default)` remains — verified `crm/views.py:204,223,231`, `forms/throttles.py:16`, `forms/views.py:134,146`, `blog/views.py:175,280`, `orgs/views.py:63`+`middleware.py:268` (see TA19). Analytics/billing resolved by SA17.2 (AppConfig.ready() guards removed the `True` defaults). |
-| TA4 | still-open | Posthog fallback defaults `entry_point.py:302-311`. |
+| TA4 | closed 2026-07-04 | Remediated by SA18.2 — see header note. |
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
-| TA6 | still-open | `generator.py` `Path.cwd()` guess `:117`, root-template compat `:178`. |
-| TA7 | still-open | `version.py:20` `except Exception:` → silent `"0.0.0"` floor. |
+| TA6 | closed 2026-07-04 | Remediated by SA18.4 — see header note. |
+| TA7 | closed 2026-07-04 | Remediated by SA18.5 — see header note. |
 | TA8 | still-open | `project_state.py` broad swallows. |
 | TA9 | still-open | `analytics/services.py:218`, `forms/views.py:94` warning-and-continue. |
 | TA10 | still-open | 8× `except Exception` in `railway_utils.py`. |
