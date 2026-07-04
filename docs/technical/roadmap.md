@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.10` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, and TA14) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.10 are complete; SA18.11 is ready now — plus new SA19, SA21.1, SA22, SA25 (all ready now).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 and SA14.2 are complete; SA14.5 and SA14.6 are ready now (no deps), SA14.3 waits on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.10 are complete; SA18.11 is ready now — plus new SA19, SA21.1, SA22, SA25 (all ready now).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -65,7 +65,7 @@ Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batch
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.6 (no deps — complete)
-SA14.2 (deps: SA14.1)                SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
+SA14.2 (deps: SA14.1 — complete)     SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
 SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
 SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — complete)
 SA14.5 (no deps — ready)                                                  SA18.10 (no deps — complete)
@@ -78,7 +78,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA14.1 (complete) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
+| **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
 | **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
 | **3** | SA18.1–SA18.10 (complete), SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
 
@@ -93,9 +93,10 @@ No cross-track dependencies — all three tracks can run fully in parallel.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py` (new base class and helpers), `quickscale_modules/orgs/tests/conftest.py` (new, shared fixtures), `quickscale_modules/orgs/tests/test_admin.py` (extended).
   *Acceptance:* a model admin subclassing `TenantModelAdmin` shows the VIEW-AS-resolved org's rows under the restricted `NOBYPASSRLS` role and denies cross-tenant rows without an explicit operator grant.
 
-- [ ] **SA14.2 — Port CRM's 8 admins to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
-  Replace `all_objects.all()` "cross-tenant visibility" idiom in CRM's `ModelAdmin`s with the new base; delete the now-inaccurate comments.
-  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/admin.py`.
+- [x] **SA14.2 — Port CRM's 7 admin classes to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
+  Ported all 7 CRM admin classes (TagAdmin, CompanyAdmin, ContactAdmin, StageAdmin, DealAdmin, ContactNoteAdmin, DealNoteAdmin) from `admin.ModelAdmin` to `TenantModelAdmin`. Removed all `get_queryset` overrides that used `all_objects.all()` (TenantModelAdmin scopes querysets via `_org_db_context`). Removed `formfield_for_foreignkey`/`formfield_for_manytomany` overrides that used `all_objects` — related-field querysets now scope correctly via TenantManager under the org context. Removed custom inline formsets (ContactNoteFormSet, DealNoteFormSet) that bypassed TenantManager with `all_objects`. Preserved `_CrmOrgAwareAdminMixin` with same-org form-level validation, organization-required-on-add, organization-readonly-on-change behavior. Added NULL-safe session guard to `debug_helpers.get_debug_as_org()` to prevent `AttributeError` when `request.session` is unavailable (VIEW-AS debug helpers hardening). Updated comments. Updated HTTP-level tests to set session org context for TenantModelAdmin compatibility.
+    - **Review-driven follow-up (CR-SA14.2-001):** Added `created_by` auto-stamping from the current user in `ContactAdmin.save_formset()` and `DealAdmin.save_formset()` so inline ContactNote/DealNote creations record the operator who created them. Added 3 regression tests (`TestContactAdminInlineNoteCreatedBy` with 2 tests, `TestDealAdminInlineNoteCreatedBy` with 1 test) proving inline notes carry `created_by` on both add and change forms.
+  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/admin.py`, `quickscale_modules/crm/tests/test_admin.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/debug_helpers.py`.
   *Acceptance:* CRM admin changelists render correctly under the restricted role in a manual/E2E check; no `all_objects` reference remains in `crm/admin.py`.
 
 - [ ] **SA14.3 — Port blog/forms/listings/billing admins to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
