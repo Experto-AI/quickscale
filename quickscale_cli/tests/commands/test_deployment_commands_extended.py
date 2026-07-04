@@ -475,6 +475,20 @@ class TestVerifyDeploymentStep:
         }
         _verify_deployment_step("myapp")
 
+    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    def test_unparsable_text_output_exits_nonzero(self, mock_vars):
+        """Test that text-fallback ValueError causes non-zero exit.
+
+        CR-SA18.7-002: Non-empty unparsable text output surfaces as a hard
+        failure at the deploy caller seam, not a warning.
+        """
+        mock_vars.side_effect = ValueError(
+            "Railway CLI returned success with non-empty output but no "
+            "KEY=VALUE pairs could be parsed."
+        )
+        with pytest.raises(SystemExit):
+            _verify_deployment_step("myapp")
+
 
 # ============================================================================
 # _display_summary / _link_database_step / _generate_domain_step / _configure_env_vars_step

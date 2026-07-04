@@ -13,12 +13,9 @@ Org selection follows a two-priority source order:
 
 When no valid org is available the admin fails closed (empty result set).
 
-``_org_db_context`` wraps every admin view in a ``transaction.atomic()``
-block that:
-  1. Captures the prior ContextVar value and restores it on exit (no leak).
-  2. Sets the ContextVar (so ``TenantManager`` auto-scopes at Django level).
-  3. Executes ``SET LOCAL app.current_org_id`` (so FORCE RLS on PostgreSQL
-     allows the query).
+``_org_db_context`` wraps every admin view in ``org_scope()`` which
+internally handles both the ContextVar and ``SET LOCAL app.current_org_id``
+inside ``transaction.atomic()``, ensuring RLS-protected tables are visible.
 
 The ``/admin/`` path remains exempt from ``TenantMiddleware``, so the
 ContextVar and DB parameter are populated here rather than by middleware.
@@ -33,13 +30,14 @@ from collections.abc import Iterator
 from typing import Any
 
 from django.contrib import admin
-from django.db import models, transaction
+from django.db import models
 
 from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
+    org_scope,
     set_current_org_id,
-    tenant_context,
 )
+from quickscale_modules_orgs.models import Organization
 
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
@@ -115,21 +113,45 @@ def _org_db_context(request: Any) -> Iterator[None]:
     """Context manager setting ContextVar and DB ``app.current_org_id``.
 
     Resolves the active org for *request* and delegates to
-    :func:`~quickscale_modules_orgs.current_org.tenant_context`
-    inside ``transaction.atomic()`` so that ``SET LOCAL`` has
-    an active transaction and RLS-protected tables are visible.
+    :func:`~quickscale_modules_orgs.current_org.org_scope` (the
+    blessed public API for entering org context).  ``org_scope``
+    internally wraps in ``transaction.atomic()`` and handles both
+    the ContextVar and ``SET LOCAL app.current_org_id`` so that
+    RLS-protected tables are visible.
 
-    See :func:`~quickscale_modules_orgs.current_org.tenant_context`
+    On the fail-closed path (no org or org not found) delegates to
+    ``org_scope(None)``.
+
+    Stores the validated org result (``uuid.UUID | None``) on
+    *request._validated_org_id* so downstream consumers such as
+    :meth:`PerOrgAdminMixin.get_queryset` can read the same
+    validated result instead of re-resolving the raw session UUID
+    (CR-SA13.3-001).
+
+    See :func:`~quickscale_modules_orgs.current_org.org_scope`
     for ContextVar save/restore contract.
     """
     org_id = _resolve_active_org_id(request)
     if org_id is None:
-        with tenant_context(None):
+        request._validated_org_id = None  # type: ignore[attr-defined]
+        with org_scope(None):
             yield
         return
-    with transaction.atomic():
-        with tenant_context(org_id):
+
+    # Fetch the Organization instance so we can use org_scope(instance),
+    # which accesses ``.pk`` internally.  If the org no longer exists,
+    # fail closed via org_scope(None).
+    try:
+        org = Organization.objects.get(pk=org_id)
+    except Organization.DoesNotExist:
+        request._validated_org_id = None  # type: ignore[attr-defined]
+        with org_scope(None):
             yield
+        return
+
+    request._validated_org_id = org.pk  # type: ignore[attr-defined]
+    with org_scope(org):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -152,12 +174,18 @@ class PerOrgAdminMixin:
     def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
         """Per-org contract: scope queryset to the request org.
 
-        This is called from within ``_org_db_context`` so the ContextVar
-        is typically already set.  The redundant ``set_current_org_id``
-        is a safety net for code paths that call ``get_queryset`` outside
-        the view wrappers.
+        Consumes the validated org result stored on *request* by
+        :func:`_org_db_context` (``request._validated_org_id``),
+        which is either a verified ``Organization`` PK or ``None``
+        (fail-closed).  This avoids re-resolving the raw session UUID
+        which could re-prime a bogus active-org context under AF9
+        (CR-SA13.3-001).
+
+        When called outside the view wrappers (no prior
+        ``_org_db_context``), ``_validated_org_id`` is absent and
+        the queryset safely returns empty (fail-closed).
         """
-        org_id = _resolve_active_org_id(request)
+        org_id = getattr(request, "_validated_org_id", None)
         if org_id is None:
             return self.model.objects.none()
         set_current_org_id(org_id)
