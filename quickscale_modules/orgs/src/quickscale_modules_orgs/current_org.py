@@ -324,7 +324,7 @@ def org_scope(organization: Any) -> Iterator[None]:
                 if prior is None:
                     reset_db_current_org_id()
                 else:
-                    _set_db_current_org_id(prior)
+                    set_db_current_org_id(prior)
                 set_current_org_id(prior)
         return
 
@@ -335,7 +335,7 @@ def org_scope(organization: Any) -> Iterator[None]:
     from django.db import transaction
 
     with transaction.atomic():
-        _set_db_current_org_id(organization.pk)
+        set_db_current_org_id(organization.pk)
         try:
             yield
         finally:
@@ -344,7 +344,7 @@ def org_scope(organization: Any) -> Iterator[None]:
             if prior is None:
                 reset_db_current_org_id()
             else:
-                _set_db_current_org_id(prior)
+                set_db_current_org_id(prior)
             set_current_org_id(prior)
 
 
