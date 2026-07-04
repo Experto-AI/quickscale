@@ -116,7 +116,7 @@ class TestAuthModuleConfig:
     def test_generate_auth_settings_addition(self):
         """Test generation of auth settings."""
         config = {
-            "allow_registration": True,
+            "registration_enabled": True,
             "email_verification": "optional",
             "authentication_method": "email",
         }

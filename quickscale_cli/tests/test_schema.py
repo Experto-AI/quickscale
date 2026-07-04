@@ -66,8 +66,8 @@ docker:
         assert config.docker.build is False
         assert config.docker.create_superuser is False
 
-    def test_validate_config_prunes_legacy_crm_default_pipeline_stages(self):
-        """Legacy CRM stage defaults should be removed during config parsing."""
+    def test_validate_config_rejects_legacy_crm_default_pipeline_stages(self):
+        """Legacy CRM default_pipeline_stages raises ConfigValidationError."""
         yaml_content = """
 version: "1"
 project:
@@ -86,13 +86,8 @@ modules:
       - Closed-Lost
 """
 
-        config = validate_config(yaml_content)
-
-        assert config.modules["crm"].options == {
-            "enable_api": True,
-            "deals_per_page": 30,
-            "contacts_per_page": 60,
-        }
+        with pytest.raises(ConfigValidationError, match="default_pipeline_stages"):
+            validate_config(yaml_content)
 
     @pytest.mark.parametrize(
         ("invalid_option", "option_value", "expected_marker"),
@@ -737,8 +732,8 @@ class TestGenerateYaml:
         assert parsed.docker.build == original.docker.build
         assert parsed.docker.create_superuser == original.docker.create_superuser
 
-    def test_generate_yaml_omits_legacy_crm_default_pipeline_stages(self):
-        """YAML generation should not re-emit the retired CRM stage-default key."""
+    def test_generate_yaml_round_trips_crm_canonical_keys(self):
+        """YAML generation round-trips canonical CRM keys correctly."""
         config = QuickScaleConfig(
             version="1",
             project=ProjectConfig(
@@ -753,12 +748,6 @@ class TestGenerateYaml:
                         "enable_api": True,
                         "deals_per_page": 25,
                         "contacts_per_page": 50,
-                        "default_pipeline_stages": [
-                            "Prospecting",
-                            "Negotiation",
-                            "Closed-Won",
-                            "Closed-Lost",
-                        ],
                     },
                 )
             },

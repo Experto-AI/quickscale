@@ -220,16 +220,19 @@ def default_auth_module_options() -> dict[str, Any]:
 
 
 def normalize_auth_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
+    from quickscale_core.schema.config_schema import ConfigValidationError
+
     normalized = dict(options or {})
-    if (
-        AUTH_REGISTRATION_ENABLED_OPTION not in normalized
-        and LEGACY_AUTH_ALLOW_REGISTRATION_OPTION in normalized
-    ):
-        normalized[AUTH_REGISTRATION_ENABLED_OPTION] = normalized[
-            LEGACY_AUTH_ALLOW_REGISTRATION_OPTION
-        ]
-    normalized.pop(LEGACY_AUTH_ALLOW_REGISTRATION_OPTION, None)
-    normalized.pop(LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION, None)
+    if LEGACY_AUTH_ALLOW_REGISTRATION_OPTION in normalized:
+        raise ConfigValidationError(
+            f"Legacy config key '{LEGACY_AUTH_ALLOW_REGISTRATION_OPTION}' is "
+            f"no longer supported. Use '{AUTH_REGISTRATION_ENABLED_OPTION}' instead."
+        )
+    if LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION in normalized:
+        raise ConfigValidationError(
+            f"Legacy config key '{LEGACY_AUTH_SOCIAL_PROVIDERS_OPTION}' is "
+            "no longer supported. Remove it from the auth module options."
+        )
     return normalized
 
 
@@ -552,8 +555,14 @@ def default_crm_module_options() -> dict[str, Any]:
 
 
 def normalize_crm_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
+    from quickscale_core.schema.config_schema import ConfigValidationError
+
     normalized = dict(options or {})
-    normalized.pop(LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION, None)
+    if LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION in normalized:
+        raise ConfigValidationError(
+            "Legacy config key 'default_pipeline_stages' is no longer supported. "
+            "Remove it from the CRM module options."
+        )
     return normalized
 
 
