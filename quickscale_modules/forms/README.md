@@ -43,17 +43,26 @@ This seeds four ready-to-use forms: `contact`, `newsletter`, `feedback`, and `su
 
 ## Configuration
 
-All settings have defaults and can be overridden in your Django settings:
+The following settings configure form behavior. `FORMS_SPAM_PROTECTION`, `FORMS_RATE_LIMIT`, and `FORMS_SUBMISSIONS_API` are required and must be set explicitly in your Django settings.
+
+### Required Settings
+
+| Setting | Description |
+|---------|-------------|
+| `FORMS_SPAM_PROTECTION` | Enable honeypot spam protection |
+| `FORMS_RATE_LIMIT` | Throttle rate per IP (format: `count/period`) |
+| `FORMS_SUBMISSIONS_API` | Enable the staff admin REST endpoints under `/api/admin/forms/`; when disabled they return `404` |
+
+### Optional Settings
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `FORMS_PER_PAGE` | `25` | Submission page size for the staff `/api/admin/forms/{id}/submissions/` endpoint |
-| `FORMS_SPAM_PROTECTION` | `True` | Enable honeypot spam protection |
-| `FORMS_RATE_LIMIT` | `"5/hour"` | Throttle rate per IP (format: `count/period`) |
 | `FORMS_DATA_RETENTION_DAYS` | `365` | Days before submission anonymization |
-| `FORMS_SUBMISSIONS_API` | `True` | Enable the staff admin REST endpoints under `/api/admin/forms/`; when disabled they return `404` |
 
-New `Form` rows created without an explicit `data_retention_days` value, including `forms_seed_presets` and the first-run seed migration, inherit `FORMS_DATA_RETENTION_DAYS`. Existing forms keep their stored retention window, and anonymization continues to use each form's per-row value.
+> **Note:** When using QuickScale project generation, these settings are wired automatically with explicit values in the generated project's settings.
+
+New `Form` rows created at runtime after migrations complete — including those from the `forms_seed_presets` management command when run manually — inherit `FORMS_DATA_RETENTION_DAYS` when `data_retention_days` is omitted. Fresh-install preset rows created by the initial seed migration are an exception: they hardcode the historical 365-day default and do not inherit the runtime setting. Existing forms always keep their stored per-row retention window regardless of how they were created.
 
 ## REST API Endpoints
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, override_settings
 
 from quickscale_modules_forms.throttles import FormSubmitThrottle
@@ -17,17 +19,16 @@ def test_form_submit_throttle_uses_configured_rate() -> None:
         assert throttle.get_rate() == "5/hour"
 
 
-def test_form_submit_throttle_falls_back_to_parent_rate() -> None:
+def test_form_submit_throttle_missing_rate_raises_improperly_configured() -> None:
+    """SA17.4 — missing FORMS_RATE_LIMIT must raise at request time."""
     throttle = FormSubmitThrottle()
 
     with override_settings(FORMS_RATE_LIMIT=None):
-        with patch(
-            "rest_framework.throttling.ScopedRateThrottle.get_rate",
-            return_value="10/minute",
-        ) as mocked_super_get_rate:
-            assert throttle.get_rate() == "10/minute"
-
-    mocked_super_get_rate.assert_called_once_with()
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="FORMS_RATE_LIMIT",
+        ):
+            throttle.get_rate()
 
 
 def test_form_submit_throttle_uses_parent_cache_key_when_view_scope_is_declared() -> (

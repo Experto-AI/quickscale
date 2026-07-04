@@ -131,7 +131,10 @@ class FormsAdminApiMixin:
     permission_classes = [IsAdminUser]
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
-        if not bool(getattr(settings, "FORMS_SUBMISSIONS_API", True)):
+        # SA17.4 — no True default: FORMS_SUBMISSIONS_API must be explicitly
+        # set.  AppConfig.ready() enforces presence at startup; this is a
+        # defensive check so a missing value is treated as disabled.
+        if not bool(getattr(settings, "FORMS_SUBMISSIONS_API", None)):
             raise Http404
         APIView.initial(self, request, *args, **kwargs)
 

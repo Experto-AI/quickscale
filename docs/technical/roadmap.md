@@ -159,9 +159,9 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `crm/apps.py`, `crm/adapter.py`, `crm/views.py`, `crm/tests/settings.py`, `crm/tests/test_apps.py` (new), `crm/tests/test_views.py`.
   *Acceptance:* missing `CRM_ENABLE_API` or a malformed page-size setting raises at startup/request time with a descriptive error.
 
-- [ ] **SA17.4 — Fail-hard forms module settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  Require explicit settings for the submissions API toggle, rate limit, and spam-protection flag instead of defaulting them.
-  *Files:* `forms/views.py:134,146`, `forms/throttles.py:16`, `forms/models.py:32`.
+- [x] **SA17.4 — Fail-hard forms module settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
+  Added AppConfig.ready() startup guard to `forms/apps.py` that raises `ImproperlyConfigured` at startup when any of `FORMS_SUBMISSIONS_API`, `FORMS_RATE_LIMIT`, or `FORMS_SPAM_PROTECTION` is missing. Removed default-`True` fallbacks in `views.py` (`FormsAdminApiMixin.initial()`), `throttles.py` (`FormSubmitThrottle.get_rate()`), and `models.py` (`is_form_spam_protection_enabled()`). Updated test settings with the required settings. Replaced the `test_form_submit_throttle_falls_back_to_parent_rate` fallback test with `test_form_submit_throttle_missing_rate_raises_improperly_configured`. Added five ready()-method tests to `forms/tests/test_apps.py` (new). See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `forms/apps.py`, `forms/views.py`, `forms/throttles.py`, `forms/models.py`, `forms/tests/settings.py`, `forms/tests/test_apps.py` (new), `forms/tests/test_throttles.py`.
   *Acceptance:* omitting any of the three settings raises at startup instead of silently applying the current defaults.
 
 - [ ] **SA17.5 — Fail-hard blog module settings.** `Tier 2 · Track 2 · deps: none · (why → TA2)`

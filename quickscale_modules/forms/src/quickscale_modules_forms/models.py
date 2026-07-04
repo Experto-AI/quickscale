@@ -27,9 +27,14 @@ def get_default_form_data_retention_days() -> int:
 
 
 def is_form_spam_protection_enabled(form: "Form") -> bool:
-    """Return whether honeypot handling is active for the given form."""
+    """Return whether honeypot handling is active for the given form.
+
+    SA17.4 — no True default: FORMS_SPAM_PROTECTION must be explicitly set.
+    AppConfig.ready() enforces presence at startup; this is a defensive
+    check so a missing value is treated as disabled (False).
+    """
     return bool(
-        getattr(settings, "FORMS_SPAM_PROTECTION", True)
+        getattr(settings, "FORMS_SPAM_PROTECTION", None)
         and form.spam_protection_enabled
     )
 
