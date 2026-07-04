@@ -160,12 +160,14 @@ help:
 	@echo "                               match their core snapshots"
 	@echo "  make manifest-sync        - Copy source manifests to snapshot paths"
 	@echo ""
-	@echo "Org-Context Primitives Gate (SA13.1):"
-	@echo "  make check-org-context-primitives - Warn on direct external use of"
-	@echo "                               the three privatized org-context primitives"
+	@echo "Org-Context Primitives Gate (SA13.4):"
+	@echo "  make check-org-context-primitives - Hard-fail gate for direct external use"
+	@echo "                               of the three privatized org-context primitives"
 	@echo "                               (_tenant_context, _set_current_org_for_context,"
-	@echo "                               _set_db_current_org_id). Warn-only during"
-	@echo "                               SA13.1–SA13.3; flips to hard-fail in SA13.4."
+	@echo "                               _set_db_current_org_id). Exits 1 on any"
+	@echo "                               violation — all SA13.2/SA13.3 migrations"
+	@echo "                               are complete. AF9 None-path hardening"
+	@echo "                               deferred (see roadmap.md)."
 	@echo ""
 	@echo "LLM Optimized Checks (Quiet on success):"
 	@echo "  make check-llm            - Run all checks quietly"
@@ -561,11 +563,12 @@ check-manifest-sync:
 manifest-sync:
 	@$(PYTHON) scripts/sync_module_manifests.py --sync
 
-# --- Org-Context Primitives Gate (SA13.1) ---
+# --- Org-Context Primitives Gate (SA13.4) ---
 
-# Warn-only lint gate for direct external use of the three privatized
-# org-context primitives.  Exits 0 during SA13.1–SA13.3 so pre-migration
-# callers continue to work.  Flips to hard-fail in SA13.4.
+# Hard-fail lint gate for direct external use of the three privatized
+# org-context primitives.  Exits 1 on any violation — all SA13.2/13.3
+# migrations are complete.  AF9 None-path hardening deferred;
+# compatibility aliases remain but trigger the gate.
 check-org-context-primitives:
 	@$(PYTHON) scripts/check_org_context_primitives.py
 

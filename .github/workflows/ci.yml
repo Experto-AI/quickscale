@@ -175,9 +175,37 @@ jobs:
       run: |
         make check-manifest-sync
 
+  org-context-primitives-gate:
+    name: Org-Context Primitives Gate (SA13.4)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Verify no external use of privatized org-context primitives
+      run: |
+        make check-org-context-primitives
+
   test:
     name: Run Tests (Unit + Integration)
-    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate]
+    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, org-context-primitives-gate]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -296,7 +324,7 @@ jobs:
 
   isolation-conformance:
     name: Isolation Conformance (AF10)
-    needs: [backups-validation, module-manifest-contract, manifest-sync-gate]
+    needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -377,7 +405,7 @@ jobs:
 
   lint-cli:
     name: Lint CLI Package
-    needs: [backups-validation, module-manifest-contract, manifest-sync-gate]
+    needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate]
     runs-on: ubuntu-latest
 
     steps:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SA13.1 — Warn-only AST lint gate for the three privatized org-context primitives.
+SA13.4 — Hard-fail AST lint gate for the three privatized org-context primitives.
 
 Scans ``quickscale_modules/*/src/`` (excluding orgs itself) for imports of
 the three underscored primitives (``_tenant_context``,
@@ -8,15 +8,16 @@ the three underscored primitives (``_tenant_context``,
 compatibility aliases (``tenant_context``, ``set_current_org_for_context``,
 ``set_db_current_org_id``) from ``quickscale_modules_orgs.current_org``.
 
-This gate **warns only** (exit 0) during SA13.1 so pre-migration callers
-continue to work.  SA13.4 will flip to hard-fail once SA13.2/13.3 migrate
-all external callsites.
+This gate **fails CI** (exit 1) when any violation is found.  All SA13.2/13.3
+migrations are complete — any new direct external import of a privatized
+primitive will hard-fail.
 
 ``org_scope`` and all other ``current_org`` symbols are exempt — they are
 the permanent public API.
 
 Exit codes:
-    0 — always (warn-only mode during SA13.1–SA13.3)
+    0 — no violations found
+    1 — one or more violations detected (hard-fail)
     2 — a configuration or filesystem error
 """
 
@@ -123,7 +124,7 @@ def _check_module_source(source_dir: Path) -> dict[Path, list[tuple[int, str]]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the org-context primitives lint gate and exit 0 (warn-only)."""
+    """Run the org-context primitives lint gate; exit 0 on clean, 1 on violations."""
     if argv is None:
         argv = sys.argv[1:]
 
@@ -196,21 +197,21 @@ def main(argv: list[str] | None = None) -> int:
     if total == 0:
         print(
             "No direct external use of privatized org-context primitives found — "
-            "all module imports respect the SA13.1 boundary."
+            "all module imports respect the SA13.4 hard-fail gate."
         )
     else:
         print(
-            f"\n⚠️  {total} direct use(s) of privatized org-context primitive(s) found "
-            f"(warn-only during SA13.1–SA13.3).\n"
-            f"These should be migrated to `org_scope` / `PublicSystemOrgReadMixin` "
-            f"in SA13.2/SA13.3.\n"
+            f"\n❌ {total} direct use(s) of privatized org-context primitive(s) found "
+            f"(hard-fail after SA13.4).\n"
+            f"All SA13.2/SA13.3 migrations are complete — any new direct external import\n"
+            f"of a privatized primitive now fails CI.\n"
             f"Primitives flagged: {', '.join(sorted(PRIVATIZED_PRIMITIVES))}\n"
             f"Exempt modules: {', '.join(sorted(EXEMPT_MODULES))}\n"
             f"`org_scope` and other public symbols are never flagged."
         )
 
-    # Warn-only: always exit 0 during SA13.1–SA13.3
-    return 0
+    # Hard-fail after SA13.4: exit 1 when violations exist, 0 on clean
+    return 1 if total > 0 else 0
 
 
 if __name__ == "__main__":
