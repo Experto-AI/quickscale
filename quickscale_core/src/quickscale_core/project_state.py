@@ -605,6 +605,13 @@ class ProjectStateManager:
         1. ``state.yml.managed_files`` — consolidated authoritative records.
         2. ``file_hashes.yml`` — legacy fallback, only when the consolidated
            section is absent from state.
+
+        Note:
+            This method is explicitly OUTSIDE F12.2 scope. Its legacy
+            fallback to ``file_hashes.yml`` is a drift-detection design
+            choice, not an M2 migration compatibility path.  F12.2 covers
+            only the read-through import in ``_read_through_import_legacy``
+            and ``materialize_authoritative_state``.
         """
         # Try consolidated state.yml first.
         if self._state_file_has_consolidated_sections():
@@ -662,19 +669,19 @@ class ProjectStateManager:
                 )
 
         # 2. Fall back to validated quickscale.yml.
+        # SA18.6: validation errors propagate — a malformed or invalid
+        # quickscale.yml must fail loudly, not be indistinguishable from
+        # "no project here."
         quickscale_yml = self.project_path / "quickscale.yml"
         if quickscale_yml.exists():
-            try:
-                from quickscale_core.schema.config_schema import validate_config
+            from quickscale_core.schema.config_schema import validate_config
 
-                desired = validate_config(quickscale_yml.read_text())
-                return (
-                    desired.project.slug,
-                    desired.project.package,
-                    desired.project.theme,
-                )
-            except Exception:
-                return None
+            desired = validate_config(quickscale_yml.read_text())
+            return (
+                desired.project.slug,
+                desired.project.package,
+                desired.project.theme,
+            )
 
         return None
 
