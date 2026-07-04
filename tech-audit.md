@@ -44,14 +44,14 @@
 
 SA11.7 (tracked in decisions.md Known violations) covers `auth/adapters.py:14` (`ACCOUNT_ALLOW_REGISTRATION` defaults `True`), but the pattern is systemic — missing Django settings silently enable features or invent values instead of raising `ImproperlyConfigured`:
 
-- `analytics/services.py:61` — `QUICKSCALE_ANALYTICS_ENABLED` defaults `True`
-- `billing/services.py:117` — `QUICKSCALE_BILLING_ENABLED` defaults `True`
+- ~~`analytics/services.py:61` — `QUICKSCALE_ANALYTICS_ENABLED` defaults `True`~~ — resolved by SA17.2 (AppConfig.ready() guard), see CHANGELOG.md
+- ~~`billing/services.py:117` — `QUICKSCALE_BILLING_ENABLED` defaults `True`~~ — resolved by SA17.2 (AppConfig.ready() guard), see CHANGELOG.md
 - `crm/views.py:219,238,246` — `CRM_ENABLE_API` defaults `True`; page sizes `int(getattr(...) or 50)` also swallow invalid values
 - `forms/views.py:134,146`, `forms/throttles.py:16`, `forms/models.py:32` — submissions API on, rate limit `"5/hour"`, spam protection flag defaulted
 - `blog/urls.py:18`, `blog/views.py:175,280`, `blog/models.py:46-48` — RSS on by default; `BLOG_API_TOKENS` defaults `[]` with malformed entries silently `continue`-skipped (`views.py:181-190`); media URL invented
 - `notifications/services.py:155-157` — enabled defaults `True`, provider defaults `"resend"`
 
-Since modules are creation-time assembled and the generator owns settings emission, every one of these settings is knowable at generation time; the defaults exist only to mask incomplete wiring. **Fix direction:** module `apps.py` startup checks (Django system checks) that raise on missing required settings; generator guarantees emission.
+Since modules are creation-time assembled and the generator owns settings emission, every one of these settings is knowable at generation time; the defaults exist only to mask incomplete wiring. **Fix direction:** module `apps.py` `AppConfig.ready()` startup guards that raise on missing required settings; generator guarantees emission.
 
 ### TA4 (Medium) — Analytics fallback defaults in manifest resolution
 
@@ -129,7 +129,7 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 | ID | Status | Note |
 |----|--------|------|
 | TA1 | **still-open** | Legacy-key silent translate/drop still present (`resolvers.py:252`, `:780`). |
-| TA2 | **still-open** | Permissive `getattr(settings, …, default)` still pervasive (analytics/billing/crm/forms/blog/notifications). Auth's `ACCOUNT_ALLOW_REGISTRATION` (SA11.7) is now fixed and raises `ImproperlyConfigured` — the *pattern* remains open elsewhere. |
+| TA2 | **still-open** | Permissive `getattr(settings, …, default)` still pervasive (crm/forms/blog/notifications); analytics/billing resolved by SA17.2 (AppConfig.ready() guards). Auth's `ACCOUNT_ALLOW_REGISTRATION` (SA11.7) is now fixed and raises `ImproperlyConfigured` — the *pattern* remains open elsewhere. |
 | TA4 | **still-open** | Analytics "fallback defaults matching legacy behaviour" still at `entry_point.py:302-311`. (Tracked as SA18.2.) |
 | TA5 | **still-open** | `quickscale_cli.schema` shim package still present; CLI still imports through it (`status_command.py`, `plan_command.py`, `module_commands.py`, `module_wiring_manager.py`). |
 | TA6 | **still-open** | `Path.cwd()` template-dir fallback (`generator.py:117`) + backward-compat root-template tier (`:178`) still present. |
@@ -184,7 +184,7 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 
 ## Structural smells (candidates for `arch-audit.md`)
 
-- TA2's breadth (permissive `getattr(settings, …, default)` across every module) is a *systemic* fail-open habit that a per-callsite fix cannot close durably; it points to a missing **generator↔module settings contract** (generator guarantees emission; modules assert presence via Django system checks). This is the same beam arch-audit's `QUICKSCALE_MODE` red flag rests on.
+- TA2's breadth (permissive `getattr(settings, …, default)` across every module) is a *systemic* fail-open habit that a per-callsite fix cannot close durably; it points to a missing **generator↔module settings contract** (generator guarantees emission; modules assert presence via AppConfig.ready startup guards). This is the same beam arch-audit's `QUICKSCALE_MODE` red flag rests on.
 - TA16's proxy-IP gap is one callsite pattern, but the absence of any trusted-proxy client-IP convention in the generated settings is a template-wide decision (where does the app learn its edge topology?) worth an architectural note.
 
 ## Tooling gaps
@@ -243,7 +243,7 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 | ID | Status | Note |
 |----|--------|------|
 | TA1 | still-open | Legacy-key silent translation unchanged (`resolvers.py`, `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS` at :780) |
-| TA2 | still-open (partially remediated) | `auth/adapters.py` now **raises** `ImproperlyConfigured` when `ACCOUNT_ALLOW_REGISTRATION` unset (SA11.7 done); all other listed module defaults remain (verified notifications :157, forms, blog, crm, analytics, billing) |
+| TA2 | still-open (partially remediated) | `auth/adapters.py` now **raises** `ImproperlyConfigured` when `ACCOUNT_ALLOW_REGISTRATION` unset (SA11.7 done); analytics/billing resolved by SA17.2; remaining listed module defaults (notifications :157, forms, blog, crm) verified still open |
 | TA4 | still-open | Posthog fallback defaults verified at `entry_point.py:302-311` |
 | TA5 | still-open | Shim package present; 4+ internal CLI files still import through it |
 | TA6 | still-open | `Path.cwd()` guess at `generator.py:117`, root-template compat at :178 |
@@ -302,7 +302,7 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 | ID | Status | Note (re-verified 2026-07-04) |
 |----|--------|------|
 | TA1 | still-open | `resolvers.py` legacy-key silent translate/drop; `_LEGACY_NOTIFICATIONS_SECRET_OPTIONS` at `:780`. |
-| TA2 | still-open (partial) | `auth/adapters.py` now raises (SA11.7 done); permissive `getattr(settings, …, default)` remains — verified `billing/services.py:117`, `analytics/services.py:61`, `crm/views.py:204,223,231`, `forms/throttles.py:16`, `forms/views.py:134,146`, `blog/views.py:175,280`, `orgs/views.py:63`+`middleware.py:268` (see TA19). |
+| TA2 | still-open (partial) | `auth/adapters.py` now raises (SA11.7 done); permissive `getattr(settings, …, default)` remains — verified `crm/views.py:204,223,231`, `forms/throttles.py:16`, `forms/views.py:134,146`, `blog/views.py:175,280`, `orgs/views.py:63`+`middleware.py:268` (see TA19). Analytics/billing resolved by SA17.2 (AppConfig.ready() guards removed the `True` defaults). |
 | TA4 | still-open | Posthog fallback defaults `entry_point.py:302-311`. |
 | TA5 | still-open | `quickscale_cli.schema` shim still imported internally. |
 | TA6 | still-open | `generator.py` `Path.cwd()` guess `:117`, root-template compat `:178`. |

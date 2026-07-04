@@ -114,7 +114,7 @@ class BillingSettingsSnapshot:
     def from_settings(cls) -> BillingSettingsSnapshot:
         """Create a billing runtime snapshot from Django settings."""
         return cls(
-            enabled=bool(getattr(settings, "QUICKSCALE_BILLING_ENABLED", True)),
+            enabled=bool(settings.QUICKSCALE_BILLING_ENABLED),
             publishable_key_env_var=str(
                 getattr(
                     settings,
