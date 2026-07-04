@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 (dead context API deletion) landed already, so SA13.2 and SA13.3 are complete and SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7 has substantial implementation landed but remains open on one deploy `DATABASE_URL`-link follow-up; SA18.8–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.9 within the track.
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1–SA13.3 are complete; SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.6 are complete; SA18.7 has substantial implementation landed but remains open on one deploy `DATABASE_URL`-link follow-up; SA18.8, SA18.9 and SA18.11 are ready now (SA18.9 decision made — fail hard on OSError); SA18.10 is unblocked (no longer depends on SA18.9).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -68,7 +68,7 @@ SA13.2 (no deps — complete)           SA17.3 (no deps — complete)           
 SA13.3 (no deps — complete)           SA17.4 (no deps — complete)                  SA18.7 (partial — 1 deploy follow-up still open)
 SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — ready)                  SA18.8 (no deps — ready)
 SA14.1 (no deps — ready)             SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
-SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (deps: SA18.9)
+SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (no deps — ready)
 SA14.3 (deps: SA14.1)                SA17.8 (no deps — ready)                  SA18.11 (no deps — ready)
 SA14.4 (deps: SA14.2, SA14.3)
 SA14.5 (no deps — ready)
@@ -83,7 +83,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 |-------|------------------|-------|
 | **1** | SA13.2, SA13.3 (complete) → SA13.4 (deps met), then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA17.3–SA17.4 (complete), SA17.5, SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
-| **3** | SA18.6 (complete), SA18.7 (partial — deploy follow-up still open), SA18.8–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.9) | Core/CLI fail-hard plumbing (Finding 4 not fully closed until SA18.7 follow-up lands) |
+| **3** | SA18.6 (complete), SA18.7 (partial — deploy follow-up still open), SA18.8–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing (Finding 4 not fully closed until SA18.7 follow-up lands) |
 
 ---
 
@@ -245,13 +245,14 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Files:* `quickscale_cli/src/quickscale_cli/utils/docker_utils.py:164-173`.
   *Acceptance:* `PORT=notanumber` raises a descriptive error; `PORT` unset still defaults to `8000`.
 
-- [ ] **SA18.9 — Decide and implement the hash-capture step's failure behavior.** `Tier 1 · Track 3 · deps: none · (why → TA13)`
-  Decide: either fail `step_capture_hashes` on `OSError` (hash capture over files the apply itself just wrote should never fail) or register the current best-effort behavior as a documented `# F-EXCEPTION:` entry. Implement whichever is chosen.
+- [ ] **SA18.9 — Fail `step_capture_hashes` on `OSError`.** `Tier 1 · Track 3 · deps: none · (why → TA13)`
+  Return `StepOutcome(success=False)` on `OSError` with a descriptive error message. Hash capture runs over files the apply pipeline itself just wrote — a read-back failure is a genuine system-level problem (disk full, permissions, filesystem corruption), not a best-effort informational path.
+  **Decision (2026-07-04):** Option 1 (fail hard), per user direction. Consistent with all prior SA17/SA18 precedent (SA17.1–SA17.4, SA18.1–SA18.6). No F-EXCEPTION needed.
   *Files:* `quickscale_core/src/quickscale_core/apply/steps/wiring.py:71-120`.
-  *Acceptance:* either the step now fails on `OSError` (and `quickscale apply` reports failure, not silent success), or the step carries a `# F-EXCEPTION:` tag and a decisions.md entry justifying it.
+  *Acceptance:* `step_capture_hashes` returns `success=False` on `OSError`; docstring updated (remove "always succeeds" contract); `quickscale apply` reports failure instead of silent degradation.
 
-- [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: SA18.9 · (why → TA14)`
-  Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. SA18.6 is already complete (its exception entries are in place), so SA18.10 now waits only on SA18.9 reshaping any remaining exception entries this task must tag.
+- [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: none · (why → TA14)`
+  Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. SA18.6 is already complete (its exception entries are in place); SA18.9 chose the fail-hard path (no new F-EXCEPTION), so no dependency remains.
   *Files:* `quickscale_core/src/quickscale_core/project_state.py:415`, `quickscale_cli/src/quickscale_cli/commands/remove_command.py`, `docs/technical/decisions.md`.
   *Acceptance:* `grep -rn "F-EXCEPTION"` returns a hit for every exception decisions.md documents, and decisions.md's exception table lists every exception the grep finds.
 
