@@ -11,7 +11,6 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from importlib import import_module
 from typing import Any
 
 from django.apps import apps
@@ -83,30 +82,30 @@ def _neutralize_csv_cell(value: Any) -> str:
 
 
 def _capture_submission_analytics(submission: FormSubmission, request: Request) -> None:
-    """Best-effort analytics hook for successful public form submissions."""
+    """Best-effort analytics hook for successful public form submissions.
+
+    Analytics helpers are imported lazily inside the function body, after
+    the ``apps.is_installed`` guard, so forms remains importable without
+    analytics on the Python path.  Once analytics IS available at runtime
+    the imports resolve normally — no soft degradation path is restored.
+    """
     if not apps.is_installed("quickscale_modules_analytics"):
         return
     if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", True)):
         return
 
-    try:
-        analytics_services = import_module("quickscale_modules_analytics.services")
-    except ImportError:
-        return
-
-    capture_form_submit = getattr(analytics_services, "capture_form_submit", None)
-    get_distinct_id = getattr(analytics_services, "get_distinct_id", None)
-    if not callable(capture_form_submit) or not callable(get_distinct_id):
-        return
+    # Lazy import — analytics is assembled (confirmed by is_installed above)
+    # so these symbols resolve at runtime, not at module load time.
+    from quickscale_modules_analytics.services import (
+        capture_form_submit,
+        get_distinct_id,
+    )
 
     django_request = getattr(request, "_request", request)
 
     try:
         distinct_id = get_distinct_id(django_request)
-        if not isinstance(distinct_id, str):
-            distinct_id = str(distinct_id or "")
-        distinct_id = distinct_id.strip()
-        if not distinct_id:
+        if not distinct_id.strip():
             return
 
         capture_form_submit(
