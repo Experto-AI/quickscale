@@ -47,9 +47,9 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
+> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.4` (Track 2 — legacy config keys, analytics/billing/CRM/forms settings, closes TA1/TA2-partial) and `SA18.1`–`SA18.7` (Track 3 — manifest/version/template/project-metadata/railway-utils fail-hard fixes, closes TA3–TA8 and TA10) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1–SA13.3 are complete; SA13.4 is unblocked. Track 2: SA15 (entire finding) and SA17.1–SA17.5 are complete; SA17.6 and SA17.8 are ready now; SA17.7 is unblocked (SA17.5 complete). Track 3: SA18.1–SA18.6 are complete; SA18.7 has substantial implementation landed but remains open on one deploy `DATABASE_URL`-link follow-up; SA18.8, SA18.9 and SA18.11 are ready now (SA18.9 decision made — fail hard on OSError); SA18.10 is unblocked (no longer depends on SA18.9).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.5, SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3. Track 2: SA17.1–SA17.5 are complete; SA17.6 and SA17.8 are ready now; SA17.7 is unblocked/ready (SA17.5 complete). Track 3: SA18.1–SA18.7 are complete; SA18.8, SA18.9, SA18.10, and SA18.11 are all ready now (no deps; SA18.9 decision already made — fail hard on OSError).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -59,20 +59,17 @@ Fix plan derived from the [2026-07-03 fresh-pass autopsy](../../arch-audit.md#au
 
 #### Dependency & parallelization overview (2026-07-04)
 
-Per arch-audit's "Fix order and interactions": Finding 3 (`org-context-api-accretion`) must land before Finding 1 (`operator-read-path-undefined`), since the admin/operator contract should be built on the *consolidated* `org_scope` seam — so SA13 → SA14 remains one intra-track dependency chain. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are now closed — see the closed-batches note above. The fail-hard tasks (SA17, SA18) are file-scoped and independent of the structural work and of each other, aside from two noted internal orderings.
+Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. The fail-hard tasks (SA17, SA18) are file-scoped and independent of the structural work and of each other, aside from two noted internal orderings.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA13.2 (no deps — complete)           SA17.3 (no deps — complete)               SA18.6 (no deps — complete)
-SA13.3 (no deps — complete)           SA17.4 (no deps — complete)                  SA18.7 (partial — 1 deploy follow-up still open)
-SA13.4 (deps: SA13.2, SA13.3)        SA17.5 (no deps — complete)                  SA18.8 (no deps — ready)
-SA14.1 (no deps — ready)             SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
-SA14.2 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)            SA18.10 (no deps — ready)
-SA14.3 (deps: SA14.1)                SA17.8 (no deps — ready)                  SA18.11 (no deps — ready)
-SA14.4 (deps: SA14.2, SA14.3)
-SA14.5 (no deps — ready)
-SA14.6 (no deps — ready)
+SA14.1 (no deps — ready)             SA17.3 (no deps — complete)               SA18.8 (no deps — ready)
+SA14.2 (deps: SA14.1)                SA17.4 (no deps — complete)               SA18.9 (no deps — ready)
+SA14.3 (deps: SA14.1)                SA17.5 (no deps — complete)               SA18.10 (no deps — ready)
+SA14.4 (deps: SA14.2, SA14.3)        SA17.6 (no deps — ready)                  SA18.11 (no deps — ready)
+SA14.5 (no deps — ready)             SA17.7 (deps: SA17.5 — ready)
+SA14.6 (no deps — ready)             SA17.8 (no deps — ready)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -81,9 +78,9 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA13.2, SA13.3 (complete) → SA13.4 (deps met), then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
-| **2** | SA17.3–SA17.5 (complete), SA17.6, SA17.8 (ready) → SA17.7 (ready, deps met) | Module-side fail-hard settings (Finding 2/TA2 not fully closed until SA17.6 lands) |
-| **3** | SA18.6 (complete), SA18.7 (partial — deploy follow-up still open), SA18.8–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing (Finding 4 not fully closed until SA18.7 follow-up lands) |
+| **1** | SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
+| **2** | SA17.1–SA17.5 (complete); SA17.6, SA17.8 (ready); SA17.7 (ready, deps met) | Module-side fail-hard settings (Finding 2/TA2 not fully closed until SA17.6 lands) |
+| **3** | SA18.8–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing (SA18.1–SA18.7 closed) |
 
 ---
 
@@ -167,23 +164,7 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 #### `SA17` — Module-side settings and config fail-hard fixes (Track 2)
 
-- [x] **SA17.1 — Reject legacy config keys instead of silently translating/dropping them (complete).** `Tier 2 · Track 2 · deps: none · (why → TA1, closed)`
-  `normalize_auth_module_options`/`normalize_crm_module_options`/`normalize_notifications_module_options` now raise `ConfigValidationError` naming the legacy key and its replacement instead of silently mapping or dropping it. Closes tech-audit TA1. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA17.2 — Fail-hard analytics/billing enabled-flag settings (complete).** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium (billing) · (why → TA2)`
-  Added AppConfig.ready() startup guards to `analytics/apps.py` and `billing/apps.py` that raise `ImproperlyConfigured` at startup when `QUICKSCALE_ANALYTICS_ENABLED` / `QUICKSCALE_BILLING_ENABLED` are missing. Removed default-`True` fallbacks in `analytics/services.py`, `billing/services.py`, and `billing/adapter.py`. Updated test settings (`billing/tests/settings.py`) with the required enabled-flag. Rewrote the analytics `test_configure_analytics_client_defaults_missing_enabled_setting_to_enabled` test as `test_configure_analytics_client_missing_enabled_setting_raises_attribute_error`. Added ready()-method tests to both modules' `test_apps.py` (analytics: `test_ready_raises_improperly_configured_when_enabled_setting_missing`, billing: `test_app_config_ready_raises_improperly_configured_when_enabled_setting_missing`). Added `test_billing_settings_snapshot_missing_enabled_setting_raises_attribute_error` to billing `test_services.py`. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `analytics/apps.py`, `analytics/services.py`, `analytics/tests/test_apps.py`, `analytics/tests/test_services.py`, `billing/apps.py`, `billing/services.py`, `billing/adapter.py`, `billing/tests/settings.py`, `billing/tests/test_apps.py`, `billing/tests/test_services.py`.
-  *Acceptance:* omitting either setting from a generated project raises at startup instead of silently enabling the feature.
-
-- [x] **SA17.3 — Fail-hard CRM's API-enable flag and page-size settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  `CRM_ENABLE_API` required (no `True` default); replaced `int(getattr(...) or 50)` page-size reads with explicit validation that rejects non-numeric values instead of silently swallowing them to `50`. Added `AppConfig.ready()` startup guard to `crm/apps.py` that raises `ImproperlyConfigured` when `CRM_ENABLE_API` is missing. Removed default-`True` fallback in `CRMApiEnabledMixin.initial()` and default-`25`/`50` fallbacks in `ContactPagination.get_page_size()` / `DealPagination.get_page_size()`. Removed fallback defaults in `adapter.py` `_crm_post_hook` — all three settings now use direct key access (must be present from `module.yml` derivation). Updated test settings with the required settings. Added `ready()`-method guard test to `crm/tests/test_apps.py`. Added four page-size fail-hard tests to `crm/tests/test_views.py`. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `crm/apps.py`, `crm/adapter.py`, `crm/views.py`, `crm/tests/settings.py`, `crm/tests/test_apps.py` (new), `crm/tests/test_views.py`.
-  *Acceptance:* missing `CRM_ENABLE_API` or a malformed page-size setting raises at startup/request time with a descriptive error.
-
-- [x] **SA17.4 — Fail-hard forms module settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  Added AppConfig.ready() startup guard to `forms/apps.py` that raises `ImproperlyConfigured` at startup when any of `FORMS_SUBMISSIONS_API`, `FORMS_RATE_LIMIT`, or `FORMS_SPAM_PROTECTION` is missing. Removed default-`True` fallbacks in `views.py` (`FormsAdminApiMixin.initial()`), `throttles.py` (`FormSubmitThrottle.get_rate()`), and `models.py` (`is_form_spam_protection_enabled()`). Updated test settings with the required settings. Replaced the `test_form_submit_throttle_falls_back_to_parent_rate` fallback test with `test_form_submit_throttle_missing_rate_raises_improperly_configured`. Added five ready()-method tests to `forms/tests/test_apps.py` (new). See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `forms/apps.py`, `forms/views.py`, `forms/throttles.py`, `forms/models.py`, `forms/tests/settings.py`, `forms/tests/test_apps.py` (new), `forms/tests/test_throttles.py`.
-  *Acceptance:* omitting any of the three settings raises at startup instead of silently applying the current defaults.
+> SA17.1–SA17.4 (legacy config keys, analytics/billing/CRM/forms fail-hard settings — closes TA1 and the CRM/forms slice of TA2) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [x] **SA17.5 — Fail-hard blog module settings (complete).** `Tier 2 · Track 2 · deps: none · (why → TA2)`
   Added `AppConfig.ready()` startup guard to `blog/apps.py` that raises `ImproperlyConfigured` at startup when `BLOG_ENABLE_RSS` is missing, `MEDIA_URL` is empty/unset, or any `BLOG_API_TOKENS` entry is malformed (naming the bad entry). Removed the default-`True` fallback in `urls.py:_blog_enable_rss()` and the `getattr(settings, "MEDIA_URL", "/media/")` fallbacks in `views.py:_build_media_response_url()` and `models.py:_build_public_media_url()`. Updated test settings with the required `BLOG_ENABLE_RSS = True`. Updated `test_urls.py` to remove the `None`-unset parametrize case. Added `blog/tests/test_apps.py` with 9 ready()-method guard tests (3 general + 6 malformed-token variations). Acceptance: a malformed `BLOG_API_TOKENS` entry raises at startup naming the bad entry; RSS-enable and media-URL settings are required, not defaulted. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
@@ -205,38 +186,7 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 #### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3)
 
-- [x] **SA18.1 — Narrow the import-time `except Exception: pass` in manifest adapter init (complete — 2026-07-03).** `Tier 1 · Track 3 · deps: none`
-  Closed the fail-hard violation formerly tracked as tech-audit TA3 (now dropped from tech-audit.md). See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA18.2 — Raise instead of silently defaulting empty analytics manifest settings (complete — 2026-07-03).** `Tier 1 · Track 3 · deps: none · (why → TA4)`
-  Replaced the silent PostHog fallback defaults in `_analytics_post_hook` with a `ManifestError` that raises when resolved settings are empty, naming the empty keys. The PR-4 disabled short-circuit (`enabled=False` → empty spec) is unaffected and remains before the validation check. Five unit tests added to `TestAnalyticsPostHookFailHard` covering empty provider, empty host, multiple empty keys, non-empty happy path, and disabled short-circuit.
-  **Follow-up (CR-SA18.2-001):** Fixed `regenerate_managed_wiring` in `module_wiring_manager.py` which was silently swallowing `ManifestError` from `build_manifest_wiring_spec`, masking the analytics fail-hard validation. The `except ManifestError: continue` handler now only skips "Manifest file not found" errors for modules absent from the embedded directory; all other `ManifestError` instances (including invalid analytics configuration) propagate as real failures. Two regression tests added proving invalid analytics options fail through the regenerate/apply seam. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_core/tests/test_manifest_entry_point.py`, `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`, `quickscale_cli/tests/test_module_wiring_manager_manifest.py`.
-  *Acceptance:* an empty-after-resolution analytics config raises a descriptive error through `build_manifest_wiring_spec` *and* through the `regenerate_managed_wiring`/apply seam; the disabled short-circuit behaviour is unaffected.
-
-- [x] **SA18.3 — Delete the `quickscale_cli.schema` compat shim (complete).** `Tier 2 · Track 3 · deps: none · (why → TA5, closed)`
-  Migrated all CLI internal imports and tests from `quickscale_cli.schema.*` to `quickscale_core.schema.*`; deleted the shim package. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA18.4 — Fix generator template-resolution fallback chains (complete).** `Tier 2 · Track 3 · deps: none · (why → TA6)`
-  Replaced the template-dir discovery guess chain (dev dir → package dir → cwd-relative guesses) with a single deterministic resolution rule (installed package path, with an explicit override param for dev use). Deleted the "backward compatibility" root-template fallback tier in `_get_theme_template_path` and raises `FileNotFoundError` immediately with the attempted path on a miss instead of deferring to a later Jinja `TemplateNotFound`. Added `common/templates/admin/` directory with copies of the shared Django admin templates so the common fallback resolves them correctly. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA18.5 — Remove the version fallback chain's terminal `"0.0.0"` default (complete).** `Tier 1 · Track 3 · deps: none · (why → TA7)`
-  Narrowed `quickscale_core.version` from `except Exception` to `ImportError`, kept the dev-tree `VERSION` fallback, and now raises `FileNotFoundError` instead of silently reporting `"0.0.0"` when both resolution paths fail. Updated targeted version tests to preserve fallback-to-`VERSION` behavior and assert the new fail-hard path.
-  *Finding:* the repository currently ships a generated `quickscale_core/_version.py`, so the fail-hard branch is primarily a broken-build/source-tree guard; targeted tests now cover that seam explicitly.
-  See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA18.6 — Stop swallowing validation errors in project-metadata resolution (complete).** `Tier 2 · Track 3 · deps: none · (why → TA8)`
-  Removed `except Exception: return None` from `resolve_authoritative_project_metadata`'s `quickscale.yml` branch — `validate_config` errors now propagate as `ConfigValidationError` instead of being indistinguishable from "no project here." `_load_managed_file_records_for_drift` is explicitly documented as outside F12.2 scope (its legacy `file_hashes.yml` fallback is a drift-detection design choice, not an M2 migration compatibility path). The F12.2 exception table entry now carries the SA18.6 annotation. Closes tech-audit TA8. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-  *Files:* `quickscale_core/src/quickscale_core/project_state.py`, `quickscale_core/tests/test_project_state.py`, `docs/technical/decisions.md`.
-  *Acceptance:* a malformed `quickscale.yml` raises `ConfigValidationError`; `_load_managed_file_records_for_drift` is explicitly outside F12.2; targeted tests updated to expect fail-hard behavior.
-- [ ] **SA18.7 — Narrow `railway_utils.py`'s broad exception swallowing.** `Tier 1 · Track 3 · deps: none · (why → TA10)`
-  Narrow the `except Exception: return None` clauses around URL extraction, variable parsing, and status queries to the specific expected failure modes; keep the narrower `subprocess`-error "is the CLI installed" probes as-is.
-  **Progress landed (2026-07-04):** `get_deployment_url()`, `generate_railway_domain()`, `get_railway_variables()`, and `_get_railway_variables_json()` now narrow their broad catches to the expected Railway command failure types (`TimeoutError`, `FileNotFoundError`). Successful-but-unparseable Railway output (returncode 0 but unrecognizable format) now raises `ValueError` instead of collapsing to `None`/`{}` across the URL/domain parsing paths and the DR/runtime-variable path. Focused Railway utility tests plus deploy/DR caller-level regression coverage were added for those seams. The narrower `subprocess`-error probes at lines 52 and 236 remain unchanged.
-  **Pending / blocking follow-up (user-directed stop after review cap):** the deploy `DATABASE_URL` link path (`_link_database_step()` → `link_database_to_service()` → `get_railway_variables()`) still needs the same descriptive fail-hard conversion and a caller-level regression test. Today that path can still surface the parse-drift `ValueError` uncaught instead of converting it into the same operator-visible non-zero CLI failure used by the other deploy/DR seams.
-  **Decision status:** no product or design decision remains open here — the remaining work is a narrow implementation follow-up only.
-  *Files landed so far:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py`; `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py`; `quickscale_cli/src/quickscale_cli/commands/dr_commands.py`; `quickscale_cli/tests/utils/test_railway_utils.py`; `quickscale_cli/tests/commands/test_deployment_commands.py`; `quickscale_cli/tests/commands/test_deployment_commands_extended.py`; `quickscale_cli/tests/commands/test_dr_commands.py`.
-  *Pending file for closeout:* `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py` (deploy `DATABASE_URL`-link seam) plus the direct regression coverage for that path.
-  *Acceptance:* every Railway caller seam surfaces CLI crashes or output-format drift as a descriptive error, distinguishable from benign "not deployed yet" / empty-output states; successful-but-unparseable output does not collapse to `None`/`{}` anywhere in the deploy/DR Railway helpers.
+> SA18.1–SA18.7 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing — closes TA3–TA8 and TA10) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA18.8 — Fail-hard invalid `PORT` values.** `Tier 1 · Track 3 · deps: none · (why → TA11)`
   A non-numeric `PORT` env value should raise a descriptive error instead of silently coercing to `8000`; the default-when-unset behavior (`8000`) is fine and stays.

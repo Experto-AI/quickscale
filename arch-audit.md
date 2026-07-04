@@ -4,7 +4,7 @@
 >
 > **Closed 2026-07-03:** Findings 2 (orgs god-module — SA7.2–SA7.4), 3 (dual active-org truth — product decision D1), and 4 (core-as-runtime-API — SA9.1–SA9.6). Closeout in [CHANGELOG.md](CHANGELOG.md). Sections dropped below per template rule.
 >
-> **Closed 2026-07-04** (from the 2026-07-03 fresh-pass autopsy below): `registry-universe-mismatch` (SA15.1–SA15.3, entire finding) and `per-module-knowledge-fanout` (SA16.1–SA16.2, entire finding). Closeout in [CHANGELOG.md](CHANGELOG.md). Sections dropped below per template rule.
+> **Closed 2026-07-04** (from the 2026-07-03 fresh-pass autopsy below): `registry-universe-mismatch` (SA15.1–SA15.3, entire finding), `per-module-knowledge-fanout` (SA16.1–SA16.2, entire finding), and `org-context-api-accretion` (SA13.1–SA13.4, entire finding — Finding 3). Finding 3 was remediated via its own preferred option 1 ("Consolidate + gate"): the five overlapping context primitives are now privatized behind `org_scope`/`PublicSystemOrgReadMixin`, all 44 callsites migrated, and the AST lint gate (`check_org_context_primitives.py`) flipped to hard-fail. Closeout in [CHANGELOG.md](CHANGELOG.md). Sections dropped below per template rule.
 >
 > **Closed 2026-07-03** (from the 2026-07-02 autopsy below, reconciled 2026-07-04): Finding 5 (module↔generated-project contract drift — remediated by SA10.1/SA10.2's `project_contract`/contract-vintage mechanism, the finding's own preferred option 3) and Module Finding 1 (request→tenant-context boundary — remediated by SA11.1–SA11.7's shared `PublicSystemOrgReadMixin`/DRF permission baseline, the finding's own preferred option 1). Both were already treated as resolved in `roadmap.md`'s closed-batches note but never formally closed here; closeout detail in [CHANGELOG.md](CHANGELOG.md). Sections dropped below per template rule.
 
@@ -78,9 +78,8 @@ QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poe
 | ID | Title | Horizon | Confidence | Size | Problem (one line) |
 |----|-------|---------|------------|------|--------------------|
 | `operator-read-path-undefined` | Elevated/operator reads: Python bypass and DB RLS contradict each other | now | High (structure) / Medium (exact prod symptom) | M | `all_objects` admin querysets promise cross-tenant visibility that FORCE RLS deliberately denies to the runtime role; the documented `operator_access()` contract does not exist in code |
-| `org-context-api-accretion` | Five overlapping org-context entry APIs + per-callsite discipline | now → 6-18mo | High | M | Outside the request path every surface hand-picks among 5 context primitives whose correctness depends on transaction state — the factory for the project's own worst bug class |
 
-`registry-universe-mismatch` and `per-module-knowledge-fanout` (closed 2026-07-04) — see closure note above.
+`registry-universe-mismatch`, `per-module-knowledge-fanout`, and `org-context-api-accretion` (all closed 2026-07-04) — see closure note above.
 
 ### Finding 1: Elevated/operator reads are structurally undefined — the Python bypass and the DB backstop disagree
 
@@ -111,37 +110,9 @@ QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poe
 - **Remediation size:** M.
 - **Migration path:** Build `TenantModelAdmin` in orgs (org-resolving, `org_scope`-wrapping) and port CRM's eight admins to it; delete the "cross-tenant visibility" comments as you go.
 
-### Finding 3: Org-context entry is a five-API accretion; every non-request path hand-picks its idiom
-
-- **ID:** `org-context-api-accretion`
-- **Rank rationale:** Blast = correctness of tenant isolation on every path outside the middleware (public pages, webhooks, commands, admin, feeds, background work); likelihood = every new surface re-rolls the dice — and this exact class already produced the project's worst shipped defect (public pages empty) and three named regression fixes (CR-T119-001, CR-AF11-001, CR-SA42-001).
-- **Horizon:** now → 6–18 months (pays out at every new surface; teams module is next).
-- **Confidence:** High — all APIs read in full, callers counted.
-- **Context dependence:** wrong-for-now — residue of a fast, individually-justified iteration burst (T1.2 → T1.15 → T1.17 → Phase 2 → T1.19 → AF9 → SA11.1), each layer added without retiring the last.
-- **Problem:** `current_org.py` exposes five overlapping public context primitives plus an auto-priming execute wrapper, and `tenancy.py` retains two generations of child-parent equality infrastructure; outside the request path, which primitive is safe depends on transaction state and execution context, and each module answers differently.
-- **Evidence:**
-  - `orgs/current_org.py`: `set_current_org_id` (ContextVar only), `set_db_current_org_id`/`reset_db_current_org_id` (GUC only, needs an active atomic), `set_current_org_for_context` (both, no restore), `tenant_context` (both, restores, no atomic), `org_scope` (both, restores, opens atomic) — plus the AF9 wrapper that auto-primes the GUC from the ContextVar anyway (`:377-527`).
-  - Caller census (module+core src): `tenant_context` 26 · `org_scope` 13 · `set_current_org_for_context` 5 · `PublicSystemOrgReadMixin` 5 · `resolve_public_org_context` **0** (built in SA11.1; dead on arrival — callers use the mixin) · direct `set_db_current_org_id` 0. Hand-managed context spans 13 files across 7 modules: views, services, **serializers** (`crm/serializers.py`), feeds, admin, notifications helpers, management commands.
-  - Bespoke resolver in prod code: `crm/views.py:43-74` `_resolve_active_org` carried a "for tests that bypass middleware" personal-org fallback and a write-on-read side effect (`ensure_org_default_stages`) — this was cleaned up by SA11.6 (complete, see CHANGELOG.md), though the underlying multi-idiom problem this finding describes remains open.
-  - Duplicate invariant machinery: trigger-based child-parent equality (AF1 P2, `tenancy.py:523-674`) retained alongside its composite-FK replacement (AF12 P1, `tenancy.py:677-858`); one migration caller total (`crm/migrations/0009`).
-  - Residual desync window: the AF9 wrapper passes through when the ContextVar is `None` (`current_org.py:474-476`), so inside a multi-statement transaction a cleared ContextVar leaves the previous `SET LOCAL` GUC live for raw/`all_objects` SQL.
-- **Why it compounds:** Every new non-request surface must re-derive the safe primitive; a wrong pick produces the ContextVar/GUC desync class (silent scope widening or empty reads); docstrings already need paragraphs to explain when each call is legal; review burden and the fix-trail (three CR-numbered regressions in this one file) grow with callsites.
-- **Correct shape:** Exactly one blessed entry per execution context — request path: middleware + AF9 (automatic); everything else: `org_scope` (or the mixin that wraps it) — with the remaining primitives private and direct use lint-gated (the repo already has this enforcement pattern: SA9.6's import linter).
-- **Trigger for urgency:** The next background/async surface: scheduled backups touching tenant rows, future task runners, and the teams module.
-- **Compounding factor:** 44+ existing callsites; billing's webhook handlers (correctly hand-rolled today); social admin's bespoke resolver; SA11.6/SA11.7 (both complete) were point-fixes inside this seam, not a consolidation of it.
-- **Detection signal:** Recurrence of the empty-page/desync bug class on a new surface; instrument: a DEBUG-mode assertion comparing the ContextVar to `current_setting('app.current_org_id')` at query time.
-- **Steelman:** The variants encode real, distinct transaction constraints (SET LOCAL requires an atomic; middleware must not hold request-long transactions), so a flat "one API" could hide genuine differences. — Holds for the *constraints*, not the *API count*: `org_scope` already adapts to both cases internally; the zero-caller helper and the superseded equality infra show the surface outlived its need.
-- **Alternative solutions:**
-  1. **Consolidate + gate:** keep `org_scope` + `PublicSystemOrgReadMixin` public; underscore-privatize `set_db_current_org_id`, `set_current_org_for_context`, `tenant_context`; delete `resolve_public_org_context` (0 callers) and the trigger-based equality API once its single migration is re-expressed; add an AST lint gate for direct primitive use. S–M effort, mechanical, reversible.
-  2. **Document-only decision table** in orgs README/decisions.md mapping context → API. Cheap; removes no wrong choices; the same class of bug recurs.
-  3. **Fold everything into AF9:** make the wrapper own the `None` path too (prime-to-empty instead of pass-through) and delete manual GUC priming everywhere. Most elegant end-state; changes wrapper semantics on hot paths and needs careful autocommit handling — M effort, highest regression risk.
-- **Preferred option + why:** (1) now — it matches the governance style this repo already trusts (facade + linter, as in SA9.3/SA9.6) and shrinks the decision space to one question ("am I in a request?"); evaluate (3)'s `None`-path hardening separately since it closes the last desync window.
-- **Remediation size:** M (S for the API surface itself; M with the 26 `tenant_context` callsite migrations).
-- **Migration path:** Delete `resolve_public_org_context`, privatize the three mid-level primitives behind `org_scope`, and add the lint gate; migrate callsites module-by-module afterward.
-
 ### Fix order and interactions
 
-Do Finding 3 before (or as the first step of) Finding 1: the operator/admin contract should be built on the consolidated `org_scope` seam, otherwise Finding 1 adds a sixth context idiom that Finding 3 must later migrate. `registry-universe-mismatch` and `per-module-knowledge-fanout` are closed (2026-07-04) and no longer part of the ordering. SA11.6/SA11.7 and SA10.2 are complete (see CHANGELOG.md) — they were partial, already-landed steps toward Finding 3's consolidation and Finding 5's contract-vintage detection respectively, not open dependencies.
+Finding 3 (`org-context-api-accretion`) is closed (2026-07-04, see closure note above) — it was completed as the prerequisite step for Finding 1: the operator/admin contract is now built on the consolidated `org_scope` seam. `registry-universe-mismatch` and `per-module-knowledge-fanout` are also closed and no longer part of the ordering. SA11.6/SA11.7 and SA10.2 are complete (see CHANGELOG.md) — they were partial, already-landed steps toward Finding 3's (now-complete) consolidation and Finding 5's contract-vintage detection respectively.
 
 ### Sound load-bearing decisions (protect these during remediation)
 

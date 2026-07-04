@@ -270,7 +270,11 @@ def _create_app_service_step(app_service: str) -> None:
 
 def _link_database_step(app_service: str) -> bool:
     """Link DATABASE_URL from PostgreSQL to app service."""
-    link_success, link_message = link_database_to_service(app_service)
+    try:
+        link_success, link_message = link_database_to_service(app_service)
+    except ValueError as exc:
+        click.secho(f"❌ Error: {exc}", fg="red", err=True)
+        sys.exit(1)
 
     if link_success:
         click.secho(f"✅ {link_message}", fg="green")

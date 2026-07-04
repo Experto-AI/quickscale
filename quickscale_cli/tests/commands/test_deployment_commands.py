@@ -1342,6 +1342,47 @@ class TestRailwayCommand:
                                                     in result.output
                                                 )
 
+    def test_railway_database_link_format_drift_fails_command(self):
+        """Test ValueError from link_database_to_service surfaces as CLI error."""
+        runner = CliRunner()
+
+        with mock_preflight_checks():
+            with patch(
+                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+            ) as mock_installed:
+                with patch(
+                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                ) as mock_auth:
+                    with patch(
+                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                    ) as mock_project_init:
+                        with patch(
+                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                        ) as mock_run:
+                            with patch(
+                                "quickscale_cli.commands.deployment_commands.link_database_to_service"
+                            ) as mock_link:
+                                mock_installed.return_value = True
+                                mock_auth.return_value = True
+                                mock_project_init.return_value = True
+                                mock_run.return_value = Mock(
+                                    returncode=0,
+                                    stdout="postgres available",
+                                    stderr="",
+                                )
+                                mock_link.side_effect = ValueError(
+                                    "Railway CLI returned success with non-empty output "
+                                    "but no KEY=VALUE pairs could be parsed."
+                                )
+
+                                result = runner.invoke(railway)
+
+                                assert result.exit_code == 1
+                                assert (
+                                    "Railway CLI returned success with non-empty output"
+                                    in result.output
+                                )
+
     def test_railway_derives_project_name_from_cwd(self):
         """Without --project-name, railway derives service name from CWD."""
         runner = CliRunner()

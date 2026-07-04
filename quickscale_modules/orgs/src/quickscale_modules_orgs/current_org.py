@@ -563,12 +563,15 @@ def install_priming_wrapper(connection: Any) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# SA13.1 — Compatibility aliases for deferred caller migrations
+# SA13.4 — Compatibility aliases (retained after hard-fail gate)
 # ---------------------------------------------------------------------------
-# These old public names still work during SA13.2/SA13.3 so external callers
-# don't break before they're migrated.  The SA13.1 lint gate warns on any
-# direct external use.  Remove these aliases after SA13.4 flips the gate to
-# hard-fail.
+# These compatibility aliases are retained even though the SA13.4 lint gate
+# now hard-fails on new external use.  The aliases exist for backward
+# compatibility with management-command and test code that references them
+# through the orgs-internal exemption.  AF9 None-path hardening was
+# deferred per SA13.4-AF9-DEFERRAL (see roadmap.md) — the aliases confirm
+# that no semantic change was made to the None-context wrapper path in this
+# release.
 # ---------------------------------------------------------------------------
 
 set_db_current_org_id = _set_db_current_org_id
