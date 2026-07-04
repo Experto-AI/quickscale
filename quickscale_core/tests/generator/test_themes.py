@@ -83,10 +83,11 @@ class TestThemeTemplateResolution:
         """_get_theme_template_path should fall back to common templates"""
         generator = ProjectGenerator(theme="showcase_html")
 
-        # This should fall back to root (backend templates)
-        path = generator._get_theme_template_path("manage.py.j2")
-        # Should not be in themes directory
-        assert "themes" not in path or "manage.py.j2" in path
+        # This template lives in common/templates/admin/ (not in any theme dir),
+        # so _get_theme_template_path should resolve it via the common fallback.
+        path = generator._get_theme_template_path("templates/admin/index.html.j2")
+        assert "common" in path
+        assert "index.html.j2" in path
 
 
 class TestProjectGenerationWithTheme:
@@ -706,6 +707,20 @@ class TestSelectedModulesReactTheme:
 
 class TestSharedAdminTemplates:
     """Both themes should reuse the consolidated admin override templates."""
+
+    def test_react_missing_shared_template_raises_file_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """React shared-template loop must fail hard when a shared Django template is missing."""
+        monkeypatch.setattr(
+            "quickscale_core.generator.generator.REACT_THEME_SHARED_DJANGO_TEMPLATES",
+            ("templates/admin/nonexistent_template.html.j2",),
+        )
+        generator = ProjectGenerator(theme="showcase_react")
+        # The FileNotFoundError is raised inside _generate_react_frontend but
+        # re-raised as RuntimeError by generate() (which wraps all exceptions).
+        with pytest.raises(RuntimeError, match="Shared Django template"):
+            generator.generate("test_missing_shared", tmp_path / "out")
 
     @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
     def test_both_themes_render_shared_admin_overrides(

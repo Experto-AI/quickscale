@@ -91,41 +91,11 @@ class ProjectGenerator:
             )
 
         if template_dir is None:
-            # Try to find templates in development environment first
+            # Resolve templates from the installed package path deterministically.
             import quickscale_core
 
             package_dir = Path(quickscale_core.__file__).parent
-
-            # Check if we're in development (source directory exists)
-            dev_template_dir = package_dir / "generator" / "templates"
-            if dev_template_dir.exists():
-                template_dir = dev_template_dir
-            else:
-                # Fall back to package templates (should be included)
-                template_dir = package_dir / "templates"
-
-                # If package templates don't exist, try to find source templates
-                # by walking up from the current file location
-                if not template_dir.exists():
-                    current_file = Path(__file__)
-                    # Try common development layouts
-                    possible_paths = [
-                        current_file.parent / "templates",  # Same directory
-                        current_file.parent.parent
-                        / "generator"
-                        / "templates",  # Parent
-                        Path.cwd()
-                        / "quickscale_core"
-                        / "src"
-                        / "quickscale_core"
-                        / "generator"
-                        / "templates",  # From repo root
-                    ]
-
-                    for path in possible_paths:
-                        if path.exists():
-                            template_dir = path
-                            break
+            template_dir = package_dir / "generator" / "templates"
 
         # Validate template directory exists
         if not template_dir.exists():
@@ -160,6 +130,11 @@ class ProjectGenerator:
         -------
             str: Full path to template relative to template_dir
 
+        Raises:
+        ------
+            FileNotFoundError: If the template is not found in the theme
+                or common directories — includes the attempted paths.
+
         """
         # Check theme-specific template first
         theme_path = f"themes/{self.theme}/{template_name}"
@@ -175,8 +150,16 @@ class ProjectGenerator:
         if common_full_path.exists():
             return common_path
 
-        # Fall back to root template (for backward compatibility)
-        return template_name
+        # Neither theme nor common path exists — raise immediately with
+        # attempted paths instead of deferring to a later Jinja
+        # TemplateNotFound.
+        raise FileNotFoundError(
+            f"Template '{template_name}' not found for theme '{self.theme}'. "
+            f"Searched:\n"
+            f"  - {theme_full_path}\n"
+            f"  - {common_full_path}\n"
+            f"Ensure the template exists in one of these locations."
+        )
 
     def generate(
         self,
@@ -518,7 +501,15 @@ class ProjectGenerator:
         for shared_rel in REACT_THEME_SHARED_DJANGO_TEMPLATES:
             shared_source = self.template_dir / shared_rel
             if not shared_source.exists():
-                continue
+                raise FileNotFoundError(
+                    f"Shared Django template '{shared_rel}' not found. "
+                    f"Searched:\n"
+                    f"  - {shared_source}\n"
+                    "Ensure the template exists in the templates/admin/ "
+                    "directory or add it to REACT_THEME_SHARED_DJANGO_TEMPLATES. "
+                    "These templates are required for the React theme — "
+                    "missing templates are no longer silently skipped."
+                )
 
             output_rel = Path(shared_rel).with_suffix("")  # Strip .j2
             output_file_path = output_path / output_rel

@@ -351,19 +351,20 @@ class TestProjectGeneratorThemeValidation:
             == "common/fallback.html.j2"
         )
 
-    def test_returns_template_name_when_neither_theme_nor_common_exists(
+    def test_raises_file_not_found_when_neither_theme_nor_common_exists(
         self, tmp_path: Path
     ) -> None:
-        """Falls back to bare template name for backward compatibility."""
+        """Raises FileNotFoundError with attempted paths when template is missing."""
         template_dir = tmp_path / "templates"
         (template_dir / "themes" / "showcase_html").mkdir(parents=True)
 
         generator = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
 
-        assert (
+        with pytest.raises(
+            FileNotFoundError,
+            match="Template 'some_root_template.j2' not found for theme 'showcase_html'",
+        ):
             generator._get_theme_template_path("some_root_template.j2")
-            == "some_root_template.j2"
-        )
 
 
 class TestProjectGeneratorErrorPaths:

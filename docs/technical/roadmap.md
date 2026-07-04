@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III, Finding `registry-universe-mismatch` (SA15.1–SA15.3, entire finding, closed 2026-07-04) and Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, entire finding, closed 2026-07-03) are also fully resolved and dropped from both this file and arch-audit.md — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 is complete, so SA13.2 and SA13.3 are now unblocked and ready to start. Track 2: SA15 (entire finding) and SA17.1 are complete; SA17.2–SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.2/SA17.5 within the track. Track 3: SA18.2 and SA18.3 are complete; SA18.4–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.6/SA18.9 within the track.
+> **Track status (2026-07-04):** All three tracks are clear to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: SA13.1 is complete, so SA13.2 and SA13.3 are now unblocked and ready to start. Track 2: SA15 (entire finding) and SA17.1 are complete; SA17.2–SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.2/SA17.5 within the track. Track 3: SA18.2, SA18.3, and SA18.4 are complete; SA18.5–SA18.9 and SA18.11 are ready now, SA18.10 waits on SA18.6/SA18.9 within the track.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -66,7 +66,7 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA13.1 ✅ (complete)                  SA17.1 ✅ (complete)                      SA18.2 ✅ (complete)
 SA13.2 (deps: SA13.1 ✅ — ready)      SA17.2 (no deps — ready)                  SA18.3 ✅ (complete)
-SA13.3 (deps: SA13.1 ✅ — ready)      SA17.3 (no deps — ready)                  SA18.4 (no deps — ready)
+SA13.3 (deps: SA13.1 ✅ — ready)      SA17.3 (no deps — ready)                  SA18.4 ✅ (complete)
 SA13.4 (deps: SA13.2, SA13.3)        SA17.4 (no deps — ready)                  SA18.5 (no deps — ready)
 SA14.1 (deps: SA13.1 ✅ — ready)      SA17.5 (no deps — ready)                  SA18.6 (no deps — ready)
 SA14.2 (deps: SA14.1)                SA17.6 (no deps — ready)                  SA18.7 (no deps — ready)
@@ -84,7 +84,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 |-------|------------------|-------|
 | **1** | SA13.1 ✅ complete → {SA13.2, SA13.3} ready → SA13.4, then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA17.1 ✅ complete, plus SA17.2–SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.2, SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
-| **3** | SA18.2 ✅, SA18.3 ✅ complete, plus SA18.4–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.6, SA18.9) | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
+| **3** | SA18.2 ✅, SA18.3 ✅, SA18.4 ✅ complete, plus SA18.5–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.6, SA18.9) | Core/CLI fail-hard plumbing (Finding 4 fully closed — see CHANGELOG.md) |
 
 ---
 
@@ -202,10 +202,8 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 - [x] **SA18.3 — Delete the `quickscale_cli.schema` compat shim (complete).** `Tier 2 · Track 3 · deps: none · (why → TA5, closed)`
   Migrated all CLI internal imports and tests from `quickscale_cli.schema.*` to `quickscale_core.schema.*`; deleted the shim package. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA18.4 — Fix generator template-resolution fallback chains.** `Tier 2 · Track 3 · deps: none · (why → TA6)`
-  Replace the template-dir discovery guess chain (dev dir → package dir → cwd-relative guesses) with a single deterministic resolution rule (installed package path, with an explicit override param for dev use); delete the "backward compatibility" root-template fallback tier in `_get_theme_template_path` and raise immediately with the attempted path on a miss instead of deferring to a later `TemplateNotFound`.
-  *Files:* `quickscale_core/src/quickscale_core/generator/generator.py:96-131,165-178`.
-  *Acceptance:* template resolution follows one deterministic rule; a missing template raises immediately naming the attempted path, not a downstream Jinja `TemplateNotFound`.
+- [x] **SA18.4 — Fix generator template-resolution fallback chains (complete).** `Tier 2 · Track 3 · deps: none · (why → TA6)`
+  Replaced the template-dir discovery guess chain (dev dir → package dir → cwd-relative guesses) with a single deterministic resolution rule (installed package path, with an explicit override param for dev use). Deleted the "backward compatibility" root-template fallback tier in `_get_theme_template_path` and raises `FileNotFoundError` immediately with the attempted path on a miss instead of deferring to a later Jinja `TemplateNotFound`. Added `common/templates/admin/` directory with copies of the shared Django admin templates so the common fallback resolves them correctly. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA18.5 — Remove the version fallback chain's terminal `"0.0.0"` default.** `Tier 1 · Track 3 · deps: none · (why → TA7)`
   Narrow the `except Exception` around `from ._version import __version__` to `ImportError` (or the specific expected failure), keep the legitimate dev-tree `VERSION`-file read, but raise instead of silently returning `"0.0.0"` when both resolution paths fail.
