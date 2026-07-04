@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.10` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, and TA14) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.10 are complete; SA18.11 is ready now — plus new SA19, SA21.1, SA22, SA25 (all ready now).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.11 are complete — plus new SA19, SA21.1, SA22, SA25 (all ready now).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -69,7 +69,7 @@ SA14.2 (deps: SA14.1)                SA17.6 (no deps — complete)              
 SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
 SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — complete)
 SA14.5 (no deps — ready)                                                  SA18.10 (no deps — complete)
-SA14.6 (no deps — ready)                                                  SA18.11 (no deps — ready)
+SA14.6 (no deps — ready)                                                  SA18.11 (no deps — complete)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -80,7 +80,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 |-------|------------------|-------|
 | **1** | SA14.1 (complete) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
 | **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
-| **3** | SA18.1–SA18.10 (complete), SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
+| **3** | SA18.1–SA18.11 (complete) | Core/CLI fail-hard plumbing |
 
 ---
 
@@ -142,10 +142,11 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 > SA18.1–SA18.10 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing, `PORT` fail-hard, `step_capture_hashes` fail-hard on `OSError`, `# F-EXCEPTION:` tags on documented M2 compatibility paths — closes TA3–TA8, TA10, TA11, TA13, and TA14) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA18.11 — Fix dev-tooling silent parse failure in the compatibility checker.** `Tier 1 · Track 3 · deps: none · (why → TA15)`
-  A malformed module `pyproject.toml` should fail the compatibility check loudly, not be silently skipped.
-  *Files:* `scripts/check_module_core_compatibility.py:381-388`.
-  *Acceptance:* a malformed `pyproject.toml` in any module causes the checker to fail/report an error for that module instead of silently skipping it.
+- [x] **SA18.11 — Fix dev-tooling silent parse failure in the compatibility checker (complete).** `Tier 1 · Track 3 · deps: none · (why → TA15)`
+  Narrowed `except Exception` to `except OSError` in both `_get_module_package_name` and `_get_module_non_core_deps`, so `tomllib.TOMLDecodeError` from a malformed module `pyproject.toml` propagates as an error instead of being silently swallowed. In `main()`, the `_get_module_package_name` call is now wrapped in a try/except that reports the malformed TOML with a clear error message and marks the module as failed. Both helper functions preserve their existing `OSError` handling (file-not-found, permission errors) so benign file-system issues still return `None`/`[]`. Added 6 focused unit tests covering malformed-TOML raise, absent-file return, and empty-file edge cases.
+  *Files:* `scripts/check_module_core_compatibility.py`, `quickscale_core/tests/scripts/test_check_module_core_compatibility.py`.
+  *Acceptance:* a malformed `pyproject.toml` in any module now raises `tomllib.TOMLDecodeError` — the `_get_module_package_name` path reports a clear error and marks the module as failed; the `_get_module_non_core_deps` path surfaces the error through the existing probe exception handler.
+  *Finding:* The adjacent `_get_module_non_core_deps` silent-swallow path (same `except Exception: return []` pattern) was also fixed — its exception propagates into the existing outer handler in `_probe_module_install_import`, which appends the `tomllib.TOMLDecodeError` message to the module's probe issues. No additional call-site handling needed for that path. No blockers discovered.
 
 ---
 
