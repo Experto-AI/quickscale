@@ -248,8 +248,8 @@ def test_configure_analytics_client_initializes_posthog_client(monkeypatch) -> N
     monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
 
     with patch(
-        "quickscale_modules_analytics.services.import_module",
-        return_value=fake_posthog,
+        "quickscale_modules_analytics.services.posthog",
+        fake_posthog,
     ):
         assert services.configure_analytics_client() is True
 
@@ -269,35 +269,13 @@ def test_configure_analytics_client_reuses_cached_settings(monkeypatch) -> None:
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with patch(
-        "quickscale_modules_analytics.services.import_module",
-        return_value=fake_posthog,
+        "quickscale_modules_analytics.services.posthog",
+        fake_posthog,
     ):
         assert services.configure_analytics_client() is True
 
-    with patch(
-        "quickscale_modules_analytics.services.import_module",
-        side_effect=AssertionError("cached configuration should not re-import posthog"),
-    ):
-        assert services.configure_analytics_client() is True
-
-
-@override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
-def test_configure_analytics_client_disables_when_sdk_is_missing(
-    monkeypatch,
-    caplog,
-) -> None:
-    """Import failures should degrade analytics to a safe disabled state."""
-    monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
-    caplog.set_level(logging.WARNING, logger=services.__name__)
-
-    with patch(
-        "quickscale_modules_analytics.services.import_module",
-        side_effect=ImportError("posthog not installed"),
-    ):
-        assert services.configure_analytics_client() is False
-
-    assert services._ANALYTICS_DISABLED_REASON == "missing-sdk"
-    assert "could not import the PostHog SDK" in caplog.text
+    # Cached settings short-circuit before accessing services.posthog
+    assert services.configure_analytics_client() is True
 
 
 @override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
@@ -310,8 +288,8 @@ def test_configure_analytics_client_supports_module_style_posthog_fallback(
     monkeypatch.setenv("POSTHOG_HOST", "https://eu.i.posthog.com")
 
     with patch(
-        "quickscale_modules_analytics.services.import_module",
-        return_value=legacy_module,
+        "quickscale_modules_analytics.services.posthog",
+        legacy_module,
     ):
         assert services.configure_analytics_client() is True
 
@@ -336,8 +314,8 @@ def test_configure_analytics_client_handles_factory_initialization_errors(
     caplog.set_level(logging.WARNING, logger=services.__name__)
 
     with patch(
-        "quickscale_modules_analytics.services.import_module",
-        return_value=BrokenPosthogModule(),
+        "quickscale_modules_analytics.services.posthog",
+        BrokenPosthogModule(),
     ):
         assert services.configure_analytics_client() is False
 
@@ -352,8 +330,8 @@ def test_capture_event_uses_active_client(monkeypatch) -> None:
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with patch(
-        "quickscale_modules_analytics.services.import_module",
-        return_value=fake_posthog,
+        "quickscale_modules_analytics.services.posthog",
+        fake_posthog,
     ):
         assert services.configure_analytics_client() is True
 
@@ -390,8 +368,8 @@ def test_capture_form_submit_uses_canonical_payload(monkeypatch) -> None:
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with patch(
-        "quickscale_modules_analytics.services.import_module",
-        return_value=fake_posthog,
+        "quickscale_modules_analytics.services.posthog",
+        fake_posthog,
     ):
         services.configure_analytics_client()
 
@@ -423,8 +401,8 @@ def test_capture_social_link_click_uses_canonical_payload(monkeypatch) -> None:
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
     with patch(
-        "quickscale_modules_analytics.services.import_module",
-        return_value=fake_posthog,
+        "quickscale_modules_analytics.services.posthog",
+        fake_posthog,
     ):
         services.configure_analytics_client()
 

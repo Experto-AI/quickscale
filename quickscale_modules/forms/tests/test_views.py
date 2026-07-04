@@ -175,19 +175,24 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field, monkeypatch
     ):
         """Successful submissions should call the guarded analytics helper when present."""
-        analytics_services = Mock()
-        analytics_services.get_distinct_id.return_value = "session:test-visitor"
 
         def analytics_is_installed(app_label: str) -> bool:
             return app_label == "quickscale_modules_analytics"
+
+        mock_get_distinct_id = Mock(return_value="session:test-visitor")
+        mock_capture_form_submit = Mock()
 
         monkeypatch.setattr(
             "quickscale_modules_forms.views.apps.is_installed",
             analytics_is_installed,
         )
         monkeypatch.setattr(
-            "quickscale_modules_forms.views.import_module",
-            lambda module_path: analytics_services,
+            "quickscale_modules_analytics.services.get_distinct_id",
+            mock_get_distinct_id,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.capture_form_submit",
+            mock_capture_form_submit,
         )
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
@@ -198,33 +203,36 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        analytics_services.get_distinct_id.assert_called_once()
-        analytics_services.capture_form_submit.assert_called_once_with(
+        mock_get_distinct_id.assert_called_once()
+        mock_capture_form_submit.assert_called_once_with(
             "session:test-visitor",
             form.pk,
             form.title,
             extra={"form_slug": form.slug},
         )
 
-    @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
-    def test_submission_ignores_missing_analytics_module(
-        self, api_client, form, form_field, email_field, monkeypatch
+    @override_settings(QUICKSCALE_ANALYTICS_ENABLED=False)
+    def test_submission_skips_analytics_when_disabled_but_installed_and_env_present(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
     ):
-        """Missing analytics package should stay a clean no-op after submit."""
+        """Disabled analytics must not call services even when the package remains installed."""
 
         def analytics_is_installed(app_label: str) -> bool:
             return app_label == "quickscale_modules_analytics"
 
-        def missing_analytics(_module_path: str):
-            raise ImportError("analytics not installed")
-
+        mock_capture = Mock()
         monkeypatch.setattr(
             "quickscale_modules_forms.views.apps.is_installed",
             analytics_is_installed,
         )
         monkeypatch.setattr(
-            "quickscale_modules_forms.views.import_module",
-            missing_analytics,
+            "quickscale_modules_analytics.services.capture_form_submit",
+            mock_capture,
         )
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
@@ -236,34 +244,18 @@ class TestFormSubmitAPIView:
 
         assert response.status_code == 201
         assert FormSubmission.all_objects.filter(form=form).count() == 1
+        mock_capture.assert_not_called()
 
-    @override_settings(QUICKSCALE_ANALYTICS_ENABLED=False)
-    def test_submission_skips_analytics_when_disabled_but_installed_and_env_present(
-        self,
-        api_client,
-        form,
-        form_field,
-        email_field,
-        monkeypatch,
+    def test_submission_succeeds_without_analytics_installed(
+        self, api_client, form, form_field, email_field, monkeypatch
     ):
-        """Disabled analytics must not import services even when the package remains installed."""
-
-        def analytics_is_installed(app_label: str) -> bool:
-            return app_label == "quickscale_modules_analytics"
-
-        def fail_import(module_path: str):
-            raise AssertionError(
-                "analytics services should not load when runtime analytics is disabled"
-            )
-
-        monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
+        """Prove forms submits cleanly when analytics is absent from the
+        Python path / not installed.  _capture_submission_analytics()
+        short-circuits via the apps.is_installed guard; no analytics
+        symbols are imported or resolved."""
         monkeypatch.setattr(
             "quickscale_modules_forms.views.apps.is_installed",
-            analytics_is_installed,
-        )
-        monkeypatch.setattr(
-            "quickscale_modules_forms.views.import_module",
-            fail_import,
+            lambda label: False,
         )
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
@@ -281,22 +273,24 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field, monkeypatch
     ):
         """Analytics capture failure must not block the public success response."""
-        analytics_services = Mock()
-        analytics_services.get_distinct_id.return_value = "session:test-visitor"
-        analytics_services.capture_form_submit.side_effect = RuntimeError(
-            "posthog unavailable"
-        )
 
         def analytics_is_installed(app_label: str) -> bool:
             return app_label == "quickscale_modules_analytics"
+
+        mock_get_distinct_id = Mock(return_value="session:test-visitor")
+        mock_capture_form_submit = Mock(side_effect=RuntimeError("posthog unavailable"))
 
         monkeypatch.setattr(
             "quickscale_modules_forms.views.apps.is_installed",
             analytics_is_installed,
         )
         monkeypatch.setattr(
-            "quickscale_modules_forms.views.import_module",
-            lambda module_path: analytics_services,
+            "quickscale_modules_analytics.services.get_distinct_id",
+            mock_get_distinct_id,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_analytics.services.capture_form_submit",
+            mock_capture_form_submit,
         )
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})

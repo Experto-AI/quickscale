@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.10` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, and TA14) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.11 are complete — plus new SA19, SA21.1, SA22, SA25 (all ready now).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies. Track 2 has one local blocker (SA17.7 carries **CR-SA17.7-002**); SA17.8 is the next ready item. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 is partial (code changes landed but absent-analytics regression is still too weak — **CR-SA17.7-002 blocking**); SA17.8 is ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.11 are complete — plus new SA19, SA21.1, SA22, SA25 (all ready now).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -66,7 +66,7 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.6 (no deps — complete)
 SA14.2 (deps: SA14.1)                SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
-SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
+SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — partial; blocker CR-SA17.7-002)     SA18.8 (no deps — complete)
 SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — complete)
 SA14.5 (no deps — ready)                                                  SA18.10 (no deps — complete)
 SA14.6 (no deps — ready)                                                  SA18.11 (no deps — complete)
@@ -79,7 +79,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA14.1 (complete) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
+| **2** | SA17.1–SA17.6 (complete); SA17.7 (partial — CR-SA17.7-002 blocking); SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
 | **3** | SA18.1–SA18.11 (complete) | Core/CLI fail-hard plumbing |
 
 ---
@@ -128,10 +128,12 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 > SA17.1–SA17.6 (legacy config keys, analytics/billing/CRM/forms/blog/notifications fail-hard settings — closes TA1 and fully closes TA2) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring.** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
-  Analytics' PostHog SDK import failure currently logs a warning and disables capture; forms' analytics integration currently probes for the sibling module via a soft `ImportError`/`getattr(None)` chain. Since module assembly happens at generation time, wire the analytics↔forms integration (and the PostHog SDK requirement) as a hard dependency the generator resolves, not a runtime probe. Depends on SA17.5 landing the surrounding settings checks first so the two changes don't fight over the same code paths (SA17.2's half of this ordering is already satisfied — it's complete).
-  *Files:* `analytics/services.py:218-223`, `forms/views.py:92-97`.
-  *Acceptance:* if analytics is assembled into a project, a missing PostHog SDK raises at startup (not a warning); forms' analytics integration is generation-time wired, not runtime-probed.
+- [-] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring (partial — code changes landed; blocker CR-SA17.7-002 remains).** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
+  **Landed code:** Removed the `ImportError` fallback in `analytics/services.py:configure_analytics_client()` (PostHog SDK is now a hard dependency — module-level `import posthog` replaces the `import_module("posthog")`/`except ImportError` probe). Removed the `import_module`/`getattr` runtime probe in `forms/views.py:_capture_submission_analytics()` — analytics' `capture_form_submit` and `get_distinct_id` are now imported lazily inside the function body (after the ``apps.is_installed`` guard), keeping forms importable without analytics on the Python path while removing the soft-degradation probe. Updated analytics test suite: removed dead `test_configure_analytics_client_disables_when_sdk_is_missing` test; changed all patch targets from `services.import_module` to `services.posthog`. Updated forms test suite: removed `test_submission_ignores_missing_analytics_module`; changed remaining analytics patch targets to ``quickscale_modules_analytics.services.*``. SA17.5's settings checks provided the needed ordering so the two changes do not fight over the same code paths.
+  **Remaining blocker (CR-SA17.7-002):** The absent-analytics regression (`test_views.py`) is still too weak — the test must be strengthened to prove that analytics symbols are never imported/resolved when `apps.is_installed("quickscale_modules_analytics")` is false. Currently the test passes even though the import-time resolution path is not fully proven to be dead code under the absent-analytics condition.
+  **Advisory (CR-SA17.7-003):** Low-consistency follow-up coupled to the blocker; should be resolved by accurate roadmap wording (this entry).
+  *Files:* `analytics/services.py`, `analytics/tests/test_services.py`, `forms/views.py`, `forms/tests/test_views.py`.
+  *Partial acceptance:* analytics hard-fails on missing PostHog; forms' analytics integration is generation-time wired; BUT the absent-analytics guard in forms is not proven airtight by the current test coverage.
 
 - [ ] **SA17.8 — Remove or gate deprecated `module_catalog` compat delegates; fix fail-open readiness.** `Tier 1 · Track 2 · deps: none · (why → TA12)`
   Remove `get_module_names()`/`get_module_entries()` from the public `contracts/__init__.py` API (or add the mandated `# F-EXCEPTION:` tag if a caller genuinely still needs them), and make `get_module_readiness_reason()` raise or return an explicit "unknown module" sentinel for unrecognized names instead of `None` (indistinguishable from "ready").
