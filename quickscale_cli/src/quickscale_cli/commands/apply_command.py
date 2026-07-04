@@ -141,7 +141,7 @@ from quickscale_core.apply.steps import (
     step_start_docker,
     step_sync_dependencies,
 )
-from quickscale_core.apply.steps.types import StepContext
+from quickscale_core.apply.steps.types import StepContext, StepOutcome
 
 
 @dataclass
@@ -872,10 +872,12 @@ def _capture_managed_file_hashes_after_apply(
     project_path: Path,
     qs_config: QuickScaleConfig,
     state: QuickScaleState,
-) -> None:
+) -> StepOutcome:
     """Thin wrapper delegating to core step body (AF6 Phase 2).
 
-    Returns ``None`` — hash capture is best-effort and never aborts apply.
+    Returns the :class:`StepOutcome` from the core step body.
+    SA18.9 made this a fail-hard step — `quickscale apply` will abort
+    when the outcome carries ``success=False``.
     """
 
     def _resolve_paths() -> list[str]:
@@ -898,7 +900,7 @@ def _capture_managed_file_hashes_after_apply(
         qs_config=qs_config,
         reporter=_reporter,
     )
-    step_capture_hashes(
+    return step_capture_hashes(
         step_ctx,
         compute_file_hashes_fn=_compute_hashes,
         resolve_managed_wiring_paths_fn=_resolve_paths,
@@ -3284,12 +3286,20 @@ def _execute_apply_steps_locked(
         _checkpoint_step(APPLY_STEPS[2])  # step 3
 
     # ------------------------------------------------------------------
-    # Step 4: Capture managed file hashes (best-effort)
+    # Step 4: Capture managed file hashes
     # ------------------------------------------------------------------
     if _should_run(4):
-        _capture_managed_file_hashes_after_apply(
+        step4_outcome = _capture_managed_file_hashes_after_apply(
             ctx.output_path, ctx.qs_config, post_embed_state
         )
+        if not step4_outcome.success:
+            _abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["capture managed file hashes"],
+                reason=str(step4_outcome.message),
+            )
         _checkpoint_step(APPLY_STEPS[3])  # step 4
 
     # ------------------------------------------------------------------

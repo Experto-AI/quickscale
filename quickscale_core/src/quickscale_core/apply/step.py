@@ -26,15 +26,15 @@ class ApplyStep:
 
     Attributes:
         order: 1-based position in the canonical execution order (1..16).
-        step_id: Stable identifier for this step.  For the 13 steps that
+        step_id: Stable identifier for this step.  For the 14 steps that
             carry a ``failed_step`` abort label in the apply implementation,
             this equals that verbatim label string so recovery sentinels
-            remain valid.  For steps without a label (steps 4, 11, 16) the
+            remain valid.  For steps without a label (steps 11, 16) the
             descriptive name is used.
         failed_step_label: The verbatim ``failed_step`` string used by the
             apply command when aborting on this step, or ``None`` for steps
             that do not abort with a labelled sentinel (best-effort or
-            informational steps).  Currently None for steps 4, 11, and 16.
+            informational steps).  Currently None for steps 11 and 16.
         apply_action: Short stable descriptor of what the step does.
         resume: Compensating/resume descriptor.  There is no rollback today;
             all irreversible steps use ``"idempotent-rerun"`` (presence-gated
@@ -89,7 +89,7 @@ APPLY_STEPS: tuple[ApplyStep, ...] = (
     ApplyStep(
         order=4,
         step_id="capture managed file hashes",
-        failed_step_label=None,
+        failed_step_label="capture managed file hashes",
         apply_action="capture managed file hashes",
         resume="idempotent-rerun",
         reversible=False,

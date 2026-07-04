@@ -2,7 +2,7 @@
 
 Step 3 (managed module wiring generation) and step 4 (capture managed file
 hashes) are extracted here.  Both steps operate on the post-embed project
-state and are best-effort for hash capture.
+state.
 """
 
 from __future__ import annotations
@@ -77,8 +77,10 @@ def step_capture_hashes(
 ) -> StepOutcome:
     """Step 4: Capture SHA-256 hashes of managed wiring files.
 
-    This is a best-effort step — failures do not abort the pipeline.
-    Hash capture is informational for ``quickscale status`` drift detection.
+    Hash capture runs over files the apply pipeline itself just wrote.
+    An ``OSError`` during resolution or hashing is a genuine system-level
+    problem (disk full, permissions, filesystem corruption) and aborts the
+    step with ``success=False``.
 
     Args:
         ctx: Core-safe step context.
@@ -91,7 +93,9 @@ def step_capture_hashes(
             state object (``ctx.state_snapshot``).
 
     Returns:
-        Always ``StepOutcome(success=True)`` — this step is best-effort.
+        :class:`StepOutcome` with ``success=False`` and
+        ``failed_step_label="capture managed file hashes"`` on
+        ``OSError``.
     """
     try:
         managed_paths = resolve_managed_wiring_paths_fn()
@@ -103,8 +107,9 @@ def step_capture_hashes(
         if ctx.reporter:
             ctx.reporter(f"⚠️  Failed to capture managed file hashes: {error}", ok=False)
         return StepOutcome(
-            success=True,
-            message=f"Hash capture skipped: {error}",
+            success=False,
+            message=f"Failed to capture managed file hashes: {error}",
+            failed_step_label="capture managed file hashes",
         )
 
     for path_str, digest in hashes.items():
