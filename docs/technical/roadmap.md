@@ -64,12 +64,12 @@ Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batch
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.1 (no deps — ready)             SA17.5 (no deps — complete)               SA18.6 (no deps — complete)
-SA14.2 (deps: SA14.1)                SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
-SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
-SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — complete)
-SA14.5 (no deps — ready)                                                  SA18.10 (no deps — complete)
-SA14.6 (no deps — ready)                                                  SA18.11 (no deps — ready)
+SA14.1 (no deps — ready)             SA17.7 (deps: SA17.5 — ready)              SA18.11 (no deps — ready)
+SA14.2 (deps: SA14.1)                SA17.8 (no deps — ready)
+SA14.3 (deps: SA14.1)
+SA14.4 (deps: SA14.2, SA14.3)
+SA14.5 (no deps — ready)
+SA14.6 (no deps — ready)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -79,8 +79,8 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
-| **3** | SA18.6–SA18.10 (complete), SA18.11 (ready) | Core/CLI fail-hard plumbing |
+| **2** | SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (SA17.1–SA17.6 complete, TA2 closed; remaining work is TA9/TA12) |
+| **3** | SA18.11 (ready) | Core/CLI fail-hard plumbing (SA18.1–SA18.10 complete) |
 
 ---
 
