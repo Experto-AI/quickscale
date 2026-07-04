@@ -10,6 +10,8 @@
 > **Closed 2026-07-04:** `TA1` (legacy config keys silently translated/dropped) — remediated by `aea5e3bd` (SA17.1). `normalize_auth_module_options`, `normalize_crm_module_options`, and `normalize_notifications_module_options` now raise `ConfigValidationError` naming the dead key and its replacement for every legacy key named in this finding (`allow_registration`, `social_providers`, `default_pipeline_stages`, `resend_api_key`, `webhook_secret`). Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
 > **Closed 2026-07-04:** `TA5` (undocumented `quickscale_cli.schema` compat shim) — remediated by `ab32f272` (SA18.3). The shim package is deleted; all internal CLI imports and tests were migrated to `quickscale_core.schema`. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA8` (project-metadata resolution swallows validation errors) — remediated by SA18.6. Removed `except Exception: return None` from `resolve_authoritative_project_metadata`'s quickscale.yml branch; `_load_managed_file_records_for_drift` is explicitly outside F12.2 scope. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 
 **Scope swept:** `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `scripts/`, generator templates. Patterns: broad/silent `except`, fallback chains, legacy/compat keywords, `getattr(settings, X, default)`, env-var defaults.
 
@@ -25,7 +27,6 @@
 | TA4 | Medium | `quickscale_core/manifest/entry_point.py:302` | Analytics "fallback defaults matching legacy behaviour" silently fill empty settings |
 | TA6 | Medium | `quickscale_core/generator/generator.py` | Template-dir discovery fallback chain + root-template compat fallback |
 | TA7 | Medium | `quickscale_core/version.py:16` | Version fallback chain ending in silent `"0.0.0"` default |
-| TA8 | Medium | `quickscale_core/project_state.py:655` | Metadata resolution falls back state.yml → quickscale.yml → `None`, swallowing validation errors |
 | TA9 | Medium | `analytics/services.py:218`, `forms/views.py:92` | Missing SDK / missing sibling module degrades silently instead of failing |
 | TA10 | Medium | `quickscale_cli/utils/railway_utils.py` | Broad `except Exception: return None` hides Railway CLI errors |
 | TA11 | Low | `quickscale_cli/utils/docker_utils.py:164` | Invalid `PORT` env value silently coerced to 8000 |
@@ -66,10 +67,6 @@ Since modules are creation-time assembled and the generator owns settings emissi
 ### TA7 (Medium) — Version fallback chain ending in `"0.0.0"`
 
 `quickscale_core/version.py:16-27`: `from ._version import __version__` wrapped in `except Exception` (not `ImportError`), falling back to the repo `VERSION` file, falling back to hardcoded `"0.0.0"`. A broken build (missing `_version.py` in a wheel, missing VERSION file) silently reports version `0.0.0` instead of failing — poisoning version-gated behavior and support diagnostics. The dev-tree read is legitimate; the terminal `"0.0.0"` default and the over-broad except are not.
-
-### TA8 (Medium) — Project-metadata resolution swallows validation errors
-
-`project_state.py` `resolve_authoritative_project_metadata` (≈:640-679): falls back `state.yml` → `quickscale.yml` → `None`, and the `quickscale.yml` branch wraps `validate_config` in `except Exception: return None` — a malformed/invalid `quickscale.yml` is indistinguishable from "no project here." Related: `_load_managed_file_records_for_drift` (≈:600) reads legacy `file_hashes.yml` as a fallback — same M2 family as F12.2 but a different function, not covered by the documented exception's stated location. **Fix direction:** let validation errors propagate (the file exists but is broken → tell the user); extend or properly scope F12.2 for the drift-read path.
 
 ### TA9 (Medium) — Optional-dependency graceful degradation in modules
 
@@ -128,7 +125,7 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 | TA5 | **closed 2026-07-04** | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | **still-open** | `Path.cwd()` template-dir fallback (`generator.py:117`) + backward-compat root-template tier (`:178`) still present. |
 | TA7 | **still-open** | `version.py:19-27` broad `except Exception` + terminal `"0.0.0"` still present. |
-| TA8 | **still-open** | `project_state.py:244`, `:676` `except Exception` swallows still present. |
+| TA8 | **closed 2026-07-04** | Remediated by SA18.6 — see header note. |
 | TA9 | **still-open** | Analytics missing-SDK warn-and-disable (`services.py:218`), forms soft analytics probe (`views.py:94`) still present. |
 | TA10 | **still-open** | 8× `except Exception` in `railway_utils.py`. |
 | TA11 | **still-open** | `docker_utils.get_port_from_env()` still coerces invalid `PORT`→8000. |
@@ -242,7 +239,7 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | still-open | `Path.cwd()` guess at `generator.py:117`, root-template compat at :178 |
 | TA7 | still-open | `version.py:16-27` unchanged |
-| TA8 | still-open | `except Exception` swallows at `project_state.py:244,676` |
+| TA8 | closed 2026-07-04 | Remediated by SA18.6 — see header note. |
 | TA9 | still-open | Verified `analytics/services.py:218` warning-and-continue, `forms/views.py:94` |
 | TA10 | still-open | 8 `except Exception` sites in `railway_utils.py` |
 | TA11 | still-open | `docker_utils.py:164-173` unchanged |
@@ -301,7 +298,7 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 | TA5 | closed 2026-07-04 | Remediated by SA18.3 (`ab32f272`) — see header note. |
 | TA6 | still-open | `generator.py` `Path.cwd()` guess `:117`, root-template compat `:178`. |
 | TA7 | still-open | `version.py:20` `except Exception:` → silent `"0.0.0"` floor. |
-| TA8 | still-open | `project_state.py` broad swallows. |
+| TA8 | closed 2026-07-04 | Remediated by SA18.6 — see header note. |
 | TA9 | still-open | `analytics/services.py:218`, `forms/views.py:94` warning-and-continue. |
 | TA10 | still-open | 8× `except Exception` in `railway_utils.py`. |
 | TA11 | still-open | `docker_utils.py:170-173` — invalid `PORT` silently → 8000. |

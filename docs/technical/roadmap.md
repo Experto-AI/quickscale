@@ -210,10 +210,10 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
   *Finding:* the repository currently ships a generated `quickscale_core/_version.py`, so the fail-hard branch is primarily a broken-build/source-tree guard; targeted tests now cover that seam explicitly.
   See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA18.6 — Stop swallowing validation errors in project-metadata resolution.** `Tier 2 · Track 3 · deps: none · (why → TA8)`
-  Let `validate_config` errors propagate in `resolve_authoritative_project_metadata`'s `quickscale.yml` branch instead of `except Exception: return None` (which makes "broken config" indistinguishable from "no project here"). Separately, scope the F12.2 documented exception properly to cover (or explicitly exclude) `_load_managed_file_records_for_drift`'s legacy `file_hashes.yml` read.
-  *Files:* `quickscale_core/src/quickscale_core/project_state.py:~640-679,~600`.
-  *Acceptance:* a malformed `quickscale.yml` raises a validation error instead of being treated as "no project"; the F12.2 exception table entry explicitly lists (or explicitly excludes) the drift-read path.
+- [x] **SA18.6 — Stop swallowing validation errors in project-metadata resolution (complete).** `Tier 2 · Track 3 · deps: none · (why → TA8)`
+  Removed `except Exception: return None` from `resolve_authoritative_project_metadata`'s `quickscale.yml` branch — `validate_config` errors now propagate as `ConfigValidationError` instead of being indistinguishable from "no project here." `_load_managed_file_records_for_drift` is explicitly documented as outside F12.2 scope (its legacy `file_hashes.yml` fallback is a drift-detection design choice, not an M2 migration compatibility path). The F12.2 exception table entry now carries the SA18.6 annotation. Closes tech-audit TA8. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
+  *Files:* `quickscale_core/src/quickscale_core/project_state.py`, `quickscale_core/tests/test_project_state.py`, `docs/technical/decisions.md`.
+  *Acceptance:* a malformed `quickscale.yml` raises `ConfigValidationError`; `_load_managed_file_records_for_drift` is explicitly outside F12.2; targeted tests updated to expect fail-hard behavior.
 
 - [ ] **SA18.7 — Narrow `railway_utils.py`'s broad exception swallowing.** `Tier 1 · Track 3 · deps: none · (why → TA10)`
   Narrow the `except Exception: return None` clauses around URL extraction, variable parsing, and status queries to the specific expected failure modes; keep the narrower `subprocess`-error "is the CLI installed" probes as-is.
