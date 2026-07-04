@@ -20,6 +20,10 @@
 > **Closed 2026-07-04:** `TA10` (`railway_utils.py` broad exception swallowing) — remediated by SA18.7. All four functions this finding originally cited by line number (`get_deployment_url`, `generate_railway_domain`, `get_railway_variables`, `_get_railway_variables_json`) plus `link_database_to_service` now narrow their catches to `(TimeoutError, FileNotFoundError)` and raise `ValueError` on successful-but-unparseable Railway output instead of collapsing to `None`/`{}`; deploy/DR callers surface these as descriptive non-zero failures. Verified against current source 2026-07-04: 5 broad `except Exception` sites remain in the file (`set_railway_variable`, `set_railway_variables_batch`, `verify_railway_json`, `verify_railway_dependencies`) but these are write-path or local-pyproject-file-read functions outside TA10's original scope (Railway CLI output parsing), not a residual of this finding. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 >
 > **Closed 2026-07-04:** `TA11` (invalid `PORT` env value silently coerced to 8000) — remediated by SA18.8. `get_port_from_env()` now defaults to `8000` only when `PORT` is unset; a present but non-numeric `PORT` raises `ValueError` naming the invalid value. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA13` (best-effort hash-capture step always reports success) — remediated by SA18.9. `step_capture_hashes` now returns `StepOutcome(success=False, ...)` on `OSError` instead of a best-effort `success=True`; the apply pipeline aborts with the correct failure label. Decision made: fail hard, no F-EXCEPTION. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
+>
+> **Closed 2026-07-04:** `TA14` (`# F-EXCEPTION:` tag mandated by decisions.md absent from code) — remediated by SA18.10. Added `# F-EXCEPTION: F12.2` tags to the documented M2 compatibility paths in `project_state.py` and `remove_command.py`; `decisions.md`'s fail-hard exception table now lists both. Dropped per this file's own rule; closeout detail lives in CHANGELOG.md.
 
 **Scope swept:** `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `scripts/`, generator templates. Patterns: broad/silent `except`, fallback chains, legacy/compat keywords, `getattr(settings, X, default)`, env-var defaults.
 
@@ -36,8 +40,8 @@
 | ~~TA10~~ | ~~Medium~~ | ~~`quickscale_cli/utils/railway_utils.py`~~ | closed 2026-07-04 — see header note |
 | ~~TA11~~ | ~~Low~~ | ~~`quickscale_cli/utils/docker_utils.py:164`~~ | closed 2026-07-04 — see header note |
 | TA12 | Low | `quickscale_core/contracts/module_catalog.py` | Deprecated compat delegates still in public API; unknown module names fail-open in readiness check |
-| TA13 | Low | `quickscale_core/apply/steps/wiring.py:71` | Best-effort hash-capture step always reports success |
-| TA14 | Low | repo-wide | `# F-EXCEPTION:` tag mandated by decisions.md appears nowhere in code |
+| ~~TA13~~ | ~~Low~~ | ~~`quickscale_core/apply/steps/wiring.py:71`~~ | closed 2026-07-04 — see header note |
+| ~~TA14~~ | ~~Low~~ | ~~repo-wide~~ | closed 2026-07-04 — see header note |
 | TA15 | Low | `scripts/check_module_core_compatibility.py:381` | `except Exception: return None` on pyproject parse in dev tooling |
 
 ---
@@ -65,13 +69,9 @@
 
 `contracts/module_catalog.py:128-175`: `get_module_names()` / `get_module_entries()` are documented "Deprecated since D2 … kept for backward compatibility only," yet still exported from the `contracts/__init__.py` public API with no F-EXCEPTION entry or sunset. Additionally `get_module_readiness_reason()` (`:270-289`) returns `None` for **unknown** module names — same return as "ready" — so readiness gating is fail-open for names the catalog has never heard of (mitigated only if all callers validate existence first).
 
-### TA13 (Low) — Best-effort hash-capture step always succeeds
+### ~~TA13 (Low)~~ — ~~Best-effort hash-capture step always succeeds~~ (closed 2026-07-04 — see header note)
 
-`apply/steps/wiring.py:71-120` `step_capture_hashes`: on `OSError` it prints a reporter warning but returns `StepOutcome(success=True)` — drift detection silently loses coverage while `quickscale apply` reports success. Deliberate design ("informational only"), but it is graceful degradation inside the apply pipeline. **Decision needed:** either fail the step (hash capture over files the apply itself just wrote should never fail) or register it as a documented F-EXCEPTION.
-
-### TA14 (Low) — Mandated `# F-EXCEPTION:` tags absent from code
-
-decisions.md §fail-hard-principle requires each documented exception to carry a `# F-EXCEPTION: <tag>` label in code. `grep -rn "F-EXCEPTION"` across all source returns **zero** hits. `_read_through_import_legacy` (`project_state.py:415`) mentions "F12.2" in its docstring but not in the mandated tag format, and the F12.2-adjacent legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) are not listed in the exception table at all. Traceability drift between SSOT and code.
+### ~~TA14 (Low)~~ — ~~Mandated `# F-EXCEPTION:` tags absent from code~~ (closed 2026-07-04 — see header note)
 
 ### TA15 (Low) — Dev-tooling silent parse failure
 
@@ -110,8 +110,8 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 | TA10 | **closed 2026-07-04** | Remediated by SA18.7 — see header note. |
 | TA11 | **closed 2026-07-04** | Remediated by SA18.8 — see header note. |
 | TA12 | **still-open** | Deprecated-D2 catalog delegates still exported; unknown-name readiness still fail-open. |
-| TA13 | **still-open** | `apply/steps/wiring.py` best-effort step still returns `success=True` on `OSError`. |
-| TA14 | **still-open** | Zero `# F-EXCEPTION:` tags in code (grep confirms 0 hits). |
+| TA13 | **closed 2026-07-04** | Remediated by SA18.9 — see header note. |
+| TA14 | **closed 2026-07-04** | Remediated by SA18.10 — see header note. |
 | TA15 | **still-open** | `check_module_core_compatibility.py:385` still `except Exception: return None`. |
 
 ## New findings
@@ -163,7 +163,7 @@ QuickScale is a **Python 3.13 Django project generator** (monorepo: `quickscale_
 - **No dependency-vulnerability gate in CI.** Add `pip-audit` (or `safety`) as a read-only CI step — would systematically catch the dependency-hygiene class this sweep could only inspect by hand. (Prevents future CVE drift on the Stripe/Django/Pillow trust-boundary deps.)
 - **No security-lint gate.** A `bandit` (or `semgrep`) CI step configured for the broad-`except`/`subprocess`-argv/weak-default families would flag TA10/TA15 swallows and TA17-style argv exposure automatically. Ties to `TA7`, `TA8`, `TA10`, `TA15`, `TA17`.
 - **`vulture`/`pylint` are dev-declared but not CI-wired.** Wiring the existing `pylint` duplication config into CI would keep the collapsed-class habits from regressing; `vulture` would surface the dead compat delegates behind `TA12`.
-- **A grep-based CI check for the mandated `# F-EXCEPTION:` tag** (decisions.md §fail-hard-principle) would close `TA14`'s SSOT↔code traceability drift cheaply.
+- **A grep-based CI check for the mandated `# F-EXCEPTION:` tag** (decisions.md §fail-hard-principle) would enforce the SSOT↔code traceability that SA18.10 (closing TA14) established manually — worth automating so future compatibility paths can't land untagged.
 
 _Categories swept with no new qualifying finding: injection sinks (no `shell=True`/`eval`/`os.system`; raw SQL is parameterized or static PL/pgSQL by design), crypto misuse (HMAC + `secrets.compare_digest` + UUID4 tokens used correctly), unsafe deserialization (`yaml.safe_load` throughout), open redirect (VIEW-AS `next` is superuser-gated), XSS via markdown (`escape()` precedes `markdownify()` in blog and listings), concurrency on the credit ledger (`select_for_update` + `F()` + `IntegrityError` idempotency are correct), N+1 (CRM/billing use `select_related`/`prefetch_related`), mutable default args (none), timezone-naive comparisons on request paths (none reached)._
 
@@ -224,8 +224,8 @@ destructive ops gated by confirm prompts + advisory lock; CRM/blog querysets pro
 | TA10 | closed 2026-07-04 | Remediated by SA18.7 — see header note. |
 | TA11 | closed 2026-07-04 | Remediated by SA18.8 — see header note. |
 | TA12 | still-open | Deprecated delegates at `module_catalog.py:132,162` |
-| TA13 | still-open | `wiring.py` best-effort `success=True` unchanged |
-| TA14 | still-open | `F-EXCEPTION` grep: 0 hits |
+| TA13 | closed 2026-07-04 | Remediated by SA18.9 — see header note. |
+| TA14 | closed 2026-07-04 | Remediated by SA18.10 — see header note. |
 | TA15 | still-open | `check_module_core_compatibility.py:381-388` unchanged |
 
 ## New findings summary
@@ -283,8 +283,8 @@ QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo). Two 
 | TA10 | closed 2026-07-04 | Remediated by SA18.7 — see header note. |
 | TA11 | closed 2026-07-04 | Remediated by SA18.8 — see header note. |
 | TA12 | still-open | Deprecated delegates `module_catalog.py:132,162`. |
-| TA13 | still-open | `wiring.py` best-effort `success=True`. |
-| TA14 | still-open | `# F-EXCEPTION:` tag: 0 hits repo-wide. |
+| TA13 | closed 2026-07-04 | Remediated by SA18.9 — see header note. |
+| TA14 | closed 2026-07-04 | Remediated by SA18.10 — see header note. |
 | TA15 | still-open | `check_module_core_compatibility.py:381-388`. |
 | TA16 | still-open | `start.sh.j2` Step 1 prints `SECRET_KEY`/`DATABASE_URL` values (S2, Trivial quick win). Re-verified. |
 | TA17 | still-open | `backups/admin.py:419-437` — `restore_backup_artifact` / `restore_admin_uploaded_backup` (→ `pg_restore --clean`) run **synchronously** in the admin POST inside the 60s gunicorn worker (S2). Re-verified. |

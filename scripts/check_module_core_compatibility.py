@@ -62,6 +62,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib  # Python 3.11+ stdlib
 from pathlib import Path
 from typing import Final, cast
 
@@ -379,11 +380,9 @@ def _get_module_package_name(module_dir: Path) -> str | None:
     if not pyproject.is_file():
         return None
     try:
-        import tomllib  # Python 3.11+ stdlib
-
         with pyproject.open("rb") as fh:
             data = tomllib.load(fh)
-    except Exception:
+    except OSError:
         return None
     packages = data.get("tool", {}).get("poetry", {}).get("packages", [])
     if not isinstance(packages, list):
@@ -454,11 +453,9 @@ def _get_module_non_core_deps(module_dir: Path) -> list[str]:
     if not pyproject.is_file():
         return []
     try:
-        import tomllib
-
         with pyproject.open("rb") as fh:
             data = tomllib.load(fh)
-    except Exception:
+    except OSError:
         return []
 
     poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
@@ -919,7 +916,15 @@ def main(argv: list[str] | None = None) -> int:
             if mod_name in SKIP_INSTALL_PROBE_MODULES:
                 print(f"  INSTALL PROBE: Skipped — {SKIP_INSTALL_PROBE_MODULES[mod_name]}")
             else:
-                package_name = _get_module_package_name(mod_dir)
+                try:
+                    package_name = _get_module_package_name(mod_dir)
+                except tomllib.TOMLDecodeError as exc:
+                    print(
+                        f"  ERROR: Malformed module pyproject.toml "
+                        f"({mod_dir / 'pyproject.toml'}): {exc}"
+                    )
+                    overall_exit = 1
+                    continue
                 if package_name and src_dir.is_dir():
                     probe_issues = _probe_module_install_import(
                         mod_name=mod_name,
