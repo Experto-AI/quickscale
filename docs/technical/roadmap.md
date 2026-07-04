@@ -81,7 +81,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | {SA13.2, SA13.3} ready → SA13.4, then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
+| **1** | SA13.2, SA13.3 complete → SA13.4 (deps met), then SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Tenant-context request/admin boundary (Finding 3, Finding 1) |
 | **2** | SA17.3–SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (Finding 2 fully closed — see CHANGELOG.md) |
 | **3** | SA18.6 (complete), SA18.7 (partial — deploy follow-up still open), SA18.8–SA18.9, SA18.11 (ready) → SA18.10 (deps: SA18.9) | Core/CLI fail-hard plumbing (Finding 4 not fully closed until SA18.7 follow-up lands) |
 
@@ -106,10 +106,19 @@ No cross-track dependencies — all three tracks can run fully in parallel.
   *Files:* views/services across `crm`, `billing`, `blog`, `listings`, `notifications` (per arch-audit's caller census).
   *Acceptance:* no view/service module imports the underscored primitives directly; module test suites stay green.
 
-- [ ] **SA13.3 — Migrate serializer/admin/feed/management-command callsites.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
+- [x] **SA13.3 — Migrate serializer/admin/feed/management-command callsites.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
   Same migration as SA13.2, scoped to the remaining callsite classes: `crm/serializers.py`, feeds, admin modules, notifications helpers, management commands (the audit's "13 files across 7 modules" spanning non-view surfaces). Runs in parallel with SA13.2 — disjoint file sets.
   *Files:* `crm/serializers.py`, module admin.py files, feed classes, management commands.
   *Acceptance:* same as SA13.2 for this file set; the SA13.1 lint gate flips from warn to **fail** once both SA13.2 and SA13.3 land (tracked as part of SA13.4).
+
+  > **Collapse finding (2026-07-04):** Fresh discovery found only one remaining non-exempt production callsite — `social/admin.py`'s `_org_db_context` using the `tenant_context` compatibility alias. All other SA13.3 target surfaces (serializers, feeds, management commands, other admin modules) were either already migrated by SA13.2, belong to orgs-internal exempt paths, or had no direct import of the privatized primitives. The migration:
+  > - Replaced the `tenant_context` import with `org_scope` (the blessed public API).
+  > - Rewrote `_org_db_context` to fetch the `Organization` instance from the resolved UUID and delegate to `org_scope(instance)`; the fail-closed path (`None` or org-not-found) uses `org_scope(None)`.
+  > - Removed the outer `transaction.atomic()` wrapper (now internal to `org_scope`).
+  > - Removed the unused `from django.db import transaction` import.
+  > - Updated the test that exercised `_org_db_context` with a random UUID to use the `org` fixture (the Organization lookup requires a real DB record).
+  > - Updated module and function docstrings to reference `org_scope` instead of `tenant_context`.
+  > SA13.3 acceptance: the social module test suite stays green; the lint gate (`make check-org-context-primitives`) reports zero remaining external uses of `tenant_context` or the other privatized primitives (warn-only during SA13.1–SA13.3).
 
 - [ ] **SA13.4 — Flip the lint gate to hard-fail; harden the AF9 `None`-path.** `Tier 2 · Track 1 · deps: SA13.2, SA13.3 · RISK LEVEL: medium`
   Flip `check_org_context_primitives.py` from warn to fail (closing the migration). Separately evaluate and, if safe, implement AF9's `None`-path hardening (option 3 in Finding 3: prime-to-empty instead of pass-through when the ContextVar is `None`) to close the last ContextVar/GUC desync window — needs careful autocommit-path review since it changes wrapper semantics on hot paths.
