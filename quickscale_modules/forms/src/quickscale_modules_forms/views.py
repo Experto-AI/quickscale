@@ -50,7 +50,7 @@ from quickscale_modules_forms.serializers import (
     FormSubmissionCreateSerializer,
 )
 from quickscale_modules_forms.throttles import FormSubmitThrottle
-from quickscale_modules_orgs.current_org import tenant_context
+from quickscale_modules_orgs.current_org import org_scope
 
 logger = logging.getLogger(__name__)
 
@@ -164,14 +164,13 @@ class FormSchemaAPIView(RetrieveAPIView):
     serializer_class = FormSchemaSerializer
 
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Activate tenant context so DB-side app.current_org_id is set for FORCE-RLS.
-        Wraps in transaction.atomic() because tenant_context() requires an active
-        transaction for SET LOCAL — the middleware no longer holds a request-long
+        """Activate org scope so DB-side app.current_org_id is set for FORCE-RLS.
+        Uses org_scope() which wraps in transaction.atomic() internally and
+        handles SET LOCAL — the middleware no longer holds a request-long
         atomic (Phase 3)."""
         org = _resolve_subject_org(request)
-        with transaction.atomic():
-            with tenant_context(org.pk if org else None):
-                return super().retrieve(request, *args, **kwargs)
+        with org_scope(org):
+            return super().retrieve(request, *args, **kwargs)
 
     def get_object(self) -> Form:
         slug = self.kwargs.get("slug")
@@ -219,49 +218,48 @@ class FormSubmitAPIView(CreateAPIView):
         # lookup and write work only.  Side effects (notification, analytics)
         # run AFTER the outer atomic commits so they do not hold a DB
         # transaction open for remote calls.
-        with transaction.atomic():
-            with tenant_context(org.pk if org else None):
-                form = self._get_form()
-                data = request.data
+        with org_scope(org):
+            form = self._get_form()
+            data = request.data
 
-                # Honeypot check — silently mark as spam, do NOT reveal detection
-                honeypot_value = data.get(HONEYPOT_FIELD_NAME, "")
-                if is_form_spam_protection_enabled(form) and honeypot_value:
-                    with transaction.atomic():
-                        submission = FormSubmission.objects.create(
-                            form=form,
-                            organization=form.organization,
-                            ip_address=request.META.get("REMOTE_ADDR"),
-                            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-                            is_spam=True,
-                        )
-                        self._create_field_values(submission, form, data)
-                    return Response(
-                        {
-                            "message": form.success_message,
-                            "redirect_url": form.redirect_url or None,
-                        },
-                        status=status.HTTP_201_CREATED,
-                    )
-
-                # Validate submitted data against form field definitions
-                serializer = self.get_serializer(data=data)
-                if not serializer.is_valid():
-                    return Response(
-                        {"errors": serializer.errors},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                # Persist submission inside a transaction
+            # Honeypot check — silently mark as spam, do NOT reveal detection
+            honeypot_value = data.get(HONEYPOT_FIELD_NAME, "")
+            if is_form_spam_protection_enabled(form) and honeypot_value:
                 with transaction.atomic():
                     submission = FormSubmission.objects.create(
                         form=form,
                         organization=form.organization,
                         ip_address=request.META.get("REMOTE_ADDR"),
                         user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-                        is_spam=False,
+                        is_spam=True,
                     )
                     self._create_field_values(submission, form, data)
+                return Response(
+                    {
+                        "message": form.success_message,
+                        "redirect_url": form.redirect_url or None,
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
+
+            # Validate submitted data against form field definitions
+            serializer = self.get_serializer(data=data)
+            if not serializer.is_valid():
+                return Response(
+                    {"errors": serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Persist submission inside a transaction
+            with transaction.atomic():
+                submission = FormSubmission.objects.create(
+                    form=form,
+                    organization=form.organization,
+                    ip_address=request.META.get("REMOTE_ADDR"),
+                    user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
+                    is_spam=False,
+                )
+                self._create_field_values(submission, form, data)
 
         # CR-P3-006: side effects run AFTER the atomic commits.  They are
         # already exception-safe (never raise) so they cannot roll back the
