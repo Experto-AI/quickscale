@@ -81,6 +81,9 @@ MEDIA_ROOT = BASE_DIR / "tests" / "media"
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Blog module required settings (SA17.5: fail-hard defaults)
+BLOG_ENABLE_RSS = True
+
 # Markdownx settings
 MARKDOWNX_MARKDOWN_EXTENSIONS = [
     "markdown.extensions.fenced_code",

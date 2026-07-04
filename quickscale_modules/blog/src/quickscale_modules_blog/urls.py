@@ -14,8 +14,13 @@ app_name = "quickscale_blog"
 
 
 def _blog_enable_rss() -> bool:
-    """Return whether the blog RSS route should be exposed."""
-    value = getattr(settings, "BLOG_ENABLE_RSS", True)
+    """Return whether the blog RSS route should be exposed.
+
+    Must be explicitly configured.  Startup validation in
+    ``AppConfig.ready()`` ensures this setting is always present
+    (SA17.5) — no fallback default.
+    """
+    value = settings.BLOG_ENABLE_RSS
     if isinstance(value, bool):
         return value
     if isinstance(value, str):

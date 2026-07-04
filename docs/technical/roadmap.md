@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.4` (Track 2 — legacy config keys, analytics/billing/CRM/forms settings, closes TA1/TA2-partial) and `SA18.1`–`SA18.7` (Track 3 — manifest/version/template/project-metadata/railway-utils fail-hard fixes, closes TA3–TA8 and TA10) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.5, SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3. Track 2: SA17.1–SA17.4 are complete; SA17.5, SA17.6 and SA17.8 are ready now, SA17.7 waits on SA17.5 within the track. Track 3: SA18.1–SA18.7 are complete; SA18.8, SA18.9, SA18.10, and SA18.11 are all ready now (no deps; SA18.9 decision already made — fail hard on OSError).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.5, SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3. Track 2: SA17.1–SA17.5 are complete; SA17.6 and SA17.8 are ready now; SA17.7 is unblocked/ready (SA17.5 complete). Track 3: SA18.1–SA18.7 are complete; SA18.8, SA18.9, SA18.10, and SA18.11 are all ready now (no deps; SA18.9 decision already made — fail hard on OSError).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -64,12 +64,12 @@ Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batch
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.1 (no deps — ready)             SA17.5 (no deps — ready)                  SA18.8 (no deps — ready)
-SA14.2 (deps: SA14.1)                SA17.6 (no deps — ready)                  SA18.9 (no deps — ready)
-SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5)                     SA18.10 (no deps — ready)
-SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.11 (no deps — ready)
-SA14.5 (no deps — ready)
-SA14.6 (no deps — ready)
+SA14.1 (no deps — ready)             SA17.3 (no deps — complete)               SA18.8 (no deps — ready)
+SA14.2 (deps: SA14.1)                SA17.4 (no deps — complete)               SA18.9 (no deps — ready)
+SA14.3 (deps: SA14.1)                SA17.5 (no deps — complete)               SA18.10 (no deps — ready)
+SA14.4 (deps: SA14.2, SA14.3)        SA17.6 (no deps — ready)                  SA18.11 (no deps — ready)
+SA14.5 (no deps — ready)             SA17.7 (deps: SA17.5 — ready)
+SA14.6 (no deps — ready)             SA17.8 (no deps — ready)
 ```
 
 No cross-track dependencies — all three tracks can run fully in parallel.
@@ -79,8 +79,48 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.5, SA17.6, SA17.8 (ready) → SA17.7 (deps: SA17.5) | Module-side fail-hard settings (SA17.1–SA17.4 closed) |
+| **2** | SA17.1–SA17.5 (complete); SA17.6, SA17.8 (ready); SA17.7 (ready, deps met) | Module-side fail-hard settings (Finding 2/TA2 not fully closed until SA17.6 lands) |
 | **3** | SA18.8–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing (SA18.1–SA18.7 closed) |
+
+---
+
+#### Finding — `org-context-api-accretion` (`why →` [Finding 3](../../arch-audit.md#finding-3-org-context-entry-is-a-five-api-accretion-every-non-request-path-hand-picks-its-idiom))
+
+- [x] **SA13.1 — Delete the dead context API and gate the rest.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
+  Delete `resolve_public_org_context` (0 module+core src callers per the Finding 3 census; internal/test references remain). Underscore-privatize `set_db_current_org_id`, `set_current_org_for_context`, and `tenant_context` as internal helpers behind the public `org_scope`/`PublicSystemOrgReadMixin` surface, kept importable for the callsite migrations in SA13.2/13.3. Add an AST/import-lint gate (reuse the SA9.6 `check_module_core_imports.py` pattern) that *warns* (not yet fails) on direct external use of the three privatized primitives only.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py`, new `scripts/check_org_context_primitives.py`.
+  *Acceptance:* `resolve_public_org_context` is gone; the three primitives are renamed with a leading underscore but remain importable; the new lint script runs in warn-only mode and flags direct use of `_tenant_context` / `_set_current_org_for_context` / `_set_db_current_org_id` only — 31 pre-migration callsites (`tenant_context` 26 + `set_current_org_for_context` 5) — without failing CI; `org_scope` usage is never flagged, since it is the permanent public API, not a migration source.
+
+  > **Scope decision (2026-07-04):** Resolved the discovery-note ambiguity between the task text (gate the 3 privatized primitives only) and the acceptance text's broader "44-count" (which wrongly folded in `org_scope`'s 13 callers). **Decision: gate the 3 privatized primitives only.** `org_scope` stays public and exempt — it's the permanent target API under arch-audit Finding 3's locked-in "Consolidate + gate" option, so flagging it would contradict the chosen design and would immediately self-conflict with SA13.2/13.3 (which migrate callers *to* `org_scope`). Also decided: keep the **warn-now / fail-later staging** (SA13.1 warns, SA13.4 flips to hard-fail once SA13.2/13.3 finish migrating callsites) rather than failing immediately — an immediate hard-fail would break CI on the ~31 not-yet-migrated callsites before the migration work has even started, which is a sequencing self-inflicted break, not a real misconfiguration. This staging does not conflict with the fail-hard principle: that principle governs runtime/production misconfiguration behavior, not an in-flight internal lint-gate rollout, and this project has staged an equivalent guardrail before (SA6.3's imperative-freeze test). **Implementation is unblocked.**
+  >
+  > **Review-driven follow-up (2026-07-04 — CR-SA13.1-001, CR-SA13.1-002, CR-SA13.1-003):**
+  > - **CR-SA13.1-001 resolved:** The social managed-view generator (`social_manifest.py:render_social_managed_views_module`) now emits `org_scope()` instead of `tenant_context()` — eliminating the generated code's use of a privatized primitive. The lint gate scope is extended to also scan `quickscale_core/src/` for direct Python-level imports of the privatized primitives. Template-string usages are not AST-detectable; those are resolved by migrating the generator to emit the public API.
+  > - **CR-SA13.1-002 resolved:** `get_public_org_context()` now wraps `_tenant_context()` and yields the resolved org UUID instead of delegating directly (which yielded `None`). The documented `Iterator[uuid.UUID | None]` contract is now fulfilled. Regression tests added proving the yield value matches the expected org UUID, and fail-closed behavior yields `None`.
+  > - **CR-SA13.1-003 resolved:** Added regeneration evidence to `test_social_module_produces_managed_files` in `test_module_wiring_manager_manifest.py`. The test now reads the regenerated `social_views.py` file produced by `regenerate_managed_wiring` and asserts the SA13.1 contract: `org_scope(resolved_org)` is present; `tenant_context`, `organization_id`, `set_current_org_id`, `set_db_current_org_id`, and `from django.db import transaction` are all absent — confirming the template change propagates through the full regeneration pipeline to the on-disk managed file.
+
+- [x] **SA13.2 — Migrate view/service callsites to `org_scope`.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
+  Migrate the `tenant_context`/`org_scope`-eligible callsites in module views and services (the majority of the 26 `tenant_context` + 13 `org_scope` callsites) to the blessed `org_scope`/`PublicSystemOrgReadMixin` API.
+  *Files:* views/services across `crm`, `billing`, `blog`, `listings`, `notifications` (per arch-audit's caller census).
+  *Acceptance:* no view/service module imports the underscored primitives directly; module test suites stay green.
+
+- [x] **SA13.3 — Migrate serializer/admin/feed/management-command callsites.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
+  Same migration as SA13.2, scoped to the remaining callsite classes: `crm/serializers.py`, feeds, admin modules, notifications helpers, management commands (the audit's "13 files across 7 modules" spanning non-view surfaces). Runs in parallel with SA13.2 — disjoint file sets.
+  *Files:* `crm/serializers.py`, module admin.py files, feed classes, management commands.
+  *Acceptance:* same as SA13.2 for this file set; the SA13.1 lint gate flips from warn to **fail** once both SA13.2 and SA13.3 land (tracked as part of SA13.4).
+
+  > **Collapse finding (2026-07-04):** Fresh discovery found only one remaining non-exempt production callsite — `social/admin.py`'s `_org_db_context` using the `tenant_context` compatibility alias. All other SA13.3 target surfaces (serializers, feeds, management commands, other admin modules) were either already migrated by SA13.2, belong to orgs-internal exempt paths, or had no direct import of the privatized primitives. The migration:
+  > - Replaced the `tenant_context` import with `org_scope` (the blessed public API).
+  > - Rewrote `_org_db_context` to fetch the `Organization` instance from the resolved UUID and delegate to `org_scope(instance)`; the fail-closed path (`None` or org-not-found) uses `org_scope(None)`.
+  > - Removed the outer `transaction.atomic()` wrapper (now internal to `org_scope`).
+  > - Removed the unused `from django.db import transaction` import.
+  > - Updated the test that exercised `_org_db_context` with a random UUID to use the `org` fixture (the Organization lookup requires a real DB record).
+  > - Updated module and function docstrings to reference `org_scope` instead of `tenant_context`.
+  > SA13.3 acceptance: the social module test suite stays green; the lint gate (`make check-org-context-primitives`) reports zero remaining external uses of `tenant_context` or the other privatized primitives (warn-only during SA13.1–SA13.3).
+
+- [ ] **SA13.4 — Flip the lint gate to hard-fail; harden the AF9 `None`-path.** `Tier 2 · Track 1 · deps: SA13.2, SA13.3 · RISK LEVEL: medium`
+  Flip `check_org_context_primitives.py` from warn to fail (closing the migration). Separately evaluate and, if safe, implement AF9's `None`-path hardening (option 3 in Finding 3: prime-to-empty instead of pass-through when the ContextVar is `None`) to close the last ContextVar/GUC desync window — needs careful autocommit-path review since it changes wrapper semantics on hot paths.
+  *Files:* `scripts/check_org_context_primitives.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py`.
+  *Acceptance:* lint gate fails CI on any new direct use of the privatized primitives; AF9 wrapper behavior on `None` context is either hardened (with regression tests for autocommit/atomic paths) or explicitly deferred with a written reason if the risk outweighs the benefit.
 
 ---
 
@@ -126,10 +166,8 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 > SA17.1–SA17.4 (legacy config keys, analytics/billing/CRM/forms fail-hard settings — closes TA1 and the CRM/forms slice of TA2) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA17.5 — Fail-hard blog module settings.** `Tier 2 · Track 2 · deps: none · (why → TA2)`
-  Require explicit RSS-enable and media-URL settings; make malformed `BLOG_API_TOKENS` entries raise at startup instead of being silently `continue`-skipped.
-  *Files:* `blog/urls.py:18`, `blog/views.py:175,181-190,280`, `blog/models.py:46-48`.
-  *Acceptance:* a malformed `BLOG_API_TOKENS` entry raises at startup naming the bad entry; RSS-enable and media-URL settings are required, not defaulted.
+- [x] **SA17.5 — Fail-hard blog module settings (complete).** `Tier 2 · Track 2 · deps: none · (why → TA2)`
+  Added `AppConfig.ready()` startup guard to `blog/apps.py` that raises `ImproperlyConfigured` at startup when `BLOG_ENABLE_RSS` is missing, `MEDIA_URL` is empty/unset, or any `BLOG_API_TOKENS` entry is malformed (naming the bad entry). Removed the default-`True` fallback in `urls.py:_blog_enable_rss()` and the `getattr(settings, "MEDIA_URL", "/media/")` fallbacks in `views.py:_build_media_response_url()` and `models.py:_build_public_media_url()`. Updated test settings with the required `BLOG_ENABLE_RSS = True`. Updated `test_urls.py` to remove the `None`-unset parametrize case. Added `blog/tests/test_apps.py` with 9 ready()-method guard tests (3 general + 6 malformed-token variations). Acceptance: a malformed `BLOG_API_TOKENS` entry raises at startup naming the bad entry; RSS-enable and media-URL settings are required, not defaulted. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA17.6 — Fail-hard notifications module settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
   Require explicit enabled-flag and provider settings instead of defaulting to `True`/`"resend"`.
