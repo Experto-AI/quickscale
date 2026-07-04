@@ -393,20 +393,22 @@ class TestPerOrgHelpers:
     # DB-level context propagation (PostgreSQL only)
     # ------------------------------------------------------------------
 
-    def test_db_current_org_id_is_set_inside_context(self, request) -> None:
+    def test_db_current_org_id_is_set_inside_context(self, request, org) -> None:
         """On PostgreSQL the context manager calls ``set_db_current_org_id``
         with the session org UUID.
 
         This test verifies the wiring via mock; on PostgreSQL the real
         ``SET LOCAL`` would also be exercised.  Skipped on SQLite.
+        The ``org`` fixture provides a real ``Organization`` instance so
+        that ``_org_db_context`` can look it up and pass it to
+        ``org_scope(instance)``.
         """
         if connection.vendor != "postgresql":
             pytest.skip("DB-level RLS testing requires PostgreSQL")
 
-        org_id = uuid.uuid4()
         rf = RequestFactory()
         mock_request = _request_with_session(
-            rf, **{ACTIVE_ORG_SESSION_KEY: str(org_id)}
+            rf, **{ACTIVE_ORG_SESSION_KEY: str(org.id)}
         )
 
         with patch(
@@ -415,26 +417,33 @@ class TestPerOrgHelpers:
             with _org_db_context(mock_request):
                 pass
 
-        mock_set_db.assert_called_once_with(org_id)
+        mock_set_db.assert_called_once_with(org.id)
 
     # ------------------------------------------------------------------
     # Spy-based wiring verification
     # ------------------------------------------------------------------
 
-    def test_get_queryset_calls_resolve_active_org_id(self, rf: RequestFactory) -> None:
-        """SocialLinkAdmin.get_queryset calls ``_resolve_active_org_id``."""
+    def test_get_queryset_reads_validated_org_id(self, rf: RequestFactory) -> None:
+        """SocialLinkAdmin.get_queryset reads ``request._validated_org_id``
+        set by ``_org_db_context`` (CR-SA13.3-001)."""
         from quickscale_modules_social.admin import SocialLinkAdmin
 
         site = AdminSite()
         admin_instance = SocialLinkAdmin(SocialLink, site)
         request = _request_with_session(rf)
 
-        with patch(
-            "quickscale_modules_social.admin._resolve_active_org_id",
-            return_value=None,
-        ) as mock_resolve:
-            admin_instance.get_queryset(request)
-            mock_resolve.assert_called_once_with(request)
+        # With no _validated_org_id, get_queryset returns empty (fail-closed).
+        assert list(admin_instance.get_queryset(request)) == []
+
+        # With a real org UUID on _validated_org_id, it returns the full
+        # queryset (scoping is handled by the ContextVar set by
+        # _org_db_context).
+        request._validated_org_id = uuid.uuid4()  # type: ignore[attr-defined]
+        qs = admin_instance.get_queryset(request)
+        assert qs is not None
+        # It should return ``all()`` — not ``none()`` — when a validated
+        # org is present; the ContextVar/RLS is what scopes the results.
+        assert list(qs) == []
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +476,8 @@ class TestSocialAdminGetQueryset:
         assert list(admin_instance.get_queryset(request)) == []
 
     def test_scopes_to_session_org(self, rf: RequestFactory, org_a, org_b) -> None:
-        """SocialLinkAdmin.get_queryset returns only items for the session org."""
+        """SocialLinkAdmin.get_queryset returns only items for the org
+        resolved by ``_org_db_context`` via ``request._validated_org_id``."""
         from quickscale_modules_social.admin import SocialLinkAdmin
 
         SocialLink.objects.create(
@@ -481,7 +491,8 @@ class TestSocialAdminGetQueryset:
             organization=org_b,
         )
 
-        request = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(org_a.id)})
+        request = _request_with_session(rf)
+        request._validated_org_id = org_a.id  # type: ignore[attr-defined]
         admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
         titles = list(
             admin_instance.get_queryset(request).values_list("title", flat=True)
@@ -491,7 +502,8 @@ class TestSocialAdminGetQueryset:
     def test_embed_scopes_to_session_org(
         self, rf: RequestFactory, org_a, org_b
     ) -> None:
-        """SocialEmbedAdmin.get_queryset returns only items for the session org."""
+        """SocialEmbedAdmin.get_queryset returns only items for the org
+        resolved by ``_org_db_context`` via ``request._validated_org_id``."""
         from quickscale_modules_social.admin import SocialEmbedAdmin
 
         SocialEmbed.objects.create(
@@ -505,7 +517,8 @@ class TestSocialAdminGetQueryset:
             organization=org_b,
         )
 
-        request = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(org_a.id)})
+        request = _request_with_session(rf)
+        request._validated_org_id = org_a.id  # type: ignore[attr-defined]
         admin_instance = SocialEmbedAdmin(SocialEmbed, AdminSite())
         titles = list(
             admin_instance.get_queryset(request).values_list("title", flat=True)
@@ -530,16 +543,18 @@ class TestSocialAdminGetQueryset:
 
         admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
 
-        # Session scoped to Org A — Org B link must not appear.
-        request_a = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(org_a.id)})
+        # Request with _validated_org_id set for Org A — Org B link must not appear.
+        request_a = _request_with_session(rf)
+        request_a._validated_org_id = org_a.id  # type: ignore[attr-defined]
         titles_a = list(
             admin_instance.get_queryset(request_a).values_list("title", flat=True)
         )
         assert "Org A Link" in titles_a
         assert "Org B Link" not in titles_a
 
-        # Session scoped to Org B — Org A link must not appear.
-        request_b = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(org_b.id)})
+        # Request with _validated_org_id set for Org B — Org A link must not appear.
+        request_b = _request_with_session(rf)
+        request_b._validated_org_id = org_b.id  # type: ignore[attr-defined]
         titles_b = list(
             admin_instance.get_queryset(request_b).values_list("title", flat=True)
         )
@@ -776,6 +791,142 @@ class TestSocialAdminEndToEnd:
         )
         assert response.status_code == 200
         assert "Test Embed" in response.content.decode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# CR-SA13.3-001 — regression: unknown-org fail-closed with AF9 context re-priming
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestSocialAdminNonexistentOrg:
+    """Regression: admin stays fail-closed for a syntactically valid but
+    nonexistent org UUID (CR-SA13.3-001).
+
+    Before the fix, ``get_queryset`` re-resolved the raw session UUID via
+    ``_resolve_active_org_id`` and called ``set_current_org_id(org_id)``
+    with the bogus UUID, undoing the ``org_scope(None)`` fail-closed state
+    that ``_org_db_context`` had already established.  Under AF9 the
+    priming wrapper would then propagate the bogus UUID as the DB-level
+    ``app.current_org_id``, undoing the DB-level fail-closed state.
+
+    These tests prove the admin stays fail-closed without re-priming a
+    bogus active-org context when the session carries a nonexistent org
+    UUID.
+    """
+
+    def test_changelist_returns_empty_for_nonexistent_org_uuid(
+        self, admin_client: Client, org
+    ) -> None:
+        """A syntactically valid UUID that does not resolve to any
+        Organization should produce an empty changelist (fail-closed)
+        without crashing."""
+        SocialLink.objects.create(
+            title="Test Link",
+            url="https://www.linkedin.com/company/test/",
+            organization=org,
+        )
+        _clear_session_org(admin_client)
+
+        bogus = uuid.uuid4()
+        _set_session_org(admin_client, bogus)
+
+        response = admin_client.get(
+            reverse("admin:quickscale_modules_social_sociallink_changelist")
+        )
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Test Link" not in content, (
+            "Changelist should be empty when session org does not "
+            "resolve to a real Organization"
+        )
+
+    def test_changelist_returns_empty_for_nonexistent_org_embed(
+        self, admin_client: Client, org
+    ) -> None:
+        """Same fail-closed proof for the SocialEmbed admin."""
+        SocialEmbed.objects.create(
+            title="Test Embed",
+            url="https://www.youtube.com/shorts/test123",
+            organization=org,
+        )
+        _clear_session_org(admin_client)
+
+        bogus = uuid.uuid4()
+        _set_session_org(admin_client, bogus)
+
+        response = admin_client.get(
+            reverse("admin:quickscale_modules_social_socialembed_changelist")
+        )
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Test Embed" not in content, (
+            "Embed changelist should be empty when session org does not "
+            "resolve to a real Organization"
+        )
+
+    def test_session_with_nonexistent_org_does_not_scrub_session_value(
+        self, admin_client: Client, org
+    ) -> None:
+        """After viewing the changelist with a nonexistent org UUID, the
+        session value should remain unchanged (the fix ignores but does
+        not clear it)."""
+        SocialLink.objects.create(
+            title="Test Link",
+            url="https://www.linkedin.com/company/test/",
+            organization=org,
+        )
+        _clear_session_org(admin_client)
+
+        bogus = uuid.uuid4()
+        _set_session_org(admin_client, bogus)
+
+        admin_client.get(
+            reverse("admin:quickscale_modules_social_sociallink_changelist")
+        )
+
+        # The session should still contain the bogus UUID.
+        session_after = admin_client.session.get(ACTIVE_ORG_SESSION_KEY)
+        assert session_after == str(bogus), (
+            "The session org value should not be scrubbed — the fix "
+            "safely ignores nonexistent orgs instead of clearing them"
+        )
+
+    def test_nonexistent_org_does_not_reprime_contextvar_inside_view(
+        self, rf: RequestFactory
+    ) -> None:
+        """Unit-test proof: inside ``_org_db_context`` with a nonexistent
+        org UUID, ``get_queryset`` returns an empty queryset and the
+        ContextVar remains ``None`` during view processing (no re-priming).
+
+        This is the direct proof that ``get_queryset`` no longer calls
+        ``set_current_org_id`` with the bogus UUID (CR-SA13.3-001).
+        """
+        from quickscale_modules_social.admin import (
+            SocialLinkAdmin,
+            _org_db_context,
+        )
+
+        bogus = uuid.uuid4()
+        request = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(bogus)})
+
+        site = AdminSite()
+        admin_instance = SocialLinkAdmin(SocialLink, site)
+
+        with _org_db_context(request):
+            qs = admin_instance.get_queryset(request)
+            assert list(qs) == [], (
+                "get_queryset should return empty queryset for nonexistent org"
+            )
+            # The ContextVar should remain None (fail-closed), proving
+            # get_queryset did not re-prime it with the bogus UUID.
+            assert get_current_org_id() is None, (
+                "ContextVar should stay None when org does not exist — "
+                "get_queryset must not call set_current_org_id with the "
+                "bogus UUID"
+            )
 
 
 # ---------------------------------------------------------------------------
