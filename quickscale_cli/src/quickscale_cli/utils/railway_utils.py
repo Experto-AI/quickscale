@@ -458,15 +458,23 @@ def get_deployment_url(service: str | None = None) -> str | None:
 
         if result.returncode == 0:
             # Parse output for deployment URL
+            found_https = False
             for line in result.stdout.split("\n"):
                 if "https://" in line:
+                    found_https = True
                     # Extract URL from line
                     parts = line.split()
                     for part in parts:
-                        if part.startswith("https://"):
+                        if part.startswith("https://") and len(part) > len("https://"):
                             return str(part)
+            if found_https:
+                raise ValueError(
+                    f"Found https:// in Railway status output but could not "
+                    f"extract a valid URL. Output format may have changed: "
+                    f"{result.stdout.strip()[:200]}"
+                )
         return None
-    except Exception:
+    except (TimeoutError, FileNotFoundError):
         return None
 
 
@@ -530,8 +538,18 @@ def generate_railway_domain(service: str) -> str | None:
             if output.startswith("https://") and ".railway.app" in output:
                 return output
 
+            # Detect Railway domain pattern that couldn't be parsed — format drift
+            if "https://" in output and (
+                ".up.railway.app" in output or ".railway.app" in output
+            ):
+                raise ValueError(
+                    f"Found Railway domain pattern in status output but could not "
+                    f"parse a valid URL. Output format may have changed: "
+                    f"{output[:200]}"
+                )
+
         return None
-    except Exception:
+    except (TimeoutError, FileNotFoundError):
         return None
 
 
@@ -769,9 +787,18 @@ def get_railway_variables(
                     if len(parts) == 2:
                         key, value = parts
                         variables[key.strip()] = value.strip()
+            # CR-SA18.7-002: Non-empty output with zero parseable KEY=VALUE pairs
+            # is evidence of an unexpected output format — fail hard instead of
+            # silently collapsing to {}. Truly empty output is benign.
+            if not variables and result.stdout.strip():
+                raise ValueError(
+                    f"Railway CLI returned success with non-empty output but no "
+                    f"KEY=VALUE pairs could be parsed. Output may have changed "
+                    f"format: {result.stdout[:200]}"
+                )
             return variables
         return None
-    except Exception:
+    except (TimeoutError, FileNotFoundError):
         return None
 
 
@@ -793,7 +820,14 @@ def _get_railway_variables_json(
         result = run_railway_command(base_cmd + ["--json"], timeout=30)
         if result.returncode != 0:
             return None
-        data = json.loads(result.stdout)
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            raise ValueError(
+                f"Railway CLI returned success but JSON output could not be "
+                f"parsed (output format may have changed): "
+                f"{result.stdout[:200]}"
+            )
         # Railway JSON output can be a dict of {key: value} or a list of objects
         if isinstance(data, dict):
             return {k: str(v) for k, v in data.items()}
@@ -802,9 +836,16 @@ def _get_railway_variables_json(
             for item in data:
                 if isinstance(item, dict) and "name" in item and "value" in item:
                     variables[item["name"]] = str(item["value"])
-            return variables if variables else None
-        return None
-    except (json.JSONDecodeError, TimeoutError, Exception):
+            if variables:
+                return variables
+            # Empty list — no variables set, which is benign
+            return {}
+        raise ValueError(
+            f"Railway CLI returned success but output format is unrecognized "
+            f"(expected dict or list, got {type(data).__name__}). "
+            f"Output may have changed: {result.stdout[:200]}"
+        )
+    except TimeoutError:
         return None
 
 

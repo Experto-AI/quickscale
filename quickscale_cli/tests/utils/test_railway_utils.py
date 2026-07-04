@@ -17,6 +17,7 @@ from quickscale_cli.utils.railway_utils import (
     get_deployment_url,
     get_railway_cli_version,
     get_railway_project_info,
+    get_railway_variables,
     install_railway_cli,
     is_npm_installed,
     is_railway_authenticated,
@@ -622,12 +623,38 @@ class TestGetDeploymentUrl:
 
             assert url is None
 
-    def test_returns_none_on_exception(self):
-        """Test that function returns None when exception occurs."""
+    def test_unexpected_exception_propagates(self):
+        """Test that unexpected exceptions propagate instead of being swallowed."""
         with patch("subprocess.run") as mock_run:
-            mock_run.side_effect = Exception("Error")
-            url = get_deployment_url()
+            mock_run.side_effect = Exception("Unexpected Railway CLI crash")
+            with pytest.raises(Exception, match="Unexpected Railway CLI crash"):
+                get_deployment_url()
 
+    def test_raises_when_https_found_but_no_url(self):
+        """Test raises ValueError when https:// found but URL cannot be extracted."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="URL: https:// but incomplete",
+            )
+            with pytest.raises(ValueError, match="Found https:// in Railway status"):
+                get_deployment_url()
+
+    def test_returns_none_when_no_https_in_output(self):
+        """Test returns None when output has no https:// at all (not deployed yet)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="No deployment found",
+            )
+            url = get_deployment_url()
+            assert url is None
+
+    def test_returns_none_when_output_empty(self):
+        """Test returns None when output is empty string."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="")
+            url = get_deployment_url()
             assert url is None
 
 
@@ -690,16 +717,307 @@ class TestGenerateRailwayDomain:
 
             assert domain is None
 
-    def test_returns_none_on_exception(self):
-        """Test returns None when exception occurs."""
+    def test_unexpected_exception_propagates(self):
+        """Test that unexpected exceptions propagate instead of being swallowed."""
         with patch("subprocess.run") as mock_run:
-            mock_run.side_effect = Exception("Error")
+            mock_run.side_effect = Exception("Unexpected Railway CLI crash")
+
+            from quickscale_cli.utils.railway_utils import generate_railway_domain
+
+            with pytest.raises(Exception, match="Unexpected Railway CLI crash"):
+                generate_railway_domain("my-service")
+
+    def test_raises_when_railway_domain_found_but_not_parsed(self):
+        """Test raises ValueError when .up.railway.app found but URL cannot be parsed."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="Some text https://myapp_production.up.railway.app extra",
+            )
+
+            from quickscale_cli.utils.railway_utils import generate_railway_domain
+
+            with pytest.raises(
+                ValueError, match="Found Railway domain pattern in status output"
+            ):
+                generate_railway_domain("my-service")
+
+    def test_returns_none_when_no_railway_domain_pattern(self):
+        """Test returns None when output has no Railway domain pattern (not generated)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="No domain generated",
+            )
 
             from quickscale_cli.utils.railway_utils import generate_railway_domain
 
             domain = generate_railway_domain("my-service")
-
             assert domain is None
+
+    def test_returns_none_when_output_empty(self):
+        """Test returns None when output is empty."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="")
+
+            from quickscale_cli.utils.railway_utils import generate_railway_domain
+
+            domain = generate_railway_domain("my-service")
+            assert domain is None
+
+
+class TestGetRailwayVariables:
+    """Tests for get_railway_variables function."""
+
+    def test_returns_variables_from_json_path(self):
+        """Test that JSON path returns parsed variables."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+        ):
+            mock_json.return_value = {"KEY1": "value1", "KEY2": "value2"}
+            result = get_railway_variables()
+
+            assert result == {"KEY1": "value1", "KEY2": "value2"}
+            mock_json.assert_called_once()
+
+    def test_returns_variables_from_text_fallback(self):
+        """Test that text fallback returns parsed variables when JSON returns None."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="KEY1=value1\nKEY2=value2\n",
+            )
+            result = get_railway_variables()
+
+            assert result == {"KEY1": "value1", "KEY2": "value2"}
+
+    def test_returns_none_when_both_paths_fail(self):
+        """Test that function returns None when both JSON and text paths fail."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.return_value = Mock(returncode=1, stdout="")
+            result = get_railway_variables()
+
+            assert result is None
+
+    def test_returns_none_on_timeout(self):
+        """Test that function returns None on TimeoutError (expected failure)."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.side_effect = TimeoutError("timed out")
+            result = get_railway_variables()
+
+            assert result is None
+
+    def test_returns_none_on_cli_not_found(self):
+        """Test that function returns None on FileNotFoundError (CLI not installed)."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.side_effect = FileNotFoundError("CLI not found")
+            result = get_railway_variables()
+
+            assert result is None
+
+    def test_unexpected_exception_propagates(self):
+        """Test that unexpected exceptions propagate instead of being swallowed."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.side_effect = Exception("Unexpected Railway CLI crash")
+            with pytest.raises(Exception, match="Unexpected Railway CLI crash"):
+                get_railway_variables()
+
+    def test_json_path_format_drift_propagates(self):
+        """Test that JSON decode error in _get_railway_variables_json propagates as ValueError."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+        ):
+            mock_json.side_effect = ValueError(
+                "Railway CLI returned success but output format is unrecognized"
+            )
+            with pytest.raises(
+                ValueError,
+                match="Railway CLI returned success but output format is unrecognized",
+            ):
+                get_railway_variables()
+
+    def test_raises_on_non_empty_unparsable_text_output(self):
+        """Test that non-empty text output with no KEY=VALUE pairs raises ValueError.
+
+        CR-SA18.7-002: The text-fallback path must fail hard instead of returning {}
+        when Railway returns success with non-empty output that cannot be parsed.
+        """
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout="some unparseable output\nwithout any equals signs\n",
+            )
+            with pytest.raises(
+                ValueError,
+                match="no KEY=VALUE pairs could be parsed",
+            ):
+                get_railway_variables()
+
+    def test_returns_empty_dict_on_empty_text_output(self):
+        """Test that truly empty text stdout still returns {} (no variables set)."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.return_value = Mock(returncode=0, stdout="")
+            result = get_railway_variables()
+            assert result == {}
+
+    def test_returns_empty_dict_on_whitespace_only_text_output(self):
+        """Test that whitespace-only text stdout returns {} (no variables set)."""
+        with (
+            patch(
+                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+            ) as mock_json,
+            patch(
+                "quickscale_cli.utils.railway_utils.run_railway_command",
+            ) as mock_run,
+        ):
+            mock_json.return_value = None
+            mock_run.return_value = Mock(returncode=0, stdout="  \n  \n")
+            result = get_railway_variables()
+            assert result == {}
+
+
+class TestGetRailwayVariablesJson:
+    """Direct tests for _get_railway_variables_json format-drift detection."""
+
+    def test_json_decode_error_propagates(self):
+        """Test that json.JSONDecodeError propagates instead of being swallowed."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="not valid json{")
+            from quickscale_cli.utils.railway_utils import (
+                _get_railway_variables_json,
+            )
+
+            with pytest.raises(ValueError, match="JSON output could not be parsed"):
+                _get_railway_variables_json(["variables", "--service", "myapp"])
+
+    def test_unexpected_json_type_raises_value_error(self):
+        """Test that unexpected JSON type (e.g. string) raises ValueError."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout='"just_a_string"')
+            from quickscale_cli.utils.railway_utils import (
+                _get_railway_variables_json,
+            )
+
+            with pytest.raises(ValueError, match="expected dict or list, got str"):
+                _get_railway_variables_json(["variables", "--service", "myapp"])
+
+    def test_empty_json_list_returns_empty_dict(self):
+        """Test that empty JSON list returns {} (no variables set, benign)."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="[]")
+            from quickscale_cli.utils.railway_utils import (
+                _get_railway_variables_json,
+            )
+
+            result = _get_railway_variables_json(["variables", "--service", "myapp"])
+            assert result == {}
+
+    def test_valid_json_returns_dict(self):
+        """Test that valid JSON dict returns parsed variables."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0, stdout='{"KEY1": "value1", "KEY2": "value2"}'
+            )
+            from quickscale_cli.utils.railway_utils import (
+                _get_railway_variables_json,
+            )
+
+            result = _get_railway_variables_json(["variables", "--service", "myapp"])
+            assert result == {"KEY1": "value1", "KEY2": "value2"}
+
+    def test_non_zero_return_returns_none(self):
+        """Test that non-zero returncode returns None (CLI doesn't support --json)."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=1, stdout="")
+            from quickscale_cli.utils.railway_utils import (
+                _get_railway_variables_json,
+            )
+
+            result = _get_railway_variables_json(["variables", "--service", "myapp"])
+            assert result is None
+
+    def test_timeout_returns_none(self):
+        """Test that TimeoutError returns None (expected failure)."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.side_effect = TimeoutError("timed out")
+            from quickscale_cli.utils.railway_utils import (
+                _get_railway_variables_json,
+            )
+
+            result = _get_railway_variables_json(["variables", "--service", "myapp"])
+            assert result is None
 
 
 class TestGetAppServiceName:
