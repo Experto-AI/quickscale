@@ -47,9 +47,9 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.4` (Track 2 — legacy config keys, analytics/billing/CRM/forms settings, closes TA1/TA2-partial) and `SA18.1`–`SA18.7` (Track 3 — manifest/version/template/project-metadata/railway-utils fail-hard fixes, closes TA3–TA8 and TA10) are closed — see CHANGELOG.md.
+> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.10` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, and TA14) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3. Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed. Track 3: SA18.1–SA18.9 are complete; SA18.10 and SA18.11 are ready now (no deps).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1 is complete; SA14.5 and SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3 — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: SA18.1–SA18.10 are complete; SA18.11 is ready now — plus new SA19, SA21.1, SA22, SA25 (all ready now).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -68,7 +68,7 @@ SA14.1 (no deps — complete)           SA17.5 (no deps — complete)           
 SA14.2 (deps: SA14.1)                SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
 SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
 SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — complete)
-SA14.5 (no deps — ready)                                                  SA18.10 (no deps — ready)
+SA14.5 (no deps — ready)                                                  SA18.10 (no deps — complete)
 SA14.6 (no deps — ready)                                                  SA18.11 (no deps — ready)
 ```
 
@@ -80,7 +80,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 |-------|------------------|-------|
 | **1** | SA14.1 (complete) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
 | **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
-| **3** | SA18.6–SA18.9 (complete), SA18.10–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
+| **3** | SA18.1–SA18.10 (complete), SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
 
 ---
 
@@ -126,14 +126,7 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 #### `SA17` — Module-side settings and config fail-hard fixes (Track 2)
 
-> SA17.1–SA17.4 (legacy config keys, analytics/billing/CRM/forms fail-hard settings — closes TA1 and the CRM/forms slice of TA2) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA17.5 — Fail-hard blog module settings (complete).** `Tier 2 · Track 2 · deps: none · (why → TA2)`
-  Added `AppConfig.ready()` startup guard to `blog/apps.py` that raises `ImproperlyConfigured` at startup when `BLOG_ENABLE_RSS` is missing, `MEDIA_URL` is empty/unset, or any `BLOG_API_TOKENS` entry is malformed (naming the bad entry). Removed the default-`True` fallback in `urls.py:_blog_enable_rss()` and the `getattr(settings, "MEDIA_URL", "/media/")` fallbacks in `views.py:_build_media_response_url()` and `models.py:_build_public_media_url()`. Updated test settings with the required `BLOG_ENABLE_RSS = True`. Updated `test_urls.py` to remove the `None`-unset parametrize case. Added `blog/tests/test_apps.py` with 9 ready()-method guard tests (3 general + 6 malformed-token variations). Acceptance: a malformed `BLOG_API_TOKENS` entry raises at startup naming the bad entry; RSS-enable and media-URL settings are required, not defaulted. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA17.6 — Fail-hard notifications module settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  Added a notifications `AppConfig.ready()` startup guard that requires explicit `QUICKSCALE_NOTIFICATIONS_ENABLED` and `QUICKSCALE_NOTIFICATIONS_PROVIDER` settings, matching the fail-hard pattern already used by analytics/billing/CRM/forms/blog. Removed the default `True`/`"resend"` fallbacks from `NotificationSettingsSnapshot.from_settings()` so service-level settings reads now fail hard too. Expanded `notifications/tests/test_apps.py` with startup-guard and defensive snapshot coverage. Acceptance: omitting either setting now raises `ImproperlyConfigured` at startup instead of silently enabling the `"resend"` provider.
-  *Finding:* Closeout surfaced a pre-existing cross-module test-settings gap: `notifications/tests/settings.py` loads `quickscale_modules_forms` in `INSTALLED_APPS`, so the suite also needed `FORMS_SUBMISSIONS_API`, `FORMS_RATE_LIMIT`, and `FORMS_SPAM_PROTECTION` added to satisfy the existing forms SA17.4 startup guard.
+> SA17.1–SA17.6 (legacy config keys, analytics/billing/CRM/forms/blog/notifications fail-hard settings — closes TA1 and fully closes TA2) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring.** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
   Analytics' PostHog SDK import failure currently logs a warning and disables capture; forms' analytics integration currently probes for the sibling module via a soft `ImportError`/`getattr(None)` chain. Since module assembly happens at generation time, wire the analytics↔forms integration (and the PostHog SDK requirement) as a hard dependency the generator resolves, not a runtime probe. Depends on SA17.5 landing the surrounding settings checks first so the two changes don't fight over the same code paths (SA17.2's half of this ordering is already satisfied — it's complete).
@@ -147,32 +140,104 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 
 #### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3)
 
-> SA18.1–SA18.7 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing — closes TA3–TA8 and TA10) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
-
-- [x] **SA18.8 — Fail-hard invalid `PORT` values (complete).** `Tier 1 · Track 3 · deps: none · (why → TA11)`
-  `get_port_from_env()` now defaults to `8000` only when `PORT` is unset. A present but non-numeric `PORT` now raises `ValueError` naming the bad value instead of silently coercing to `8000`. Updated the helper docstring to remove the fallback-on-invalid contract and rewrote the focused `TestGetPortFromEnv` regression to assert the fail-hard behavior.
-  *Files:* `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`, `quickscale_cli/tests/utils/test_docker_utils.py`.
-  *Acceptance:* `PORT=notanumber` raises a descriptive error; `PORT` unset still defaults to `8000`.
-  *Finding:* Existing focused test coverage already exercised the invalid-`PORT` seam, so the task reduced to changing the helper behavior and updating the assertion from fallback-to-default to fail-hard. No blockers discovered.
-
-- [x] **SA18.9 — Fail `step_capture_hashes` on `OSError` (complete).** `Tier 1 · Track 3 · deps: none · (why → TA13)`
-  `step_capture_hashes` now returns `StepOutcome(success=False, failed_step_label="capture managed file hashes")` on `OSError`. Updated the docstring to remove the best-effort/always-succeeds contract. Added focused regression coverage (13 tests) covering OSError on resolve/compute, no-managed-paths no-op, success recording, and reporter-none edge cases.
-  **Decision (2026-07-04):** Option 1 (fail hard), per user direction. No F-EXCEPTION needed.
-  `step.py` step 4 `failed_step_label` changed from `None` to `"capture managed file hashes"` so the registry entry matches the new fail-hard posture (reduces None entries from 3 to 2, raises labeled count from 13 to 14).
-  `apply_command.py` `_capture_managed_file_hashes_after_apply` updated to return its `StepOutcome` and the step 4 pipeline caller now checks the outcome and calls `_abort_after_post_embed_failure` when it is unsuccessful.
-  *Files:* `quickscale_core/src/quickscale_core/apply/steps/wiring.py:71-130`, `quickscale_core/src/quickscale_core/apply/step.py:89-96`, `quickscale_cli/src/quickscale_cli/commands/apply_command.py`, `quickscale_core/tests/test_apply_wiring_steps.py` (new), `quickscale_core/tests/test_apply_step.py`.
-  *Acceptance:* `step_capture_hashes` returns `success=False` on `OSError` with descriptive message and `failed_step_label`; docstring updated; step registry reflects the fail-hard posture; `quickscale apply` aborts with the correct failure label when the step fails.
-  *Finding:* The step body change alone would not propagate to the CLI — the `_capture_managed_file_hashes_after_apply` wrapper and its step 4 pipeline caller also needed updating to check the outcome and call `_abort_after_post_embed_failure`. No blockers discovered.
-
-- [ ] **SA18.10 — Add mandated `# F-EXCEPTION:` tags to documented exceptions.** `Tier 1 · Track 3 · deps: none · (why → TA14)`
-  Add the `# F-EXCEPTION: <tag>` comment format decisions.md §fail-hard-principle mandates to every code location it documents as an exception (starting with `_read_through_import_legacy`'s F12.2 reference, corrected to the mandated tag format), and add the currently-undocumented legacy paths in `remove_command.py` (`_load_legacy_tracking`, legacy `config.yml` snapshot/update) to the decisions.md exception table. SA18.6 is already complete (its exception entries are in place); SA18.9 chose the fail-hard path (no new F-EXCEPTION), so no dependency remains.
-  *Files:* `quickscale_core/src/quickscale_core/project_state.py:415`, `quickscale_cli/src/quickscale_cli/commands/remove_command.py`, `docs/technical/decisions.md`.
-  *Acceptance:* `grep -rn "F-EXCEPTION"` returns a hit for every exception decisions.md documents, and decisions.md's exception table lists every exception the grep finds.
+> SA18.1–SA18.10 (manifest adapter init, analytics manifest settings, `quickscale_cli.schema` shim removal, generator template resolution, version fallback, project-metadata resolution, `railway_utils.py` exception narrowing, `PORT` fail-hard, `step_capture_hashes` fail-hard on `OSError`, `# F-EXCEPTION:` tags on documented M2 compatibility paths — closes TA3–TA8, TA10, TA11, TA13, and TA14) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [ ] **SA18.11 — Fix dev-tooling silent parse failure in the compatibility checker.** `Tier 1 · Track 3 · deps: none · (why → TA15)`
   A malformed module `pyproject.toml` should fail the compatibility check loudly, not be silently skipped.
   *Files:* `scripts/check_module_core_compatibility.py:381-388`.
   *Acceptance:* a malformed `pyproject.toml` in any module causes the checker to fail/report an error for that module instead of silently skipping it.
+
+---
+
+### Deep Technical Sweep Remediation (opened 2026-07-04)
+
+Fix plan derived from the [2026-07-03/2026-07-04 deep technical sweeps](../../tech-audit.md) (`TA16`–`TA25`). `arch-audit.md` contributes no new untracked findings this batch — its only open finding, `operator-read-path-undefined`, is already fully tracked as `SA14` above. Of the tech-audit findings, `TA19` (`QUICKSCALE_MODE` permissive default) is already tracked as `SA14.6` and is **not** duplicated here; `TA9`, `TA12`, `TA13`, `TA14`, `TA15` are already tracked as `SA17.7`, `SA17.8`, (`SA18.9`, complete), `SA18.10`, `SA18.11` respectively. This batch covers the remaining still-open findings: `TA16`, `TA17`, `TA18`/`TA24` (same underlying defect, tracked jointly), `TA20`, `TA21`, `TA22`, `TA23`, `TA25`.
+
+**Naming:** continues the `SAn` sequence from `SA18` (last used). Each task is sized Adaptive **Tier 1 or Tier 2**; any task touching `orgs`/tenancy/RLS or billing floors at Tier 2 per the sensitive-domain rule.
+
+#### Dependency & parallelization overview (2026-07-04)
+
+```
+Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
+───────────────────────────────      ───────────────────────────────────       ───────────────────────────
+SA23 (no deps — ready)               SA20 (no deps — ready)                    SA19 (no deps — ready)
+                                      SA21.2 (deps: SA21.1)                     SA21.1 (no deps — ready)
+                                      SA24 (no deps — ready)                    SA22 (no deps — ready)
+                                      SA26 (no deps — ready)                    SA25 (no deps — ready)
+```
+
+No cross-track dependencies except SA21.2 → SA21.1 (Track 2 waits on a Track 3 deliverable — the generator settings change must land before module throttles can be rewired to use it).
+
+#### Track summary
+
+| Track | Tasks (in order) | Theme |
+|-------|------------------|-------|
+| **1** | SA23 (ready) | Orgs debug-view open redirect |
+| **2** | SA20 (ready), SA21.2 (deps: SA21.1), SA24 (ready), SA26 (ready) | Module-side hardening (backups restore, throttle wiring, XSS) |
+| **3** | SA19 (ready), SA21.1 (ready), SA22 (ready), SA25 (ready) | Core/CLI/generator plumbing (secrets logging, cache/IP infra, apply ordering, hygiene) |
+
+---
+
+#### Finding — `startsh-secrets-in-deploy-logs` (`why →` [TA16](../../tech-audit.md))
+
+- [ ] **SA19 — Stop `start.sh.j2` from printing secret values to deploy logs.** `Tier 1 · Track 3 · deps: none`
+  Replace the `env | grep -E '(DATABASE_URL|SECRET_KEY|...)'` environment-check step with one that prints only variable *names* and a set/missing status, never values.
+  *Files:* `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2`.
+  *Acceptance:* container boot logs show `SECRET_KEY: set` / `DATABASE_URL: set` (or `MISSING`) but never the underlying value; existing missing-var fail-hard behavior is unchanged.
+
+#### Finding — `backups-sync-restore-blocks-worker` (`why →` [TA17](../../tech-audit.md))
+
+- [ ] **SA20 — Move admin-triggered backup restore off the synchronous request path.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
+  `restore_backup_artifact`/`restore_admin_uploaded_backup` currently run `pg_restore --clean` synchronously inside the admin POST handler, inside a 60s-capped gunicorn worker — large restores can exceed the timeout mid-restore, leaving the database partially restored. Move the restore to a background-executed step (management command invoked via subprocess, or a queued job) with the admin view returning immediately and surfacing progress/completion via polling or a status flag on the backup record.
+  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py:419-437`.
+  *Acceptance:* triggering a restore from the admin returns before the 60s worker timeout regardless of restore duration; the restore's success/failure is observable after the fact (status field, log, or notification); a restore that fails mid-way is distinguishable from one that never started.
+
+#### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../../tech-audit.md))
+
+- [ ] **SA21.1 — Add canonical client-IP resolution and a shared cache backend to generated settings.** `Tier 2 · Track 3 · deps: none`
+  Two related gaps in the generated project's settings: (a) no trusted-proxy client-IP convention, so `REMOTE_ADDR` is the Railway edge proxy's address, not the client's; (b) no `CACHES` backend, so DRF throttles and the blog rate limiter fall back to per-process `LocMemCache` — uncounted across workers/replicas and reset on every deploy. Add a `TRUSTED_PROXY_COUNT`/`USE_X_FORWARDED_FOR`-gated client-IP helper (or set DRF `NUM_PROXIES`) and a working shared-cache default (Redis on Railway, or `DatabaseCache` at minimum) wired into `DEFAULT_THROTTLE_CLASSES`.
+  *Files:* `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2`, `.../production.py.j2:186-195`.
+  *Acceptance:* a generated project has a resolvable canonical client-IP helper gated behind an explicit trusted-proxy setting, and a non-`LocMemCache` backend configured for production; single-host (no-proxy) deployments keep `REMOTE_ADDR` unless the setting is enabled.
+
+- [ ] **SA21.2 — Wire forms/blog throttles and IP logging to the new canonical-IP and cache infrastructure.** `Tier 2 · Track 2 · deps: SA21.1`
+  Point `FormSubmitThrottle.get_cache_key`, `_get_blog_api_rate_limit_ident`, and the IP fields recorded on `FormSubmission`/blog rate-limit logging at the canonical client-IP helper landed by SA21.1, and confirm both throttles run against the shared cache backend instead of the default in-memory one.
+  *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/throttles.py:26-30`, `quickscale_modules/forms/src/quickscale_modules_forms/views.py:231,257`, `quickscale_modules/blog/src/quickscale_modules_blog/views.py:260-266,277-304`.
+  *Acceptance:* two requests with different `X-Forwarded-For` values (fixed `REMOTE_ADDR`) get independent throttle buckets and are logged with the forwarded client IP, not the proxy's; a 6th form submission within the configured window from one distinct client is rejected regardless of which worker/replica serves it.
+
+#### Finding — `apply-force-wipes-before-generating` (`why →` [TA20](../../tech-audit.md))
+
+- [ ] **SA22 — Generate the replacement project before deleting the existing one on `apply --force`.** `Tier 2 · Track 3 · deps: none · RISK LEVEL: medium`
+  `apply_command.py`'s `--force` path currently `rmtree`/`unlink`s the existing project content before generating its replacement into a temp dir; a generation failure after the wipe leaves the project deleted with nothing to restore. Reorder so generation happens into a temp/staging location first, validated, and only then swaps in over the existing content (or generation failure leaves the original untouched).
+  *Files:* `quickscale_cli/src/quickscale_cli/commands/apply_command.py:1781-1792`.
+  *Acceptance:* a forced generation failure (e.g. induced template error) leaves the pre-existing project directory intact; a successful forced apply still ends with the new content in place.
+
+#### Finding — `debug-view-open-redirect` (`why →` [TA21](../../tech-audit.md))
+
+- [ ] **SA23 — Validate the `next` redirect target in orgs debug views.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
+  `orgs/debug_views.py:53-55,86-88` redirects to `request.POST.get("next")` unvalidated (superuser-only, POST-only, but still an open redirect). Validate with `django.utils.http.url_has_allowed_host_and_scheme` before redirecting; reject or fall back to a safe default on failure.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/debug_views.py:53-55,86-88`.
+  *Acceptance:* a `next` value pointing off-site (or to a disallowed scheme) is rejected/falls back instead of being redirected to; same-host redirect targets continue to work.
+
+#### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../../tech-audit.md))
+
+- [ ] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 2 · deps: none`
+  `analytics_tags.py:33` uses `mark_safe(json.dumps(payload))` without escaping `<`/`>`/`&`, which is latent stored-XSS if the payload ever carries request-influenced data. Switch to Django's `json_script` template filter/tag or manually escape those characters before marking safe.
+  *Files:* `quickscale_modules/analytics/src/quickscale_modules_analytics/templatetags/analytics_tags.py:33`.
+  *Acceptance:* a payload value containing `</script>` renders inert in the page source; existing analytics payload rendering is otherwise unchanged.
+
+#### Finding — `committed-coverage-artifacts` (`why →` [TA23](../../tech-audit.md))
+
+- [ ] **SA25 — Untrack build/coverage artifacts and gitignore them.** `Tier 1 · Track 3 · deps: none`
+  `coverage.json` and `pytest_cov_log.txt` are tracked in git; `htmlcov/` is present on disk. Remove from tracking and add patterns to `.gitignore`.
+  *Files:* repo root `.gitignore`, `coverage.json`, `pytest_cov_log.txt`.
+  *Acceptance:* `git status` after a fresh test run shows no untracked-artifact noise; the artifacts no longer appear in `git ls-files`.
+
+#### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../../tech-audit.md))
+
+- [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 2 · deps: none`
+  `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
+  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
+  *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
 
 ---
 
