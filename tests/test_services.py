@@ -274,6 +274,16 @@ def test_billing_settings_snapshot_reads_defaults_and_environment(
     assert snapshot.resolve_webhook_secret() == "whsec_123"
 
 
+def test_billing_settings_snapshot_missing_enabled_setting_raises_attribute_error(
+    settings,
+) -> None:
+    """Missing QUICKSCALE_BILLING_ENABLED in settings should raise AttributeError."""
+    del settings.QUICKSCALE_BILLING_ENABLED
+
+    with pytest.raises(AttributeError):
+        BillingSettingsSnapshot.from_settings()
+
+
 def test_get_stripe_client_requires_secret_key_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
