@@ -4,9 +4,9 @@ from typing import Any
 
 from django.contrib import admin
 from django.core.exceptions import ValidationError
-from django.db import models
 from django.forms import ModelForm
-from django.forms.models import BaseInlineFormSet
+
+from quickscale_modules_orgs.admin import TenantModelAdmin
 
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 
@@ -81,14 +81,19 @@ def _make_same_org_validated_form(
 
 
 class _CrmOrgAwareAdminMixin:
-    """Mixin that makes the organization field explicit on the operator admin path.
+    """Mixin that ensures CRM-specific org-field behavior in admin forms.
 
-    Phase 1 contract:
+    SA14.2: used in combination with ``TenantModelAdmin``, which provides
+    org-scoped querysets and view wrappers.  This mixin adds CRM-specific
+    same-org related-field validation (company, contact, stage, tags) via
+    form-level ``clean()`` hooks, ensures organization is required on add
+    and read-only on change, and stamps inline notes with the parent's org.
+
     - **Add forms**: organization is a required editable field so the operator
       must choose an organization when creating a new row.
     - **Change forms**: organization is displayed read-only so the operator can
       see which organization owns the row but cannot reassign it.
-    - **Cross-org related validation**: the admin form rejects related
+    - **Same-org related validation**: the admin form rejects related
       selections (company, contact, stage, tags) that belong to a different
       organization than the row's organization.
     """
@@ -157,24 +162,6 @@ class _CrmOrgAwareAdminMixin:
             )
             fieldsets = [(first_name, first_opts)] + list(fieldsets[1:])
         return fieldsets
-
-    def formfield_for_manytomany(  # type: ignore[override]
-        self, db_field: Any, request: Any, **kwargs: Any
-    ) -> Any:
-        """Use all_objects for M2M related-field querysets to bypass TenantManager auto-scoping."""
-        if db_field.name in self._org_related_fields:
-            model = db_field.remote_field.model
-            kwargs["queryset"] = getattr(model, "all_objects", model.objects).all()
-        return super().formfield_for_manytomany(db_field, request, **kwargs)  # type: ignore[misc]
-
-    def formfield_for_foreignkey(  # type: ignore[override]
-        self, db_field: Any, request: Any, **kwargs: Any
-    ) -> Any:
-        """Use all_objects for FK related-field querysets to bypass TenantManager auto-scoping."""
-        if db_field.name in self._org_related_fields:
-            model = db_field.remote_field.model
-            kwargs["queryset"] = getattr(model, "all_objects", model.objects).all()
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)  # type: ignore[misc]
 
     def _get_org_id_from_form(self, form: ModelForm) -> int | None:
         """Extract the organization_id from a bound form's cleaned data or instance."""
@@ -247,7 +234,7 @@ class _CrmOrgAwareAdminMixin:
 
 
 @admin.register(Tag)
-class TagAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
+class TagAdmin(_CrmOrgAwareAdminMixin, TenantModelAdmin):
     """Admin configuration for Tag model"""
 
     list_display = ["name", "organization", "created_at"]
@@ -255,13 +242,9 @@ class TagAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
     search_fields = ["name"]
     ordering = ["name"]
 
-    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Tag.all_objects.all()
-
 
 @admin.register(Company)
-class CompanyAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
+class CompanyAdmin(_CrmOrgAwareAdminMixin, TenantModelAdmin):
     """Admin configuration for Company model"""
 
     list_display = [
@@ -276,10 +259,6 @@ class CompanyAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
     search_fields = ["name", "industry"]
     ordering = ["name"]
 
-    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Company.all_objects.all()
-
     def contact_count(self, obj: Company) -> int:
         """Return the number of contacts for this company"""
         return obj.contacts.count()  # type: ignore
@@ -287,28 +266,17 @@ class CompanyAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
     contact_count.short_description = "Contacts"  # type: ignore
 
 
-class ContactNoteFormSet(BaseInlineFormSet):
-    """Inline formset that bypasses TenantManager for cross-tenant operator path."""
-
-    def get_queryset(self) -> models.QuerySet:
-        """Use all_objects to avoid TenantManager scoping on the operator path."""
-        if not self.instance or not self.instance.pk:
-            return ContactNote.all_objects.none()
-        return ContactNote.all_objects.filter(**{self.fk.attname: self.instance.pk})
-
-
 class ContactNoteInline(admin.TabularInline):
     """Inline admin for ContactNote"""
 
     model = ContactNote
-    formset = ContactNoteFormSet
     extra = 1
     readonly_fields = ["created_at", "created_by"]
     fields = ["text", "created_by", "created_at"]
 
 
 @admin.register(Contact)
-class ContactAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
+class ContactAdmin(_CrmOrgAwareAdminMixin, TenantModelAdmin):
     """Admin configuration for Contact model"""
 
     list_display = [
@@ -337,10 +305,6 @@ class ContactAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         ),
     )
 
-    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Contact.all_objects.all()
-
     def save_formset(  # type: ignore[override]
         self,
         request: Any,
@@ -348,7 +312,7 @@ class ContactAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         formset: Any,
         change: bool,
     ) -> None:
-        """Stamp organization from the parent Contact on inline ContactNote creates."""
+        """Stamp organization and created_by from the parent Contact on inline ContactNote creates."""
         instances = formset.save(commit=False)
         parent_org_id = getattr(form.instance, "organization_id", None)
         for obj in formset.deleted_objects:
@@ -359,22 +323,26 @@ class ContactAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
                 and getattr(instance, "organization_id", None) is None
             ):
                 instance.organization_id = parent_org_id
+            # Auto-set created_by from the current user for note models
+            # (ContactNote, DealNote) when the inline form excludes the field.
+            if (
+                hasattr(instance, "created_by_id")
+                and instance.created_by_id is None
+                and request.user.is_authenticated
+            ):
+                instance.created_by = request.user
             instance.save()
         formset.save_m2m()
 
 
 @admin.register(Stage)
-class StageAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
+class StageAdmin(_CrmOrgAwareAdminMixin, TenantModelAdmin):
     """Admin configuration for Stage model"""
 
     list_display = ["name", "order", "organization", "deal_count"]
     list_filter = ["organization"]
     list_editable = ["order"]
     ordering = ["order"]
-
-    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Stage.all_objects.all()
 
     def deal_count(self, obj: Stage) -> int:
         """Return the number of deals in this stage"""
@@ -397,28 +365,17 @@ class StageAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         return form_class
 
 
-class DealNoteFormSet(BaseInlineFormSet):
-    """Inline formset that bypasses TenantManager for cross-tenant operator path."""
-
-    def get_queryset(self) -> models.QuerySet:
-        """Use all_objects to avoid TenantManager scoping on the operator path."""
-        if not self.instance or not self.instance.pk:
-            return DealNote.all_objects.none()
-        return DealNote.all_objects.filter(**{self.fk.attname: self.instance.pk})
-
-
 class DealNoteInline(admin.TabularInline):
     """Inline admin for DealNote"""
 
     model = DealNote
-    formset = DealNoteFormSet
     extra = 1
     readonly_fields = ["created_at", "created_by"]
     fields = ["text", "created_by", "created_at"]
 
 
 @admin.register(Deal)
-class DealAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
+class DealAdmin(_CrmOrgAwareAdminMixin, TenantModelAdmin):
     """Admin configuration for Deal model"""
 
     list_display = [
@@ -454,10 +411,6 @@ class DealAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         ),
     )
 
-    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Deal.all_objects.all()
-
     def save_formset(  # type: ignore[override]
         self,
         request: Any,
@@ -465,7 +418,7 @@ class DealAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         formset: Any,
         change: bool,
     ) -> None:
-        """Stamp organization from the parent Deal on inline DealNote creates."""
+        """Stamp organization and created_by from the parent Deal on inline DealNote creates."""
         instances = formset.save(commit=False)
         parent_org_id = getattr(form.instance, "organization_id", None)
         for obj in formset.deleted_objects:
@@ -476,12 +429,20 @@ class DealAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
                 and getattr(instance, "organization_id", None) is None
             ):
                 instance.organization_id = parent_org_id
+            # Auto-set created_by from the current user for note models
+            # (ContactNote, DealNote) when the inline form excludes the field.
+            if (
+                hasattr(instance, "created_by_id")
+                and instance.created_by_id is None
+                and request.user.is_authenticated
+            ):
+                instance.created_by = request.user
             instance.save()
         formset.save_m2m()
 
 
 @admin.register(ContactNote)
-class ContactNoteAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
+class ContactNoteAdmin(_CrmOrgAwareAdminMixin, TenantModelAdmin):
     """Admin configuration for ContactNote model"""
 
     list_display = ["contact", "created_by", "short_text", "organization", "created_at"]
@@ -497,13 +458,9 @@ class ContactNoteAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
 
     short_text.short_description = "Text"  # type: ignore
 
-    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return ContactNote.all_objects.all()
-
 
 @admin.register(DealNote)
-class DealNoteAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
+class DealNoteAdmin(_CrmOrgAwareAdminMixin, TenantModelAdmin):
     """Admin configuration for DealNote model"""
 
     list_display = ["deal", "created_by", "short_text", "organization", "created_at"]
@@ -518,7 +475,3 @@ class DealNoteAdmin(_CrmOrgAwareAdminMixin, admin.ModelAdmin):
         return obj.text[:50] + "..." if len(obj.text) > 50 else obj.text
 
     short_text.short_description = "Text"  # type: ignore
-
-    def get_queryset(self, request: Any) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return DealNote.all_objects.all()
