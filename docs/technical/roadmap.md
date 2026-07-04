@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.4` (Track 2 — legacy config keys, analytics/billing/CRM/forms settings, closes TA1/TA2-partial) and `SA18.1`–`SA18.7` (Track 3 — manifest/version/template/project-metadata/railway-utils fail-hard fixes, closes TA3–TA8 and TA10) are closed — see CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.5, SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3. Track 2: SA17.1–SA17.5 are complete; SA17.6 and SA17.8 are ready now; SA17.7 is unblocked/ready (SA17.5 complete). Track 3: SA18.1–SA18.8 are complete; SA18.9, SA18.10, and SA18.11 are ready now (no deps; SA18.9 decision already made — fail hard on OSError).
+> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.5, SA14.6 are ready now (no deps), SA14.2/SA14.3 wait on SA14.1, SA14.4 waits on SA14.2+SA14.3. Track 2: SA17.1–SA17.6 are complete; SA17.7 and SA17.8 are ready now; TA2 is fully closed. Track 3: SA18.1–SA18.8 are complete; SA18.9, SA18.10, and SA18.11 are ready now (no deps; SA18.9 decision already made — fail hard on OSError).
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -65,7 +65,7 @@ Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batch
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA14.1 (no deps — ready)             SA17.5 (no deps — complete)               SA18.6 (no deps — complete)
-SA14.2 (deps: SA14.1)                SA17.6 (no deps — ready)                  SA18.7 (no deps — complete)
+SA14.2 (deps: SA14.1)                SA17.6 (no deps — complete)               SA18.7 (no deps — complete)
 SA14.3 (deps: SA14.1)                SA17.7 (deps: SA17.5 — ready)             SA18.8 (no deps — complete)
 SA14.4 (deps: SA14.2, SA14.3)        SA17.8 (no deps — ready)                  SA18.9 (no deps — ready)
 SA14.5 (no deps — ready)                                                  SA18.10 (no deps — ready)
@@ -79,7 +79,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA14.1 (ready) → {SA14.2, SA14.3} → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.1–SA17.5 (complete); SA17.6 and SA17.8 (ready); SA17.7 (ready, deps met) | Module-side fail-hard settings (Finding 2/TA2 not fully closed until SA17.6 lands) |
+| **2** | SA17.1–SA17.6 (complete); SA17.7 and SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; remaining work is TA9/TA12) |
 | **3** | SA18.6–SA18.8 (complete), SA18.9–SA18.11 (ready, no deps) | Core/CLI fail-hard plumbing |
 
 ---
@@ -131,10 +131,9 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 - [x] **SA17.5 — Fail-hard blog module settings (complete).** `Tier 2 · Track 2 · deps: none · (why → TA2)`
   Added `AppConfig.ready()` startup guard to `blog/apps.py` that raises `ImproperlyConfigured` at startup when `BLOG_ENABLE_RSS` is missing, `MEDIA_URL` is empty/unset, or any `BLOG_API_TOKENS` entry is malformed (naming the bad entry). Removed the default-`True` fallback in `urls.py:_blog_enable_rss()` and the `getattr(settings, "MEDIA_URL", "/media/")` fallbacks in `views.py:_build_media_response_url()` and `models.py:_build_public_media_url()`. Updated test settings with the required `BLOG_ENABLE_RSS = True`. Updated `test_urls.py` to remove the `None`-unset parametrize case. Added `blog/tests/test_apps.py` with 9 ready()-method guard tests (3 general + 6 malformed-token variations). Acceptance: a malformed `BLOG_API_TOKENS` entry raises at startup naming the bad entry; RSS-enable and media-URL settings are required, not defaulted. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
-- [ ] **SA17.6 — Fail-hard notifications module settings.** `Tier 1 · Track 2 · deps: none · (why → TA2)`
-  Require explicit enabled-flag and provider settings instead of defaulting to `True`/`"resend"`.
-  *Files:* `notifications/services.py:155-157`.
-  *Acceptance:* omitting either setting raises at startup instead of silently enabling the "resend" provider.
+- [x] **SA17.6 — Fail-hard notifications module settings (complete).** `Tier 1 · Track 2 · deps: none · (why → TA2)`
+  Added a notifications `AppConfig.ready()` startup guard that requires explicit `QUICKSCALE_NOTIFICATIONS_ENABLED` and `QUICKSCALE_NOTIFICATIONS_PROVIDER` settings, matching the fail-hard pattern already used by analytics/billing/CRM/forms/blog. Removed the default `True`/`"resend"` fallbacks from `NotificationSettingsSnapshot.from_settings()` so service-level settings reads now fail hard too. Expanded `notifications/tests/test_apps.py` with startup-guard and defensive snapshot coverage. Acceptance: omitting either setting now raises `ImproperlyConfigured` at startup instead of silently enabling the `"resend"` provider.
+  *Finding:* Closeout surfaced a pre-existing cross-module test-settings gap: `notifications/tests/settings.py` loads `quickscale_modules_forms` in `INSTALLED_APPS`, so the suite also needed `FORMS_SUBMISSIONS_API`, `FORMS_RATE_LIMIT`, and `FORMS_SPAM_PROTECTION` added to satisfy the existing forms SA17.4 startup guard.
 
 - [ ] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring.** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
   Analytics' PostHog SDK import failure currently logs a warning and disables capture; forms' analytics integration currently probes for the sibling module via a soft `ImportError`/`getattr(None)` chain. Since module assembly happens at generation time, wire the analytics↔forms integration (and the PostHog SDK requirement) as a hard dependency the generator resolves, not a runtime probe. Depends on SA17.5 landing the surrounding settings checks first so the two changes don't fight over the same code paths (SA17.2's half of this ordering is already satisfied — it's complete).

@@ -14,6 +14,7 @@ from email.utils import formataddr
 from typing import Any, Protocol, cast
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
 from django.db import transaction
@@ -56,6 +57,29 @@ _EVENT_STATUS_MAP = {
     "complained": NotificationDelivery.STATUS_COMPLAINED,
     "email.complained": NotificationDelivery.STATUS_COMPLAINED,
 }
+
+
+def _require_notification_runtime_setting(
+    setting_name: str,
+    help_text: str,
+) -> None:
+    """Raise when a required notification runtime setting is absent."""
+    if not hasattr(settings, setting_name):
+        raise ImproperlyConfigured(
+            f"The {setting_name} setting is required. {help_text}"
+        )
+
+
+def validate_required_notification_settings() -> None:
+    """Fail fast when the core notifications runtime settings are unset."""
+    _require_notification_runtime_setting(
+        "QUICKSCALE_NOTIFICATIONS_ENABLED",
+        "Set it to True or False in your Django settings.",
+    )
+    _require_notification_runtime_setting(
+        "QUICKSCALE_NOTIFICATIONS_PROVIDER",
+        "Set it to the configured provider name in your Django settings.",
+    )
 
 
 class NotificationError(Exception):
@@ -151,11 +175,10 @@ class NotificationSettingsSnapshot:
     @classmethod
     def from_settings(cls) -> NotificationSettingsSnapshot:
         """Create a snapshot from Django settings defaults."""
+        validate_required_notification_settings()
         return cls(
-            enabled=bool(getattr(settings, "QUICKSCALE_NOTIFICATIONS_ENABLED", True)),
-            provider_name=str(
-                getattr(settings, "QUICKSCALE_NOTIFICATIONS_PROVIDER", "resend")
-            ),
+            enabled=bool(settings.QUICKSCALE_NOTIFICATIONS_ENABLED),
+            provider_name=str(settings.QUICKSCALE_NOTIFICATIONS_PROVIDER),
             email_backend=str(getattr(settings, "EMAIL_BACKEND", "")),
             sender_name=str(
                 getattr(settings, "QUICKSCALE_NOTIFICATIONS_SENDER_NAME", "QuickScale")
