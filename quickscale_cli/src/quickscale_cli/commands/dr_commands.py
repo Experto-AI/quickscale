@@ -226,24 +226,25 @@ def _call_adapter(
 ) -> dict[str, Any]:
     """Call a DR adapter function inside the backend container.
 
-    Uses the thin ``dr_adapter_call`` management command as the transport
-    bridge — no env-var protocol, no per-operation management commands.
+    The JSON payload is piped through stdin (``docker exec -i``) instead
+    of passing ``--args-json`` on the command line, keeping secret values
+    off process argv (SA31).
     """
     args_json = json.dumps(kwargs, default=str)
     docker_command = [
         "docker",
         "exec",
+        "-i",
         get_backend_container_name(),
         "python",
         "manage.py",
         "dr_adapter_call",
         function_name,
-        "--args-json",
-        args_json,
     ]
 
     result = subprocess.run(
         docker_command,
+        input=args_json,
         capture_output=True,
         text=True,
         check=False,

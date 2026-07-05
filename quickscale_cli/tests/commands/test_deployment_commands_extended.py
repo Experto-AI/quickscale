@@ -543,10 +543,11 @@ class TestRemainingHelpers:
     @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
     @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
     def test_configure_env_vars_failure(self, mock_secret, mock_batch):
-        """Test env var configuration with failures"""
+        """Test env var configuration with failures hard-stops (SA31)."""
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (False, ["SECRET_KEY"])
-        _configure_env_vars_step("myapp", None)
+        with pytest.raises(SystemExit):
+            _configure_env_vars_step("myapp", None)
 
     @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
     @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")

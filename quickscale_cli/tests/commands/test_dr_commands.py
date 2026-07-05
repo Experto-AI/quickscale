@@ -3,7 +3,7 @@
 import json
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 import click
 import pytest
@@ -1669,6 +1669,52 @@ def test_fetch_railway_runtime_variables_format_drift_converts_to_click_exceptio
                 railway_environment=None,
                 role="target",
             )
+
+
+def test_call_adapter_pipes_json_via_stdin_not_argv() -> None:
+    """SA31: _call_adapter pipes JSON via stdin, not --args-json on argv.
+
+    Regression: the docker exec command must NOT contain --args-json,
+    and the JSON payload must be passed as ``input`` to subprocess.run.
+    """
+    with (
+        patch(
+            "quickscale_cli.commands.dr_commands.get_backend_container_name",
+            return_value="backend",
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands.subprocess.run",
+        ) as mock_run,
+    ):
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout='{"status": "ok"}',
+        )
+
+        result = dr_commands._call_adapter(
+            "test_func",
+            secret_key="super-secret-value",
+            db_url="postgres://user:pass@host/db",
+        )
+
+    assert result == {"status": "ok"}
+    mock_run.assert_called_once()
+    call_args, call_kwargs = mock_run.call_args
+
+    # The command list must NOT contain --args-json
+    cmd = call_args[0]
+    assert "--args-json" not in cmd, (
+        f"JSON payload must not appear on argv, but found --args-json in: {cmd}"
+    )
+
+    # docker exec must include -i for stdin forwarding
+    assert "-i" in cmd, "docker exec must include -i for stdin transport"
+
+    # The JSON payload must be passed via input kwarg
+    assert "input" in call_kwargs, "JSON payload must be passed via stdin (input kwarg)"
+    payload = json.loads(call_kwargs["input"])
+    assert payload["secret_key"] == "super-secret-value"
+    assert payload["db_url"] == "postgres://user:pass@host/db"
 
 
 def test_fetch_railway_runtime_variables_unparsable_text_becomes_click_exception() -> (

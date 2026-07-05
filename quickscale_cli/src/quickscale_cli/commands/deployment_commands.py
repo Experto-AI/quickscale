@@ -341,16 +341,25 @@ def _configure_env_vars_step(app_service: str, domain_name: str | None) -> None:
                 click.echo(f"   • {key}=<generated>")
             else:
                 click.echo(f"   • {key}={env_vars[key]}")
-        click.echo("💡 This triggers ONE deployment with all variables set")
+        click.echo(
+            "💡 Variables are set without triggering a deployment. The deploy step below will start one."
+        )
     else:
         click.secho(
-            "⚠️  Warning: Some environment variables could not be set", fg="yellow"
+            "❌ Error: Some environment variables could not be set — "
+            "deployment aborted",
+            fg="red",
+            err=True,
         )
         if failed_keys:
-            click.echo("Failed variables:")
+            click.echo("Failed variables:", err=True)
             for key in failed_keys:
-                click.echo(f"   • {key}")
-        click.echo("💡 Set manually using: railway variables --set KEY=VALUE")
+                click.echo(f"   • {key}", err=True)
+        click.echo(
+            "💡 Set variables securely with: railway variable set KEY --stdin",
+            err=True,
+        )
+        sys.exit(1)
 
 
 def _deploy_app_step(app_service: str) -> None:

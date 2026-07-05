@@ -373,31 +373,85 @@ class TestDeployRailwayService:
 
 
 class TestSetRailwayVariable:
-    """Tests for set_railway_variable function."""
+    """Tests for set_railway_variable function (stdin transport — SA31)."""
 
     def test_successful_variable_set(self):
-        """Test successful environment variable setting."""
-        with patch("subprocess.run") as mock_run:
+        """Test successful environment variable setting via stdin."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
             mock_run.return_value = Mock(returncode=0)
             result = set_railway_variable("KEY", "value")
 
             assert result is True
+            mock_run.assert_called_once_with(
+                ["variable", "set", "KEY", "--stdin"],
+                timeout=30,
+                input_data="value",
+            )
 
-    def test_successful_variable_set_with_service(self):
-        """Test successful environment variable setting with service parameter."""
-        with patch("subprocess.run") as mock_run:
+    def test_successful_variable_set_with_service_and_environment(self):
+        """Test successful variable setting with service and environment params."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
             mock_run.return_value = Mock(returncode=0)
-            result = set_railway_variable("KEY", "value", service="my-service")
+            result = set_railway_variable(
+                "KEY",
+                "value",
+                service="my-service",
+                environment="production",
+            )
 
             assert result is True
-            # Verify the service parameter was included in the command
-            call_args = mock_run.call_args[0][0]
-            assert "--service" in call_args
-            assert "my-service" in call_args
+            mock_run.assert_called_once_with(
+                [
+                    "variable",
+                    "set",
+                    "KEY",
+                    "--stdin",
+                    "--service",
+                    "my-service",
+                    "--environment",
+                    "production",
+                ],
+                timeout=30,
+                input_data="value",
+            )
+
+    def test_successful_variable_set_with_skip_deploy(self):
+        """Test successful variable setting with skip_deploy flag."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = set_railway_variable(
+                "KEY",
+                "value",
+                service="my-service",
+                skip_deploy=True,
+            )
+
+            assert result is True
+            mock_run.assert_called_once_with(
+                [
+                    "variable",
+                    "set",
+                    "KEY",
+                    "--stdin",
+                    "--service",
+                    "my-service",
+                    "--skip-deploys",
+                ],
+                timeout=30,
+                input_data="value",
+            )
 
     def test_failed_variable_set(self):
         """Test failed environment variable setting."""
-        with patch("subprocess.run") as mock_run:
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
             mock_run.return_value = Mock(returncode=1)
             result = set_railway_variable("KEY", "value")
 
@@ -405,7 +459,9 @@ class TestSetRailwayVariable:
 
     def test_exception_during_variable_set(self):
         """Test that exceptions are handled gracefully."""
-        with patch("subprocess.run") as mock_run:
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command",
+        ) as mock_run:
             mock_run.side_effect = Exception("Unknown error")
             result = set_railway_variable("KEY", "value")
 
@@ -413,38 +469,62 @@ class TestSetRailwayVariable:
 
 
 class TestSetRailwayVariablesBatch:
-    """Tests for set_railway_variables_batch function."""
+    """Tests for set_railway_variables_batch function (per-variable stdin — SA31).
+
+    Railway CLI has no batch-stdin or env-file input, so this function
+    decomposes into per-variable stdin calls with ``--skip-deploys``
+    forced on **all** writes (CR-SA31-001) so an auto-deploy is never
+    triggered after a partial failure.  Callers deploy after success.
+    """
 
     def test_successful_batch_set(self):
-        """Test successful batch environment variable setting."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0)
+        """Test successful per-variable batch setting via stdin."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.set_railway_variable",
+        ) as mock_set:
+            mock_set.return_value = True
             variables = {"KEY1": "value1", "KEY2": "value2", "KEY3": "value3"}
             success, failed = set_railway_variables_batch(variables)
 
             assert success is True
             assert failed == []
-            # Verify all variables were included in single command
-            call_args = mock_run.call_args[0][0]
-            assert "KEY1=value1" in call_args
-            assert "KEY2=value2" in call_args
-            assert "KEY3=value3" in call_args
+            # Verify each variable was set individually with skip_deploy=True
+            assert mock_set.call_count == 3
+            for i in range(3):
+                key = f"KEY{i + 1}"
+                val = f"value{i + 1}"
+                assert mock_set.call_args_list[i] == (
+                    (key, val),
+                    {"service": None, "environment": None, "skip_deploy": True},
+                )
 
-    def test_successful_batch_set_with_service(self):
-        """Test successful batch environment variable setting with service parameter."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0)
+    def test_successful_batch_set_with_service_and_environment(self):
+        """Test per-variable batch setting with service and environment."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.set_railway_variable",
+        ) as mock_set:
+            mock_set.return_value = True
             variables = {"KEY1": "value1", "KEY2": "value2"}
             success, failed = set_railway_variables_batch(
-                variables, service="my-service"
+                variables,
+                service="my-service",
+                environment="production",
             )
 
             assert success is True
             assert failed == []
-            # Verify the service parameter was included
-            call_args = mock_run.call_args[0][0]
-            assert "--service" in call_args
-            assert "my-service" in call_args
+            assert mock_set.call_count == 2
+            for i in range(2):
+                key = f"KEY{i + 1}"
+                val = f"value{i + 1}"
+                assert mock_set.call_args_list[i] == (
+                    (key, val),
+                    {
+                        "service": "my-service",
+                        "environment": "production",
+                        "skip_deploy": True,
+                    },
+                )
 
     def test_empty_variables_dict(self):
         """Test batch set with empty variables dictionary."""
@@ -453,77 +533,46 @@ class TestSetRailwayVariablesBatch:
         assert success is True
         assert failed == []
 
-    def test_failed_batch_set_falls_back_to_individual(self):
-        """Test that failed batch set falls back to individual variable setting."""
-        with patch("subprocess.run") as mock_run:
-            # First call (batch) fails, subsequent calls (individual) succeed
-            mock_run.side_effect = [
-                Exception("Batch failed"),  # Batch attempt fails
-                Mock(returncode=0),  # KEY1 individual set succeeds
-                Mock(returncode=0),  # KEY2 individual set succeeds
-            ]
-            variables = {"KEY1": "value1", "KEY2": "value2"}
-            success, failed = set_railway_variables_batch(variables)
-
-            assert success is True
-            assert failed == []
-            # Verify fallback occurred (3 calls: 1 batch + 2 individual)
-            assert mock_run.call_count == 3
-
-    def test_fallback_with_partial_failure(self):
-        """Test fallback when some individual variables fail to set."""
-        with patch("subprocess.run") as mock_run:
-            # First call (batch) fails, then individual calls have mixed results
-            mock_run.side_effect = [
-                Exception("Batch failed"),  # Batch attempt fails
-                Mock(returncode=0),  # KEY1 succeeds
-                Mock(returncode=1),  # KEY2 fails
-                Mock(returncode=0),  # KEY3 succeeds
-            ]
+    def test_partial_failure_returns_failed_keys(self):
+        """Test partial failure when some individual variable sets fail."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.set_railway_variable",
+        ) as mock_set:
+            mock_set.side_effect = [True, False, True]
             variables = {"KEY1": "value1", "KEY2": "value2", "KEY3": "value3"}
             success, failed = set_railway_variables_batch(variables)
 
             assert success is False
-            assert "KEY2" in failed
-            assert len(failed) == 1
+            assert failed == ["KEY2"]
+
+    def test_all_failures_returns_all_keys(self):
+        """Test all failures returns all keys as failed."""
+        with patch(
+            "quickscale_cli.utils.railway_utils.set_railway_variable",
+        ) as mock_set:
+            mock_set.return_value = False
+            variables = {"KEY1": "value1", "KEY2": "value2", "KEY3": "value3"}
+            success, failed = set_railway_variables_batch(variables)
+
+            assert success is False
+            assert sorted(failed) == ["KEY1", "KEY2", "KEY3"]
 
     def test_batch_set_single_variable(self):
         """Test batch set with single variable."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0)
+        with patch(
+            "quickscale_cli.utils.railway_utils.set_railway_variable",
+        ) as mock_set:
+            mock_set.return_value = True
             variables = {"SECRET_KEY": "my-secret"}
             success, failed = set_railway_variables_batch(variables)
 
             assert success is True
             assert failed == []
-            call_args = mock_run.call_args[0][0]
-            assert "SECRET_KEY=my-secret" in call_args
-
-    def test_batch_set_with_special_characters(self):
-        """Test batch set with special characters in values."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0)
-            variables = {
-                "SECRET_KEY": "django-insecure-!@#$%^&*()",
-                "ALLOWED_HOSTS": "app1.com,app2.com,app3.com",
-            }
-            success, failed = set_railway_variables_batch(variables)
-
-            assert success is True
-            assert failed == []
-
-    def test_batch_returns_false_on_failure(self):
-        """Test that batch returns False when Railway command fails with non-zero return code."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=1)
-            variables = {"KEY1": "value1"}
-
-            success, failed = set_railway_variables_batch(variables)
-
-            # When batch command fails with non-zero return code, it returns False
-            # with empty failed list. The fallback only occurs on exceptions
-            assert success is False
-            assert failed == []
+            # Single variable should also have skip_deploy=True (CR-SA31-001)
+            assert mock_set.call_args_list[0] == (
+                ("SECRET_KEY", "my-secret"),
+                {"service": None, "environment": None, "skip_deploy": True},
+            )
 
 
 class TestGenerateDjangoSecretKey:

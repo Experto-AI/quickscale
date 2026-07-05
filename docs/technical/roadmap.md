@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 1 clear to continue: SA28 and SA24 complete (SA14, SA23 also complete — archived); rebalanced onto SA29 and SA30 now that its earlier backlog is closed. Track 2 is blocked on SA20 (CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking — spawn-failure rollback metadata); SA21.2 and SA26 are otherwise ready once SA20 is revisited. Track 3 clear to continue: SA27 complete; SA31 ready, SA32 rebalanced in (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 1 clear to continue: SA28 and SA24 complete (SA14, SA23 also complete — archived); rebalanced onto SA29 and SA30 now that its earlier backlog is closed. Track 2 is blocked on SA20 (CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking — spawn-failure rollback metadata); SA21.2 and SA26 are otherwise ready once SA20 is revisited. Track 3 clear to continue: SA27 and SA31 complete; SA32 rebalanced in (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
@@ -57,7 +57,7 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA28 — complete                      SA20 — blocked (CR-SA20-007)              SA27 — complete
-SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
+SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 — complete
 SA29 (no deps)                       SA26 (no deps)                            SA32 (no deps)
 SA30 (no deps — land after SA29)
 ```
@@ -151,10 +151,18 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `railway-cli-secrets-on-argv` (`why →` [TA27](../others/tech-audit.md))
 
-- [ ] **SA31 — Move Railway/DR adapter secrets off process argv.** `Tier 1 · Track 3 · deps: none`
-  `railway_utils.py` invokes `railway variables --set KEY=VALUE` with live secret values on the command line, and `dr_commands.py` passes `--args-json` on `docker exec` argv — both visible to any local user via `ps`/`/proc` on shared hosts. Switch to stdin transport for the adapter JSON payload; for the Railway CLI (which has no stdin-based `--set`), document the CLI limitation and scope the fix to what's actually controllable (e.g. minimize the exposure window, or investigate `railway variables --set` alternatives such as a batch file input if the CLI supports one).
-  *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:348,391,891`, `quickscale_cli/src/quickscale_cli/commands/dr_commands.py:232-242`.
-  *Acceptance:* the DR adapter's JSON payload no longer appears in `docker exec` argv (stdin transport verified via a process-argv assertion in tests); the Railway CLI limitation (if unfixable) is documented in code comments and this finding's closeout note.
+> **SA31 — complete (review findings resolved 2026-07-05).** Three-part fix moving secret payloads off process argv:
+>
+> 1. **DR adapter** (`_call_adapter` in `dr_commands.py`): JSON kwargs are now piped via `docker exec -i` stdin instead of `--args-json` on argv. The management command (`dr_adapter_call.py`) reads from stdin when `--args-json` is absent, keeping backward compat.
+>
+> 2. **Railway single variable set** (`set_railway_variable` in `railway_utils.py`): Switched from `railway variables --set KEY=VALUE` (secret in argv) to `railway variable set KEY --stdin` (value piped via stdin).
+>
+> 3. **Railway batch variable set** (`set_railway_variables_batch`): Decomposed into per-variable stdin calls with `--skip-deploys` forced on **all** writes so an auto-deploy is never triggered after a partial failure (CR-SA31-001). Railway CLI has no batch-stdin or env-file input (confirmed 2026-07-05). This limitation is documented in code and in this closeout note.
+>
+> **Review follow-up (CR-SA31-001/002):** (1) `_configure_env_vars_step` failure path now hard-stops with `sys.exit(1)` instead of continuing to deploy after failed env var writes, and the insecure `--set KEY=VALUE` fallback is replaced with the stdin-based `railway variable set KEY --stdin` suggestion. (2) Added 16 standalone tests in `quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py` providing direct execution evidence for the stdin transport and legacy `--args-json` path, bypassing the pre-existing circular import in the backups Django test suite. (3) Batch writes now force `--skip-deploys` on every variable; the deploy is deferred to the caller after 100% success is confirmed.
+>
+> *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:330-441`, `quickscale_cli/src/quickscale_cli/commands/dr_commands.py:222-265`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py`, `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py:335-356`, `quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py`.
+> *Acceptance:* `_call_adapter` test asserts `--args-json` is absent from docker command and JSON payload is passed via `input` kwarg. Railway `set_railway_variable` test asserts the stdin-based command structure. Railway CLI batch limitation documented in `set_railway_variables_batch` docstring. `_configure_env_vars_step` failure hard-stops with secure stdin alternative suggestion. Batch writes always use `--skip-deploys` so no auto-deploy occurs after partial failure. 16 standalone dr_adapter_call tests cover stdin transport, legacy `--args-json`, adapter dispatch, and error paths. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
 

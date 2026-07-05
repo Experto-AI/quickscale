@@ -242,6 +242,7 @@ def run_railway_command(
     timeout: int = 60,
     interactive: bool = False,
     cwd: str | Path | None = None,
+    input_data: str | None = None,
 ) -> subprocess.CompletedProcess:
     """
     Execute Railway CLI command with error handling.
@@ -252,6 +253,7 @@ def run_railway_command(
         timeout: Command timeout in seconds
         interactive: If True, run command interactively without capturing output
         cwd: Working directory for the command (if None, uses current directory)
+        input_data: String data to pipe to stdin (non-interactive only)
 
     Returns:
     -------
@@ -262,6 +264,8 @@ def run_railway_command(
 
     try:
         if interactive:
+            if input_data is not None:
+                raise ValueError("input_data is not supported in interactive mode.")
             # Run interactively - let user see prompts and provide input
             result = subprocess.run(
                 cmd,
@@ -271,13 +275,15 @@ def run_railway_command(
             )
         else:
             # Run non-interactively - capture output
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=cwd,
-            )
+            run_kwargs: dict[str, Any] = {
+                "capture_output": True,
+                "text": True,
+                "timeout": timeout,
+                "cwd": cwd,
+            }
+            if input_data is not None:
+                run_kwargs["input"] = input_data
+            result = subprocess.run(cmd, **run_kwargs)
         return result
     except subprocess.TimeoutExpired as e:
         raise TimeoutError(
@@ -332,9 +338,14 @@ def set_railway_variable(
     value: str,
     service: str | None = None,
     environment: str | None = None,
+    skip_deploy: bool = False,
 ) -> bool:
     """
-    Set Railway environment variable.
+    Set Railway environment variable via stdin (SA31).
+
+    The value is piped through stdin (``railway variable set KEY --stdin``)
+    rather than passed on the command line, avoiding secret exposure in
+    ``ps``/``/proc`` on shared hosts.
 
     Args:
     ----
@@ -342,15 +353,19 @@ def set_railway_variable(
         value: Environment variable value
         service: Service name to set variable for (optional)
         environment: Railway environment name to target (optional)
+        skip_deploy: If True, pass ``--skip-deploys`` to avoid triggering a
+            deployment (used by batch callers to reduce deploy churn)
 
     """
     try:
-        cmd = ["variables", "--set", f"{key}={value}"]
+        cmd = ["variable", "set", key, "--stdin"]
         if service:
             cmd.extend(["--service", service])
         if environment:
             cmd.extend(["--environment", environment])
-        result = run_railway_command(cmd, timeout=30)
+        if skip_deploy:
+            cmd.append("--skip-deploys")
+        result = run_railway_command(cmd, timeout=30, input_data=value)
         return result.returncode == 0
     except Exception:
         return False
@@ -362,10 +377,15 @@ def set_railway_variables_batch(
     environment: str | None = None,
 ) -> tuple[bool, list[str]]:
     """
-    Set multiple Railway environment variables in a single command.
+    Set multiple Railway environment variables via per-variable stdin calls.
 
-    This reduces deployments by setting all variables at once instead of
-    triggering a deployment for each variable.
+    Railway CLI does **not** support batch-stdin or env-file input
+    (confirmed 2026-07-05).  Each variable is set individually through
+    ``railway variable set KEY --stdin``, which keeps the value off
+    process argv.      ``--skip-deploys`` is forced on **all** writes so
+    that an auto-deploy is never triggered after a partial failure
+    (CR-SA31-001).  Callers are responsible for triggering a deploy
+    after confirming 100% success.
 
     Args:
     ----
@@ -383,32 +403,17 @@ def set_railway_variables_batch(
     if not variables:
         return True, []
 
-    try:
-        # Build command with multiple --set flags (Railway CLI requirement)
-        # Format: railway variables --set KEY1=VALUE1 --set KEY2=VALUE2 --service <service>
-        cmd = ["variables"]
-        for key, value in variables.items():
-            cmd.extend(["--set", f"{key}={value}"])
-
-        if service:
-            cmd.extend(["--service", service])
-        if environment:
-            cmd.extend(["--environment", environment])
-
-        result = run_railway_command(cmd, timeout=60)
-        return result.returncode == 0, []
-    except Exception:
-        # If batch setting fails, fall back to individual setting
-        failed_keys = []
-        for key, value in variables.items():
-            if not set_railway_variable(
-                key,
-                value,
-                service,
-                environment,
-            ):
-                failed_keys.append(key)
-        return len(failed_keys) == 0, failed_keys
+    failed_keys: list[str] = []
+    for key, value in variables.items():
+        if not set_railway_variable(
+            key,
+            value,
+            service=service,
+            environment=environment,
+            skip_deploy=True,
+        ):
+            failed_keys.append(key)
+    return len(failed_keys) == 0, failed_keys
 
 
 def generate_django_secret_key() -> str:
