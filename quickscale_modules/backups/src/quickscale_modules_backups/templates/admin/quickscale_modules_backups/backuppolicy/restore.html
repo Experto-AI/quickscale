@@ -94,6 +94,12 @@
             <button type="submit" class="default" name="operation" value="dry_run">Dry-run validation</button>
             <button type="submit" name="operation" value="restore">Restore backup</button>
         </div>
+        <p>
+            <strong>Note:</strong> Selecting "Restore backup" runs the restore in the
+            background and returns you to the policy changelist immediately. Large
+            restores may take several minutes; check the artifact's status in the
+            artifact list for progress or errors.
+        </p>
     </form>
 
     {% if can_view_restore_artifacts and eligible_artifacts %}

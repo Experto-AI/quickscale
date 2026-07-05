@@ -10,6 +10,11 @@
 
 ## Autopsy — 2026-07-04 (re-run)
 
+> **Update (2026-07-05, roadmap cleanup):** The one open finding this pass identified
+> (`operator-read-path-undefined`) is now closed — SA14.2–SA14.6 landed on top of SA14.1 (see
+> CHANGELOG.md and the Reconciliation log below). The narrative below is left as the historical
+> record of the 2026-07-04 pass; treat "still-open"/"in flight" language in it as superseded.
+
 ### Orientation (2026-07-04)
 
 QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poetry monorepo,
@@ -46,95 +51,14 @@ a program that closed eight structural findings. The current state is one still-
 
 ### Summary table
 
-| ID | Title | Horizon | Confidence | Size | Problem (one line) |
-|----|-------|---------|------------|------|--------------------|
-| `operator-read-path-undefined` | Elevated/operator reads: Python bypass and DB RLS contradict each other | now | High | M | `all_objects` admin querysets promise cross-tenant visibility that FORCE RLS deliberately denies to the runtime role; remediation (SA14) is 1/6 landed |
-
-### Finding 1: Elevated/operator reads are structurally undefined — the Python bypass and the DB backstop disagree
-
-- **ID:** `operator-read-path-undefined` *(still-open; opened 2026-07-03; remediation SA14 in flight — SA14.1 complete, SA14.2–SA14.6 open)*
-- **Rank rationale (blast radius × likelihood):** Blast = the entire admin/operator surface of
-  every generated saas project (8+ ModelAdmins across crm/blog/forms/listings/billing, plus the
-  backups admin-restore operational surface); likelihood = fires the first time an operator opens
-  `/admin/` in production — no special trigger needed.
-- **Horizon & trigger:** now — first real operator/admin use of a production saas deployment
-  (content moderation, billing support, backups restore triage).
-- **Confidence:** High that the contradiction is structural (all seams re-read 2026-07-04). Medium
-  on the precise production symptom (empty changelists) — static reasoning; confirm by generating a
-  saas project, serving under `RUNTIME_DATABASE_URL`, and opening a CRM admin changelist.
-- **Context dependence:** wrong-regardless — it contradicts the project's own hardened posture.
-- **Problem:** "Read across tenants as an operator" was never designed as a seam: the Python layer
-  offers `all_objects` (bypasses `TenantManager` only), the DB layer deliberately offers **no**
-  bypass to the runtime role (BYPASSRLS is boot-blocked), and the documented contract
-  (`operator_access(reason=...)`, decisions.md §multitenant "permanent rules") exists in no code —
-  so each module improvised.
-- **Evidence (re-verified 2026-07-04):**
-  - The bare-`all_objects` "cross-tenant visibility" idiom persists in **all five** module admins:
-    `crm/admin.py` (:259–260, :280–281, :341–342, :376–377 + related-field bypasses :164–176),
-    `blog/admin.py` (:227–242, :272–273, :334–377), `forms/admin.py` (10 refs),
-    `billing/admin.py` (3 refs), `listings/admin.py` (2 refs).
-  - `orgs/middleware.py:45`: `/admin/` in `EXEMPT_PATH_PREFIXES` → no `request.org`, ContextVar
-    stays `None`; the AF9 wrapper then passes through **without priming**
-    (`current_org.py:473–479`) → GUC unset → the NULLIF-guarded policies match zero rows for the
-    NOBYPASSRLS role. `orgs/apps.py` boot guard (T1.18/SA2.1) still forbids BYPASSRLS at runtime,
-    so no legitimate production role exists under which the idiom works.
-  - `operator_access` still exists nowhere in code (grep across orgs + core, 2026-07-04).
-  - Test blindness unchanged: `orgs/tests/settings.py` sets
-    `os.environ.setdefault("QUICKSCALE_ALLOW_BYPASSRLS", "1")` with `USER=postgres` default — the
-    superuser posture that makes the wrong idiom pass CI. Flipping this is SA14.4, correctly
-    sequenced after the admin ports.
-  - **Remediation landed so far:** SA14.1 built the orgs-owned `TenantModelAdmin` base
-    (`orgs/admin.py:158–413`) — org resolution chain (VIEW-AS debug session → explicit request
-    selection → session key), `org_scope`-wrapped views, **fail-closed empty queryset when no org
-    resolves**. This generalizes the pattern social's admin already proved under RLS and matches
-    this finding's preferred option 1. No module has been ported yet.
-- **Why it compounds:** The Module Implementation Checklist requires an `admin.py` per module, so
-  every new module re-picks an idiom; the wrong idiom is invisible to the default test posture
-  until SA14.4 lands; every new operator surface (support tooling, exports, dashboards) re-fights
-  the same undefined seam. The teams module — the next build — will add its own admin and must not
-  land on the broken idiom. This root already burned the project once (Module Finding 1's
-  "public pages render empty under production posture" was the anonymous-read instance).
-- **Detection signal:** Operator reports of empty admin changelists on tenant tables in
-  production; instrument: count admin-path queries on ENROLLED tables returning 0 rows under the
-  runtime role.
-- **Steelman:** "Admin is a dev-only surface; production operators use VIEW-AS inside the app." —
-  Rejected: backups' admin restore is an explicitly documented operational surface, `start.sh`
-  provisions a production superuser, and VIEW-AS cannot reach admin because `/admin/` bypasses the
-  middleware that reads the debug session key. If dev-only-admin *were* the intent, that itself
-  needs deciding once and enforcing (strip module admins in production settings), which is the
-  same finding.
-- **Correct shape:** One orgs-owned elevated-read contract whose semantics are identical in both
-  enforcement layers — any cross-tenant or view-as-tenant read goes through a single API that the
-  RLS policies recognize, and that restricted-role tests exercise. `all_objects` alone must never
-  be presented as "cross-tenant visibility."
-- **Options:**
-  1. **Per-org scoped admin (VIEW-AS through admin):** `TenantModelAdmin` (now built) resolving
-     the active org and wrapping changelist/change views in `org_scope`. Keeps RLS untouched;
-     admin is one-org-at-a-time. Effort M, low risk, reversible; no true cross-tenant lists.
-  2. **First-class operator predicate in RLS:** add
-     `OR NULLIF(current_setting('app.operator_access', true), '') = 'on'` to the policy template
-     and implement the documented `operator_access(reason=...)` (audited, superuser-gated) as the
-     only setter. True cross-tenant reads; mechanical policy migration because the SQL template is
-     centralized (`apply_force_rls`). Effort M–L.
-  3. **Second DB role for operator paths** with permissive policies and per-path connection
-     routing. Strongest separation; disproportionate at current scale.
-- **Recommendation:** (1) as the default admin experience plus a minimal (2) for genuinely
-  cross-tenant operator needs, **and** the SA14.4 test-posture flip (restricted role by default,
-  superuser opt-in) — the posture change is what prevents recurrence. This is exactly the SA14.2–
-  SA14.6 plan already in `roadmap.md`; the plan's internal ordering (ports before posture flip) is
-  correct. **One scope gap:** SA14.6 names only `middleware.py:268`, but the permissive
-  `getattr(settings, "QUICKSCALE_MODE", "solo")` read also lives at `orgs/adapters.py:60`,
-  `orgs/adapters.py:81`, and `orgs/views.py:63` — all four callsites must go fail-hard or the mode
-  fail-open survives the fix. · **Size:** M · **First step (updated):** port CRM's admins to
-  `TenantModelAdmin` (SA14.2) — the base now exists.
+*(No open findings this pass — see Reconciliation log for the closeout of Finding 1.)*
 
 ### Fix order and interactions
 
-One open finding; its internal ordering is already encoded in the roadmap (SA14.2/SA14.3 ports →
-SA14.4 posture flip; SA14.5 and SA14.6 independent) and is correct — the posture flip must not land
-before the ports or it breaks the suites it protects. Add the `adapters.py`/`views.py`
-`QUICKSCALE_MODE` callsites to SA14.6's scope. The SA19–SA26 tech-sweep batch is independent of
-SA14 except that SA23 (debug-view redirect) touches the same orgs surface — trivial to sequence.
+No open findings. Finding 1 (`operator-read-path-undefined`) closed 2026-07-05 once SA14.2–SA14.6
+landed on top of SA14.1 — see Reconciliation log for the full closeout note. The SA19–SA26
+tech-sweep batch was independent of SA14 except that SA23 (debug-view redirect) touched the same
+orgs surface — sequencing was trivial and both are complete.
 
 ### Sound load-bearing decisions (protect these during remediation)
 
@@ -196,9 +120,6 @@ SA14 except that SA23 (debug-view redirect) touches the same orgs surface — tr
   unscheduled? Answer promotes or kills the multi-sourced-defaults watchlist item.
 - Will teams' UI surfaces live in the teams module or extend `orgs/views.py`? Answer decides
   whether the views-fusion watchlist item becomes a finding at teams kickoff.
-- Is production `/admin/` an intended operator surface (the SA14 plan implies yes)? If it is ever
-  decided dev-only instead, `operator-read-path-undefined`'s remaining work collapses to
-  "strip module admins in production settings" — same finding, much smaller fix.
 
 ### Red flags (out of scope — fix now)
 
@@ -207,9 +128,6 @@ SA14 except that SA23 (debug-view redirect) touches the same orgs surface — tr
   (`LISTINGS_PER_PAGE` → 12), forms (five defaults incl. `FORMS_SPAM_PROTECTION` → True) — the
   same fail-open class SA18.2 purged from the analytics hook. Candidate tech-audit finding; the
   module-side SA17 guards mask it only for settings they assert.
-- `QUICKSCALE_MODE` fail-open scope gap: SA14.6/TA19 name `middleware.py:268` (+`views.py:63`),
-  but `orgs/adapters.py:60` and `:81` carry the same permissive default — fix all four or the
-  silent solo-mode flip survives.
 - CHANGELOG links to the dropped arch-audit heading
   `#finding-4-per-module-contract-knowledge-…` — dangling historical anchor; cheap fix, feed to
   the doc-consistency gate.
@@ -389,3 +307,11 @@ architecture, dependency/config, build/supply chain, performance.
   Per-module verdicts added, including the teams landing checklist and SA20 shape guidance.
   New ticket-shaped item: port forms models to the `TenantModel` base (second idiom for the
   tenant contract).
+- 2026-07-05 (roadmap cleanup) — `operator-read-path-undefined`: **resolved**. SA14.2/SA14.3
+  ported all five module admins (crm/blog/forms/listings/billing) off `all_objects` onto
+  `TenantModelAdmin`; SA14.4 flipped module test suites to NOBYPASSRLS-by-default; SA14.5 landed
+  `operator_access(reason=...)` as a real, audited, read-only RLS predicate; SA14.6 fail-hardened
+  `QUICKSCALE_MODE`, closing the scope gap this document flagged (`adapters.py:60,81` and
+  `views.py:63`, in addition to `middleware.py:268` — all four now direct required reads, per
+  CHANGELOG.md). This closes the sole open finding from the 2026-07-04 pass; no other finding is
+  currently open.

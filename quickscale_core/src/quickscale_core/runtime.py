@@ -1,4 +1,5 @@
-"""QuickScale runtime API facade — public re-export surface for generated-project code.
+"""
+QuickScale runtime API facade — public re-export surface for generated-project code.
 
 SA9.3: Pure re-export layer. No behavior change. All symbols are imported from
 their canonical internal locations and re-exported so that module code imports
@@ -20,21 +21,6 @@ from __future__ import annotations
 import typing
 
 # ---------------------------------------------------------------------------
-# DR adapter surface
-# ---------------------------------------------------------------------------
-from quickscale_core.dr_engine.adapter import (
-    ADAPTER_FUNCTIONS,
-    build_database_plan,
-    capture_snapshot,
-    execute_database_restore,
-    fetch_snapshot_report,
-    record_verification,
-    set_rollback_pin,
-    sync_media,
-)
-from quickscale_core.dr_engine.primitives import BackupError
-
-# ---------------------------------------------------------------------------
 # Social-manifest surface: path constants
 # ---------------------------------------------------------------------------
 from quickscale_core.contracts.module_options import (
@@ -48,6 +34,21 @@ from quickscale_core.contracts.module_options import (
 # Social-manifest surface: resolver
 # ---------------------------------------------------------------------------
 from quickscale_core.contracts.resolvers import resolve_social_module_options
+
+# ---------------------------------------------------------------------------
+# DR adapter surface
+# ---------------------------------------------------------------------------
+from quickscale_core.dr_engine.adapter import (
+    ADAPTER_FUNCTIONS,
+    build_database_plan,
+    capture_snapshot,
+    execute_database_restore,
+    fetch_snapshot_report,
+    record_verification,
+    set_rollback_pin,
+    sync_media,
+)
+from quickscale_core.dr_engine.primitives import BackupError
 
 # ---------------------------------------------------------------------------
 # Manifest assembler and resolver
@@ -103,6 +104,10 @@ __all__ = [
     "restore_admin_uploaded_backup",  # noqa: F822
     "restore_backup_artifact",  # noqa: F822
     "restore_backup_source",  # noqa: F822
+    # Admin uploaded-file staging/resolution/cleanup seam
+    "_cleanup_admin_restore_upload_directory",  # noqa: F822
+    "_resolve_admin_uploaded_restore_artifact",  # noqa: F822
+    "_stage_admin_restore_upload",  # noqa: F822
     "set_backup_snapshot_rollback_pin",  # noqa: F822
     "sync_backup_snapshot_media",  # noqa: F822
     "validate_backup_artifact",  # noqa: F822
@@ -198,6 +203,10 @@ _LAZY_ORCHESTRATION_SYMBOLS: frozenset[str] = frozenset(
         "restore_admin_uploaded_backup",
         "restore_backup_artifact",
         "restore_backup_source",
+        # Admin uploaded-file staging/resolution/cleanup seam
+        "_cleanup_admin_restore_upload_directory",
+        "_resolve_admin_uploaded_restore_artifact",
+        "_stage_admin_restore_upload",
         "set_backup_snapshot_rollback_pin",
         "sync_backup_snapshot_media",
         "validate_backup_artifact",

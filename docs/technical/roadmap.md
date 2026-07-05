@@ -49,27 +49,24 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 1: SA28 ready (SA14, SA23 complete — archived). Track 2: SA20 unblocked (decision: fix symlink); SA21.2, SA24, SA26, SA29, SA30, SA32 ready. Track 3: SA27, SA31 complete (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 1 clear to continue: SA28 and SA24 complete (SA14, SA23 also complete — archived); rebalanced onto SA29 and SA30 now that its earlier backlog is closed. Track 2 is blocked on SA20 (CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking — spawn-failure rollback metadata); SA21.2 and SA26 are otherwise ready once SA20 is revisited. Track 3 clear to continue: SA27 and SA31 complete; SA32 rebalanced in (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA28 (no deps)                       SA20 (no deps)                            SA27 — complete
-                                     SA21.2 (deps: SA21.1 — complete)          SA31 — complete
-                                     SA24 (no deps)
-                                     SA26 (no deps)
-                                     SA29 (no deps)
-                                     SA30 (no deps — land after SA29)
-                                     SA32 (no deps)
+SA28 — complete                      SA20 — blocked (CR-SA20-007)              SA27 — complete
+SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 — complete
+SA29 (no deps)                       SA26 (no deps)                            SA32 (no deps)
+SA30 (no deps — land after SA29)
 ```
 
-Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 but is within Track 2.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 and now lands in the same Track 1 sequence. Rebalanced 2026-07-05: SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3, since Track 1 and Track 3 emptied out as SA28/SA27 completed while Track 2 still carried six open items — this restores 3/3/2 parallelism across the three worktrees.
 
 ### Track 1 — Tenant-context surface
 
-#### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../others/arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
+#### Finding — `operator-read-path-undefined` (`why →` [arch-audit.md reconciliation log](../others/arch-audit.md#reconciliation-log-append-only))
 
 > **SA14 — complete.** SA14.1–SA14.6 (TenantModelAdmin base, CRM/blog/forms/listings/billing admin ports, NOBYPASSRLS default for module test suites, operator_access RLS predicate, QUICKSCALE_MODE fail-hard) merged. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
@@ -79,26 +76,54 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `account-delete-cascade-bypasses-org-invariants` (`why →` [TA30](../others/tech-audit.md))
 
-- [x] **SA28 — Enforce the last-owner and personal-org invariants at the account-deletion boundary.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  Implemented in `AccountDeleteView` via `form_valid` override (view-local boundary fix, no new signals or receivers). Blocks deletion with a `messages.error` naming the org(s) when the user is the sole owner of any shared org that still has other members. Cancels the personal org's active subscription through the existing `cancel_current_subscription` billing seam before deletion. Moved the success message from the dead `delete()` override to `form_valid` so it actually fires. Added 8 focused tests covering: blocked-as-sole-owner, allowed-when-other-owner, allowed-when-sole-member, allowed-when-personal-org-only, subscription-cancellation-called, graceful-handoff-when-billing-not-installed, and success-message-rendered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA28 — complete.** Enforced the last-owner and personal-org invariants at the account-deletion boundary via an `AccountDeleteView.form_valid` override; cancels the personal org's active subscription through the existing billing seam before deletion. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+#### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../others/tech-audit.md))
+
+- [x] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 1 · deps: none`
+  Escaped `<`/`>`/`&` in `analytics_public_config_json()` before `mark_safe`, preserving the existing raw JSON output contract while making `</script>` inert in page source. Added a focused template-tag regression proving dangerous payload content renders safely and still round-trips through `json.loads()`. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+#### Finding — `storage-config-dead-env-docs-secrets-in-vcs` (`why →` [TA31](../others/tech-audit.md))
+
+- [ ] **SA29 — Rebuild storage's config-delivery contract: env-var indirection for secrets, README aligned with the real wiring mechanism.** `Tier 2 · Track 1 · deps: none`
+  Storage is the only secret-bearing module without the `*_env_var` indirection pattern analytics/notifications/billing already use, and its README documents a config channel (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/etc. as deploy-time env vars) that the generated app never reads — settings are baked as literals at generation time. Adopt the indirection pattern: storage credential options become `*_env_var` names (adapter emits `os.environ` reads into the managed settings module rather than baked literal values), keep `backend`/bucket/region as non-secret yml options, and rewrite the README against the real contract.
+  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py:1269-1348` (`_storage_manifest_adapter`), `quickscale_core/src/quickscale_core/module_wiring.py:85-100`, `quickscale_core/src/quickscale_core/generator/templates/README.md.j2:265-286`, storage's `module.yml` option declarations.
+  *Acceptance:* generating a project configured per the rewritten README and deploying with the documented env vars set results in uploads landing in the configured S3/R2 bucket; the generated `settings/modules.py` contains no credential material; leaving storage on `local` still works with no config required.
+
+#### Finding — `listings-storage-runtime-fail-open-residuals` (`why →` [TA32](../others/tech-audit.md))
+
+- [ ] **SA30 — Apply the SA17 direct-required-read pattern to listings/storage runtime settings.** `Tier 1 · Track 1 · deps: none (relates to SA29 — land after so storage's fixed contract is what this reads from)`
+  `listings/views.py`'s `_get_positive_int_setting` and `storage/helpers.py`'s `_read_setting`/`_normalize_backend` silently default or coerce on missing/invalid values — the same class SA17.2–SA17.6 closed for other modules, but listings and storage were outside that batch's scope. Replace with direct required reads that raise `ImproperlyConfigured` on missing/invalid values, matching the SA17 shape.
+  *Files:* `quickscale_modules/listings/src/quickscale_modules_listings/views.py:30-70`, `quickscale_modules/storage/src/quickscale_modules_storage/helpers.py:35-115`.
+  *Acceptance:* an invalid/missing `LISTINGS_PER_PAGE` or `QUICKSCALE_STORAGE_BACKEND` value raises a descriptive startup error instead of silently falling back; valid configurations are unaffected.
 
 ### Track 2 — Module contracts & settings
 
 #### Finding — `backups-sync-restore-blocks-worker` (`why →` [TA17](../others/tech-audit.md))
 
 - [ ] **SA20 — Move admin-triggered backup restore off the synchronous request path.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
-  **In progress — CR-SA20-005 symlink fix in progress.** Track 2 worktree has made substantial progress on the async restore lifecycle:
-  - **Async dispatch:** Restore no longer runs synchronously in-request. Admin sets `STATUS_RESTORING` and dispatches `backups_restore` management command via `subprocess.Popen`, returning immediately.
-  - **Restore status lifecycle:** `BackupArtifact` tracks `STATUS_RESTORING`, `restore_started_at`, and `restore_error`. Management command persists failure on `BackupError`.
-  - **Spawn-failure rollback:** A failed `subprocess.Popen` reverts `STATUS_RESTORING` to avoid stranded restoring state.
-  - **Uploaded-file path parity:** Uploaded-file restore shares the trusted resolver / staging seam used by the existing admin download/restore path.
-  - **Admin regression coverage:** Tests cover trusted-match rejection, incomplete-snapshot rejection, out-of-tree remap, and attempted symlink remap.
+  **BLOCKED — CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking (spawn-failure rollback metadata); CR-SA20-008 resolved.** Track 2 worktree has made substantial progress on the async restore lifecycle:
+  - **Async dispatch:** Restore no longer runs synchronously in-request. Admin persists `STATUS_RESTORING` before spawning `backups_restore` via `subprocess.Popen`, returning immediately (both recorded-artifact and uploaded-file branches use the artifact-id dispatch path).
+  - **Restore status lifecycle:** `BackupArtifact` tracks `STATUS_RESTORING`, `restore_started_at`, and `restore_error`. Management command persists failure on any exception (BackupError, fast failures, generic crashes) — not just `BackupError`.
+  - **Spawn-failure rollback:** `STATUS_RESTORING` is persisted before `Popen()`; a failed spawn reverts to the pre-spawn status so fast child terminal states are never clobbered and spawn failures never strand the artifact.
+  - **Local-only enforcement:** Admin-triggered background restores pass `--local-only` to the child command, so the child never falls back to remote materialization even when the local file disappears after enqueue.
+  - **Uploaded-file path parity:** Uploaded-file restore shares the trusted resolver / staging seam used by the existing admin download/restore path. Both branches dispatch via artifact-id (not `--file`).
+  - **Admin regression coverage:** Tests cover trusted-match rejection, incomplete-snapshot rejection, out-of-tree remap, attempted symlink remap, `--local-only` arg presence, BackupError failure recording, generic-exception failure recording, non-stranding for non-RESTORING artifacts, spawn-failure rollback on both branches, and fast-child-terminal-non-clobber on both branches.
 
-  **Blocker CR-SA20-005 (high, blocking, security-boundary):** The async uploaded-file restore remap can still follow a preexisting symlink at the authoritative destination and write outside the backup root.
+  **CR-SA20-005 (resolved):** The async uploaded-file restore used `shutil.copy2(staged_upload.local_path, local_path)` where `local_path` was derived from `get_local_backup_directory()/trusted_artifact.filename`. If `local_path` already existed as a symlink pointing outside the backup root, `copy2` would follow it and write outside the root. Fixed by adding `local_path.unlink(missing_ok=True)` before `copy2` so a pre-existing destination (regular file or symlink) is always removed first, materializing a regular file inside the authoritative backup directory. The symlink regression test was strengthened to preload the escape target with different content so the test fails if the symlink is followed — proving the fix is active.
 
-  **Decision (2026-07-05):** Fix the symlink path traversal now — consistent with all prior security-boundary hardening precedents (SA2.1, SA17, SA18). A symlink check or path resolution guard is needed in the uploaded-file restore remap before merge.
-  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py`, `models.py`, `management/commands/backups_restore.py`, `templates/admin/.../restore.html`, `migrations/0005_backupartifact_restore_execution.py`, `tests/test_admin.py`.
-  *Acceptance:* triggering a restore from the admin returns before the 60s worker timeout regardless of restore duration; the restore's success/failure is observable after the fact (status field, `restore_error`, log, or notification); a restore that fails mid-way is distinguishable from one that never started (`STATUS_FAILED + restore_error` vs `STATUS_RESTORING`). **In progress — CR-SA20-005 symlink fix pending.**
+  **CR-SA20-006 (resolved):** The async admin flow enqueued the generic artifact-id restore path without forcing `RestoreSourceResolutionMode.LOCAL_ONLY`. If the local file disappeared after enqueue, the child could fall back to remote materialization, violating the admin restore contract. Fixed by adding `--local-only` flag to `backups_restore` management command (maps to `resolution_mode=LOCAL_ONLY` in the adapter), and passing it from both recorded-artifact and uploaded-file admin dispatch paths. The adapter function `restore_backup` now accepts an optional `resolution_mode` parameter. Regression: admin dispatch tests assert `--local-only` in Popen args; command-level tests verify `resolution_mode="local_only"` is passed to the adapter.
+
+  **CR-SA20-007 — REMAINS BLOCKING (spawn-failure rollback metadata restoration).** The lifecycle-ordering race sub-finding (fast-child terminal status clobber) was resolved: `STATUS_RESTORING` is now persisted before `Popen()`, the parent never writes status after `Popen` returns, and two admin regressions (`test_restore_async_parent_does_not_clobber_fast_child_terminal_status` and its uploaded-file counterpart) prove fast-child terminal states are preserved. Combined with the existing command-level failure-recording regressions (BackupError, generic `ValueError`, non-RESTORING unaffected), the lifecycle-ordering race is fully closed.
+
+  However, the spawn-failure rollback still fails to restore pre-spawn `restore_started_at` and `restore_error` metadata when the parent retries a previously FAILED or RESTORED artifact and `Popen()` raises. When the parent resets the artifact's status to `STATUS_RESTORING` before the new spawn attempt, the prior failure metadata is overwritten without being preserved. Fix required: capture `restore_started_at` and `restore_error` before overwriting them on retry and restore them if the new spawn fails. Needed follow-up: add regressions for retrying FAILED/RESTORED artifacts when `Popen` raises. This is the sole remaining blocker preventing SA20 closeout.
+
+  **CR-SA20-008 (resolved):** The CHANGELOG's SA20 entry previously described the uploaded-file dispatch as using ``--file <path>``, but both branches (recorded-artifact and uploaded-file) dispatch via artifact-id. The CHANGELOG entry and roadmap wording have been corrected to accurately reflect the artifact-id dispatch for both branches.
+
+  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/backups_restore.py`, `quickscale_core/src/quickscale_core/dr_engine/adapter.py`, `quickscale_modules/backups/tests/test_admin.py`, `quickscale_modules/backups/tests/test_restore_command.py`.
+  *Acceptance:* triggering a restore from the admin returns before the 60s worker timeout regardless of restore duration; the restore's success/failure is observable after the fact (status field, `restore_error`, log, or notification); a restore that fails mid-way is distinguishable from one that never started (`STATUS_FAILED + restore_error` vs `STATUS_RESTORING`); admin-triggered restores never fall back to remote materialization even when the local file is removed after enqueue; any exception in the child (including non-BackupError crashes) records `STATUS_FAILED` instead of stranding `STATUS_RESTORING`.
+
+  **Circular-import guard expansion (SA20 closeout):** The SA20 import chain (backups admin → services → `quickscale_core.runtime` → managed-adapters init) triggered a pre-existing gap in the lazy-init circular-import detector in `quickscale_core.manifest.entry_point`. The guard recognised only `quickscale_core.manifest.entry_point` and `quickscale_core.contracts.resolvers` as tolerated partially-initialized modules, so the import through `quickscale_core.runtime` was re-raised as `ImproperlyConfigured`, blocking test startup. Added `quickscale_core.runtime` to the recognised patterns. *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_core/tests/test_manifest_entry_point.py`.
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
 
@@ -107,40 +132,12 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
   *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/throttles.py:26-30`, `quickscale_modules/forms/src/quickscale_modules_forms/views.py:231,257`, `quickscale_modules/blog/src/quickscale_modules_blog/views.py:260-266,277-304`.
   *Acceptance:* two requests with different `X-Forwarded-For` values (fixed `REMOTE_ADDR`) get independent throttle buckets and are logged with the forwarded client IP, not the proxy's; a 6th form submission within the configured window from one distinct client is rejected regardless of which worker/replica serves it.
 
-#### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../others/tech-audit.md))
-
-- [ ] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 2 · deps: none`
-  `analytics_tags.py:33` uses `mark_safe(json.dumps(payload))` without escaping `<`/`>`/`&`, which is latent stored-XSS if the payload ever carries request-influenced data. Switch to Django's `json_script` template filter/tag or manually escape those characters before marking safe.
-  *Files:* `quickscale_modules/analytics/src/quickscale_modules_analytics/templatetags/analytics_tags.py:33`.
-  *Acceptance:* a payload value containing `</script>` renders inert in the page source; existing analytics payload rendering is otherwise unchanged.
-
 #### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../others/tech-audit.md))
 
 - [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 2 · deps: none`
   `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
   *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
   *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
-
-#### Finding — `storage-config-dead-env-docs-secrets-in-vcs` (`why →` [TA31](../others/tech-audit.md))
-
-- [ ] **SA29 — Rebuild storage's config-delivery contract: env-var indirection for secrets, README aligned with the real wiring mechanism.** `Tier 2 · Track 2 · deps: none`
-  Storage is the only secret-bearing module without the `*_env_var` indirection pattern analytics/notifications/billing already use, and its README documents a config channel (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/etc. as deploy-time env vars) that the generated app never reads — settings are baked as literals at generation time. Adopt the indirection pattern: storage credential options become `*_env_var` names (adapter emits `os.environ` reads into the managed settings module rather than baked literal values), keep `backend`/bucket/region as non-secret yml options, and rewrite the README against the real contract.
-  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py:1269-1348` (`_storage_manifest_adapter`), `quickscale_core/src/quickscale_core/module_wiring.py:85-100`, `quickscale_core/src/quickscale_core/generator/templates/README.md.j2:265-286`, storage's `module.yml` option declarations.
-  *Acceptance:* generating a project configured per the rewritten README and deploying with the documented env vars set results in uploads landing in the configured S3/R2 bucket; the generated `settings/modules.py` contains no credential material; leaving storage on `local` still works with no config required.
-
-#### Finding — `listings-storage-runtime-fail-open-residuals` (`why →` [TA32](../others/tech-audit.md))
-
-- [ ] **SA30 — Apply the SA17 direct-required-read pattern to listings/storage runtime settings.** `Tier 1 · Track 2 · deps: none (relates to SA29 — land after so storage's fixed contract is what this reads from)`
-  `listings/views.py`'s `_get_positive_int_setting` and `storage/helpers.py`'s `_read_setting`/`_normalize_backend` silently default or coerce on missing/invalid values — the same class SA17.2–SA17.6 closed for other modules, but listings and storage were outside that batch's scope. Replace with direct required reads that raise `ImproperlyConfigured` on missing/invalid values, matching the SA17 shape.
-  *Files:* `quickscale_modules/listings/src/quickscale_modules_listings/views.py:30-70`, `quickscale_modules/storage/src/quickscale_modules_storage/helpers.py:35-115`.
-  *Acceptance:* an invalid/missing `LISTINGS_PER_PAGE` or `QUICKSCALE_STORAGE_BACKEND` value raises a descriptive startup error instead of silently falling back; valid configurations are unaffected.
-
-#### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
-
-- [ ] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 2 · deps: none`
-  The exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context (model `save()`/`delete()` invalidate correctly; this function is uncalled by first-party code but is a public-API trap for bulk mutations like `queryset.update()` that bypass `save()`). Either make it org-aware (accept/iterate org context) or remove it from `__all__` so it stops looking like a safe bulk-invalidation tool.
-  *Files:* `quickscale_modules/social/src/quickscale_modules_social/services.py:182-184`.
-  *Acceptance:* either a test demonstrates `invalidate_social_cache()` correctly invalidates org-partitioned entries, or the function is dropped from the module's public `__all__` with a comment explaining why.
 
 ### Track 3 — Core/CLI plumbing
 
@@ -166,6 +163,13 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 >
 > *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:330-441`, `quickscale_cli/src/quickscale_cli/commands/dr_commands.py:222-265`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py`, `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py:335-356`, `quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py`.
 > *Acceptance:* `_call_adapter` test asserts `--args-json` is absent from docker command and JSON payload is passed via `input` kwarg. Railway `set_railway_variable` test asserts the stdin-based command structure. Railway CLI batch limitation documented in `set_railway_variables_batch` docstring. `_configure_env_vars_step` failure hard-stops with secure stdin alternative suggestion. Batch writes always use `--skip-deploys` so no auto-deploy occurs after partial failure. 16 standalone dr_adapter_call tests cover stdin transport, legacy `--args-json`, adapter dispatch, and error paths. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+#### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
+
+- [ ] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 3 · deps: none`
+  The exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context (model `save()`/`delete()` invalidate correctly; this function is uncalled by first-party code but is a public-API trap for bulk mutations like `queryset.update()` that bypass `save()`). Either make it org-aware (accept/iterate org context) or remove it from `__all__` so it stops looking like a safe bulk-invalidation tool.
+  *Files:* `quickscale_modules/social/src/quickscale_modules_social/services.py:182-184`.
+  *Acceptance:* either a test demonstrates `invalidate_social_cache()` correctly invalidates org-partitioned entries, or the function is dropped from the module's public `__all__` with a comment explaining why.
 
 #### Finding — `dangling-arch-audit-anchor` (`why →` [TA29](../others/tech-audit.md))
 

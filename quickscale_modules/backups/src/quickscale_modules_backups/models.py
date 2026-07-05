@@ -88,12 +88,14 @@ class BackupArtifact(models.Model):
 
     STATUS_READY = "ready"
     STATUS_VALIDATED = "validated"
+    STATUS_RESTORING = "restoring"
     STATUS_FAILED = "failed"
     STATUS_DELETED = "deleted"
     STATUS_RESTORED = "restored"
     STATUS_CHOICES = [
         (STATUS_READY, "Ready"),
         (STATUS_VALIDATED, "Validated"),
+        (STATUS_RESTORING, "Restoring..."),
         (STATUS_FAILED, "Failed"),
         (STATUS_DELETED, "Deleted"),
         (STATUS_RESTORED, "Restored"),
@@ -156,6 +158,15 @@ class BackupArtifact(models.Model):
     )
     validation_notes = models.TextField(blank=True)
     validated_at = models.DateTimeField(null=True, blank=True)
+    restore_started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the most recent background restore was initiated.",
+    )
+    restore_error = models.TextField(
+        blank=True,
+        help_text="Error message from a failed background restore, if any.",
+    )
     restored_at = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
