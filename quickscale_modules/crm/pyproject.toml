@@ -52,6 +52,7 @@ python_files = ["test_*.py"]
 testpaths = ["tests"]
 addopts = "-v --cov=quickscale_modules_crm --cov-report=html --cov-report=term-missing --cov-fail-under=90"
 markers = [
+    "bypass_rls: test requires BYPASSRLS database privilege (superuser / migration DDL). Skipped when QUICKSCALE_ALLOW_BYPASSRLS is not set.",
     "isolation: cross-tenant isolation tests (roadmap Finding 14 / F11 rollout)",
 ]
 

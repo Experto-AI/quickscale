@@ -167,6 +167,7 @@ class TestMigration0002Seed:
         assert "from django.core.management" not in source
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.django_db(transaction=True)
 class TestMigrationExecutorHarness:
     """Verify migration 0002 seed data via MigrationExecutor through a
@@ -285,6 +286,7 @@ except Exception:
     _FORMS_IS_POSTGRES = False
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.django_db(transaction=True)
 class TestFormsMigration0007CompositeFK:
     """MigrationExecutor harness for Forms 0006→0007→0008 AF12 composite FKs."""

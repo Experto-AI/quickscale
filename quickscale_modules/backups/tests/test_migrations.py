@@ -6,7 +6,10 @@ import pytest
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [
+    pytest.mark.bypass_rls,
+    pytest.mark.django_db(transaction=True),
+]
 
 
 def _create_legacy_artifact(
