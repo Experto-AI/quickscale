@@ -49,14 +49,14 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. Track 1: SA23 and SA28 are ready (SA14 complete — archived). Track 2: SA20 blocked; SA21.2, SA24, SA26, SA29, SA30, SA32 ready. Track 3: SA27 blocked/pending scope decision; SA31 ready (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. Track 1: SA23 complete (archived); SA28 is ready (SA14 complete — archived). Track 2: SA20 blocked; SA21.2, SA24, SA26, SA29, SA30, SA32 ready. Track 3: SA27 blocked/pending scope decision; SA31 ready (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA23 (no deps)                       SA20 (no deps — blocked CR-SA20-005)      SA27 (no deps — blocked/pending scope decision)
+SA23 (no deps — complete)            SA20 (no deps — blocked CR-SA20-005)      SA27 (no deps — blocked/pending scope decision)
 SA28 (no deps)                       SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
                                      SA24 (no deps)
                                      SA26 (no deps)
@@ -75,10 +75,11 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `debug-view-open-redirect` (`why →` [TA21](../others/tech-audit.md))
 
-- [ ] **SA23 — Validate the `next` redirect target in orgs debug views.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  `orgs/debug_views.py:53-55,86-88` redirects to `request.POST.get("next")` unvalidated (superuser-only, POST-only, but still an open redirect). Validate with `django.utils.http.url_has_allowed_host_and_scheme` before redirecting; reject or fall back to a safe default on failure.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/debug_views.py:53-55,86-88`.
+- [x] **SA23 — Validate the `next` redirect target in orgs debug views.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
+  `orgs/debug_views.py:53-55,86-88` redirected to `request.POST.get("next")` unvalidated (superuser-only, POST-only, but still an open redirect). Added `url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()})` guard in both `DebugAsOrgView.post` and `ExitDebugModeView.post` — off-site or disallowed-scheme `next` values now fall back to the default redirect target (org detail or `/admin/`) instead of being followed. Same-host redirects continue to work. Added 6 focused regression tests covering valid next, off-site rejection, and disallowed-scheme rejection for both views. Import added: `from django.utils.http import url_has_allowed_host_and_scheme`.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/debug_views.py:53-55,86-88` (modified), `quickscale_modules/orgs/tests/test_debug.py` (6 new tests).
   *Acceptance:* a `next` value pointing off-site (or to a disallowed scheme) is rejected/falls back instead of being redirected to; same-host redirect targets continue to work.
+  *Findings/blockers:* None.
 
 #### Finding — `account-delete-cascade-bypasses-org-invariants` (`why →` [TA30](../others/tech-audit.md))
 
