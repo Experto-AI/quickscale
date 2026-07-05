@@ -692,6 +692,8 @@ class TestBackupPolicyAdmin:
         assert str(postgresql_backup_artifact.pk) in popen_args
         assert "--confirm" in popen_args
         assert postgresql_backup_artifact.filename in popen_args
+        # CR-SA20-006: admin dispatch always includes --local-only
+        assert "--local-only" in popen_args
 
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             (
@@ -941,6 +943,8 @@ class TestBackupPolicyAdmin:
         assert "--file" not in popen_args  # artifact-id, not --file
         assert "--confirm" in popen_args
         assert postgresql_backup_artifact.filename in popen_args
+        # CR-SA20-006: admin dispatch always includes --local-only
+        assert "--local-only" in popen_args
 
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             (
@@ -1071,6 +1075,134 @@ class TestBackupPolicyAdmin:
         assert postgresql_backup_artifact.status == original_status
         assert "Failed to initiate background restore" in response.content.decode(
             "utf-8"
+        )
+        mocked_popen.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # CR-SA20-007: regression — parent does not clobber fast child
+    # terminal status.  The new design persists STATUS_RESTORING before
+    # Popen, so a child that completes during Popen (simulated here by
+    # writing a terminal status inside the Popen mock) must not be
+    # overwritten back to STATUS_RESTORING by the parent return path.
+    # ------------------------------------------------------------------
+
+    def test_restore_async_parent_does_not_clobber_fast_child_terminal_status(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """CR-SA20-007: Recorded-artifact dispatch preserves fast child terminal status.
+
+        The mock simulates a child that completes immediately inside the
+        Popen call, setting STATUS_FAILED before the parent return path
+        can run.  The parent must not overwrite this terminal state back
+        to STATUS_RESTORING.
+        """
+        del backup_policy
+
+        def _simulate_fast_child_first(*args: object, **kwargs: object) -> MagicMock:
+            """Simulate a child that writes terminal status before parent returns."""
+            postgresql_backup_artifact.refresh_from_db()
+            # Child sees STATUS_RESTORING (parent set it before Popen)
+            # and transitions to STATUS_FAILED.
+            postgresql_backup_artifact.status = BackupArtifact.STATUS_FAILED
+            postgresql_backup_artifact.restore_error = "simulated fast child failure"
+            postgresql_backup_artifact.save(
+                update_fields=["status", "restore_error", "updated_at"]
+            )
+            return MagicMock()
+
+        with patch(
+            "quickscale_modules_backups.admin.subprocess.Popen",
+            side_effect=_simulate_fast_child_first,
+        ) as mocked_popen:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        postgresql_backup_artifact.refresh_from_db()
+        # The child's terminal STATUS_FAILED must be preserved.  In the
+        # old design (STATUS_RESTORING after Popen) the parent would
+        # overwrite this back to STATUS_RESTORING.  In the new design
+        # (STATUS_RESTORING before Popen) the parent never writes the
+        # status again after Popen returns.
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert (
+            "simulated fast child failure" in postgresql_backup_artifact.restore_error
+        )
+        mocked_popen.assert_called_once()
+
+    def test_restore_async_upload_parent_does_not_clobber_fast_child_terminal_status(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """CR-SA20-007: Uploaded-file dispatch preserves fast child terminal status."""
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        def _simulate_fast_child_first(*args: object, **kwargs: object) -> MagicMock:
+            postgresql_backup_artifact.refresh_from_db()
+            postgresql_backup_artifact.status = BackupArtifact.STATUS_FAILED
+            postgresql_backup_artifact.restore_error = "simulated fast child failure"
+            postgresql_backup_artifact.save(
+                update_fields=["status", "restore_error", "updated_at"]
+            )
+            return MagicMock()
+
+        with (
+            patch(
+                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_modules_backups.admin."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+                side_effect=_simulate_fast_child_first,
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        postgresql_backup_artifact.refresh_from_db()
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert (
+            "simulated fast child failure" in postgresql_backup_artifact.restore_error
         )
         mocked_popen.assert_called_once()
 
@@ -1306,7 +1438,12 @@ class TestBackupPolicyAdmin:
         # The backup directory must exist before creating a symlink inside it.
         local_backup_settings.mkdir(parents=True, exist_ok=True)
         escape_target = local_backup_settings.parent / "outside-root.dump"
-        escape_target.write_bytes(content)
+        # Preload with DIFFERENT content so that if the symlink IS
+        # followed, shutil.copy2 overwrites the escape target and the
+        # assertion below fails -- proving the vulnerability would be
+        # exploitable without the fix.
+        escape_original = b"ESCAPE TARGET ORIGINAL CONTENT - MUST NOT CHANGE"
+        escape_target.write_bytes(escape_original)
         symlink_path = local_backup_settings / postgresql_backup_artifact.filename
         symlink_path.symlink_to(escape_target)
 
@@ -1348,11 +1485,16 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
 
-        # The symlink escape target was written before the test with the
-        # same content; verify it was NOT overwritten by following the
-        # symlink (a truncation would reduce it to zero bytes, or the
-        # content would differ if the escape target was a sensitive file).
-        assert escape_target.read_bytes() == content
+        # The symlink escape target must still hold the original
+        # different content — if the fix were missing, shutil.copy2
+        # would follow the symlink and overwrite it.
+        assert escape_target.read_bytes() == escape_original
+
+        # The former symlink path must now be a regular file (the
+        # symlink was unlinked by the fix, then the regular file was
+        # materialized by copy2).
+        assert symlink_path.is_file()
+        assert not symlink_path.is_symlink()
 
         # Artifact local_path was updated to a safe direct path under
         # the backup root, NOT the symlink escape target.

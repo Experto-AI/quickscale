@@ -28,6 +28,10 @@ from quickscale_modules_backups.services import (
     BackupError,
     BackupRestoreBlocked,
     RestoreSourceResolutionMode,
+    # Admin uploaded-file staging/resolution/cleanup seam
+    _cleanup_admin_restore_upload_directory,
+    _resolve_admin_uploaded_restore_artifact,
+    _stage_admin_restore_upload,
     create_backup,
     delete_artifact_files,
     download_backup_path,
@@ -38,10 +42,6 @@ from quickscale_modules_backups.services import (
     restore_admin_uploaded_backup,
     restore_backup_artifact,
     validate_backup_artifact,
-    # Admin uploaded-file staging/resolution/cleanup seam
-    _cleanup_admin_restore_upload_directory,
-    _resolve_admin_uploaded_restore_artifact,
-    _stage_admin_restore_upload,
 )
 
 if TYPE_CHECKING:
@@ -502,20 +502,12 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                 assert selected_artifact is not None
                                 confirm_value = form.cleaned_data["confirmation"]
                                 manage_py = _get_manage_py()
-                                subprocess.Popen(
-                                    [
-                                        sys.executable,
-                                        manage_py,
-                                        "backups_restore",
-                                        str(selected_artifact.pk),
-                                        "--confirm",
-                                        confirm_value,
-                                    ],
-                                    close_fds=True,
-                                )
-                                # Persist STATUS_RESTORING only after
-                                # successful subprocess spawn so a launch
-                                # failure does not strand the artifact.
+
+                                # CR-SA20-007: Persist STATUS_RESTORING before
+                                # Popen so a fast child terminal update is never
+                                # missed or overwritten.  Roll back to the
+                                # pre-spawn status on spawn failure.
+                                pre_spawn_status = selected_artifact.status
                                 selected_artifact.status = (
                                     BackupArtifact.STATUS_RESTORING
                                 )
@@ -531,6 +523,33 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                         "updated_at",
                                     ]
                                 )
+                                try:
+                                    subprocess.Popen(
+                                        [
+                                            sys.executable,
+                                            manage_py,
+                                            "backups_restore",
+                                            str(selected_artifact.pk),
+                                            "--confirm",
+                                            confirm_value,
+                                            "--local-only",
+                                        ],
+                                        close_fds=True,
+                                    )
+                                except Exception:
+                                    # Rollback: restore pre-spawn status so a
+                                    # spawn failure never strands the artifact
+                                    # in STATUS_RESTORING.
+                                    selected_artifact.status = pre_spawn_status
+                                    selected_artifact.restore_started_at = None
+                                    selected_artifact.save(
+                                        update_fields=[
+                                            "status",
+                                            "restore_started_at",
+                                            "updated_at",
+                                        ]
+                                    )
+                                    raise
                             else:
                                 # SA20 uploaded-file restore: route through
                                 # the trusted authoritative seam before
@@ -591,6 +610,12 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                     staged_upload.local_path.resolve()
                                     != local_path.resolve()
                                 ):
+                                    # CR-SA20-005: Remove any pre-existing
+                                    # destination (including symlinks) before
+                                    # copy so we always materialize a regular
+                                    # file inside the authoritative backup
+                                    # root.
+                                    local_path.unlink(missing_ok=True)
                                     shutil.copy2(
                                         staged_upload.local_path,
                                         local_path,
@@ -611,20 +636,14 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                 )
 
                                 # Dispatch async via artifact-id path.
+                                # CR-SA20-006: Always pass --local-only so
+                                # the child never remote-materializes.
+                                # CR-SA20-007: Persist STATUS_RESTORING before
+                                # Popen so a fast child terminal update is never
+                                # missed or overwritten.  Roll back to the
+                                # pre-spawn status on spawn failure.
                                 manage_py = _get_manage_py()
-                                subprocess.Popen(
-                                    [
-                                        sys.executable,
-                                        manage_py,
-                                        "backups_restore",
-                                        str(trusted_artifact.pk),
-                                        "--confirm",
-                                        confirm_value,
-                                    ],
-                                    close_fds=True,
-                                )
-                                # Persist STATUS_RESTORING after
-                                # successful spawn.
+                                pre_spawn_status = trusted_artifact.status
                                 trusted_artifact.status = (
                                     BackupArtifact.STATUS_RESTORING
                                 )
@@ -640,6 +659,33 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                         "updated_at",
                                     ]
                                 )
+                                try:
+                                    subprocess.Popen(
+                                        [
+                                            sys.executable,
+                                            manage_py,
+                                            "backups_restore",
+                                            str(trusted_artifact.pk),
+                                            "--confirm",
+                                            confirm_value,
+                                            "--local-only",
+                                        ],
+                                        close_fds=True,
+                                    )
+                                except Exception:
+                                    # Rollback: restore pre-spawn status so a
+                                    # spawn failure never strands the artifact
+                                    # in STATUS_RESTORING.
+                                    trusted_artifact.status = pre_spawn_status
+                                    trusted_artifact.restore_started_at = None
+                                    trusted_artifact.save(
+                                        update_fields=[
+                                            "status",
+                                            "restore_started_at",
+                                            "updated_at",
+                                        ]
+                                    )
+                                    raise
                         except Exception as exc:
                             form.add_error(
                                 None,
