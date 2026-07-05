@@ -26,6 +26,12 @@ for path in (SRC_ROOT, MODULE_ROOT):
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
 
+# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
+# The collection hook below skips bypass_rls-marked tests when the env var
+# is not set. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
+# This runs before django.setup() below — use a NOBYPASSRLS DB role.
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
 django.setup()
 
@@ -197,3 +203,37 @@ def org_context(request: Any, db: None) -> Generator[Organization, None, None]:
     set_current_org_id(org.id)
     yield org
     set_current_org_id(None)
+
+
+# ---------------------------------------------------------------------------
+# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# ---------------------------------------------------------------------------
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register the bypass_rls marker to prevent PytestUnknownMarkWarning."""
+    config.addinivalue_line(
+        "markers",
+        "bypass_rls: test requires BYPASSRLS database privilege "
+        "(superuser / migration DDL). Skipped when QUICKSCALE_ALLOW_BYPASSRLS "
+        "is not set.",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Skip bypass_rls-marked tests when QUICKSCALE_ALLOW_BYPASSRLS is not set.
+
+    Under NOBYPASSRLS (the default), migration tests and other
+    BYPASSRLS-dependent tests are deselected so the suite passes
+    cleanly with a restricted DB role.
+    """
+    if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
+        return  # BYPASSRLS available — run all tests
+    skip_bypass_rls = pytest.mark.skip(
+        reason="QUICKSCALE_ALLOW_BYPASSRLS not set — skipping BYPASSRLS-dependent test"
+    )
+    for item in items:
+        if item.get_closest_marker("bypass_rls"):
+            item.add_marker(skip_bypass_rls)

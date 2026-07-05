@@ -47,20 +47,20 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.3 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.4 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.3 complete (archived); SA14.4, SA14.5, SA14.6, SA23, and SA28 are ready. Track 2: SA20, SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA22, SA25, SA27, SA31, and SA33 are ready. See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.4 complete (archived); SA14.5, SA14.6, SA23, and SA28 are ready. Track 2: SA20, SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA22, SA25, SA27, SA31, and SA33 are ready. See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.4 (deps: SA14.2, SA14.3)        SA20 (no deps)                            SA22 (no deps)
-SA14.5 (no deps)                     SA21.2 (deps: SA21.1)                     SA25 (no deps)
-SA14.6 (no deps)                     SA24 (no deps)                            SA27 (no deps)
-SA23 (no deps)                       SA26 (no deps)                            SA31 (no deps)
-SA28 (no deps)                       SA29 (no deps)                            SA33 (no deps)
+SA14.5 (no deps)                     SA20 (no deps)                            SA22 (no deps)
+SA14.6 (no deps)                     SA21.2 (deps: SA21.1)                     SA25 (no deps)
+SA23 (no deps)                       SA24 (no deps)                            SA27 (no deps)
+SA28 (no deps)                       SA26 (no deps)                            SA31 (no deps)
+                                     SA29 (no deps)                            SA33 (no deps)
                                      SA30 (no deps — land after SA29)
                                      SA32 (no deps)
 ```
@@ -71,10 +71,22 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
 
 #### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../others/arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
 
-- [ ] **SA14.4 — Flip module test suites' default DB role to `NOBYPASSRLS`.** `Tier 2 · Track 1 · deps: SA14.2, SA14.3 · RISK LEVEL: medium`
-  Change the module test settings default from superuser (`QUICKSCALE_ALLOW_BYPASSRLS=1`) to the restricted runtime role, with superuser opt-in only for tests that explicitly need it (e.g. migration tests). This is the posture change that makes the operator-read bug class visible to CI going forward, so it must land *after* the admin ports (SA14.2/14.3) to avoid breaking the suites it's meant to protect.
-  *Files:* `*/tests/settings.py` across modules.
-  *Acceptance:* module test suites pass by default under the restricted role; only explicitly-marked tests opt into superuser/BYPASSRLS.
+> **SA14.1 — Build the orgs-owned `TenantModelAdmin` base (complete).** `Tier 2 · Track 1` — unblocks SA14.2/SA14.3. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+> **SA14.2 — Port CRM's 7 admin classes to `TenantModelAdmin` (complete).** `Tier 2 · Track 1 · deps: SA14.1` — review-driven follow-up CR-SA14.2-001 resolved (inline note `created_by` stamping). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+> **SA14.3 — Port blog/forms/listings/billing admins to `TenantModelAdmin` (complete).** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium` — review-driven follow-ups CR-SA14.3-001/002/003 resolved (FormSubmissionAdmin org-readonly on change; billing admin scoped-queryset regression tests). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+- [x] **SA14.4 — Flip module test suites' default DB role to `NOBYPASSRLS`.** `Tier 2 · Track 1 · deps: SA14.2, SA14.3 · RISK LEVEL: medium`
+  Removed the SA2.1 escape hatch (`os.environ.setdefault("QUICKSCALE_ALLOW_BYPASSRLS", "1")`) from all 8 affected module `tests/settings.py` AND `tests/conftest.py` files — no module test code automatically primes this env var. BYPASSRLS opt-in is shell-level only. A marker+collection-hook mechanism is the sole BYPASSRLS management:
+  - Registered `bypass_rls` pytest marker in each module's `pyproject.toml`.
+  - Collection-time hook (`pytest_collection_modifyitems`) skips `bypass_rls`-marked tests when `QUICKSCALE_ALLOW_BYPASSRLS` is not set, so the suite passes cleanly under a restricted (NOBYPASSRLS) DB role.
+  - Marked existing migration tests in billing, crm, forms, and backups with `@pytest.mark.bypass_rls`.
+  Set `QUICKSCALE_ALLOW_BYPASSRLS=1` in the shell before running pytest to include `bypass_rls`-marked tests.
+  This is the posture change that makes the operator-read bug class visible to CI going forward.
+  *Files:* `*/tests/settings.py`, `*/tests/conftest.py`, `*/pyproject.toml` across modules; `billing/tests/test_migrations.py`, `crm/tests/test_migrations.py`, `forms/tests/test_migrations.py`, `backups/tests/test_migrations.py`.
+  *Acceptance:* module test suites pass by default under the restricted role; only explicitly-marked tests opt into superuser/BYPASSRLS when `QUICKSCALE_ALLOW_BYPASSRLS=1` is set in the shell.
+  *Findings/blockers:* (1) For modules using pytest-django's `--ds` flag (billing, crm, orgs), the conftest module-level code runs after `django.setup()`, so the boot guard already ran during setup. Those modules require a restricted (NOBYPASSRLS) DB role, or `QUICKSCALE_ALLOW_BYPASSRLS=1` must be set in the shell before running pytest. (2) For modules with manual `django.setup()` (blog, forms, listings, notifications, social, backups), the conftest runs before `django.setup()`, so the env var can be read earlier — but no module test code sets it; the boot guard (`orgs/apps.py`) and the collection hook both consume the shell env var: the boot guard checks it to decide whether to raise `ImproperlyConfigured`, and the collection hook checks it to decide whether to skip or run `bypass_rls`-marked tests.
 
 - [ ] **SA14.5 — Implement `operator_access(reason=...)` as a real, audited RLS predicate.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
   Add `OR NULLIF(current_setting('app.operator_access', true), '') = 'on'` to the FORCE RLS policy template and implement `operator_access(reason=...)` (superuser-gated, audit-logged context manager) as the only setter — finally implementing the contract `decisions.md` already documents as a "permanent rule" but which exists in no code today.

@@ -12,7 +12,10 @@ import pytest
 from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [
+    pytest.mark.bypass_rls,
+    pytest.mark.django_db(transaction=True),
+]
 
 # The latest orgs migration is included in project_state for tests that
 # create Organization rows through historical apps registries. This ensures
