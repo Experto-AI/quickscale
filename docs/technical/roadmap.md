@@ -47,17 +47,17 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. Track 1: SA23 complete (archived); SA28 is ready (SA14 complete — archived). Track 2: SA20 blocked; SA21.2, SA24, SA26, SA29, SA30, SA32 ready. Track 3: SA27 blocked/pending scope decision; SA31 ready (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 1: SA28 ready (SA14, SA23 complete — archived). Track 2: SA20 unblocked (decision: fix symlink); SA21.2, SA24, SA26, SA29, SA30, SA32 ready. Track 3: SA27 unblocked (decisions: rely on Part 1 validation_issues for listings, regression audit ok); SA31 ready (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA23 (no deps — complete)            SA20 (no deps — blocked CR-SA20-005)      SA27 (no deps — blocked/pending scope decision)
-SA28 (no deps)                       SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
+SA28 (no deps)                       SA20 (no deps)                            SA27 (no deps)
+                                     SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
                                      SA24 (no deps)
                                      SA26 (no deps)
                                      SA29 (no deps)
@@ -75,11 +75,7 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `debug-view-open-redirect` (`why →` [TA21](../others/tech-audit.md))
 
-- [x] **SA23 — Validate the `next` redirect target in orgs debug views.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  `orgs/debug_views.py:53-55,86-88` redirected to `request.POST.get("next")` unvalidated (superuser-only, POST-only, but still an open redirect). Added `url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()})` guard in both `DebugAsOrgView.post` and `ExitDebugModeView.post` — off-site or disallowed-scheme `next` values now fall back to the default redirect target (org detail or `/admin/`) instead of being followed. Same-host redirects continue to work. Added 6 focused regression tests covering valid next, off-site rejection, and disallowed-scheme rejection for both views. Import added: `from django.utils.http import url_has_allowed_host_and_scheme`.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/debug_views.py:53-55,86-88` (modified), `quickscale_modules/orgs/tests/test_debug.py` (6 new tests).
-  *Acceptance:* a `next` value pointing off-site (or to a disallowed scheme) is rejected/falls back instead of being redirected to; same-host redirect targets continue to work.
-  *Findings/blockers:* None.
+> **SA23 — complete.** Validated the `next` redirect target in orgs debug views with `url_has_allowed_host_and_scheme`. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `account-delete-cascade-bypasses-org-invariants` (`why →` [TA30](../others/tech-audit.md))
 
@@ -93,18 +89,18 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 #### Finding — `backups-sync-restore-blocks-worker` (`why →` [TA17](../others/tech-audit.md))
 
 - [ ] **SA20 — Move admin-triggered backup restore off the synchronous request path.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
-  **In progress — blocked by CR-SA20-005.** Track 2 worktree has made substantial progress on the async restore lifecycle:
+  **In progress — CR-SA20-005 symlink fix in progress.** Track 2 worktree has made substantial progress on the async restore lifecycle:
   - **Async dispatch:** Restore no longer runs synchronously in-request. Admin sets `STATUS_RESTORING` and dispatches `backups_restore` management command via `subprocess.Popen`, returning immediately.
   - **Restore status lifecycle:** `BackupArtifact` tracks `STATUS_RESTORING`, `restore_started_at`, and `restore_error`. Management command persists failure on `BackupError`.
   - **Spawn-failure rollback:** A failed `subprocess.Popen` reverts `STATUS_RESTORING` to avoid stranded restoring state.
   - **Uploaded-file path parity:** Uploaded-file restore shares the trusted resolver / staging seam used by the existing admin download/restore path.
   - **Admin regression coverage:** Tests cover trusted-match rejection, incomplete-snapshot rejection, out-of-tree remap, and attempted symlink remap.
 
-  **Blocker CR-SA20-005 (high, blocking, security-boundary):** The async uploaded-file restore remap can still follow a preexisting symlink at the authoritative destination and write outside the backup root. A focused fix cycle is required before the code can merge.
+  **Blocker CR-SA20-005 (high, blocking, security-boundary):** The async uploaded-file restore remap can still follow a preexisting symlink at the authoritative destination and write outside the backup root.
 
-  **Needed decision/action:** Another focused fix cycle is required before the code can merge, or leave SA20 open for a future hardening batch.
+  **Decision (2026-07-05):** Fix the symlink path traversal now — consistent with all prior security-boundary hardening precedents (SA2.1, SA17, SA18). A symlink check or path resolution guard is needed in the uploaded-file restore remap before merge.
   *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py`, `models.py`, `management/commands/backups_restore.py`, `templates/admin/.../restore.html`, `migrations/0005_backupartifact_restore_execution.py`, `tests/test_admin.py`.
-  *Acceptance:* triggering a restore from the admin returns before the 60s worker timeout regardless of restore duration; the restore's success/failure is observable after the fact (status field, `restore_error`, log, or notification); a restore that fails mid-way is distinguishable from one that never started (`STATUS_FAILED + restore_error` vs `STATUS_RESTORING`). **Still pending — blocked by CR-SA20-005.**
+  *Acceptance:* triggering a restore from the admin returns before the 60s worker timeout regardless of restore duration; the restore's success/failure is observable after the fact (status field, `restore_error`, log, or notification); a restore that fails mid-way is distinguishable from one that never started (`STATUS_FAILED + restore_error` vs `STATUS_RESTORING`). **In progress — CR-SA20-005 symlink fix pending.**
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
 
@@ -157,10 +153,13 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 #### Finding — `module-option-validation-not-enforced-at-apply` (`why →` [TA26](../others/tech-audit.md))
 
 - [ ] **SA27 — Enforce module-option validation on the apply path; remove the silent coercions it currently masks.** `Tier 2 · Track 3 · deps: none · RISK LEVEL: medium (touches orgs mode + storage backend derivation)`
-  Three-part fix, one PR: (1) in `assemble_wiring_spec` (or `build_generic_manifest_spec`), raise `ManifestError` listing `result.validation_issues` when non-empty instead of discarding them; (2) add the missing `validate_{blog,forms,storage,orgs}_module_options` calls to `_validate_module_prerequisites` (listings skipped pending scope decision — see blockers; same pattern as the six modules already gated); (3) delete the silent coercions in `resolve_orgs_module_options` (invalid `mode` → `"solo"`), `resolve_storage_module_options` (invalid `backend` → `"local"`), and the blog `api_rate_limit` blank-coercion, so the validators' existing checks become reachable instead of dead code.
+  Three-part fix, one PR: (1) in `assemble_wiring_spec` (or `build_generic_manifest_spec`), raise `ManifestError` listing `result.validation_issues` when non-empty instead of discarding them; (2) add the missing `validate_{blog,forms,storage,orgs}_module_options` calls to `_validate_module_prerequisites` (listings covered by Part 1's declarative validation_issues path; same pattern as the six modules already gated); (3) delete the silent coercions in `resolve_orgs_module_options` (invalid `mode` → `"solo"`), `resolve_storage_module_options` (invalid `backend` → `"local"`), and the blog `api_rate_limit` blank-coercion, so the validators' existing checks become reachable instead of dead code.
   *Files:* `quickscale_cli/src/quickscale_cli/commands/apply_command.py:984-1155`, `quickscale_core/src/quickscale_core/manifest/assembler.py` (`assemble_wiring_spec`), `quickscale_core/src/quickscale_core/contracts/resolvers.py` (`resolve_orgs_module_options:1239-1242`, `resolve_storage_module_options:1612-1614`, `normalize_blog_module_options:430-434,445-448`).
   *Acceptance:* apply with `modules.orgs.mode: "invalid"` aborts with a descriptive error naming the allowed values instead of silently generating a solo-mode project; apply with `modules.storage.backend: "s3compat"` aborts instead of silently dropping the S3 wiring; apply with `modules.forms.rate_limit: "10 per hour"` aborts at apply time instead of 500ing the public form endpoint at runtime; existing valid-config apply paths are unaffected.
-  *Findings/blockers (scope decisions pending):* Implementation stopped after dependency/scope review. Dependencies are confirmed none (SA27 has no prerequisites), but two issues require resolution before proceeding: (1) Listings is skipped from Part 2 pending a scope decision — the old `validate_listings_module_options` no longer exists after the declarative migration; decision needed whether to add a listings validator back into Part 2 or rely on Part 1's fail-hard `validation_issues` path for listings. (2) Part 1 would make apply fail hard on any non-empty `validation_issues` across declarative modules, so a focused audit/regression check is needed before merging to confirm no valid config triggers a false abort. SA31 and SA33 remain ready and are unaffected by this block.
+  **Decisions (2026-07-05):**
+  - **Listings:** Rely on Part 1's `validation_issues` path (Option A). Listings is fully declarative (SA6.2) — Part 1 enforces its validation through the resolver. No imperative validator to re-add. Consistent with SA6.x direction.
+  - **Regression audit:** Proceed. Run the manifest test suite + grep for `validation_issues`/`ValidationRule` to confirm no valid config triggers a false abort. Estimated <1h before merging Part 1.
+  Both decisions unblock SA27. SA31 is unaffected and remains ready.
 
 #### Finding — `railway-cli-secrets-on-argv` (`why →` [TA27](../others/tech-audit.md))
 
