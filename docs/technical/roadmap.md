@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.7 (2026-07-04), SA18.1–SA18.11 (2026-07-04). SA14.1 (TenantModelAdmin base) complete, unblocking SA14.2/SA14.3. All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: SA14.3 ready (deps SA14.1 complete), SA14.5/SA14.6/SA23 ready; SA14.4 waits on SA14.3. Track 2: SA17.8 complete, SA20/SA24/SA26 ready; SA21.2 waits on SA21.1. Track 3: SA19 complete; SA21.1/SA22/SA25 ready.
+> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.2, and SA14.3 are complete (CR-SA14.3-001/002/003 resolved); SA14.4 is now ready; SA14.5, SA14.6, and SA23 are ready. Track 2: SA17.8 is complete; SA20, SA24, and SA26 are ready; SA21.2 waits on SA21.1. Track 3: SA19 is complete; SA21.1, SA22, and SA25 are ready.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -66,8 +66,8 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.1–SA18.11 (all complete —
 SA14.2 (deps: SA14.1 — complete)      SA17.6 (no deps — complete)                fully closed, no remaining
-SA14.3 (deps: SA14.1 — ready)         SA17.7 (deps: SA17.5 — complete)           work in this batch)
-SA14.4 (deps: SA14.2, SA14.3)         SA17.8 (no deps — complete)
+SA14.3 (deps: SA14.1 — complete)      SA17.7 (deps: SA17.5 — complete)           work in this batch)
+SA14.4 (deps: SA14.2, SA14.3 — ready) SA17.8 (no deps — complete)
 SA14.5 (no deps — ready)
 SA14.6 (no deps — ready)
 ```
@@ -78,8 +78,8 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 (ready) → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.1–SA17.7 (complete); SA17.8 (complete) — TA12 closed, Track 2 fully closed | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
+| **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 (complete) → SA14.4 (ready), plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
+| **2** | SA17.1–SA17.8 (complete) — TA12 closed, Track 2 fully closed | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
 | **3** | SA18.1–SA18.11 — fully closed, no remaining work in this batch | Core/CLI fail-hard plumbing |
 
 ---
@@ -93,10 +93,12 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 - [x] **SA14.2 — Port CRM's 7 admin classes to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1`
   CRM admin ported. See [CHANGELOG.md](../../CHANGELOG.md) for closeout detail.
 
-- [ ] **SA14.3 — Port blog/forms/listings/billing admins to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
-  Same port as SA14.2 for the remaining modules' admin classes. Runs in parallel with SA14.2 — disjoint files.
-  *Files:* `blog/admin.py`, `forms/admin.py`, `listings/admin.py`, `billing/admin.py`.
+- [x] **SA14.3 — Port blog/forms/listings/billing admins to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
+  Ported blog (CategoryAdmin, TagAdmin, BlogMediaAssetAdmin, PostAdmin), forms (FormAdmin, FormSubmissionAdmin), listings (AbstractListingAdmin, ListingAdmin), and billing (CreditBalanceAdmin, CreditTransactionAdmin, SubscriptionAdmin) from `admin.ModelAdmin` to `TenantModelAdmin`. Removed all `get_queryset` overrides that used `all_objects.all()` — TenantModelAdmin scopes querysets via `_org_db_context`. Removed `formfield_for_foreignkey`/`formfield_for_manytomany` overrides that used `all_objects` for org-scoped fields (PostAdmin's category/tags) — related-field querysets now scope via TenantManager under the org context. Removed custom inline formsets FormFieldFormSet and FormFieldValueFormSet from forms/admin.py (and their `all_objects` bypass) — inline querysets now use the default BaseInlineFormSet under TenantModelAdmin's primed org context. Preserved PostAdmin's author `formfield_for_foreignkey` (user dropdown logic, not org scoping), FormAdmin's `save_formset` (organization stamping on inline FormField instances) and `save_model` (created_by), FormAdmin's `get_queryset` override (preserves `_submission_count` annotation on top of TenantModelAdmin's scoped queryset), and AbstractListingAdmin's `get_form` (MarkdownxWidget for description). Kept tenant_excluded admins (AuthorProfileAdmin, PlanAdmin, WebhookEventAdmin) on `admin.ModelAdmin`. Updated test suites to verify scoped/fail-closed queryset behavior instead of `all_objects` operator path. SA14.3 acceptance: blog, forms, listings, and billing module test suites green; no `all_objects` reference remains in the four admin files; TenantModelAdmin-scoped querysets return only the resolved org's rows and fail-closed (empty) when no org context is present.
+  *Files:* `blog/admin.py`, `blog/tests/test_admin.py`, `forms/admin.py`, `forms/tests/test_admin.py`, `listings/admin.py`, `listings/tests/test_admin.py`, `billing/admin.py`.
   *Acceptance:* same as SA14.2 for these modules.
+    - **Review-driven follow-up (CR-SA14.3-001/002/003):** Made organization read-only on change in FormSubmissionAdmin (mirrors FormAdmin's `get_readonly_fields` pattern) so the change-form cannot reassign a submission to a different org; added FormSubmissionAdmin organization-readonly regression test (add-form editable, change-form locked); added billing admin tenant-scoped queryset regression tests (fail-closed without org context for CreditBalanceAdmin, CreditTransactionAdmin, SubscriptionAdmin; same-org scoping for SubscriptionAdmin) — the billing regression coverage now matches the blog/forms/listings patterns landed in the initial SA14.3 port. Synced roadmap/changelog wording/status with the now-complete SA14.3 state and actual verification.
+  *Files:* `forms/admin.py`, `forms/tests/test_admin.py`, `billing/tests/test_admin.py`, `docs/technical/roadmap.md`, `CHANGELOG.md`.
 
 - [ ] **SA14.4 — Flip module test suites' default DB role to `NOBYPASSRLS`.** `Tier 2 · Track 1 · deps: SA14.2, SA14.3 · RISK LEVEL: medium`
   Change the module test settings default from superuser (`QUICKSCALE_ALLOW_BYPASSRLS=1`) to the restricted runtime role, with superuser opt-in only for tests that explicitly need it (e.g. migration tests). This is the posture change that makes the operator-read bug class visible to CI going forward, so it must land *after* the admin ports (SA14.2/14.3) to avoid breaking the suites it's meant to protect.

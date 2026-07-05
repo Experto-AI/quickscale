@@ -4,16 +4,23 @@ from typing import Any
 
 from django import forms
 from django.contrib import admin
-from django.db import models
 from django.db.models import Model
 from django.http import HttpRequest
 from markdownx.widgets import AdminMarkdownxWidget
 
+from quickscale_modules_orgs.admin import TenantModelAdmin
+
 from .models import Listing
 
 
-class AbstractListingAdmin(admin.ModelAdmin):
-    """Base admin class for listing models - extend for concrete models"""
+class AbstractListingAdmin(TenantModelAdmin):
+    """Base admin class for listing models - extend for concrete models
+
+    SA14.3: inherits from ``TenantModelAdmin`` which provides org-scoped
+    querysets via ``_org_db_context`` view wrappers.  Concrete subclasses
+    (e.g. ``PropertyListingAdmin``) inherit the same scoping without
+    additional overrides.
+    """
 
     list_display = [
         "title",
@@ -59,20 +66,6 @@ class AbstractListingAdmin(admin.ModelAdmin):
 
     readonly_fields = ["created_at", "updated_at"]
 
-    def get_queryset(self, request: HttpRequest) -> models.QuerySet:  # type: ignore[override]
-        """Operator path: use all_objects for cross-tenant visibility when available.
-
-        Uses ``self.model`` rather than a hard-coded model so that concrete
-        subclasses (e.g. ``PropertyListingAdmin``) inherit the same operator-
-        path intent without additional overrides.  Falls back to the default
-        manager for subclasses that have not yet adopted the dual-manager
-        contract.
-        """
-        qs = getattr(self.model, "all_objects", None)
-        if qs is not None:
-            return qs.all()
-        return self.model._default_manager.all()
-
     def get_form(
         self,
         request: HttpRequest,
@@ -81,7 +74,7 @@ class AbstractListingAdmin(admin.ModelAdmin):
         **kwargs: Any,
     ) -> type[forms.ModelForm]:
         """Return an admin form with a Markdown editor for description"""
-        form_class = super().get_form(request, obj, change, **kwargs)
+        form_class = super().get_form(request, obj=obj, change=change, **kwargs)
         description_field = form_class.base_fields.get("description")
         if description_field is not None:
             description_field.widget = AdminMarkdownxWidget()

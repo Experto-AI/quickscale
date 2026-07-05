@@ -1,7 +1,5 @@
 """Tests for admin configuration"""
 
-from unittest.mock import patch
-
 import pytest
 from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
@@ -158,11 +156,11 @@ class TestConcreteListingAdmin:
 
 
 @pytest.mark.django_db
-class TestListingAdminOperatorPath:
-    """Phase F11.12b: verify listing admin surfaces use all_objects for cross-tenant visibility."""
+class TestListingAdminTenantScopedQueryset:
+    """SA14.3: verify listing admin querysets scope to org context via TenantModelAdmin."""
 
-    def test_abstract_listing_admin_uses_operator_or_default_queryset(self):
-        """AbstractListingAdmin.get_queryset uses all_objects when available, falls back to _default_manager."""
+    def test_abstract_listing_admin_fail_closed_without_org(self):
+        """AbstractListingAdmin.get_queryset returns empty when no org context."""
         test_site = AdminSite()
         admin_instance = AbstractListingAdmin(ConcreteListing, test_site)
         request = RequestFactory().get("/admin/")
@@ -170,14 +168,10 @@ class TestListingAdminOperatorPath:
             username="listing-op", email="listing-op@example.com", password="pass123"
         )
         qs = admin_instance.get_queryset(request)
-        assert qs.model == ConcreteListing
-        # ConcreteListing now defines all_objects (TenantManager, super_scope)
-        # and _default_manager is the scoped TenantManager. The admin's
-        # get_queryset retrieves the operator-manager queryset.
-        assert str(qs.query) == str(ConcreteListing.all_objects.all().query)
+        assert qs.count() == 0
 
-    def test_listing_admin_registered_uses_operator_queryset(self):
-        """ListingAdmin (concrete) inherits operator queryset from AbstractListingAdmin."""
+    def test_listing_admin_fail_closed_without_org(self):
+        """ListingAdmin (concrete) returns empty when no org context."""
         test_site = AdminSite()
         admin_instance = ListingAdmin(Listing, test_site)
         request = RequestFactory().get("/admin/")
@@ -187,13 +181,46 @@ class TestListingAdminOperatorPath:
             password="pass123",
         )
         qs = admin_instance.get_queryset(request)
-        assert qs.model == Listing
-        assert str(qs.query) == str(Listing.all_objects.all().query)
+        assert qs.count() == 0
 
-    def test_admin_queryset_returns_cross_tenant_listings(
+    def test_listing_admin_scoped_queryset(self):
+        """ListingAdmin.get_queryset scopes to org when _validated_org_id is set."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        test_site = AdminSite()
+        admin_instance = ListingAdmin(Listing, test_site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="listing-scope",
+            email="listing-scope@example.com",
+            password="pass123",
+        )
+        request._validated_org_id = system_org.pk
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == Listing
+
+    def test_abstract_listing_admin_scoped_queryset(self):
+        """AbstractListingAdmin.get_queryset scopes to org when _validated_org_id is set."""
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        test_site = AdminSite()
+        admin_instance = AbstractListingAdmin(ConcreteListing, test_site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="abstract-scope",
+            email="abstract-scope@example.com",
+            password="pass123",
+        )
+        request._validated_org_id = system_org.pk
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == ConcreteListing
+
+    def test_admin_queryset_returns_only_same_org_listings(
         self, org_a, org_b, listing_factory
     ):
-        """Operator admin queryset returns listings from all organizations."""
+        """Scoped admin queryset returns only listings from the scoped org."""
         listing_factory(title="Listing A", organization=org_a)
         listing_factory(title="Listing B", organization=org_b)
 
@@ -201,45 +228,12 @@ class TestListingAdminOperatorPath:
         admin_instance = AbstractListingAdmin(ConcreteListing, test_site)
         request = RequestFactory().get("/admin/")
         request.user = User.objects.create_superuser(
-            username="cross-listing",
-            email="cross-listing@example.com",
+            username="scope-listing",
+            email="scope-listing@example.com",
             password="pass123",
         )
+        request._validated_org_id = org_a.pk
         qs = admin_instance.get_queryset(request)
         titles = list(qs.values_list("title", flat=True))
         assert "Listing A" in titles
-        assert "Listing B" in titles
-
-    # ------------------------------------------------------------------
-    # Spy-based seam verification: prove all_objects is actually called
-    # ------------------------------------------------------------------
-
-    def test_listing_admin_get_queryset_calls_all_objects(self):
-        """ListingAdmin.get_queryset actually calls Listing.all_objects.all()."""
-        with patch.object(Listing, "all_objects") as mock_mgr:
-            mock_mgr.all.return_value = Listing.objects.none()
-            test_site = AdminSite()
-            admin_instance = ListingAdmin(Listing, test_site)
-            request = RequestFactory().get("/admin/")
-            request.user = User.objects.create_superuser(
-                username="listing-spy",
-                email="listing-spy@example.com",
-                password="pass123",
-            )
-            admin_instance.get_queryset(request)
-            mock_mgr.all.assert_called_once()
-
-    def test_abstract_listing_admin_calls_all_objects_when_present(self):
-        """AbstractListingAdmin.get_queryset calls all_objects when model has it."""
-        with patch.object(Listing, "all_objects") as mock_mgr:
-            mock_mgr.all.return_value = Listing.objects.none()
-            test_site = AdminSite()
-            admin_instance = AbstractListingAdmin(Listing, test_site)
-            request = RequestFactory().get("/admin/")
-            request.user = User.objects.create_superuser(
-                username="abstract-spy",
-                email="abstract-spy@example.com",
-                password="pass123",
-            )
-            admin_instance.get_queryset(request)
-            mock_mgr.all.assert_called_once()
+        assert "Listing B" not in titles

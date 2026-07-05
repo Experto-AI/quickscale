@@ -1,7 +1,6 @@
 """Tests for blog admin configuration"""
 
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 from django.contrib.admin.sites import AdminSite
@@ -411,11 +410,11 @@ class TestPostAdmin:
 
 
 @pytest.mark.django_db
-class TestBlogAdminOperatorPaths:
-    """Phase F11.11: verify blog admin surfaces use all_objects for cross-tenant visibility."""
+class TestBlogAdminTenantScopedQueryset:
+    """SA14.3: verify blog admin querysets scope to org context via TenantModelAdmin."""
 
-    def test_category_admin_uses_operator_queryset(self):
-        """CategoryAdmin.get_queryset uses Category.all_objects."""
+    def test_category_admin_fail_closed_without_org(self):
+        """CategoryAdmin.get_queryset returns empty when no org context."""
         site = AdminSite()
         admin_instance = CategoryAdmin(Category, site)
         factory = RequestFactory()
@@ -424,11 +423,24 @@ class TestBlogAdminOperatorPaths:
             username="cat-admin", email="cat@example.com", password="pass123"
         )
         qs = admin_instance.get_queryset(request)
-        assert qs.model == Category
-        assert str(qs.query) == str(Category.all_objects.all().query)
+        assert qs.count() == 0
 
-    def test_tag_admin_uses_operator_queryset(self):
-        """TagAdmin.get_queryset uses Tag.all_objects."""
+    def test_category_admin_scopes_to_org(self, system_org):
+        """CategoryAdmin.get_queryset scopes to org when _validated_org_id is set."""
+        site = AdminSite()
+        admin_instance = CategoryAdmin(Category, site)
+        factory = RequestFactory()
+        request = factory.get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="cat-admin-2", email="cat2@example.com", password="pass123"
+        )
+        request._validated_org_id = system_org.pk
+        qs = admin_instance.get_queryset(request)
+        assert qs.model == Category
+        assert qs.count() == 0  # No categories exist yet
+
+    def test_tag_admin_fail_closed_without_org(self):
+        """TagAdmin.get_queryset returns empty when no org context."""
         site = AdminSite()
         admin_instance = TagAdmin(Tag, site)
         factory = RequestFactory()
@@ -437,11 +449,10 @@ class TestBlogAdminOperatorPaths:
             username="tag-admin", email="tag@example.com", password="pass123"
         )
         qs = admin_instance.get_queryset(request)
-        assert qs.model == Tag
-        assert str(qs.query) == str(Tag.all_objects.all().query)
+        assert qs.count() == 0
 
-    def test_post_admin_uses_operator_queryset(self):
-        """PostAdmin.get_queryset uses Post.all_objects."""
+    def test_post_admin_fail_closed_without_org(self):
+        """PostAdmin.get_queryset returns empty when no org context."""
         site = AdminSite()
         admin_instance = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -450,11 +461,10 @@ class TestBlogAdminOperatorPaths:
             username="post-admin", email="post@example.com", password="pass123"
         )
         qs = admin_instance.get_queryset(request)
-        assert qs.model == Post
-        assert str(qs.query) == str(Post.all_objects.all().query)
+        assert qs.count() == 0
 
-    def test_blog_media_asset_admin_uses_operator_queryset(self):
-        """BlogMediaAssetAdmin.get_queryset uses BlogMediaAsset.all_objects."""
+    def test_blog_media_asset_admin_fail_closed_without_org(self):
+        """BlogMediaAssetAdmin.get_queryset returns empty when no org context."""
         site = AdminSite()
         admin_instance = BlogMediaAssetAdmin(BlogMediaAsset, site)
         factory = RequestFactory()
@@ -463,18 +473,15 @@ class TestBlogAdminOperatorPaths:
             username="media-admin", email="media@example.com", password="pass123"
         )
         qs = admin_instance.get_queryset(request)
-        assert qs.model == BlogMediaAsset
-        assert str(qs.query) == str(BlogMediaAsset.all_objects.all().query)
+        assert qs.count() == 0
 
-    def test_admin_queryset_returns_cross_tenant_posts(self, org_a, org_b):
-        """Operator admin queryset returns posts from all organizations."""
-        from quickscale_modules_blog.models import Post
-
-        Post.objects.create(
-            title="Post A", content="A", organization=org_a, status="draft"
+    def test_post_admin_scopes_to_org(self, system_org, org_b):
+        """PostAdmin.get_queryset returns only posts from the scoped org."""
+        Post.all_objects.create(
+            title="System Post", content="A", organization=system_org, status="draft"
         )
-        Post.objects.create(
-            title="Post B", content="B", organization=org_b, status="draft"
+        Post.all_objects.create(
+            title="Org B Post", content="B", organization=org_b, status="draft"
         )
 
         site = AdminSite()
@@ -482,72 +489,14 @@ class TestBlogAdminOperatorPaths:
         factory = RequestFactory()
         request = factory.get("/admin/")
         request.user = User.objects.create_superuser(
-            username="cross-admin", email="cross@example.com", password="pass123"
+            username="scope-admin", email="scope@example.com", password="pass123"
         )
+        request._validated_org_id = system_org.pk
+
         qs = admin_instance.get_queryset(request)
         titles = list(qs.values_list("title", flat=True))
-        assert "Post A" in titles
-        assert "Post B" in titles
-
-    # ------------------------------------------------------------------
-    # Spy-based seam verification: prove all_objects is actually called
-    # ------------------------------------------------------------------
-
-    def test_category_admin_get_queryset_calls_all_objects(self):
-        """CategoryAdmin.get_queryset actually calls Category.all_objects.all()."""
-        with patch.object(Category, "all_objects") as mock_mgr:
-            mock_mgr.all.return_value = Category.objects.none()
-            site = AdminSite()
-            admin_instance = CategoryAdmin(Category, site)
-            factory = RequestFactory()
-            request = factory.get("/admin/")
-            request.user = User.objects.create_superuser(
-                username="cat-spy", email="cat-spy@example.com", password="pass123"
-            )
-            admin_instance.get_queryset(request)
-            mock_mgr.all.assert_called_once()
-
-    def test_tag_admin_get_queryset_calls_all_objects(self):
-        """TagAdmin.get_queryset actually calls Tag.all_objects.all()."""
-        with patch.object(Tag, "all_objects") as mock_mgr:
-            mock_mgr.all.return_value = Tag.objects.none()
-            site = AdminSite()
-            admin_instance = TagAdmin(Tag, site)
-            factory = RequestFactory()
-            request = factory.get("/admin/")
-            request.user = User.objects.create_superuser(
-                username="tag-spy", email="tag-spy@example.com", password="pass123"
-            )
-            admin_instance.get_queryset(request)
-            mock_mgr.all.assert_called_once()
-
-    def test_post_admin_get_queryset_calls_all_objects(self):
-        """PostAdmin.get_queryset actually calls Post.all_objects.all()."""
-        with patch.object(Post, "all_objects") as mock_mgr:
-            mock_mgr.all.return_value = Post.objects.none()
-            site = AdminSite()
-            admin_instance = PostAdmin(Post, site)
-            factory = RequestFactory()
-            request = factory.get("/admin/")
-            request.user = User.objects.create_superuser(
-                username="post-spy", email="post-spy@example.com", password="pass123"
-            )
-            admin_instance.get_queryset(request)
-            mock_mgr.all.assert_called_once()
-
-    def test_blog_media_asset_admin_get_queryset_calls_all_objects(self):
-        """BlogMediaAssetAdmin.get_queryset actually calls BlogMediaAsset.all_objects.all()."""
-        with patch.object(BlogMediaAsset, "all_objects") as mock_mgr:
-            mock_mgr.all.return_value = BlogMediaAsset.objects.none()
-            site = AdminSite()
-            admin_instance = BlogMediaAssetAdmin(BlogMediaAsset, site)
-            factory = RequestFactory()
-            request = factory.get("/admin/")
-            request.user = User.objects.create_superuser(
-                username="media-spy", email="media-spy@example.com", password="pass123"
-            )
-            admin_instance.get_queryset(request)
-            mock_mgr.all.assert_called_once()
+        assert "System Post" in titles
+        assert "Org B Post" not in titles
 
 
 @pytest.mark.django_db
@@ -731,6 +680,9 @@ class TestBlogAdminOrgAwareMixin:
 
     def test_post_admin_add_accepts_same_org_category(self, org_a):
         """PostAdmin add form accepts category from the same org."""
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
+        set_current_org_id(org_a.pk)
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -790,6 +742,9 @@ class TestBlogAdminOrgAwareMixin:
 
     def test_post_admin_add_accepts_same_org_tag(self, org_a):
         """PostAdmin add form accepts tag from the same org."""
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
+        set_current_org_id(org_a.pk)
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
