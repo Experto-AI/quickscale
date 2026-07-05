@@ -1,4 +1,5 @@
-"""Manifest-driven wiring spec entry point.
+"""
+Manifest-driven wiring spec entry point.
 
 Provides :func:`build_manifest_wiring_spec` — the canonical entry point that
 routes a module through its manifest adapter and the manifest assembler to
@@ -37,15 +38,14 @@ from collections.abc import Callable
 from typing import Any
 
 from quickscale_core.contracts.module_discovery import get_modules_base_path
-from quickscale_core.manifest.derivation import build_schema_from_manifest
-from quickscale_core.manifest.loader import ManifestError, load_manifest_from_path
-from quickscale_core.manifest.resolver import resolve_module_config
 from quickscale_core.manifest.assembler import (
     PostResolutionHook,
     assemble_wiring_spec,
 )
+from quickscale_core.manifest.derivation import build_schema_from_manifest
+from quickscale_core.manifest.loader import ManifestError, load_manifest_from_path
+from quickscale_core.manifest.resolver import resolve_module_config
 from quickscale_core.module_wiring import ModuleWiringSpec
-
 
 # ---------------------------------------------------------------------------
 # Generic manifest adapter helpers (T2.3 Phase 3)
@@ -64,7 +64,8 @@ _manifest_cache: dict[tuple[str, str], Any] = {}
 
 
 def load_module_manifest(module_name: str) -> Any:
-    """Load the ``module.yml`` manifest for *module_name*.
+    """
+    Load the ``module.yml`` manifest for *module_name*.
 
     Uses a module-level cache keyed by ``(module_name, base_path_str)`` to
     avoid re-reading the YAML file on every adapter invocation while still
@@ -101,7 +102,8 @@ def build_generic_manifest_spec(
     project_package: str | None = None,
     post_hook: PostResolutionHook | None = None,
 ) -> ModuleWiringSpec:
-    """Build a :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+    """
+    Build a :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
     *module_name* using the declarative derivation rules in its ``module.yml``.
 
     This is the generic entry point for Batch A modules whose derivation
@@ -177,7 +179,8 @@ MANAGED_ADAPTER_ORIGINS: set[str] = set()
 
 
 def refresh_managed_adapters() -> None:
-    """Refresh managed adapter entries in :data:`MANIFEST_ADAPTER_REGISTRY`
+    """
+    Refresh managed adapter entries in :data:`MANIFEST_ADAPTER_REGISTRY`
     based on the current modules base path.
 
     For each module name in :data:`MANAGED_ADAPTER_ORIGINS`:
@@ -263,7 +266,8 @@ def refresh_managed_adapters() -> None:
 def _analytics_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply analytics-specific type coercions and fallback defaults.
+    """
+    Apply analytics-specific type coercions and fallback defaults.
 
     The generic resolver handles wiring projections and option derivations
     declared in ``module.yml``.  This hook reproduces the legacy boolean/string
@@ -332,7 +336,8 @@ def _analytics_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the analytics module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the analytics module via the manifest path.
 
     Uses the generic manifest-driven path that reads derivation rules
     (wiring projections, option derivations) from the analytics ``module.yml``
@@ -407,7 +412,8 @@ def _blog_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the blog module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the blog module via the manifest path.
 
     Uses the generic manifest-driven path that reads derivation rules from the
     blog ``module.yml`` manifest.
@@ -466,7 +472,8 @@ def _listings_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the listings module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the listings module via the manifest path.
 
     Uses the generic manifest-driven path that reads derivation rules from the
     listings ``module.yml`` manifest.
@@ -537,7 +544,8 @@ def _forms_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the forms module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the forms module via the manifest path.
 
     Uses the generic manifest-driven path that reads derivation rules from the
     forms ``module.yml`` manifest.
@@ -570,7 +578,8 @@ def _backups_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the backups module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the backups module via the manifest path.
 
     Apps: ``("quickscale_modules_backups",)``.
     Settings: QUICKSCALE_BACKUPS_* keys.
@@ -588,11 +597,11 @@ def _backups_manifest_adapter(
         backups that is equal to the legacy ``_backups_wiring`` output.
     """
     from quickscale_core.contracts.module_options import (  # noqa: PLC0415
-        normalize_backups_module_options,
         BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
         BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
         DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
         DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+        normalize_backups_module_options,
     )
     from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         default_backups_module_options,
@@ -707,7 +716,8 @@ def _notifications_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the notifications module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the notifications module via the manifest path.
 
     Apps: ``("quickscale_modules_notifications",)`` with ``"anymail"`` prepended
     when the runtime email backend is the live Resend backend.
@@ -930,7 +940,9 @@ def _notifications_manifest_adapter(
     def _notifications_post_hook(
         spec: ModuleWiringSpec, resolved_opts: dict[str, Any]
     ) -> ModuleWiringSpec:
-        from quickscale_core.module_wiring import ModuleWiringSpec as _MWS  # noqa: PLC0415
+        from quickscale_core.module_wiring import (
+            ModuleWiringSpec as _MWS,
+        )
 
         apps = list(spec.apps)
         if runtime_email_backend == NOTIFICATIONS_LIVE_EMAIL_BACKEND:
@@ -969,7 +981,8 @@ def _auth_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the auth module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the auth module via the manifest path.
 
     Apps: ``("django.contrib.sites", "quickscale_modules_auth", "allauth",
     "allauth.account")``.
@@ -1111,7 +1124,8 @@ def _orgs_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the orgs module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the orgs module via the manifest path.
 
     Apps: ``("quickscale_modules_orgs",)``.
     Middleware: ``("quickscale_modules_orgs.middleware.TenantMiddleware",)``.
@@ -1234,7 +1248,8 @@ def _storage_manifest_adapter(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a ModuleWiringSpec for the storage module via the manifest path.
+    """
+    Build a ModuleWiringSpec for the storage module via the manifest path.
 
     Apps: ``("quickscale_modules_storage",)``.
     Settings: ``QUICKSCALE_STORAGE_BACKEND``, ``QUICKSCALE_STORAGE_PUBLIC_BASE_URL``,
@@ -1386,11 +1401,17 @@ _ADAPTERS_INITIALIZED: bool = False
 
 
 def _is_import_time_adapter_circular_import(error: Exception) -> bool:
-    """Return True when *error* is the documented lazy-init circular import.
+    """
+    Return True when *error* is the documented lazy-init circular import.
 
-    The only tolerated import-time failure is the known partially-initialized
-    core-module cycle encountered while module-owned adapters import
+    The only tolerated import-time failures are the known partially-initialized
+    core-module cycles encountered while module-owned adapters import
     ``build_generic_manifest_spec`` during entry-point initialisation.
+    Recognised patterns:
+    - ``quickscale_core.manifest.entry_point``
+    - ``quickscale_core.contracts.resolvers``
+    - ``quickscale_core.runtime``  (SA20 closeout — e.g. social adapter via
+      backups admin autodiscovery)
     """
     cause = error.__cause__
     if not isinstance(cause, ImportError):
@@ -1403,12 +1424,14 @@ def _is_import_time_adapter_circular_import(error: Exception) -> bool:
         and (
             "quickscale_core.manifest.entry_point" in message
             or "quickscale_core.contracts.resolvers" in message
+            or "quickscale_core.runtime" in message
         )
     )
 
 
 def _ensure_adapters_initialized() -> None:
-    """One-time lazy initialisation of managed adapters.
+    """
+    One-time lazy initialisation of managed adapters.
 
     Called by :func:`build_manifest_wiring_spec` when the import-time
     refresh failed (circular import during module initialisation).
@@ -1425,7 +1448,8 @@ def _ensure_adapters_initialized() -> None:
 
 
 def _initialize_managed_adapters_at_import() -> None:
-    """Eagerly initialise managed adapters unless the known circular import hits.
+    """
+    Eagerly initialise managed adapters unless the known circular import hits.
 
     Broken adapter imports must fail at import time. Only the documented
     partially-initialized core-module circular import is deferred to
@@ -1469,7 +1493,8 @@ def build_manifest_wiring_spec(
     *,
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
-    """Build a :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
+    """
+    Build a :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
     *module_name* via the manifest-driven path.
 
     Routes the module through its registered manifest adapter (which calls
