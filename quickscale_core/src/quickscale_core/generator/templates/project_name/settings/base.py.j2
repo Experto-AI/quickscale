@@ -35,6 +35,65 @@ ALLOWED_HOSTS = config(
 )
 
 
+# ── Trusted-proxy client-IP resolution ───────────────────────────────
+#
+# QuickScale supports canonical client-IP resolution behind a trusted
+# reverse proxy (e.g. Railway edge, Cloudflare, or an application-layer
+# proxy).  Both settings are environment-configurable so that single-host
+# (no-proxy) deployments keep ``REMOTE_ADDR`` with no configuration
+# change required.
+#
+# - ``USE_X_FORWARDED_FOR`` (default ``False``): when enabled, the
+#   application reads the ``X-Forwarded-For`` header to determine the
+#   real client IP instead of ``REMOTE_ADDR``.
+# - ``TRUSTED_PROXY_COUNT`` (default ``0``): the number of trusted
+#   reverse proxies in front of the application.  The client IP is
+#   extracted at position ``-(TRUSTED_PROXY_COUNT + 1)`` in the
+#   ``X-Forwarded-For`` chain.
+#
+# Both values feed into :func:`get_client_ip` below and into DRF's
+# ``NUM_PROXIES`` setting so that DRF throttles also resolve the
+# correct client identity behind a proxy.
+
+USE_X_FORWARDED_FOR = config("USE_X_FORWARDED_FOR", default=False, cast=bool)
+TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=0, cast=int)
+
+
+def get_client_ip(request: object) -> str:
+    """Return the canonical client IP address for *request*.
+
+    When ``USE_X_FORWARDED_FOR`` is enabled and a positive
+    ``TRUSTED_PROXY_COUNT`` is configured, the function resolves the
+    real client IP from the ``X-Forwarded-For`` header chain, counting
+    back from the rightmost (most recent) proxy address.
+
+    In all other cases — including the default configuration of
+    ``USE_X_FORWARDED_FOR=False`` and/or ``TRUSTED_PROXY_COUNT=0`` —
+    it returns ``request.META.get("REMOTE_ADDR", "")``, preserving
+    single-host behaviour with no configuration change.
+    """
+    if not USE_X_FORWARDED_FOR or TRUSTED_PROXY_COUNT <= 0:
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+    x_forwarded_for: str = (
+        request.META.get("HTTP_X_FORWARDED_FOR", "")  # type: ignore[union-attr]
+    ).strip()
+    if not x_forwarded_for:
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+    # X-Forwarded-For is a comma-separated list ordered from client to
+    # most recent proxy:  client, proxy1, proxy2, ..., proxyN.
+    # When we trust N proxies, the client IP lives at index
+    # -(N + 1) in the split list.
+    ips = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
+    if len(ips) > TRUSTED_PROXY_COUNT:
+        return ips[-(TRUSTED_PROXY_COUNT + 1)]
+    # Chain shorter than the declared proxy count — fail closed to
+    # REMOTE_ADDR instead of trusting a potentially spoofed leftmost
+    # address.
+    return request.META.get("REMOTE_ADDR", "")
+
+
 # ── Structured logging and correlation ID support ────────────────────
 
 
@@ -98,9 +157,8 @@ class CorrelationIdMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: object) -> object:
-        correlation_id = (
-            getattr(request, "META", {}).get("HTTP_X_REQUEST_ID")
-            or str(uuid.uuid4())
+        correlation_id = getattr(request, "META", {}).get("HTTP_X_REQUEST_ID") or str(
+            uuid.uuid4()
         )
         request.correlation_id = correlation_id  # type: ignore[union-attr]
         _correlation_id_var.set(correlation_id)
@@ -291,6 +349,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Client-IP resolution for DRF throttles
+    "NUM_PROXIES": TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None,
 }
 
 
