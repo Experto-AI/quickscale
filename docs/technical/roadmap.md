@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites + operator_access RLS predicate + fail-hard QUICKSCALE_MODE guard), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs), SA22 (2026-07-05 — same-filesystem staging + backup/swap/rollback for `apply --force`), SA25 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.6 complete (archived); SA23 and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA27, SA31, and SA33 are ready (SA22 and SA25 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.6 complete (archived); SA23 and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA27 is blocked/pending scope clarification after dependency/scope review; SA31 and SA33 remain ready (SA22 and SA25 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
@@ -57,7 +57,7 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA14.5 (no deps — complete)          SA20 (no deps)                            SA25 (no deps — complete)
-SA14.6 (no deps — complete)          SA21.2 (deps: SA21.1)                     SA27 (no deps)
+SA14.6 (no deps — complete)          SA21.2 (deps: SA21.1)                     SA27 (no deps — blocked/pending scope decision)
 SA23 (no deps)                       SA24 (no deps)                            SA31 (no deps)
 SA28 (no deps)                       SA26 (no deps)                            SA33 (no deps)
                                      SA29 (no deps)
@@ -65,7 +65,7 @@ SA28 (no deps)                       SA26 (no deps)                            S
                                      SA32 (no deps)
 ```
 
-Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to SA29 but is within Track 2. SA22 and SA25 (closed); remaining Track 3 items are now clear to proceed.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to SA29 but is within Track 2. SA22 and SA25 (closed); SA31 and SA33 remain ready; SA27 is blocked/pending scope clarification after review.
 
 ### Track 1 — Tenant-context surface
 
@@ -203,9 +203,10 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
 #### Finding — `module-option-validation-not-enforced-at-apply` (`why →` [TA26](../others/tech-audit.md))
 
 - [ ] **SA27 — Enforce module-option validation on the apply path; remove the silent coercions it currently masks.** `Tier 2 · Track 3 · deps: none · RISK LEVEL: medium (touches orgs mode + storage backend derivation)`
-  Three-part fix, one PR: (1) in `assemble_wiring_spec` (or `build_generic_manifest_spec`), raise `ManifestError` listing `result.validation_issues` when non-empty instead of discarding them; (2) add the missing `validate_{blog,forms,listings,storage,orgs}_module_options` calls to `_validate_module_prerequisites` (same pattern as the six modules already gated); (3) delete the silent coercions in `resolve_orgs_module_options` (invalid `mode` → `"solo"`), `resolve_storage_module_options` (invalid `backend` → `"local"`), and the blog `api_rate_limit` blank-coercion, so the validators' existing checks become reachable instead of dead code.
+  Three-part fix, one PR: (1) in `assemble_wiring_spec` (or `build_generic_manifest_spec`), raise `ManifestError` listing `result.validation_issues` when non-empty instead of discarding them; (2) add the missing `validate_{blog,forms,storage,orgs}_module_options` calls to `_validate_module_prerequisites` (listings skipped pending scope decision — see blockers; same pattern as the six modules already gated); (3) delete the silent coercions in `resolve_orgs_module_options` (invalid `mode` → `"solo"`), `resolve_storage_module_options` (invalid `backend` → `"local"`), and the blog `api_rate_limit` blank-coercion, so the validators' existing checks become reachable instead of dead code.
   *Files:* `quickscale_cli/src/quickscale_cli/commands/apply_command.py:984-1155`, `quickscale_core/src/quickscale_core/manifest/assembler.py` (`assemble_wiring_spec`), `quickscale_core/src/quickscale_core/contracts/resolvers.py` (`resolve_orgs_module_options:1239-1242`, `resolve_storage_module_options:1612-1614`, `normalize_blog_module_options:430-434,445-448`).
   *Acceptance:* apply with `modules.orgs.mode: "invalid"` aborts with a descriptive error naming the allowed values instead of silently generating a solo-mode project; apply with `modules.storage.backend: "s3compat"` aborts instead of silently dropping the S3 wiring; apply with `modules.forms.rate_limit: "10 per hour"` aborts at apply time instead of 500ing the public form endpoint at runtime; existing valid-config apply paths are unaffected.
+  *Findings/blockers (scope decisions pending):* Implementation stopped after dependency/scope review. Dependencies are confirmed none (SA27 has no prerequisites), but two issues require resolution before proceeding: (1) Listings is skipped from Part 2 pending a scope decision — the old `validate_listings_module_options` no longer exists after the declarative migration; decision needed whether to add a listings validator back into Part 2 or rely on Part 1's fail-hard `validation_issues` path for listings. (2) Part 1 would make apply fail hard on any non-empty `validation_issues` across declarative modules, so a focused audit/regression check is needed before merging to confirm no valid config triggers a false abort. SA31 and SA33 remain ready and are unaffected by this block.
 
 #### Finding — `railway-cli-secrets-on-argv` (`why →` [TA27](../others/tech-audit.md))
 
