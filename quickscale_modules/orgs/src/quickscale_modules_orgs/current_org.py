@@ -24,6 +24,7 @@ transaction behavior.
 from __future__ import annotations
 
 import contextlib
+import logging
 import uuid
 from collections.abc import Iterator
 from contextvars import ContextVar
@@ -560,6 +561,125 @@ def install_priming_wrapper(connection: Any) -> bool:
     connection.execute_wrappers.append(wrapper)
     setattr(connection, _INSTALLED_MARKER, True)
     return True
+
+
+# ---------------------------------------------------------------------------
+# SA14.5 — operator_access context manager
+# ---------------------------------------------------------------------------
+# Superuser-gated, audit-logged context manager for cross-tenant reads.
+# Temporarily sets the PostgreSQL GUC ``app.operator_access`` to ``'on'``
+# so FORCE RLS policies allow queries matching any ``organization_id``.
+# ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+_OPERATOR_ACCESS_GUC = "app.operator_access"
+"""PostgreSQL GUC that signals operator-access mode to RLS policies."""
+
+
+def _get_operator_access() -> str:
+    """Return the current ``app.operator_access`` GUC value.
+
+    Returns ``''`` (empty string) on non-PostgreSQL databases or when
+    the GUC is at its default (unset) value.
+
+    Used by :func:`operator_access` to save/restore the prior GUC for
+    nesting safety (CR-SA14.5-002).
+    """
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        return ""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT COALESCE(NULLIF(current_setting(%s, true), ''), '')",
+            [_OPERATOR_ACCESS_GUC],
+        )
+        (result,) = cursor.fetchone()
+        return result
+
+
+def _set_operator_access(value: str) -> None:
+    """Set the ``app.operator_access`` GUC via ``SET LOCAL``.
+
+    Transaction-scoped — must be called inside an active
+    ``transaction.atomic()`` block.
+
+    No-op on non-PostgreSQL databases.
+
+    Args:
+        value: ``'on'`` or ``''`` (empty string to clear).
+    """
+    from django.db import connection
+
+    if connection.vendor != "postgresql":
+        return
+    with connection.cursor() as cursor:
+        cursor.execute(f"SET LOCAL {_OPERATOR_ACCESS_GUC} = %s", [value])
+
+
+@contextlib.contextmanager
+def operator_access(*, reason: str) -> Iterator[None]:
+    """Superuser-gated, audit-logged context manager for cross-tenant reads.
+
+    Temporarily sets the PostgreSQL GUC ``app.operator_access`` to
+    ``'on'`` via ``SET LOCAL`` so that FORCE RLS policies allow queries
+    matching **any** ``organization_id`` (see the SA14.5 OR clause added
+    to ``tenancy._FORCE_RLS_FORWARD_SQL`` ``_select`` sub-policy).
+
+    The elevation is **transaction-scoped**: ``SET LOCAL`` applies only
+    within the current database transaction and is automatically reset
+    on transaction end.  Callers must be inside an active
+    ``transaction.atomic()`` block.
+
+    **Nesting-safe**: saves the prior ``app.operator_access`` GUC value
+    on entry and restores it on exit, so nested ``operator_access()``
+    use correctly preserves the outer scope (CR-SA14.5-002).
+
+    **Superuser-gated:** callers must verify ``user.is_superuser``
+    before entering this context manager.  Views and management commands
+    are responsible for this check (see the existing pattern in
+    :func:`debug_helpers.set_debug_as_org`).
+
+    **Audit-logged:** every activation is recorded at ``INFO`` level
+    via stdlib logging with a structured ``extra`` dict containing the
+    reason.  Deactivation is also logged so the complete lifecycle is
+    observable.
+
+    Usage::
+
+        from quickscale_modules_orgs.current_org import operator_access
+
+        with transaction.atomic():
+            with operator_access(reason="Support ticket #12345"):
+                rows = MyModel.all_objects.filter(...)
+
+    Args:
+        reason: Human-readable explanation of why operator access is
+            needed.  Logged at ``INFO`` level for audit review (e.g.
+            ``"Support ticket #12345 — investigate billing discrepancy"``).
+
+    Yields:
+        None
+    """
+    # Save the prior GUC value so nesting is safe (CR-SA14.5-002).
+    prior = _get_operator_access()
+    _set_operator_access("on")
+    logger.info(
+        "operator_access activated",
+        extra={"reason": reason},
+    )
+    try:
+        yield
+    finally:
+        # Restore prior GUC value instead of unconditionally clearing
+        # to ``''``, so nested operator_access() use correctly restores
+        # the outer scope (CR-SA14.5-002).
+        _set_operator_access(prior)
+        logger.info(
+            "operator_access deactivated",
+            extra={"reason": reason},
+        )
 
 
 # ---------------------------------------------------------------------------

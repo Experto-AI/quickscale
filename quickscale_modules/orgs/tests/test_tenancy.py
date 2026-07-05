@@ -93,16 +93,23 @@ class TestForceRlsSqlTemplates:
         guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
         assert guarded_cast in _FORCE_RLS_FORWARD_SQL
 
-    def test_forward_sql_guarded_cast_appears_exactly_twice(self) -> None:
-        """The guarded cast must appear exactly twice: once in the
-        USING clause and once in the WITH CHECK clause."""
+    def test_forward_sql_guarded_cast_appears_three_times(self) -> None:
+        """The guarded cast must appear exactly three times: once in FOR ALL
+        USING, once in FOR ALL WITH CHECK, and once in FOR SELECT USING.
+
+        CR-SA14.5-001 split the operator_access OR clause into a separate
+        FOR SELECT sub-policy, adding a third guarded-cast occurrence."""
         guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
-        assert _FORCE_RLS_FORWARD_SQL.count(guarded_cast) == 2
+        assert _FORCE_RLS_FORWARD_SQL.count(guarded_cast) == 3
 
     def test_forward_sql_guarded_cast_in_using_clause(self) -> None:
-        """The guarded cast appears specifically in the USING clause."""
+        """The guarded cast appears in the USING clause before the
+        operator_access OR clause."""
         guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
-        assert f"USING ({guarded_cast} = organization_id)" in _FORCE_RLS_FORWARD_SQL
+        assert (
+            f"USING (\n        {guarded_cast} = organization_id\n        OR"
+            in _FORCE_RLS_FORWARD_SQL
+        )
 
     def test_forward_sql_guarded_cast_in_with_check_clause(self) -> None:
         """The guarded cast appears specifically in the WITH CHECK clause."""
@@ -110,6 +117,53 @@ class TestForceRlsSqlTemplates:
         assert (
             f"WITH CHECK ({guarded_cast} = organization_id)" in _FORCE_RLS_FORWARD_SQL
         )
+
+    def test_forward_sql_contains_operator_access_predicate(self) -> None:
+        """The SA14.5 operator_access OR clause is present in the template."""
+        assert (
+            "NULLIF(current_setting('app.operator_access', true), '') = 'on'"
+            in _FORCE_RLS_FORWARD_SQL
+        )
+
+    def test_forward_sql_operator_access_in_for_select_only(self) -> None:
+        """The operator_access predicate appears in the FOR SELECT sub-policy's
+        USING clause only, never in FOR ALL or WITH CHECK (CR-SA14.5-001).
+
+        operator_access must grant cross-tenant **read** visibility only,
+        not write or delete visibility."""
+        assert (
+            "NULLIF(current_setting('app.operator_access', true), '') = 'on'"
+            in _FORCE_RLS_FORWARD_SQL
+        )
+        # operator_access appears in the FOR SELECT sub-policy (after "_select").
+        assert "_select" in _FORCE_RLS_FORWARD_SQL, (
+            "Expected _select sub-policy for read-only operator_access"
+        )
+        select_part = _FORCE_RLS_FORWARD_SQL.split("_select")[-1]
+        assert "USING (" in select_part, (
+            "operator_access sub-policy must have a USING clause"
+        )
+        # FOR SELECT has no WITH CHECK — read-only elevation.
+        assert "WITH CHECK" not in select_part, (
+            "FOR SELECT sub-policy must not contain WITH CHECK"
+        )
+
+    def test_forward_sql_with_check_unchanged(self) -> None:
+        """The FOR ALL policy's WITH CHECK clause still uses only the
+        current_org_id guard (no operator_access bypass).
+
+        CR-SA14.5-001: operator_access appears only in the FOR SELECT
+        sub-policy, never in any WITH CHECK clause."""
+        guarded_cast = "NULLIF(current_setting('app.current_org_id', true), '')::uuid"
+        assert (
+            f"WITH CHECK ({guarded_cast} = organization_id)" in _FORCE_RLS_FORWARD_SQL
+        )
+        # operator_access must not appear on any line containing WITH CHECK.
+        for line in _FORCE_RLS_FORWARD_SQL.split("\n"):
+            if "WITH CHECK" in line:
+                assert "operator_access" not in line, (
+                    "operator_access must not appear in WITH CHECK clause"
+                )
 
     def test_forward_sql_has_format_placeholders(self) -> None:
         assert "{table}" in _FORCE_RLS_FORWARD_SQL
@@ -165,12 +219,24 @@ class TestApplyForceRlsPostgres:
         assert "policy_one" in first_call_sql
 
     def test_forward_sql_coherent(self, pg_schema_editor: MagicMock) -> None:
-        """Smoke: the formatted SQL is syntactically plausible."""
+        """Smoke: the formatted SQL is syntactically plausible.
+
+        CR-SA14.5-001 split the template into two policies:
+        - FOR ALL (standard write path, no operator_access bypass)
+        - FOR SELECT (read-only operator elevation)
+        """
         apply_force_rls(pg_schema_editor, self.TARGETS)
         sql = pg_schema_editor.execute.call_args_list[0][0][0]
         assert sql.count("ALTER TABLE") == 2  # ENABLE + FORCE
-        assert sql.count("CREATE POLICY") == 1
+        assert sql.count("CREATE POLICY") == 2, (
+            "Expected 2 CREATE POLICY statements (FOR ALL + FOR SELECT)"
+        )
         assert sql.count("FOR ALL") == 1
+        # Both the policy definition ("CREATE POLICY ... FOR SELECT") and
+        # the prose comment ("-- Deliberately FOR SELECT only") reference
+        # FOR SELECT.  Verify the policy-level occurrence exists.
+        assert "FOR SELECT" in sql
+        assert sql.count("CREATE POLICY") == 2
 
     def test_forward_reverse_round_trip(self, pg_schema_editor: MagicMock) -> None:
         """Applying then reverting should produce complementary SQL."""
@@ -685,7 +751,7 @@ class TestCompositeFkFormFieldValueDeletePath:
         """
         from django.db import connection
 
-        from quickscale_modules_forms.models import (
+        from quickscale_modules_forms.models import (  # type: ignore[import-untyped]
             Form,
             FormField,
             FormFieldValue,
