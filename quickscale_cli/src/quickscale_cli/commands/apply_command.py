@@ -1779,29 +1779,58 @@ def _generate_with_existing_config(
 
     saved_config = quickscale_yml_path.read_text()
 
-    if force:
-        for item in output_path.iterdir():
-            if item.name != "quickscale.yml":
-                if item.is_dir():
-                    shutil.rmtree(item)
-                else:
-                    item.unlink()
-
-    temp_dir = Path(tempfile.mkdtemp())
+    temp_dir = Path(tempfile.mkdtemp(dir=str(output_path.parent)))
     temp_project = temp_dir / qs_config.project.slug
 
     if not _generate_project(qs_config, temp_project):
         shutil.rmtree(temp_dir)
         raise click.Abort()
 
-    for item in temp_project.iterdir():
-        dest = output_path / item.name
-        if dest.exists():
-            if dest.is_dir():
-                shutil.rmtree(dest)
-            else:
-                dest.unlink()
-        shutil.move(str(item), str(dest))
+    if force:
+        # Backup+swap+rollback: move existing content to a same-filesystem backup
+        # dir, swap staged files in, and restore the originals on failure.
+        backup_dir = Path(tempfile.mkdtemp(dir=str(output_path.parent)))
+        try:
+            for item in output_path.iterdir():
+                if item.name != "quickscale.yml":
+                    shutil.move(str(item), str(backup_dir / item.name))
+        except Exception:
+            # Backup phase failed — restore whatever was moved to backup
+            for item in backup_dir.iterdir():
+                shutil.move(str(item), str(output_path / item.name))
+            shutil.rmtree(backup_dir)
+            shutil.rmtree(temp_dir)
+            raise click.Abort()
+
+        try:
+            for item in temp_project.iterdir():
+                dest = output_path / item.name
+                shutil.move(str(item), str(dest))
+        except Exception:
+            # Staging swap failed — remove partially-moved files, restore originals
+            for item in list(output_path.iterdir()):
+                if item.name != "quickscale.yml":
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+            for item in backup_dir.iterdir():
+                shutil.move(str(item), str(output_path / item.name))
+            shutil.rmtree(backup_dir)
+            shutil.rmtree(temp_dir)
+            raise click.Abort()
+
+        shutil.rmtree(backup_dir)
+    else:
+        for item in temp_project.iterdir():
+            dest = output_path / item.name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+            shutil.move(str(item), str(dest))
+
     shutil.rmtree(temp_dir)
 
     quickscale_yml_path.write_text(saved_config)
