@@ -93,11 +93,20 @@ class TestManifestAdapterRegistry:
         assert callable(MANIFEST_ADAPTER_REGISTRY["storage"])
 
     def test_social_registered_at_import(self) -> None:
-        """Social adapter is registered when entry_point module loads."""
+        """Social adapter is available (import-time or deferred lazy init).
+
+        The social adapter is a managed adapter owned by the module package
+        (``quickscale_modules_social.adapter``).  When the managed adapter
+        import triggers a ``quickscale_core.runtime`` circular import
+        (e.g. because the backups module loaded first), the import-time
+        initialisation is deferred to :func:`_ensure_adapters_initialized`.
+        """
+        entry_point_module._ensure_adapters_initialized()
         assert "social" in MANIFEST_ADAPTER_REGISTRY
 
     def test_social_value_is_callable(self) -> None:
-        """The social registry entry is callable."""
+        """The social registry entry is callable (import-time or deferred)."""
+        entry_point_module._ensure_adapters_initialized()
         assert callable(MANIFEST_ADAPTER_REGISTRY["social"])
 
     def test_importable_from_manifest_package(self) -> None:
@@ -582,6 +591,37 @@ class TestImportTimeManagedAdapterInitialization:
             raise ImproperlyConfigured("circular import during adapter init") from (
                 circular_import
             )
+
+        monkeypatch.setattr(
+            entry_point_module,
+            "refresh_managed_adapters",
+            _raise_circular_import,
+        )
+
+        entry_point_module._initialize_managed_adapters_at_import()
+
+        assert entry_point_module._ADAPTERS_INITIALIZED is False
+
+    def test_runtime_circular_import_is_deferred_to_lazy_init(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``quickscale_core.runtime`` circular import is recognised and
+        deferred to lazy init (SA20 closeout — social adapter via backups
+        admin autodiscovery)."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
+
+        runtime_circular = ImportError(
+            "cannot import name 'SOCIAL_EMBEDS_PATH' from partially "
+            "initialized module 'quickscale_core.runtime' "
+            "(most likely due to a circular import)"
+        )
+
+        def _raise_circular_import() -> None:
+            raise ImproperlyConfigured(
+                "circular import during adapter init"
+            ) from runtime_circular
 
         monkeypatch.setattr(
             entry_point_module,

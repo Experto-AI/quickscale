@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+from tempfile import mkdtemp
 from typing import TYPE_CHECKING, Any
 
 from django import forms
@@ -12,6 +16,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils import timezone as django_timezone
 from django.utils.html import format_html
 
 from quickscale_modules_backups.models import (
@@ -21,11 +26,18 @@ from quickscale_modules_backups.models import (
 )
 from quickscale_modules_backups.services import (
     BackupError,
+    BackupRestoreBlocked,
     RestoreSourceResolutionMode,
+    # Admin uploaded-file staging/resolution/cleanup seam
+    _cleanup_admin_restore_upload_directory,
+    _resolve_admin_uploaded_restore_artifact,
+    _stage_admin_restore_upload,
     create_backup,
     delete_artifact_files,
     download_backup_path,
     ensure_default_policy,
+    get_local_backup_directory,
+    load_policy_snapshot,
     prune_expired_backups,
     restore_admin_uploaded_backup,
     restore_backup_artifact,
@@ -34,6 +46,23 @@ from quickscale_modules_backups.services import (
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
+
+
+def _get_manage_py() -> str:
+    """Return the path to manage.py for subprocess management-command dispatch."""
+    script = Path(sys.argv[0])
+    if script.name == "manage.py" and script.exists():
+        return str(script)
+    try:
+        from django.conf import settings
+
+        base = Path(settings.BASE_DIR)
+        candidate = base / "manage.py"
+        if candidate.exists():
+            return str(candidate)
+    except Exception:
+        pass
+    return "manage.py"
 
 
 class BackupPolicyRestoreForm(forms.Form):
@@ -417,40 +446,40 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                             )
 
                 if not form.errors:
-                    try:
-                        if (
-                            form.cleaned_data["source_mode"]
-                            == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
-                        ):
-                            assert selected_artifact is not None
-                            result = restore_backup_artifact(
-                                selected_artifact,
-                                confirmation=form.cleaned_data["confirmation"],
-                                dry_run=operation == "dry_run",
-                                resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
-                            )
+                    if operation == "dry_run":
+                        try:
+                            if (
+                                form.cleaned_data["source_mode"]
+                                == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
+                            ):
+                                assert selected_artifact is not None
+                                result = restore_backup_artifact(
+                                    selected_artifact,
+                                    confirmation=form.cleaned_data["confirmation"],
+                                    dry_run=True,
+                                    resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
+                                )
+                            else:
+                                result = restore_admin_uploaded_backup(
+                                    form.cleaned_data["uploaded_file"],
+                                    confirmation=form.cleaned_data["confirmation"],
+                                    dry_run=True,
+                                )
+                        except BackupError as exc:
+                            form.add_error(None, str(exc))
                         else:
-                            result = restore_admin_uploaded_backup(
-                                form.cleaned_data["uploaded_file"],
-                                confirmation=form.cleaned_data["confirmation"],
-                                dry_run=operation == "dry_run",
-                            )
-                    except BackupError as exc:
-                        form.add_error(None, str(exc))
-                    else:
-                        self.message_user(
-                            request,
-                            result.message,
-                            level=messages.SUCCESS,
-                        )
-                        for warning in result.warnings:
                             self.message_user(
                                 request,
-                                warning.message,
-                                level=messages.WARNING,
+                                result.message,
+                                level=messages.SUCCESS,
                             )
+                            for warning in result.warnings:
+                                self.message_user(
+                                    request,
+                                    warning.message,
+                                    level=messages.WARNING,
+                                )
 
-                        if operation == "dry_run":
                             redirect_url = reverse(
                                 "admin:quickscale_modules_backups_backuppolicy_restore"
                             )
@@ -459,11 +488,221 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                     f"{redirect_url}?artifact_id={selected_artifact.pk}"
                                 )
                             return HttpResponseRedirect(redirect_url)
-                        return HttpResponseRedirect(
-                            reverse(
-                                "admin:quickscale_modules_backups_backuppolicy_changelist"
+
+                    # SA20: Async dispatch for actual restore — return immediately,
+                    # let the management command handle execution in background.
+                    # Guard against dry_run fallthrough when the dry run
+                    # raises and adds a form error.
+                    elif operation == "restore":
+                        try:
+                            if (
+                                form.cleaned_data["source_mode"]
+                                == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
+                            ):
+                                assert selected_artifact is not None
+                                confirm_value = form.cleaned_data["confirmation"]
+                                manage_py = _get_manage_py()
+
+                                # CR-SA20-007: Persist STATUS_RESTORING before
+                                # Popen so a fast child terminal update is never
+                                # missed or overwritten.  Roll back to the
+                                # pre-spawn status on spawn failure.
+                                pre_spawn_status = selected_artifact.status
+                                selected_artifact.status = (
+                                    BackupArtifact.STATUS_RESTORING
+                                )
+                                selected_artifact.restore_started_at = (
+                                    django_timezone.now()
+                                )
+                                selected_artifact.restore_error = ""
+                                selected_artifact.save(
+                                    update_fields=[
+                                        "status",
+                                        "restore_started_at",
+                                        "restore_error",
+                                        "updated_at",
+                                    ]
+                                )
+                                try:
+                                    subprocess.Popen(
+                                        [
+                                            sys.executable,
+                                            manage_py,
+                                            "backups_restore",
+                                            str(selected_artifact.pk),
+                                            "--confirm",
+                                            confirm_value,
+                                            "--local-only",
+                                        ],
+                                        close_fds=True,
+                                    )
+                                except Exception:
+                                    # Rollback: restore pre-spawn status so a
+                                    # spawn failure never strands the artifact
+                                    # in STATUS_RESTORING.
+                                    selected_artifact.status = pre_spawn_status
+                                    selected_artifact.restore_started_at = None
+                                    selected_artifact.save(
+                                        update_fields=[
+                                            "status",
+                                            "restore_started_at",
+                                            "updated_at",
+                                        ]
+                                    )
+                                    raise
+                            else:
+                                # SA20 uploaded-file restore: route through
+                                # the trusted authoritative seam before
+                                # dispatching the background restore.  Uses
+                                # the same staging + trusted resolver as
+                                # restore_admin_uploaded_backup (sync flow)
+                                # so that ambiguous, incomplete-snapshot,
+                                # and untrusted cases are rejected
+                                # identically.
+                                uploaded_file = form.cleaned_data["uploaded_file"]
+                                staging_directory = Path(
+                                    mkdtemp(prefix=("quickscale-backups-admin-upload-"))
+                                )
+                                try:
+                                    staged_upload = _stage_admin_restore_upload(
+                                        uploaded_file,
+                                        staging_directory=(staging_directory),
+                                    )
+                                    trusted_artifact = (
+                                        _resolve_admin_uploaded_restore_artifact(
+                                            checksum_sha256=(
+                                                staged_upload.checksum_sha256
+                                            ),
+                                            size_bytes=(staged_upload.size_bytes),
+                                        )
+                                    )
+                                except Exception:
+                                    _cleanup_admin_restore_upload_directory(
+                                        staging_directory
+                                    )
+                                    raise
+
+                                confirm_value = form.cleaned_data["confirmation"]
+                                if confirm_value.strip() != trusted_artifact.filename:
+                                    _cleanup_admin_restore_upload_directory(
+                                        staging_directory
+                                    )
+                                    raise BackupRestoreBlocked(
+                                        "Confirmation must exactly match "
+                                        "the backup filename."
+                                    )
+
+                                # CR-SA20-005: Always remap to a trusted
+                                # path under get_local_backup_directory().
+                                # Ignore any unsafe persisted local_path
+                                # — persist only after a successful copy.
+                                policy_snapshot = load_policy_snapshot()
+                                local_dir = get_local_backup_directory(policy_snapshot)
+                                local_dir.mkdir(parents=True, exist_ok=True)
+                                local_path = local_dir / trusted_artifact.filename
+
+                                # Skip the copy when the staged upload is already at the
+                                # artifact's expected local path (same file from
+                                # testing or inline materialization).  Use
+                                # resolve() to handle symlinks and relative
+                                # vs absolute path normalization.
+                                if (
+                                    staged_upload.local_path.resolve()
+                                    != local_path.resolve()
+                                ):
+                                    # CR-SA20-005: Remove any pre-existing
+                                    # destination (including symlinks) before
+                                    # copy so we always materialize a regular
+                                    # file inside the authoritative backup
+                                    # root.
+                                    local_path.unlink(missing_ok=True)
+                                    shutil.copy2(
+                                        staged_upload.local_path,
+                                        local_path,
+                                    )
+                                _cleanup_admin_restore_upload_directory(
+                                    staging_directory
+                                )
+
+                                # Persist local_path only after successful
+                                # copy so a failed copy does not leave a
+                                # dangling path on the artifact.
+                                trusted_artifact.local_path = str(local_path)
+                                trusted_artifact.save(
+                                    update_fields=[
+                                        "local_path",
+                                        "updated_at",
+                                    ]
+                                )
+
+                                # Dispatch async via artifact-id path.
+                                # CR-SA20-006: Always pass --local-only so
+                                # the child never remote-materializes.
+                                # CR-SA20-007: Persist STATUS_RESTORING before
+                                # Popen so a fast child terminal update is never
+                                # missed or overwritten.  Roll back to the
+                                # pre-spawn status on spawn failure.
+                                manage_py = _get_manage_py()
+                                pre_spawn_status = trusted_artifact.status
+                                trusted_artifact.status = (
+                                    BackupArtifact.STATUS_RESTORING
+                                )
+                                trusted_artifact.restore_started_at = (
+                                    django_timezone.now()
+                                )
+                                trusted_artifact.restore_error = ""
+                                trusted_artifact.save(
+                                    update_fields=[
+                                        "status",
+                                        "restore_started_at",
+                                        "restore_error",
+                                        "updated_at",
+                                    ]
+                                )
+                                try:
+                                    subprocess.Popen(
+                                        [
+                                            sys.executable,
+                                            manage_py,
+                                            "backups_restore",
+                                            str(trusted_artifact.pk),
+                                            "--confirm",
+                                            confirm_value,
+                                            "--local-only",
+                                        ],
+                                        close_fds=True,
+                                    )
+                                except Exception:
+                                    # Rollback: restore pre-spawn status so a
+                                    # spawn failure never strands the artifact
+                                    # in STATUS_RESTORING.
+                                    trusted_artifact.status = pre_spawn_status
+                                    trusted_artifact.restore_started_at = None
+                                    trusted_artifact.save(
+                                        update_fields=[
+                                            "status",
+                                            "restore_started_at",
+                                            "updated_at",
+                                        ]
+                                    )
+                                    raise
+                        except Exception as exc:
+                            form.add_error(
+                                None,
+                                f"Failed to initiate background restore: {exc}",
                             )
-                        )
+                        else:
+                            self.message_user(
+                                request,
+                                "Restore has been initiated in the background. "
+                                "Check the artifact's status for progress or errors.",
+                                level=messages.SUCCESS,
+                            )
+                            return HttpResponseRedirect(
+                                reverse(
+                                    "admin:quickscale_modules_backups_backuppolicy_changelist"
+                                )
+                            )
         else:
             if can_view_restore_artifacts:
                 selected_artifact = self._get_restore_artifact_by_id(
@@ -534,6 +773,11 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         """Return why an artifact cannot be restored from the admin surface."""
         if artifact.status == BackupArtifact.STATUS_DELETED:
             return "Deleted backup artifacts cannot be restored from admin."
+        if artifact.status == BackupArtifact.STATUS_RESTORING:
+            return (
+                "This backup artifact is currently being restored. "
+                "Wait for the restore to complete before retrying."
+            )
         if artifact.is_export_only() or artifact.backup_format != "pg_dump_custom":
             return (
                 "Admin restore only supports PostgreSQL custom-format backup artifacts."
@@ -701,6 +945,8 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         "initiated_by",
         "validation_notes",
         "validated_at",
+        "restore_started_at",
+        "restore_error",
         "restored_at",
         "deleted_at",
         "created_at",
@@ -754,6 +1000,8 @@ class BackupArtifactAdmin(admin.ModelAdmin):
                     "dump_client_major",
                     "validation_notes",
                     "validated_at",
+                    "restore_started_at",
+                    "restore_error",
                     "restored_at",
                     "deleted_at",
                     "metadata_pretty",
