@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.4 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs), SA22 (2026-07-05 — same-filesystem staging + backup/swap/rollback for `apply --force`). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.4 complete (archived); SA14.5, SA14.6, SA23, and SA28 are ready. Track 2: SA20, SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA25, SA27, SA31, and SA33 are ready (SA22 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.4 complete (archived); SA14.5, SA14.6, SA23, and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA25, SA27, SA31, and SA33 are ready (SA22 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
@@ -117,9 +117,18 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
 #### Finding — `backups-sync-restore-blocks-worker` (`why →` [TA17](../others/tech-audit.md))
 
 - [ ] **SA20 — Move admin-triggered backup restore off the synchronous request path.** `Tier 2 · Track 2 · deps: none · RISK LEVEL: medium`
-  `restore_backup_artifact`/`restore_admin_uploaded_backup` currently run `pg_restore --clean` synchronously inside the admin POST handler, inside a 60s-capped gunicorn worker — large restores can exceed the timeout mid-restore, leaving the database partially restored. Move the restore to a background-executed step (management command invoked via subprocess, or a queued job) with the admin view returning immediately and surfacing progress/completion via polling or a status flag on the backup record.
-  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py:419-437`.
-  *Acceptance:* triggering a restore from the admin returns before the 60s worker timeout regardless of restore duration; the restore's success/failure is observable after the fact (status field, log, or notification); a restore that fails mid-way is distinguishable from one that never started.
+  **In progress — blocked by CR-SA20-005.** Track 2 worktree has made substantial progress on the async restore lifecycle:
+  - **Async dispatch:** Restore no longer runs synchronously in-request. Admin sets `STATUS_RESTORING` and dispatches `backups_restore` management command via `subprocess.Popen`, returning immediately.
+  - **Restore status lifecycle:** `BackupArtifact` tracks `STATUS_RESTORING`, `restore_started_at`, and `restore_error`. Management command persists failure on `BackupError`.
+  - **Spawn-failure rollback:** A failed `subprocess.Popen` reverts `STATUS_RESTORING` to avoid stranded restoring state.
+  - **Uploaded-file path parity:** Uploaded-file restore shares the trusted resolver / staging seam used by the existing admin download/restore path.
+  - **Admin regression coverage:** Tests cover trusted-match rejection, incomplete-snapshot rejection, out-of-tree remap, and attempted symlink remap.
+
+  **Blocker CR-SA20-005 (high, blocking, security-boundary):** The async uploaded-file restore remap can still follow a preexisting symlink at the authoritative destination and write outside the backup root. A focused fix cycle is required before the code can merge.
+
+  **Needed decision/action:** Another focused fix cycle is required before the code can merge, or leave SA20 open for a future hardening batch.
+  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py`, `models.py`, `management/commands/backups_restore.py`, `templates/admin/.../restore.html`, `migrations/0005_backupartifact_restore_execution.py`, `tests/test_admin.py`.
+  *Acceptance:* triggering a restore from the admin returns before the 60s worker timeout regardless of restore duration; the restore's success/failure is observable after the fact (status field, `restore_error`, log, or notification); a restore that fails mid-way is distinguishable from one that never started (`STATUS_FAILED + restore_error` vs `STATUS_RESTORING`). **Still pending — blocked by CR-SA20-005.**
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
 
