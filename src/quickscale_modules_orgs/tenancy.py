@@ -112,7 +112,7 @@ class TenantTableEntry:
 # the tenant isolation contract.  Every installed concrete model must
 # appear in exactly one of the three categories below.
 #
-# See `docs/technical/roadmap.md` → AF1 and `arch-audit.md` → Finding 1
+# See `docs/technical/roadmap.md` → AF1 and `docs/others/arch-audit.md` → Finding 1
 # for the full rationale.
 # ---------------------------------------------------------------------------
 
