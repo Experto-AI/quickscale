@@ -958,24 +958,21 @@ class TestModuleWiringSpecs:
         assert settings["AWS_STORAGE_BUCKET_NAME"] == "assets"
         assert settings["AWS_QUERYSTRING_AUTH"] is False
 
-    def test_storage_wiring_invalid_backend_and_media_url_are_normalized(self):
-        """Storage wiring should normalize invalid backends and relative URLs."""
-        specs = _build_specs(
-            {
-                "storage": {
-                    "backend": "invalid",
-                    "media_url": "media",
-                    "public_base_url": "",
-                    "private_media_enabled": True,
+    def test_storage_wiring_invalid_backend_raises_manifest_error(self):
+        """Storage wiring must fail closed on invalid backends (CR-SA27-001)."""
+        from quickscale_core.manifest.loader import ManifestError
+
+        with pytest.raises(ManifestError, match="modules.storage.backend"):
+            _build_specs(
+                {
+                    "storage": {
+                        "backend": "invalid",
+                        "media_url": "media",
+                        "public_base_url": "",
+                        "private_media_enabled": True,
+                    }
                 }
-            }
-        )
-
-        _, _, settings, _ = collect_wiring(specs)
-
-        assert settings["QUICKSCALE_STORAGE_BACKEND"] == "local"
-        assert settings["MEDIA_URL"] == "/media/"
-        assert settings["QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED"] is True
+            )
 
     def test_storage_wiring_r2_sets_optional_provider_settings(self):
         """Storage wiring should emit optional provider fields for R2 mode."""
