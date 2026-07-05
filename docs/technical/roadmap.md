@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.7 (2026-07-04), SA18.1–SA18.11 (2026-07-04). SA14.1 (TenantModelAdmin base) complete, unblocking SA14.2/SA14.3. All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: SA14.3 ready (deps SA14.1 complete), SA14.5/SA14.6/SA23 ready; SA14.4 waits on SA14.3. Track 2: SA17.8 complete, SA20/SA24/SA26 ready; SA21.2 waits on SA21.1. Track 3: SA19/SA21.1/SA22/SA25 ready.
+> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: SA14.3 ready (deps SA14.1 complete), SA14.5/SA14.6/SA23 ready; SA14.4 waits on SA14.3. Track 2: SA17.8 complete, SA20/SA24/SA26 ready; SA21.2 waits on SA21.1. Track 3: SA19 complete; SA21.1/SA22/SA25 ready.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -163,16 +163,17 @@ No cross-track dependencies except SA21.2 → SA21.1 (Track 2 waits on a Track 3
 |-------|------------------|-------|
 | **1** | SA23 (ready) | Orgs debug-view open redirect |
 | **2** | SA20 (ready), SA21.2 (deps: SA21.1), SA24 (ready), SA26 (ready) | Module-side hardening (backups restore, throttle wiring, XSS) |
-| **3** | SA19 (ready), SA21.1 (ready), SA22 (ready), SA25 (ready) | Core/CLI/generator plumbing (secrets logging, cache/IP infra, apply ordering, hygiene) |
+| **3** | SA19 (complete), SA21.1 (ready), SA22 (ready), SA25 (ready) | Core/CLI/generator plumbing (secrets logging, cache/IP infra, apply ordering, hygiene) |
 
 ---
 
 #### Finding — `startsh-secrets-in-deploy-logs` (`why →` [TA16](../../tech-audit.md))
 
-- [ ] **SA19 — Stop `start.sh.j2` from printing secret values to deploy logs.** `Tier 1 · Track 3 · deps: none`
-  Replace the `env | grep -E '(DATABASE_URL|SECRET_KEY|...)'` environment-check step with one that prints only variable *names* and a set/missing status, never values.
-  *Files:* `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2`.
-  *Acceptance:* container boot logs show `SECRET_KEY: set` / `DATABASE_URL: set` (or `MISSING`) but never the underlying value; existing missing-var fail-hard behavior is unchanged.
+- [x] **SA19 — Stop `start.sh.j2` from printing secret values to deploy logs.** `Tier 1 · Track 3 · deps: none`
+  Replaced the raw `env | grep -E '(DATABASE_URL|SECRET_KEY|...)'` dump with per-variable `set`/`MISSING` status lines so deploy logs never print underlying values. Added focused template regressions for the logging contract.
+  *Files:* `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2`, `quickscale_core/tests/test_generator/test_start_sh_template.py`.
+  *Acceptance:* container boot logs now show `SECRET_KEY: set` / `DATABASE_URL: set` (or `MISSING`) without printing values; the existing downstream missing-var failure path remains unchanged.
+  *Finding:* the Step 1 check was informational only before this fix and did not enforce env presence; fail-hard behavior continues to come from the later startup/migration paths rather than the log-only probe.
 
 #### Finding — `backups-sync-restore-blocks-worker` (`why →` [TA17](../../tech-audit.md))
 
