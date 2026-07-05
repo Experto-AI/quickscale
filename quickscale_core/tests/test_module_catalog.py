@@ -1,13 +1,13 @@
 """Tests for the shared module catalog owned by quickscale_core."""
 
+import pytest
+
 from quickscale_core.contracts.module_catalog import (
     MODULE_CATALOG,
     find_not_ready_modules,
     get_discovered_module_entries,
     get_discovered_module_names,
-    get_module_entries,
     get_module_entry,
-    get_module_names,
     get_module_readiness_reason,
 )
 from quickscale_core.contracts.module_discovery import (
@@ -29,39 +29,6 @@ class TestGetModuleEntry:
     def test_returns_none_for_unknown_module(self) -> None:
         """Unknown module name should return None."""
         assert get_module_entry("nonexistent_module") is None
-
-
-class TestGetModuleEntries:
-    def test_filters_non_ready_by_default(self) -> None:
-        """Default entries should exclude non-ready modules."""
-        entries = get_module_entries()
-        names = [e.name for e in entries]
-        assert "auth" in names
-        assert "teams" not in names
-
-    def test_includes_experimental_when_requested(self) -> None:
-        """include_experimental=True should surface non-ready entries."""
-        entries = get_module_entries(include_experimental=True)
-        names = [e.name for e in entries]
-        assert "teams" in names
-
-
-class TestGetModuleNames:
-    def test_returns_all_when_including_experimental(self) -> None:
-        """All module names should be returned with include_experimental=True."""
-        names = get_module_names(include_experimental=True)
-        assert "teams" in names
-        assert len(names) == len(MODULE_CATALOG)
-
-    def test_includes_experimental_by_default(self) -> None:
-        """Default get_module_names includes experimental modules (param default is True)."""
-        names = get_module_names()
-        assert "teams" in names
-
-    def test_excludes_teams_when_explicitly_false(self) -> None:
-        """Explicit include_experimental=False filters non-ready modules."""
-        names = get_module_names(include_experimental=False)
-        assert "teams" not in names
 
 
 class TestFindNotReadyModules:
@@ -95,9 +62,10 @@ class TestGetModuleReadinessReason:
         """Ready modules should return None."""
         assert get_module_readiness_reason("auth") is None
 
-    def test_returns_none_for_unknown_module(self) -> None:
-        """Unknown modules should return None."""
-        assert get_module_readiness_reason("nonexistent") is None
+    def test_raises_for_unknown_module(self) -> None:
+        """Unknown modules should raise ValueError."""
+        with pytest.raises(ValueError, match="Unknown module name"):
+            get_module_readiness_reason("nonexistent")
 
     def test_returns_reason_for_non_ready_module(self) -> None:
         """Non-ready modules should return an actionable readiness message."""
