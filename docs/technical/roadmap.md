@@ -47,19 +47,19 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.4 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs), SA22 (2026-07-05 — same-filesystem staging + backup/swap/rollback for `apply --force`), SA25 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites + operator_access RLS predicate + fail-hard QUICKSCALE_MODE guard), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs), SA22 (2026-07-05 — same-filesystem staging + backup/swap/rollback for `apply --force`), SA25 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.5 complete (archived); SA14.6, SA23, and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA27, SA31, and SA33 are ready (SA22 and SA25 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.6 complete (archived); SA23 and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA27, SA31, and SA33 are ready (SA22 and SA25 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.6 (no deps)                     SA20 (no deps)                            SA27 (no deps)
-SA23 (no deps)                       SA21.2 (deps: SA21.1)                     SA31 (no deps)
-SA28 (no deps)                       SA24 (no deps)                            SA33 (no deps)
-                                     SA26 (no deps)
+SA14.5 (no deps — complete)          SA20 (no deps)                            SA25 (no deps — complete)
+SA14.6 (no deps — complete)          SA21.2 (deps: SA21.1)                     SA27 (no deps)
+SA23 (no deps)                       SA24 (no deps)                            SA31 (no deps)
+SA28 (no deps)                       SA26 (no deps)                            SA33 (no deps)
                                      SA29 (no deps)
                                      SA30 (no deps — land after SA29)
                                      SA32 (no deps)
@@ -94,10 +94,11 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
   *Acceptance:* `operator_access(reason=...)` grants true cross-tenant reads for its duration only, is audit-logged, and requires superuser; without it, no code path bypasses RLS.
   *Review-driven follow-up (CR-SA14.5-001/002/003):* Split the operator_access OR clause into a separate `FOR SELECT` sub-policy so operator_access grants cross-tenant **read** visibility only (not write/delete). Made `operator_access()` nesting-safe by saving and restoring the prior GUC value. Added `_get_operator_access()` helper. Created `migrations/0006_refresh_rls_operator_readonly.py` to refresh all enrolled policies with the updated template. Added cross-tenant read/delete/update regression tests proving FOR SELECT-only elevation, plus nested-scope restoration regression tests. Synced roadmap track status, updated changelog test count, and documented the `transaction.atomic()` requirement in `organizations.md`. Closes CR-SA14.5-001, CR-SA14.5-002, CR-SA14.5-003.
 
-- [ ] **SA14.6 — Fail-hard `QUICKSCALE_MODE` when orgs is installed.** `Tier 1 · Track 1 · deps: none`
-  Replace `getattr(settings, "QUICKSCALE_MODE", "solo")` with a required-setting read that raises `ImproperlyConfigured` when `orgs` is installed and `QUICKSCALE_MODE` is unset, so a saas deployment can't silently flip to solo-mode tenancy.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py:268`, `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py:60`, `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py:81`, `quickscale_modules/orgs/src/quickscale_modules_orgs/views.py:63`.
+- [x] **SA14.6 — Fail-hard `QUICKSCALE_MODE` when orgs is installed.** `Tier 1 · Track 1 · deps: none`
+  Replaced all 4 `getattr(settings, "QUICKSCALE_MODE", "solo")` fallback sites with direct `settings.QUICKSCALE_MODE` access (guaranteed present by the boot guard). Added `_check_quickscale_mode()` to `QuickscaleOrgsConfig.ready()` — a startup-time guard that raises `ImproperlyConfigured` when `QUICKSCALE_MODE` is unset or has an invalid value. The guard runs before the BYPASSRLS check and before the migrate exemption, so every startup path enforces the required setting. Invalid values (case variants, empty string, unrecognized modes) are also rejected with a descriptive error. 9 focused tests in `test_mode_guard.py` covering solo/saas pass, missing/None raise, invalid-value raise, case-sensitivity enforcement, and `ready()` lifecycle scenarios.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` (new `_check_quickscale_mode` + `ready()` wiring), `middleware.py:268` (direct access), `adapters.py:60,81` (direct access), `views.py:63` (direct access), `tests/test_mode_guard.py` (9 tests).
   *Acceptance:* omitting `QUICKSCALE_MODE` in a saas-mode generated project raises at startup instead of defaulting to `"solo"`.
+  *Findings/blockers:* None.
 
 #### Finding — `debug-view-open-redirect` (`why →` [TA21](../others/tech-audit.md))
 
