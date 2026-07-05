@@ -79,26 +79,26 @@ args, no timeout-less HTTP calls, no bare `Popen`/unclosed-file patterns.
 
 ## Findings summary
 
-| ID | Severity | Category | Title | Effort | Confidence |
-|----|----------|----------|-------|--------|------------|
-| TA26 | S2 | correctness / fail-open config | Module-option validation never enforced on the apply path for 5 modules; invalid `orgs.mode` silently downgrades tenancy to solo; invalid `storage.backend` silently drops S3 wiring; malformed forms rate 500s the public endpoint | Small | High |
-| TA31 | S2 | security + data loss / config contract | Storage: generated README documents env-var configuration the app never reads (silent `local` fallback → uploads lost on redeploy); the working channel bakes S3 secrets from quickscale.yml into VCS-tracked settings | Medium | High |
-| TA30 | S2 | correctness / data integrity | Self-service account deletion cascade-deletes org memberships, bypassing the last-owner invariant — ownerless orgs, zombie personal orgs with live Stripe subscriptions | Small | High |
-| TA19 | S2 | security / fail-open config | `QUICKSCALE_MODE` read with permissive `"solo"` default at 4 tenancy-relevant runtime callsites | Small ⚡ | High |
-| TA18 | S2 | security / rate limiting | No client-IP resolution behind Railway proxy: per-IP throttles collapse to one shared bucket; IP forensics misattributed | Small | Medium |
-| TA17 | S2 | operability / data loss | Admin backup restore runs `pg_restore --clean` synchronously inside the 60s-capped gunicorn worker | Medium | High |
-| TA20 | S3 | correctness / data loss (CLI) | `apply --force` wipes the existing project before generating its replacement | Small | High |
-| TA24 | S3 | operability / rate limiting | Generated app ships no `CACHES` backend — throttle counters per-process (`LocMemCache`), reset on deploy | Small | High |
-| TA21 | S4 | security hardening | `debug_views` unvalidated `next` redirect (superuser POST) | Trivial | High |
-| TA22 | S4 | security hardening | `analytics_tags` `mark_safe(json.dumps(...))` without `</script>` escaping | Trivial | High |
-| TA23 | S4 | hygiene | `coverage.json`, `pytest_cov_log.txt` tracked in git | Trivial | High |
-| TA25 | S4 | security hardening | Markdown `javascript:` link URIs survive escaping on public blog/listing pages | Small | Medium |
-| TA27 | S4 | security (local) | Railway CLI and DR adapter receive secrets/args on process argv (`ps`-visible) | Small | High |
-| TA28 | S4 | correctness / library API | `invalidate_social_cache()` clears only bare keys — no-op for org-partitioned entries; exported but uncalled | Trivial | High |
-| TA29 | S4 | docs hygiene | `decisions.md:650` links to a dropped `arch-audit.md` heading | Trivial | High |
-| TA32 | S4 | fail-open config (runtime residuals) | Listings/storage runtime settings reads silently default and coerce (TA2 class — modules outside SA17's scope) | Small | High |
+| ID | Severity | Category | Title | Effort | Confidence | Status |
+|----|----------|----------|-------|--------|------------|--------|
+| TA26 | S2 | correctness / fail-open config | Module-option validation never enforced on the apply path for 5 modules; invalid `orgs.mode` silently downgrades tenancy to solo; invalid `storage.backend` silently drops S3 wiring; malformed forms rate 500s the public endpoint | Small | High | open |
+| TA31 | S2 | security + data loss / config contract | Storage: generated README documents env-var configuration the app never reads (silent `local` fallback → uploads lost on redeploy); the working channel bakes S3 secrets from quickscale.yml into VCS-tracked settings | Medium | High | open |
+| TA30 | S2 | correctness / data integrity | Self-service account deletion cascade-deletes org memberships, bypassing the last-owner invariant — ownerless orgs, zombie personal orgs with live Stripe subscriptions | Small | High | open |
+| TA18 | S2 | security / rate limiting | No client-IP resolution behind Railway proxy: per-IP throttles collapse to one shared bucket; IP forensics misattributed | Small | Medium | open |
+| TA17 | S2 | operability / data loss | Admin backup restore runs `pg_restore --clean` synchronously inside the 60s-capped gunicorn worker | Medium | High | open |
+| TA24 | S3 | operability / rate limiting | Generated app ships no `CACHES` backend — throttle counters per-process (`LocMemCache`), reset on deploy | Small | High | open |
+| TA21 | S4 | security hardening | `debug_views` unvalidated `next` redirect (superuser POST) | Trivial | High | open |
+| TA22 | S4 | security hardening | `analytics_tags` `mark_safe(json.dumps(...))` without `</script>` escaping | Trivial | High | open |
+| TA25 | S4 | security hardening | Markdown `javascript:` link URIs survive escaping on public blog/listing pages | Small | Medium | open |
+| TA27 | S4 | security (local) | Railway CLI and DR adapter receive secrets/args on process argv (`ps`-visible) | Small | High | open |
+| TA28 | S4 | correctness / library API | `invalidate_social_cache()` clears only bare keys — no-op for org-partitioned entries; exported but uncalled | Trivial | High | open |
+| ~~TA29~~ | ~~S4~~ | ~~docs hygiene~~ | ~~`decisions.md:650` links to a dropped `arch-audit.md` heading~~ | ~~Trivial~~ | ~~High~~ | closed (SA33) |
+| TA32 | S4 | fail-open config (runtime residuals) | Listings/storage runtime settings reads silently default and coerce (TA2 class — modules outside SA17's scope) | Small | High | open |
+| ~~TA19~~ | ~~S2~~ | ~~security / fail-open config~~ | ~~`QUICKSCALE_MODE` read with permissive `"solo"` default at 4 tenancy-relevant runtime callsites~~ | ~~Small ⚡~~ | ~~High~~ | closed (SA14.6) |
+| ~~TA20~~ | ~~S3~~ | ~~correctness / data loss (CLI)~~ | ~~`apply --force` wipes the existing project before generating its replacement~~ | ~~Small~~ | ~~High~~ | closed (SA22) |
+| ~~TA23~~ | ~~S4~~ | ~~hygiene~~ | ~~`coverage.json`, `pytest_cov_log.txt` tracked in git~~ | ~~Trivial~~ | ~~High~~ | closed (SA25) |
 
-Counts: **S1: 0 · S2: 6 · S3: 2 · S4: 8.** Quick wins flagged ⚡ (Trivial/Small-effort S2).
+Counts: **S1: 0 · S2: 5 · S3: 1 · S4: 6.** Quick wins flagged ⚡ (Trivial/Small-effort S2).
 
 ---
 
@@ -126,16 +126,6 @@ Counts: **S1: 0 · S2: 6 · S3: 2 · S4: 8.** Quick wins flagged ⚡ (Trivial/Sm
 - **Deliberate?** None found — the coercion sites carry no comment defending them; the validator functions and module.yml rules show intent *to* validate; the 6-of-11 apply-gate coverage reads as accretion. Hand-off note: surfaced from arch-audit Red flags (entry_point post-hook defaults); the post-hook `.get(default)`s themselves turned out mostly dead (resolver projects every declared key) — the live defect is this validation gap.
 - **Age:** coercion sites landed 2026-06-24 (`244db3b3`, T2.3 manifest migration — the same change that added the discarded ValidationRules); the apply-gate omissions are older accretion.
 
-### TA19 (S2) — `QUICKSCALE_MODE` read with permissive `"solo"` default at 4 runtime callsites
-
-- **ID:** `quickscale-mode-fail-open-solo` · **Category:** §4.III fail-open config · **Confidence:** High (re-verified 2026-07-05)
-- **Location:** `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py:60,81`; `middleware.py:268`; `views.py:63` — all `getattr(settings, "QUICKSCALE_MODE", "solo")`.
-- **Defect:** a missing `QUICKSCALE_MODE` setting silently selects `"solo"` — the *less*-isolated tenancy posture — instead of failing hard. The DB-level RLS guard is mode-independent (SA2.1), but org-resolution middleware, account-adapter hooks, and view gating all branch on this value.
-- **Failure scenario:** a generated project's settings lose or never receive `QUICKSCALE_MODE` (custom settings refactor, partial apply, manual edit) → SaaS-intended deployment quietly runs solo-mode org resolution; nothing raises. Chains with TA26 scenario 1 (generation-time coercion) — together, no layer ever surfaces the wrong mode.
-- **Evidence:** the four `getattr` sites above; contrast `apps.py:119` which is deliberately mode-independent ("fail closed — regardless of QUICKSCALE_MODE or DEBUG").
-- **Fix:** read `settings.QUICKSCALE_MODE` directly (raise `ImproperlyConfigured` when absent/invalid) via one shared helper, or assert presence in orgs `AppConfig.ready()` alongside the existing SA2.1 guard. **Effort:** Small. ⚡
-- **Verification:** boot a generated project with `QUICKSCALE_MODE` deleted → assert startup failure naming the setting; existing tests pin solo/saas branches.
-- **Deliberate?** Partially tracked — SA14.6 names middleware/views; the `adapters.py` pair was a scope gap (arch-audit red flag). No comment defends the default.
 
 ### TA18 (S2) — No client-IP resolution behind the Railway proxy: throttles collapse; IP forensics misattributed
 
@@ -184,18 +174,15 @@ Counts: **S1: 0 · S2: 6 · S3: 2 · S4: 8.** Quick wins flagged ⚡ (Trivial/Sm
 
 ## Findings detail — S3 (compact)
 
-- **TA20** (`apply-force-wipe-before-generate`, S3) — `quickscale_cli/src/quickscale_cli/commands/apply_command.py:1782-1793`: `--force` deletes all project content except `quickscale.yml` **before** generating the replacement into a temp dir; if generation fails (`:1793-1795`), the project is already gone and only the config survives. Reorder: generate to temp first, wipe/swap only on success. **Effort:** Small · Confidence: High (re-verified).
 - **TA24** (`generated-app-no-cache-throttle-unreliable`, S3) — `generator/templates/project_name/settings/base.py.j2` ships no `CACHES` (Redis block commented at `production.py.j2:187`), so DRF form throttle and blog limiter run on per-process `LocMemCache`: effective limit multiplies by worker/replica count and resets on every deploy. Ship a working shared-cache default (Railway Redis or `DatabaseCache`) or gate throttling behind a configured backend. **Effort:** Small · Confidence: High (mechanism) / Medium (exploitability). Chains with TA18.
 
 ## Findings detail — S4 (one line each)
 
 - **TA21** — `orgs/debug_views.py:53-55,86-88`: `redirect(request.POST.get("next"))` unvalidated (superuser-only, POST-only). Fix: `url_has_allowed_host_and_scheme`.
 - **TA22** — `analytics/templatetags/analytics_tags.py:33`: `mark_safe(json.dumps(payload))` — latent `</script>` injection if payload ever carries request data (settings-only today). Fix: `json_script` pattern or escape `<>&`.
-- **TA23** — repo root: `coverage.json`, `pytest_cov_log.txt` tracked in git. Fix: `git rm --cached` + `.gitignore`.
 - **TA25** — `blog/views.py:787` + `listings/views.py:304-305` → `|safe` templates: `markdownify(escape(...))` neutralizes raw HTML but not markdown `[x](javascript:…)` link URIs (staff/token-gated authoring; defense-in-depth). Fix: sanitize rendered HTML (`nh3`/`bleach`, drop non-http(s)/mailto schemes).
 - **TA27** — `quickscale_cli/utils/railway_utils.py:348,391,891` (`railway variables --set KEY=VALUE` with live secret values) and `commands/dr_commands.py:232-242` (`--args-json` on `docker exec` argv): secrets/args visible via `ps`/`/proc` on shared hosts. Fix: stdin transport for the adapter JSON; document the Railway CLI limitation. *(Reinstated — see Reconciliation log.)*
 - **TA28** — `social/services.py:182-184`: exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context; no first-party callers (model `save()`/`delete()` at `models.py:133-162` invalidate correctly) — a public-API trap for bulk mutations (`queryset.update()` bypasses `save()`). Fix: make it org-aware or drop it from `__all__`; consider `transaction.on_commit` for the model-path invalidation while there.
-- **TA29** — `docs/technical/decisions.md:650`: links to `arch-audit.md#finding-4-per-module-contract-knowledge-…`, a heading dropped in the 2026-07-04 arch-audit closeout. Fix: point to the arch-audit reconciliation note / roadmap T2.4 entry.
 - **TA32** — `listings/views.py:39-52` (`_get_positive_int_setting`: missing/invalid `LISTINGS_PER_PAGE` silently → default) and `storage/helpers.py:44-56` (`_read_setting` defaults; `_normalize_backend`: unknown backend value silently → `"local"`): runtime fail-open residuals of the TA2 class — listings and storage were outside SA17.2–17.6's scope. Low-stakes at runtime today because TA26's generation-time coercion guarantees "valid" baked literals, but the storage fallback becomes live under hand-edited settings/env overrides and is the runtime half of TA26 scenario 4 / TA31. Fix: direct required reads (SA17 pattern) in both modules.
 
 ---
@@ -203,7 +190,7 @@ Counts: **S1: 0 · S2: 6 · S3: 2 · S4: 8.** Quick wins flagged ⚡ (Trivial/Sm
 ## Structural smells (candidates for `arch-audit.md`)
 
 - **Validation knowledge is triplicated and unwired (TA26):** module.yml declarative rules, resolver ValidationRules, and imperative `validate_*` functions encode the same constraints, and which layer actually *enforces* varies by module. The contained fix closes today's gap; the triplication itself is arch-audit Finding-4 / T2.4-T2.5 territory (option-pipeline fan-out).
-- **Tenancy posture is inferred, never asserted (TA19 + TA26):** `QUICKSCALE_MODE` fails toward solo at generation *and* runtime; the isolation boundary should fail toward more isolation or be a required, validated value (SA14.6).
+- **Tenancy posture is inferred, never asserted (TA26):** `QUICKSCALE_MODE` fails toward solo at generation (SA14.6 closed the runtime half); the isolation boundary should fail toward more isolation or be a required, validated value.
 - **Abuse-control correctness rests on two ambient facts the generated app doesn't guarantee (TA18 + TA24):** canonical client IP behind the proxy and a shared counter store — throttling may belong at the edge or behind an explicit "abuse-control backend configured" gate.
 - **No single "how does a generated app get configured at deploy time" contract (TA31):** some settings are baked literals, some are env-read, and the docs describe a third reality. The storage finding is fixable in place, but the literal-vs-env split deserves an explicit generator-wide rule (which settings classes are env-overridable, and how docs are generated from that rule). (TA16's portion of this smell — `start.sh` secret logging — is resolved by SA19.)
 - **Business invariants enforced in model methods don't survive ORM cascades (TA30):** the last-owner guard's placement (overridden `delete()`) protects only direct deletes. Any future invariant of this kind needs a boundary-level (signal or service-layer) enforcement convention — worth an arch-audit look when teams lands, since teams will add more membership-like invariants.
@@ -212,10 +199,10 @@ Counts: **S1: 0 · S2: 6 · S3: 2 · S4: 8.** Quick wins flagged ⚡ (Trivial/Sm
 
 - **`pip-audit`/`safety` CI step** — no dependency-CVE gate exists; the lockfile read stays manual and low-confidence. (Dependency class, ongoing.)
 - **`bandit`/`semgrep` CI step** — would systematically catch TA21 (unvalidated redirect), TA22/TA25 (`mark_safe`/`|safe` on non-constant), TA27 (argv secrets). (TA16 — secret echo — resolved by SA19.)
-- **Settings-contract system check** (custom Django check asserting `QUICKSCALE_MODE` and `QUICKSCALE_*_ENABLED` explicitly set) — closes the TA19 class at startup.
+- **Settings-contract system check** (custom Django check asserting `QUICKSCALE_MODE` and `QUICKSCALE_*_ENABLED` explicitly set) — closes the TA19 class at startup (runtime half resolved by SA14.6).
 - **Apply-gate completeness check** — CI assertion that every exported `validate_*_module_options` is invoked on the apply path (or deleted) — prevents TA26 recurring as new modules land.
 - **`vulture` (dead code)** — would surface the dead blog validation branch (TA26) and TA28's uncalled export. (TA12 — deprecated catalog delegates — resolved by SA17.8.)
-- **`.gitignore` + pre-commit for build artifacts** — closes TA23 permanently.
+- **`.gitignore` + pre-commit for build artifacts** — closes the TA23 class permanently (SA25 resolved the tracked-artifact instance).
 
 Categories swept with no qualifying finding this pass: injection sinks, deserialization, crypto misuse, SSRF/open-redirect (beyond TA21), concurrency/TOCTOU (billing & orgs lock-guarded), resource leaks, timeouts (no HTTP clients without deadlines), N+1/perf, test flakiness (sleeps confined to e2e suites), import-time side effects.
 
@@ -240,9 +227,13 @@ Categories swept with no qualifying finding this pass: injection sinks, deserial
 - 2026-07-05 — TA9: resolved (SA17.7, `100f67d6` + `0ed70760` — analytics hard-imports posthog at module top; forms uses `apps.is_installed` guard + hard lazy imports; residual broad catch around the capture call is documented best-effort for a non-critical side effect, with regression tests).
 - 2026-07-05 — TA12: resolved (SA17.8 — deprecated catalog delegates removed from public API; `get_module_readiness_reason` raises `ValueError` on unknown names).
 - 2026-07-05 — TA16: resolved (SA19 — `start.sh.j2` prints per-variable `set`/`MISSING` status, never secret values).
-- 2026-07-05 — TA17, TA18, TA19, TA20, TA21, TA22, TA23, TA24, TA25: still-open (every location re-verified against `a6706db1`; TA19's location list now includes the `orgs/adapters.py:60,81` pair from the arch-audit red flag).
-- 2026-07-05 — TA26, TA27, TA28, TA29: opened this pass (TA27 is the reinstatement above).
+- 2026-07-05 — TA17, TA18, TA21, TA22, TA24, TA25: still-open (every location re-verified against `a6706db1`).
+- 2026-07-05 — TA26, TA27, TA28: opened this pass (TA27 is the reinstatement above); TA29 opened and resolved in the same closeout pass (SA33).
+- 2026-07-05 (closeout) — TA29: resolved (SA33 — dangling `decisions.md:650` → `arch-audit.md` anchor link repointed to the arch-audit reconciliation log entry).
 - 2026-07-05 (module-by-module deep pass) — TA30, TA31, TA32: opened. TA26 strengthened (storage-backend coercion joins the class as scenario 4). TA17 extended (admin backup-create/prune share the in-request execution; restore remains the anchor). Modules read deeply and found clean this pass: quickscale_core (DR engine, apply ledger/executor, state/locks/git), orgs (purge/migration commands, tenant-context machinery), quickscale_cli (update/remove snapshot-rollback flows, status/dev/deploy commands), billing, backups commands, notifications, crm.
+- 2026-07-05 (closeout) — TA19: resolved (SA14.6 — QUICKSCALE_MODE fail-hard guard added in `QuickscaleOrgsConfig.ready()`, all 4 `getattr(settings, "QUICKSCALE_MODE", "solo")` callsites replaced with direct required reads).
+- 2026-07-05 (closeout) — TA20: resolved (SA22 — same-filesystem staging with backup/swap/rollback for `apply --force`; generation to temp first, swap only on success, rollback on failure).
+- 2026-07-05 (closeout) — TA23: resolved (SA25 — `coverage.json` and `pytest_cov_log.txt` removed from git tracking via `git rm --cached`; `.gitignore` patterns already present).
 
 ## Notes (not violations, watch items)
 

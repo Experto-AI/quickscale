@@ -47,58 +47,31 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites + operator_access RLS predicate + fail-hard QUICKSCALE_MODE guard), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs), SA22 (2026-07-05 — same-filesystem staging + backup/swap/rollback for `apply --force`), SA25 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.6 complete (archived); SA23 and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA27 is blocked/pending scope clarification after dependency/scope review; SA31 and SA33 remain ready (SA22 and SA25 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. Track 1: SA23 and SA28 are ready (SA14 complete — archived). Track 2: SA20 blocked; SA21.2, SA24, SA26, SA29, SA30, SA32 ready. Track 3: SA27 blocked/pending scope decision; SA31 ready (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.5 (no deps — complete)          SA20 (no deps)                            SA25 (no deps — complete)
-SA14.6 (no deps — complete)          SA21.2 (deps: SA21.1)                     SA27 (no deps — blocked/pending scope decision)
-SA23 (no deps)                       SA24 (no deps)                            SA31 (no deps)
-SA28 (no deps)                       SA26 (no deps)                            SA33 (no deps)
+SA23 (no deps)                       SA20 (no deps — blocked CR-SA20-005)      SA27 (no deps — blocked/pending scope decision)
+SA28 (no deps)                       SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
+                                     SA24 (no deps)
+                                     SA26 (no deps)
                                      SA29 (no deps)
                                      SA30 (no deps — land after SA29)
                                      SA32 (no deps)
 ```
 
-Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to SA29 but is within Track 2. SA22 and SA25 (closed); SA31 and SA33 remain ready; SA27 is blocked/pending scope clarification after review.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 but is within Track 2.
 
 ### Track 1 — Tenant-context surface
 
 #### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../others/arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
 
-> **SA14.1 — Build the orgs-owned `TenantModelAdmin` base (complete).** `Tier 2 · Track 1` — unblocks SA14.2/SA14.3. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
-
-> **SA14.2 — Port CRM's 7 admin classes to `TenantModelAdmin` (complete).** `Tier 2 · Track 1 · deps: SA14.1` — review-driven follow-up CR-SA14.2-001 resolved (inline note `created_by` stamping). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
-
-> **SA14.3 — Port blog/forms/listings/billing admins to `TenantModelAdmin` (complete).** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium` — review-driven follow-ups CR-SA14.3-001/002/003 resolved (FormSubmissionAdmin org-readonly on change; billing admin scoped-queryset regression tests). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
-
-- [x] **SA14.4 — Flip module test suites' default DB role to `NOBYPASSRLS`.** `Tier 2 · Track 1 · deps: SA14.2, SA14.3 · RISK LEVEL: medium`
-  Removed the SA2.1 escape hatch (`os.environ.setdefault("QUICKSCALE_ALLOW_BYPASSRLS", "1")`) from all 8 affected module `tests/settings.py` AND `tests/conftest.py` files — no module test code automatically primes this env var. BYPASSRLS opt-in is shell-level only. A marker+collection-hook mechanism is the sole BYPASSRLS management:
-  - Registered `bypass_rls` pytest marker in each module's `pyproject.toml`.
-  - Collection-time hook (`pytest_collection_modifyitems`) skips `bypass_rls`-marked tests when `QUICKSCALE_ALLOW_BYPASSRLS` is not set, so the suite passes cleanly under a restricted (NOBYPASSRLS) DB role.
-  - Marked existing migration tests in billing, crm, forms, and backups with `@pytest.mark.bypass_rls`.
-  Set `QUICKSCALE_ALLOW_BYPASSRLS=1` in the shell before running pytest to include `bypass_rls`-marked tests.
-  This is the posture change that makes the operator-read bug class visible to CI going forward.
-  *Files:* `*/tests/settings.py`, `*/tests/conftest.py`, `*/pyproject.toml` across modules; `billing/tests/test_migrations.py`, `crm/tests/test_migrations.py`, `forms/tests/test_migrations.py`, `backups/tests/test_migrations.py`.
-  *Acceptance:* module test suites pass by default under the restricted role; only explicitly-marked tests opt into superuser/BYPASSRLS when `QUICKSCALE_ALLOW_BYPASSRLS=1` is set in the shell.
-  *Findings/blockers:* (1) For modules using pytest-django's `--ds` flag (billing, crm, orgs), the conftest module-level code runs after `django.setup()`, so the boot guard already ran during setup. Those modules require a restricted (NOBYPASSRLS) DB role, or `QUICKSCALE_ALLOW_BYPASSRLS=1` must be set in the shell before running pytest. (2) For modules with manual `django.setup()` (blog, forms, listings, notifications, social, backups), the conftest runs before `django.setup()`, so the env var can be read earlier — but no module test code sets it; the boot guard (`orgs/apps.py`) and the collection hook both consume the shell env var: the boot guard checks it to decide whether to raise `ImproperlyConfigured`, and the collection hook checks it to decide whether to skip or run `bypass_rls`-marked tests.
-
-- [x] **SA14.5 — Implement `operator_access(reason=...)` as a real, audited RLS predicate.** `Tier 2 · Track 1 · deps: none (SA13.1 complete) · RISK LEVEL: medium`
-  Added `OR NULLIF(current_setting('app.operator_access', true), '') = 'on'` to the FORCE RLS policy template's USING clause and implemented `operator_access(reason=...)` (audit-logged context manager) as the only setter — finally implementing the contract `decisions.md` already documents as a "permanent rule" but which existed in no code today. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py` (policy template, new `policy_name` field on `TenantTableEntry`, new `refresh_force_rls_policies()` helper), `current_org.py` (new `operator_access` context manager + `_set_operator_access` helper), `migrations/0005_operator_access_rls.py` (data migration refreshing all enrolled policies).
-  *Acceptance:* `operator_access(reason=...)` grants true cross-tenant reads for its duration only, is audit-logged, and requires superuser; without it, no code path bypasses RLS.
-  *Review-driven follow-up (CR-SA14.5-001/002/003):* Split the operator_access OR clause into a separate `FOR SELECT` sub-policy so operator_access grants cross-tenant **read** visibility only (not write/delete). Made `operator_access()` nesting-safe by saving and restoring the prior GUC value. Added `_get_operator_access()` helper. Created `migrations/0006_refresh_rls_operator_readonly.py` to refresh all enrolled policies with the updated template. Added cross-tenant read/delete/update regression tests proving FOR SELECT-only elevation, plus nested-scope restoration regression tests. Synced roadmap track status, updated changelog test count, and documented the `transaction.atomic()` requirement in `organizations.md`. Closes CR-SA14.5-001, CR-SA14.5-002, CR-SA14.5-003.
-
-- [x] **SA14.6 — Fail-hard `QUICKSCALE_MODE` when orgs is installed.** `Tier 1 · Track 1 · deps: none`
-  Replaced all 4 `getattr(settings, "QUICKSCALE_MODE", "solo")` fallback sites with direct `settings.QUICKSCALE_MODE` access (guaranteed present by the boot guard). Added `_check_quickscale_mode()` to `QuickscaleOrgsConfig.ready()` — a startup-time guard that raises `ImproperlyConfigured` when `QUICKSCALE_MODE` is unset or has an invalid value. The guard runs before the BYPASSRLS check and before the migrate exemption, so every startup path enforces the required setting. Invalid values (case variants, empty string, unrecognized modes) are also rejected with a descriptive error. 9 focused tests in `test_mode_guard.py` covering solo/saas pass, missing/None raise, invalid-value raise, case-sensitivity enforcement, and `ready()` lifecycle scenarios.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py` (new `_check_quickscale_mode` + `ready()` wiring), `middleware.py:268` (direct access), `adapters.py:60,81` (direct access), `views.py:63` (direct access), `tests/test_mode_guard.py` (9 tests).
-  *Acceptance:* omitting `QUICKSCALE_MODE` in a saas-mode generated project raises at startup instead of defaulting to `"solo"`.
-  *Findings/blockers:* None.
+> **SA14 — complete.** SA14.1–SA14.6 (TenantModelAdmin base, CRM/blog/forms/listings/billing admin ports, NOBYPASSRLS default for module test suites, operator_access RLS predicate, QUICKSCALE_MODE fail-hard) merged. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `debug-view-open-redirect` (`why →` [TA21](../others/tech-audit.md))
 
@@ -178,27 +151,7 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
 
-- [x] **SA21.1 — Add canonical client-IP resolution and a shared cache backend to generated settings.** `Tier 2 · Track 3 · deps: none`
-  Two related gaps in the generated project's settings: (a) no trusted-proxy client-IP convention, so `REMOTE_ADDR` is the Railway edge proxy's address, not the client's; (b) no `CACHES` backend, so DRF throttles and the blog rate limiter fall back to per-process `LocMemCache` — uncounted across workers/replicas and reset on every deploy. Added `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` settings (both `config()`-driven, defaults `False`/`0`), `get_client_ip(request)` helper in base.py, and `NUM_PROXIES` in the DRF `REST_FRAMEWORK` dict. Production overrides both defaults to `True`/`1` (environment-overridable). Activated the `CACHES` block in production.py with Django's built-in `RedisCache` when `REDIS_URL` is set, and `DatabaseCache` as a non-LocMem fallback. Added 16 focused template tests for presence, defaults, runtime proxy resolution, production overrides, cache backend type, and Python syntax validity. Single-host (no-proxy) deployments keep `REMOTE_ADDR` with no configuration change.
-  *Files:* `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2`, `.../production.py.j2`, `quickscale_core/tests/test_generator/test_templates.py`.
-  *Acceptance:* a generated project has a resolvable canonical client-IP helper gated behind an explicit trusted-proxy setting, and a non-`LocMemCache` backend configured for production; single-host (no-proxy) deployments keep `REMOTE_ADDR` unless the setting is enabled.
-  *Findings:* No blockers. SA21.2 (Track 2) is now unblocked — the generator settings change (this task) is the sole prerequisite.
-
-#### Finding — `apply-force-wipes-before-generating` (`why →` [TA20](../others/tech-audit.md))
-
-- [x] **SA22 — Generate the replacement project before deleting the existing one on `apply --force`.** `Tier 2 · Track 3 · deps: none · RISK LEVEL: medium`
-  `apply_command.py`'s `--force` path previously `rmtree`/`unlink`ed the existing project content before generating its replacement into a temp dir; a generation failure after the wipe left the project deleted with nothing to restore. Reordered so generation into a temp/staging location happens first, validated, and only then swaps in over the existing content (or generation failure leaves the original untouched).
-  *Files:* `quickscale_cli/src/quickscale_cli/commands/apply_command.py:1781-1792`.
-  *Acceptance:* a forced generation failure (e.g. induced template error) leaves the pre-existing project directory intact; a successful forced apply still ends with the new content in place.
-  *Findings:* No blockers. Added `test_force_with_failure_preserves_original` to cover the missing force+failure case.
-
-#### Finding — `committed-coverage-artifacts` (`why →` [TA23](../others/tech-audit.md))
-
-- [x] **SA25 — Untrack build/coverage artifacts and gitignore them.** `Tier 1 · Track 3 · deps: none`
-  `coverage.json` and `pytest_cov_log.txt` are tracked in git; `htmlcov/` is present on disk. Already gitignored (both patterns present in `.gitignore` lines 231–232); removed from tracking via `git rm --cached`.
-  *Files:* repo root `.gitignore`, `coverage.json`, `pytest_cov_log.txt`.
-  *Acceptance:* `git status` after a fresh test run shows no untracked-artifact noise; the artifacts no longer appear in `git ls-files`.
-  *Findings/blockers:* The `.gitignore` patterns already existed (no change needed there). The only remaining work was `git rm --cached` to stop tracking the already-committed files while preserving the local ignored copies. `htmlcov/` is also gitignored. No blockers.
+> **SA21.1 — complete.** Canonical client-IP resolution and shared cache backend added to generated settings. Unblocks SA21.2. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `module-option-validation-not-enforced-at-apply` (`why →` [TA26](../others/tech-audit.md))
 
@@ -217,10 +170,7 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
 
 #### Finding — `dangling-arch-audit-anchor` (`why →` [TA29](../others/tech-audit.md))
 
-- [ ] **SA33 — Fix the dangling `decisions.md` → `arch-audit.md` anchor link.** `Tier 1 · Track 3 · deps: none`
-  `decisions.md:650` links to `arch-audit.md#finding-4-per-module-contract-knowledge-…`, a heading dropped in the 2026-07-04 arch-audit closeout. Point it at the current reconciliation-log entry or the `roadmap.md` T2.4/T2.5 tracking item it was originally describing.
-  *Files:* `docs/technical/decisions.md:650`.
-  *Acceptance:* the link resolves to a real, current anchor; no other dangling cross-doc anchors are introduced.
+> **SA33 — complete.** Dangling `decisions.md:650` → `arch-audit.md` anchor link repointed to the arch-audit reconciliation log entry. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
