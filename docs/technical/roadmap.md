@@ -57,22 +57,23 @@ Fix plan derived from the [2026-07-03 fresh-pass autopsy](../others/arch-audit.m
 
 **Naming:** continues the `SAn.m` sequence from `SA12` (last used). `SA13`, `SA15`, `SA16` close 3 of 4 structural findings (all fully closed — see above); SA14 (Finding 1, `operator-read-path-undefined`) remains open. `SA17`–`SA18` close the tech-audit fail-hard findings (`SA17` = module-side settings, `SA18` = core/CLI plumbing).
 
-#### Dependency & parallelization overview (2026-07-04)
+#### Dependency & parallelization overview (2026-07-05)
 
-Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. `SA18` (Track 3) is now fully closed — no remaining work in this batch. `SA17.8` (Track 2) is now complete — no remaining fail-hard tasks in this batch.
+Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. The diagram below tracks the full backlog per track across all open batches.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.1–SA18.11 (all complete —
-SA14.2 (deps: SA14.1 — complete)      SA17.6 (no deps — complete)                fully closed, no remaining
-SA14.3 (deps: SA14.1 — complete)      SA17.7 (deps: SA17.5 — complete)           work in this batch)
-SA14.4 (deps: SA14.2, SA14.3 — ready) SA17.8 (no deps — complete)
-SA14.5 (no deps — ready)
-SA14.6 (no deps — ready)
+SA14.4 (deps: SA14.2, SA14.3)        SA20 (no deps)                            SA21.1 (no deps)
+SA14.5 (no deps)                     SA21.2 (deps: SA21.1)                     SA22 (no deps)
+SA14.6 (no deps)                     SA24 (no deps)                            SA25 (no deps)
+SA23 (no deps)                       SA26 (no deps)                            SA27 (no deps)
+SA28 (no deps)                       SA29 (no deps)                            SA31 (no deps)
+                                     SA30 (no deps — land after SA29)          SA33 (no deps)
+                                     SA32 (no deps)
 ```
 
-No cross-track dependencies — all three tracks can run fully in parallel.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to SA29 but is within Track 2. SA22 and SA27 both touch `apply_command.py` — sequence within Track 3 to keep merges clean.
 
 #### Track summary
 
@@ -138,8 +139,8 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA23 (no deps — ready)               SA20 (no deps — ready)                    SA21.1 (no deps — ready)
                                        SA21.2 (deps: SA21.1)                     SA22 (no deps — ready)
-                                      SA24 (no deps — ready)                    SA22 (no deps — ready)
-                                      SA26 (no deps — ready)                    SA25 (no deps — ready)
+                                       SA24 (no deps — ready)
+                                       SA26 (no deps — ready)                    SA25 (no deps — ready)
 ```
 
 No cross-track dependencies except SA21.2 → SA21.1 (Track 2 waits on a Track 3 deliverable — the generator settings change must land before module throttles can be rewired to use it).
