@@ -47,27 +47,27 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (fully resolved, dropped per template rule — detail lives in [CHANGELOG.md](../../CHANGELOG.md)):** Structural Autopsy Remediation I (SA1–SA5, closed 2026-07-02) and II (SA6–SA12, closed 2026-07-03) — repo Findings 2–5 and Module Finding 1 are fully resolved with no open tasks. Within Remediation III: Finding `registry-universe-mismatch` (SA15.1–SA15.3, closed 2026-07-04), Finding `per-module-knowledge-fanout` (SA16.1/SA16.2, closed 2026-07-03), and Finding `org-context-api-accretion` (SA13.1–SA13.4, entire finding, closed 2026-07-04) are fully resolved and dropped from both this file and arch-audit.md. Within the Fail-Hard Remediation batch: `SA17.1`–`SA17.6` (Track 2 — legacy config keys, analytics/billing/CRM/forms/blog/notifications settings, closes TA1 and fully closes TA2) and `SA18.1`–`SA18.11` (Track 3 — manifest/version/template/project-metadata/railway-utils/PORT/hash-capture/dev-tooling-parse-failure fail-hard fixes, closes TA3–TA8, TA10, TA11, TA13, TA14, and TA15) are closed — `SA18` is now fully closed (Track 3 has no remaining work in Remediation III) — see CHANGELOG.md. Also within Finding `operator-read-path-undefined`: `SA14.1` (the `TenantModelAdmin` base) is complete, unblocking `SA14.2`/`SA14.3` — see CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.7 (2026-07-04), SA18.1–SA18.11 (2026-07-04). SA14.1 (TenantModelAdmin base) complete, unblocking SA14.2/SA14.3. All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-04):** All three tracks are clean to continue in parallel — no cross-track dependencies and no unresolved blockers. Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.2, and SA14.3 are complete (CR-SA14.3-001/002/003 resolved); SA14.4 waits on SA14.2+SA14.3; SA14.5 and SA14.6 are ready now — plus new SA23 (ready now). Track 2: SA17.1–SA17.6 are complete and TA2 is fully closed; SA17.7 is complete — blocker CR-SA17.7-002 is resolved (import-seam sentinel proves the lazy-import guard is airtight; see SA17.7 entry); SA17.8 is ready now — plus new SA20, SA21.2 (deps SA21.1), SA24, SA26 (all ready except SA21.2). Track 3: `SA18` (SA18.1–SA18.11) is fully closed, no remaining work from Remediation III — plus new SA19, SA21.1, SA22, SA25 (all ready now).
+> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: Finding `org-context-api-accretion` (SA13.1–SA13.4) is fully closed; remaining work is Finding `operator-read-path-undefined` (SA14.1–SA14.6) — SA14.1, SA14.2, and SA14.3 are complete (CR-SA14.3-001/002/003 resolved); SA14.4 is now ready; SA14.5, SA14.6, and SA23 are ready. Track 2: SA17.8 is complete; SA20, SA24, and SA26 are ready; SA21.2 waits on SA21.1. Track 3: SA19 is complete; SA21.1, SA22, and SA25 are ready.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
-Fix plan derived from the [2026-07-03 fresh-pass autopsy](../../arch-audit.md#autopsy--2026-07-03-fresh-full-pass) (4 structural findings, 2 now closed) and [tech-audit.md](../../tech-audit.md) (fail-hard findings). Each task below is sized Adaptive **Tier 1 or Tier 2**; every task touching `orgs`/tenancy/RLS or billing floors at Tier 2 per the sensitive-domain rule.
+Fix plan derived from the [2026-07-03 fresh-pass autopsy](../../arch-audit.md#autopsy--2026-07-03-fresh-full-pass) (4 structural findings, 3 now closed) and [tech-audit.md](../../tech-audit.md) (fail-hard findings). Each task below is sized Adaptive **Tier 1 or Tier 2**; every task touching `orgs`/tenancy/RLS or billing floors at Tier 2 per the sensitive-domain rule.
 
-**Naming:** continues the `SAn.m` sequence from `SA12` (last used). `SA13`–`SA16` close the 2026-07-03 structural findings (`SA15` and `SA16` fully closed — see above); `SA17`–`SA18` close the tech-audit fail-hard findings (`SA17` = module-side settings, `SA18` = core/CLI plumbing).
+**Naming:** continues the `SAn.m` sequence from `SA12` (last used). `SA13`, `SA15`, `SA16` close 3 of 4 structural findings (all fully closed — see above); SA14 (Finding 1, `operator-read-path-undefined`) remains open. `SA17`–`SA18` close the tech-audit fail-hard findings (`SA17` = module-side settings, `SA18` = core/CLI plumbing).
 
 #### Dependency & parallelization overview (2026-07-04)
 
-Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. `SA18` (Track 3) is now fully closed — no remaining work in this batch. The one remaining fail-hard task (`SA17.8`, Track 2) is file-scoped and independent of the structural work.
+Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. `SA18` (Track 3) is now fully closed — no remaining work in this batch. `SA17.8` (Track 2) is now complete — no remaining fail-hard tasks in this batch.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.1–SA18.11 (all complete —
 SA14.2 (deps: SA14.1 — complete)      SA17.6 (no deps — complete)                fully closed, no remaining
-SA14.3 (deps: SA14.1 — complete)       SA17.7 (deps: SA17.5 — complete)           work in this batch)
-SA14.4 (deps: SA14.2, SA14.3)         SA17.8 (no deps — ready)
+SA14.3 (deps: SA14.1 — complete)      SA17.7 (deps: SA17.5 — complete)           work in this batch)
+SA14.4 (deps: SA14.2, SA14.3 — ready) SA17.8 (no deps — complete)
 SA14.5 (no deps — ready)
 SA14.6 (no deps — ready)
 ```
@@ -78,8 +78,8 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
-| **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 (complete) → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.1–SA17.7 (complete); SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
+| **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 (complete) → SA14.4 (ready), plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
+| **2** | SA17.1–SA17.8 (complete) — TA12 closed, Track 2 fully closed | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
 | **3** | SA18.1–SA18.11 — fully closed, no remaining work in this batch | Core/CLI fail-hard plumbing |
 
 ---
@@ -90,11 +90,8 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 > **SA14.1 — Build the orgs-owned `TenantModelAdmin` base (complete).** `Tier 2 · Track 1` — unblocks SA14.2/SA14.3. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
-- [x] **SA14.2 — Port CRM's 7 admin classes to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
-  Ported all 7 CRM admin classes (TagAdmin, CompanyAdmin, ContactAdmin, StageAdmin, DealAdmin, ContactNoteAdmin, DealNoteAdmin) from `admin.ModelAdmin` to `TenantModelAdmin`. Removed all `get_queryset` overrides that used `all_objects.all()` (TenantModelAdmin scopes querysets via `_org_db_context`). Removed `formfield_for_foreignkey`/`formfield_for_manytomany` overrides that used `all_objects` — related-field querysets now scope correctly via TenantManager under the org context. Removed custom inline formsets (ContactNoteFormSet, DealNoteFormSet) that bypassed TenantManager with `all_objects`. Preserved `_CrmOrgAwareAdminMixin` with same-org form-level validation, organization-required-on-add, organization-readonly-on-change behavior. Added NULL-safe session guard to `debug_helpers.get_debug_as_org()` to prevent `AttributeError` when `request.session` is unavailable (VIEW-AS debug helpers hardening). Updated comments. Updated HTTP-level tests to set session org context for TenantModelAdmin compatibility.
-    - **Review-driven follow-up (CR-SA14.2-001):** Added `created_by` auto-stamping from the current user in `ContactAdmin.save_formset()` and `DealAdmin.save_formset()` so inline ContactNote/DealNote creations record the operator who created them. Added 3 regression tests (`TestContactAdminInlineNoteCreatedBy` with 2 tests, `TestDealAdminInlineNoteCreatedBy` with 1 test) proving inline notes carry `created_by` on both add and change forms.
-  *Files:* `quickscale_modules/crm/src/quickscale_modules_crm/admin.py`, `quickscale_modules/crm/tests/test_admin.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/debug_helpers.py`.
-  *Acceptance:* CRM admin changelists render correctly under the restricted role in a manual/E2E check; no `all_objects` reference remains in `crm/admin.py`.
+- [x] **SA14.2 — Port CRM's 7 admin classes to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1`
+  CRM admin ported. See [CHANGELOG.md](../../CHANGELOG.md) for closeout detail.
 
 - [x] **SA14.3 — Port blog/forms/listings/billing admins to `TenantModelAdmin`.** `Tier 2 · Track 1 · deps: SA14.1 · RISK LEVEL: medium`
   Ported blog (CategoryAdmin, TagAdmin, BlogMediaAssetAdmin, PostAdmin), forms (FormAdmin, FormSubmissionAdmin), listings (AbstractListingAdmin, ListingAdmin), and billing (CreditBalanceAdmin, CreditTransactionAdmin, SubscriptionAdmin) from `admin.ModelAdmin` to `TenantModelAdmin`. Removed all `get_queryset` overrides that used `all_objects.all()` — TenantModelAdmin scopes querysets via `_org_db_context`. Removed `formfield_for_foreignkey`/`formfield_for_manytomany` overrides that used `all_objects` for org-scoped fields (PostAdmin's category/tags) — related-field querysets now scope via TenantManager under the org context. Removed custom inline formsets FormFieldFormSet and FormFieldValueFormSet from forms/admin.py (and their `all_objects` bypass) — inline querysets now use the default BaseInlineFormSet under TenantModelAdmin's primed org context. Preserved PostAdmin's author `formfield_for_foreignkey` (user dropdown logic, not org scoping), FormAdmin's `save_formset` (organization stamping on inline FormField instances) and `save_model` (created_by), FormAdmin's `get_queryset` override (preserves `_submission_count` annotation on top of TenantModelAdmin's scoped queryset), and AbstractListingAdmin's `get_form` (MarkdownxWidget for description). Kept tenant_excluded admins (AuthorProfileAdmin, PlanAdmin, WebhookEventAdmin) on `admin.ModelAdmin`. Updated test suites to verify scoped/fail-closed queryset behavior instead of `all_objects` operator path. SA14.3 acceptance: blog, forms, listings, and billing module test suites green; no `all_objects` reference remains in the four admin files; TenantModelAdmin-scoped querysets return only the resolved org's rows and fail-closed (empty) when no org context is present.
@@ -115,7 +112,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 
 - [ ] **SA14.6 — Fail-hard `QUICKSCALE_MODE` when orgs is installed.** `Tier 1 · Track 1 · deps: none`
   Replace `getattr(settings, "QUICKSCALE_MODE", "solo")` with a required-setting read that raises `ImproperlyConfigured` when `orgs` is installed and `QUICKSCALE_MODE` is unset, so a saas deployment can't silently flip to solo-mode tenancy.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py:268`.
+  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py:268`, `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py:60`, `quickscale_modules/orgs/src/quickscale_modules_orgs/adapters.py:81`, `quickscale_modules/orgs/src/quickscale_modules_orgs/views.py:63`.
   *Acceptance:* omitting `QUICKSCALE_MODE` in a saas-mode generated project raises at startup instead of defaulting to `"solo"`.
 
 ---
@@ -129,16 +126,13 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 > SA17.1–SA17.6 (legacy config keys, analytics/billing/CRM/forms/blog/notifications fail-hard settings — closes TA1 and fully closes TA2) are complete. See [CHANGELOG.md](../../CHANGELOG.md) for closeout details.
 
 - [x] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring (complete).** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
-  **Landed code:** Removed the `ImportError` fallback in `analytics/services.py:configure_analytics_client()` (PostHog SDK is now a hard dependency — module-level `import posthog` replaces the `import_module("posthog")`/`except ImportError` probe). Removed the `import_module`/`getattr` runtime probe in `forms/views.py:_capture_submission_analytics()` — analytics' `capture_form_submit` and `get_distinct_id` are now imported lazily inside the function body (after the ``apps.is_installed`` guard), keeping forms importable without analytics on the Python path while removing the soft-degradation probe. Updated analytics test suite: removed dead `test_configure_analytics_client_disables_when_sdk_is_missing` test; changed all patch targets from `services.import_module` to `services.posthog`. Updated forms test suite: removed `test_submission_ignores_missing_analytics_module`; changed remaining analytics patch targets to ``quickscale_modules_analytics.services.*``. SA17.5's settings checks provided the needed ordering so the two changes do not fight over the same code paths.
-  **CR-SA17.7-002 (resolved):** Replaced the previous spy-mock approach (which relied on `AssertionError` inside the `except Exception` boundary — swallowable) with an import-seam sentinel. The test now replaces `quickscale_modules_analytics.services` in `sys.modules` with a blocker object that raises `ModuleNotFoundError` on attribute access. Because the lazy import statement runs OUTSIDE the `try/except Exception` block, a bypassed guard would trigger the sentinel's `__getattr__` and fail the test — providing airtight, non-swallowable proof that the `apps.is_installed` guard correctly prevents the import when analytics is absent.
-  **CR-SA17.7-003 (resolved):** Roadmap and changelog wording corrected to match the verified import-seam sentinel mechanism.
-  *Files:* `analytics/services.py`, `analytics/tests/test_services.py`, `forms/views.py`, `forms/tests/test_views.py`.
-  *Acceptance:* analytics hard-fails on missing PostHog; forms' analytics integration is generation-time wired; absent-analytics guard in forms is proven airtight by import-seam sentinel regression coverage. Blocker CR-SA17.7-002 resolved.
+  PostHog import hardened to hard failure; import-seam sentinel regression. See [CHANGELOG.md](../../CHANGELOG.md) for closeout detail.
 
-- [ ] **SA17.8 — Remove or gate deprecated `module_catalog` compat delegates; fix fail-open readiness.** `Tier 1 · Track 2 · deps: none · (why → TA12)`
-  Remove `get_module_names()`/`get_module_entries()` from the public `contracts/__init__.py` API (or add the mandated `# F-EXCEPTION:` tag if a caller genuinely still needs them), and make `get_module_readiness_reason()` raise or return an explicit "unknown module" sentinel for unrecognized names instead of `None` (indistinguishable from "ready").
-  *Files:* `quickscale_core/src/quickscale_core/contracts/module_catalog.py:128-175,270-289`.
-  *Acceptance:* the deprecated delegates are either removed from the public API or carry an `# F-EXCEPTION:` tag; readiness checks on an unknown module name raise/return a distinguishable value from "ready".
+- [x] **SA17.8 — Remove or gate deprecated `module_catalog` compat delegates; fix fail-open readiness.** `Tier 1 · Track 2 · deps: none · (why → TA12)`
+  Removed `get_module_names()`/`get_module_entries()` from the public `contracts/__init__.py` API (zero production callers confirmed by discovery; no `# F-EXCEPTION:` tag needed). Made `get_module_readiness_reason()` raise `ValueError` for unrecognized module names instead of returning `None` (previously indistinguishable from "ready"). Updated core and CLI test suites to remove deleted-function tests and assert the new raise-on-unknown behavior. Removed the two deprecated function bodies from `module_catalog.py`.
+  *Files:* `quickscale_core/src/quickscale_core/contracts/module_catalog.py:128-187`, `contracts/__init__.py`, `quickscale_core/tests/test_module_catalog.py`, `quickscale_cli/tests/test_module_catalog.py`.
+  *Acceptance:* the deprecated delegates are removed from the public API (no `# F-EXCEPTION:` tag); readiness checks on an unknown module name raise `ValueError` with a descriptive message; core and CLI test suites pass.
+  *Findings:* Zero production callers for `get_module_names`/`get_module_entries` confirmed — clean removal. No `# F-EXCEPTION:` tag required. The `ValueError` message uses the format `"Unknown module name '...'. Expected a known QuickScale module name."`
 
 #### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3) — **fully closed 2026-07-04**
 
@@ -171,16 +165,17 @@ No cross-track dependencies except SA21.2 → SA21.1 (Track 2 waits on a Track 3
 |-------|------------------|-------|
 | **1** | SA23 (ready) | Orgs debug-view open redirect |
 | **2** | SA20 (ready), SA21.2 (deps: SA21.1), SA24 (ready), SA26 (ready) | Module-side hardening (backups restore, throttle wiring, XSS) |
-| **3** | SA19 (ready), SA21.1 (ready), SA22 (ready), SA25 (ready) | Core/CLI/generator plumbing (secrets logging, cache/IP infra, apply ordering, hygiene) |
+| **3** | SA19 (complete), SA21.1 (ready), SA22 (ready), SA25 (ready) | Core/CLI/generator plumbing (secrets logging, cache/IP infra, apply ordering, hygiene) |
 
 ---
 
 #### Finding — `startsh-secrets-in-deploy-logs` (`why →` [TA16](../../tech-audit.md))
 
-- [ ] **SA19 — Stop `start.sh.j2` from printing secret values to deploy logs.** `Tier 1 · Track 3 · deps: none`
-  Replace the `env | grep -E '(DATABASE_URL|SECRET_KEY|...)'` environment-check step with one that prints only variable *names* and a set/missing status, never values.
-  *Files:* `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2`.
-  *Acceptance:* container boot logs show `SECRET_KEY: set` / `DATABASE_URL: set` (or `MISSING`) but never the underlying value; existing missing-var fail-hard behavior is unchanged.
+- [x] **SA19 — Stop `start.sh.j2` from printing secret values to deploy logs.** `Tier 1 · Track 3 · deps: none`
+  Replaced the raw `env | grep -E '(DATABASE_URL|SECRET_KEY|...)'` dump with per-variable `set`/`MISSING` status lines so deploy logs never print underlying values. Added focused template regressions for the logging contract.
+  *Files:* `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2`, `quickscale_core/tests/test_generator/test_start_sh_template.py`.
+  *Acceptance:* container boot logs now show `SECRET_KEY: set` / `DATABASE_URL: set` (or `MISSING`) without printing values; the existing downstream missing-var failure path remains unchanged.
+  *Finding:* the Step 1 check was informational only before this fix and did not enforce env presence; fail-hard behavior continues to come from the later startup/migration paths rather than the log-only probe.
 
 #### Finding — `backups-sync-restore-blocks-worker` (`why →` [TA17](../../tech-audit.md))
 

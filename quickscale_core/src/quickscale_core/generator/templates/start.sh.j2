@@ -15,7 +15,21 @@ echo ""
 
 echo "📋 Step 1/6: Environment check"
 echo "Checking critical environment variables..."
-env | grep -E '(DATABASE_URL|SECRET_KEY|DEBUG|DJANGO_SETTINGS_MODULE|ALLOWED_HOSTS|PORT)' || echo "⚠️  Some variables may be missing"
+critical_vars=(DATABASE_URL SECRET_KEY DEBUG DJANGO_SETTINGS_MODULE ALLOWED_HOSTS PORT)
+missing_critical_var=0
+
+for var_name in "${critical_vars[@]}"; do
+  if [[ -n "${!var_name:-}" ]]; then
+    echo "${var_name}: set"
+  else
+    echo "${var_name}: MISSING"
+    missing_critical_var=1
+  fi
+done
+
+if [[ "$missing_critical_var" -eq 1 ]]; then
+  echo "⚠️  Some variables may be missing"
+fi
 echo ""
 
 echo "📋 Step 2/6: Python environment"
