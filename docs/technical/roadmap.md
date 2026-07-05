@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.7 (2026-07-04), SA18.1–SA18.11 (2026-07-04). SA14.1 (TenantModelAdmin base) complete, unblocking SA14.2/SA14.3. All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: SA14.3 ready (deps SA14.1 complete), SA14.5/SA14.6/SA23 ready; SA14.4 waits on SA14.3. Track 2: SA17.8/SA20/SA24/SA26 ready; SA21.2 waits on SA21.1. Track 3: SA19/SA21.1/SA22/SA25 ready.
+> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: SA14.3 ready (deps SA14.1 complete), SA14.5/SA14.6/SA23 ready; SA14.4 waits on SA14.3. Track 2: SA17.8 complete, SA20/SA24/SA26 ready; SA21.2 waits on SA21.1. Track 3: SA19/SA21.1/SA22/SA25 ready.
 
 ### Structural Autopsy Remediation III (opened 2026-07-03)
 
@@ -59,7 +59,7 @@ Fix plan derived from the [2026-07-03 fresh-pass autopsy](../../arch-audit.md#au
 
 #### Dependency & parallelization overview (2026-07-04)
 
-Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. `SA18` (Track 3) is now fully closed — no remaining work in this batch. The one remaining fail-hard task (`SA17.8`, Track 2) is file-scoped and independent of the structural work.
+Finding 3 (`org-context-api-accretion`, SA13) is closed — see the closed-batches note above; Track 1's remaining work is Finding 1 (`operator-read-path-undefined`, SA14) alone. `registry-universe-mismatch` (SA15) and `per-module-knowledge-fanout` (SA16) are also closed. `SA18` (Track 3) is now fully closed — no remaining work in this batch. `SA17.8` (Track 2) is now complete — no remaining fail-hard tasks in this batch.
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
@@ -67,7 +67,7 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 SA14.1 (no deps — complete)           SA17.5 (no deps — complete)               SA18.1–SA18.11 (all complete —
 SA14.2 (deps: SA14.1 — complete)      SA17.6 (no deps — complete)                fully closed, no remaining
 SA14.3 (deps: SA14.1 — ready)         SA17.7 (deps: SA17.5 — complete)           work in this batch)
-SA14.4 (deps: SA14.2, SA14.3)         SA17.8 (no deps — ready)
+SA14.4 (deps: SA14.2, SA14.3)         SA17.8 (no deps — complete)
 SA14.5 (no deps — ready)
 SA14.6 (no deps — ready)
 ```
@@ -79,7 +79,7 @@ No cross-track dependencies — all three tracks can run fully in parallel.
 | Track | Tasks (in order) | Theme |
 |-------|------------------|-------|
 | **1** | SA14.1 (complete) → SA14.2 (complete) → SA14.3 (ready) → SA14.4, plus SA14.5 (ready), SA14.6 (ready) | Operator/admin read-path contract (Finding 1; Finding 3 closed) |
-| **2** | SA17.1–SA17.7 (complete); SA17.8 (ready) | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
+| **2** | SA17.1–SA17.7 (complete); SA17.8 (complete) — TA12 closed, Track 2 fully closed | Module-side fail-hard follow-ups (TA2 closed by SA17.6; TA9/TA12) |
 | **3** | SA18.1–SA18.11 — fully closed, no remaining work in this batch | Core/CLI fail-hard plumbing |
 
 ---
@@ -126,10 +126,11 @@ Fix plan derived from [tech-audit.md](../../tech-audit.md). `SA17` covers module
 - [x] **SA17.7 — Replace optional-dependency soft degradation with generation-time wiring (complete).** `Tier 2 · Track 2 · deps: SA17.5 (SA17.2 complete) · (why → TA9)`
   PostHog import hardened to hard failure; import-seam sentinel regression. See [CHANGELOG.md](../../CHANGELOG.md) for closeout detail.
 
-- [ ] **SA17.8 — Remove or gate deprecated `module_catalog` compat delegates; fix fail-open readiness.** `Tier 1 · Track 2 · deps: none · (why → TA12)`
-  Remove `get_module_names()`/`get_module_entries()` from the public `contracts/__init__.py` API (or add the mandated `# F-EXCEPTION:` tag if a caller genuinely still needs them), and make `get_module_readiness_reason()` raise or return an explicit "unknown module" sentinel for unrecognized names instead of `None` (indistinguishable from "ready").
-  *Files:* `quickscale_core/src/quickscale_core/contracts/module_catalog.py:128-175,270-289`.
-  *Acceptance:* the deprecated delegates are either removed from the public API or carry an `# F-EXCEPTION:` tag; readiness checks on an unknown module name raise/return a distinguishable value from "ready".
+- [x] **SA17.8 — Remove or gate deprecated `module_catalog` compat delegates; fix fail-open readiness.** `Tier 1 · Track 2 · deps: none · (why → TA12)`
+  Removed `get_module_names()`/`get_module_entries()` from the public `contracts/__init__.py` API (zero production callers confirmed by discovery; no `# F-EXCEPTION:` tag needed). Made `get_module_readiness_reason()` raise `ValueError` for unrecognized module names instead of returning `None` (previously indistinguishable from "ready"). Updated core and CLI test suites to remove deleted-function tests and assert the new raise-on-unknown behavior. Removed the two deprecated function bodies from `module_catalog.py`.
+  *Files:* `quickscale_core/src/quickscale_core/contracts/module_catalog.py:128-187`, `contracts/__init__.py`, `quickscale_core/tests/test_module_catalog.py`, `quickscale_cli/tests/test_module_catalog.py`.
+  *Acceptance:* the deprecated delegates are removed from the public API (no `# F-EXCEPTION:` tag); readiness checks on an unknown module name raise `ValueError` with a descriptive message; core and CLI test suites pass.
+  *Findings:* Zero production callers for `get_module_names`/`get_module_entries` confirmed — clean removal. No `# F-EXCEPTION:` tag required. The `ValueError` message uses the format `"Unknown module name '...'. Expected a known QuickScale module name."`
 
 #### `SA18` — Core/CLI/generator plumbing fail-hard fixes (Track 3) — **fully closed 2026-07-04**
 

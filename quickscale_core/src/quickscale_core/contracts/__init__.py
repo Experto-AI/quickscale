@@ -32,9 +32,7 @@ from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_discovered_module_entries,
     get_discovered_module_names,
-    get_module_entries,
     get_module_entry,
-    get_module_names,
     get_module_readiness_reason,
 )
 from quickscale_core.contracts.resolvers import (  # noqa: F401
@@ -151,9 +149,7 @@ __all__ = [
     "find_not_ready_modules",
     "get_discovered_module_entries",
     "get_discovered_module_names",
-    "get_module_entries",
     "get_module_entry",
-    "get_module_names",
     "get_module_readiness_reason",
     # Resolver functions
     "analytics_production_targeted",
