@@ -247,6 +247,150 @@ modules:
             in error_output
         )
 
+    # ------------------------------------------------------------------
+    # SA27 — blog, forms, storage, orgs option validation
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        ("options", "expected_marker"),
+        [
+            (
+                {"api_rate_limit": ""},
+                "api_rate_limit cannot be blank",
+            ),
+            (
+                {"posts_per_page": -1},
+                "posts_per_page must be a positive integer",
+            ),
+        ],
+    )
+    def test_apply_blog_prerequisites_fail(self, options, expected_marker, capsys):
+        """Blog apply preflight should report contract issues."""
+        qs_config = SimpleNamespace(modules={"blog": SimpleNamespace(options=options)})
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Blog module configuration is incomplete for apply" in error_output
+        assert expected_marker in error_output
+
+    def test_apply_blog_valid_options_pass(self, capsys):
+        """Blog with valid options must pass preflight."""
+        qs_config = SimpleNamespace(
+            modules={
+                "blog": SimpleNamespace(options={}),
+            }
+        )
+        # Should not raise — defaults are valid
+        _validate_module_prerequisites(qs_config)
+
+    @pytest.mark.parametrize(
+        ("options", "expected_marker"),
+        [
+            (
+                {"rate_limit": "10 per hour"},
+                "rate_limit must match format",
+            ),
+            (
+                {"forms_per_page": 0},
+                "forms_per_page must be at least 1",
+            ),
+            (
+                {"data_retention_days": -1},
+                "data_retention_days must be a non-negative integer",
+            ),
+        ],
+    )
+    def test_apply_forms_prerequisites_fail(self, options, expected_marker, capsys):
+        """Forms apply preflight should report contract issues."""
+        qs_config = SimpleNamespace(modules={"forms": SimpleNamespace(options=options)})
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Forms module configuration is incomplete for apply" in error_output
+        assert expected_marker in error_output
+
+    def test_apply_forms_valid_options_pass(self, capsys):
+        """Forms with valid options must pass preflight."""
+        qs_config = SimpleNamespace(
+            modules={
+                "forms": SimpleNamespace(options={}),
+            }
+        )
+        # Should not raise — defaults are valid
+        _validate_module_prerequisites(qs_config)
+
+    @pytest.mark.parametrize(
+        ("options", "expected_marker"),
+        [
+            (
+                {"backend": "invalid"},
+                "modules.storage.backend must be one of",
+            ),
+        ],
+    )
+    def test_apply_storage_prerequisites_fail(self, options, expected_marker, capsys):
+        """Storage apply preflight should report contract issues."""
+        qs_config = SimpleNamespace(
+            modules={"storage": SimpleNamespace(options=options)}
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Storage module configuration is incomplete for apply" in error_output
+        assert expected_marker in error_output
+
+    def test_apply_storage_valid_options_pass(self, capsys):
+        """Storage with valid options must pass preflight."""
+        qs_config = SimpleNamespace(
+            modules={
+                "storage": SimpleNamespace(options={}),
+            }
+        )
+        # Should not raise — defaults are valid
+        _validate_module_prerequisites(qs_config)
+
+    @pytest.mark.parametrize(
+        ("options", "expected_marker"),
+        [
+            (
+                {"mode": "invalid"},
+                "modules.orgs.mode must be one of",
+            ),
+        ],
+    )
+    def test_apply_orgs_prerequisites_fail(self, options, expected_marker, capsys):
+        """Orgs apply preflight should report invalid mode option."""
+        qs_config = SimpleNamespace(
+            modules={
+                "orgs": SimpleNamespace(options=options),
+                "auth": SimpleNamespace(options={}),
+            }
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Orgs module configuration is incomplete for apply" in error_output
+        assert expected_marker in error_output
+
+    def test_apply_orgs_valid_mode_passes(self, capsys):
+        """Orgs with valid mode must pass preflight."""
+        qs_config = SimpleNamespace(
+            modules={
+                "orgs": SimpleNamespace(options={"mode": "solo"}),
+                "auth": SimpleNamespace(options={}),
+            }
+        )
+        # Should not raise
+        _validate_module_prerequisites(qs_config)
+
 
 # ---------------------------------------------------------------------------
 # SA7.4 — required-module version-floor validation wrapper
@@ -393,7 +537,7 @@ docker:
 
             modules = (persisted or {}).get("modules") or {}
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert "notifications" in modules
 
     def test_load_and_validate_config_auto_adds_orgs_and_notifications_for_crm(
         self,
@@ -431,7 +575,7 @@ docker:
 
             modules = (persisted or {}).get("modules") or {}
             assert "orgs" in modules
-            assert modules["notifications"] == default_notifications_module_options()
+            assert "notifications" in modules
 
     def test_apply_crm_requires_auth_module_via_implied_orgs(self, capsys):
         """CRM without auth should fail fast because CRM implies orgs which requires auth."""

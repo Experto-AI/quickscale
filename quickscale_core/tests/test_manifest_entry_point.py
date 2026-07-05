@@ -822,3 +822,52 @@ class TestAnalyticsPostHookFailHard:
         result = entry_point_module._analytics_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.apps == ()
+
+
+# ---------------------------------------------------------------------------
+# CR-SA27-001: Org/Storage custom adapter callers must fail closed on
+# invalid options (silent-coercion removal caller-parity gap).
+# ---------------------------------------------------------------------------
+
+
+class TestOrgsStorageAdapterFailClosed:
+    """Orgs/storage custom manifest-adapter callers must feed validation
+    issues into ResolverResult so that assemble_wiring_spec fails closed
+    on invalid options instead of silently assembling an invalid spec
+    (CR-SA27-001)."""
+
+    def test_orgs_invalid_mode_raises_manifest_error(self) -> None:
+        """build_manifest_wiring_spec('orgs', {'mode': 'invalid'})
+        raises ManifestError with a descriptive message."""
+        from quickscale_core.manifest import ManifestError
+
+        with pytest.raises(ManifestError) as exc_info:
+            build_manifest_wiring_spec("orgs", {"mode": "invalid_mode"})
+        msg = str(exc_info.value)
+        assert "validation issues" in msg
+        assert "modules.orgs.mode" in msg
+
+    def test_storage_invalid_backend_raises_manifest_error(self) -> None:
+        """build_manifest_wiring_spec('storage', {'backend': 'invalid'})
+        raises ManifestError with a descriptive message."""
+        from quickscale_core.manifest import ManifestError
+
+        with pytest.raises(ManifestError) as exc_info:
+            build_manifest_wiring_spec("storage", {"backend": "invalid_backend"})
+        msg = str(exc_info.value)
+        assert "validation issues" in msg
+        assert "modules.storage.backend" in msg
+
+    def test_orgs_valid_mode_still_succeeds(self) -> None:
+        """Valid orgs mode continues to produce a spec (happy path)."""
+        spec = build_manifest_wiring_spec("orgs", {"mode": "saas"})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_orgs" in spec.apps
+
+    def test_storage_valid_backend_still_succeeds(self) -> None:
+        """Valid storage backend continues to produce a spec (happy path)."""
+        spec = build_manifest_wiring_spec(
+            "storage", {"backend": "s3", "bucket_name": "b", "region_name": "r"}
+        )
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_storage" in spec.apps

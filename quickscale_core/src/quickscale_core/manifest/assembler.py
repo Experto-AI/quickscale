@@ -30,6 +30,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.manifest.resolver import ResolverResult
 from quickscale_core.manifest.schema import MANAGED_FILE_ROOT_PREFIX
 from quickscale_core.module_wiring import ModuleWiringSpec
@@ -118,7 +119,21 @@ def assemble_wiring_spec(
         A frozen :class:`~quickscale_core.module_wiring.ModuleWiringSpec`
         ready for use with
         :func:`~quickscale_core.module_wiring.write_managed_wiring`.
+
+    Raises:
+        ManifestError: When ``result.validation_issues`` is non-empty.  The
+            error message lists each issue on a separate line prefixed with
+            ``"  • "`` so the caller (typically
+            :func:`~quickscale_core.manifest.entry_point.build_manifest_wiring_spec`)
+            can surface them to the operator.
     """
+    if result.validation_issues:
+        issues_str = "\n".join(f"  • {issue}" for issue in result.validation_issues)
+        raise ManifestError(
+            f"Module '{result.module_name}' has validation issues "
+            f"that must be resolved before assembly:\n{issues_str}"
+        )
+
     spec = ModuleWiringSpec(
         apps=result.apps,
         middleware=result.middleware,
