@@ -42,7 +42,11 @@ from quickscale_core.contracts.resolvers import (
     validate_analytics_module_options,
     resolve_billing_module_options,
     validate_billing_module_options,
+    validate_blog_module_options,
     validate_crm_module_options,
+    validate_forms_module_options,
+    validate_orgs_module_options,
+    validate_storage_module_options,
     notifications_live_delivery_configured,
     notifications_production_targeted,
     resolve_notifications_module_options,
@@ -1002,6 +1006,25 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
         )
         raise click.Abort()
 
+    if "orgs" in qs_config.modules:
+        orgs_issues = validate_orgs_module_options(
+            qs_config.modules["orgs"].options or {}
+        )
+        if orgs_issues:
+            click.secho(
+                "\n❌ Orgs module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in orgs_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to correct the orgs option values.",
+                err=True,
+            )
+            raise click.Abort()
+
     billing_config = qs_config.modules.get("billing")
     if billing_config is not None:
         billing_issues = validate_billing_module_options(billing_config.options or {})
@@ -1044,6 +1067,64 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     _abort_for_not_ready_modules(
         list(qs_config.modules.keys()), source="quickscale.yml"
     )
+
+    blog_config = qs_config.modules.get("blog")
+    if blog_config is not None:
+        blog_issues = validate_blog_module_options(blog_config.options or {})
+        if blog_issues:
+            click.secho(
+                "\n❌ Blog module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in blog_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to correct the blog option values. "
+                "Blog apply requires valid posts_per_page, enable_rss, and api_rate_limit.",
+                err=True,
+            )
+            raise click.Abort()
+
+    forms_config = qs_config.modules.get("forms")
+    if forms_config is not None:
+        forms_issues = validate_forms_module_options(forms_config.options or {})
+        if forms_issues:
+            click.secho(
+                "\n❌ Forms module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in forms_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to correct the forms option values. "
+                "Forms apply requires valid forms_per_page, rate_limit, "
+                "data_retention_days, and boolean flags.",
+                err=True,
+            )
+            raise click.Abort()
+
+    storage_config = qs_config.modules.get("storage")
+    if storage_config is not None:
+        storage_issues = validate_storage_module_options(storage_config.options or {})
+        if storage_issues:
+            click.secho(
+                "\n❌ Storage module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in storage_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to correct the storage option values. "
+                "Storage apply requires a valid backend and optional booleans.",
+                err=True,
+            )
+            raise click.Abort()
 
     backups_config = qs_config.modules.get("backups")
     if backups_config is not None:

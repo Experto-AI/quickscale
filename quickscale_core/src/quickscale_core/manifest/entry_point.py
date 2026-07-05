@@ -1133,6 +1133,7 @@ def _orgs_manifest_adapter(
     """
     from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         resolve_orgs_module_options,
+        validate_orgs_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
     from quickscale_core.manifest.derivation import (  # noqa: PLC0415
@@ -1148,6 +1149,7 @@ def _orgs_manifest_adapter(
     )
 
     resolved = resolve_orgs_module_options(options)
+    validation_issues = validate_orgs_module_options(options)
     mode = str(resolved.get("mode", "solo")).strip().lower()
 
     schema = ModuleDerivationSchema(
@@ -1211,6 +1213,7 @@ def _orgs_manifest_adapter(
         module_name="orgs",
         defaults={},
         resolved=resolved,
+        validation_issues=validation_issues,
         derived_settings=derived_settings,
         apps=tuple(wiring["apps"]),
         middleware=tuple(wiring["middleware"]),
@@ -1255,6 +1258,7 @@ def _storage_manifest_adapter(
     """
     from quickscale_core.contracts.resolvers import (  # noqa: PLC0415
         resolve_storage_module_options,
+        validate_storage_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
     from quickscale_core.manifest.derivation import (  # noqa: PLC0415
@@ -1267,6 +1271,7 @@ def _storage_manifest_adapter(
     )
 
     resolved = resolve_storage_module_options(options)
+    validation_issues = validate_storage_module_options(options)
     backend = str(resolved.get("backend", "local")).lower()
 
     schema = ModuleDerivationSchema(
@@ -1351,6 +1356,7 @@ def _storage_manifest_adapter(
         module_name="storage",
         defaults={},
         resolved=resolved,
+        validation_issues=validation_issues,
         derived_settings=derived_settings,
         apps=tuple(wiring["apps"]),
         middleware=tuple(wiring["middleware"]),

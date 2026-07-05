@@ -37,11 +37,9 @@ from quickscale_core.contracts.module_options import (
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     normalize_notifications_module_options,
     # Orgs
-    ORGS_MODE_SOLO,
     ORGS_MODES,
     # Storage
     STORAGE_BACKENDS,
-    STORAGE_BACKEND_LOCAL,
     DEFAULT_STORAGE_MEDIA_URL,
     # Social
     SOCIAL_LAYOUT_VARIANTS,
@@ -428,10 +426,7 @@ def default_blog_module_options() -> dict[str, Any]:
 def normalize_blog_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
     normalized = dict(options or {})
     if "api_rate_limit" in normalized:
-        stripped = str(normalized["api_rate_limit"]).strip()
-        normalized["api_rate_limit"] = (
-            stripped if stripped else DEFAULT_BLOG_API_RATE_LIMIT
-        )
+        normalized["api_rate_limit"] = str(normalized["api_rate_limit"]).strip()
     return normalized
 
 
@@ -442,10 +437,7 @@ def resolve_blog_module_options(options: Mapping[str, Any] | None) -> dict[str, 
     resolved = dict(result.resolved)
     resolved["posts_per_page"] = int(resolved["posts_per_page"])
     resolved["enable_rss"] = bool(resolved["enable_rss"])
-    stripped_rate = str(resolved.get("api_rate_limit", "")).strip()
-    resolved["api_rate_limit"] = (
-        stripped_rate if stripped_rate else DEFAULT_BLOG_API_RATE_LIMIT
-    )
+    resolved["api_rate_limit"] = str(resolved.get("api_rate_limit", "")).strip()
     return resolved
 
 
@@ -1237,8 +1229,6 @@ def resolve_orgs_module_options(options: Mapping[str, Any] | None) -> dict[str, 
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
     resolved = dict(result.resolved)
     mode = str(resolved.get("mode", "")).strip().lower()
-    if mode not in ORGS_MODES:
-        mode = ORGS_MODE_SOLO
     resolved["mode"] = mode
     return resolved
 
@@ -1610,8 +1600,6 @@ def resolve_storage_module_options(options: Mapping[str, Any] | None) -> dict[st
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
     resolved = dict(result.resolved)
     backend = str(resolved.get("backend", "")).lower()
-    if backend not in STORAGE_BACKENDS:
-        backend = STORAGE_BACKEND_LOCAL
     resolved["backend"] = backend
     resolved["media_url"] = _normalize_media_url(
         str(resolved.get("media_url", DEFAULT_STORAGE_MEDIA_URL))

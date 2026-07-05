@@ -386,9 +386,9 @@ class TestResolversBlog:
         result = normalize_blog_module_options({"api_rate_limit": "  10/minute  "})
         assert result["api_rate_limit"] == "10/minute"
 
-    def test_normalize_blog_empty_api_rate_limit_uses_default(self) -> None:
+    def test_normalize_blog_empty_api_rate_limit_passes_through(self) -> None:
         result = normalize_blog_module_options({"api_rate_limit": "  "})
-        assert result["api_rate_limit"] == DEFAULT_BLOG_API_RATE_LIMIT
+        assert result["api_rate_limit"] == ""
 
     def test_normalize_blog_none_returns_empty(self) -> None:
         assert normalize_blog_module_options(None) == {}
@@ -785,10 +785,15 @@ class TestResolversOrgs:
         assert result["mode"] == "saas"
 
     @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_orgs_fallback_to_solo(self, mock_load: MagicMock) -> None:
+    def test_resolve_orgs_passes_through_invalid_mode(
+        self, mock_load: MagicMock
+    ) -> None:
         mock_load.return_value = _make_mock_manifest("orgs", {"mode": "solo"})
         result = resolve_orgs_module_options({"mode": "unknown"})
-        assert result["mode"] == "solo"
+        # SA27: silent coercion removed; invalid mode passes through.
+        # Validation is now gated at the apply path via _validate_module_prerequisites
+        # and at the assembler via validation_issues.
+        assert result["mode"] == "unknown"
 
     @patch(_MANIFEST_PATCH_PATH)
     def test_validate_orgs_invalid_mode(self, mock_load: MagicMock) -> None:
@@ -1058,14 +1063,15 @@ class TestResolversStorage:
         assert result["backend"] == "s3"
 
     @patch(_MANIFEST_PATCH_PATH)
-    def test_resolve_storage_unknown_backend_falls_back(
+    def test_resolve_storage_unknown_backend_passes_through(
         self, mock_load: MagicMock
     ) -> None:
         mock_load.return_value = _make_mock_manifest(
             "storage", {"backend": "local", "media_url": "/media/"}
         )
         result = resolve_storage_module_options({"backend": "unknown"})
-        assert result["backend"] == "local"
+        # SA27: silent coercion removed; invalid backend passes through.
+        assert result["backend"] == "unknown"
 
     @patch(_MANIFEST_PATCH_PATH)
     def test_validate_storage_valid(self, mock_load: MagicMock) -> None:

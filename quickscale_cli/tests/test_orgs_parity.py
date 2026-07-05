@@ -159,19 +159,20 @@ class TestResolutionParity:
         resolved = resolve_orgs_module_options({"mode": "  SaaS  "})
         assert resolved["mode"] == "saas"
 
-    def test_invalid_mode_falls_back_to_solo(self) -> None:
-        """Invalid mode must fall back to 'solo' (mirrors legacy guard)."""
+    def test_invalid_mode_passes_through(self) -> None:
+        """SA27: invalid mode passes through instead of coercing to 'solo'."""
         resolved = resolve_orgs_module_options({"mode": "team"})
-        assert resolved["mode"] == "solo"
+        assert resolved["mode"] == "team"
 
-    def test_empty_mode_falls_back_to_solo(self) -> None:
-        """Empty string mode (after strip) must fall back to 'solo'."""
+    def test_empty_mode_passes_through(self) -> None:
+        """SA27: empty mode passes through instead of coercing to 'solo'."""
         resolved = resolve_orgs_module_options({"mode": ""})
-        assert resolved["mode"] == "solo"
+        assert resolved["mode"] == ""
 
-    def test_blank_mode_falls_back_to_solo(self) -> None:
+    def test_blank_mode_passes_through(self) -> None:
+        """SA27: blank mode passes through instead of coercing to 'solo'."""
         resolved = resolve_orgs_module_options({"mode": "   "})
-        assert resolved["mode"] == "solo"
+        assert resolved["mode"] == ""
 
     def test_resolution_is_idempotent(self) -> None:
         resolved = resolve_orgs_module_options({"mode": "saas"})
@@ -238,10 +239,10 @@ class TestWiringFieldsParity:
         resolved = resolve_orgs_module_options({"mode": "saas"})
         assert resolved["mode"] == "saas"
 
-    def test_invalid_mode_wiring_falls_back_to_solo(self) -> None:
-        """Invalid mode in wiring uses legacy fallback: mode = 'solo'."""
+    def test_invalid_mode_passes_through_in_wiring(self) -> None:
+        """SA27: invalid mode passes through instead of coercing to 'solo'."""
         resolved = resolve_orgs_module_options({"mode": "enterprise"})
-        assert resolved["mode"] == "solo"
+        assert resolved["mode"] == "enterprise"
 
     def test_resolved_contains_all_wiring_keys(self) -> None:
         resolved = resolve_orgs_module_options(None)
