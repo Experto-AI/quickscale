@@ -12,6 +12,12 @@ from quickscale_modules_analytics.services import get_template_analytics_context
 
 register = template.Library()
 
+_JSON_HTML_ESCAPES = {
+    ord("<"): "\\u003C",
+    ord(">"): "\\u003E",
+    ord("&"): "\\u0026",
+}
+
 
 def _resolve_request(context: template.Context) -> HttpRequest | None:
     request = context.get("request")
@@ -30,4 +36,5 @@ def analytics_public_config(context: template.Context) -> dict[str, object]:
 def analytics_public_config_json(context: template.Context) -> str:
     """Return the resolved analytics config as JSON."""
     payload = get_template_analytics_context(_resolve_request(context))
-    return mark_safe(json.dumps(payload, sort_keys=True))
+    rendered = json.dumps(payload, sort_keys=True).translate(_JSON_HTML_ESCAPES)
+    return mark_safe(rendered)
