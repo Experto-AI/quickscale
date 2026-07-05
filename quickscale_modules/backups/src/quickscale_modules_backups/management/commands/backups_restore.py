@@ -1,8 +1,28 @@
-"""Validate or execute a guarded backup restore."""
+"""
+Validate or execute a guarded backup restore.
+
+SA20: When an artifact carries STATUS_RESTORING, the command persists
+restore_started_at on entry and transitions to STATUS_FAILED + restore_error
+on failure. Admin-triggered background restores are observable through
+the artifact's status and error fields.
+
+CR-SA20-006: The ``--local-only`` flag forces
+``RestoreSourceResolutionMode.LOCAL_ONLY`` so the child never falls
+back to remote materialization even when the local file disappears
+after enqueue.
+
+CR-SA20-007: The admin parent now persists STATUS_RESTORING before
+Popen (not after), so a fast child terminal update is never missed or
+overwritten.  The failure handler here catches all ``Exception``
+subclasses (not just ``BackupError``) so that fast failures and
+non-BackupError crashes record ``STATUS_FAILED`` instead of
+stranding ``STATUS_RESTORING``.  The handler refreshes DB state
+unconditionally before writing to handle concurrent state changes.
+"""
 
 from django.core.management.base import BaseCommand, CommandError
-
-from quickscale_core.runtime import ADAPTER_FUNCTIONS, BackupError
+from django.utils import timezone as django_timezone
+from quickscale_core.runtime import ADAPTER_FUNCTIONS
 
 
 class Command(BaseCommand):
@@ -44,6 +64,15 @@ class Command(BaseCommand):
             help="Validate the artifact and guardrails without executing restore.",
         )
         parser.add_argument(
+            "--local-only",
+            action="store_true",
+            help=(
+                "Forbid remote materialization — fail the restore if the "
+                "local file is missing.  Used by the admin async dispatch "
+                "to enforce the admin restore contract."
+            ),
+        )
+        parser.add_argument(
             "--allow-production",
             action="store_true",
             help=(
@@ -54,6 +83,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
+        from quickscale_modules_backups.models import BackupArtifact
+
         artifact_id = options["artifact_id"]
         snapshot_id = options["snapshot_id"]
         file_path = options["file_path"]
@@ -69,6 +100,25 @@ class Command(BaseCommand):
                 "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
             )
 
+        # SA20: If this artifact was marked STATUS_RESTORING by the admin
+        # dispatch, track the lifecycle.
+        artifact = None
+        if artifact_id is not None:
+            try:
+                artifact = BackupArtifact.objects.get(pk=artifact_id)
+                if artifact.status == BackupArtifact.STATUS_RESTORING:
+                    if artifact.restore_started_at is None:
+                        artifact.restore_started_at = django_timezone.now()
+                        artifact.save(
+                            update_fields=["restore_started_at", "updated_at"]
+                        )
+            except BackupArtifact.DoesNotExist:
+                pass
+
+        # CR-SA20-006: Map --local-only to LOCAL_ONLY resolution mode so
+        # the child never falls back to remote materialization.
+        resolution_mode = "local_only" if options["local_only"] else None
+
         try:
             result = ADAPTER_FUNCTIONS["restore_backup"](
                 artifact_id=artifact_id,
@@ -77,8 +127,29 @@ class Command(BaseCommand):
                 confirmation=options["confirm"],
                 dry_run=bool(options["dry_run"]),
                 allow_production=bool(options["allow_production"]),
+                resolution_mode=resolution_mode,
             )
-        except BackupError as exc:
+        except Exception as exc:
+            # SA20 / CR-SA20-007: Record failure for STATUS_RESTORING
+            # artifacts on any exception (BackupError, fast failures,
+            # generic crashes) so the status is never stranded.
+            # Refresh DB state unconditionally before writing to handle
+            # concurrent status changes.
+            if artifact is not None:
+                try:
+                    artifact.refresh_from_db()
+                    if artifact.status == BackupArtifact.STATUS_RESTORING:
+                        artifact.status = BackupArtifact.STATUS_FAILED
+                        artifact.restore_error = str(exc)
+                        artifact.save(
+                            update_fields=[
+                                "status",
+                                "restore_error",
+                                "updated_at",
+                            ]
+                        )
+                except BackupArtifact.DoesNotExist:
+                    pass
             raise CommandError(str(exc)) from exc
 
         self.stdout.write(self.style.SUCCESS(result["message"]))

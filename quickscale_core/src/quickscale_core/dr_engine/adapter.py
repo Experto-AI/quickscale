@@ -344,13 +344,23 @@ def restore_backup(
     confirmation: str,
     dry_run: bool = False,
     allow_production: bool = False,
+    resolution_mode: Any | None = None,
 ) -> dict[str, Any]:
     """Validate or execute a guarded restore from one of three source types.
 
     Adapter replacement for the ``backups_restore`` management command.
+
+    When *resolution_mode* is ``None`` (the default), the underlying
+    ``restore_backup_source`` uses its own default
+    (``REMOTE_FALLBACK``).  Pass ``LOCAL_ONLY`` to forbid remote
+    materialization.
     """
+    from quickscale_core.dr_engine.recovery import RestoreSourceResolutionMode
     from quickscale_modules_backups.models import BackupArtifact
     from quickscale_modules_backups.services import restore_backup_source
+
+    if resolution_mode is None:
+        resolution_mode = RestoreSourceResolutionMode.REMOTE_FALLBACK
 
     artifact = None
     if artifact_id is not None:
@@ -366,6 +376,7 @@ def restore_backup(
         confirmation=confirmation,
         dry_run=dry_run,
         allow_production=allow_production,
+        resolution_mode=resolution_mode,
     )
 
     return {
