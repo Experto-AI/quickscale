@@ -103,6 +103,10 @@ __all__ = [
     "restore_admin_uploaded_backup",  # noqa: F822
     "restore_backup_artifact",  # noqa: F822
     "restore_backup_source",  # noqa: F822
+    # Admin uploaded-file staging/resolution/cleanup seam
+    "_cleanup_admin_restore_upload_directory",  # noqa: F822
+    "_resolve_admin_uploaded_restore_artifact",  # noqa: F822
+    "_stage_admin_restore_upload",  # noqa: F822
     "set_backup_snapshot_rollback_pin",  # noqa: F822
     "sync_backup_snapshot_media",  # noqa: F822
     "validate_backup_artifact",  # noqa: F822
@@ -198,6 +202,10 @@ _LAZY_ORCHESTRATION_SYMBOLS: frozenset[str] = frozenset(
         "restore_admin_uploaded_backup",
         "restore_backup_artifact",
         "restore_backup_source",
+        # Admin uploaded-file staging/resolution/cleanup seam
+        "_cleanup_admin_restore_upload_directory",
+        "_resolve_admin_uploaded_restore_artifact",
+        "_stage_admin_restore_upload",
         "set_backup_snapshot_rollback_pin",
         "sync_backup_snapshot_media",
         "validate_backup_artifact",
