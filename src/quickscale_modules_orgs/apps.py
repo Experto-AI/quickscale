@@ -23,6 +23,7 @@ import os
 import sys
 
 from django.apps import AppConfig
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.db.backends.signals import connection_created
@@ -47,6 +48,30 @@ def _is_migrate_command() -> bool:
         and sys.argv[0].endswith("manage.py")
         and sys.argv[1] == "migrate"
     )
+
+
+def _check_quickscale_mode() -> None:
+    """SA14.6 — Require ``QUICKSCALE_MODE`` setting when orgs is installed.
+
+    Raises ``ImproperlyConfigured`` at startup when ``QUICKSCALE_MODE``
+    is unset, preventing a saas-mode generated project from silently
+    defaulting to solo-mode tenancy.
+
+    Also rejects values other than ``"solo"`` or ``"saas"`` so that
+    an invalid ``QUICKSCALE_MODE`` does not silently behave as solo.
+    """
+    mode = getattr(settings, "QUICKSCALE_MODE", None)
+    if mode is None:
+        raise ImproperlyConfigured(
+            "QUICKSCALE_MODE setting is required when "
+            "quickscale_modules_orgs is installed. "
+            "Set it to 'solo' for single-tenant or 'saas' for "
+            "multi-tenant mode."
+        )
+    if mode not in ("solo", "saas"):
+        raise ImproperlyConfigured(
+            f"QUICKSCALE_MODE must be 'solo' or 'saas', got {mode!r}."
+        )
 
 
 def _check_rls_role() -> None:
@@ -108,6 +133,13 @@ class QuickscaleOrgsConfig(AppConfig):
     verbose_name = "QuickScale Organizations"
 
     def ready(self) -> None:
+        # ---- SA14.6 — QUICKSCALE_MODE boot guard -----------------------
+        # Runs before the migrate exemption and the BYPASSRLS guard so
+        # that every startup path (including migrate) enforces the
+        # required setting.  A saas-mode generated project cannot silently
+        # default to solo-mode tenancy when QUICKSCALE_MODE is omitted.
+        _check_quickscale_mode()
+
         # ---- T1.18 / SA2.1 — BYPASSRLS boot guard ----------------------
         # Two narrow exemptions:
         #   1. manage.py migrate — start.sh deliberately unsets
