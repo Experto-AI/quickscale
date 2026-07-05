@@ -469,6 +469,75 @@ class TestDebugAsOrgView:
 
         assert response.status_code == 405
 
+    @pytest.mark.django_db
+    def test_with_valid_next_redirects_to_next(self, client, settings) -> None:
+        """A valid same-host next parameter is followed."""
+        settings.QUICKSCALE_MODE = "saas"
+        user = get_user_model().objects.create_superuser(
+            username="super-next-valid",
+            email="super-next-valid@example.com",
+            password="secret123",
+        )
+        organization = Organization.objects.create(name="NextValid", slug="next-valid")
+        client.force_login(user)
+
+        response = client.post(
+            f"/orgs/{organization.slug}/debug/view-as/",
+            {"next": "http://testserver/some/path/"},
+        )
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == "http://testserver/some/path/"
+        assert client.session[DEBUG_AS_ORG_SESSION_KEY] == str(organization.pk)
+
+    @pytest.mark.django_db
+    def test_with_off_site_next_falls_back_to_org_detail(
+        self, client, settings
+    ) -> None:
+        """An off-site next parameter falls back to the org detail redirect."""
+        settings.QUICKSCALE_MODE = "saas"
+        user = get_user_model().objects.create_superuser(
+            username="super-next-offsite",
+            email="super-next-offsite@example.com",
+            password="secret123",
+        )
+        organization = Organization.objects.create(
+            name="NextOffSite", slug="next-offsite"
+        )
+        client.force_login(user)
+
+        response = client.post(
+            f"/orgs/{organization.slug}/debug/view-as/",
+            {"next": "http://evil.com/phish"},
+        )
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == f"/orgs/{organization.slug}/"
+        assert client.session[DEBUG_AS_ORG_SESSION_KEY] == str(organization.pk)
+
+    @pytest.mark.django_db
+    def test_with_disallowed_scheme_next_falls_back(self, client, settings) -> None:
+        """A disallowed-scheme next parameter falls back to the org detail."""
+        settings.QUICKSCALE_MODE = "saas"
+        user = get_user_model().objects.create_superuser(
+            username="super-next-scheme",
+            email="super-next-scheme@example.com",
+            password="secret123",
+        )
+        organization = Organization.objects.create(
+            name="NextScheme", slug="next-scheme"
+        )
+        client.force_login(user)
+
+        response = client.post(
+            f"/orgs/{organization.slug}/debug/view-as/",
+            {"next": "javascript:alert(1)"},
+        )
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == f"/orgs/{organization.slug}/"
+        assert client.session[DEBUG_AS_ORG_SESSION_KEY] == str(organization.pk)
+
 
 class TestExitDebugModeView:
     """ExitDebugModeView deactivates debug mode for superusers only."""
@@ -526,6 +595,82 @@ class TestExitDebugModeView:
         response = client.get(f"/orgs/{organization.slug}/debug/exit/")
 
         assert response.status_code == 405
+
+    @pytest.mark.django_db
+    def test_with_valid_next_redirects_to_next(self, client, settings) -> None:
+        """A valid same-host next parameter is followed on exit."""
+        settings.QUICKSCALE_MODE = "saas"
+        user = get_user_model().objects.create_superuser(
+            username="super-exit-next",
+            email="super-exit-next@example.com",
+            password="secret123",
+        )
+        organization = Organization.objects.create(name="ExitNext", slug="exit-next")
+        client.force_login(user)
+        session = client.session
+        session[DEBUG_AS_ORG_SESSION_KEY] = str(organization.pk)
+        session.save()
+
+        response = client.post(
+            f"/orgs/{organization.slug}/debug/exit/",
+            {"next": "/some/path/"},
+        )
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == "/some/path/"
+        assert DEBUG_AS_ORG_SESSION_KEY not in client.session
+
+    @pytest.mark.django_db
+    def test_with_off_site_next_falls_back_to_admin(self, client, settings) -> None:
+        """An off-site next parameter falls back to /admin/ on exit."""
+        settings.QUICKSCALE_MODE = "saas"
+        user = get_user_model().objects.create_superuser(
+            username="super-exit-offsite",
+            email="super-exit-offsite@example.com",
+            password="secret123",
+        )
+        organization = Organization.objects.create(
+            name="ExitOffSite", slug="exit-offsite"
+        )
+        client.force_login(user)
+        session = client.session
+        session[DEBUG_AS_ORG_SESSION_KEY] = str(organization.pk)
+        session.save()
+
+        response = client.post(
+            f"/orgs/{organization.slug}/debug/exit/",
+            {"next": "http://evil.com/phish"},
+        )
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == "/admin/"
+        assert DEBUG_AS_ORG_SESSION_KEY not in client.session
+
+    @pytest.mark.django_db
+    def test_with_disallowed_scheme_next_falls_back(self, client, settings) -> None:
+        """A disallowed-scheme next parameter falls back to /admin/ on exit."""
+        settings.QUICKSCALE_MODE = "saas"
+        user = get_user_model().objects.create_superuser(
+            username="super-exit-scheme",
+            email="super-exit-scheme@example.com",
+            password="secret123",
+        )
+        organization = Organization.objects.create(
+            name="ExitScheme", slug="exit-scheme"
+        )
+        client.force_login(user)
+        session = client.session
+        session[DEBUG_AS_ORG_SESSION_KEY] = str(organization.pk)
+        session.save()
+
+        response = client.post(
+            f"/orgs/{organization.slug}/debug/exit/",
+            {"next": "javascript:alert(1)"},
+        )
+
+        assert response.status_code == 302
+        assert response.headers["Location"] == "/admin/"
+        assert DEBUG_AS_ORG_SESSION_KEY not in client.session
 
 
 # ---------------------------------------------------------------------------

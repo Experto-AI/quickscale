@@ -265,4 +265,6 @@ class TenantMiddleware:
 
     @staticmethod
     def _is_saas_mode() -> bool:
-        return getattr(settings, "QUICKSCALE_MODE", "solo") == "saas"
+        # SA14.6: QUICKSCALE_MODE is guaranteed by the boot guard in
+        # QuickscaleOrgsConfig.ready() — direct access, no fallback.
+        return settings.QUICKSCALE_MODE == "saas"

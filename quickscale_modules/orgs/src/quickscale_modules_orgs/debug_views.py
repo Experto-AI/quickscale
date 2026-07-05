@@ -15,6 +15,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
 from .debug_helpers import clear_debug_as_org, set_debug_as_org
@@ -51,7 +52,9 @@ class DebugAsOrgView(LoginRequiredMixin, View):
         set_debug_as_org(request, organization)
 
         next_url = request.POST.get("next")
-        if next_url:
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}
+        ):
             return redirect(next_url)
 
         return redirect(reverse("org-detail", kwargs={"org_slug": organization.slug}))
@@ -84,7 +87,9 @@ class ExitDebugModeView(LoginRequiredMixin, View):
         clear_debug_as_org(request)
 
         next_url = request.POST.get("next")
-        if next_url:
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}
+        ):
             return redirect(next_url)
 
         return redirect("/admin/")

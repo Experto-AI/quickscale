@@ -4,6 +4,8 @@ import os
 
 SECRET_KEY = "test-secret-key-for-auth-module"
 
+QUICKSCALE_MODE = "solo"
+
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
@@ -12,9 +14,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "quickscale_modules_auth",
+    "quickscale_modules_orgs",
+    "quickscale_modules_billing",
     "allauth",
     "allauth.account",
 ]
+
+QUICKSCALE_BILLING_ENABLED = True
 
 DATABASES = {
     "default": {

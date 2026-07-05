@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from quickscale_core.manifest import (
+    ManifestError,
     PostResolutionHook,
     ResolverResult,
     assemble_wiring_spec,
@@ -349,6 +350,79 @@ class TestAssembleManagedFiles:
         assert spec.pre_home_url_includes == (("robots.txt", "myapp.robots"),)
         # And managed_files is also populated
         assert spec.managed_files == {"quickscale_managed/f.html": "r"}
+
+
+# ---------------------------------------------------------------------------
+# Validation issues enforcement (SA27)
+# ---------------------------------------------------------------------------
+
+
+class TestAssembleValidationIssues:
+    """Tests for the SA27 validation_issues enforcement in assemble_wiring_spec."""
+
+    def test_no_validation_issues_passes(self) -> None:
+        """Empty validation_issues list assembles without error."""
+        result = _make_result()
+        spec = assemble_wiring_spec(result)
+        assert isinstance(spec, ModuleWiringSpec)
+
+    def test_single_validation_issue_raises_manifest_error(self) -> None:
+        """A single validation issue raises ManifestError with the issue text."""
+        result = ResolverResult(
+            module_name="test",
+            defaults={},
+            resolved={"key": "val"},
+            validation_issues=["modules.test.key must be a positive integer"],
+        )
+        with pytest.raises(ManifestError) as exc_info:
+            assemble_wiring_spec(result)
+        assert "must be a positive integer" in str(exc_info.value)
+        assert "test" in str(exc_info.value)
+
+    def test_multiple_validation_issues_all_listed(self) -> None:
+        """Multiple validation issues are all included in the error message."""
+        result = ResolverResult(
+            module_name="test",
+            defaults={},
+            resolved={"key": "val"},
+            validation_issues=[
+                "modules.test.field_a is required",
+                "modules.test.field_b must be a boolean",
+            ],
+        )
+        with pytest.raises(ManifestError) as exc_info:
+            assemble_wiring_spec(result)
+        msg = str(exc_info.value)
+        assert "field_a is required" in msg
+        assert "field_b must be a boolean" in msg
+
+    def test_validation_issues_with_post_hook_still_raises(self) -> None:
+        """Validation issues are checked before the post_hook runs."""
+        result = ResolverResult(
+            module_name="test",
+            defaults={},
+            resolved={"key": "val"},
+            validation_issues=["modules.test.key is invalid"],
+        )
+
+        def hook(spec: ModuleWiringSpec, resolved: dict[str, Any]) -> ModuleWiringSpec:
+            msg = "hook should never be called"
+            raise AssertionError(msg)
+
+        with pytest.raises(ManifestError, match="key is invalid"):
+            assemble_wiring_spec(result, post_hook=hook)
+
+    def test_module_name_in_error_message(self) -> None:
+        """The error message includes the module name."""
+        result = ResolverResult(
+            module_name="analytics",
+            defaults={},
+            resolved={},
+            validation_issues=["modules.analytics.provider must be one of: posthog"],
+        )
+        with pytest.raises(ManifestError) as exc_info:
+            assemble_wiring_spec(result)
+        assert "analytics" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

@@ -287,10 +287,10 @@ class TestResolutionParity:
         resolved = resolve_storage_module_options({"backend": "S3"})
         assert resolved["backend"] == "s3"
 
-    def test_invalid_backend_falls_back_to_local(self) -> None:
-        """Invalid backend must fall back to 'local' (mirrors legacy guard)."""
+    def test_invalid_backend_passes_through(self) -> None:
+        """SA27: invalid backend passes through instead of coercing to 'local'."""
         resolved = resolve_storage_module_options({"backend": "gcs"})
-        assert resolved["backend"] == "local"
+        assert resolved["backend"] == "gcs"
 
     def test_media_url_normalized_in_resolve(self) -> None:
         resolved = resolve_storage_module_options({"media_url": "uploads"})

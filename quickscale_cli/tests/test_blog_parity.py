@@ -113,13 +113,13 @@ class TestNormalizationParity:
         normalized = normalize_blog_module_options({"api_rate_limit": "  10/minute  "})
         assert normalized["api_rate_limit"] == "10/minute"
 
-    def test_api_rate_limit_blank_falls_back_to_default(self) -> None:
+    def test_api_rate_limit_blank_passes_through(self) -> None:
         normalized = normalize_blog_module_options({"api_rate_limit": "  "})
-        assert normalized["api_rate_limit"] == DEFAULT_BLOG_API_RATE_LIMIT
+        assert normalized["api_rate_limit"] == ""
 
-    def test_api_rate_limit_empty_falls_back_to_default(self) -> None:
+    def test_api_rate_limit_empty_passes_through(self) -> None:
         normalized = normalize_blog_module_options({"api_rate_limit": ""})
-        assert normalized["api_rate_limit"] == DEFAULT_BLOG_API_RATE_LIMIT
+        assert normalized["api_rate_limit"] == ""
 
     def test_none_options_returns_empty_dict(self) -> None:
         normalized = normalize_blog_module_options(None)
@@ -180,10 +180,10 @@ class TestResolutionParity:
         resolved = resolve_blog_module_options({"api_rate_limit": "  10/minute  "})
         assert resolved["api_rate_limit"] == "10/minute"
 
-    def test_api_rate_limit_blank_fallback_in_resolve(self) -> None:
-        """Blank api_rate_limit must fall back to DEFAULT_BLOG_API_RATE_LIMIT."""
+    def test_api_rate_limit_blank_passes_through_in_resolve(self) -> None:
+        """SA27: blank api_rate_limit passes through instead of coercing to default."""
         resolved = resolve_blog_module_options({"api_rate_limit": ""})
-        assert resolved["api_rate_limit"] == DEFAULT_BLOG_API_RATE_LIMIT
+        assert resolved["api_rate_limit"] == ""
 
     def test_resolution_is_idempotent(self) -> None:
         resolved = resolve_blog_module_options(
@@ -218,10 +218,10 @@ class TestValidationParity:
         )
         assert issues == []
 
-    def test_blank_api_rate_limit_is_valid_after_fallback(self) -> None:
-        """Blank api_rate_limit falls back to default; validation passes."""
+    def test_blank_api_rate_limit_is_invalid(self) -> None:
+        """SA27: blank api_rate_limit is now detected instead of silently coerced."""
         issues = validate_blog_module_options({"api_rate_limit": ""})
-        assert issues == []
+        assert any("api_rate_limit cannot be blank" in i for i in issues)
 
     @pytest.mark.parametrize("bad_value", [0, -1, -100])
     def test_non_positive_posts_per_page_fails(self, bad_value: int) -> None:
