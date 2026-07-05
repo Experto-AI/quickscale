@@ -49,15 +49,15 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 1 clear to continue: SA28 complete (SA14, SA23 also complete — archived); rebalanced onto SA24, SA29, SA30 now that its own backlog is empty. Track 2 is blocked on SA20 (CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking — spawn-failure rollback metadata); SA21.2 and SA26 are otherwise ready once SA20 is revisited. Track 3 clear to continue: SA27 complete; SA31 ready, SA32 rebalanced in (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 1 clear to continue: SA28 and SA24 complete (SA14, SA23 also complete — archived); rebalanced onto SA29 and SA30 now that its earlier backlog is closed. Track 2 is blocked on SA20 (CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking — spawn-failure rollback metadata); SA21.2 and SA26 are otherwise ready once SA20 is revisited. Track 3 clear to continue: SA27 complete; SA31 ready, SA32 rebalanced in (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA28 — complete                      SA20 — in progress (decision made)        SA27 — complete
-SA24 (no deps)                       SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
+SA28 — complete                      SA20 — blocked (CR-SA20-007)              SA27 — complete
+SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
 SA29 (no deps)                       SA26 (no deps)                            SA32 (no deps)
 SA30 (no deps — land after SA29)
 ```
@@ -80,10 +80,8 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../others/tech-audit.md))
 
-- [ ] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 1 · deps: none`
-  `analytics_tags.py:33` uses `mark_safe(json.dumps(payload))` without escaping `<`/`>`/`&`, which is latent stored-XSS if the payload ever carries request-influenced data. Switch to Django's `json_script` template filter/tag or manually escape those characters before marking safe.
-  *Files:* `quickscale_modules/analytics/src/quickscale_modules_analytics/templatetags/analytics_tags.py:33`.
-  *Acceptance:* a payload value containing `</script>` renders inert in the page source; existing analytics payload rendering is otherwise unchanged.
+- [x] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 1 · deps: none`
+  Escaped `<`/`>`/`&` in `analytics_public_config_json()` before `mark_safe`, preserving the existing raw JSON output contract while making `</script>` inert in page source. Added a focused template-tag regression proving dangerous payload content renders safely and still round-trips through `json.loads()`. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `storage-config-dead-env-docs-secrets-in-vcs` (`why →` [TA31](../others/tech-audit.md))
 

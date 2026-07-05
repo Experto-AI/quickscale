@@ -9,6 +9,7 @@ from django.template import Context, Template
 from django.test import RequestFactory, override_settings
 
 from quickscale_modules_analytics import services
+from quickscale_modules_analytics.templatetags import analytics_tags
 
 
 def _request_with_session(rf: RequestFactory):
@@ -60,6 +61,31 @@ def test_analytics_public_config_json_tag_serializes_runtime_config(
     assert payload["enabled"] is True
     assert payload["provider"] == "posthog"
     assert payload["posthog_api_key"] == "test-posthog-key"
+
+
+def test_analytics_public_config_json_tag_escapes_html_sensitive_chars(
+    monkeypatch,
+) -> None:
+    """JSON tag should keep `</script>` inert without changing payload semantics."""
+    payload = {
+        "close": "</script>",
+        "mixed": "<script>alert('x')</script>&value",
+    }
+
+    monkeypatch.setattr(
+        analytics_tags,
+        "get_template_analytics_context",
+        lambda _request: payload,
+    )
+
+    template = Template("{% load analytics_tags %}{% analytics_public_config_json %}")
+    rendered = template.render(Context({}))
+
+    assert "</script>" not in rendered
+    assert "<script>" not in rendered
+    assert "\\u003C/script\\u003E" in rendered
+    assert "\\u0026value" in rendered
+    assert json.loads(rendered) == payload
 
 
 @override_settings(DEBUG=False, QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=False)
