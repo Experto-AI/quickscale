@@ -49,27 +49,24 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 1: SA28 ready (SA14, SA23 complete — archived). Track 2: SA20 unblocked (decision: fix symlink); SA21.2, SA24, SA26, SA29, SA30, SA32 ready. Track 3: SA27 complete; SA31 ready (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 1 clear to continue: SA28 complete (SA14, SA23 also complete — archived); rebalanced onto SA24, SA29, SA30 now that its own backlog is empty. Track 2 clear to continue: SA20 unblocked (decision: fix symlink, implementation in progress); SA21.2, SA26 ready. Track 3 clear to continue: SA27 complete; SA31 ready, SA32 rebalanced in (SA21.1, SA22, SA25, SA33 closed). No track is blocked. See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA28 (no deps)                       SA20 (no deps)                            SA27 — complete
-                                     SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
-                                     SA24 (no deps)
-                                     SA26 (no deps)
-                                     SA29 (no deps)
-                                     SA30 (no deps — land after SA29)
-                                     SA32 (no deps)
+SA28 — complete                      SA20 — in progress (decision made)        SA27 — complete
+SA24 (no deps)                       SA21.2 (deps: SA21.1 — complete)          SA31 (no deps)
+SA29 (no deps)                       SA26 (no deps)                            SA32 (no deps)
+SA30 (no deps — land after SA29)
 ```
 
-Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 but is within Track 2.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 and now lands in the same Track 1 sequence. Rebalanced 2026-07-05: SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3, since Track 1 and Track 3 emptied out as SA28/SA27 completed while Track 2 still carried six open items — this restores 3/3/2 parallelism across the three worktrees.
 
 ### Track 1 — Tenant-context surface
 
-#### Finding — `operator-read-path-undefined` (`why →` [Finding 1](../others/arch-audit.md#finding-1-elevatedoperator-reads-are-structurally-undefined--the-python-bypass-and-the-db-backstop-disagree))
+#### Finding — `operator-read-path-undefined` (`why →` [arch-audit.md reconciliation log](../others/arch-audit.md#reconciliation-log-append-only))
 
 > **SA14 — complete.** SA14.1–SA14.6 (TenantModelAdmin base, CRM/blog/forms/listings/billing admin ports, NOBYPASSRLS default for module test suites, operator_access RLS predicate, QUICKSCALE_MODE fail-hard) merged. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
@@ -79,8 +76,28 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `account-delete-cascade-bypasses-org-invariants` (`why →` [TA30](../others/tech-audit.md))
 
-- [x] **SA28 — Enforce the last-owner and personal-org invariants at the account-deletion boundary.** `Tier 2 · Track 1 · deps: none · RISK LEVEL: medium`
-  Implemented in `AccountDeleteView` via `form_valid` override (view-local boundary fix, no new signals or receivers). Blocks deletion with a `messages.error` naming the org(s) when the user is the sole owner of any shared org that still has other members. Cancels the personal org's active subscription through the existing `cancel_current_subscription` billing seam before deletion. Moved the success message from the dead `delete()` override to `form_valid` so it actually fires. Added 8 focused tests covering: blocked-as-sole-owner, allowed-when-other-owner, allowed-when-sole-member, allowed-when-personal-org-only, subscription-cancellation-called, graceful-handoff-when-billing-not-installed, and success-message-rendered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA28 — complete.** Enforced the last-owner and personal-org invariants at the account-deletion boundary via an `AccountDeleteView.form_valid` override; cancels the personal org's active subscription through the existing billing seam before deletion. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+#### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../others/tech-audit.md))
+
+- [ ] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 1 · deps: none`
+  `analytics_tags.py:33` uses `mark_safe(json.dumps(payload))` without escaping `<`/`>`/`&`, which is latent stored-XSS if the payload ever carries request-influenced data. Switch to Django's `json_script` template filter/tag or manually escape those characters before marking safe.
+  *Files:* `quickscale_modules/analytics/src/quickscale_modules_analytics/templatetags/analytics_tags.py:33`.
+  *Acceptance:* a payload value containing `</script>` renders inert in the page source; existing analytics payload rendering is otherwise unchanged.
+
+#### Finding — `storage-config-dead-env-docs-secrets-in-vcs` (`why →` [TA31](../others/tech-audit.md))
+
+- [ ] **SA29 — Rebuild storage's config-delivery contract: env-var indirection for secrets, README aligned with the real wiring mechanism.** `Tier 2 · Track 1 · deps: none`
+  Storage is the only secret-bearing module without the `*_env_var` indirection pattern analytics/notifications/billing already use, and its README documents a config channel (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/etc. as deploy-time env vars) that the generated app never reads — settings are baked as literals at generation time. Adopt the indirection pattern: storage credential options become `*_env_var` names (adapter emits `os.environ` reads into the managed settings module rather than baked literal values), keep `backend`/bucket/region as non-secret yml options, and rewrite the README against the real contract.
+  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py:1269-1348` (`_storage_manifest_adapter`), `quickscale_core/src/quickscale_core/module_wiring.py:85-100`, `quickscale_core/src/quickscale_core/generator/templates/README.md.j2:265-286`, storage's `module.yml` option declarations.
+  *Acceptance:* generating a project configured per the rewritten README and deploying with the documented env vars set results in uploads landing in the configured S3/R2 bucket; the generated `settings/modules.py` contains no credential material; leaving storage on `local` still works with no config required.
+
+#### Finding — `listings-storage-runtime-fail-open-residuals` (`why →` [TA32](../others/tech-audit.md))
+
+- [ ] **SA30 — Apply the SA17 direct-required-read pattern to listings/storage runtime settings.** `Tier 1 · Track 1 · deps: none (relates to SA29 — land after so storage's fixed contract is what this reads from)`
+  `listings/views.py`'s `_get_positive_int_setting` and `storage/helpers.py`'s `_read_setting`/`_normalize_backend` silently default or coerce on missing/invalid values — the same class SA17.2–SA17.6 closed for other modules, but listings and storage were outside that batch's scope. Replace with direct required reads that raise `ImproperlyConfigured` on missing/invalid values, matching the SA17 shape.
+  *Files:* `quickscale_modules/listings/src/quickscale_modules_listings/views.py:30-70`, `quickscale_modules/storage/src/quickscale_modules_storage/helpers.py:35-115`.
+  *Acceptance:* an invalid/missing `LISTINGS_PER_PAGE` or `QUICKSCALE_STORAGE_BACKEND` value raises a descriptive startup error instead of silently falling back; valid configurations are unaffected.
 
 ### Track 2 — Module contracts & settings
 
@@ -107,40 +124,12 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
   *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/throttles.py:26-30`, `quickscale_modules/forms/src/quickscale_modules_forms/views.py:231,257`, `quickscale_modules/blog/src/quickscale_modules_blog/views.py:260-266,277-304`.
   *Acceptance:* two requests with different `X-Forwarded-For` values (fixed `REMOTE_ADDR`) get independent throttle buckets and are logged with the forwarded client IP, not the proxy's; a 6th form submission within the configured window from one distinct client is rejected regardless of which worker/replica serves it.
 
-#### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../others/tech-audit.md))
-
-- [ ] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 2 · deps: none`
-  `analytics_tags.py:33` uses `mark_safe(json.dumps(payload))` without escaping `<`/`>`/`&`, which is latent stored-XSS if the payload ever carries request-influenced data. Switch to Django's `json_script` template filter/tag or manually escape those characters before marking safe.
-  *Files:* `quickscale_modules/analytics/src/quickscale_modules_analytics/templatetags/analytics_tags.py:33`.
-  *Acceptance:* a payload value containing `</script>` renders inert in the page source; existing analytics payload rendering is otherwise unchanged.
-
 #### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../others/tech-audit.md))
 
 - [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 2 · deps: none`
   `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
   *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
   *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
-
-#### Finding — `storage-config-dead-env-docs-secrets-in-vcs` (`why →` [TA31](../others/tech-audit.md))
-
-- [ ] **SA29 — Rebuild storage's config-delivery contract: env-var indirection for secrets, README aligned with the real wiring mechanism.** `Tier 2 · Track 2 · deps: none`
-  Storage is the only secret-bearing module without the `*_env_var` indirection pattern analytics/notifications/billing already use, and its README documents a config channel (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/etc. as deploy-time env vars) that the generated app never reads — settings are baked as literals at generation time. Adopt the indirection pattern: storage credential options become `*_env_var` names (adapter emits `os.environ` reads into the managed settings module rather than baked literal values), keep `backend`/bucket/region as non-secret yml options, and rewrite the README against the real contract.
-  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py:1269-1348` (`_storage_manifest_adapter`), `quickscale_core/src/quickscale_core/module_wiring.py:85-100`, `quickscale_core/src/quickscale_core/generator/templates/README.md.j2:265-286`, storage's `module.yml` option declarations.
-  *Acceptance:* generating a project configured per the rewritten README and deploying with the documented env vars set results in uploads landing in the configured S3/R2 bucket; the generated `settings/modules.py` contains no credential material; leaving storage on `local` still works with no config required.
-
-#### Finding — `listings-storage-runtime-fail-open-residuals` (`why →` [TA32](../others/tech-audit.md))
-
-- [ ] **SA30 — Apply the SA17 direct-required-read pattern to listings/storage runtime settings.** `Tier 1 · Track 2 · deps: none (relates to SA29 — land after so storage's fixed contract is what this reads from)`
-  `listings/views.py`'s `_get_positive_int_setting` and `storage/helpers.py`'s `_read_setting`/`_normalize_backend` silently default or coerce on missing/invalid values — the same class SA17.2–SA17.6 closed for other modules, but listings and storage were outside that batch's scope. Replace with direct required reads that raise `ImproperlyConfigured` on missing/invalid values, matching the SA17 shape.
-  *Files:* `quickscale_modules/listings/src/quickscale_modules_listings/views.py:30-70`, `quickscale_modules/storage/src/quickscale_modules_storage/helpers.py:35-115`.
-  *Acceptance:* an invalid/missing `LISTINGS_PER_PAGE` or `QUICKSCALE_STORAGE_BACKEND` value raises a descriptive startup error instead of silently falling back; valid configurations are unaffected.
-
-#### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
-
-- [ ] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 2 · deps: none`
-  The exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context (model `save()`/`delete()` invalidate correctly; this function is uncalled by first-party code but is a public-API trap for bulk mutations like `queryset.update()` that bypass `save()`). Either make it org-aware (accept/iterate org context) or remove it from `__all__` so it stops looking like a safe bulk-invalidation tool.
-  *Files:* `quickscale_modules/social/src/quickscale_modules_social/services.py:182-184`.
-  *Acceptance:* either a test demonstrates `invalidate_social_cache()` correctly invalidates org-partitioned entries, or the function is dropped from the module's public `__all__` with a comment explaining why.
 
 ### Track 3 — Core/CLI plumbing
 
@@ -158,6 +147,13 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
   `railway_utils.py` invokes `railway variables --set KEY=VALUE` with live secret values on the command line, and `dr_commands.py` passes `--args-json` on `docker exec` argv — both visible to any local user via `ps`/`/proc` on shared hosts. Switch to stdin transport for the adapter JSON payload; for the Railway CLI (which has no stdin-based `--set`), document the CLI limitation and scope the fix to what's actually controllable (e.g. minimize the exposure window, or investigate `railway variables --set` alternatives such as a batch file input if the CLI supports one).
   *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:348,391,891`, `quickscale_cli/src/quickscale_cli/commands/dr_commands.py:232-242`.
   *Acceptance:* the DR adapter's JSON payload no longer appears in `docker exec` argv (stdin transport verified via a process-argv assertion in tests); the Railway CLI limitation (if unfixable) is documented in code comments and this finding's closeout note.
+
+#### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
+
+- [ ] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 3 · deps: none`
+  The exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context (model `save()`/`delete()` invalidate correctly; this function is uncalled by first-party code but is a public-API trap for bulk mutations like `queryset.update()` that bypass `save()`). Either make it org-aware (accept/iterate org context) or remove it from `__all__` so it stops looking like a safe bulk-invalidation tool.
+  *Files:* `quickscale_modules/social/src/quickscale_modules_social/services.py:182-184`.
+  *Acceptance:* either a test demonstrates `invalidate_social_cache()` correctly invalidates org-partitioned entries, or the function is dropped from the module's public `__all__` with a comment explaining why.
 
 #### Finding — `dangling-arch-audit-anchor` (`why →` [TA29](../others/tech-audit.md))
 
