@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from django.contrib import admin, messages
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.conf import settings
@@ -32,9 +32,9 @@ from quickscale_modules_backups.models import (
 )
 from quickscale_modules_backups.services import (
     BackupError,
+    BackupRestoreBlocked,
     RestoreResult,
-    RestoreSourceResolutionMode,
-    RestoreWarning,
+    StagedAdminRestoreUpload,
 )
 
 if TYPE_CHECKING:
@@ -652,30 +652,24 @@ class TestBackupPolicyAdmin:
         mocked_restore.assert_not_called()
         assert expected_error in response.content.decode("utf-8")
 
-    def test_restore_page_reports_success_and_warning_as_separate_messages(
+    def test_restore_page_dispatches_restore_asynchronously(
         self,
         admin_client: Client,
         backup_policy: BackupPolicy,
         postgresql_backup_artifact: BackupArtifact,
     ) -> None:
+        """SA20: Admin-triggered restore is dispatched async via subprocess.
+
+        The artifact should transition to STATUS_RESTORING immediately, and the
+        management command is invoked in the background. The admin returns to the
+        changelist with an initiation message instead of blocking on the restore.
+        """
         del backup_policy
-        warning = RestoreWarning(
-            code="artifact_row_missing_after_restore",
-            message=(
-                "Restore executed, but the original backup artifact row no longer "
-                "exists in the restored database."
-            ),
-        )
 
         with patch(
-            "quickscale_modules_backups.admin.restore_backup_artifact",
-            return_value=RestoreResult(
-                executed=True,
-                dry_run=False,
-                message=f"Restore executed for {postgresql_backup_artifact.filename}.",
-                warnings=(warning,),
-            ),
-        ) as mocked_restore:
+            "quickscale_modules_backups.admin.subprocess.Popen",
+            return_value=MagicMock(),
+        ) as mocked_popen:
             response = admin_client.post(
                 reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
                 {
@@ -687,21 +681,23 @@ class TestBackupPolicyAdmin:
             )
 
         assert response.status_code == 200
-        mocked_restore.assert_called_once_with(
-            postgresql_backup_artifact,
-            confirmation=postgresql_backup_artifact.filename,
-            dry_run=False,
-            resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
-        )
-        assert [
-            (message.level, message.message)
-            for message in get_messages(response.wsgi_request)
-        ] == [
+        postgresql_backup_artifact.refresh_from_db()
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.restore_started_at is not None
+        assert postgresql_backup_artifact.restore_error == ""
+
+        mocked_popen.assert_called_once()
+        popen_args = mocked_popen.call_args[0][0]
+        assert "backups_restore" in popen_args
+        assert str(postgresql_backup_artifact.pk) in popen_args
+        assert "--confirm" in popen_args
+        assert postgresql_backup_artifact.filename in popen_args
+
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
             (
-                messages.SUCCESS,
-                f"Restore executed for {postgresql_backup_artifact.filename}.",
+                "Restore has been initiated in the background. Check the artifact's "
+                "status for progress or errors."
             ),
-            (messages.WARNING, warning.message),
         ]
 
     def test_create_backup_now_button_runs_from_custom_operator_endpoint(
@@ -868,6 +864,504 @@ class TestBackupPolicyAdmin:
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             "Pruned 2 expired backup artifact(s)."
         ]
+
+    # ------------------------------------------------------------------
+    # SA20 regression: uploaded-file restore through trusted seam
+    # ------------------------------------------------------------------
+
+    def test_restore_page_dispatches_uploaded_restore_through_trusted_seam(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """SA20: Uploaded-file restore dispatch routes through the trusted seam.
+
+        The uploaded content goes through the shared staging + trusted resolver
+        (not inline candidate selection).  The dispatch uses the artifact-id path
+        (not --file) and persists STATUS_RESTORING only after successful spawn.
+        """
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                return_value=staged,
+            ) as mocked_stage,
+            patch(
+                (
+                    "quickscale_modules_backups.admin."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ) as mocked_resolve,
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+                return_value=MagicMock(),
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_stage.assert_called_once()
+        mocked_resolve.assert_called_once_with(
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+        postgresql_backup_artifact.refresh_from_db()
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.restore_started_at is not None
+        assert postgresql_backup_artifact.restore_error == ""
+
+        mocked_popen.assert_called_once()
+        popen_args = mocked_popen.call_args[0][0]
+        assert "backups_restore" in popen_args
+        assert str(postgresql_backup_artifact.pk) in popen_args
+        assert "--file" not in popen_args  # artifact-id, not --file
+        assert "--confirm" in popen_args
+        assert postgresql_backup_artifact.filename in popen_args
+
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            (
+                "Restore has been initiated in the background. Check the "
+                "artifact's status for progress or errors."
+            ),
+        ]
+
+    def test_restore_page_rejects_uploaded_file_with_no_matching_artifact(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        """SA20: Uploaded file with no matching artifact by checksum+size raises."""
+        del backup_policy
+        uploaded_file = SimpleUploadedFile(
+            "unknown.dump",
+            b"no artifact anywhere has this checksum",
+        )
+
+        with patch(
+            "quickscale_modules_backups.admin.restore_backup_artifact"
+        ) as mocked_restore:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": "unknown.dump",
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_restore.assert_not_called()
+        assert "does not match any recorded authoritative" in response.content.decode(
+            "utf-8"
+        )
+
+    # ------------------------------------------------------------------
+    # SA20 regression: spawn-failure rollback (no stranded STATUS_RESTORING)
+    # ------------------------------------------------------------------
+
+    def test_restore_page_does_not_strand_status_restoring_on_spawn_failure(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """SA20: When subprocess.Popen raises, STATUS_RESTORING is not persisted."""
+        del backup_policy
+        original_status = postgresql_backup_artifact.status
+
+        with patch(
+            "quickscale_modules_backups.admin.subprocess.Popen",
+            side_effect=OSError("manage.py not found"),
+        ) as mocked_popen:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                },
+            )
+
+        assert response.status_code == 200
+        postgresql_backup_artifact.refresh_from_db()
+        assert postgresql_backup_artifact.status == original_status
+        assert postgresql_backup_artifact.restore_started_at is None
+        assert "Failed to initiate background restore" in response.content.decode(
+            "utf-8"
+        )
+        mocked_popen.assert_called_once()
+
+    def test_restore_page_cleanly_reports_uploaded_spawn_failure(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """SA20: Uploaded-file restore reports spawn failure without stranding."""
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+        original_status = postgresql_backup_artifact.status
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_modules_backups.admin."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+                side_effect=OSError("manage.py not found"),
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        postgresql_backup_artifact.refresh_from_db()
+        # Status must NOT have changed to STATUS_RESTORING
+        assert postgresql_backup_artifact.status == original_status
+        assert "Failed to initiate background restore" in response.content.decode(
+            "utf-8"
+        )
+        mocked_popen.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # CR-SA20-004: regression — async uploaded-file restore rejects
+    # ambiguous / incomplete-snapshot cases through shared resolver
+    # ------------------------------------------------------------------
+
+    def test_restore_async_upload_rejects_ambiguous_trusted_match(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """Async uploaded-file restore rejects ambiguous trusted matches.
+
+        The shared trusted resolver raises BackupRestoreBlocked when
+        multiple trusted authoritative artifacts match, and the async
+        branch must surface the same rejection as a user-facing form
+        error instead of silently picking ``candidates[0]``.
+        """
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_modules_backups.admin."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                side_effect=BackupRestoreBlocked(
+                    "Restore blocked because the uploaded backup file "
+                    "matches multiple trusted authoritative backup "
+                    "artifacts."
+                ),
+            ),
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        assert (
+            "matches multiple trusted authoritative backup artifacts"
+            in response.content.decode("utf-8")
+        )
+        postgresql_backup_artifact.refresh_from_db()
+        # Status must NOT have changed to STATUS_RESTORING
+        assert postgresql_backup_artifact.status != BackupArtifact.STATUS_RESTORING
+
+    def test_restore_async_upload_rejects_incomplete_snapshot_contract(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """Async uploaded-file restore rejects incomplete authoritative snapshot
+        contracts through the shared trusted resolver, matching dry_run parity."""
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_modules_backups.admin."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                side_effect=BackupRestoreBlocked(
+                    "Restore blocked because the uploaded backup file "
+                    "could not be resolved to a trusted authoritative "
+                    "backup artifact: matching recorded artifact is not "
+                    "linked to an authoritative snapshot."
+                ),
+            ),
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        assert "not linked to an authoritative snapshot" in response.content.decode(
+            "utf-8"
+        )
+        postgresql_backup_artifact.refresh_from_db()
+        # Status must NOT have changed to STATUS_RESTORING
+        assert postgresql_backup_artifact.status != BackupArtifact.STATUS_RESTORING
+
+    # ------------------------------------------------------------------
+    # CR-SA20-005: regression — async uploaded-file restore ignores
+    # unsafe persisted local_path (out-of-tree and symlinked destinations)
+    # ------------------------------------------------------------------
+
+    def test_restore_async_upload_remaps_out_of_tree_local_path(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+        local_backup_settings: Path,
+    ) -> None:
+        """CR-SA20-005: Out-of-tree persisted local_path is always
+        replaced by a safe path under get_local_backup_directory().
+
+        The async uploaded-file restore branch must NOT copy bytes to
+        an attacker-controlled destination when the artifact's persisted
+        local_path points outside the authoritative backup root.
+        """
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        # Set the artifact's local_path to an out-of-tree path whose
+        # parent exists (a classic escape scenario).
+        out_of_tree_path = local_backup_settings.parent / "escape.dump"
+        postgresql_backup_artifact.local_path = str(out_of_tree_path)
+        postgresql_backup_artifact.save(
+            update_fields=["local_path", "updated_at"],
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                "quickscale_modules_backups.admin._stage_admin_restore_upload",
+                return_value=staged,
+            ),
+            patch(
+                "quickscale_modules_backups.admin._resolve_admin_uploaded_restore_artifact",
+                return_value=postgresql_backup_artifact,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+                return_value=MagicMock(),
+            ),
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+
+        # The out-of-tree path must NOT have been written.
+        assert not out_of_tree_path.exists()
+
+        # Artifact local_path was updated to a safe path under the
+        # configured authoritative backup root.
+        postgresql_backup_artifact.refresh_from_db()
+        safe_path = Path(postgresql_backup_artifact.local_path)
+        assert safe_path.parent == local_backup_settings
+        assert safe_path.name == postgresql_backup_artifact.filename
+        assert safe_path.exists()
+        assert safe_path.read_bytes() == content
+
+    def test_restore_async_upload_remaps_symlinked_local_path(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+        local_backup_settings: Path,
+    ) -> None:
+        """CR-SA20-005: Symlink-based local_path is always replaced by a
+        safe direct path under get_local_backup_directory().
+
+        The async uploaded-file restore branch must NOT follow a symlink
+        that escapes the authoritative backup root when copying staged
+        upload bytes.
+        """
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        # Create a symlink inside the backup root that points outside.
+        # The backup directory must exist before creating a symlink inside it.
+        local_backup_settings.mkdir(parents=True, exist_ok=True)
+        escape_target = local_backup_settings.parent / "outside-root.dump"
+        escape_target.write_bytes(content)
+        symlink_path = local_backup_settings / postgresql_backup_artifact.filename
+        symlink_path.symlink_to(escape_target)
+
+        postgresql_backup_artifact.local_path = str(symlink_path)
+        postgresql_backup_artifact.save(
+            update_fields=["local_path", "updated_at"],
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                "quickscale_modules_backups.admin._stage_admin_restore_upload",
+                return_value=staged,
+            ),
+            patch(
+                "quickscale_modules_backups.admin._resolve_admin_uploaded_restore_artifact",
+                return_value=postgresql_backup_artifact,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+                return_value=MagicMock(),
+            ),
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE,
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+
+        # The symlink escape target was written before the test with the
+        # same content; verify it was NOT overwritten by following the
+        # symlink (a truncation would reduce it to zero bytes, or the
+        # content would differ if the escape target was a sensitive file).
+        assert escape_target.read_bytes() == content
+
+        # Artifact local_path was updated to a safe direct path under
+        # the backup root, NOT the symlink escape target.
+        postgresql_backup_artifact.refresh_from_db()
+        safe_path = Path(postgresql_backup_artifact.local_path)
+        assert safe_path.parent == local_backup_settings
+        assert safe_path.name == postgresql_backup_artifact.filename
+        assert safe_path.exists()
+        assert safe_path.read_bytes() == content
 
 
 @pytest.mark.django_db

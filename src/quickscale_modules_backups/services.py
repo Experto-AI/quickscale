@@ -114,6 +114,10 @@ from quickscale_core.runtime import (  # noqa: F401
     _get_restore_source_compatibility_issues,
     _get_restore_source_validation_issues,
     _normalize_restore_file_path,
+    # Admin uploaded-file staging/resolution/cleanup seam
+    _cleanup_admin_restore_upload_directory,
+    _resolve_admin_uploaded_restore_artifact,
+    _stage_admin_restore_upload,
     # verification surface
     _build_clear_rollback_pin_fields,
     _build_verification_payload,

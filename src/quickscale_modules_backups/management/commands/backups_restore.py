@@ -1,6 +1,13 @@
-"""Validate or execute a guarded backup restore."""
+"""Validate or execute a guarded backup restore.
+
+SA20: When an artifact carries STATUS_RESTORING, the command persists
+restore_started_at on entry and transitions to STATUS_FAILED + restore_error
+on BackupError. Admin-triggered background restores are observable through
+the artifact's status and error fields.
+"""
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone as django_timezone
 
 from quickscale_core.runtime import ADAPTER_FUNCTIONS, BackupError
 
@@ -54,6 +61,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
+        from quickscale_modules_backups.models import BackupArtifact
+
         artifact_id = options["artifact_id"]
         snapshot_id = options["snapshot_id"]
         file_path = options["file_path"]
@@ -69,6 +78,21 @@ class Command(BaseCommand):
                 "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
             )
 
+        # SA20: If this artifact was marked STATUS_RESTORING by the admin
+        # dispatch, track the lifecycle.
+        artifact = None
+        if artifact_id is not None:
+            try:
+                artifact = BackupArtifact.objects.get(pk=artifact_id)
+                if artifact.status == BackupArtifact.STATUS_RESTORING:
+                    if artifact.restore_started_at is None:
+                        artifact.restore_started_at = django_timezone.now()
+                        artifact.save(
+                            update_fields=["restore_started_at", "updated_at"]
+                        )
+            except BackupArtifact.DoesNotExist:
+                pass
+
         try:
             result = ADAPTER_FUNCTIONS["restore_backup"](
                 artifact_id=artifact_id,
@@ -79,6 +103,19 @@ class Command(BaseCommand):
                 allow_production=bool(options["allow_production"]),
             )
         except BackupError as exc:
+            # SA20: Persist failure status when a STATUS_RESTORING artifact
+            # fails to restore. The adapter sets STATUS_RESTORED on success.
+            if (
+                artifact is not None
+                and artifact.status == BackupArtifact.STATUS_RESTORING
+            ):
+                artifact.refresh_from_db()
+                if artifact.status == BackupArtifact.STATUS_RESTORING:
+                    artifact.status = BackupArtifact.STATUS_FAILED
+                    artifact.restore_error = str(exc)
+                    artifact.save(
+                        update_fields=["status", "restore_error", "updated_at"]
+                    )
             raise CommandError(str(exc)) from exc
 
         self.stdout.write(self.style.SUCCESS(result["message"]))
