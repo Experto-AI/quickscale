@@ -14,6 +14,7 @@ from quickscale_modules_billing.admin import (
     CreditBalanceAdmin,
     CreditTransactionAdmin,
     PlanAdmin,
+    SubscriptionAdmin,
     WebhookEventAdmin,
 )
 from quickscale_modules_billing.models import (
@@ -23,6 +24,21 @@ from quickscale_modules_billing.models import (
     Subscription,
     WebhookEvent,
 )
+
+from django.contrib.auth import get_user_model
+from django.contrib.sessions.middleware import SessionMiddleware
+
+from quickscale_modules_orgs.models import Organization
+
+User = get_user_model()
+
+
+def _add_session(request):
+    """Add session support to a RequestFactory-generated request."""
+    middleware = SessionMiddleware(lambda r: None)
+    middleware.process_request(request)
+    request.session.save()
+    return request
 
 
 def _plan_admin() -> PlanAdmin:
@@ -70,7 +86,7 @@ class TestReadOnlyAdminModels:
         superuser,
     ) -> None:
         balance_admin = _credit_balance_admin()
-        request = RequestFactory().get("/admin/")
+        request = _add_session(RequestFactory().get("/admin/"))
         request.user = superuser
 
         with patch.object(
@@ -122,3 +138,85 @@ class TestPlanAdmin:
         request.user = superuser
 
         assert plan_admin.has_add_permission(request) is True
+
+
+@pytest.mark.django_db
+class TestBillingAdminTenantScopedQueryset:
+    """CR-SA14.3-002: verify billing TenantModelAdmin querysets scope to org context."""
+
+    def test_credit_balance_admin_fail_closed_without_org(self):
+        """CreditBalanceAdmin.get_queryset returns empty when no org context."""
+        from django.contrib.admin.sites import AdminSite
+
+        site = AdminSite()
+        admin_instance = CreditBalanceAdmin(CreditBalance, site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            "cb-admin", "cb@example.com", "adminpass"
+        )
+        qs = admin_instance.get_queryset(request)
+        assert qs.count() == 0
+
+    def test_credit_transaction_admin_fail_closed_without_org(self):
+        """CreditTransactionAdmin.get_queryset returns empty when no org context."""
+        from django.contrib.admin.sites import AdminSite
+
+        site = AdminSite()
+        admin_instance = CreditTransactionAdmin(CreditTransaction, site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            "ct-admin", "ct@example.com", "adminpass"
+        )
+        qs = admin_instance.get_queryset(request)
+        assert qs.count() == 0
+
+    def test_subscription_admin_fail_closed_without_org(self):
+        """SubscriptionAdmin.get_queryset returns empty when no org context."""
+        from django.contrib.admin.sites import AdminSite
+
+        site = AdminSite()
+        admin_instance = SubscriptionAdmin(Subscription, site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            "sub-admin", "sub@example.com", "adminpass"
+        )
+        qs = admin_instance.get_queryset(request)
+        assert qs.count() == 0
+
+    def test_subscription_admin_scopes_to_org(self, organization):
+        """SubscriptionAdmin.get_queryset returns only subscriptions from the scoped org."""
+        from django.contrib.admin.sites import AdminSite
+
+        org_b = Organization.objects.create(name="Org B", slug="org-b")
+
+        plan = Plan.objects.create(
+            name="Test Plan",
+            slug="test-plan",
+            stripe_price_id="price_test",
+            credits_per_period=100,
+            price_cents=1000,
+        )
+
+        # Create subscriptions in different orgs using all_objects
+        Subscription.all_objects.create(
+            organization=organization,
+            plan=plan,
+            status=Subscription.Status.ACTIVE,
+        )
+        Subscription.all_objects.create(
+            organization=org_b,
+            plan=plan,
+            status=Subscription.Status.ACTIVE,
+        )
+
+        site = AdminSite()
+        admin_instance = SubscriptionAdmin(Subscription, site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            "scope-admin", "scope@example.com", "adminpass"
+        )
+        request._validated_org_id = organization.pk
+
+        qs = admin_instance.get_queryset(request)
+        # With TenantManager, only the scoped org's subscription should appear
+        assert qs.count() == 1

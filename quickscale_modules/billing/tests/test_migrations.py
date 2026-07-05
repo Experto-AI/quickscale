@@ -15,6 +15,7 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.django_db(transaction=True)
 def test_initial_migration_applies_cleanly() -> None:
     """Run the initial billing migration to confirm it applies.

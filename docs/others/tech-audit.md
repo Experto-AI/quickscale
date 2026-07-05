@@ -7,9 +7,10 @@
 > reading the interiors earlier passes only sampled. Prior IDs are stable; this document states
 > **present reality for planning** — closed findings live only in the Reconciliation log at the
 > bottom. Structural findings live in [arch-audit.md](arch-audit.md); fail-hard policy SSOT is
-> [decisions.md §fail-hard-principle](docs/technical/decisions.md#fail-hard-principle).
+> [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
 > Remediation batch mapping: TA9/TA12 → SA17.7/17.8 (17.7 done); TA16–TA25 → SA19–SA26 batch;
-> TA26–TA32 not yet batched.
+> TA26–TA32 → SA27–SA33 batch ("Fail-Hard & Contract Gaps Remediation", opened 2026-07-05,
+> see roadmap.md).
 
 ## Orientation summary
 
@@ -80,7 +81,6 @@ args, no timeout-less HTTP calls, no bare `Popen`/unclosed-file patterns.
 
 | ID | Severity | Category | Title | Effort | Confidence |
 |----|----------|----------|-------|--------|------------|
-| TA16 | S2 | security / secrets in logs | Generated `start.sh` prints `SECRET_KEY` and `DATABASE_URL` values to deploy logs | Trivial ⚡ | High |
 | TA26 | S2 | correctness / fail-open config | Module-option validation never enforced on the apply path for 5 modules; invalid `orgs.mode` silently downgrades tenancy to solo; invalid `storage.backend` silently drops S3 wiring; malformed forms rate 500s the public endpoint | Small | High |
 | TA31 | S2 | security + data loss / config contract | Storage: generated README documents env-var configuration the app never reads (silent `local` fallback → uploads lost on redeploy); the working channel bakes S3 secrets from quickscale.yml into VCS-tracked settings | Medium | High |
 | TA30 | S2 | correctness / data integrity | Self-service account deletion cascade-deletes org memberships, bypassing the last-owner invariant — ownerless orgs, zombie personal orgs with live Stripe subscriptions | Small | High |
@@ -89,7 +89,6 @@ args, no timeout-less HTTP calls, no bare `Popen`/unclosed-file patterns.
 | TA17 | S2 | operability / data loss | Admin backup restore runs `pg_restore --clean` synchronously inside the 60s-capped gunicorn worker | Medium | High |
 | TA20 | S3 | correctness / data loss (CLI) | `apply --force` wipes the existing project before generating its replacement | Small | High |
 | TA24 | S3 | operability / rate limiting | Generated app ships no `CACHES` backend — throttle counters per-process (`LocMemCache`), reset on deploy | Small | High |
-| TA12 | S4 | dead code / fail-open | Deprecated catalog delegates still in public API; unknown-name readiness fail-open | Small | High |
 | TA21 | S4 | security hardening | `debug_views` unvalidated `next` redirect (superuser POST) | Trivial | High |
 | TA22 | S4 | security hardening | `analytics_tags` `mark_safe(json.dumps(...))` without `</script>` escaping | Trivial | High |
 | TA23 | S4 | hygiene | `coverage.json`, `pytest_cov_log.txt` tracked in git | Trivial | High |
@@ -99,21 +98,11 @@ args, no timeout-less HTTP calls, no bare `Popen`/unclosed-file patterns.
 | TA29 | S4 | docs hygiene | `decisions.md:650` links to a dropped `arch-audit.md` heading | Trivial | High |
 | TA32 | S4 | fail-open config (runtime residuals) | Listings/storage runtime settings reads silently default and coerce (TA2 class — modules outside SA17's scope) | Small | High |
 
-Counts: **S1: 0 · S2: 7 · S3: 2 · S4: 9.** Quick wins flagged ⚡ (Trivial/Small-effort S2).
+Counts: **S1: 0 · S2: 6 · S3: 2 · S4: 8.** Quick wins flagged ⚡ (Trivial/Small-effort S2).
 
 ---
 
 ## Findings detail — S2 (full blocks)
-
-### TA16 (S2) — Generated `start.sh` logs secret values on every boot
-
-- **ID:** `startsh-secrets-in-deploy-logs` · **Category:** §4.III secrets logged · **Confidence:** High (read directly; re-verified 2026-07-05)
-- **Location:** `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2:18` (Step 1 "Environment check").
-- **Defect:** `env | grep -E '(DATABASE_URL|SECRET_KEY|DEBUG|...)'` prints the **values** of `SECRET_KEY` and `DATABASE_URL` (embedding the DB password) to stdout on every container start. Railway retains deploy logs for anyone with project access; log drains propagate further.
-- **Failure scenario:** any generated project deploys → its Django signing key and DB credentials sit in plaintext in platform log history.
-- **Fix:** print only presence/absence per var name (`[ -n "${!v+x}" ] && echo "$v: set"`), never values. **Effort:** Trivial.
-- **Verification:** generate a project, run `start.sh` with dummy env, assert no secret value appears in output.
-- **Deliberate?** None found — framed as a debug convenience.
 
 ### TA26 (S2) — Module-option validation is not enforced on the apply path; invalid values silently coerced (collapsed class)
 
@@ -200,7 +189,6 @@ Counts: **S1: 0 · S2: 7 · S3: 2 · S4: 9.** Quick wins flagged ⚡ (Trivial/Sm
 
 ## Findings detail — S4 (one line each)
 
-- **TA12** — `contracts/module_catalog.py:128-175,271-289` + `contracts/__init__.py:35-37`: deprecated-since-D2 delegates still exported with no F-EXCEPTION/sunset; `get_module_readiness_reason` returns `None` for unknown names (fail-open; mitigated at `config_schema.py:481` by the AVAILABLE_MODULES pre-check). Fix: delete delegates; raise on unknown names.
 - **TA21** — `orgs/debug_views.py:53-55,86-88`: `redirect(request.POST.get("next"))` unvalidated (superuser-only, POST-only). Fix: `url_has_allowed_host_and_scheme`.
 - **TA22** — `analytics/templatetags/analytics_tags.py:33`: `mark_safe(json.dumps(payload))` — latent `</script>` injection if payload ever carries request data (settings-only today). Fix: `json_script` pattern or escape `<>&`.
 - **TA23** — repo root: `coverage.json`, `pytest_cov_log.txt` tracked in git. Fix: `git rm --cached` + `.gitignore`.
@@ -217,16 +205,16 @@ Counts: **S1: 0 · S2: 7 · S3: 2 · S4: 9.** Quick wins flagged ⚡ (Trivial/Sm
 - **Validation knowledge is triplicated and unwired (TA26):** module.yml declarative rules, resolver ValidationRules, and imperative `validate_*` functions encode the same constraints, and which layer actually *enforces* varies by module. The contained fix closes today's gap; the triplication itself is arch-audit Finding-4 / T2.4-T2.5 territory (option-pipeline fan-out).
 - **Tenancy posture is inferred, never asserted (TA19 + TA26):** `QUICKSCALE_MODE` fails toward solo at generation *and* runtime; the isolation boundary should fail toward more isolation or be a required, validated value (SA14.6).
 - **Abuse-control correctness rests on two ambient facts the generated app doesn't guarantee (TA18 + TA24):** canonical client IP behind the proxy and a shared counter store — throttling may belong at the edge or behind an explicit "abuse-control backend configured" gate.
-- **No single "how does a generated app get configured at deploy time" contract (TA31 + TA16):** some settings are baked literals, some are env-read, and the docs describe a third reality. The storage finding is fixable in place, but the literal-vs-env split deserves an explicit generator-wide rule (which settings classes are env-overridable, and how docs are generated from that rule).
+- **No single "how does a generated app get configured at deploy time" contract (TA31):** some settings are baked literals, some are env-read, and the docs describe a third reality. The storage finding is fixable in place, but the literal-vs-env split deserves an explicit generator-wide rule (which settings classes are env-overridable, and how docs are generated from that rule). (TA16's portion of this smell — `start.sh` secret logging — is resolved by SA19.)
 - **Business invariants enforced in model methods don't survive ORM cascades (TA30):** the last-owner guard's placement (overridden `delete()`) protects only direct deletes. Any future invariant of this kind needs a boundary-level (signal or service-layer) enforcement convention — worth an arch-audit look when teams lands, since teams will add more membership-like invariants.
 
 ## Tooling gaps
 
 - **`pip-audit`/`safety` CI step** — no dependency-CVE gate exists; the lockfile read stays manual and low-confidence. (Dependency class, ongoing.)
-- **`bandit`/`semgrep` CI step** — would systematically catch TA16 (secret echo), TA21 (unvalidated redirect), TA22/TA25 (`mark_safe`/`|safe` on non-constant), TA27 (argv secrets).
+- **`bandit`/`semgrep` CI step** — would systematically catch TA21 (unvalidated redirect), TA22/TA25 (`mark_safe`/`|safe` on non-constant), TA27 (argv secrets). (TA16 — secret echo — resolved by SA19.)
 - **Settings-contract system check** (custom Django check asserting `QUICKSCALE_MODE` and `QUICKSCALE_*_ENABLED` explicitly set) — closes the TA19 class at startup.
 - **Apply-gate completeness check** — CI assertion that every exported `validate_*_module_options` is invoked on the apply path (or deleted) — prevents TA26 recurring as new modules land.
-- **`vulture` (dead code)** — would surface TA12's delegates, the dead blog validation branch (TA26), and TA28's uncalled export.
+- **`vulture` (dead code)** — would surface the dead blog validation branch (TA26) and TA28's uncalled export. (TA12 — deprecated catalog delegates — resolved by SA17.8.)
 - **`.gitignore` + pre-commit for build artifacts** — closes TA23 permanently.
 
 Categories swept with no qualifying finding this pass: injection sinks, deserialization, crypto misuse, SSRF/open-redirect (beyond TA21), concurrency/TOCTOU (billing & orgs lock-guarded), resource leaks, timeouts (no HTTP clients without deadlines), N+1/perf, test flakiness (sleeps confined to e2e suites), import-time side effects.
@@ -250,7 +238,9 @@ Categories swept with no qualifying finding this pass: injection sinks, deserial
 - 2026-07-04 — TA15: resolved (SA18.11 — malformed module pyproject raises `TOMLDecodeError`).
 - 2026-07-04 — **ID renumbering note:** the interrupted 2026-07-03 sweep briefly assigned TA16=`throttle-remote-addr-behind-proxy` (superseded by today's TA18), TA17=`railway-cli-secrets-on-argv` (dropped in renumbering — **reinstated 2026-07-05 as TA27**), TA18=`committed-coverage-artifacts` (renumbered TA23). Canonical IDs are the ones in this document.
 - 2026-07-05 — TA9: resolved (SA17.7, `100f67d6` + `0ed70760` — analytics hard-imports posthog at module top; forms uses `apps.is_installed` guard + hard lazy imports; residual broad catch around the capture call is documented best-effort for a non-critical side effect, with regression tests).
-- 2026-07-05 — TA12, TA16, TA17, TA18, TA19, TA20, TA21, TA22, TA23, TA24, TA25: still-open (every location re-verified against `a6706db1`; TA19's location list now includes the `orgs/adapters.py:60,81` pair from the arch-audit red flag).
+- 2026-07-05 — TA12: resolved (SA17.8 — deprecated catalog delegates removed from public API; `get_module_readiness_reason` raises `ValueError` on unknown names).
+- 2026-07-05 — TA16: resolved (SA19 — `start.sh.j2` prints per-variable `set`/`MISSING` status, never secret values).
+- 2026-07-05 — TA17, TA18, TA19, TA20, TA21, TA22, TA23, TA24, TA25: still-open (every location re-verified against `a6706db1`; TA19's location list now includes the `orgs/adapters.py:60,81` pair from the arch-audit red flag).
 - 2026-07-05 — TA26, TA27, TA28, TA29: opened this pass (TA27 is the reinstatement above).
 - 2026-07-05 (module-by-module deep pass) — TA30, TA31, TA32: opened. TA26 strengthened (storage-backend coercion joins the class as scenario 4). TA17 extended (admin backup-create/prune share the in-request execution; restore remains the anchor). Modules read deeply and found clean this pass: quickscale_core (DR engine, apply ledger/executor, state/locks/git), orgs (purge/migration commands, tenant-context machinery), quickscale_cli (update/remove snapshot-rollback flows, status/dev/deploy commands), billing, backups commands, notifications, crm.
 

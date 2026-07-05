@@ -39,9 +39,9 @@ from quickscale_modules_orgs.apps import (
 def _clear_escape_hatch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove the SA2.1 escape hatch before each test.
 
-    The env var is set in ``tests/settings.py`` so that
-    ``django.setup()`` does not trigger the boot guard.  This
-    autouse fixture clears it before every test so that tests
+    The env var is a shell-level opt-in (set before running
+    pytest — no module test code primes it).  This autouse
+    fixture clears it before every test so that tests
     exercising the guard (expecting ``ImproperlyConfigured``)
     work correctly without the env var interfering.
     """

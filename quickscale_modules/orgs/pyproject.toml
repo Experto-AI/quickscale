@@ -37,6 +37,9 @@ python_files = ["test_*.py"]
 norecursedirs = [".*", "build", "dist", "node_modules", "quickscale_cli", "quickscale_core", "analytics", "auth", "backups", "billing", "blog", "crm", "forms", "listings", "notifications", "social", "storage", "teams"]
 testpaths = ["tests"]
 addopts = "-v --cov=quickscale_modules_orgs --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+markers = [
+    "bypass_rls: test requires BYPASSRLS database privilege (superuser / migration DDL). Skipped when QUICKSCALE_ALLOW_BYPASSRLS is not set.",
+]
 
 [tool.coverage.report]
 fail_under = 90

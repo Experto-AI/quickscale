@@ -7,6 +7,7 @@ from unittest.mock import ANY, Mock, patch
 
 import click
 import pytest
+import shutil as _real_shutil
 import yaml
 
 from quickscale_core.contracts.module_options import (
@@ -4974,6 +4975,133 @@ class TestGenerateWithExistingConfig:
         _generate_with_existing_config(mock_config, output, config_file, True)
         assert not (output / "old_file.txt").exists()
         assert (output / "manage.py").exists()
+
+    @patch("quickscale_cli.commands.apply_command._generate_project")
+    def test_force_with_failure_preserves_original(self, mock_gen, tmp_path):
+        """Test force flag + generation failure preserves original project."""
+        output = tmp_path / "myapp"
+        output.mkdir()
+        config_file = output / "quickscale.yml"
+        config_file.write_text("original config")
+        (output / "original_file.txt").write_text("preserve me")
+        (output / "subdir").mkdir()
+        (output / "subdir" / "nested.txt").write_text("nested")
+
+        mock_gen.return_value = False
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+
+        with pytest.raises(click.Abort):
+            _generate_with_existing_config(mock_config, output, config_file, True)
+
+        # Original content must be preserved after a failed force generation
+        assert config_file.read_text() == "original config"
+        assert (output / "original_file.txt").exists()
+        assert (output / "original_file.txt").read_text() == "preserve me"
+        assert (output / "subdir").exists()
+        assert (output / "subdir" / "nested.txt").exists()
+        assert (output / "subdir" / "nested.txt").read_text() == "nested"
+
+    @patch("quickscale_cli.commands.apply_command._generate_project")
+    def test_force_staging_failure_rollback(self, mock_gen, tmp_path):
+        """Force mode must restore original files if staging-phase filesystem ops fail.
+
+        Proves CR-SA22-001 rollback: after the backup phase succeeds but a
+        filesystem operation during the staging swap fails, the function
+        restores all original files from backup and raises click.Abort().
+        """
+        output = tmp_path / "myapp"
+        output.mkdir()
+        config_file = output / "quickscale.yml"
+        config_file.write_text("original config")
+        (output / "original_file.txt").write_text("preserve me")
+        (output / "subdir").mkdir()
+        (output / "subdir" / "nested.txt").write_text("nested")
+
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+
+        def fake_generate(config, path):
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "manage.py").touch()
+            (path / "new_file.py").touch()
+            return True
+
+        mock_gen.side_effect = fake_generate
+
+        # Controlled shutil.move side effect:
+        #   calls 1-2: backup phase (original_file.txt, subdir) -> real move
+        #   call 3: first staging move (manage.py) -> real move
+        #   call 4: second staging move (new_file.py) -> OSError
+        #   calls 5+: rollback phase (restore from backup) -> real move
+        move_counter: list[int] = [0]
+        real_move = _real_shutil.move
+
+        def controlled_move(src: str, dst: str) -> None:
+            move_counter[0] += 1
+            if move_counter[0] == 4:
+                raise OSError("Simulated filesystem failure during staging swap")
+            return real_move(src, dst)
+
+        with patch("shutil.move", controlled_move):
+            with pytest.raises(click.Abort):
+                _generate_with_existing_config(mock_config, output, config_file, True)
+
+        # Original files must be restored after rollback
+        assert config_file.read_text() == "original config"
+        assert (output / "original_file.txt").exists()
+        assert (output / "original_file.txt").read_text() == "preserve me"
+        assert (output / "subdir").exists()
+        assert (output / "subdir" / "nested.txt").exists()
+        assert (output / "subdir" / "nested.txt").read_text() == "nested"
+        # Partially-moved staged files must be cleaned up by rollback
+        assert not (output / "manage.py").exists()
+        assert not (output / "new_file.py").exists()
+
+    def test_force_temp_dirs_on_same_filesystem(self, tmp_path):
+        """Force mode must create staging and backup dirs under output_path.parent
+        to guarantee same-filesystem move semantics (CR-SA22-001)."""
+        import tempfile as _real_tempfile
+
+        # Save reference to real mkdtemp before any patches
+        real_mkdtemp = _real_tempfile.mkdtemp
+
+        output = tmp_path / "myapp"
+        output.mkdir()
+        config_file = output / "quickscale.yml"
+        config_file.write_text("original config")
+        (output / "old_file.txt").touch()
+
+        mock_config = Mock()
+        mock_config.project.slug = "myapp"
+
+        captured_kwargs: list[dict] = []
+
+        def tracking_mkdtemp(**kwargs: object) -> str:
+            captured_kwargs.append(dict(kwargs))
+            return real_mkdtemp(**kwargs)
+
+        def fake_generate(config, path):
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "manage.py").touch()
+            return True
+
+        with patch("tempfile.mkdtemp", tracking_mkdtemp):
+            with patch(
+                "quickscale_cli.commands.apply_command._generate_project",
+                side_effect=fake_generate,
+            ):
+                _generate_with_existing_config(mock_config, output, config_file, True)
+
+        # mkdtemp called twice: once for staging (temp_dir), once for backup
+        assert len(captured_kwargs) == 2, (
+            f"Expected 2 mkdtemp calls, got {len(captured_kwargs)}"
+        )
+        expected_dir = str(output.parent)
+        for i, kwargs in enumerate(captured_kwargs):
+            assert kwargs.get("dir") == expected_dir, (
+                f"mkdtemp call {i}: expected dir={expected_dir!r}, got {kwargs!r}"
+            )
 
 
 class TestGitCheckpointRestoration:

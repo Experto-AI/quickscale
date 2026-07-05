@@ -46,6 +46,8 @@ class TenantTableEntry:
             verification.
         parent_model_name: For ``PENDING_REMEDIATION`` entries, the
             model name of the direct parent.
+        policy_name: PostgreSQL RLS policy name for ``ENROLLED`` tables.
+            Required for ``ENROLLED`` entries; unused for other statuses.
     """
 
     __slots__ = (
@@ -55,6 +57,7 @@ class TenantTableEntry:
         "_reason",
         "_parent_app_label",
         "_parent_model_name",
+        "_policy_name",
     )
 
     def __init__(
@@ -65,6 +68,7 @@ class TenantTableEntry:
         reason: str = "",
         parent_app_label: str | None = None,
         parent_model_name: str | None = None,
+        policy_name: str = "",
     ) -> None:
         self._app_label = app_label
         self._model_name = model_name
@@ -72,6 +76,7 @@ class TenantTableEntry:
         self._reason = reason
         self._parent_app_label = parent_app_label
         self._parent_model_name = parent_model_name
+        self._policy_name = policy_name
 
     # Read-only properties so the registry is immutable after creation.
     @property
@@ -98,6 +103,10 @@ class TenantTableEntry:
     def parent_model_name(self) -> str | None:
         return self._parent_model_name
 
+    @property
+    def policy_name(self) -> str:
+        return self._policy_name
+
     def __repr__(self) -> str:
         return (
             f"TenantTableEntry(app_label={self._app_label!r}, "
@@ -112,7 +121,7 @@ class TenantTableEntry:
 # the tenant isolation contract.  Every installed concrete model must
 # appear in exactly one of the three categories below.
 #
-# See `docs/technical/roadmap.md` → AF1 and `arch-audit.md` → Finding 1
+# See `docs/technical/roadmap.md` → AF1 and `docs/others/arch-audit.md` → Finding 1
 # for the full rationale.
 # ---------------------------------------------------------------------------
 
@@ -126,111 +135,132 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
         app_label="quickscale_modules_crm",
         model_name="Tag",
         status=TenantTableStatus.ENROLLED,
+        policy_name="crm_tag_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_crm",
         model_name="Company",
         status=TenantTableStatus.ENROLLED,
+        policy_name="crm_company_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_crm",
         model_name="Contact",
         status=TenantTableStatus.ENROLLED,
+        policy_name="crm_contact_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_crm",
         model_name="Stage",
         status=TenantTableStatus.ENROLLED,
+        policy_name="crm_stage_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_crm",
         model_name="Deal",
         status=TenantTableStatus.ENROLLED,
+        policy_name="crm_deal_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_crm",
         model_name="ContactNote",
         status=TenantTableStatus.ENROLLED,
+        policy_name="crm_contactnote_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_crm",
         model_name="DealNote",
         status=TenantTableStatus.ENROLLED,
+        policy_name="crm_dealnote_org_isolation",
     ),
     # -- Forms --
     TenantTableEntry(
         app_label="quickscale_modules_forms",
         model_name="Form",
         status=TenantTableStatus.ENROLLED,
+        policy_name="forms_form_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_forms",
         model_name="FormField",
         status=TenantTableStatus.ENROLLED,
+        policy_name="forms_formfield_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_forms",
         model_name="FormSubmission",
         status=TenantTableStatus.ENROLLED,
+        policy_name="forms_formsubmission_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_forms",
         model_name="FormFieldValue",
         status=TenantTableStatus.ENROLLED,
+        policy_name="forms_formfieldvalue_org_isolation",
     ),
     # -- Billing --
     TenantTableEntry(
         app_label="quickscale_modules_billing",
         model_name="CreditBalance",
         status=TenantTableStatus.ENROLLED,
+        policy_name="billing_credit_balance_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_billing",
         model_name="CreditTransaction",
         status=TenantTableStatus.ENROLLED,
+        policy_name="billing_credit_transaction_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_billing",
         model_name="Subscription",
         status=TenantTableStatus.ENROLLED,
+        policy_name="billing_subscription_org_isolation",
     ),
     # -- Blog --
     TenantTableEntry(
         app_label="quickscale_modules_blog",
         model_name="Category",
         status=TenantTableStatus.ENROLLED,
+        policy_name="blog_category_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_blog",
         model_name="Tag",
         status=TenantTableStatus.ENROLLED,
+        policy_name="blog_tag_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_blog",
         model_name="BlogMediaAsset",
         status=TenantTableStatus.ENROLLED,
+        policy_name="blog_media_asset_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_blog",
         model_name="Post",
         status=TenantTableStatus.ENROLLED,
+        policy_name="blog_post_org_isolation",
     ),
     # -- Listings --
     TenantTableEntry(
         app_label="quickscale_modules_listings",
         model_name="Listing",
         status=TenantTableStatus.ENROLLED,
+        policy_name="listings_listing_org_isolation",
     ),
     # -- Social --
     TenantTableEntry(
         app_label="quickscale_modules_social",
         model_name="SocialLink",
         status=TenantTableStatus.ENROLLED,
+        policy_name="social_link_org_isolation",
     ),
     TenantTableEntry(
         app_label="quickscale_modules_social",
         model_name="SocialEmbed",
         status=TenantTableStatus.ENROLLED,
+        policy_name="social_embed_org_isolation",
     ),
     # ====== REVIEWED EXCLUSIONS ==========================================
     # Models intentionally excluded from the tenant-isolation contract.
@@ -476,14 +506,28 @@ _FORCE_RLS_FORWARD_SQL = """
 ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
 
+-- Standard write-path policy: current-org only, no operator_access bypass.
 CREATE POLICY {policy_name} ON {table}
     FOR ALL
-    USING (NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id)
+    USING (
+        NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id
+    )
     WITH CHECK (NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id);
+
+-- Read-only operator policy: allows cross-tenant reads when operator_access GUC is set.
+-- Deliberately FOR SELECT only — operator_access must NOT grant write or delete
+-- visibility across tenant boundaries (CR-SA14.5-001).
+CREATE POLICY {policy_name}_select ON {table}
+    FOR SELECT
+    USING (
+        NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id
+        OR NULLIF(current_setting('app.operator_access', true), '') = 'on'
+    );
 """
 
 _FORCE_RLS_REVERSE_SQL = """
 DROP POLICY IF EXISTS {policy_name} ON {table};
+DROP POLICY IF EXISTS {policy_name}_select ON {table};
 ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE {table} DISABLE ROW LEVEL SECURITY;
 """
@@ -530,6 +574,68 @@ def revert_force_rls(
         schema_editor.execute(
             _FORCE_RLS_REVERSE_SQL.format(table=table, policy_name=policy_name),
         )
+
+
+# ---------------------------------------------------------------------------
+# SA14.5 — Refresh FORCE RLS policies from the current template
+# ---------------------------------------------------------------------------
+
+
+def refresh_force_rls_policies(schema_editor: Any) -> None:
+    """Drop and recreate FORCE RLS policies on all enrolled tables.
+
+    Uses the current ``_FORCE_RLS_FORWARD_SQL`` template so that any
+    template changes (e.g. the SA14.5 ``operator_access`` OR clause) take
+    effect on existing policies.
+
+    The function iterates ``TENANT_TABLE_REGISTRY`` for entries whose
+    ``status == ENROLLED`` and constructs the ``(table_name, policy_name)``
+    pairs from the entry's ``policy_name`` attribute and the Django default
+    db_table convention (``app_label + '_' + model_name.lower()``).
+
+    Tables that do not exist yet in the database are silently skipped
+    (handles the case where this migration runs before other modules'
+    schema migrations in a fresh test database).
+
+    No-op on non-PostgreSQL databases.
+
+    Args:
+        schema_editor: The Django schema editor from a migration.
+    """
+    if schema_editor.connection.vendor != "postgresql":
+        return
+
+    targets: list[tuple[str, str]] = []
+    for entry in TENANT_TABLE_REGISTRY:
+        if entry.status != TenantTableStatus.ENROLLED:
+            continue
+        if not entry.policy_name:
+            continue
+        table_name = f"{entry.app_label}_{entry.model_name.lower()}"
+        targets.append((table_name, entry.policy_name))
+
+    if not targets:
+        return
+
+    # Filter out tables that do not exist yet in the database.  This can
+    # happen when the migration runs before other modules' schema
+    # migrations have created their tables (e.g. in a fresh test DB).
+    existing_targets: list[tuple[str, str]] = []
+    with schema_editor.connection.cursor() as cursor:
+        for table, policy_name in targets:
+            cursor.execute(
+                "SELECT to_regclass(%s) IS NOT NULL",
+                [table],
+            )
+            if cursor.fetchone()[0]:
+                existing_targets.append((table, policy_name))
+
+    if not existing_targets:
+        return
+
+    # Drop existing policies then re-create with the current template.
+    revert_force_rls(schema_editor, tuple(existing_targets))
+    apply_force_rls(schema_editor, tuple(existing_targets))
 
 
 # ---------------------------------------------------------------------------

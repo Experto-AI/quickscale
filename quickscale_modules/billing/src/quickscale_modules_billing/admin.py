@@ -7,6 +7,8 @@ from typing import Any, cast
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
 
+from quickscale_modules_orgs.admin import TenantModelAdmin
+
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -91,18 +93,15 @@ class PlanAdmin(admin.ModelAdmin):
 
 
 @admin.register(CreditBalance)
-class CreditBalanceAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+class CreditBalanceAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
     """Read-only admin for per-organization balance snapshots."""
 
     list_display = ["organization", "user", "balance", "updated_at"]
     list_select_related = ["organization", "user"]
 
-    def get_queryset(self, request):
-        return self.model.all_objects.all()
-
 
 @admin.register(CreditTransaction)
-class CreditTransactionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+class CreditTransactionAdmin(ReadOnlyAdminMixin, TenantModelAdmin):
     """Read-only admin for credit transaction history."""
 
     list_display = [
@@ -117,12 +116,9 @@ class CreditTransactionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_filter = ["transaction_type", "created_at"]
     list_select_related = ["organization", "user"]
 
-    def get_queryset(self, request):
-        return self.model.all_objects.all()
-
 
 @admin.register(Subscription)
-class SubscriptionAdmin(admin.ModelAdmin):
+class SubscriptionAdmin(TenantModelAdmin):
     """Editable admin surface for local subscription snapshots."""
 
     list_display = [
@@ -141,11 +137,6 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "stripe_subscription_id",
         "stripe_customer_id",
     ]
-
-    def get_queryset(self, request):
-        return self.model.all_objects.all().select_related(
-            "organization", "user", "plan"
-        )
 
 
 @admin.register(WebhookEvent)

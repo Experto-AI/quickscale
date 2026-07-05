@@ -1,10 +1,50 @@
 """Shared pytest fixtures for Forms module tests"""
 
-import pytest
-from django.contrib.auth import get_user_model
-from rest_framework.test import APIClient
+from __future__ import annotations
 
-from quickscale_modules_forms.models import (
+import os
+import sys
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+
+import django
+import pytest
+from django.conf import settings
+
+# SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
+# (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
+# The collection hook below skips bypass_rls-marked tests when the env var
+# is not set. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
+# This runs before django.setup() below — use a NOBYPASSRLS DB role.
+
+# Configure Django before importing models
+if not settings.configured:
+    settings_path = Path(__file__).with_name("settings.py")
+    settings_module_name = "quickscale_modules_forms_test_settings"
+    settings_spec = spec_from_file_location(settings_module_name, settings_path)
+    if settings_spec is None or settings_spec.loader is None:
+        raise RuntimeError(f"Unable to load forms test settings from {settings_path}")
+    test_settings = module_from_spec(settings_spec)
+    sys.modules[settings_module_name] = test_settings
+    settings_spec.loader.exec_module(test_settings)
+
+    os.environ["DJANGO_SETTINGS_MODULE"] = settings_module_name
+    django.setup()
+
+
+@pytest.fixture(scope="session")
+def django_db_setup(django_db_blocker):
+    """Set up test database with migrations"""
+    from django.core.management import call_command
+
+    with django_db_blocker.unblock():
+        call_command("migrate", "--run-syncdb", verbosity=0)
+
+
+from django.contrib.auth import get_user_model  # noqa: E402
+from rest_framework.test import APIClient  # noqa: E402
+
+from quickscale_modules_forms.models import (  # noqa: E402
     Form,
     FormField,
     FormFieldValue,
@@ -243,3 +283,37 @@ def org_b_admin(db, org_b):
         role=OrgRole.ADMIN,
     )
     return user
+
+
+# ---------------------------------------------------------------------------
+# SA14.4 — bypass_rls marker registration and collection-time opt-in
+# ---------------------------------------------------------------------------
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register the bypass_rls marker to prevent PytestUnknownMarkWarning."""
+    config.addinivalue_line(
+        "markers",
+        "bypass_rls: test requires BYPASSRLS database privilege "
+        "(superuser / migration DDL). Skipped when QUICKSCALE_ALLOW_BYPASSRLS "
+        "is not set.",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Skip bypass_rls-marked tests when QUICKSCALE_ALLOW_BYPASSRLS is not set.
+
+    Under NOBYPASSRLS (the default), migration tests and other
+    BYPASSRLS-dependent tests are deselected so the suite passes
+    cleanly with a restricted DB role.
+    """
+    if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
+        return  # BYPASSRLS available — run all tests
+    skip_bypass_rls = pytest.mark.skip(
+        reason="QUICKSCALE_ALLOW_BYPASSRLS not set — skipping BYPASSRLS-dependent test"
+    )
+    for item in items:
+        if item.get_closest_marker("bypass_rls"):
+            item.add_marker(skip_bypass_rls)

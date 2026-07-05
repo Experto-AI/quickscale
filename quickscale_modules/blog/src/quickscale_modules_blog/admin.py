@@ -6,9 +6,10 @@ from django import forms
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import models
 from django.forms import ModelForm
 from markdownx.admin import MarkdownxModelAdmin
+
+from quickscale_modules_orgs.admin import TenantModelAdmin
 
 from .models import AuthorProfile, BlogMediaAsset, Category, Post, Tag
 
@@ -215,7 +216,7 @@ class PostAdminForm(forms.ModelForm):
 
 
 @admin.register(Category)
-class CategoryAdmin(_BlogOrgAwareAdminMixin, admin.ModelAdmin):
+class CategoryAdmin(_BlogOrgAwareAdminMixin, TenantModelAdmin):
     """Admin for blog categories"""
 
     list_display = ["name", "slug", "organization"]
@@ -223,23 +224,15 @@ class CategoryAdmin(_BlogOrgAwareAdminMixin, admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     search_fields = ["name", "description"]
 
-    def get_queryset(self, request: Any) -> models.QuerySet:
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Category.all_objects.all()
-
 
 @admin.register(Tag)
-class TagAdmin(_BlogOrgAwareAdminMixin, admin.ModelAdmin):
+class TagAdmin(_BlogOrgAwareAdminMixin, TenantModelAdmin):
     """Admin for blog tags"""
 
     list_display = ["name", "slug", "organization"]
     list_filter = ["organization"]
     prepopulated_fields = {"slug": ("name",)}
     search_fields = ["name"]
-
-    def get_queryset(self, request: Any) -> models.QuerySet:
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Tag.all_objects.all()
 
 
 @admin.register(AuthorProfile)
@@ -252,7 +245,7 @@ class AuthorProfileAdmin(admin.ModelAdmin):
 
 
 @admin.register(BlogMediaAsset)
-class BlogMediaAssetAdmin(_BlogOrgAwareAdminMixin, admin.ModelAdmin):
+class BlogMediaAssetAdmin(_BlogOrgAwareAdminMixin, TenantModelAdmin):
     """Admin for uploaded blog media assets."""
 
     list_display = [
@@ -268,13 +261,9 @@ class BlogMediaAssetAdmin(_BlogOrgAwareAdminMixin, admin.ModelAdmin):
     search_fields = ["original_filename", "alt", "uploaded_by__username"]
     readonly_fields = ["width", "height", "created_at"]
 
-    def get_queryset(self, request: Any) -> models.QuerySet:
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return BlogMediaAsset.all_objects.all()
-
 
 @admin.register(Post)
-class PostAdmin(_BlogOrgAwareAdminMixin, MarkdownxModelAdmin):
+class PostAdmin(_BlogOrgAwareAdminMixin, TenantModelAdmin, MarkdownxModelAdmin):
     """Admin for blog posts with Markdown support"""
 
     form = PostAdminForm
@@ -330,16 +319,8 @@ class PostAdmin(_BlogOrgAwareAdminMixin, MarkdownxModelAdmin):
         ),
     ]
 
-    def get_queryset(self, request: Any) -> models.QuerySet:
-        """Operator path: use all_objects for cross-tenant visibility."""
-        return Post.all_objects.all()
-
     def formfield_for_foreignkey(self, db_field, request, **kwargs):  # type: ignore[no-untyped-def]
-        """Show author as dropdown with blank default and current user option.
-
-        Uses ``all_objects`` for the category FK to bypass TenantManager
-        auto-scoping in the admin (operator path).
-        """
+        """Show author as dropdown with blank default and current user option."""
         if db_field.name == "author":
             user_model = get_user_model()
             allowed_author_ids = {request.user.pk}
@@ -367,15 +348,7 @@ class PostAdmin(_BlogOrgAwareAdminMixin, MarkdownxModelAdmin):
             kwargs["queryset"] = user_model.objects.filter(
                 pk__in=allowed_author_ids
             ).order_by("username")
-        if db_field.name == "category":
-            kwargs["queryset"] = Category.all_objects.all()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def formfield_for_manytomany(self, db_field, request, **kwargs):  # type: ignore[no-untyped-def]
-        """Use ``all_objects`` for the tags M2M to bypass TenantManager auto-scoping."""
-        if db_field.name == "tags":
-            kwargs["queryset"] = Tag.all_objects.all()
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]
         """Save the model."""
