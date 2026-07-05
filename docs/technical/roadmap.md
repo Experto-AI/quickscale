@@ -49,19 +49,19 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.3 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.3 complete (archived); SA14.4, SA14.5, SA14.6, SA23, and SA28 are ready. Track 2: SA20, SA21.2 (deps: SA21.1), SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA21.1, SA22, SA25, SA27, SA31, and SA33 are ready. See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** All three tracks clean to continue. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.3 complete (archived); SA14.4, SA14.5, SA14.6, SA23, and SA28 are ready. Track 2: SA20, SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA22, SA25, SA27, SA31, and SA33 are ready. See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.4 (deps: SA14.2, SA14.3)        SA20 (no deps)                            SA21.1 (no deps)
-SA14.5 (no deps)                     SA21.2 (deps: SA21.1)                     SA22 (no deps)
-SA14.6 (no deps)                     SA24 (no deps)                            SA25 (no deps)
-SA23 (no deps)                       SA26 (no deps)                            SA27 (no deps)
-SA28 (no deps)                       SA29 (no deps)                            SA31 (no deps)
-                                     SA30 (no deps — land after SA29)          SA33 (no deps)
+SA14.4 (deps: SA14.2, SA14.3)        SA20 (no deps)                            SA22 (no deps)
+SA14.5 (no deps)                     SA21.2 (deps: SA21.1)                     SA25 (no deps)
+SA14.6 (no deps)                     SA24 (no deps)                            SA27 (no deps)
+SA23 (no deps)                       SA26 (no deps)                            SA31 (no deps)
+SA28 (no deps)                       SA29 (no deps)                            SA33 (no deps)
+                                     SA30 (no deps — land after SA29)
                                      SA32 (no deps)
 ```
 
@@ -155,10 +155,11 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
 
-- [ ] **SA21.1 — Add canonical client-IP resolution and a shared cache backend to generated settings.** `Tier 2 · Track 3 · deps: none`
-  Two related gaps in the generated project's settings: (a) no trusted-proxy client-IP convention, so `REMOTE_ADDR` is the Railway edge proxy's address, not the client's; (b) no `CACHES` backend, so DRF throttles and the blog rate limiter fall back to per-process `LocMemCache` — uncounted across workers/replicas and reset on every deploy. Add a `TRUSTED_PROXY_COUNT`/`USE_X_FORWARDED_FOR`-gated client-IP helper (or set DRF `NUM_PROXIES`) and a working shared-cache default (Redis on Railway, or `DatabaseCache` at minimum) wired into `DEFAULT_THROTTLE_CLASSES`.
-  *Files:* `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2`, `.../production.py.j2:186-195`.
+- [x] **SA21.1 — Add canonical client-IP resolution and a shared cache backend to generated settings.** `Tier 2 · Track 3 · deps: none`
+  Two related gaps in the generated project's settings: (a) no trusted-proxy client-IP convention, so `REMOTE_ADDR` is the Railway edge proxy's address, not the client's; (b) no `CACHES` backend, so DRF throttles and the blog rate limiter fall back to per-process `LocMemCache` — uncounted across workers/replicas and reset on every deploy. Added `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` settings (both `config()`-driven, defaults `False`/`0`), `get_client_ip(request)` helper in base.py, and `NUM_PROXIES` in the DRF `REST_FRAMEWORK` dict. Production overrides both defaults to `True`/`1` (environment-overridable). Activated the `CACHES` block in production.py with Django's built-in `RedisCache` when `REDIS_URL` is set, and `DatabaseCache` as a non-LocMem fallback. Added 16 focused template tests for presence, defaults, runtime proxy resolution, production overrides, cache backend type, and Python syntax validity. Single-host (no-proxy) deployments keep `REMOTE_ADDR` with no configuration change.
+  *Files:* `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2`, `.../production.py.j2`, `quickscale_core/tests/test_generator/test_templates.py`.
   *Acceptance:* a generated project has a resolvable canonical client-IP helper gated behind an explicit trusted-proxy setting, and a non-`LocMemCache` backend configured for production; single-host (no-proxy) deployments keep `REMOTE_ADDR` unless the setting is enabled.
+  *Findings:* No blockers. SA21.2 (Track 2) is now unblocked — the generator settings change (this task) is the sole prerequisite.
 
 #### Finding — `apply-force-wipes-before-generating` (`why →` [TA20](../others/tech-audit.md))
 

@@ -14,6 +14,11 @@ REQUIRED ENVIRONMENT VARIABLES:
 - RUNTIME_DATABASE_URL: Restricted NOSUPERUSER/NOBYPASSRLS role connection string; required for runtime serving
 - ALLOWED_HOSTS: Comma-separated list of allowed hostnames
 - SENTRY_DSN: (optional) Sentry error tracking DSN
+
+OPTIONAL ENVIRONMENT VARIABLES:
+- REDIS_URL: When set, enables Redis as the shared cache backend (recommended; standard on Railway)
+- USE_X_FORWARDED_FOR: Defaults to ``True`` in production; set to ``False`` for single-host
+- TRUSTED_PROXY_COUNT: Defaults to ``1``; the number of reverse proxies in front of the app
 """
 
 import sys
@@ -88,6 +93,56 @@ SECURE_HSTS_PRELOAD = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
+
+# Trusted-proxy client-IP resolution (overrides base defaults)
+#
+# Production deployments typically sit behind a reverse proxy (e.g.
+# Railway edge, Cloudflare).  Enable X-Forwarded-For resolution and
+# declare the number of trusted proxies so that :func:`get_client_ip`
+# and DRF throttles resolve the real client IP rather than the proxy's
+# internal address.
+#
+# Single-host (no-proxy) deployments can disable both settings in their
+# environment to keep ``REMOTE_ADDR`` behaviour.
+USE_X_FORWARDED_FOR = config("USE_X_FORWARDED_FOR", default=True, cast=bool)
+TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=1, cast=int)
+
+
+# Rebind client-IP resolution with production-aware globals so that
+# :func:`get_client_ip` reads the overridden values of
+# ``USE_X_FORWARDED_FOR`` and ``TRUSTED_PROXY_COUNT`` rather than the
+# base defaults.
+def get_client_ip(request: object) -> str:
+    """Return the canonical client IP address for *request*.
+
+    See the base :func:`get_client_ip` docstring for full semantics.
+    This rebind exists so that production defaults
+    (``USE_X_FORWARDED_FOR=True``, ``TRUSTED_PROXY_COUNT=1``) are
+    actually in effect at request time.
+    """
+    if not USE_X_FORWARDED_FOR or TRUSTED_PROXY_COUNT <= 0:
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+    x_forwarded_for: str = (
+        request.META.get("HTTP_X_FORWARDED_FOR", "")  # type: ignore[union-attr]
+    ).strip()
+    if not x_forwarded_for:
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+    ips = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
+    if len(ips) > TRUSTED_PROXY_COUNT:
+        return ips[-(TRUSTED_PROXY_COUNT + 1)]
+    # Chain shorter than the declared proxy count — fail closed to
+    # REMOTE_ADDR instead of trusting a potentially spoofed leftmost
+    # address.
+    return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+
+# Recompute DRF proxy setting after the override so that
+# ``NUM_PROXIES`` matches the production values of
+# ``USE_X_FORWARDED_FOR`` and ``TRUSTED_PROXY_COUNT``.
+REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else None  # noqa: F405
+
 
 # Database - PostgreSQL for production
 #
@@ -183,16 +238,34 @@ STORAGES["staticfiles"] = {  # noqa: F405
 # MEDIA_URL = config("MEDIA_URL", default="/media/")
 # MEDIA_ROOT = BASE_DIR / "media"  # noqa: F405
 
-# Cache configuration - Redis recommended for production
-# CACHES = {
-#     "default": {
-#         "BACKEND": "django_redis.cache.RedisCache",
-#         "LOCATION": config("REDIS_URL", default="redis://localhost:6379/1"),
-#         "OPTIONS": {
-#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-#         },
-#     }
-# }
+# Shared cache backend for production
+#
+# A shared (not per-process in-memory) cache is required so that DRF
+# throttles and per-user rate limits are enforced consistently across all
+# workers and replicas.  Redis is the primary backend when ``REDIS_URL``
+# is available (standard on Railway).  Falls back to Django's database-
+# backed cache which, while slower, still provides cross-process
+# coherence.
+#
+# To create the database cache table, run::
+#
+#     python manage.py createcachetable
+#
+_redis_url = config("REDIS_URL", default=None)
+if _redis_url:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": _redis_url,
+        },
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "django_cache_table",
+        },
+    }
 
 # Session backend - Redis for better performance (optional)
 # SESSION_ENGINE = "django.contrib.sessions.backends.cache"
