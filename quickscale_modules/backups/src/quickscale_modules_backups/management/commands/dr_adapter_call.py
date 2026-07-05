@@ -1,10 +1,10 @@
-"""Thin bridge to call DR adapter functions from within Django context.
+"""Thin bridge to call DR adapter functions from within Docker context.
 
 This is the *only* management command the CLI uses for DR operations —
 it replaces the previous protocol of one management command per DR
 operation.  The CLI passes the adapter function name and its keyword
-arguments as JSON; this command dispatches to the adapter and writes
-the JSON result to stdout.
+arguments as JSON via stdin (SA31); this command dispatches to the
+adapter and writes the JSON result to stdout.
 
 Management commands for admin/manual use (``backups_create``,
 ``backups_report``, etc.) remain as thin Django-facing surfaces and
@@ -14,6 +14,7 @@ are *not* affected by this bridge.
 from __future__ import annotations
 
 import json
+import sys
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -32,9 +33,38 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--args-json",
-            required=True,
-            help="JSON object of keyword arguments for the adapter function.",
+            required=False,
+            default=None,
+            help=(
+                "JSON object of keyword arguments (deprecated — prefer stdin). "
+                "When omitted, JSON is read from stdin."
+            ),
         )
+
+    def _read_kwargs(self, args_json: str | None) -> dict:  # type: ignore[type-arg]
+        """Read keyword arguments from ``--args-json`` or stdin."""
+        if args_json is not None:
+            try:
+                kwargs = json.loads(args_json)
+            except json.JSONDecodeError as exc:
+                raise CommandError(f"--args-json must be valid JSON: {exc}") from exc
+            if not isinstance(kwargs, dict):
+                raise CommandError("--args-json must be a JSON object.")
+            return kwargs
+
+        # Read from stdin (SA31 transport)
+        raw = sys.stdin.read()
+        if not raw.strip():
+            raise CommandError(
+                "No JSON input provided. Pipe JSON via stdin or use --args-json."
+            )
+        try:
+            kwargs = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise CommandError(f"stdin input must be valid JSON: {exc}") from exc
+        if not isinstance(kwargs, dict):
+            raise CommandError("stdin input must be a JSON object.")
+        return kwargs
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
         function_name = options["function_name"]
@@ -45,13 +75,7 @@ class Command(BaseCommand):
                 f"Available: {', '.join(sorted(ADAPTER_FUNCTIONS))}"
             )
 
-        try:
-            kwargs = json.loads(options["args_json"])
-        except json.JSONDecodeError as exc:
-            raise CommandError(f"--args-json must be valid JSON: {exc}") from exc
-
-        if not isinstance(kwargs, dict):
-            raise CommandError("--args-json must be a JSON object.")
+        kwargs = self._read_kwargs(options.get("args_json"))
 
         try:
             result = func(**kwargs)

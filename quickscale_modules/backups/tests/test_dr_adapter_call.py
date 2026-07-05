@@ -1,4 +1,11 @@
-"""Focused tests for the dr_adapter_call management command bridge."""
+"""Focused tests for the dr_adapter_call management command bridge.
+
+Note: SA31 stdin transport coverage is provided by the standalone tests
+at ``quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py``.
+This file requires a full Django app setup and is currently blocked by a
+pre-existing circular import between ``quickscale_core.runtime`` and
+``quickscale_modules_social.adapter``.
+"""
 
 from __future__ import annotations
 

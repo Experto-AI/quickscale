@@ -614,9 +614,10 @@ class TestRailwayCommand:
                                                 in batch_vars["ALLOWED_HOSTS"]
                                             )
 
-                                            # Verify this triggers only ONE deployment
+                                            # Verify the batch-set step explains that
+                                            # deploy is deferred to the next step
                                             assert (
-                                                "triggers ONE deployment"
+                                                "without triggering a deployment"
                                                 in result.output
                                             )
 
@@ -1085,8 +1086,12 @@ class TestRailwayCommand:
                                                 in result.output
                                             )
 
-    def test_railway_batch_variables_fallback_to_individual(self):
-        """Test railway command falls back to individual variable setting when batch fails."""
+    def test_railway_batch_variables_failure_hard_stops(self):
+        """Test railway command hard-stops when batch variable set fails (SA31).
+
+        CR-SA31-001: env var write failure must abort deployment instead of
+        continuing with insecure argv-style fallback.
+        """
         runner = CliRunner()
 
         with mock_preflight_checks():
@@ -1137,12 +1142,24 @@ class TestRailwayCommand:
 
                                             result = runner.invoke(railway)
 
-                                            assert result.exit_code == 0
+                                            assert result.exit_code == 1
                                             assert (
-                                                "Some environment variables could not be set"
+                                                "environment variables could not be set"
                                                 in result.output
                                             )
                                             assert "DEBUG" in result.output
+                                            assert "deployment aborted" in result.output
+                                            # Insecure argv-style suggestion must NOT appear
+                                            assert (
+                                                "--set KEY=VALUE" not in result.output
+                                            )
+                                            # Secure stdin alternative must be suggested
+                                            assert (
+                                                "variable set KEY --stdin"
+                                                in result.output
+                                            )
+                                            # Deploy step must NOT have been called
+                                            mock_deploy.assert_not_called()
 
     def test_railway_login_success(self):
         """Test railway command successfully authenticates when not logged in."""
