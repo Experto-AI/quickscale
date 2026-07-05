@@ -1,10 +1,42 @@
 """Shared pytest fixtures for Forms module tests"""
 
-import pytest
-from django.contrib.auth import get_user_model
-from rest_framework.test import APIClient
+import os
+import sys
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
-from quickscale_modules_forms.models import (
+import django
+import pytest
+from django.conf import settings
+
+# Configure Django before importing models
+if not settings.configured:
+    settings_path = Path(__file__).with_name("settings.py")
+    settings_module_name = "quickscale_modules_forms_test_settings"
+    settings_spec = spec_from_file_location(settings_module_name, settings_path)
+    if settings_spec is None or settings_spec.loader is None:
+        raise RuntimeError(f"Unable to load forms test settings from {settings_path}")
+    test_settings = module_from_spec(settings_spec)
+    sys.modules[settings_module_name] = test_settings
+    settings_spec.loader.exec_module(test_settings)
+
+    os.environ["DJANGO_SETTINGS_MODULE"] = settings_module_name
+    django.setup()
+
+
+@pytest.fixture(scope="session")
+def django_db_setup(django_db_blocker):
+    """Set up test database with migrations"""
+    from django.core.management import call_command
+
+    with django_db_blocker.unblock():
+        call_command("migrate", "--run-syncdb", verbosity=0)
+
+
+from django.contrib.auth import get_user_model  # noqa: E402
+from rest_framework.test import APIClient  # noqa: E402
+
+from quickscale_modules_forms.models import (  # noqa: E402
     Form,
     FormField,
     FormFieldValue,
