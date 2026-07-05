@@ -647,7 +647,7 @@ workflow coverage are aligned to it.
 | `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
 | `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
 
-**Roadmap context:** This foundation replaces the imperative `normalize_*` / `validate_*` functions and CLI contract files that historically duplicated per-module knowledge (seven hand-written contract files, the now-deleted `module_wiring_specs.py`, and `module_config.py`). Analytics (SA6 pilot) and listings (SA6.2) are fully migrated to declarative derivation, with an imperative-freeze guardrail preventing regression (SA6.3). Remaining modules migrate one at a time; see [arch-audit.md Finding 4](../../arch-audit.md#finding-4-per-module-contract-knowledge-is-still-fanned-across-6-hand-written-surfaces--and-the-duplicate-manifest-snapshots-already-drift) for the current fan-out state and drift risk across the unmigrated modules.
+**Roadmap context:** This foundation replaces the imperative `normalize_*` / `validate_*` functions and CLI contract files that historically duplicated per-module knowledge (seven hand-written contract files, the now-deleted `module_wiring_specs.py`, and `module_config.py`). Analytics (SA6 pilot) and listings (SA6.2) are fully migrated to declarative derivation, with an imperative-freeze guardrail preventing regression (SA6.3). Remaining modules migrate one at a time; see [arch-audit.md Finding 4](../others/arch-audit.md#finding-4-per-module-contract-knowledge-is-still-fanned-across-6-hand-written-surfaces--and-the-duplicate-manifest-snapshots-already-drift) for the current fan-out state and drift risk across the unmigrated modules.
 
 **Constraints:**
 - ✅ Derivation types are frozen dataclasses (immutable after construction)
@@ -1076,7 +1076,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` and `materialize_authoritative_state()`; `remove_command.py:_load_legacy_tracking()` and `_record_mutation_snapshots()` (legacy `config.yml` / `file_hashes.yml` M2 compatibility paths) | One-time M2 compatibility window: pre-M2 projects may still depend on legacy `config.yml` / `file_hashes.yml` data while consolidated `state.yml` becomes authoritative. `project_state.py` logs-and-skips stale legacy import failures so consolidation is not blocked; `remove_command.py` still consults and snapshots legacy `config.yml` so rollback-safe module removal can preserve compatibility tracking during the same sunset window. Does NOT cover `_load_managed_file_records_for_drift()` (SA18.6) — its legacy `file_hashes.yml` fallback is a drift-detection design choice, not an M2 compatibility path. | Remove when the M2 state format has been deployed for two full releases with no known pre-M2 projects in active use. |
 
-**Known violations:** tracked in [tech-audit.md](../../tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
+**Known violations:** tracked in [tech-audit.md](../others/tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
 
 ---
 
@@ -1129,7 +1129,7 @@ QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supab
 **Operator debug mode — shipped VIEW-AS contract:**
 Django superusers may activate a debug session that scopes the entire request to a selected organization so they can see the app exactly as that org's members see it. The shipped surface uses the session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when the key is present; the admin surface activates or exits the session; a debug banner renders while active; and every activation is audit-logged. No BYPASSRLS — the debug session runs under the same restricted runtime role as all other tenant paths, so RLS remains fully enforced.
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../../arch-audit.md) (current risk posture)
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../others/arch-audit.md) (current risk posture)
 
 ---
 

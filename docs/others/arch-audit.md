@@ -3,7 +3,7 @@
 > This file is regenerated on each autopsy run to state **present reality for planning**: the
 > current orientation, the open findings in full detail, and a curated watchlist. Closed findings
 > exist only as dated lines in the **Reconciliation log** at the bottom (closeout detail lives in
-> [CHANGELOG.md](CHANGELOG.md)); version control preserves prior full text. Finding IDs are stable
+> [CHANGELOG.md](../../CHANGELOG.md)); version control preserves prior full text. Finding IDs are stable
 > across runs.
 
 ---
