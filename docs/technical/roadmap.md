@@ -47,25 +47,25 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.4 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs), SA22 (2026-07-05 — same-filesystem staging + backup/swap/rollback for `apply --force`). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.4 (2026-07-05 — TenantModelAdmin base + CRM/blog/forms/listings/billing admin ports + NOBYPASSRLS default for module test suites), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05 — module-side fail-hard + optional-dependency hardening + deprecated catalog delegates removed), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05 — start.sh secret values removed from deploy logs), SA22 (2026-07-05 — same-filesystem staging + backup/swap/rollback for `apply --force`), SA25 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.5 complete (archived); SA14.6, SA23, and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA25, SA27, SA31, and SA33 are ready (SA22 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-05):** Track 2 SA20 is in-progress/blocked by CR-SA20-005. One cross-track dependency just closed: SA21.2 (Track 2) was waiting on SA21.1 (Track 3), and SA21.1 is now complete. Track 1: Finding `operator-read-path-undefined` (SA14) — SA14.1–SA14.5 complete (archived); SA14.6, SA23, and SA28 are ready. Track 2: SA20 is in-progress/blocked; SA21.2, SA24, SA26, SA29, SA30, and SA32 are ready. Track 3: SA27, SA31, and SA33 are ready (SA22 and SA25 closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      Track 3 (core/CLI plumbing)
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
-SA14.5 (no deps)                     SA20 (no deps)                            SA25 (no deps)
-SA14.6 (no deps)                     SA21.2 (deps: SA21.1)                     SA27 (no deps)
-SA23 (no deps)                       SA24 (no deps)                            SA31 (no deps)
-SA28 (no deps)                       SA26 (no deps)                            SA33 (no deps)
+SA14.6 (no deps)                     SA20 (no deps)                            SA27 (no deps)
+SA23 (no deps)                       SA21.2 (deps: SA21.1)                     SA31 (no deps)
+SA28 (no deps)                       SA24 (no deps)                            SA33 (no deps)
+                                     SA26 (no deps)
                                      SA29 (no deps)
                                      SA30 (no deps — land after SA29)
                                      SA32 (no deps)
 ```
 
-Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to SA29 but is within Track 2. SA22 (closed) and remaining Track 3 items are now clear to proceed.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to SA29 but is within Track 2. SA22 and SA25 (closed); remaining Track 3 items are now clear to proceed.
 
 ### Track 1 — Tenant-context surface
 
@@ -193,10 +193,11 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3). SA30 relates to S
 
 #### Finding — `committed-coverage-artifacts` (`why →` [TA23](../others/tech-audit.md))
 
-- [ ] **SA25 — Untrack build/coverage artifacts and gitignore them.** `Tier 1 · Track 3 · deps: none`
-  `coverage.json` and `pytest_cov_log.txt` are tracked in git; `htmlcov/` is present on disk. Remove from tracking and add patterns to `.gitignore`.
+- [x] **SA25 — Untrack build/coverage artifacts and gitignore them.** `Tier 1 · Track 3 · deps: none`
+  `coverage.json` and `pytest_cov_log.txt` are tracked in git; `htmlcov/` is present on disk. Already gitignored (both patterns present in `.gitignore` lines 231–232); removed from tracking via `git rm --cached`.
   *Files:* repo root `.gitignore`, `coverage.json`, `pytest_cov_log.txt`.
   *Acceptance:* `git status` after a fresh test run shows no untracked-artifact noise; the artifacts no longer appear in `git ls-files`.
+  *Findings/blockers:* The `.gitignore` patterns already existed (no change needed there). The only remaining work was `git rm --cached` to stop tracking the already-committed files while preserving the local ignored copies. `htmlcov/` is also gitignored. No blockers.
 
 #### Finding — `module-option-validation-not-enforced-at-apply` (`why →` [TA26](../others/tech-audit.md))
 
