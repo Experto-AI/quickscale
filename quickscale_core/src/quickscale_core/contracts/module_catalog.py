@@ -125,68 +125,6 @@ def get_module_entry(module_name: str) -> ModuleCatalogEntry | None:
     return None
 
 
-def get_module_names(*, include_experimental: bool = True) -> list[str]:
-    """Return module names from the catalog.
-
-    .. note::
-       Deprecated since D2.  For the authoritative list of shipped modules,
-       prefer :func:`get_discovered_module_names`.  This function is kept
-       for backward compatibility only — it delegates to manifest-backed
-       discovery for shipped modules and supplements with static-catalog
-       experimental entries when requested.
-
-    Args:
-        include_experimental: If ``True`` (default), includes experimental
-            (non-ready) modules in the result.
-
-    Returns:
-        Sorted list of module names.
-    """
-    discovered = get_discovered_module_names()
-    if include_experimental:
-        experimental = [
-            entry.name
-            for entry in MODULE_CATALOG
-            if not entry.ready and entry.name not in discovered
-        ]
-        return sorted(set(discovered) | set(experimental))
-    return discovered
-
-
-def get_module_entries(
-    *, include_experimental: bool = False
-) -> list[ModuleCatalogEntry]:
-    """Return catalog entries filtered by readiness/experimental visibility.
-
-    .. note::
-       Deprecated since D2.  For the authoritative list of shipped modules,
-       prefer :func:`get_discovered_module_entries`.  This function is kept
-       for backward compatibility only — it delegates to manifest-backed
-       discovery for shipped entries and supplements with static-catalog
-       experimental entries when requested.
-
-    Args:
-        include_experimental: If ``True``, includes experimental
-            (non-ready) entries.
-
-    Returns:
-        List of :class:`ModuleCatalogEntry` instances.
-    """
-    discovered = get_discovered_module_entries()
-    if include_experimental:
-        discovered_names = {entry.name for entry in discovered}
-        experimental = [
-            entry
-            for entry in MODULE_CATALOG
-            if not entry.ready and entry.name not in discovered_names
-        ]
-        return sorted(
-            discovered + experimental,
-            key=lambda e: e.name,
-        )
-    return discovered
-
-
 # ---------------------------------------------------------------------------
 # Manifest-backed discovery (T2.3 Phase 2+)
 # ---------------------------------------------------------------------------
@@ -279,7 +217,10 @@ def get_module_readiness_reason(module_name: str) -> str | None:
 
     Returns:
         A human-readable reason string if the module is not ready, or
-        ``None`` if the module is ready or unknown.
+        ``None`` if the module is ready.
+
+    Raises:
+        ValueError: If the module name is not recognized.
     """
     # Fail-closed check for known placeholder names outside the catalog.
     placeholder_reason = get_placeholder_rejection_reason(module_name)
@@ -288,7 +229,12 @@ def get_module_readiness_reason(module_name: str) -> str | None:
 
     # Fall back to the static catalog.
     entry = get_module_entry(module_name)
-    if entry is None or entry.ready:
+    if entry is None:
+        raise ValueError(
+            f"Unknown module name '{module_name}'. "
+            "Expected a known QuickScale module name."
+        )
+    if entry.ready:
         return None
 
     module_display_name = module_name.replace("_", " ").title()
