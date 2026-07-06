@@ -179,6 +179,17 @@ class FormSubmissionCreateSerializer(serializers.Serializer):
         for field in active_fields:
             submitted_value = data.get(field.name, "")
 
+            # Public forms must only accept text values for user-controlled
+            # fields. DRF JSON payloads can carry non-string primitives.
+            if submitted_value is None:
+                if field.required:
+                    errors[field.name] = ["This field is required."]
+                continue
+
+            if not isinstance(submitted_value, str):
+                errors[field.name] = ["This field must be text."]
+                continue
+
             # Check required fields
             if field.required and not submitted_value:
                 errors[field.name] = ["This field is required."]
