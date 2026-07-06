@@ -60,9 +60,9 @@ Track 1 (tenant-context surface)          Track 2 (module contracts & settings) 
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
 SA39 (deps: none)                         SA43 (deps: none)                           SA34 (deps: none)
 SA45 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA36 (deps: none) ─────┐
-SA35 (deps: none)                         SA43 (deps: none)                           SA46 (deps: none)      │
-SA41 (deps: none)                         SA37 (deps: SA43)                           SA44 (deps: none)      │
-SA47 (deps: SA35, SA41 — soft sequence)   SA38 (deps: SA43)                           SA42 (deps: none)      │
+SA35 (deps: none)                         SA37 (deps: SA43)                           SA46 (deps: none)      │
+SA41 (deps: none)                         SA38 (deps: SA43)                           SA44 (deps: none)      │
+SA47 (deps: SA35, SA41 — soft sequence)                                               SA42 (deps: none)      │
                                                 ▲                                                            │
                                                 └───────────────────── * cross-track: SA36 → SA21.2 ─────────┘
 ```
