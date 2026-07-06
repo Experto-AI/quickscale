@@ -206,11 +206,17 @@ class FormSubmissionCreateSerializer(serializers.Serializer):
                     continue
 
             # Apply validation_rules
-            validator = make_field_validator(field)
             try:
+                validator = make_field_validator(field)
                 validator(submitted_value)
             except serializers.ValidationError as e:
-                errors[field.name] = list(e.detail)
+                errors[field.name] = (
+                    list(e.detail)
+                    if isinstance(e.detail, list)
+                    else [str(error) for error in e.detail]
+                    if isinstance(e.detail, tuple)
+                    else [str(e.detail)]
+                )
 
         if errors:
             raise serializers.ValidationError(errors)
