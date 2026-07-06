@@ -51,7 +51,7 @@ git merge --no-ff wt-track{N}
 
 > **Triage note (2026-07-06):** the previously-deferred triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41 new/narrowed this pass) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5) is done. SA34–SA47 below are the resulting fix items, each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred, matching the source docs' own "recommended first stage" framing). One doc-drift note: tech-audit's summary table still lists **TA32 as open**, but the code (`listings/views.py`, `storage/helpers.py`) already raises `ImproperlyConfigured` per SA30 — verified directly. Treating TA32 as closed (per roadmap's existing SA30 entry); no new item created for it. tech-audit.md itself is left untouched by this pass — only roadmap.md is updated here.
 
-> **Track status (2026-07-06):** Track 1 — **4 open items** (SA35, SA41, SA45, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **5 open items** (SA34, SA36, SA42, SA44, SA46). SA39 completed.
+> **Track status (2026-07-06):** Track 1 — **3 open items** (SA35, SA41, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **5 open items** (SA34, SA36, SA42, SA44, SA46). SA39 completed.
 
 ### Dependency & parallelization overview
 
@@ -59,11 +59,11 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
 SA39 (deps: none)                         SA43 (deps: none)                           SA34 (deps: none)
-SA45 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA36 (deps: none) ─────┐
-SA35 (deps: none)                         SA37 (deps: SA43)                           SA46 (deps: none)      │
-SA41 (deps: none)                         SA38 (deps: SA43)                           SA44 (deps: none)      │
-SA47 (deps: SA35, SA41 — soft sequence)                                               SA42 (deps: none)      │
-                                                ▲                                                            │
+SA35 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA36 (deps: none) ─────┐
+SA41 (deps: none)                         SA37 (deps: SA43)                           SA46 (deps: none)      │
+SA47 (deps: SA35, SA41 — soft sequence)     SA38 (deps: SA43)                           SA44 (deps: none)      │
+                                                                          SA42 (deps: none)      │
+                                                 ▲                                                            │
                                                 └───────────────────── * cross-track: SA36 → SA21.2 ─────────┘
 ```
 
@@ -80,7 +80,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `org-model-universe-hand-enumerated` (`why →` [arch-audit.md Finding 4](../others/arch-audit.md), first step only)
 
-- [ ] **SA45 — Derive the purge-spec completeness test from the tenant-classification universe instead of a second hand-written model list.** `Tier 1 · Track 1 · deps: none`
+- [x] **SA45 — Derive the purge-spec completeness test from the tenant-classification universe instead of a second hand-written model list.** `Tier 1 · Track 1 · deps: none`
   `purge_organization`'s `_DELETE_SPECS` registry is validated by a test whose `expected_models` is a *third* hand-written copy of the same universe — it derives nothing, so a new tenant model fails neither the registry nor the test. Compute the test's expected model set from the marker-derived tenant tables (org-FK-bearing concrete models) instead. Full derivation of the purge plan itself (arch-audit Option 2) is out of scope — this is the cheap completeness-gate step only.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py:64-212`, `quickscale_modules/orgs/tests/test_management_commands.py:1281-1332`.
   *Acceptance:* the completeness test computes its expected model set from the tenant-classification universe rather than a hand-written literal; a new tenant model added without a matching `_DELETE_SPECS` entry now fails CI instead of passing silently.
