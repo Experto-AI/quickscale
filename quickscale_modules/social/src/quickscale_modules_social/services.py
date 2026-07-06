@@ -180,7 +180,12 @@ class SocialEmbedRecord:
 
 
 def invalidate_social_cache() -> None:
-    """Clear cached social payloads after admin or service mutations."""
+    """Clear only the bare social cache keys.
+
+    Compatibility helper retained for direct imports, but not safe as a
+    tenant-scoped bulk invalidation API because tenant reads use org-partitioned
+    cache keys.
+    """
     cache.delete_many([SOCIAL_LINKS_CACHE_KEY, SOCIAL_EMBEDS_CACHE_KEY])
 
 
@@ -504,12 +509,14 @@ def build_social_embeds_payload() -> dict[str, object]:
     )
 
 
+# ``invalidate_social_cache()`` intentionally stays out of ``__all__``: it only
+# clears bare keys and is unsafe to advertise as a tenant-aware bulk
+# invalidation API.
 __all__ = [
     "SocialEmbedRecord",
     "SocialLinkRecord",
     "build_social_embeds_payload",
     "build_social_link_tree_payload",
-    "invalidate_social_cache",
     "list_published_social_embeds",
     "list_published_social_links",
 ]
