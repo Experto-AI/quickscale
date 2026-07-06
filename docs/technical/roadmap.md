@@ -51,20 +51,19 @@ git merge --no-ff wt-track{N}
 
 > **Triage note (2026-07-06):** the previously-deferred triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41 new/narrowed this pass) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5) is done. SA34–SA47 below are the resulting fix items, each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred, matching the source docs' own "recommended first stage" framing). One doc-drift note: tech-audit's summary table still lists **TA32 as open**, but the code (`listings/views.py`, `storage/helpers.py`) already raises `ImproperlyConfigured` per SA30 — verified directly. Treating TA32 as closed (per roadmap's existing SA30 entry); no new item created for it. tech-audit.md itself is left untouched by this pass — only roadmap.md is updated here.
 
-> **Track status (2026-07-06):** Track 1 — **3 open items** (SA35, SA41, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **5 open items** (SA34, SA36, SA42, SA44, SA46). SA39 completed.
+> **Track status (2026-07-06):** Track 1 — **3 open items** (SA35, SA41, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **4 open items** (SA36, SA42, SA44, SA46). SA34 completed.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
-SA39 (deps: none)                         SA43 (deps: none)                           SA34 (deps: none)
-SA35 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA36 (deps: none) ─────┐
-SA41 (deps: none)                         SA37 (deps: SA43)                           SA46 (deps: none)      │
-SA47 (deps: SA35, SA41 — soft sequence)     SA38 (deps: SA43)                           SA44 (deps: none)      │
-                                                                          SA42 (deps: none)      │
-                                                 ▲                                                            │
-                                                └───────────────────── * cross-track: SA36 → SA21.2 ─────────┘
+SA39 (deps: none)                         SA43 (deps: none)                           SA36 (deps: none)
+SA35 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA46 (deps: none)      │
+SA41 (deps: none)                         SA37 (deps: SA43)                           SA44 (deps: none)      │
+SA47 (deps: SA35, SA41 — soft sequence)   SA38 (deps: SA43)                           SA42 (deps: none)      │
+                                                 ▲                                                        │
+                                                 └───────────────────── * cross-track: SA36 → SA21.2 ─────────
 ```
 
 Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the generated `get_client_ip()` helper until **SA36** (Track 3) fixes its off-by-one — otherwise SA21.2 ships the attacker-controlled variant of TA18 that TA35 warns about. This mirrors the existing SA21.1 → SA21.2 pattern (settings landed by Track 3, consumed by Track 2). All other listed deps are same-track, same-file sequencing (noted per item below) rather than hard blockers, since each track's worktree processes one item at a time anyway. Rebalancing history (2026-07-05/06, preserved for context): SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3 to restore 3/3/2 parallelism when Track 2 was carrying six open items; SA26 then moved Track 2 → Track 3 for 1/2/1 parallelism. All of those items are now complete; this triage pass restores 5/5/5 parallelism by assigning SA34–SA47 across the three tracks.
