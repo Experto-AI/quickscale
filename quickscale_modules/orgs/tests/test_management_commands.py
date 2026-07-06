@@ -1287,11 +1287,25 @@ def test_purge_delete_specs_are_complete() -> None:
     from quickscale_modules_orgs.management.commands.purge_organization import (
         _DELETE_SPECS,
     )
+    from quickscale_modules_orgs.tenancy import (
+        get_tenant_models,
+        has_organization_id_field,
+    )
 
-    app_labels = {str(spec["app_label"]) for spec in _DELETE_SPECS}
-    model_names = {str(spec["model_name"]) for spec in _DELETE_SPECS}
+    actual_specs = {
+        (str(spec["app_label"]), str(spec["model_name"])) for spec in _DELETE_SPECS
+    }
 
-    # Verify every owned module is represented in the specs.
+    expected_models = {
+        (model._meta.app_label, model.__name__)
+        for model in get_tenant_models()
+        if model._meta.app_label != "quickscale_modules_orgs"
+        if model._meta.app_label.startswith("quickscale_modules_")
+        and not model._meta.abstract
+        and has_organization_id_field(model)
+    }
+
+    # Verify every owned module model with an organization FK is represented.
     for expected_app in [
         "quickscale_modules_social",
         "quickscale_modules_forms",
@@ -1300,36 +1314,20 @@ def test_purge_delete_specs_are_complete() -> None:
         "quickscale_modules_crm",
         "quickscale_modules_billing",
     ]:
-        assert expected_app in app_labels, (
-            f"Missing delete spec entry for {expected_app}"
+        assert expected_app in {a for a, _ in actual_specs}, (
+            f"Missing delete spec app-label entry for {expected_app}"
         )
 
-    # Verify key model entries exist.
-    expected_models = {
-        "SocialLink",
-        "SocialEmbed",
-        "FormFieldValue",
-        "FormField",
-        "FormSubmission",
-        "Form",
-        "Listing",
-        "Post",
-        "Category",
-        "Tag",
-        "BlogMediaAsset",
-        "DealNote",
-        "ContactNote",
-        "Deal",
-        "Contact",
-        "Company",
-        "Stage",
-        "Tag",  # CRM Tag
-        "CreditTransaction",
-        "Subscription",
-        "CreditBalance",
-    }
-    for model_name in expected_models:
-        assert model_name in model_names, f"Missing delete spec entry for {model_name}"
+    for expected_model in expected_models:
+        assert expected_model in actual_specs, (
+            f"Missing delete spec entry for {expected_model[0]}.{expected_model[1]}"
+        )
+
+    # Keep the spec set aligned with the same tenant-typing universe.
+    assert actual_specs == expected_models, (
+        "Delete spec set must match tenant-classification-derived org models "
+        "with direct organization FK"
+    )
 
     # Verify CRM delete ordering: DealNote before Deal before Stage.
     deal_note_idx = next(
