@@ -583,13 +583,24 @@ def _get_operator_access() -> str:
     Returns ``''`` (empty string) on non-PostgreSQL databases or when
     the GUC is at its default (unset) value.
 
+    Raises :class:`django.core.exceptions.ImproperlyConfigured` when
+    called on PostgreSQL outside an active ``transaction.atomic()``
+    block, because ``current_setting`` reads would see session-level
+    state rather than transaction-scoped GUC values (SA39).
+
     Used by :func:`operator_access` to save/restore the prior GUC for
     nesting safety (CR-SA14.5-002).
     """
+    from django.core.exceptions import ImproperlyConfigured
     from django.db import connection
 
     if connection.vendor != "postgresql":
         return ""
+    if not connection.in_atomic_block:
+        raise ImproperlyConfigured(
+            "app.operator_access GUC cannot be read outside an "
+            "active transaction.atomic() block on PostgreSQL."
+        )
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT COALESCE(NULLIF(current_setting(%s, true), ''), '')",
@@ -605,15 +616,25 @@ def _set_operator_access(value: str) -> None:
     Transaction-scoped — must be called inside an active
     ``transaction.atomic()`` block.
 
+    Raises :class:`django.core.exceptions.ImproperlyConfigured` when
+    called on PostgreSQL outside an active ``transaction.atomic()``
+    block, because ``SET LOCAL`` would be a silent no-op (SA39).
+
     No-op on non-PostgreSQL databases.
 
     Args:
         value: ``'on'`` or ``''`` (empty string to clear).
     """
+    from django.core.exceptions import ImproperlyConfigured
     from django.db import connection
 
     if connection.vendor != "postgresql":
         return
+    if not connection.in_atomic_block:
+        raise ImproperlyConfigured(
+            "app.operator_access GUC cannot be set outside an "
+            "active transaction.atomic() block on PostgreSQL."
+        )
     with connection.cursor() as cursor:
         cursor.execute(f"SET LOCAL {_OPERATOR_ACCESS_GUC} = %s", [value])
 

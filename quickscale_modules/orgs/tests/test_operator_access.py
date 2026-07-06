@@ -18,6 +18,7 @@ from collections.abc import Generator
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 
 from quickscale_modules_orgs.tenancy import (
     TENANT_TABLE_REGISTRY,
@@ -43,6 +44,7 @@ class TestOperatorAccessGucLifecycle:
         patcher = patch("django.db.connection")
         mock_conn = patcher.start()
         mock_conn.vendor = "postgresql"
+        mock_conn.in_atomic_block = True
         # _get_operator_access() is now called on entry (CR-SA14.5-002
         # nesting-safety save).  Configure the mock cursor.fetchone() to
         # return the default empty GUC value.
@@ -57,6 +59,7 @@ class TestOperatorAccessGucLifecycle:
         fetchone configured for ``_get_operator_access()``."""
         conn = MagicMock()
         conn.vendor = "postgresql"
+        conn.in_atomic_block = True
         conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("",)
         return conn
 
@@ -210,6 +213,7 @@ class TestOperatorAccessAuditLogging:
         patcher = patch("django.db.connection")
         mock_conn = patcher.start()
         mock_conn.vendor = "postgresql"
+        mock_conn.in_atomic_block = True
         mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
             "",
         )
@@ -221,6 +225,7 @@ class TestOperatorAccessAuditLogging:
         with patch("quickscale_modules_orgs.current_org.logger") as mock_logger:
             with patch("django.db.connection") as mock_conn:
                 mock_conn.vendor = "postgresql"
+                mock_conn.in_atomic_block = True
                 mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                     "",
                 )
@@ -235,6 +240,7 @@ class TestOperatorAccessAuditLogging:
         with patch("quickscale_modules_orgs.current_org.logger") as mock_logger:
             with patch("django.db.connection") as mock_conn:
                 mock_conn.vendor = "postgresql"
+                mock_conn.in_atomic_block = True
                 mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                     "",
                 )
@@ -250,6 +256,7 @@ class TestOperatorAccessAuditLogging:
         with patch("quickscale_modules_orgs.current_org.logger") as mock_logger:
             with patch("django.db.connection") as mock_conn:
                 mock_conn.vendor = "postgresql"
+                mock_conn.in_atomic_block = True
                 mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                     "",
                 )
@@ -276,6 +283,7 @@ class TestOperatorAccessEdgeCases:
         patcher = patch("django.db.connection")
         mock_conn = patcher.start()
         mock_conn.vendor = "postgresql"
+        mock_conn.in_atomic_block = True
         mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
             "",
         )
@@ -286,6 +294,7 @@ class TestOperatorAccessEdgeCases:
         """``reason`` is a required keyword argument."""
         with patch("django.db.connection") as mock_conn:
             mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
             mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                 "",
             )
@@ -297,6 +306,7 @@ class TestOperatorAccessEdgeCases:
         """Empty string reason does not cause issues."""
         with patch("django.db.connection") as mock_conn:
             mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
             mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                 "",
             )
@@ -307,6 +317,7 @@ class TestOperatorAccessEdgeCases:
         """Long reason strings are handled correctly."""
         with patch("django.db.connection") as mock_conn:
             mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
             mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                 "",
             )
@@ -758,6 +769,7 @@ class TestGetOperatorAccess:
 
         with patch("django.db.connection") as mock_conn:
             mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
             cursor = mock_conn.cursor.return_value.__enter__.return_value
             cursor.fetchone.return_value = ("",)
             result = _get_operator_access()
@@ -770,6 +782,7 @@ class TestGetOperatorAccess:
 
         with patch("django.db.connection") as mock_conn:
             mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
             cursor = mock_conn.cursor.return_value.__enter__.return_value
             cursor.fetchone.return_value = ("on",)
             result = _get_operator_access()
@@ -781,8 +794,121 @@ class TestGetOperatorAccess:
 
         with patch("django.db.connection") as mock_conn:
             mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
             cursor = mock_conn.cursor.return_value.__enter__.return_value
             cursor.fetchone.side_effect = Exception("DB error")
             # The exception is not caught, so it should propagate.
             with pytest.raises(Exception, match="DB error"):
                 _get_operator_access()
+
+
+# =========================================================================
+# SA39 — atomic guard regression tests
+# =========================================================================
+
+
+class TestOperatorAccessAtomicGuard:
+    """``_get_operator_access`` and ``_set_operator_access`` raise
+    ``ImproperlyConfigured`` on PostgreSQL when called outside an active
+    ``transaction.atomic()`` block (SA39)."""
+
+    # -- _get_operator_access outside atomic -------------------------------
+
+    def test_get_raises_outside_atomic(self) -> None:
+        """``_get_operator_access()`` raises ``ImproperlyConfigured`` on
+        PostgreSQL when ``connection.in_atomic_block`` is ``False``."""
+        from quickscale_modules_orgs.current_org import _get_operator_access
+
+        with patch("django.db.connection") as mock_conn:
+            mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = False
+
+            with pytest.raises(ImproperlyConfigured) as exc_info:
+                _get_operator_access()
+
+            msg = str(exc_info.value)
+            assert "app.operator_access GUC cannot be read" in msg
+            assert "transaction.atomic()" in msg
+
+    def test_get_passes_inside_atomic(self) -> None:
+        """``_get_operator_access()`` succeeds on PostgreSQL when
+        ``connection.in_atomic_block`` is ``True``."""
+        from quickscale_modules_orgs.current_org import _get_operator_access
+
+        with patch("django.db.connection") as mock_conn:
+            mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
+            cursor = mock_conn.cursor.return_value.__enter__.return_value
+            cursor.fetchone.return_value = ("",)
+
+            result = _get_operator_access()
+            assert result == ""
+
+    def test_get_skips_atomic_check_on_sqlite(self) -> None:
+        """``_get_operator_access()`` does not check atomic on non-PostgreSQL."""
+        from quickscale_modules_orgs.current_org import _get_operator_access
+
+        with patch("django.db.connection") as mock_conn:
+            mock_conn.vendor = "sqlite"
+            # in_atomic_block is not set — would AttributeError if accessed.
+            result = _get_operator_access()
+            assert result == ""
+
+    # -- _set_operator_access outside atomic -------------------------------
+
+    def test_set_raises_outside_atomic(self) -> None:
+        """``_set_operator_access()`` raises ``ImproperlyConfigured`` on
+        PostgreSQL when ``connection.in_atomic_block`` is ``False``."""
+        from quickscale_modules_orgs.current_org import _set_operator_access
+
+        with patch("django.db.connection") as mock_conn:
+            mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = False
+
+            with pytest.raises(ImproperlyConfigured) as exc_info:
+                _set_operator_access("on")
+
+            msg = str(exc_info.value)
+            assert "app.operator_access GUC cannot be set" in msg
+            assert "transaction.atomic()" in msg
+
+    def test_set_passes_inside_atomic(self) -> None:
+        """``_set_operator_access()`` succeeds on PostgreSQL when
+        ``connection.in_atomic_block`` is ``True``."""
+        from quickscale_modules_orgs.current_org import _set_operator_access
+
+        with patch("django.db.connection") as mock_conn:
+            mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = True
+            cursor = mock_conn.cursor.return_value.__enter__.return_value
+
+            _set_operator_access("on")
+            cursor.execute.assert_called_once_with(
+                "SET LOCAL app.operator_access = %s", ["on"]
+            )
+
+    def test_set_skips_atomic_check_on_sqlite(self) -> None:
+        """``_set_operator_access()`` does not check atomic on non-PostgreSQL."""
+        from quickscale_modules_orgs.current_org import _set_operator_access
+
+        with patch("django.db.connection") as mock_conn:
+            mock_conn.vendor = "sqlite"
+            # in_atomic_block is not set — would AttributeError if accessed.
+            _set_operator_access("on")
+
+    # -- operator_access() context manager outside atomic ------------------
+
+    def test_context_manager_raises_outside_atomic(self) -> None:
+        """``operator_access()`` raises ``ImproperlyConfigured`` when
+        called on PostgreSQL outside an active ``transaction.atomic()``."""
+        with patch("django.db.connection") as mock_conn:
+            mock_conn.vendor = "postgresql"
+            mock_conn.in_atomic_block = False
+
+            with pytest.raises(ImproperlyConfigured) as exc_info:
+                with operator_access(reason="outside-atomic"):
+                    pass  # pragma: no cover
+
+            msg = str(exc_info.value)
+            assert "app.operator_access GUC cannot be read" in msg
+            assert "transaction.atomic()" in msg
