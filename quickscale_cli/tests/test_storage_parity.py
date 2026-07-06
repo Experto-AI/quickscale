@@ -1,9 +1,10 @@
 """Parity/regression tests for the manifest-driven storage option-resolution path.
 
-These tests encode the *legacy* ``_storage_wiring`` and ``_normalize_media_url``
-behaviour as gold expectations and verify that the manifest-driven replacement
-(``storage_manifest.py``) produces identical results for every public entry
-point that belongs to the B-phase adapter scope.
+These tests encode the SA29 storage credential indirection contract
+(``access_key_id_env_var`` / ``secret_access_key_env_var`` instead of
+literal ``access_key_id`` / ``secret_access_key``) as gold expectations
+and verify that the manifest-driven replacement produces correct results
+for every public entry point that belongs to the B-phase adapter scope.
 
 B-phase scope (this file):
 * Default option values
@@ -18,7 +19,7 @@ C11 scope (deferred, NOT tested here):
 * Nested STORAGES / AWS_* wiring for s3 / r2 backends
 
 The gold values below were recovered from the storage ``module.yml`` manifest
-and the ``storage_manifest.py`` adapter.
+and the SA29-env-var adapter.
 """
 
 from __future__ import annotations
@@ -28,15 +29,19 @@ from typing import Any
 import pytest
 
 from quickscale_core.contracts.module_options import (
+    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_STORAGE_BACKEND,
     DEFAULT_STORAGE_MEDIA_URL,
     DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED,
     DEFAULT_STORAGE_PUBLIC_BASE_URL,
+    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     STORAGE_BACKEND_LOCAL,
     STORAGE_BACKEND_R2,
     STORAGE_BACKEND_S3,
     STORAGE_BACKENDS,
     STORAGE_MODULE_OPTION_KEYS,
+    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
 )
 from quickscale_core.contracts.resolvers import (
     default_storage_module_options,
@@ -59,8 +64,8 @@ _LEGACY_DEFAULTS: dict[str, Any] = {
     "bucket_name": "",
     "endpoint_url": "",
     "region_name": "",
-    "access_key_id": "",
-    "secret_access_key": "",
+    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
     "default_acl": "",
     "querystring_auth": False,
     "private_media_enabled": False,
@@ -109,17 +114,26 @@ class TestDefaultsParity:
         defaults = default_storage_module_options()
         assert defaults["querystring_auth"] is False
 
-    def test_default_cloud_fields_are_empty_strings(self) -> None:
+    def test_default_cloud_string_keys_are_empty_strings(self) -> None:
         defaults = default_storage_module_options()
         for key in (
             "bucket_name",
             "endpoint_url",
             "region_name",
-            "access_key_id",
-            "secret_access_key",
             "default_acl",
         ):
             assert defaults[key] == "", f"Expected empty string for {key}"
+
+    def test_default_env_var_keys_have_default_names(self) -> None:
+        defaults = default_storage_module_options()
+        assert (
+            defaults[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION]
+            == DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
+        )
+        assert (
+            defaults[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
+            == DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
+        )
 
 
 # ===========================================================================
@@ -155,8 +169,8 @@ class TestConstantsParity:
                 "bucket_name",
                 "endpoint_url",
                 "region_name",
-                "access_key_id",
-                "secret_access_key",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
                 "default_acl",
                 "querystring_auth",
                 "private_media_enabled",
@@ -322,17 +336,26 @@ class TestResolutionParity:
         resolved = resolve_storage_module_options({"backend": "s3"})
         assert set(resolved.keys()) == set(_LEGACY_DEFAULTS.keys())
 
-    def test_cloud_fields_default_to_empty_string_in_resolved(self) -> None:
+    def test_cloud_string_fields_default_to_empty_in_resolved(self) -> None:
         resolved = resolve_storage_module_options(None)
         for key in (
             "bucket_name",
             "endpoint_url",
             "region_name",
-            "access_key_id",
-            "secret_access_key",
             "default_acl",
         ):
             assert resolved[key] == "", f"Expected empty string for {key}"
+
+    def test_cloud_env_var_fields_default_to_default_names_in_resolved(self) -> None:
+        resolved = resolve_storage_module_options(None)
+        assert (
+            resolved[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION]
+            == DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
+        )
+        assert (
+            resolved[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
+            == DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
+        )
 
     def test_cloud_fields_override_and_strip(self) -> None:
         resolved = resolve_storage_module_options(
@@ -341,16 +364,19 @@ class TestResolutionParity:
                 "bucket_name": "  my-bucket  ",
                 "endpoint_url": "  https://s3.example.com  ",
                 "region_name": "  us-east-1  ",
-                "access_key_id": "  AKIAIOSFODNN7EXAMPLE  ",
-                "secret_access_key": "  wJalrXUtnFEMI/K7MDENG  ",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "  AWS_MY_ACCESS_KEY_ID  ",
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "  AWS_MY_SECRET_ACCESS_KEY  ",
                 "default_acl": "  public-read  ",
             }
         )
         assert resolved["bucket_name"] == "my-bucket"
         assert resolved["endpoint_url"] == "https://s3.example.com"
         assert resolved["region_name"] == "us-east-1"
-        assert resolved["access_key_id"] == "AKIAIOSFODNN7EXAMPLE"
-        assert resolved["secret_access_key"] == "wJalrXUtnFEMI/K7MDENG"
+        assert resolved[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "AWS_MY_ACCESS_KEY_ID"
+        assert (
+            resolved[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
+            == "AWS_MY_SECRET_ACCESS_KEY"
+        )
         assert resolved["default_acl"] == "public-read"
 
 

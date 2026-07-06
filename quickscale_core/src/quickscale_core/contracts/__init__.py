@@ -111,6 +111,8 @@ from quickscale_core.contracts.module_options import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     DEFAULT_BILLING_CURRENCY,
+    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
     DEFAULT_BILLING_PUBLISHABLE_KEY_ENV_VAR,
     DEFAULT_BILLING_SECRET_KEY_ENV_VAR,
     DEFAULT_BILLING_WEBHOOK_SECRET_ENV_VAR,
@@ -129,6 +131,8 @@ from quickscale_core.contracts.module_options import (
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     PORTABLE_ENV_EXACT,
+    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     PORTABLE_ENV_PREFIXES,
     format_auth_desired_config_contract,
     get_env_var_portability,
@@ -140,6 +144,7 @@ from quickscale_core.contracts.module_options import (
     validate_auth_module_options,
     validate_backups_env_var_reference,
     validate_notifications_env_var_reference,
+    validate_storage_env_var_reference,
 )
 
 __all__ = [
@@ -265,6 +270,11 @@ __all__ = [
     "DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
     "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
     "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
+    # Storage constants
+    "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+    "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+    "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+    "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     # Normalize functions
     "normalize_analytics_module_options",
     "normalize_auth_module_options",
@@ -273,6 +283,7 @@ __all__ = [
     "normalize_crm_module_options",
     "normalize_notifications_module_options",
     "normalize_social_module_options",
+    "normalize_storage_module_options",
     # Validate functions
     "validate_analytics_env_var_reference",
     "validate_analytics_module_options",
@@ -284,6 +295,7 @@ __all__ = [
     "validate_notifications_env_var_reference",
     "validate_notifications_module_options",
     "validate_social_module_options",
+    "validate_storage_env_var_reference",
     # Helpers
     "format_auth_desired_config_contract",
     "has_legacy_backups_secret_values",

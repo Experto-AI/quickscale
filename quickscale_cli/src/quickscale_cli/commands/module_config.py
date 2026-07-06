@@ -35,6 +35,12 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_LAYOUT_VARIANTS,
     SOCIAL_LINK_TREE_PATH,
 )
+from quickscale_core.contracts.module_options import (
+    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+)
 from quickscale_core.contracts.resolvers import (
     default_analytics_module_options,
     resolve_analytics_module_options,
@@ -869,8 +875,8 @@ def get_default_storage_config() -> dict[str, Any]:
         "bucket_name": "",
         "endpoint_url": "",
         "region_name": "",
-        "access_key_id": "",
-        "secret_access_key": "",
+        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
         "default_acl": "",
         "querystring_auth": False,
         "private_media_enabled": False,
@@ -917,8 +923,18 @@ def configure_storage_module(
         "bucket_name": str(defaults["bucket_name"]),
         "endpoint_url": str(defaults["endpoint_url"]),
         "region_name": str(defaults["region_name"]),
-        "access_key_id": str(defaults["access_key_id"]),
-        "secret_access_key": str(defaults["secret_access_key"]),
+        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: str(
+            defaults.get(
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+            )
+        ),
+        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: str(
+            defaults.get(
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+                DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+            )
+        ),
         "default_acl": str(defaults["default_acl"]),
         "querystring_auth": bool(defaults["querystring_auth"]),
         "private_media_enabled": bool(defaults["private_media_enabled"]),
@@ -938,14 +954,32 @@ def configure_storage_module(
             "Region name",
             default=str(defaults["region_name"]),
         ).strip()
-        config["access_key_id"] = click.prompt(
-            "Access key id",
-            default=str(defaults["access_key_id"]),
-        ).strip()
-        config["secret_access_key"] = click.prompt(
-            "Secret access key",
-            default=str(defaults["secret_access_key"]),
-        ).strip()
+        config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] = (
+            click.prompt(
+                "Access key ID environment variable name",
+                default=str(
+                    defaults.get(
+                        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                        DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+                    )
+                    or DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+                ),
+            ).strip()
+            or DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
+        )
+        config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
+            click.prompt(
+                "Secret access key environment variable name",
+                default=str(
+                    defaults.get(
+                        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+                        DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+                    )
+                    or DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+                ),
+            ).strip()
+            or DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
+        )
         config["default_acl"] = click.prompt(
             "Default ACL (blank recommended)",
             default=str(defaults["default_acl"]),
@@ -960,8 +994,8 @@ def configure_storage_module(
                 "bucket_name": "",
                 "endpoint_url": "",
                 "region_name": "",
-                "access_key_id": "",
-                "secret_access_key": "",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "",
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "",
                 "default_acl": "",
                 "querystring_auth": False,
             }
@@ -1078,6 +1112,24 @@ def apply_storage_configuration(
         click.echo(
             "  • Bucket: "
             + (str(normalized.get("bucket_name") or "").strip() or "not configured")
+        )
+        click.echo(
+            "  • Access key ID env var: "
+            + str(
+                normalized.get(
+                    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+                )
+            )
+        )
+        click.echo(
+            "  • Secret access key env var: "
+            + str(
+                normalized.get(
+                    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+                    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+                )
+            )
         )
 
 

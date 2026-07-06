@@ -47,9 +47,9 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-06):** Track 1 clear to continue: SA28 and SA24 complete (SA14, SA23 also complete — archived); rebalanced onto SA29 and SA30 now that its earlier backlog is closed. Track 2: SA20 complete (CR-SA20-005 through CR-SA20-008, CR-SA20-REV-001, CR-SA20-REV-002 resolved); SA21.2 and SA26 are ready. Track 3 clear: SA27, SA31, and SA32 are complete; no remaining Track 3 backlog in this phase set (SA21.1, SA22, SA25, SA33 also closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2: SA20 complete (CR-SA20-005 through CR-SA20-008, CR-SA20-REV-001, CR-SA20-REV-002 resolved); SA21.2 and SA26 are ready. Track 3: SA27, SA31, and SA32 complete (SA21.1, SA22, SA25, SA33 also closed); rebalanced onto SA26, which has no dependencies and is ready to start now. See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
@@ -58,11 +58,11 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA28 — complete                      SA20 — complete                          SA27 — complete
 SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 — complete
-SA29 (no deps)                       SA26 (no deps)                            SA32 — complete
-SA30 (no deps — land after SA29)
+SA29 — complete                                                               SA32 — complete
+SA30 (no deps — land after SA29)                                              SA26 (no deps)
 ```
 
-Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 and now lands in the same Track 1 sequence. Rebalanced 2026-07-05: SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3, since Track 1 and Track 3 emptied out as SA28/SA27 completed while Track 2 still carried six open items — this restores 3/3/2 parallelism across the three worktrees.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 and now lands in the same Track 1 sequence. Rebalanced 2026-07-05: SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3, since Track 1 and Track 3 emptied out as SA28/SA27 completed while Track 2 still carried six open items — this restored 3/3/2 parallelism across the three worktrees. Rebalanced again 2026-07-06: SA26 moved Track 2 → Track 3, since Track 3 emptied out again as SA27/SA31/SA32 completed while Track 2 still carried three open items (SA20, SA21.2, SA26) — this restores 1/2/1 parallelism, weighted toward Track 2 since SA20 is the larger in-progress item.
 
 ### Track 1 — Tenant-context surface
 
@@ -80,15 +80,11 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../others/tech-audit.md))
 
-- [x] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 1 · deps: none`
-  Escaped `<`/`>`/`&` in `analytics_public_config_json()` before `mark_safe`, preserving the existing raw JSON output contract while making `</script>` inert in page source. Added a focused template-tag regression proving dangerous payload content renders safely and still round-trips through `json.loads()`. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA24 — complete.** Escaped the analytics template tag payload before `mark_safe`, making `</script>` inert in page source. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `storage-config-dead-env-docs-secrets-in-vcs` (`why →` [TA31](../others/tech-audit.md))
 
-- [ ] **SA29 — Rebuild storage's config-delivery contract: env-var indirection for secrets, README aligned with the real wiring mechanism.** `Tier 2 · Track 1 · deps: none`
-  Storage is the only secret-bearing module without the `*_env_var` indirection pattern analytics/notifications/billing already use, and its README documents a config channel (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/etc. as deploy-time env vars) that the generated app never reads — settings are baked as literals at generation time. Adopt the indirection pattern: storage credential options become `*_env_var` names (adapter emits `os.environ` reads into the managed settings module rather than baked literal values), keep `backend`/bucket/region as non-secret yml options, and rewrite the README against the real contract.
-  *Files:* `quickscale_core/src/quickscale_core/manifest/entry_point.py:1269-1348` (`_storage_manifest_adapter`), `quickscale_core/src/quickscale_core/module_wiring.py:85-100`, `quickscale_core/src/quickscale_core/generator/templates/README.md.j2:265-286`, storage's `module.yml` option declarations.
-  *Acceptance:* generating a project configured per the rewritten README and deploying with the documented env vars set results in uploads landing in the configured S3/R2 bucket; the generated `settings/modules.py` contains no credential material; leaving storage on `local` still works with no config required.
+> **SA29 — complete.** Storage credential options converted to env-var indirection (`*_env_var` pattern), matching analytics/notifications/billing/backups; generated `settings/modules.py` contains no credential material. CR-SA29-002 (README doc gap re: `media_url`) accepted as non-blocking and closed with the merge. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `listings-storage-runtime-fail-open-residuals` (`why →` [TA32](../others/tech-audit.md))
 
@@ -114,7 +110,7 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
   **CR-SA20-006 (resolved):** The async admin flow enqueued the generic artifact-id restore path without forcing `RestoreSourceResolutionMode.LOCAL_ONLY`. If the local file disappeared after enqueue, the child could fall back to remote materialization, violating the admin restore contract. Fixed by adding `--local-only` flag to `backups_restore` management command (maps to `resolution_mode=LOCAL_ONLY` in the adapter), and passing it from both recorded-artifact and uploaded-file admin dispatch paths. The adapter function `restore_backup` now accepts an optional `resolution_mode` parameter. Regression: admin dispatch tests assert `--local-only` in Popen args; command-level tests verify `resolution_mode="local_only"` is passed to the adapter.
 
-  **CR-SA20-007 (resolved):** Spawn-failure rollback now preserves pre-spawn `restore_started_at` and `restore_error` metadata across retries. Both admin branches (recorded-artifact and uploaded-file) snapshot `restore_started_at` + `restore_error` before overwriting for `STATUS_RESTORING`, and restore all three pre-spawn fields (`status`, `restore_started_at`, `restore_error`) in a single `save(update_fields=...)` on `Popen` failure. Added 4 branch-parity regressions covering retries from `FAILED` (with prior error text) and `RESTORED` (with prior restore_started_at) for both branches, proving prior metadata survives a spawn-failure rollback. The lifecycle-ordering race sub-finding (fast-child terminal status clobber) was resolved in a prior pass.
+  **CR-SA20-007 (resolved):** Spawn-failure rollback now preserves pre-spawn `restore_started_at` and `restore_error` metadata across retries. Both admin branches (recorded-artifact and uploaded-file) snapshot `restore_started_at` + `restore_error` before overwriting for `STATUS_RESTORING`, and restore all three pre-spawn fields (`status`, `restore_started_at`, `restore_error`) in a single `save(update_fields=...)` on `Popen` failure. Added 4 branch-parity regressions covering retries from `FAILED` (with prior error text) and `RESTORED` (with prior restore_started_at) for both branches, proving prior metadata survives a spawn-failure rollback. The lifecycle-ordering race sub-finding (fast-child terminal status clobber) was resolved in a prior pass. The locked design decision (Option A: snapshot-and-restore, symmetric with the existing `pre_spawn_status` pattern) is recorded in the SA20 commit history.
 
   **CR-SA20-008 (resolved):** The CHANGELOG's SA20 entry previously described the uploaded-file dispatch as using ``--file <path>``, but both branches (recorded-artifact and uploaded-file) dispatch via artifact-id. The CHANGELOG entry and roadmap wording have been corrected to accurately reflect the artifact-id dispatch for both branches.
 
@@ -134,13 +130,6 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
   *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/throttles.py:26-30`, `quickscale_modules/forms/src/quickscale_modules_forms/views.py:231,257`, `quickscale_modules/blog/src/quickscale_modules_blog/views.py:260-266,277-304`.
   *Acceptance:* two requests with different `X-Forwarded-For` values (fixed `REMOTE_ADDR`) get independent throttle buckets and are logged with the forwarded client IP, not the proxy's; a 6th form submission within the configured window from one distinct client is rejected regardless of which worker/replica serves it.
 
-#### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../others/tech-audit.md))
-
-- [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 2 · deps: none`
-  `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
-  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
-  *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
-
 ### Track 3 — Core/CLI plumbing
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
@@ -153,27 +142,22 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `railway-cli-secrets-on-argv` (`why →` [TA27](../others/tech-audit.md))
 
-> **SA31 — complete (review findings resolved 2026-07-05).** Three-part fix moving secret payloads off process argv:
->
-> 1. **DR adapter** (`_call_adapter` in `dr_commands.py`): JSON kwargs are now piped via `docker exec -i` stdin instead of `--args-json` on argv. The management command (`dr_adapter_call.py`) reads from stdin when `--args-json` is absent, keeping backward compat.
->
-> 2. **Railway single variable set** (`set_railway_variable` in `railway_utils.py`): Switched from `railway variables --set KEY=VALUE` (secret in argv) to `railway variable set KEY --stdin` (value piped via stdin).
->
-> 3. **Railway batch variable set** (`set_railway_variables_batch`): Decomposed into per-variable stdin calls with `--skip-deploys` forced on **all** writes so an auto-deploy is never triggered after a partial failure (CR-SA31-001). Railway CLI has no batch-stdin or env-file input (confirmed 2026-07-05). This limitation is documented in code and in this closeout note.
->
-> **Review follow-up (CR-SA31-001/002):** (1) `_configure_env_vars_step` failure path now hard-stops with `sys.exit(1)` instead of continuing to deploy after failed env var writes, and the insecure `--set KEY=VALUE` fallback is replaced with the stdin-based `railway variable set KEY --stdin` suggestion. (2) Added 16 standalone tests in `quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py` providing direct execution evidence for the stdin transport and legacy `--args-json` path, bypassing the pre-existing circular import in the backups Django test suite. (3) Batch writes now force `--skip-deploys` on every variable; the deploy is deferred to the caller after 100% success is confirmed.
->
-> *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:330-441`, `quickscale_cli/src/quickscale_cli/commands/dr_commands.py:222-265`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py`, `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py:335-356`, `quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py`.
-> *Acceptance:* `_call_adapter` test asserts `--args-json` is absent from docker command and JSON payload is passed via `input` kwarg. Railway `set_railway_variable` test asserts the stdin-based command structure. Railway CLI batch limitation documented in `set_railway_variables_batch` docstring. `_configure_env_vars_step` failure hard-stops with secure stdin alternative suggestion. Batch writes always use `--skip-deploys` so no auto-deploy occurs after partial failure. 16 standalone dr_adapter_call tests cover stdin transport, legacy `--args-json`, adapter dispatch, and error paths. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA31 — complete.** Moved Railway/DR adapter secrets off process argv onto stdin transport (DR adapter JSON, single and batch Railway variable writes); closes TA27. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
 
-- [x] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 3 · deps: none`
-  Retired `invalidate_social_cache()` from `quickscale_modules_social.services.__all__` and documented why it is not a safe tenant-aware bulk invalidation API: it only clears bare cache keys while real tenant reads use org-partitioned keys. Added a focused regression asserting the helper remains importable for compatibility but is no longer exported as public API. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA32 — complete.** Retired `invalidate_social_cache()` from the social module's public export surface (kept importable for compatibility); closes TA28. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `dangling-arch-audit-anchor` (`why →` [TA29](../others/tech-audit.md))
 
 > **SA33 — complete.** Dangling `decisions.md:650` → `arch-audit.md` anchor link repointed to the arch-audit reconciliation log entry. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+#### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../others/tech-audit.md))
+
+- [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 3 · deps: none`
+  `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
+  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
+  *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
 
 ---
 

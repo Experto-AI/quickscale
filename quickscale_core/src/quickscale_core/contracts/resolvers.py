@@ -41,6 +41,11 @@ from quickscale_core.contracts.module_options import (
     # Storage
     STORAGE_BACKENDS,
     DEFAULT_STORAGE_MEDIA_URL,
+    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+    validate_storage_env_var_reference,
     # Social
     SOCIAL_LAYOUT_VARIANTS,
     # Common
@@ -1525,8 +1530,8 @@ def _build_storage_derivation_schema() -> ModuleDerivationSchema:
         "bucket_name",
         "endpoint_url",
         "region_name",
-        "access_key_id",
-        "secret_access_key",
+        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
         "default_acl",
     )
     strip_derivations = {
@@ -1581,13 +1586,32 @@ def normalize_storage_module_options(
         normalized["media_url"] = _normalize_media_url(str(normalized["media_url"]))
     if "public_base_url" in normalized:
         normalized["public_base_url"] = str(normalized["public_base_url"]).strip()
+
+    # Convert legacy literal credential options to env-var references.
+    legacy_access_key_id = str(normalized.pop("access_key_id", "")).strip()
+    legacy_secret_access_key = str(normalized.pop("secret_access_key", "")).strip()
+    access_key_env_var = str(
+        normalized.get(STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION, "")
+    ).strip()
+    secret_access_key_env_var = str(
+        normalized.get(STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION, "")
+    ).strip()
+    if legacy_access_key_id and not access_key_env_var:
+        normalized[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] = (
+            DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
+        )
+    if legacy_secret_access_key and not secret_access_key_env_var:
+        normalized[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
+            DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
+        )
+
     for key in (
         "bucket_name",
         "endpoint_url",
         "region_name",
-        "access_key_id",
-        "secret_access_key",
         "default_acl",
+        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     ):
         if key in normalized:
             normalized[key] = str(normalized[key]).strip()
@@ -1597,7 +1621,8 @@ def normalize_storage_module_options(
 def resolve_storage_module_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
     manifest = _load_storage_manifest()
     schema = _build_storage_derivation_schema()
-    result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
+    normalized = normalize_storage_module_options(options)
+    result = resolve_module_config(manifest, schema, overrides=normalized)
     resolved = dict(result.resolved)
     backend = str(resolved.get("backend", "")).lower()
     resolved["backend"] = backend
@@ -1613,8 +1638,8 @@ def resolve_storage_module_options(options: Mapping[str, Any] | None) -> dict[st
         "bucket_name",
         "endpoint_url",
         "region_name",
-        "access_key_id",
-        "secret_access_key",
+        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
         "default_acl",
     ):
         resolved[key] = str(resolved.get(key, "")).strip()
@@ -1633,6 +1658,17 @@ def validate_storage_module_options(options: Mapping[str, Any] | None) -> list[s
         )
     if not isinstance(merged.get("private_media_enabled"), bool):
         issues.append("modules.storage.private_media_enabled must be a boolean")
+    # Validate env-var references when a cloud backend is configured.
+    if backend in {"s3", "r2"}:
+        for option_name in (
+            STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+        ):
+            issue = validate_storage_env_var_reference(
+                option_name, merged.get(option_name, "")
+            )
+            if issue:
+                issues.append(issue)
     return issues
 
 
@@ -1708,5 +1744,6 @@ __all__ = [
     "default_storage_module_options",
     "normalize_storage_module_options",
     "resolve_storage_module_options",
+    "validate_storage_env_var_reference",
     "validate_storage_module_options",
 ]
