@@ -445,22 +445,28 @@ conflicts beyond Finding 2, concurrency, security architecture (SA26 tracked), b
   - `orgs/management/commands/purge_organization.py:64–212` — `_DELETE_SPECS`, a **second**
     hand-maintained registry: 21 cross-module models with hand-ordered, comment-justified FK-safe
     deletion order ("DealNote before Deal before Stage…").
-  - `orgs/tests/test_management_commands.py:1281–1332` — the "completeness" test validates
-    `_DELETE_SPECS` against a **third hand-written copy** of the same universe
-    (`expected_models = {...}`) — it derives nothing, so a new tenant model fails neither the
-    registry nor the test; both lists just stay stale together.
+  - `orgs/tests/test_management_commands.py:1281–1332` — **fixed by SA45** (2026-07-06): the
+    "completeness" test previously validated `_DELETE_SPECS` against a third hand-written copy of
+    the same universe (`expected_models = {...}`), deriving nothing. It now computes its expected
+    model set from `get_tenant_models()` (the marker-derived tenant tables), so a new tenant model
+    without a matching `_DELETE_SPECS` entry fails CI instead of passing silently. This closes
+    Option 1's purge-spec half only — `TENANT_TABLE_REGISTRY`'s equivalent derivation check (the
+    other half of Option 1) and the full purge-plan derivation (Option 2) remain open.
   - The prior steelman covered classification only: the runtime default-deny gate accepts
-    marker-only models, so `TENANT_TABLE_REGISTRY` omissions are caught. **No equivalent gate
-    exists for purge**: a missing `_DELETE_SPECS` entry surfaces as a `ProtectedError` mid-purge —
-    fail-closed for integrity, but discovered during an org offboarding, the worst time.
+    marker-only models, so `TENANT_TABLE_REGISTRY` omissions are caught. A purge-side gate now
+    exists too (SA45, above) — but only for `_DELETE_SPECS`; `TENANT_TABLE_REGISTRY` itself still
+    has no derivation check of its own, so a classification-only omission still surfaces only as a
+    `ProtectedError` mid-purge — fail-closed for integrity, but discovered during an org
+    offboarding, the worst time.
 - **Why it compounds:** every new tenant model in any module requires K coordinated edits inside
   orgs (classification literal, purge registry, test copies, RLS conformance parametrization), and
   the enumerations already cover different subsets with nothing forcing them to agree. Teams
   multiplies the entry count; a GDPR-class deletion obligation would make the purge path
   load-bearing overnight.
 - **Detection signal:** `ProtectedError` raised from `purge_organization` in any environment; a
-  diff adding a tenant model without a same-PR `_DELETE_SPECS` change is the leading indicator
-  (currently nothing flags it).
+  diff adding a tenant model without a same-PR `_DELETE_SPECS` change now fails CI directly (SA45's
+  derived completeness test) rather than surfacing only at purge time — the same is not yet true
+  for a `TENANT_TABLE_REGISTRY` omission.
 - **Steelman:** hand-ordered deletion is explicit, reviewable, and encodes FK subtleties
   (CASCADE-vs-PROTECT interactions) that naive traversal gets wrong; the module set is small and
   closed. That held while the universe was static — the teams build ends that condition, and the
@@ -472,9 +478,10 @@ conflicts beyond Finding 2, concurrency, security architecture (SA26 tracked), b
   derivation*, not against another hand copy.
 - **Options:**
   1. **Derive the completeness gates first (cheap, immediate):** make the purge-spec test compute
-     its expected universe from the marker-derived tenant tables (org-FK-bearing concrete models),
-     and add the same derivation check for `TENANT_TABLE_REGISTRY`. Literals stay, but omissions
-     fail CI the moment a model lands. S effort, removes the silent-staleness half.
+     its expected universe from the marker-derived tenant tables (org-FK-bearing concrete models) —
+     **done, SA45** — and add the same derivation check for `TENANT_TABLE_REGISTRY` — **still open**.
+     Literals stay, but omissions fail CI the moment a model lands. S effort, removes the
+     silent-staleness half.
   2. **Derive the purge plan itself:** topological delete order from the FK graph restricted to
      org-owned models, with `_DELETE_SPECS` reduced to explicit overrides for the genuinely tricky
      cases. M effort; removes the hand-ordering tax; needs care exactly where the current comments
@@ -730,3 +737,10 @@ conflicts beyond Finding 2, concurrency, security architecture (SA26 tracked), b
   extracted during that closeout, so the finding stands but as standalone follow-up work rather
   than one that rides an already-open item. Orientation's "still open: SA20 (CR-SA20-007), SA21.2,
   SA26, SA30" line corrected — SA20, SA26, and SA30 are all complete; SA21.2 is the only open item.
+- 2026-07-06 (roadmap cleanup) — Finding 4 (`org-model-universe-hand-enumerated`): **partial
+  progress, not resolved**. SA45 landed Option 1's purge-spec half — the completeness test now
+  derives its expected model set from `get_tenant_models()` instead of a third hand-written copy,
+  closing the silent-staleness gap on the `_DELETE_SPECS` side. `TENANT_TABLE_REGISTRY`'s
+  equivalent derivation check (Option 1's other half) and the full purge-plan derivation (Option 2)
+  remain open; Finding 4 stays open pending those, and pending the teams build that motivates its
+  horizon.

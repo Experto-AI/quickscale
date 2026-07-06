@@ -47,21 +47,23 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05), SA39 (2026-07-06). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05), SA34 (2026-07-06), SA39 (2026-07-06), SA40 (2026-07-06), SA45 (2026-07-06). All closed per template rule — detail lives in CHANGELOG.md.
 
 > **Triage note (2026-07-06):** the previously-deferred triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41 new/narrowed this pass) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5) is done. SA34–SA47 below are the resulting fix items, each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred, matching the source docs' own "recommended first stage" framing). One doc-drift note: tech-audit's summary table still lists **TA32 as open**, but the code (`listings/views.py`, `storage/helpers.py`) already raises `ImproperlyConfigured` per SA30 — verified directly. Treating TA32 as closed (per roadmap's existing SA30 entry); no new item created for it. tech-audit.md itself is left untouched by this pass — only roadmap.md is updated here.
+>
+> **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-06):** Track 1 — **3 open items** (SA35, SA41, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **4 open items** (SA36, SA42, SA44, SA46). SA34 completed.
+> **Track status (2026-07-06):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **4 open items** (SA43 ready; SA37, SA38 chained on SA43; SA21.2 blocked on Track 3's SA36; SA40 complete). Track 3 — **4 open items** (SA36, SA42, SA44, SA46; SA34 complete).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
-SA39 (deps: none)                         SA43 (deps: none)                           SA36 (deps: none)
-SA35 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA46 (deps: none)      │
-SA41 (deps: none)                         SA37 (deps: SA43)                           SA44 (deps: none)      │
-SA47 (deps: SA35, SA41 — soft sequence)   SA38 (deps: SA43)                           SA42 (deps: none)      │
+SA35 (deps: none)                         SA43 (deps: none)                           SA36 (deps: none)
+SA41 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA46 (deps: none)      │
+SA47 (deps: SA35, SA41 — soft sequence)   SA37 (deps: SA43)                           SA44 (deps: none)      │
+                                           SA38 (deps: SA43)                           SA42 (deps: none)      │
                                                  ▲                                                        │
                                                  └───────────────────── * cross-track: SA36 → SA21.2 ─────────
 ```
@@ -72,17 +74,11 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `operator-access-silent-noop-outside-atomic` (`why →` [TA38](../others/tech-audit.md))
 
-- [x] **SA39 — Fail hard when `operator_access()` is invoked outside an open transaction.** `Tier 1 · Track 1 · deps: none`
-  `SET LOCAL` outside `atomic()` is a silent PostgreSQL WARNING no-op — `operator_access()`/`_set_operator_access()` currently don't assert `connection.in_atomic_block`, so a caller who forgets `atomic()` gets a silently tenant-scoped/empty cross-tenant read while the audit log still records a successful activation. Raise `ImproperlyConfigured`/`RuntimeError` in that case (both the GUC set and the paired GUC read).
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py:601-618,621-682`.
-  *Acceptance:* calling `operator_access()` outside `atomic()` raises immediately with a clear message; calling it inside `atomic()` behaves exactly as before (existing tests pass); add a regression test for the outside-atomic case.
+> **SA39 — complete.** `operator_access()`/`_set_operator_access()` now raise `ImproperlyConfigured` when invoked outside an open transaction instead of silently no-opping (closes TA38). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `org-model-universe-hand-enumerated` (`why →` [arch-audit.md Finding 4](../others/arch-audit.md), first step only)
 
-- [x] **SA45 — Derive the purge-spec completeness test from the tenant-classification universe instead of a second hand-written model list.** `Tier 1 · Track 1 · deps: none`
-  `purge_organization`'s `_DELETE_SPECS` registry is validated by a test whose `expected_models` is a *third* hand-written copy of the same universe — it derives nothing, so a new tenant model fails neither the registry nor the test. Compute the test's expected model set from the marker-derived tenant tables (org-FK-bearing concrete models) instead. Full derivation of the purge plan itself (arch-audit Option 2) is out of scope — this is the cheap completeness-gate step only.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py:64-212`, `quickscale_modules/orgs/tests/test_management_commands.py:1281-1332`.
-  *Acceptance:* the completeness test computes its expected model set from the tenant-classification universe rather than a hand-written literal; a new tenant model added without a matching `_DELETE_SPECS` entry now fails CI instead of passing silently.
+> **SA45 — complete.** `test_purge_delete_specs_are_complete` now computes its expected model set from `get_tenant_models()` instead of a third hand-written copy — a new tenant model without a matching `_DELETE_SPECS` entry now fails CI (arch-audit Finding 4's Option 1, purge-spec half only; the `TENANT_TABLE_REGISTRY` completeness half and full purge-plan derivation, Option 2, remain open). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `account-delete-cascade-content-loss` (`why →` [TA34](../others/tech-audit.md))
 
@@ -133,11 +129,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `forms-submit-nonstring-value-500` (`why →` [TA41](../others/tech-audit.md))
 
-- [x] **SA40 — Reject non-string values on public form submit instead of 500ing.** `Tier 1 · Track 2 · deps: none`
-  The public form-submit validator assumed every submitted value is a string: `to_internal_value` does `dict(data)` with no per-value coercion, then `validate()`/`make_field_validator` call `re.match`/`len` on the raw value for any field with length/regex validation rules. DRF's JSON parser yields native types, so a non-string value (`123`, `["x"]`, `{"a":1}`) raised an uncaught `TypeError` — not a `ValidationError` — 500ing an unauthenticated endpoint. Public validation now rejects non-string payloads with 400 errors and rejects malformed `validation_rules` before per-value enforcement.
-  *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/serializers.py:163-165,193`, `quickscale_modules_forms/validators.py:24,29,34`.
-  *Acceptance:* POSTing array/number/object/null values for a validated field returns 400, never 500; existing valid-string submissions unaffected; add a negative-test sweep for those JSON value types at the public submit endpoint.
-  *Findings / Blockers:* No blockers.
+> **SA40 — complete.** Public form-submit validation now rejects non-string payloads with 400 errors instead of 500ing on an uncaught `TypeError` (closes TA41). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `backups-admin-orchestration-accretion` (`why →` [arch-audit.md Finding 3](../others/arch-audit.md), first step only)
 
@@ -171,10 +163,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `generated-app-cache-table-missing` (`why →` [TA33](../others/tech-audit.md))
 
-- [ ] **SA34 — Run `createcachetable` in the generated app's deploy script.** `Tier 1 · Track 3 · deps: none`
-  The SA21.1 `CACHES` fallback (`DatabaseCache` on `django_cache_table` when `REDIS_URL` is unset) is never created by `migrate` — no deploy artifact runs `createcachetable`. On a Redis-less deployment, the first throttled request (e.g. the public form) raises `ProgrammingError` and 500s. Add `python manage.py createcachetable` to `start.sh.j2` after the migrate step (idempotent no-op when the table exists or Redis is active).
-  *Files:* `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2:49` (near the migrate step), `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/production.py.j2:254-268` (context).
-  *Acceptance:* a template test asserts `createcachetable` appears in rendered `start.sh` after `migrate`; e2e — boot the generated app with `REDIS_URL` unset and assert a form POST returns 201/429, never 500.
+> **SA34 — complete.** `createcachetable` now runs in `start.sh.j2` after the migrate step, gated to only run when `DatabaseCache` (not Redis) is active (closes TA33). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `get-client-ip-off-by-one` (`why →` [TA35](../others/tech-audit.md))
 
