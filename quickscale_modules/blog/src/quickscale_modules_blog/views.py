@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import secrets
 from time import time
 from collections.abc import Callable, Mapping
@@ -56,6 +57,64 @@ IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 DEFAULT_BLOG_POSTS_PER_PAGE = 10
 RATE_LIMIT_VALUE_PARSE_ERRORS = (TypeError, ValueError)
 RATE_LIMIT_CACHE_FALLBACK_ERRORS = (AttributeError, NotImplementedError, ValueError)
+
+_ALLOWED_HREF_SCHEMES = frozenset({"http", "https", "mailto"})
+
+# Regex matching a URI scheme at the start of an href value.
+# RFC 3986: scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+_URI_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+\-.]*:")
+
+
+def _sanitize_href(href_value: str) -> str:
+    """Return *href_value* if its URI scheme is allowed, or ``""`` otherwise.
+
+    Allows ``http:``, ``https:``, ``mailto:``, relative URLs (no scheme),
+    protocol-relative URLs (``//``), and fragment-only values.  All other
+    schemes (``javascript:``, ``data:``, ``vbscript:``, …) are neutralised
+    so they cannot execute script in the browser.
+
+    C0 control characters (``\\t``, ``\\r``, ``\\n``) and leading whitespace
+    are stripped before the scheme check because browsers strip them from
+    URLs before scheme parsing — without this, an obfuscated scheme such as
+    ``java\\tscript:`` would bypass the allowlist.
+    """
+    if not href_value:
+        return href_value
+
+    # Browsers strip \\t, \\r, \\n from URLs and trim leading C0
+    # controls/whitespace before scheme parsing (WHATWG URL spec).
+    # Normalise first so an obfuscated scheme cannot slip past the
+    # allowlist regex, which excludes these characters from the scheme
+    # character class.
+    cleaned = href_value.replace("\t", "").replace("\r", "").replace("\n", "").lstrip()
+
+    if not _URI_SCHEME_RE.match(cleaned):
+        # Relative, protocol-relative, or fragment — always safe.
+        return cleaned
+
+    scheme = cleaned.split(":", 1)[0].lower()
+    if scheme in _ALLOWED_HREF_SCHEMES:
+        return cleaned
+
+    return ""
+
+
+_ATTR_HREF_RE = re.compile(r'href\s*=\s*"([^"]*)"', re.IGNORECASE)
+
+
+def _sanitize_rendered_html(html: str) -> str:
+    """Neutralise dangerous URI schemes in ``<a href="…">`` attributes.
+
+    Runs the rendered HTML through an allowlist scheme check so that only
+    ``http:``, ``https:``, ``mailto:``, relative, protocol-relative, and
+    fragment links survive.  All other href values are replaced with an
+    empty string.
+    """
+    return _ATTR_HREF_RE.sub(
+        lambda m: 'href="' + _sanitize_href(m.group(1)) + '"',
+        html,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Org-resolution helpers for the single-URL contract (T1.6)
@@ -784,7 +843,8 @@ class PostDetailView(BlogPublicReadMixin, DetailView):
     def get_context_data(self, **kwargs):  # type: ignore[no-untyped-def]
         """Add rendered markdown content to context"""
         context = super().get_context_data(**kwargs)
-        context["rendered_content"] = markdownify(escape(self.object.content))
+        rendered = markdownify(escape(self.object.content))
+        context["rendered_content"] = _sanitize_rendered_html(rendered)
         return context
 
 
