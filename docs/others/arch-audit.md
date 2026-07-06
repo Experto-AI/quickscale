@@ -20,8 +20,8 @@ shipped Django modules under `quickscale_modules/` (teams still an empty placeho
 apps: Django 6 + PostgreSQL 18, single-service Railway; tenancy enforced twice (fail-closed
 `TenantManager` + FORCE RLS with the AF9 execute-wrapper — re-verified intact this pass,
 `current_org.py:424+`). **Since the 2026-07-04/05 passes, the SA19–SA33 tech-sweep batch closed
-almost entirely** (SA19, SA21.1, SA22–SA25, SA27–SA29, SA31–SA33); still open: SA20 (one item,
-CR-SA20-007), SA21.2, SA26, SA30. **Growth direction unchanged:** the teams module is the next
+almost entirely** (SA19–SA33 all complete as of the 2026-07-06 closeout, including SA20's
+CR-SA20-007); the only item still open in this batch is SA21.2. **Growth direction unchanged:** the teams module is the next
 build (design locked, Option C child tables). **Depth this pass:** re-walked every watchlist seam
 from 2026-07-04 and focused the fresh lens on the code the SA batch changed. Read fully —
 `quickscale_core/runtime.py` (all four lazy symbol tables), the `entry_point.py` circular-import
@@ -47,7 +47,7 @@ SA28 added a second, divergent implementation of an org invariant at a new bound
 |---|----|---------|------|------------------|
 | 1 | `dr-engine-module-circular-lattice` | now | M (first stage) | DR logic lives in core but its state and shims live in the backups module, producing a bidirectional import lattice held together by hand-maintained symbol tables and a string-matching exception classifier |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months (teams) | M | Org/billing invariants at the account-deletion boundary are re-implemented per callsite with divergent semantics instead of being owned by their domain modules |
-| 3 | `backups-admin-orchestration-accretion` | now (CR-SA20-007 open) | S–M | The async-restore job lifecycle landed inline in the admin view, duplicated across two dispatch branches, against the recorded SA20 shape guidance |
+| 3 | `backups-admin-orchestration-accretion` | now (structural duplication persists post-closeout) | S–M | The async-restore job lifecycle landed inline in the admin view, duplicated across two dispatch branches, against the recorded SA20 shape guidance |
 | 4 | `org-model-universe-hand-enumerated` | 6–18 months (teams) | M | orgs hand-enumerates the cross-module tenant-model universe in unlinked literals (classification registry, purge delete-order registry, test-side copies) with no derivation from the marker/FK sources of truth — opened by the module deep pass below |
 | 5 | `json-api-boundary-idiom-fragmentation` | 6–18 months (teams) | M | Three coexisting idioms for authed state-changing JSON endpoints (DRF baseline, orgs mixin stack, billing plain-View + manual CSRF) each re-implement the boundary by hand — opened by the module deep pass below |
 
@@ -231,11 +231,14 @@ SA28 added a second, divergent implementation of an org invariant at a new bound
 ### Finding 3: The async-restore job lifecycle landed inside the admin view, duplicated per branch
 
 - **ID:** `backups-admin-orchestration-accretion`
-- **Rank rationale (blast radius × likelihood):** contained to the backups module, but the cost is
-  being paid *right now* — the open CR-SA20-007 item must be implemented twice, once per duplicated
-  branch, with four branch-parity tests.
-- **Horizon & trigger:** `now` — CR-SA20-007 is the last open SA20 item and edits exactly the two
-  blocks this finding is about; the extraction is cheapest done as part of that closeout.
+- **Rank rationale (blast radius × likelihood):** contained to the backups module, but the cost was
+  already paid twice over — CR-SA20-005 through CR-SA20-008 and CR-SA20-REV-001/002 (all now
+  resolved, including the TA36 atomic-claim fix) each had to be implemented and re-verified once per
+  duplicated branch.
+- **Horizon & trigger:** `now` — SA20 closed in full (CR-SA20-007 and the TA36 CAS fix included)
+  with the duplication still in place; the cheap moment to extract (bundled into that closeout) has
+  passed, so the next lifecycle change pays the two-branch tax at full price with no closeout to
+  ride along with.
 - **Confidence:** High — `admin.py:380–742` read this pass; the duplication and the parity tax are
   documented in the roadmap's own CR-SA20-007 checklist ("4 new/adjusted cases total, matching the
   existing branch-parity pattern", `roadmap.md:119–123`).
@@ -260,36 +263,40 @@ SA28 added a second, divergent implementation of an org invariant at a new bound
   pressure. And as the project's only async-work pattern, it is what the next long-running
   operation (media sync, exports) will be copied from.
 - **Detection signal:** the two branches drifting — a lifecycle assertion that passes for one
-  branch's test and fails for the other's; CR-SA20-007 itself is the live instance (spawn-failure
-  metadata restoration currently missing from both).
+  branch's test and fails for the other's; CR-SA20-007 and CR-SA20-REV-002 were both live instances
+  of exactly this (each required a paired fix and paired regression per branch) before they closed.
 - **Steelman:** admin is the only trigger today; a Popen from the WSGI worker is a pragmatic,
   deliberate choice for a single-service Railway app with no queue infra (adding a queue would be
   the real over-engineering); and the branch duplication was the fastest path to closing a
   medium-risk finding. All true — which is why the finding is the *placement and duplication*, not
-  the Popen design. If DR admin work were finished after CR-SA20-007, this could ride; the roadmap
-  says it isn't.
+  the Popen design. DR admin work (SA20, including CR-SA20-007 and the REV-001/002 atomic-claim fix)
+  is now fully closed with the duplication still intact — the free ride-along window closed without
+  the extraction happening, so it is now a standalone piece of follow-up work rather than a
+  bundled one.
 - **Correct shape:** one function owns the dispatch lifecycle (snapshot pre-spawn state → persist
   RESTORING → spawn → rollback on spawn failure), parameterized by artifact, and every entry
   branch calls it; the admin view does form handling and messaging only.
 - **Options:**
-  1. **Extract to `backups/services.py` during CR-SA20-007 (recommended):**
+  1. **Extract to `backups/services.py` as standalone follow-up (recommended):**
      `dispatch_background_restore(artifact, *, confirmation) -> None` capturing all three
-     pre-spawn fields; both branches call it; the CR-007 regression tests target the function once
-     plus one thin wiring test per branch.
+     pre-spawn fields and the atomic claim; both branches call it; the existing CR-SA20-007/
+     REV-002 regressions become the target for the extracted function once, plus one thin wiring
+     test per branch.
   2. **Push into `dr_engine`** per `services.py`'s "every new orchestration feature should go in
      dr_engine" rule — but that deepens Finding 1's lattice (more model-touching code in core, more
      lazy-table entries); reject until Finding 1's first stage lands.
-- **Recommendation:** Option 1, folded into the CR-SA20-007 implementation (which must touch both
-  blocks anyway — same files, same tests). · **Size:** S–M · **First step:** lift the
-  recorded-artifact branch's lifecycle block into the service function, make the uploaded-file
-  branch call it, then implement the CR-007 metadata snapshot once.
+- **Recommendation:** Option 1, as its own ticket (the SA20 closeout that would have bundled it for
+  free has already happened) · **Size:** S–M · **First step:** lift the recorded-artifact branch's
+  lifecycle block (including `_atomic_claim_restore`) into the service function and make the
+  uploaded-file branch call it.
 
 ---
 
 ### Fix order and interactions
 
-1. **Finding 3 first** — it rides the already-open CR-SA20-007 work (same two blocks, same test
-   files) and shrinks the surface Finding 1's later stages would have to move.
+1. **Finding 3 first** — SA20 (including CR-SA20-007) has now closed with the duplication intact,
+   so this is a standalone extraction of the same two blocks/test files; doing it before Finding 1's
+   later stages shrinks the surface those stages would have to move.
 2. **Finding 1 stage 1** (registration-not-import + facade split) next — independent of SA20's
    closeout, and every future DR/module feature benefits.
 3. **The three pre-teams seams — Findings 2, 4, and 5 — before teams kickoff**, in whatever track
@@ -715,3 +722,11 @@ conflicts beyond Finding 2, concurrency, security architecture (SA26 tracked), b
   view layer, notifications' webhook view. Periphery modules verified SA-batch-churn-only since
   the 2026-07-04 deep pass and spot-checked. Teams landing checklist extended (Finding 4 gate
   before models; Finding 5 base before endpoints).
+- 2026-07-06 (roadmap cleanup, doc-consistency correction) — Finding 3
+  (`backups-admin-orchestration-accretion`) reframed, **not resolved**: CR-SA20-007 and the TA36
+  compare-and-swap fix (both cited here as the finding's "now" trigger) closed as part of SA20's
+  full closeout, confirmed present in code (`backups/admin.py`'s `_atomic_claim_restore()`). The
+  structural duplication itself (lifecycle logic inline in `admin.py`, once per branch) was not
+  extracted during that closeout, so the finding stands but as standalone follow-up work rather
+  than one that rides an already-open item. Orientation's "still open: SA20 (CR-SA20-007), SA21.2,
+  SA26, SA30" line corrected — SA20, SA26, and SA30 are all complete; SA21.2 is the only open item.
