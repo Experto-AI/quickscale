@@ -47,7 +47,7 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
 > **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2: SA20 has a locked design decision (Option A, 2026-07-06) and is ready for implementation — CR-SA20-005/006/008 resolved, CR-SA20-007 fix is scoped with a file/line checklist, just not yet coded; SA21.2 is otherwise ready once SA20 is picked up. Track 3: SA27, SA31, and SA32 complete (SA21.1, SA22, SA25, SA33 also closed); rebalanced onto SA26, which has no dependencies and is ready to start now. See track sections below for `why →` finding links.
 
@@ -58,7 +58,7 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA28 — complete                      SA20 — ready to implement (design decided, CR-SA20-007)   SA27 — complete
 SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 — complete
-SA29 — complete (CR-SA29-002: doc follow-up, non-blocking)                    SA32 — complete
+SA29 — complete                                                               SA32 — complete
 SA30 (no deps — land after SA29)                                              SA26 (no deps)
 ```
 
@@ -80,16 +80,11 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `analytics-tags-mark-safe-unescaped` (`why →` [TA22](../others/tech-audit.md))
 
-- [x] **SA24 — Escape or `json_script` the analytics template tag payload.** `Tier 1 · Track 1 · deps: none`
-  Escaped `<`/`>`/`&` in `analytics_public_config_json()` before `mark_safe`, preserving the existing raw JSON output contract while making `</script>` inert in page source. Added a focused template-tag regression proving dangerous payload content renders safely and still round-trips through `json.loads()`. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA24 — complete.** Escaped the analytics template tag payload before `mark_safe`, making `</script>` inert in page source. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `storage-config-dead-env-docs-secrets-in-vcs` (`why →` [TA31](../others/tech-audit.md))
 
-- [x] **SA29 — Rebuild storage's config-delivery contract: env-var indirection for secrets.** `Tier 2 · Track 1 · deps: none`
-  Storage credential options converted from literal `access_key_id`/`secret_access_key` to `access_key_id_env_var`/`secret_access_key_env_var` env-var name references, following the same `*_env_var` pattern analytics/notifications/billing/backups already use. The storage manifest adapter now emits `__QS_ENV__:*` markers into derived settings, which `render_settings_modules_py` renders as `os.environ.get()` calls — so the generated `settings/modules.py` contains no credential material. Non-secret YAML options (e.g., backend/bucket/region/endpoint) are preserved as-is. The storage helper runtime reads the actual credentials from Django settings (which resolve from env at Django startup). The README template is updated to document the indirection pattern. Local-storage (`local` backend) remains zero-config. Legacy `access_key_id`/`secret_access_key` values in existing `quickscale.yml` files are silently converted to their env-var defaults. The `NON_PORTABLE_ENV_CONTAINS` list already covers `STORAGE_` tokens, so the new derived env-var constants are correctly classified as non-portable.
-  *Findings:* CR-SA29-003 resolved (storage module wiring spec propagates backend/bucket/region/endpoint as non-secret derived settings). CR-SA29-002 is a **non-blocking doc follow-up**: the env-var indirection design is confirmed correct (matches the analytics/notifications/billing/backups pattern) and requires no further code changes — the only remaining gap is that operator docs (README template) don't yet explicitly list `media_url` among the `quickscale.yml`/apply-owned non-secret storage settings. Pick up whenever convenient; it does not block SA30 or anything else. The env-var portability classification already handles `STORAGE_` as a sensitive-token match via the existing `NON_PORTABLE_ENV_CONTAINS` list — no classification update needed. The generated `settings/modules.py` now imports `os` only when a `__QS_ENV__:*` marker is present, keeping the preamble minimal for modules without credential references.
-  *Files:* `quickscale_modules/storage/module.yml`, `quickscale_core/src/quickscale_core/data/manifests/storage/module.yml`, `quickscale_core/src/quickscale_core/contracts/module_options.py`, `quickscale_core/src/quickscale_core/contracts/resolvers.py`, `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_core/src/quickscale_core/module_wiring.py`, `quickscale_core/src/quickscale_core/generator/templates/README.md.j2`.
-  *Acceptance:* generating a project configured per the rewritten README and deploying with the documented env vars set results in uploads landing in the configured S3/R2 bucket; the generated `settings/modules.py` contains no credential material; leaving storage on `local` still works with no config required.
+> **SA29 — complete.** Storage credential options converted to env-var indirection (`*_env_var` pattern), matching analytics/notifications/billing/backups; generated `settings/modules.py` contains no credential material. CR-SA29-002 (README doc gap re: `media_url`) accepted as non-blocking and closed with the merge. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `listings-storage-runtime-fail-open-residuals` (`why →` [TA32](../others/tech-audit.md))
 
@@ -153,23 +148,11 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `railway-cli-secrets-on-argv` (`why →` [TA27](../others/tech-audit.md))
 
-> **SA31 — complete (review findings resolved 2026-07-05).** Three-part fix moving secret payloads off process argv:
->
-> 1. **DR adapter** (`_call_adapter` in `dr_commands.py`): JSON kwargs are now piped via `docker exec -i` stdin instead of `--args-json` on argv. The management command (`dr_adapter_call.py`) reads from stdin when `--args-json` is absent, keeping backward compat.
->
-> 2. **Railway single variable set** (`set_railway_variable` in `railway_utils.py`): Switched from `railway variables --set KEY=VALUE` (secret in argv) to `railway variable set KEY --stdin` (value piped via stdin).
->
-> 3. **Railway batch variable set** (`set_railway_variables_batch`): Decomposed into per-variable stdin calls with `--skip-deploys` forced on **all** writes so an auto-deploy is never triggered after a partial failure (CR-SA31-001). Railway CLI has no batch-stdin or env-file input (confirmed 2026-07-05). This limitation is documented in code and in this closeout note.
->
-> **Review follow-up (CR-SA31-001/002):** (1) `_configure_env_vars_step` failure path now hard-stops with `sys.exit(1)` instead of continuing to deploy after failed env var writes, and the insecure `--set KEY=VALUE` fallback is replaced with the stdin-based `railway variable set KEY --stdin` suggestion. (2) Added 16 standalone tests in `quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py` providing direct execution evidence for the stdin transport and legacy `--args-json` path, bypassing the pre-existing circular import in the backups Django test suite. (3) Batch writes now force `--skip-deploys` on every variable; the deploy is deferred to the caller after 100% success is confirmed.
->
-> *Files:* `quickscale_cli/src/quickscale_cli/utils/railway_utils.py:330-441`, `quickscale_cli/src/quickscale_cli/commands/dr_commands.py:222-265`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/dr_adapter_call.py`, `quickscale_cli/src/quickscale_cli/commands/deployment_commands.py:335-356`, `quickscale_cli/tests/commands/test_dr_adapter_call_standalone.py`.
-> *Acceptance:* `_call_adapter` test asserts `--args-json` is absent from docker command and JSON payload is passed via `input` kwarg. Railway `set_railway_variable` test asserts the stdin-based command structure. Railway CLI batch limitation documented in `set_railway_variables_batch` docstring. `_configure_env_vars_step` failure hard-stops with secure stdin alternative suggestion. Batch writes always use `--skip-deploys` so no auto-deploy occurs after partial failure. 16 standalone dr_adapter_call tests cover stdin transport, legacy `--args-json`, adapter dispatch, and error paths. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA31 — complete.** Moved Railway/DR adapter secrets off process argv onto stdin transport (DR adapter JSON, single and batch Railway variable writes); closes TA27. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
 
-- [x] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 3 · deps: none`
-  Retired `invalidate_social_cache()` from `quickscale_modules_social.services.__all__` and documented why it is not a safe tenant-aware bulk invalidation API: it only clears bare cache keys while real tenant reads use org-partitioned keys. Added a focused regression asserting the helper remains importable for compatibility but is no longer exported as public API. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+> **SA32 — complete.** Retired `invalidate_social_cache()` from the social module's public export surface (kept importable for compatibility); closes TA28. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `dangling-arch-audit-anchor` (`why →` [TA29](../others/tech-audit.md))
 
