@@ -107,6 +107,26 @@ class TestFormSubmitAPIView:
         assert response.status_code == 400
         assert "errors" in response.data
 
+    @pytest.mark.parametrize(
+        "payload,expected_error",
+        [
+            ([1, 2, 3], "must be text"),
+            ({"type": "object"}, "must be text"),
+            (123, "must be text"),
+            (None, "is required"),
+        ],
+    )
+    def test_returns_400_on_non_string_payload_values(
+        self, api_client, form, form_field, email_field, payload, expected_error
+    ):
+        """Array/number/object/null payloads return 400, never 500."""
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": payload, "email": payload, "company": payload}
+        response = api_client.post(url, data=data, format="json")
+        assert response.status_code == 400
+        assert expected_error in response.data["errors"]["full_name"][0]
+        assert expected_error in response.data["errors"]["email"][0]
+
     def test_honeypot_silently_marks_spam_and_returns_201(
         self, api_client, form, form_field, email_field
     ):
