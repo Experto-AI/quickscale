@@ -47,11 +47,11 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05), SA39 (2026-07-06). All closed per template rule — detail lives in CHANGELOG.md.
 
 > **Triage note (2026-07-06):** the previously-deferred triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41 new/narrowed this pass) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5) is done. SA34–SA47 below are the resulting fix items, each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred, matching the source docs' own "recommended first stage" framing). One doc-drift note: tech-audit's summary table still lists **TA32 as open**, but the code (`listings/views.py`, `storage/helpers.py`) already raises `ImproperlyConfigured` per SA30 — verified directly. Treating TA32 as closed (per roadmap's existing SA30 entry); no new item created for it. tech-audit.md itself is left untouched by this pass — only roadmap.md is updated here.
 
-> **Track status (2026-07-06):** Track 1 — **5 open items** (SA35, SA39, SA41, SA45, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **5 open items** (SA34, SA36, SA42, SA44, SA46). All three tracks now have queued work — 5/5/5 parallelism restored.
+> **Track status (2026-07-06):** Track 1 — **4 open items** (SA35, SA41, SA45, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **5 open items** (SA34, SA36, SA42, SA44, SA46). SA39 completed.
 
 ### Dependency & parallelization overview
 
@@ -73,7 +73,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `operator-access-silent-noop-outside-atomic` (`why →` [TA38](../others/tech-audit.md))
 
-- [ ] **SA39 — Fail hard when `operator_access()` is invoked outside an open transaction.** `Tier 1 · Track 1 · deps: none`
+- [x] **SA39 — Fail hard when `operator_access()` is invoked outside an open transaction.** `Tier 1 · Track 1 · deps: none`
   `SET LOCAL` outside `atomic()` is a silent PostgreSQL WARNING no-op — `operator_access()`/`_set_operator_access()` currently don't assert `connection.in_atomic_block`, so a caller who forgets `atomic()` gets a silently tenant-scoped/empty cross-tenant read while the audit log still records a successful activation. Raise `ImproperlyConfigured`/`RuntimeError` in that case (both the GUC set and the paired GUC read).
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py:601-618,621-682`.
   *Acceptance:* calling `operator_access()` outside `atomic()` raises immediately with a clear message; calling it inside `atomic()` behaves exactly as before (existing tests pass); add a regression test for the outside-atomic case.
