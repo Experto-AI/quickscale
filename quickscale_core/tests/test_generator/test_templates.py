@@ -3202,12 +3202,13 @@ class TestDevOpsTemplateRendering:
         assert len(output) > 0
         assert "#!/usr/bin/env bash" in output
         assert "testproject" in output
-        assert "Step 1/6" in output
-        assert "Step 2/6" in output
-        assert "Step 3/6" in output
-        assert "Step 4/6" in output
-        assert "Step 5/6" in output
-        assert "Step 6/6" in output
+        assert "Step 1/7" in output
+        assert "Step 2/7" in output
+        assert "Step 3/7" in output
+        assert "Step 4/7" in output
+        assert "Step 5/7" in output
+        assert "Step 6/7" in output
+        assert "Step 7/7" in output
 
     def test_start_sh_migration_clears_runtime_url(
         self, jinja_env: Environment, test_context: dict[str, str]

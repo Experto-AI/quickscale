@@ -35,3 +35,59 @@ def test_start_sh_keeps_missing_var_warning_path() -> None:
     assert "missing_critical_var=0" in output
     assert "missing_critical_var=1" in output
     assert 'echo "⚠️  Some variables may be missing"' in output
+
+
+def test_start_sh_has_createcachetable_after_migrate() -> None:
+    """The deploy script must run createcachetable after migrate (SA34).
+
+    SA21.1 added a DatabaseCache fallback when REDIS_URL is unset, but
+    ``migrate`` does not create the cache table — on a Redis-less
+    deployment the first throttled request raises ``ProgrammingError``.
+    SA34 adds ``python manage.py createcachetable`` to the deploy script
+    only for DatabaseCache deployments.
+    """
+    output = _render_start_sh()
+
+    assert "createcachetable" in output, "start.sh must include createcachetable"
+
+    # The createcachetable step must appear after the migrate step
+    migrate_index = output.index("python manage.py migrate")
+    createcachetable_index = output.index("python manage.py createcachetable")
+    assert createcachetable_index > migrate_index, (
+        "createcachetable must run after migrate"
+    )
+
+    # RUNTIME_DATABASE_URL must be cleared so the superuser DATABASE_URL
+    # is used (the runtime role cannot run DDL)
+    createcachetable_line = next(
+        line
+        for line in output.splitlines()
+        if "python manage.py createcachetable" in line
+    )
+    assert 'RUNTIME_DATABASE_URL=""' in createcachetable_line, (
+        "createcachetable must be invoked with RUNTIME_DATABASE_URL cleared"
+    )
+
+
+def test_start_sh_createcachetable_conditional_on_redis() -> None:
+    """createcachetable must only run when REDIS_URL is unset (CR-SA34-002).
+
+    When REDIS_URL is set the cache backend is Redis (which manages its
+    own tables), so the database cache table is not needed.
+    """
+    output = _render_start_sh()
+
+    # The Redis guard must be present
+    assert "REDIS_URL:-" in output or 'if [[ -z "${REDIS_URL' in output, (
+        "start.sh must guard createcachetable behind a REDIS_URL check"
+    )
+
+    # When REDIS is set, describe the skip
+    assert "skipping database cache table" in output.lower(), (
+        "start.sh must describe skipping when REDIS_URL is set"
+    )
+
+    # When REDIS is unset, describe the DatabaseCache path
+    assert "database cache table via superuser DATABASE_URL" in output, (
+        "start.sh must describe the DatabaseCache createcachetable path"
+    )
