@@ -7,6 +7,7 @@ Public/anonymous reads resolve the System org (D2).
 
 import json
 import logging
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -29,6 +30,48 @@ from .models import Listing
 
 logger = logging.getLogger(__name__)
 DEFAULT_LISTINGS_PER_PAGE = 12
+
+_ALLOWED_HREF_SCHEMES = frozenset({"http", "https", "mailto"})
+
+# Regex matching a URI scheme at the start of an href value.
+# RFC 3986: scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+_URI_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+\-.]*:")
+
+
+def _sanitize_href(href_value: str) -> str:
+    """Return *href_value* if its URI scheme is allowed, or ``""`` otherwise.
+
+    Allows ``http:``, ``https:``, ``mailto:``, relative URLs (no scheme),
+    protocol-relative URLs (``//``), and fragment-only values.  All other
+    schemes (``javascript:``, ``data:``, ``vbscript:``, …) are neutralised
+    so they cannot execute script in the browser.
+    """
+    if not href_value or not _URI_SCHEME_RE.match(href_value):
+        # Relative, protocol-relative, or fragment — always safe.
+        return href_value
+
+    scheme = href_value.split(":", 1)[0].lower()
+    if scheme in _ALLOWED_HREF_SCHEMES:
+        return href_value
+
+    return ""
+
+
+_ATTR_HREF_RE = re.compile(r'href\s*=\s*"([^"]*)"', re.IGNORECASE)
+
+
+def _sanitize_rendered_html(html: str) -> str:
+    """Neutralise dangerous URI schemes in ``<a href="…">`` attributes.
+
+    Runs the rendered HTML through an allowlist scheme check so that only
+    ``http:``, ``https:``, ``mailto:``, relative, protocol-relative, and
+    fragment links survive.  All other href values are replaced with an
+    empty string.
+    """
+    return _ATTR_HREF_RE.sub(
+        lambda m: 'href="' + _sanitize_href(m.group(1)) + '"',
+        html,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +344,6 @@ class ListingDetailView(ListingsPublicReadMixin, DetailView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         """Add rendered markdown description to context"""
         context = super().get_context_data(**kwargs)
-        context["rendered_description"] = markdownify(
-            escape(self.object.description or "")
-        )
+        rendered = markdownify(escape(self.object.description or ""))
+        context["rendered_description"] = _sanitize_rendered_html(rendered)
         return context

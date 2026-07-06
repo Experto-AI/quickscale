@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2: SA20 has a locked design decision (Option A, 2026-07-06) and is ready for implementation — CR-SA20-005/006/008 resolved, CR-SA20-007 fix is scoped with a file/line checklist, just not yet coded; SA21.2 is otherwise ready once SA20 is picked up. Track 3: SA27, SA31, and SA32 complete (SA21.1, SA22, SA25, SA33 also closed); rebalanced onto SA26, which has no dependencies and is ready to start now. See track sections below for `why →` finding links.
+> **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2: SA20 has a locked design decision (Option A, 2026-07-06) and is ready for implementation — CR-SA20-005/006/008 resolved, CR-SA20-007 fix is scoped with a file/line checklist, just not yet coded; SA21.2 is otherwise ready once SA20 is picked up. Track 3: SA26 complete (SA21.1, SA22, SA25, SA27, SA31, SA32, SA33 also closed) — all open Track 3 items closed. See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
@@ -59,7 +59,7 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 SA28 — complete                      SA20 — ready to implement (design decided, CR-SA20-007)   SA27 — complete
 SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 — complete
 SA29 — complete (CR-SA29-002: doc follow-up, non-blocking)                    SA32 — complete
-SA30 (no deps — land after SA29)                                              SA26 (no deps)
+SA30 (no deps — land after SA29)                                              SA26 — complete
 ```
 
 Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 and now lands in the same Track 1 sequence. Rebalanced 2026-07-05: SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3, since Track 1 and Track 3 emptied out as SA28/SA27 completed while Track 2 still carried six open items — this restored 3/3/2 parallelism across the three worktrees. Rebalanced again 2026-07-06: SA26 moved Track 2 → Track 3, since Track 3 emptied out again as SA27/SA31/SA32 completed while Track 2 still carried three open items (SA20, SA21.2, SA26) — this restores 1/2/1 parallelism, weighted toward Track 2 since SA20 is the larger in-progress item.
@@ -177,10 +177,10 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../others/tech-audit.md))
 
-- [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 3 · deps: none`
-  `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
-  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
-  *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
+- [x] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 3 · deps: none`
+  Added a stdlib-only `_sanitize_rendered_html()` helper to both `blog/views.py` and `listings/views.py` that runs the rendered markdown HTML through an allowlist URI-scheme check before it reaches the `|safe` template filter. The helper uses `re.sub` to inspect every `<a href="...">` attribute: `http:`, `https:`, `mailto:`, relative URLs, protocol-relative URLs, and fragment-only links are preserved; all other schemes (`javascript:`, `data:`, `vbscript:`, …) are neutralised by replacing the href with an empty string. No new dependency added (stdlib only). Added 3 focused regressions per module (6 total) proving `javascript:` links are neutralized, `https:` links remain clickable, and `mailto:` links remain clickable — on both blog PostDetailView and listings ListingDetailView. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py`, `quickscale_modules/blog/tests/test_views.py`, `quickscale_modules/listings/tests/test_views.py`.
+  *Acceptance:* blog `test_post_detail_sanitizes_javascript_markdown_links`, `test_post_detail_preserves_https_markdown_links`, `test_post_detail_preserves_mailto_markdown_links` and listings `test_listing_detail_sanitizes_javascript_markdown_links`, `test_listing_detail_preserves_https_markdown_links`, `test_listing_detail_preserves_mailto_markdown_links` all pass.
 
 ---
 

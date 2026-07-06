@@ -261,6 +261,68 @@ class TestPostDetailView:
         assert f'src="{post.get_featured_image_url()}"' in html
         assert f'src="{post.featured_image.url}"' not in html
 
+    # ------------------------------------------------------------------
+    # SA26 — Markdown URI scheme sanitization
+    # ------------------------------------------------------------------
+
+    def test_post_detail_sanitizes_javascript_markdown_links(
+        self, client, author_user, system_org
+    ):
+        """Test markdown []() javascript: links are neutralized in rendered output."""
+        post = Post.objects.create(
+            title="JS Link Post",
+            author=author_user,
+            content="[Click](javascript:alert(1))",
+            status="published",
+            organization=system_org,
+        )
+
+        response = client.get(reverse("quickscale_blog:post_detail", args=[post.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        # The href must not contain javascript: — it should be neutralized to ""
+        assert 'href="javascript:alert(1)"' not in html
+        assert 'href=""' in html or 'href="#">' not in html
+        # Link text should still be present
+        assert "Click" in html
+
+    def test_post_detail_preserves_https_markdown_links(
+        self, client, author_user, system_org
+    ):
+        """Test legitimate https: markdown links remain clickable."""
+        post = Post.objects.create(
+            title="Safe Link Post",
+            author=author_user,
+            content="[Example](https://example.com/page)",
+            status="published",
+            organization=system_org,
+        )
+
+        response = client.get(reverse("quickscale_blog:post_detail", args=[post.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="https://example.com/page"' in html
+
+    def test_post_detail_preserves_mailto_markdown_links(
+        self, client, author_user, system_org
+    ):
+        """Test legitimate mailto: markdown links remain clickable."""
+        post = Post.objects.create(
+            title="Mailto Link Post",
+            author=author_user,
+            content="[Email](mailto:user@example.com)",
+            status="published",
+            organization=system_org,
+        )
+
+        response = client.get(reverse("quickscale_blog:post_detail", args=[post.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="mailto:user@example.com"' in html
+
 
 @pytest.mark.django_db
 class TestCategoryListView:

@@ -320,3 +320,58 @@ class TestListingDetailView:
         html = response.content.decode()
         assert "<script>alert('xss')</script>" not in html
         assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in html
+
+    # ------------------------------------------------------------------
+    # SA26 — Markdown URI scheme sanitization
+    # ------------------------------------------------------------------
+
+    def test_listing_detail_sanitizes_javascript_markdown_links(
+        self, client, listing_factory
+    ):
+        """Test markdown []() javascript: links are neutralized in rendered output."""
+        listing = listing_factory(
+            title="JS Link Listing",
+            status="published",
+            description="[Click](javascript:alert(1))",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        # The href must not contain javascript: — it should be neutralized to ""
+        assert 'href="javascript:alert(1)"' not in html
+        # Link text should still be present
+        assert "Click" in html
+
+    def test_listing_detail_preserves_https_markdown_links(
+        self, client, listing_factory
+    ):
+        """Test legitimate https: markdown links remain clickable."""
+        listing = listing_factory(
+            title="Safe Link Listing",
+            status="published",
+            description="[Example](https://example.com/page)",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="https://example.com/page"' in html
+
+    def test_listing_detail_preserves_mailto_markdown_links(
+        self, client, listing_factory
+    ):
+        """Test legitimate mailto: markdown links remain clickable."""
+        listing = listing_factory(
+            title="Mailto Link Listing",
+            status="published",
+            description="[Email](mailto:user@example.com)",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="mailto:user@example.com"' in html
