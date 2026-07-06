@@ -48,6 +48,53 @@ if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
 
+_ARTIFACT_RESTORE_CLAIMABLE_STATUSES: frozenset[str] = frozenset(
+    {
+        BackupArtifact.STATUS_READY,
+        BackupArtifact.STATUS_VALIDATED,
+        BackupArtifact.STATUS_FAILED,
+        BackupArtifact.STATUS_RESTORED,
+    }
+)
+"""Pre-claim statuses eligible for an atomic restore claim.
+
+Excludes STATUS_DELETED (terminal — never restorable) and
+STATUS_RESTORING (already claimed by another request).
+"""
+
+
+def _atomic_claim_restore(artifact: BackupArtifact) -> bool:
+    """Atomically claim *artifact* for restore via DB compare-and-swap.
+
+    Uses a single filtered ``update()`` to transition the artifact from an
+    eligible pre-claim status to ``STATUS_RESTORING``.  Only the caller that
+    wins the race sees ``updated > 0``; losers re-read the artifact and
+    return ``False``.
+
+    After a successful claim the in-memory *artifact* is refreshed from the
+    database so its attributes reflect ``STATUS_RESTORING`` /
+    ``restore_started_at`` / ``restore_error``.  After a failed claim the
+    in-memory *artifact* is also refreshed so the caller can inspect the
+    current status to surface an appropriate reason.
+
+    Callers **must** snapshot ``artifact.status``, ``restore_started_at``,
+    and ``restore_error`` *before* calling this function if they need to
+    roll back on a subsequent spawn failure.
+    """
+    now = django_timezone.now()
+    updated = BackupArtifact.objects.filter(
+        pk=artifact.pk,
+        status__in=_ARTIFACT_RESTORE_CLAIMABLE_STATUSES,
+    ).update(
+        status=BackupArtifact.STATUS_RESTORING,
+        restore_started_at=now,
+        restore_error="",
+        updated_at=now,
+    )
+    artifact.refresh_from_db()
+    return updated > 0
+
+
 def _get_manage_py() -> str:
     """Return the path to manage.py for subprocess management-command dispatch."""
     script = Path(sys.argv[0])
@@ -506,23 +553,32 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                 # CR-SA20-007: Persist STATUS_RESTORING before
                                 # Popen so a fast child terminal update is never
                                 # missed or overwritten.  Roll back to the
-                                # pre-spawn status on spawn failure.
+                                # pre-spawn status/metadata on spawn failure so a
+                                # retried FAILED/RESTORED artifact does not lose
+                                # its prior restore_started_at and restore_error.
+                                # CR-SA20-REV-002: Use atomic compare-and-swap
+                                # so concurrent submissions do not both dispatch
+                                # Popen for the same artifact.
                                 pre_spawn_status = selected_artifact.status
-                                selected_artifact.status = (
-                                    BackupArtifact.STATUS_RESTORING
+                                pre_spawn_restore_started_at = (
+                                    selected_artifact.restore_started_at
                                 )
-                                selected_artifact.restore_started_at = (
-                                    django_timezone.now()
+                                pre_spawn_restore_error = (
+                                    selected_artifact.restore_error
                                 )
-                                selected_artifact.restore_error = ""
-                                selected_artifact.save(
-                                    update_fields=[
-                                        "status",
-                                        "restore_started_at",
-                                        "restore_error",
-                                        "updated_at",
-                                    ]
-                                )
+                                if not _atomic_claim_restore(selected_artifact):
+                                    ineligible_reason = (
+                                        self._get_admin_restore_ineligible_reason(
+                                            selected_artifact
+                                        )
+                                    )
+                                    if ineligible_reason is not None:
+                                        raise BackupRestoreBlocked(ineligible_reason)
+                                    raise BackupRestoreBlocked(
+                                        "This backup artifact is currently being "
+                                        "restored. Wait for the restore to "
+                                        "complete before retrying."
+                                    )
                                 try:
                                     subprocess.Popen(
                                         [
@@ -537,15 +593,22 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                         close_fds=True,
                                     )
                                 except Exception:
-                                    # Rollback: restore pre-spawn status so a
-                                    # spawn failure never strands the artifact
-                                    # in STATUS_RESTORING.
+                                    # Rollback: restore pre-spawn status/metadata
+                                    # so a spawn failure never strands the artifact
+                                    # in STATUS_RESTORING or loses prior failure
+                                    # metadata on retry.
                                     selected_artifact.status = pre_spawn_status
-                                    selected_artifact.restore_started_at = None
+                                    selected_artifact.restore_started_at = (
+                                        pre_spawn_restore_started_at
+                                    )
+                                    selected_artifact.restore_error = (
+                                        pre_spawn_restore_error
+                                    )
                                     selected_artifact.save(
                                         update_fields=[
                                             "status",
                                             "restore_started_at",
+                                            "restore_error",
                                             "updated_at",
                                         ]
                                     )
@@ -581,6 +644,29 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                         staging_directory
                                     )
                                     raise
+
+                                # CR-SA20-REV-001: Reject already-restoring
+                                # artifacts with parity to the recorded-artifact
+                                # branch.  The resolver above does not check
+                                # STATUS_RESTORING (its trust model mirrors
+                                # the sync path), so we guard here before
+                                # copy or Popen.  CR-SA20-REV-002's atomic
+                                # compare-and-swap below is the real race-proof
+                                # gate; this early check is an optimization to
+                                # avoid unnecessary work on a clearly-stale
+                                # artifact.
+                                if (
+                                    trusted_artifact.status
+                                    == BackupArtifact.STATUS_RESTORING
+                                ):
+                                    _cleanup_admin_restore_upload_directory(
+                                        staging_directory
+                                    )
+                                    raise BackupRestoreBlocked(
+                                        "This backup artifact is currently being "
+                                        "restored. Wait for the restore to "
+                                        "complete before retrying."
+                                    )
 
                                 confirm_value = form.cleaned_data["confirmation"]
                                 if confirm_value.strip() != trusted_artifact.filename:
@@ -641,24 +727,32 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                 # CR-SA20-007: Persist STATUS_RESTORING before
                                 # Popen so a fast child terminal update is never
                                 # missed or overwritten.  Roll back to the
-                                # pre-spawn status on spawn failure.
+                                # pre-spawn status/metadata on spawn failure so a
+                                # retried FAILED/RESTORED artifact does not lose
+                                # its prior restore_started_at and restore_error.
+                                # CR-SA20-REV-002: Use atomic compare-and-swap
+                                # so concurrent submissions do not both dispatch
+                                # Popen for the same artifact.
                                 manage_py = _get_manage_py()
                                 pre_spawn_status = trusted_artifact.status
-                                trusted_artifact.status = (
-                                    BackupArtifact.STATUS_RESTORING
+                                pre_spawn_restore_started_at = (
+                                    trusted_artifact.restore_started_at
                                 )
-                                trusted_artifact.restore_started_at = (
-                                    django_timezone.now()
-                                )
-                                trusted_artifact.restore_error = ""
-                                trusted_artifact.save(
-                                    update_fields=[
-                                        "status",
-                                        "restore_started_at",
-                                        "restore_error",
-                                        "updated_at",
-                                    ]
-                                )
+                                pre_spawn_restore_error = trusted_artifact.restore_error
+                                if not _atomic_claim_restore(trusted_artifact):
+                                    if (
+                                        trusted_artifact.status
+                                        == BackupArtifact.STATUS_DELETED
+                                    ):
+                                        raise BackupRestoreBlocked(
+                                            "Deleted backup artifacts cannot be "
+                                            "restored from admin."
+                                        )
+                                    raise BackupRestoreBlocked(
+                                        "This backup artifact is currently being "
+                                        "restored. Wait for the restore to "
+                                        "complete before retrying."
+                                    )
                                 try:
                                     subprocess.Popen(
                                         [
@@ -673,15 +767,22 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                         close_fds=True,
                                     )
                                 except Exception:
-                                    # Rollback: restore pre-spawn status so a
-                                    # spawn failure never strands the artifact
-                                    # in STATUS_RESTORING.
+                                    # Rollback: restore pre-spawn status/metadata
+                                    # so a spawn failure never strands the artifact
+                                    # in STATUS_RESTORING or loses prior failure
+                                    # metadata on retry.
                                     trusted_artifact.status = pre_spawn_status
-                                    trusted_artifact.restore_started_at = None
+                                    trusted_artifact.restore_started_at = (
+                                        pre_spawn_restore_started_at
+                                    )
+                                    trusted_artifact.restore_error = (
+                                        pre_spawn_restore_error
+                                    )
                                     trusted_artifact.save(
                                         update_fields=[
                                             "status",
                                             "restore_started_at",
+                                            "restore_error",
                                             "updated_at",
                                         ]
                                     )
