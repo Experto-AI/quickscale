@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2 is blocked on SA20 (CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking — spawn-failure rollback metadata); SA21.2 and SA26 are otherwise ready once SA20 is revisited. Track 3 clear to continue: SA27 and SA31 complete; SA32 rebalanced in (SA21.1, SA22, SA25, SA33 closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2 is blocked on SA20 (CR-SA20-005 and CR-SA20-006 resolved; CR-SA20-007 remains blocking — spawn-failure rollback metadata); SA21.2 and SA26 are otherwise ready once SA20 is revisited. Track 3 clear: SA27, SA31, and SA32 are complete; no remaining Track 3 backlog in this phase set (SA21.1, SA22, SA25, SA33 also closed). See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
@@ -58,7 +58,7 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA28 — complete                      SA20 — blocked (CR-SA20-007)              SA27 — complete
 SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 — complete
-SA29 — complete (CR-SA29-002 accepted)                       SA26 (no deps)                            SA32 (no deps)
+SA29 — complete (CR-SA29-002 accepted)                       SA26 (no deps)                            SA32 — complete
 SA30 (no deps — land after SA29)
 ```
 
@@ -119,6 +119,14 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
   However, the spawn-failure rollback still fails to restore pre-spawn `restore_started_at` and `restore_error` metadata when the parent retries a previously FAILED or RESTORED artifact and `Popen()` raises. When the parent resets the artifact's status to `STATUS_RESTORING` before the new spawn attempt, the prior failure metadata is overwritten without being preserved. Fix required: capture `restore_started_at` and `restore_error` before overwriting them on retry and restore them if the new spawn fails. Needed follow-up: add regressions for retrying FAILED/RESTORED artifacts when `Popen` raises. This is the sole remaining blocker preventing SA20 closeout.
 
+  **Decision (2026-07-06) — Option A selected: snapshot-and-restore, symmetric with the existing `pre_spawn_status` pattern.** Extend the two spawn-failure rollback blocks in `admin.py` (recorded-artifact branch and uploaded-file branch) to capture `restore_started_at` and `restore_error` into local variables *alongside* `pre_spawn_status`, before the pre-spawn overwrite. On `Popen()` failure, restore all three fields (`status`, `restore_started_at`, `restore_error`) together in the same `save(update_fields=...)` call, instead of only resetting `status` and nulling `restore_started_at`.
+  - **Why this option over the alternatives:** (B) moving the metadata writes into the child's "on entry" branch was rejected — it reopens the fast-child-terminal-clobber race that CR-SA20-007's status-ordering fix already closed, for no functional gain. (C) reloading from DB via `refresh_from_db()` before rollback was rejected — needless round trip and a race window against concurrent admin actions, when the in-memory pre-spawn values are already available. Option A reuses code shape the review has already validated once (status rollback) and matches the project's standing convention of preserving failure audit trails rather than silently discarding them (see the SA17 direct-required-read batch).
+  - **Implementation checklist for whoever picks this up:**
+    1. In `admin.py`'s recorded-artifact restore branch (~line 495-552) and uploaded-file branch (~line 638-688): before setting `status = STATUS_RESTORING` / `restore_started_at = now()` / `restore_error = ""`, snapshot the pre-spawn values of all three fields.
+    2. In the `except Exception:` rollback after `Popen()`, write the snapshotted values back for all three fields (not just `status`), in one `save(update_fields=[...])` call.
+    3. Add regression tests mirroring `test_restore_page_does_not_strand_status_restoring_on_spawn_failure` and its uploaded-file counterpart, but seeding the artifact with a prior `STATUS_FAILED`/`STATUS_RESTORED` state plus a non-empty `restore_started_at`/`restore_error`, then asserting those exact prior values survive a `Popen()` failure on retry — for both the recorded-artifact and uploaded-file branches (4 new/adjusted cases total, matching the existing branch-parity pattern).
+  - **Files to touch:** `quickscale_modules/backups/src/quickscale_modules_backups/admin.py`, `quickscale_modules/backups/tests/test_admin.py`.
+
   **CR-SA20-008 (resolved):** The CHANGELOG's SA20 entry previously described the uploaded-file dispatch as using ``--file <path>``, but both branches (recorded-artifact and uploaded-file) dispatch via artifact-id. The CHANGELOG entry and roadmap wording have been corrected to accurately reflect the artifact-id dispatch for both branches.
 
   *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py`, `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/backups_restore.py`, `quickscale_core/src/quickscale_core/dr_engine/adapter.py`, `quickscale_modules/backups/tests/test_admin.py`, `quickscale_modules/backups/tests/test_restore_command.py`.
@@ -167,10 +175,8 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 
 #### Finding — `invalidate-social-cache-org-unaware` (`why →` [TA28](../others/tech-audit.md))
 
-- [ ] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 3 · deps: none`
-  The exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context (model `save()`/`delete()` invalidate correctly; this function is uncalled by first-party code but is a public-API trap for bulk mutations like `queryset.update()` that bypass `save()`). Either make it org-aware (accept/iterate org context) or remove it from `__all__` so it stops looking like a safe bulk-invalidation tool.
-  *Files:* `quickscale_modules/social/src/quickscale_modules_social/services.py:182-184`.
-  *Acceptance:* either a test demonstrates `invalidate_social_cache()` correctly invalidates org-partitioned entries, or the function is dropped from the module's public `__all__` with a comment explaining why.
+- [x] **SA32 — Fix or retire `invalidate_social_cache()`.** `Tier 1 · Track 3 · deps: none`
+  Retired `invalidate_social_cache()` from `quickscale_modules_social.services.__all__` and documented why it is not a safe tenant-aware bulk invalidation API: it only clears bare cache keys while real tenant reads use org-partitioned keys. Added a focused regression asserting the helper remains importable for compatibility but is no longer exported as public API. No new blockers discovered. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `dangling-arch-audit-anchor` (`why →` [TA29](../others/tech-audit.md))
 

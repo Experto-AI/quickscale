@@ -91,14 +91,14 @@ args, no timeout-less HTTP calls, no bare `Popen`/unclosed-file patterns.
 | TA22 | S4 | security hardening | `analytics_tags` `mark_safe(json.dumps(...))` without `</script>` escaping | Trivial | High | open |
 | TA25 | S4 | security hardening | Markdown `javascript:` link URIs survive escaping on public blog/listing pages | Small | Medium | open |
 | TA27 | S4 | security (local) | Railway CLI and DR adapter receive secrets/args on process argv (`ps`-visible) | Small | High | open |
-| TA28 | S4 | correctness / library API | `invalidate_social_cache()` clears only bare keys — no-op for org-partitioned entries; exported but uncalled | Trivial | High | open |
+| ~~TA28~~ | ~~S4~~ | ~~correctness / library API~~ | ~~`invalidate_social_cache()` clears only bare keys — no-op for org-partitioned entries; exported but uncalled~~ | ~~Trivial~~ | ~~High~~ | closed (SA32) |
 | ~~TA29~~ | ~~S4~~ | ~~docs hygiene~~ | ~~`decisions.md:650` links to a dropped `arch-audit.md` heading~~ | ~~Trivial~~ | ~~High~~ | closed (SA33) |
 | TA32 | S4 | fail-open config (runtime residuals) | Listings/storage runtime settings reads silently default and coerce (TA2 class — modules outside SA17's scope) | Small | High | open |
 | ~~TA19~~ | ~~S2~~ | ~~security / fail-open config~~ | ~~`QUICKSCALE_MODE` read with permissive `"solo"` default at 4 tenancy-relevant runtime callsites~~ | ~~Small ⚡~~ | ~~High~~ | closed (SA14.6) |
 | ~~TA20~~ | ~~S3~~ | ~~correctness / data loss (CLI)~~ | ~~`apply --force` wipes the existing project before generating its replacement~~ | ~~Small~~ | ~~High~~ | closed (SA22) |
 | ~~TA23~~ | ~~S4~~ | ~~hygiene~~ | ~~`coverage.json`, `pytest_cov_log.txt` tracked in git~~ | ~~Trivial~~ | ~~High~~ | closed (SA25) |
 
-Counts: **S1: 0 · S2: 3 · S3: 1 · S4: 6.** Quick wins flagged ⚡ (Trivial/Small-effort S2).
+Counts: **S1: 0 · S2: 3 · S3: 1 · S4: 5.** Quick wins flagged ⚡ (Trivial/Small-effort S2).
 
 ---
 
@@ -147,7 +147,7 @@ Counts: **S1: 0 · S2: 3 · S3: 1 · S4: 6.** Quick wins flagged ⚡ (Trivial/Sm
 - **TA22** — `analytics/templatetags/analytics_tags.py:33`: `mark_safe(json.dumps(payload))` — latent `</script>` injection if payload ever carries request data (settings-only today). Fix: `json_script` pattern or escape `<>&`.
 - **TA25** — `blog/views.py:787` + `listings/views.py:304-305` → `|safe` templates: `markdownify(escape(...))` neutralizes raw HTML but not markdown `[x](javascript:…)` link URIs (staff/token-gated authoring; defense-in-depth). Fix: sanitize rendered HTML (`nh3`/`bleach`, drop non-http(s)/mailto schemes).
 - **TA27** — `quickscale_cli/utils/railway_utils.py:348,391,891` (`railway variables --set KEY=VALUE` with live secret values) and `commands/dr_commands.py:232-242` (`--args-json` on `docker exec` argv): secrets/args visible via `ps`/`/proc` on shared hosts. Fix: stdin transport for the adapter JSON; document the Railway CLI limitation. *(Reinstated — see Reconciliation log.)*
-- **TA28** — `social/services.py:182-184`: exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context; no first-party callers (model `save()`/`delete()` at `models.py:133-162` invalidate correctly) — a public-API trap for bulk mutations (`queryset.update()` bypasses `save()`). Fix: make it org-aware or drop it from `__all__`; consider `transaction.on_commit` for the model-path invalidation while there.
+- ~~**TA28** — `social/services.py:182-184`: exported `invalidate_social_cache()` clears only bare cache keys, a no-op for the org-partitioned keys actually used under tenant context; no first-party callers (model `save()`/`delete()` at `models.py:133-162` invalidate correctly) — a public-API trap for bulk mutations (`queryset.update()` bypasses `save()`). Closed by SA32: retired from `__all__`, kept importable for compatibility; no longer a public-API trap.~~
 - **TA32** — `listings/views.py:39-52` (`_get_positive_int_setting`: missing/invalid `LISTINGS_PER_PAGE` silently → default) and `storage/helpers.py:44-56` (`_read_setting` defaults; `_normalize_backend`: unknown backend value silently → `"local"`): runtime fail-open residuals of the TA2 class — listings and storage were outside SA17.2–17.6's scope. Low-stakes at runtime today because TA26's generation-time coercion guarantees "valid" baked literals, but the storage fallback becomes live under hand-edited settings/env overrides and is the runtime half of TA26 scenario 4 / TA31. Fix: direct required reads (SA17 pattern) in both modules.
 
 ---
@@ -200,6 +200,7 @@ Categories swept with no qualifying finding this pass: injection sinks, deserial
 - 2026-07-05 (closeout) — TA20: resolved (SA22 — same-filesystem staging with backup/swap/rollback for `apply --force`; generation to temp first, swap only on success, rollback on failure).
 - 2026-07-05 (closeout) — TA23: resolved (SA25 — `coverage.json` and `pytest_cov_log.txt` removed from git tracking via `git rm --cached`; `.gitignore` patterns already present).
 - 2026-07-05 (roadmap cleanup) — TA26: resolved (SA27 — `assemble_wiring_spec` now raises on non-empty `validation_issues`; missing `validate_{blog,forms,storage,orgs}_module_options` calls added to the apply-gate; silent coercions in `resolve_orgs_module_options`/`resolve_storage_module_options`/blog resolvers removed). TA30: resolved (SA28 — last-owner and personal-org invariants enforced at the account-deletion boundary via `AccountDeleteView.form_valid`, with subscription cancellation routed through the existing billing seam).
+- 2026-07-06 — TA28: resolved (SA32 — retired `invalidate_social_cache()` from `quickscale_modules_social.services.__all__`; kept the helper importable for compatibility; no longer a public-API trap for bulk mutations).
 
 ## Notes (not violations, watch items)
 
