@@ -218,6 +218,17 @@ DEFAULT_STORAGE_MEDIA_URL: Final[str] = "/media/"
 DEFAULT_STORAGE_PUBLIC_BASE_URL: Final[str] = ""
 DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED: Final[bool] = False
 
+DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR: Final[str] = "AWS_ACCESS_KEY_ID"
+DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR: Final[str] = "AWS_SECRET_ACCESS_KEY"
+
+STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: Final[str] = "access_key_id_env_var"
+STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: Final[str] = "secret_access_key_env_var"
+
+_LEGACY_STORAGE_SECRET_OPTIONS: Final[dict[str, str]] = {
+    "access_key_id": DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+    "secret_access_key": DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+}
+
 STORAGE_MODULE_OPTION_KEYS: Final[frozenset[str]] = frozenset(
     {
         "backend",
@@ -226,8 +237,8 @@ STORAGE_MODULE_OPTION_KEYS: Final[frozenset[str]] = frozenset(
         "bucket_name",
         "endpoint_url",
         "region_name",
-        "access_key_id",
-        "secret_access_key",
+        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
         "default_acl",
         "querystring_auth",
         "private_media_enabled",
@@ -546,6 +557,53 @@ def normalize_notifications_module_options(
     return normalized
 
 
+def normalize_storage_module_options(
+    options: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Return storage options with legacy raw-secret keys removed.
+
+    Legacy raw credential values are converted into conventional environment-variable
+    references so downstream persistence layers never re-store the secret values.
+    """
+    normalized = dict(options or {})
+
+    legacy_access_key_id = str(normalized.pop("access_key_id", "")).strip()
+    legacy_secret_access_key = str(normalized.pop("secret_access_key", "")).strip()
+
+    access_key_env_var = str(
+        normalized.get(STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION, "")
+    ).strip()
+    secret_access_key_env_var = str(
+        normalized.get(STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION, "")
+    ).strip()
+
+    if legacy_access_key_id and not access_key_env_var:
+        normalized[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] = (
+            DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR
+        )
+    if legacy_secret_access_key and not secret_access_key_env_var:
+        normalized[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = (
+            DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
+        )
+
+    if "backend" in normalized:
+        normalized["backend"] = str(normalized["backend"]).strip().lower()
+
+    for strip_key in (
+        "public_base_url",
+        "bucket_name",
+        "endpoint_url",
+        "region_name",
+        "default_acl",
+        STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+        STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+    ):
+        if strip_key in normalized:
+            normalized[strip_key] = str(normalized[strip_key]).strip()
+
+    return normalized
+
+
 def normalize_social_module_options(
     options: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -795,6 +853,33 @@ def validate_notifications_module_options(
     return []
 
 
+def validate_storage_env_var_reference(option_name: str, value: Any) -> str | None:
+    """Validate a storage env-var reference field.
+
+    Returns an actionable error string when the value is not a safe environment
+    variable name or appears to be a literal credential value.
+    """
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+
+    qualified_option = f"modules.storage.{option_name}"
+    if not _BACKUPS_ENV_VAR_NAME_PATTERN.fullmatch(candidate):
+        return (
+            f"{qualified_option} must be an environment variable name matching "
+            "^[A-Z][A-Z0-9_]*$"
+        )
+
+    if option_name == STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION:
+        if _LIKELY_AWS_ACCESS_KEY_ID_PATTERN.fullmatch(candidate):
+            return (
+                f"{qualified_option} must reference an environment variable name, "
+                "not a literal AWS access key id"
+            )
+
+    return None
+
+
 def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
     """Return validation issues for the social module contract.
 
@@ -950,6 +1035,8 @@ def sanitize_module_options(
         return normalize_notifications_module_options(options)
     if module_name == "social":
         return normalize_social_module_options(dict(options or {}))
+    if module_name == "storage":
+        return normalize_storage_module_options(options)
     return dict(options or {})
 
 
@@ -1035,15 +1122,19 @@ __all__ = [
     "ORGS_MODES",
     "ORGS_MODULE_OPTION_KEYS",
     # Storage constants
+    "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
     "DEFAULT_STORAGE_BACKEND",
     "DEFAULT_STORAGE_MEDIA_URL",
     "DEFAULT_STORAGE_PRIVATE_MEDIA_ENABLED",
     "DEFAULT_STORAGE_PUBLIC_BASE_URL",
+    "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+    "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "STORAGE_BACKEND_LOCAL",
     "STORAGE_BACKEND_R2",
     "STORAGE_BACKEND_S3",
     "STORAGE_BACKENDS",
     "STORAGE_MODULE_OPTION_KEYS",
+    "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     # Social path constants
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",
@@ -1055,4 +1146,7 @@ __all__ = [
     "has_legacy_backups_secret_values",
     # Sanitize dispatcher
     "sanitize_module_options",
+    # Storage normalize/validate
+    "normalize_storage_module_options",
+    "validate_storage_env_var_reference",
 ]
