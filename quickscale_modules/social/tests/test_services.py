@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db.utils import OperationalError, ProgrammingError
 from django.test import override_settings
 
+import quickscale_modules_social.services as social_services
 from quickscale_modules_social.contracts import (
     SOCIAL_EMBEDS_CACHE_KEY,
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
@@ -525,6 +526,12 @@ def test_social_models_enforce_guardrails_and_invalidate_cache(org) -> None:
     assert exc_info.value.message_dict["provider_name"] == [
         "Embeds support only TikTok and YouTube in v0.79.0."
     ]
+
+
+def test_invalidate_social_cache_is_not_exported_as_public_bulk_api() -> None:
+    """The bare-key cache helper should not be advertised as tenant-aware API."""
+    assert hasattr(social_services, "invalidate_social_cache")
+    assert "invalidate_social_cache" not in social_services.__all__
 
 
 def test_build_social_link_tree_payload_freezes_disabled_and_error_semantics() -> None:
