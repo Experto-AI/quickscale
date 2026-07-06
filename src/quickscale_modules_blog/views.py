@@ -72,14 +72,29 @@ def _sanitize_href(href_value: str) -> str:
     protocol-relative URLs (``//``), and fragment-only values.  All other
     schemes (``javascript:``, ``data:``, ``vbscript:``, …) are neutralised
     so they cannot execute script in the browser.
+
+    C0 control characters (``\\t``, ``\\r``, ``\\n``) and leading whitespace
+    are stripped before the scheme check because browsers strip them from
+    URLs before scheme parsing — without this, an obfuscated scheme such as
+    ``java\\tscript:`` would bypass the allowlist.
     """
-    if not href_value or not _URI_SCHEME_RE.match(href_value):
-        # Relative, protocol-relative, or fragment — always safe.
+    if not href_value:
         return href_value
 
-    scheme = href_value.split(":", 1)[0].lower()
+    # Browsers strip \\t, \\r, \\n from URLs and trim leading C0
+    # controls/whitespace before scheme parsing (WHATWG URL spec).
+    # Normalise first so an obfuscated scheme cannot slip past the
+    # allowlist regex, which excludes these characters from the scheme
+    # character class.
+    cleaned = href_value.replace("\t", "").replace("\r", "").replace("\n", "").lstrip()
+
+    if not _URI_SCHEME_RE.match(cleaned):
+        # Relative, protocol-relative, or fragment — always safe.
+        return cleaned
+
+    scheme = cleaned.split(":", 1)[0].lower()
     if scheme in _ALLOWED_HREF_SCHEMES:
-        return href_value
+        return cleaned
 
     return ""
 
