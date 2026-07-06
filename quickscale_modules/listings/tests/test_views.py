@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from quickscale_modules_listings.views import _sanitize_href
 
 
 @pytest.mark.django_db
@@ -341,8 +342,103 @@ class TestListingDetailView:
         html = response.content.decode()
         # The href must not contain javascript: — it should be neutralized to ""
         assert 'href="javascript:alert(1)"' not in html
+        assert 'href=""' in html
         # Link text should still be present
         assert "Click" in html
+
+    def test_listing_detail_sanitizes_tab_obfuscated_javascript(
+        self, client, listing_factory
+    ):
+        """Test markdown []() links with tab-obfuscated javascript: scheme are neutralized.
+
+        Note: the markdown parser converts control characters in URLs to
+        spaces before the sanitizer sees them, so ``java\\tscript:``
+        renders as ``java    script:alert(1)`` in the href.  Browsers do
+        NOT strip interior spaces from URLs, so this is not an executable
+        ``javascript:`` scheme — the tab-obfuscation attack is blocked by
+        the markdown parser itself.  The ``_sanitize_href`` control-char
+        normalisation handles the general case when a tab reaches the
+        sanitizer via a non-markdown path.
+        """
+        listing = listing_factory(
+            title="Tab JS Link Listing",
+            status="published",
+            description="[Click](java\tscript:alert(1))",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="javascript:' not in html
+        assert "javascript:alert(1)" not in html
+        assert "Click" in html
+
+    def test_listing_detail_sanitizes_newline_obfuscated_javascript(
+        self, client, listing_factory
+    ):
+        """Test markdown []() links with newline-obfuscated javascript: scheme are neutralized."""
+        listing = listing_factory(
+            title="NL JS Link Listing",
+            status="published",
+            description="[Click](java\nscript:alert(1))",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="java' not in html
+        assert "javascript:alert(1)" not in html
+        assert "Click" in html
+
+    def test_listing_detail_sanitizes_case_variant_javascript(
+        self, client, listing_factory
+    ):
+        """Test markdown []() links with case-variant javascript: scheme are neutralized."""
+        listing = listing_factory(
+            title="Case JS Link Listing",
+            status="published",
+            description="[Click](JaVaScRiPt:alert(1))",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="JaVaScRiPt:alert(1)"' not in html
+        assert "javascript:alert(1)" not in html
+        assert "Click" in html
+
+    def test_listing_detail_sanitizes_data_scheme(self, client, listing_factory):
+        """Test markdown []() data: links are neutralized in rendered output."""
+        listing = listing_factory(
+            title="Data Link Listing",
+            status="published",
+            description="[Payload](data:text/html,test)",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="data:' not in html
+        assert "Payload" in html
+
+    def test_listing_detail_sanitizes_vbscript_scheme(self, client, listing_factory):
+        """Test markdown []() vbscript: links are neutralized in rendered output."""
+        listing = listing_factory(
+            title="VB Link Listing",
+            status="published",
+            description="[VB](vbscript:msgbox(1))",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'href="vbscript:' not in html
+        assert "VB" in html
 
     def test_listing_detail_preserves_https_markdown_links(
         self, client, listing_factory
@@ -375,3 +471,28 @@ class TestListingDetailView:
         assert response.status_code == 200
         html = response.content.decode()
         assert 'href="mailto:user@example.com"' in html
+
+
+class TestSanitizeHrefUnit:
+    """Direct unit tests for the ``_sanitize_href`` security primitive.
+
+    Locks the C0 control-char normalization (CR-SA26-001) so the fix cannot
+    be silently reverted.  These reach ``_sanitize_href`` directly — not
+    through ``markdownify``, which pre-converts tabs to spaces in rendered
+    hrefs and would therefore not fail if the normalization were removed.
+    """
+
+    def test_neutralizes_tab_obfuscated_javascript(self):
+        assert _sanitize_href("java\tscript:alert(1)") == ""
+
+    def test_neutralizes_newline_obfuscated_javascript(self):
+        assert _sanitize_href("java\nscript:alert(1)") == ""
+
+    def test_neutralizes_carriage_return_obfuscated_javascript(self):
+        assert _sanitize_href("java\rscript:alert(1)") == ""
+
+    def test_neutralizes_leading_whitespace_javascript(self):
+        assert _sanitize_href("\t  javascript:alert(1)") == ""
+
+    def test_preserves_https_through_normalization(self):
+        assert _sanitize_href("https://example.com/page") == "https://example.com/page"
