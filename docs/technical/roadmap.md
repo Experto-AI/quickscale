@@ -51,14 +51,14 @@ git merge --no-ff wt-track{N}
 
 > **Triage note (2026-07-06):** the previously-deferred triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41 new/narrowed this pass) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5) is done. SA34–SA47 below are the resulting fix items, each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred, matching the source docs' own "recommended first stage" framing). One doc-drift note: tech-audit's summary table still lists **TA32 as open**, but the code (`listings/views.py`, `storage/helpers.py`) already raises `ImproperlyConfigured` per SA30 — verified directly. Treating TA32 as closed (per roadmap's existing SA30 entry); no new item created for it. tech-audit.md itself is left untouched by this pass — only roadmap.md is updated here.
 
-> **Track status (2026-07-06):** Track 1 — **5 open items** (SA35, SA39, SA41, SA45, SA47). Track 2 — **5 open items** (SA21.2 ready; SA43, SA37, SA38 chained; SA40 independent). Track 3 — **5 open items** (SA34, SA36, SA42, SA44, SA46). All three tracks now have queued work — 5/5/5 parallelism restored.
+> **Track status (2026-07-06):** Track 1 — **5 open items** (SA35, SA39, SA41, SA45, SA47). Track 2 — **4 open items** (SA21.2 ready; SA43, SA37, SA38 chained). Track 3 — **5 open items** (SA34, SA36, SA42, SA44, SA46). All three tracks now have queued work — 5/4/5 parallelism restored.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
-SA39 (deps: none)                         SA40 (deps: none)                           SA34 (deps: none)
+SA39 (deps: none)                         SA43 (deps: none)                           SA34 (deps: none)
 SA45 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA36 (deps: none) ─────┐
 SA35 (deps: none)                         SA43 (deps: none)                           SA46 (deps: none)      │
 SA41 (deps: none)                         SA37 (deps: SA43)                           SA44 (deps: none)      │
@@ -134,10 +134,11 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `forms-submit-nonstring-value-500` (`why →` [TA41](../others/tech-audit.md))
 
-- [ ] **SA40 — Reject non-string values on public form submit instead of 500ing.** `Tier 1 · Track 2 · deps: none`
-  The public form-submit validator assumes every submitted value is a string: `to_internal_value` does `dict(data)` with no per-value coercion, then `validate()`/`make_field_validator` call `re.match`/`len` on the raw value for any field with length/regex validation rules. DRF's JSON parser yields native types, so a non-string value (`123`, `["x"]`, `{"a":1}`) raises an uncaught `TypeError` — not a `ValidationError` — 500ing an unauthenticated endpoint. Reject or `str()`-coerce non-string scalars at the top of `validate()` (400 "must be text" per field), and guard `int(min_length)`/`int(max_length)` against non-numeric `validation_rules`.
+- [x] **SA40 — Reject non-string values on public form submit instead of 500ing.** `Tier 1 · Track 2 · deps: none`
+  The public form-submit validator assumed every submitted value is a string: `to_internal_value` does `dict(data)` with no per-value coercion, then `validate()`/`make_field_validator` call `re.match`/`len` on the raw value for any field with length/regex validation rules. DRF's JSON parser yields native types, so a non-string value (`123`, `["x"]`, `{"a":1}`) raised an uncaught `TypeError` — not a `ValidationError` — 500ing an unauthenticated endpoint. Public validation now rejects non-string payloads with 400 errors and rejects malformed `validation_rules` before per-value enforcement.
   *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/serializers.py:163-165,193`, `quickscale_modules_forms/validators.py:24,29,34`.
   *Acceptance:* POSTing array/number/object/null values for a validated field returns 400, never 500; existing valid-string submissions unaffected; add a negative-test sweep for those JSON value types at the public submit endpoint.
+  *Findings / Blockers:* No blockers.
 
 #### Finding — `backups-admin-orchestration-accretion` (`why →` [arch-audit.md Finding 3](../others/arch-audit.md), first step only)
 

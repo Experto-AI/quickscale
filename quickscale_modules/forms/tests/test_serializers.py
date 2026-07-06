@@ -113,3 +113,14 @@ class TestFormSubmissionCreateSerializer:
         serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
         assert not serializer.is_valid()
         assert "full_name" in serializer.errors
+
+    def test_validation_rules_with_nonnumeric_limits_return_validation_error(
+        self, form, form_field, email_field
+    ):
+        """Non-numeric min/max rules surface as field-level validation errors."""
+        form_field.validation_rules = {"min_length": "not-a-number"}
+        form_field.save()
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
+        assert not serializer.is_valid()
+        assert "full_name" in serializer.errors
