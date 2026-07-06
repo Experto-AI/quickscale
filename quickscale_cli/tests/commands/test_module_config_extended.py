@@ -58,6 +58,8 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINK_TREE_PATH,
+    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
 )
 from quickscale_cli.utils.module_dependency_sync import sync_project_module_dependencies
 from quickscale_cli.utils.module_dependency_sync import (
@@ -975,7 +977,7 @@ class TestModuleWiringSpecs:
             )
 
     def test_storage_wiring_r2_sets_optional_provider_settings(self):
-        """Storage wiring should emit optional provider fields for R2 mode."""
+        """Storage wiring should emit __QS_ENV__ markers for credential options."""
         specs = _build_specs(
             {
                 "storage": {
@@ -985,8 +987,8 @@ class TestModuleWiringSpecs:
                     "bucket_name": "assets",
                     "endpoint_url": "https://account.r2.cloudflarestorage.com",
                     "region_name": "auto",
-                    "access_key_id": "key-id",
-                    "secret_access_key": "secret-key",
+                    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "AWS_MY_ACCESS_KEY_ID",
+                    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "AWS_MY_SECRET_ACCESS_KEY",
                     "default_acl": "public-read",
                     "querystring_auth": True,
                     "private_media_enabled": False,
@@ -1006,8 +1008,10 @@ class TestModuleWiringSpecs:
             == "https://account.r2.cloudflarestorage.com"
         )
         assert settings["AWS_S3_REGION_NAME"] == "auto"
-        assert settings["AWS_ACCESS_KEY_ID"] == "key-id"
-        assert settings["AWS_SECRET_ACCESS_KEY"] == "secret-key"
+        assert settings["AWS_ACCESS_KEY_ID"] == "__QS_ENV__:AWS_MY_ACCESS_KEY_ID"
+        assert (
+            settings["AWS_SECRET_ACCESS_KEY"] == "__QS_ENV__:AWS_MY_SECRET_ACCESS_KEY"
+        )
         assert settings["AWS_DEFAULT_ACL"] == "public-read"
         assert settings["AWS_QUERYSTRING_AUTH"] is True
 
@@ -1282,8 +1286,8 @@ class TestStorageModuleConfig:
             "assets",
             "https://account.r2.cloudflarestorage.com",
             "auto",
-            "key-id",
-            "secret-key",
+            "AWS_MY_ACCESS_KEY_ID",
+            "AWS_MY_SECRET_ACCESS_KEY",
             "public-read",
         ]
 
@@ -1293,8 +1297,11 @@ class TestStorageModuleConfig:
         assert config["bucket_name"] == "assets"
         assert config["endpoint_url"] == "https://account.r2.cloudflarestorage.com"
         assert config["region_name"] == "auto"
-        assert config["access_key_id"] == "key-id"
-        assert config["secret_access_key"] == "secret-key"
+        assert config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "AWS_MY_ACCESS_KEY_ID"
+        assert (
+            config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
+            == "AWS_MY_SECRET_ACCESS_KEY"
+        )
         assert config["default_acl"] == "public-read"
         assert config["querystring_auth"] is True
 
@@ -1314,8 +1321,8 @@ class TestStorageModuleConfig:
             "assets",
             "",
             "eu-west-1",
-            "key-id",
-            "secret-key",
+            "OPS_AWS_ACCESS_KEY_ID",
+            "OPS_AWS_SECRET_ACCESS_KEY",
             "",
         ]
 
@@ -1327,8 +1334,8 @@ class TestStorageModuleConfig:
                 "public_base_url": "https://cdn.example.com/media",
                 "bucket_name": "assets",
                 "region_name": "eu-west-1",
-                "access_key_id": "key-id",
-                "secret_access_key": "secret-key",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "OPS_AWS_ACCESS_KEY_ID",
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "OPS_AWS_SECRET_ACCESS_KEY",
             },
         )
 
@@ -1356,8 +1363,8 @@ class TestStorageModuleConfig:
                 "bucket_name": "assets",
                 "endpoint_url": "https://account.r2.cloudflarestorage.com",
                 "region_name": "auto",
-                "access_key_id": "key-id",
-                "secret_access_key": "secret-key",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "OPS_AWS_ACCESS_KEY_ID",
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "OPS_AWS_SECRET_ACCESS_KEY",
                 "default_acl": "public-read",
                 "querystring_auth": True,
             },
@@ -1367,10 +1374,52 @@ class TestStorageModuleConfig:
         assert config["bucket_name"] == ""
         assert config["endpoint_url"] == ""
         assert config["region_name"] == ""
-        assert config["access_key_id"] == ""
-        assert config["secret_access_key"] == ""
+        assert config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] == ""
+        assert config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] == ""
         assert config["default_acl"] == ""
         assert config["querystring_auth"] is False
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_storage_local_to_cloud_fallback_to_default_env_var_names(
+        self,
+        mock_confirm,
+        mock_prompt,
+    ):
+        """Local→cloud reconfigure with blank env-var defaults should use canonical env-var names."""
+        mock_confirm.return_value = False
+        mock_prompt.side_effect = [
+            "s3",
+            "/media/",
+            "",
+            "assets",
+            "",
+            "eu-west-1",
+            "",  # Blank input for access key env var
+            "",  # Blank input for secret access key env var
+            "",
+        ]
+
+        config = configure_storage_module(
+            non_interactive=False,
+            existing_config={
+                "backend": "local",
+                "bucket_name": "",
+                "endpoint_url": "",
+                "region_name": "",
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION: "",
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "",
+                "default_acl": "",
+                "querystring_auth": False,
+            },
+        )
+
+        assert config["backend"] == "s3"
+        assert config["bucket_name"] == "assets"
+        assert config[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION] == "AWS_ACCESS_KEY_ID"
+        assert (
+            config[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] == "AWS_SECRET_ACCESS_KEY"
+        )
 
     def test_add_storage_dependencies_aborts_when_module_pyproject_missing(
         self, tmp_path

@@ -42,17 +42,17 @@ config:
       django_setting: AWS_S3_REGION_NAME
       description: "Cloud provider region name (or auto for endpoint providers)"
 
-    access_key_id:
+    access_key_id_env_var:
       type: string
-      default: ""
-      django_setting: AWS_ACCESS_KEY_ID
-      description: "S3-compatible access key id"
+      default: "AWS_ACCESS_KEY_ID"
+      django_setting: QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR
+      description: "Environment variable name for the S3-compatible access key id"
 
-    secret_access_key:
+    secret_access_key_env_var:
       type: string
-      default: ""
-      django_setting: AWS_SECRET_ACCESS_KEY
-      description: "S3-compatible secret access key"
+      default: "AWS_SECRET_ACCESS_KEY"
+      django_setting: QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR
+      description: "Environment variable name for the S3-compatible secret access key"
 
     default_acl:
       type: string

@@ -263,28 +263,31 @@ modules:
 		bucket_name: your-media-bucket
 		endpoint_url: ""
 		region_name: eu-west-1
-		access_key_id: YOUR_ACCESS_KEY_ID
-		secret_access_key: YOUR_SECRET_ACCESS_KEY
+		access_key_id_env_var: AWS_ACCESS_KEY_ID
+		secret_access_key_env_var: AWS_SECRET_ACCESS_KEY
 		default_acl: ""
 		querystring_auth: false
 ```
 
-Set these deployment environment variables:
+> **Secret handling — SA29:** The ``access_key_id_env_var`` and ``secret_access_key_env_var``
+> options specify the *name* of an environment variable, not the credential value itself.
+> The generated ``settings/modules.py`` reads these at runtime via ``os.environ.get()``
+> so no credential material is stored in version control.  Keep your actual
+> ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY`` values out of ``quickscale.yml``
+> and set them as deploy-time environment variables instead.
+
+Only the actual credential values belong in deploy-time environment variables.
+Set your real AWS credentials in your deploy environment:
 
 ```bash
-QUICKSCALE_STORAGE_BACKEND=s3
-QUICKSCALE_STORAGE_PUBLIC_BASE_URL=https://cdn.example.com
-AWS_STORAGE_BUCKET_NAME=your-media-bucket
-AWS_ACCESS_KEY_ID=your-access-key-id
-AWS_SECRET_ACCESS_KEY=your-secret-access-key
-AWS_S3_REGION_NAME=eu-west-1
-AWS_QUERYSTRING_AUTH=false
-
-# Cloudflare R2 only
-# QUICKSCALE_STORAGE_BACKEND=r2
-# AWS_S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
-# AWS_S3_REGION_NAME=auto
+AWS_ACCESS_KEY_ID=your-actual-access-key-id
+AWS_SECRET_ACCESS_KEY=your-actual-secret-access-key
 ```
+
+All other storage settings (`backend`, `public_base_url`, `bucket_name`, `endpoint_url`,
+`region_name`, `default_acl`, `querystring_auth`) are configured in `quickscale.yml`
+under `modules.storage` and applied with `quickscale apply`. Do not set them as
+environment variables.
 
 Keep `public_base_url` blank in local development. Set it to the final public
 CDN/media host in staging and production.

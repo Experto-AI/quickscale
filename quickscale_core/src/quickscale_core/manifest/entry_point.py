@@ -1322,18 +1322,41 @@ def _storage_manifest_adapter(
         bucket_name = str(resolved.get("bucket_name", "")).strip()
         endpoint_url = str(resolved.get("endpoint_url", "")).strip()
         region_name = str(resolved.get("region_name", "")).strip()
-        access_key_id = str(resolved.get("access_key_id", "")).strip()
-        secret_access_key = str(resolved.get("secret_access_key", "")).strip()
         default_acl = str(resolved.get("default_acl", "")).strip()
         querystring_auth = bool(resolved.get("querystring_auth", False))
+
+        # SA29: credential options are now env-var name references. The
+        # access key / secret key are NOT baked into the generated settings
+        # module.  django-storages falls back to top-level Django settings
+        # (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY), which are emitted as
+        # os.environ.get() calls via the __QS_ENV__ marker below — so the
+        # generated modules.py never stores credential material.
+        from quickscale_core.contracts.module_options import (  # noqa: PLC0415
+            DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+            DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+            STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+        )
+
+        access_key_id_env_var = str(
+            resolved.get(
+                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+            )
+        ).strip()
+        secret_access_key_env_var = str(
+            resolved.get(
+                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+                DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+            )
+        ).strip()
 
         storage_options: dict[str, Any] = {
             "querystring_auth": querystring_auth,
         }
-        if access_key_id:
-            storage_options["access_key"] = access_key_id
-        if secret_access_key:
-            storage_options["secret_key"] = secret_access_key
+        # No access_key/secret_key in STORAGES OPTIONS — django-storages
+        # falls through to the top-level AWS_ACCESS_KEY_ID setting (which
+        # is now set via os.environ.get() below).
         if bucket_name:
             storage_options["bucket_name"] = bucket_name
         if endpoint_url:
@@ -1360,10 +1383,14 @@ def _storage_manifest_adapter(
             derived_settings["AWS_S3_ENDPOINT_URL"] = endpoint_url
         if region_name:
             derived_settings["AWS_S3_REGION_NAME"] = region_name
-        if access_key_id:
-            derived_settings["AWS_ACCESS_KEY_ID"] = access_key_id
-        if secret_access_key:
-            derived_settings["AWS_SECRET_ACCESS_KEY"] = secret_access_key
+        if access_key_id_env_var:
+            derived_settings["AWS_ACCESS_KEY_ID"] = (
+                f"__QS_ENV__:{access_key_id_env_var}"
+            )
+        if secret_access_key_env_var:
+            derived_settings["AWS_SECRET_ACCESS_KEY"] = (
+                f"__QS_ENV__:{secret_access_key_env_var}"
+            )
         if default_acl:
             derived_settings["AWS_DEFAULT_ACL"] = default_acl
 

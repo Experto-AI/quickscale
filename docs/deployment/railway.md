@@ -314,8 +314,8 @@ modules:
     bucket_name: your-media-bucket
     endpoint_url: ""
     region_name: eu-west-1
-    access_key_id: YOUR_ACCESS_KEY_ID
-    secret_access_key: YOUR_SECRET_ACCESS_KEY
+    access_key_id_env_var: AWS_ACCESS_KEY_ID
+    secret_access_key_env_var: AWS_SECRET_ACCESS_KEY
     default_acl: ""
     querystring_auth: false
 ```
@@ -343,27 +343,21 @@ blog API responses, public featured-image rendering, and generated thumbnails.
 Leave it blank only for local development, where QuickScale falls back to
 `MEDIA_URL` behavior.
 
-### Minimum environment variable contract
+### Credential environment variables
 
-Generated projects wire the storage module through standard Django storage
-settings. For production Railway deployments, set:
+Only the actual credential values need to be set as Railway environment
+variables. The storage module reads these at runtime through the env-var
+names configured in `quickscale.yml`:
 
-- `QUICKSCALE_STORAGE_BACKEND=s3` for AWS S3, or `QUICKSCALE_STORAGE_BACKEND=r2`
-  for Cloudflare R2
-- `QUICKSCALE_STORAGE_PUBLIC_BASE_URL=https://cdn.example.com` for the final
-  public media host or host+path
-- `AWS_STORAGE_BUCKET_NAME`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_QUERYSTRING_AUTH=false` for public CDN-friendly assets
+- `AWS_ACCESS_KEY_ID` — your real access key (the default value for
+  `access_key_id_env_var`)
+- `AWS_SECRET_ACCESS_KEY` — your real secret key (the default value for
+  `secret_access_key_env_var`)
 
-Set `AWS_S3_REGION_NAME` for AWS S3. For Cloudflare R2, set:
-
-- `AWS_S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com`
-- `AWS_S3_REGION_NAME=auto`
-
-Keep `AWS_DEFAULT_ACL` blank unless your provider policy requires a specific
-override.
+All other storage settings (`backend`, `public_base_url`, `bucket_name`,
+`endpoint_url`, `region_name`, `default_acl`, `querystring_auth`) are
+configured in `quickscale.yml` under `modules.storage` and applied with
+`quickscale apply`. Do not set them as Railway environment variables.
 
 ### Local, staging, and production guidance
 
