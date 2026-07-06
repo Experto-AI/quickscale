@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError
 from django.db.models import QuerySet
 from django.http import HttpRequest, JsonResponse
@@ -94,20 +95,30 @@ def _sanitize_rendered_html(html: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _get_positive_int_setting(setting_name: str, default: int) -> int:
-    """Return a positive integer setting value or the provided default."""
-    value = getattr(settings, setting_name, default)
-    if isinstance(value, bool):
-        return default
+def _get_positive_int_setting(setting_name: str) -> int:
+    """Return a positive integer setting value or raise ImproperlyConfigured.
 
+    SA30: direct required read — rejects missing, non-integer, and non-positive
+    values with a descriptive error instead of silently falling back.
+    """
+    value = getattr(settings, setting_name, None)
+    if value is None:
+        raise ImproperlyConfigured(f"{setting_name} setting is required.")
+    if isinstance(value, bool):
+        raise ImproperlyConfigured(
+            f"{setting_name} must be a valid positive integer, got {type(value).__name__}"
+        )
     try:
         parsed_value = int(value)
-    except TypeError:
-        return default
-    except ValueError:
-        return default
-
-    return parsed_value if parsed_value > 0 else default
+    except (TypeError, ValueError):
+        raise ImproperlyConfigured(
+            f"{setting_name} must be a valid positive integer, got {value!r}"
+        )
+    if parsed_value <= 0:
+        raise ImproperlyConfigured(
+            f"{setting_name} must be a positive integer, got {parsed_value}"
+        )
+    return parsed_value
 
 
 class ListingPublishValidationError(Exception):
@@ -299,12 +310,13 @@ class ListingListView(ListingsPublicReadMixin, ListView):
     filterset_class: type[Any] | None = None
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
-        """Return the runtime-configured listings-per-page value."""
+        """Return the runtime-configured listings-per-page value.
+
+        SA30: raises ``ImproperlyConfigured`` when ``LISTINGS_PER_PAGE`` is
+        missing, non-integer, or non-positive instead of silently defaulting.
+        """
         del queryset
-        return _get_positive_int_setting(
-            "LISTINGS_PER_PAGE",
-            DEFAULT_LISTINGS_PER_PAGE,
-        )
+        return _get_positive_int_setting("LISTINGS_PER_PAGE")
 
     def get_filterset_class(self) -> type[Any]:
         """Resolve the filterset class, defaulting to the shared factory."""
