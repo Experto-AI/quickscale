@@ -1983,6 +1983,249 @@ class TestBackupPolicyAdmin:
             in response2.content.decode("utf-8")
         )
 
+    # ------------------------------------------------------------------
+    # CR-SA20-REV-002: regression — atomic-claim-failure defensive paths
+    # (lines 570-581 recorded-artifact; lines 743-755 uploaded-file).
+    # These are unreachable in normal flow because earlier guards catch
+    # ineligible statuses before the atomic claim.  Patch the helper to
+    # simulate a lost compare-and-swap race with a side_effect that sets
+    # the artifact's in-memory status and returns False.
+    # ------------------------------------------------------------------
+
+    def test_restore_recorded_artifact_atomic_claim_failure_with_ineligible_reason(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """CR-SA20-REV-002: Recorded-artifact atomic claim failure with
+        ineligible_reason (lines 575-576).
+
+        When _atomic_claim_restore fails and the artifact's post-claim
+        status maps to a known blocking reason (STATUS_RESTORING), the
+        code raises BackupRestoreBlocked with that reason rather than
+        the generic fallback message.
+        """
+        del backup_policy
+
+        def _fail_claim_set_restoring(
+            artifact: BackupArtifact,
+        ) -> bool:
+            artifact.status = BackupArtifact.STATUS_RESTORING
+            return False
+
+        with (
+            patch(
+                "quickscale_modules_backups.admin._atomic_claim_restore",
+                side_effect=_fail_claim_set_restoring,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_popen.assert_not_called()
+        assert (
+            "This backup artifact is currently being restored."
+            in response.content.decode("utf-8")
+        )
+
+    def test_restore_recorded_artifact_atomic_claim_fallback(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """CR-SA20-REV-002: Recorded-artifact atomic claim fallback
+        (lines 577-581).
+
+        When _atomic_claim_restore fails and the artifact's post-claim
+        status does not map to a known blocking reason (STATUS_READY
+        passes all _get_admin_restore_ineligible_reason checks, returning
+        None), the code falls back to a generic message.
+        """
+        del backup_policy
+
+        def _fail_claim_set_ready(
+            artifact: BackupArtifact,
+        ) -> bool:
+            artifact.status = BackupArtifact.STATUS_READY
+            return False
+
+        with (
+            patch(
+                "quickscale_modules_backups.admin._atomic_claim_restore",
+                side_effect=_fail_claim_set_ready,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_popen.assert_not_called()
+        assert (
+            "This backup artifact is currently being restored."
+            in response.content.decode("utf-8")
+        )
+
+    def test_restore_uploaded_file_atomic_claim_failure_with_deleted_status(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """CR-SA20-REV-002: Uploaded-file atomic claim failure with
+        STATUS_DELETED (lines 743-749).
+
+        When _atomic_claim_restore fails and the artifact's post-claim
+        status is STATUS_DELETED, the code surfaces the specific
+        deleted-artifact message.
+        """
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=(postgresql_backup_artifact.checksum_sha256),
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        def _fail_claim_set_deleted(
+            artifact: BackupArtifact,
+        ) -> bool:
+            artifact.status = BackupArtifact.STATUS_DELETED
+            return False
+
+        with (
+            patch(
+                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_modules_backups.admin."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ),
+            patch(
+                "quickscale_modules_backups.admin._atomic_claim_restore",
+                side_effect=_fail_claim_set_deleted,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
+                    "confirmation": (postgresql_backup_artifact.filename),
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_popen.assert_not_called()
+        assert (
+            "Deleted backup artifacts cannot be restored from admin."
+            in response.content.decode("utf-8")
+        )
+
+    def test_restore_uploaded_file_atomic_claim_fallback(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """CR-SA20-REV-002: Uploaded-file atomic claim fallback
+        (lines 751-755).
+
+        When _atomic_claim_restore fails and the artifact's post-claim
+        status is not STATUS_DELETED, the code falls back to a generic
+        message.
+        """
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=(postgresql_backup_artifact.checksum_sha256),
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        def _fail_claim_set_failed(
+            artifact: BackupArtifact,
+        ) -> bool:
+            artifact.status = BackupArtifact.STATUS_FAILED
+            return False
+
+        with (
+            patch(
+                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_modules_backups.admin."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ),
+            patch(
+                "quickscale_modules_backups.admin._atomic_claim_restore",
+                side_effect=_fail_claim_set_failed,
+            ),
+            patch(
+                "quickscale_modules_backups.admin.subprocess.Popen",
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
+                    "confirmation": (postgresql_backup_artifact.filename),
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_popen.assert_not_called()
+        assert (
+            "This backup artifact is currently being restored."
+            in response.content.decode("utf-8")
+        )
+
 
 @pytest.mark.django_db
 class TestBackupArtifactAdmin:
