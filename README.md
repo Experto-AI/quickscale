@@ -48,8 +48,8 @@ modules:
     bucket_name: your-media-bucket
     endpoint_url: ""
     region_name: eu-west-1
-    access_key_id: YOUR_ACCESS_KEY_ID
-    secret_access_key: YOUR_SECRET_ACCESS_KEY
+    access_key_id_env_var: AWS_ACCESS_KEY_ID
+    secret_access_key_env_var: AWS_SECRET_ACCESS_KEY
     default_acl: ""
     querystring_auth: false
 ```
@@ -72,22 +72,21 @@ If you install the package outside QuickScale's managed apply flow, enable the `
 - set `region_name` to `auto`
 - set `public_base_url` to the final public media host or host+path
 
-### Minimum environment variable contract
+### Credential environment variables
 
-Generated projects rely on these settings in cloud mode:
+Only the actual credential values need to be set as deploy-time environment
+variables. The storage module reads these at runtime through the env-var
+names configured in `quickscale.yml`:
 
-- `QUICKSCALE_STORAGE_BACKEND`
-- `QUICKSCALE_STORAGE_PUBLIC_BASE_URL`
-- `AWS_STORAGE_BUCKET_NAME`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_QUERYSTRING_AUTH`
+- `AWS_ACCESS_KEY_ID` — your real access key (the default value for
+  `access_key_id_env_var`)
+- `AWS_SECRET_ACCESS_KEY` — your real secret key (the default value for
+  `secret_access_key_env_var`)
 
-AWS S3 additionally requires `AWS_S3_REGION_NAME`.
-Cloudflare R2 additionally requires `AWS_S3_ENDPOINT_URL` and usually
-`AWS_S3_REGION_NAME=auto`.
-
-Leave `AWS_DEFAULT_ACL` blank unless you have a provider-specific reason to set it.
+All other storage settings (`backend`, `public_base_url`, `bucket_name`,
+`endpoint_url`, `region_name`, `default_acl`, `querystring_auth`) are
+configured in `quickscale.yml` under `modules.storage` and applied with
+`quickscale apply`. Do not set them as environment variables.
 
 ## Local, staging, and production guidance
 
