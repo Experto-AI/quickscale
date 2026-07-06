@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
@@ -37,20 +38,56 @@ def _uploaded_image(
 
 
 class TestSelectStorageBackend:
-    def test_local_backend_is_default(self) -> None:
-        resolved = select_storage_backend({})
-        assert resolved.backend == "local"
-        assert resolved.use_s3_compatible is False
-        assert resolved.django_backend == "django.core.files.storage.FileSystemStorage"
+    def test_missing_backend_raises_improperly_configured(self) -> None:
+        """SA30: missing QUICKSCALE_STORAGE_BACKEND raises ImproperlyConfigured."""
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="QUICKSCALE_STORAGE_BACKEND setting is required",
+        ):
+            select_storage_backend({})
 
-    def test_invalid_backend_on_settings_object_normalizes_to_local(self) -> None:
+    def test_missing_backend_on_settings_object_raises_improperly_configured(
+        self,
+    ) -> None:
+        """SA30: missing QUICKSCALE_STORAGE_BACKEND on settings object raises."""
+
+        class Settings:
+            pass
+
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="QUICKSCALE_STORAGE_BACKEND setting is required",
+        ):
+            select_storage_backend(Settings())
+
+    def test_invalid_backend_on_settings_object_raises_improperly_configured(
+        self,
+    ) -> None:
+        """SA30: invalid backend raises ImproperlyConfigured instead of normalizing."""
+
         class Settings:
             QUICKSCALE_STORAGE_BACKEND = "invalid"
 
-        resolved = select_storage_backend(Settings())
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="QUICKSCALE_STORAGE_BACKEND must be one of",
+        ):
+            select_storage_backend(Settings())
 
+    def test_empty_backend_string_raises_improperly_configured(self) -> None:
+        """SA30: empty QUICKSCALE_STORAGE_BACKEND raises ImproperlyConfigured."""
+        with pytest.raises(
+            ImproperlyConfigured,
+            match="QUICKSCALE_STORAGE_BACKEND setting is required",
+        ):
+            select_storage_backend({"QUICKSCALE_STORAGE_BACKEND": ""})
+
+    def test_local_backend_explicit(self) -> None:
+        """SA30: explicit 'local' backend returns local selection."""
+        resolved = select_storage_backend({"QUICKSCALE_STORAGE_BACKEND": "local"})
         assert resolved.backend == "local"
-        assert resolved.options == {}
+        assert resolved.use_s3_compatible is False
+        assert resolved.django_backend == "django.core.files.storage.FileSystemStorage"
 
     def test_s3_backend_uses_s3_storage(self) -> None:
         resolved = select_storage_backend(

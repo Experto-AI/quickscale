@@ -12,6 +12,7 @@ from typing import Any, Mapping
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import UploadedFile
 from django.utils.text import slugify
 from PIL import Image, UnidentifiedImageError
@@ -48,12 +49,22 @@ def _read_setting(settings_obj: Any | Mapping[str, Any], key: str, default: Any)
 
 
 def _normalize_backend(raw_backend: str | None) -> str:
-    backend = (raw_backend or "local").strip().lower()
+    """Normalize a storage backend name or raise ImproperlyConfigured.
+
+    SA30: rejects missing, empty, and unrecognized values instead of silently
+    falling back to ``local``.
+    """
+    if not raw_backend or not raw_backend.strip():
+        raise ImproperlyConfigured("QUICKSCALE_STORAGE_BACKEND setting is required.")
+    backend = raw_backend.strip().lower()
     if backend in {"filesystem", "file", "local"}:
         return "local"
     if backend in {"s3", "r2"}:
         return backend
-    return "local"
+    raise ImproperlyConfigured(
+        "QUICKSCALE_STORAGE_BACKEND must be one of 'local', 's3', or 'r2', "
+        f"got {raw_backend!r}"
+    )
 
 
 def _normalize_media_prefix(media_url: str) -> str:
@@ -74,10 +85,15 @@ def _normalize_media_prefix(media_url: str) -> str:
 def select_storage_backend(
     settings_obj: Any | Mapping[str, Any],
 ) -> StorageBackendSelection:
-    """Resolve local vs S3-compatible backend settings from Django settings."""
-    backend = _normalize_backend(
-        str(_read_setting(settings_obj, "QUICKSCALE_STORAGE_BACKEND", "local"))
-    )
+    """Resolve local vs S3-compatible backend settings from Django settings.
+
+    SA30: raises ``ImproperlyConfigured`` when ``QUICKSCALE_STORAGE_BACKEND``
+    is missing or invalid instead of silently defaulting.
+    """
+    raw_backend = _read_setting(settings_obj, "QUICKSCALE_STORAGE_BACKEND", None)
+    if raw_backend is None:
+        raise ImproperlyConfigured("QUICKSCALE_STORAGE_BACKEND setting is required.")
+    backend = _normalize_backend(str(raw_backend))
 
     if backend == "local":
         return StorageBackendSelection(
