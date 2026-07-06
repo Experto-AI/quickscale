@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA21.1 (2026-07-05), SA22 (2026-07-05), SA23 (2026-07-05), SA25 (2026-07-05), SA33 (2026-07-05). All closed per template rule — detail lives in CHANGELOG.md.
 
-> **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2: SA20 has a locked design decision (Option A, 2026-07-06) and is ready for implementation — CR-SA20-005/006/008 resolved, CR-SA20-007 fix is scoped with a file/line checklist, just not yet coded; SA21.2 and SA26 are otherwise ready once SA20 is picked up. Track 3 clear: SA27, SA31, and SA32 are complete; no remaining Track 3 backlog in this phase set (SA21.1, SA22, SA25, SA33 also closed). See track sections below for `why →` finding links.
+> **Track status (2026-07-06):** Track 1 clear to continue: SA28, SA24, and SA29 complete (SA14, SA23 also complete — archived); rebalanced onto SA30 now that its earlier backlog is closed. Track 2: SA20 has a locked design decision (Option A, 2026-07-06) and is ready for implementation — CR-SA20-005/006/008 resolved, CR-SA20-007 fix is scoped with a file/line checklist, just not yet coded; SA21.2 is otherwise ready once SA20 is picked up. Track 3: SA27, SA31, and SA32 complete (SA21.1, SA22, SA25, SA33 also closed); rebalanced onto SA26, which has no dependencies and is ready to start now. See track sections below for `why →` finding links.
 
 ### Dependency & parallelization overview
 
@@ -58,11 +58,11 @@ Track 1 (tenant-context surface)     Track 2 (module contracts & settings)      
 ───────────────────────────────      ───────────────────────────────────       ───────────────────────────
 SA28 — complete                      SA20 — ready to implement (design decided, CR-SA20-007)   SA27 — complete
 SA24 — complete                      SA21.2 (deps: SA21.1 — complete)          SA31 — complete
-SA29 — complete (CR-SA29-002: doc follow-up, non-blocking) SA26 (no deps)       SA32 — complete
-SA30 (no deps — land after SA29)
+SA29 — complete (CR-SA29-002: doc follow-up, non-blocking)                    SA32 — complete
+SA30 (no deps — land after SA29)                                              SA26 (no deps)
 ```
 
-Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 and now lands in the same Track 1 sequence. Rebalanced 2026-07-05: SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3, since Track 1 and Track 3 emptied out as SA28/SA27 completed while Track 2 still carried six open items — this restores 3/3/2 parallelism across the three worktrees.
+Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30 relates to SA29 and now lands in the same Track 1 sequence. Rebalanced 2026-07-05: SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3, since Track 1 and Track 3 emptied out as SA28/SA27 completed while Track 2 still carried six open items — this restored 3/3/2 parallelism across the three worktrees. Rebalanced again 2026-07-06: SA26 moved Track 2 → Track 3, since Track 3 emptied out again as SA27/SA31/SA32 completed while Track 2 still carried three open items (SA20, SA21.2, SA26) — this restores 1/2/1 parallelism, weighted toward Track 2 since SA20 is the larger in-progress item.
 
 ### Track 1 — Tenant-context surface
 
@@ -141,13 +141,6 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
   *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/throttles.py:26-30`, `quickscale_modules/forms/src/quickscale_modules_forms/views.py:231,257`, `quickscale_modules/blog/src/quickscale_modules_blog/views.py:260-266,277-304`.
   *Acceptance:* two requests with different `X-Forwarded-For` values (fixed `REMOTE_ADDR`) get independent throttle buckets and are logged with the forwarded client IP, not the proxy's; a 6th form submission within the configured window from one distinct client is rejected regardless of which worker/replica serves it.
 
-#### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../others/tech-audit.md))
-
-- [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 2 · deps: none`
-  `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
-  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
-  *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
-
 ### Track 3 — Core/CLI plumbing
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
@@ -181,6 +174,13 @@ Cross-track dependency: SA21.2 (Track 2) → SA21.1 (Track 3 — complete). SA30
 #### Finding — `dangling-arch-audit-anchor` (`why →` [TA29](../others/tech-audit.md))
 
 > **SA33 — complete.** Dangling `decisions.md:650` → `arch-audit.md` anchor link repointed to the arch-audit reconciliation log entry. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+
+#### Finding — `markdown-uri-scheme-stored-xss` (`why →` [TA25](../others/tech-audit.md))
+
+- [ ] **SA26 — Sanitize markdown-rendered URI schemes on public blog/listing pages.** `Tier 2 · Track 3 · deps: none`
+  `markdownify(escape(...))` blocks raw HTML injection but not markdown-native `[text](javascript:...)` links, which render as an unescaped `<a href="javascript:...">` under the `|safe` filter. Run the rendered HTML through an allowlist sanitizer (`bleach.clean`/`nh3`) restricting `href` schemes to `http`/`https`/`mailto`, or configure a markdown URL-sanitizing extension, before marking safe.
+  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/views.py:787`, `quickscale_modules/listings/src/quickscale_modules_listings/views.py:304-305`, both post/listing detail templates.
+  *Acceptance:* publishing a post/listing with a `javascript:` markdown link results in a stripped/neutralized `href` on the rendered detail page; legitimate `http(s)`/`mailto` markdown links continue to render as clickable anchors.
 
 ---
 
