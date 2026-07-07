@@ -53,6 +53,7 @@ from quickscale_cli.commands.module_config import (
     validate_backups_module_options,
 )
 from quickscale_core.manifest.entry_point import (
+    MANIFEST_ADAPTER_REGISTRY,
     build_manifest_wiring_spec,
     refresh_managed_adapters,
 )
@@ -81,20 +82,19 @@ from quickscale_cli.utils.module_dependency_sync import (
 )
 from quickscale_core.module_wiring import collect_wiring
 
-# Prime managed-adapter registry (CRM, social, billing) so that
-# _build_specs() calls for managed modules are self-contained and
-# do not depend on prior test-module execution order.  Follows
-# the established pattern in test_manifest_entry_point_integration.py
-# and test_manifest_entry_point.py.
-refresh_managed_adapters()
-
 
 def _build_specs(
     modules_options: dict[str, dict[str, object]],
     *,
     project_package: str | None = None,
 ) -> dict[str, object]:
-    """Build a dict of ModuleWiringSpec via the manifest-driven entry point."""
+    """Build a dict of ModuleWiringSpec via the manifest-driven entry point.
+
+    Refreshes the managed-adapter registry on every call so that
+    each invocation is self-contained regardless of prior suite
+    mutations to ``MANIFEST_ADAPTER_REGISTRY``.  Resolves CR-SA44-REV-001.
+    """
+    refresh_managed_adapters()
     return {
         name: build_manifest_wiring_spec(
             name, dict(options), project_package=project_package
@@ -1185,6 +1185,29 @@ class TestModuleWiringSpecs:
         """Social managed transport wiring should require the generated package name."""
         with pytest.raises(ValueError, match="project_package is required"):
             _build_specs({"social": {}})
+
+    def test_build_specs_recovers_from_cleared_registry(self):
+        """_build_specs() must recover when MANIFEST_ADAPTER_REGISTRY is
+        cleared by a prior test (regression for CR-SA44-REV-001).
+
+        The internal ``refresh_managed_adapters()`` call (inserted in
+        the SA44 continuation) should re-populate the *managed* adapter
+        entries (billing, crm, social) so that every ``_build_specs()``
+        invocation using a managed module is self-contained regardless
+        of prior suite mutations.
+        """
+        original = dict(MANIFEST_ADAPTER_REGISTRY)
+        try:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            specs = _build_specs(
+                {"billing": {"enabled": True, "billing_currency": "usd"}}
+            )
+            apps, _, settings, _ = collect_wiring(specs)
+            assert "quickscale_modules_billing" in apps
+            assert settings["QUICKSCALE_BILLING_ENABLED"] is True
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original)
 
 
 class TestFormsModuleConfig:
