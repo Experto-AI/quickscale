@@ -49,6 +49,7 @@ from quickscale_modules_billing.services import (
     BillingConfigurationError,
     BillingDisabledError,
     BillingSettingsSnapshot,
+    BillingSubscriptionAnomalyError,
     BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
@@ -311,6 +312,8 @@ class CancelSubscriptionView(View):
         except BillingDisabledError as exc:
             return JsonResponse({"error": str(exc)}, status=403)
         except BillingValidationError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        except BillingSubscriptionAnomalyError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
         except BillingConfigurationError as exc:
             return JsonResponse({"error": str(exc)}, status=500)

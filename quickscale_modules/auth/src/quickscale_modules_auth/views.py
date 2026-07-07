@@ -1,5 +1,6 @@
 """Views for account management"""
 
+import logging
 from typing import Any
 
 from django.contrib import messages
@@ -14,6 +15,8 @@ from quickscale_modules_orgs.models import (
     OrgRole,
     OrganizationMembership,
 )
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -185,6 +188,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         try:
             from quickscale_modules_billing.services import (
                 BillingDisabledError,
+                BillingSubscriptionAnomalyError,
                 BillingValidationError,
                 cancel_current_subscription,
             )
@@ -211,3 +215,14 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                 )
             except (BillingDisabledError, BillingValidationError):
                 pass  # billing disabled or no active subscription to cancel
+            except BillingSubscriptionAnomalyError:
+                logger.warning(
+                    "Account deletion for user %s (pk=%s): personal org %s "
+                    "(pk=%s) has a subscription row that is missing its "
+                    "Stripe subscription id. The subscription cannot be "
+                    "cancelled via Stripe; proceeding with deletion.",
+                    user,
+                    user.pk,
+                    org.name,
+                    org.pk,
+                )

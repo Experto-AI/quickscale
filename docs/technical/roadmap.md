@@ -53,7 +53,7 @@ git merge --no-ff wt-track{N}
 >
 > **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-07):** Track 1 — **2 open items, clear to continue** (SA41 ready now, SA47 soft-sequenced after; SA35/SA39/SA45 complete). Track 2 — **2 open items, clear to continue** (SA38's stale-threshold/surface/reset-boundary decisions are resolved — see its entry — implementation can proceed; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items, clear to continue** (SA42, SA44 ready now; SA46's CR-SA46-001 decision is resolved (Option B) — the literal-only-evaluator follow-up can proceed; SA34/SA36 complete).
+> **Track status (2026-07-07):** Track 1 — **1 open item, clear to continue** (SA41 complete, SA47 soft-sequenced after; SA35/SA39/SA45/SA41 complete). Track 2 — **2 open items, clear to continue** (SA38's stale-threshold/surface/reset-boundary decisions are resolved — see its entry — implementation can proceed; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items, clear to continue** (SA42, SA44 ready now; SA46's CR-SA46-001 decision is resolved (Option B) — the literal-only-evaluator follow-up can proceed; SA34/SA36 complete).
 
 ### Dependency & parallelization overview
 
@@ -86,10 +86,7 @@ Cross-track dependency update: **SA36 is now complete**, so SA21.2 is no longer 
 
 #### Finding — `account-delete-billing-exception-swallowed` (`why →` [TA39](../others/tech-audit.md))
 
-- [ ] **SA41 — Distinguish "no subscription" from "subscription row missing its Stripe id" in account-delete billing cleanup.** `Tier 1 · Track 1 · deps: none`
-  `AccountDeleteView._cancel_personal_org_subscriptions` does `except (BillingDisabledError, BillingValidationError): pass` unconditionally — the benign "no current subscription" case and "subscription row exists but has no Stripe id" (which leaves an unresolved subscription behind after deletion) are indistinguishable. Distinguish them with a dedicated exception or a pre-check, and log/surface the missing-id case instead of silently passing.
-  *Files:* `quickscale_modules/auth/src/quickscale_modules_auth/views.py:212-213`, `quickscale_modules/billing/src/quickscale_modules_billing/services.py:740-749`.
-  *Acceptance:* deleting an account with no subscription proceeds silently as today; deleting an account whose subscription row is missing a Stripe id logs/surfaces the anomaly instead of silently passing; Stripe API failures continue to propagate (unchanged fail-hard behavior).
+> **SA41 — complete.** `BillingSubscriptionAnomalyError` (a direct `BillingError` subclass) now separates the missing-Stripe-id anomaly from the benign "no current subscription" case in `cancel_current_subscription`. `AccountDeleteView._cancel_personal_org_subscriptions` logs a `WARNING` for the anomalous case instead of silently passing; the no-subscription case remains silently handled. Stripe API failures continue to propagate unchanged. Closes SA41. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `deletion-invariants-per-boundary-reimplementation` (`why →` [arch-audit.md Finding 2](../others/arch-audit.md), first step only)
 

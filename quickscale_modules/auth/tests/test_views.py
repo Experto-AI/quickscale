@@ -604,6 +604,97 @@ class TestAccountDeleteView:
         )
 
     # ------------------------------------------------------------------
+    # SA41 — missing-Stripe-id anomaly is surfaced instead of swallowed
+    # ------------------------------------------------------------------
+
+    def test_account_delete_logs_missing_stripe_id_anomaly(
+        self, authenticated_client, user, caplog
+    ):
+        """When ``cancel_current_subscription`` raises
+        ``BillingSubscriptionAnomalyError`` (subscription row exists but
+        has no Stripe id), the account deletion proceeds after logging a
+        warning — it does not silently swallow the anomaly."""
+        from unittest.mock import patch
+
+        import logging
+
+        from quickscale_modules_billing.services import (
+            BillingSubscriptionAnomalyError,
+        )
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        org = Organization.objects.create(
+            name="SA41 Personal",
+            slug="sa41-personal",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org,
+            role=OrgRole.OWNER,
+        )
+
+        caplog.set_level(logging.WARNING, logger="quickscale_modules_auth.views")
+        with patch(
+            "quickscale_modules_billing.services.cancel_current_subscription",
+            side_effect=BillingSubscriptionAnomalyError(
+                "Current recurring subscription is missing a Stripe subscription id."
+            ),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account-delete")
+            )
+
+        assert response.status_code == 302
+        assert any(
+            "missing its Stripe subscription id" in message
+            for message in caplog.messages
+        ), "A WARNING log message about the missing Stripe id must be emitted"
+
+    def test_account_delete_proceeds_when_billing_validation_error(
+        self, authenticated_client, user
+    ):
+        """A plain ``BillingValidationError`` (no subscription to cancel)
+        is still silently swallowed — no log, no block."""
+        from unittest.mock import patch
+
+        from quickscale_modules_billing.services import (
+            BillingValidationError,
+        )
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        org = Organization.objects.create(
+            name="SA41 No Sub",
+            slug="sa41-no-sub",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org,
+            role=OrgRole.OWNER,
+        )
+
+        with patch(
+            "quickscale_modules_billing.services.cancel_current_subscription",
+            side_effect=BillingValidationError(
+                "Organization does not have a current recurring subscription."
+            ),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account-delete")
+            )
+
+        assert response.status_code == 302
+
+    # ------------------------------------------------------------------
     # SA28 — success-message fix
     # ------------------------------------------------------------------
 
