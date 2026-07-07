@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -160,6 +161,53 @@ class OrganizationMembership(models.Model):
             .exists()
         )
 
+    @classmethod
+    def is_last_owner_with_members(
+        cls,
+        *,
+        user: Any,
+        organization: Organization,
+    ) -> bool:
+        """Return True if *user* is the sole owner of *organization* and
+        *organization* has other members beyond *user*.
+
+        When True, the user cannot be removed (via membership deletion,
+        account deletion, or demotion below owner) without stranding
+        the other members ownerless.
+
+        This is the canonical SA47 last-owner check, consolidating the
+        semantics that were previously duplicated across
+        ``AccountDeleteView._get_blocking_orgs_for_deletion``,
+        ``MemberListView``, and ``OrgApiMemberRemoveView``.
+        """
+        if not cls.objects.filter(
+            user=user,
+            organization=organization,
+            role=OrgRole.OWNER,
+        ).exists():
+            return False
+
+        other_owners_exist = (
+            cls.objects.filter(
+                organization=organization,
+                role=OrgRole.OWNER,
+            )
+            .exclude(user=user)
+            .exists()
+        )
+        if other_owners_exist:
+            return False
+
+        other_members_exist = (
+            cls.objects.filter(
+                organization=organization,
+            )
+            .exclude(user=user)
+            .exists()
+        )
+
+        return other_members_exist
+
     def _persisted_owner_state(
         self,
         *,
@@ -208,20 +256,39 @@ class OrganizationMembership(models.Model):
 
     def save(self, *args: object, **kwargs: object) -> None:
         with transaction.atomic():
-            previous_organization_id, previous_role = self._persisted_owner_state(
-                for_update=True,
-            )
-            lock_ids = {
-                organization_id
-                for organization_id in (self.organization_id, previous_organization_id)
-                if organization_id is not None
-            }
+            # 1. Lock org rows FIRST (normalized lock order — prevents
+            #    deadlock with AccountDeleteView which locks org rows
+            #    before user.delete() cascades to memberships).
+            lock_ids: set[uuid.UUID] = set()
+            if self.organization_id is not None:
+                lock_ids.add(self.organization_id)
+            if self.pk is not None:
+                previous_organization_id, _ = self._persisted_owner_state(
+                    for_update=False,
+                )
+                if previous_organization_id is not None:
+                    lock_ids.add(previous_organization_id)
             if lock_ids:
                 list(
                     Organization.objects.select_for_update()
                     .filter(pk__in=lock_ids)
                     .order_by("pk")
                 )
+
+            # 2. Lock membership row and read authoritative state.
+            previous_organization_id, previous_role = self._persisted_owner_state(
+                for_update=True,
+            )
+
+            # 3. If the persisted org differs from what we locked, lock it.
+            if (
+                previous_organization_id is not None
+                and previous_organization_id not in lock_ids
+            ):
+                Organization.objects.select_for_update().get(
+                    pk=previous_organization_id,
+                )
+
             self._validate_last_owner_invariant(
                 previous_organization_id=previous_organization_id,
                 previous_role=previous_role,
@@ -230,21 +297,39 @@ class OrganizationMembership(models.Model):
 
     def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
         with transaction.atomic():
+            # 1. Lock org rows FIRST (normalized lock order — prevents
+            #    deadlock with AccountDeleteView which locks org rows
+            #    before user.delete() cascades to memberships).
+            initial_org_id: uuid.UUID | None = self.organization_id
+            if initial_org_id is not None:
+                Organization.objects.select_for_update().get(pk=initial_org_id)
+
+            # 2. Lock membership row and read authoritative persisted state.
             persisted_organization_id, persisted_role = self._persisted_owner_state(
                 for_update=True,
             )
             organization_id = (
                 persisted_organization_id
                 if persisted_organization_id is not None
-                else self.organization_id
+                else initial_org_id
             )
 
-            if organization_id is not None:
+            # 3. If the persisted org differs and wasn't locked in step 1,
+            #    lock it now.
+            if organization_id is not None and organization_id != initial_org_id:
                 Organization.objects.select_for_update().get(pk=organization_id)
 
-            if persisted_role == OrgRole.OWNER and not type(self)._has_other_owner(
-                organization_id=organization_id,
-                exclude_pk=self.pk,
+            org: Organization | None = None
+            if organization_id is not None:
+                org = Organization.objects.get(pk=organization_id)
+
+            if (
+                persisted_role == OrgRole.OWNER
+                and org is not None
+                and type(self).is_last_owner_with_members(
+                    user=self.user,
+                    organization=org,
+                )
             ):
                 raise ValidationError(self.LAST_OWNER_REMOVAL_MESSAGE)
 
