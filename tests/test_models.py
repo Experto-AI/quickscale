@@ -116,28 +116,62 @@ def test_last_owner_cannot_be_demoted_via_model_save() -> None:
 
 
 @pytest.mark.django_db
-def test_last_owner_cannot_be_removed_via_model_delete() -> None:
-    """Direct ORM deletes should not remove an organization's final owner."""
+def test_last_owner_cannot_be_removed_when_other_members_exist() -> None:
+    """Direct ORM deletes should block removal of the last owner when
+    other members (non-owners) would be stranded ownerless (SA47)."""
 
-    user = _create_user(
+    owner = _create_user(
         username="remove-owner",
         email="remove-owner@example.com",
         password="secret123",
     )
+    other_member = _create_user(
+        username="other-remove-member",
+        email="other-remove-member@example.com",
+        password="secret123",
+    )
     organization = Organization.objects.create(name="Orbit", slug="orbit")
+    owner_membership = OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        owner_membership.delete()
+
+    assert exc_info.value.messages == [
+        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+    ]
+    assert OrganizationMembership.objects.filter(pk=owner_membership.pk).exists()
+
+
+@pytest.mark.django_db
+def test_last_owner_removal_allowed_when_sole_member() -> None:
+    """Direct ORM deletes should allow removing the last owner when no
+    other members exist — nobody is stranded (SA47)."""
+
+    user = _create_user(
+        username="sole-owner",
+        email="sole-owner@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(name="Solo", slug="solo")
     membership = OrganizationMembership.objects.create(
         user=user,
         organization=organization,
         role=OrgRole.OWNER,
     )
+    membership_pk = membership.pk
 
-    with pytest.raises(ValidationError) as exc_info:
-        membership.delete()
+    membership.delete()
 
-    assert exc_info.value.messages == [
-        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
-    ]
-    assert OrganizationMembership.objects.filter(pk=membership.pk).exists()
+    assert not OrganizationMembership.objects.filter(pk=membership_pk).exists()
 
 
 @pytest.mark.django_db
@@ -195,7 +229,20 @@ def test_last_owner_save_uses_locked_persisted_role_for_stale_instances() -> Non
         with pytest.raises(ValidationError) as exc_info:
             stale_membership.save(update_fields=["role"])
 
-    persisted_owner_state.assert_called_once_with(stale_membership, for_update=True)
+    # save() now calls _persisted_owner_state twice: first with
+    # for_update=False to determine the org to lock (normalized lock
+    # order), then with for_update=True to lock the membership row.
+    # The second (for_update=True) call delegates to the original
+    # implementation and returns the authoritative persisted state.
+    assert persisted_owner_state.call_count == 2
+    assert persisted_owner_state.call_args_list[0] == (
+        (stale_membership,),
+        {"for_update": False},
+    )
+    assert persisted_owner_state.call_args_list[1] == (
+        (stale_membership,),
+        {"for_update": True},
+    )
     stale_membership.refresh_from_db()
     assert exc_info.value.message_dict == {
         "role": [OrganizationMembership.LAST_OWNER_DEMOTION_MESSAGE]
