@@ -1,12 +1,10 @@
 """
-Thin Django-facing service layer for the QuickScale backups module.
+Django-facing service layer for the QuickScale backups module.
 
-All DR orchestration logic lives in ``quickscale_core.dr_engine.orchestration``.
-This module keeps the small set of Django-facing wrappers and shared protocol
-types that the backups app still owns locally.
-
-``services.py`` is intentionally under 400 LOC. Every new orchestration
-feature should go in ``dr_engine/``, not here.
+Model-touching lifecycle dispatch (restore claiming, background
+backup-create and pruning invocations) and admin-facing wrappers
+live here. Engine-pure orchestration logic belongs in
+``quickscale_core.dr_engine``.
 """
 
 from __future__ import annotations
