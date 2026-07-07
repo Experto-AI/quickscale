@@ -20,6 +20,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import DatabaseError, connections
 from django.test import override_settings
+from django.utils import timezone as django_timezone
 
 import quickscale_modules_backups.services as backup_services
 from quickscale_modules_backups.models import (
@@ -3937,3 +3938,155 @@ class TestBackupServiceEdgeCases:
         monkeypatch.setattr(Path, "unlink", failing_unlink)
         result = backup_services._cleanup_local_backup_file(file_path)
         assert result == "permission denied"
+
+
+@pytest.mark.django_db
+class TestStaleRestoreDetection:
+    """SA38: Stale STATUS_RESTORING detection and guarded reset."""
+
+    def test_is_restore_stale_returns_false_for_non_restoring_artifact(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """Non-RESTORING artifacts are never stale."""
+        assert backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        assert backup_services.is_restore_stale(backup_artifact) is False
+
+    def test_is_restore_stale_returns_false_when_started_at_is_none(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """STATUS_RESTORING with no restore_started_at is not stale."""
+        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.restore_started_at = None
+        backup_artifact.save(
+            update_fields=["status", "restore_started_at", "updated_at"]
+        )
+        assert backup_services.is_restore_stale(backup_artifact) is False
+
+    def test_is_restore_stale_returns_false_for_recent_restore(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """A STATUS_RESTORING artifact started within the threshold is not stale."""
+        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.restore_started_at = django_timezone.now() - timedelta(
+            minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES - 5
+        )
+        backup_artifact.save(
+            update_fields=["status", "restore_started_at", "updated_at"]
+        )
+        assert backup_services.is_restore_stale(backup_artifact) is False
+
+    def test_is_restore_stale_returns_true_for_old_restore(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """A STATUS_RESTORING artifact started past the threshold is stale."""
+        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.restore_started_at = django_timezone.now() - timedelta(
+            minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES + 1
+        )
+        backup_artifact.save(
+            update_fields=["status", "restore_started_at", "updated_at"]
+        )
+        assert backup_services.is_restore_stale(backup_artifact) is True
+
+    def test_reset_stale_restore_resets_to_failed(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """A stale STATUS_RESTORING artifact is reset to STATUS_FAILED."""
+        started_at = django_timezone.now() - timedelta(
+            minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES + 10
+        )
+        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.restore_started_at = started_at
+        backup_artifact.restore_error = ""
+        backup_artifact.save(
+            update_fields=[
+                "status",
+                "restore_started_at",
+                "restore_error",
+                "updated_at",
+            ]
+        )
+
+        backup_services.reset_stale_restore(backup_artifact)
+
+        backup_artifact.refresh_from_db()
+        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert "Restore reset" in backup_artifact.restore_error
+
+    def test_reset_stale_restore_rejects_non_restoring_artifact(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """Non-RESTORING artifacts raise BackupRestoreBlocked."""
+        assert backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="Only backup artifacts with status 'Restoring",
+        ):
+            backup_services.reset_stale_restore(backup_artifact)
+
+    def test_reset_stale_restore_rejects_recent_restore(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """A STATUS_RESTORING artifact within the threshold raises BackupRestoreBlocked."""
+        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.restore_started_at = django_timezone.now() - timedelta(
+            minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES - 10
+        )
+        backup_artifact.save(
+            update_fields=["status", "restore_started_at", "updated_at"]
+        )
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="still in progress",
+        ):
+            backup_services.reset_stale_restore(backup_artifact)
+
+    # CR-SA38-002: concurrency regression — compare-and-swap prevents
+    # overwriting a terminal status set by a concurrently finishing
+    # child process.
+
+    def test_reset_stale_restore_race_preserves_child_terminal_status(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """When a child finishes between the read and the CAS, the child's
+        terminal status must not be overwritten."""
+        started_at = django_timezone.now() - timedelta(
+            minutes=backup_services.STALE_RESTORE_THRESHOLD_MINUTES + 10
+        )
+        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        backup_artifact.restore_started_at = started_at
+        backup_artifact.restore_error = ""
+        backup_artifact.save(
+            update_fields=[
+                "status",
+                "restore_started_at",
+                "restore_error",
+                "updated_at",
+            ]
+        )
+
+        # Simulate the child finishing: the DB row now has a terminal
+        # status that the CAS must not overwrite.
+        BackupArtifact.objects.filter(pk=backup_artifact.pk).update(
+            status=BackupArtifact.STATUS_FAILED,
+            restore_error="real child failure",
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="Only backup artifacts with status 'Restoring",
+        ):
+            backup_services.reset_stale_restore(backup_artifact)
+
+        backup_artifact.refresh_from_db()
+        # The child's terminal status must be preserved.
+        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert backup_artifact.restore_error == "real child failure"
