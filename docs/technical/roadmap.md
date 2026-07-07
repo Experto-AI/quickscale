@@ -53,7 +53,7 @@ git merge --no-ff wt-track{N}
 >
 > **Origin note (2026-07-07, fix-plan pass):** SA48–SA56 trace to the 2026-07-07 delta-pass findings in [tech-audit.md](../others/tech-audit.md) (TA42–TA46) and [arch-audit.md](../others/arch-audit.md) (Finding 1's red flags and CR-SA44-REV-001 blocker, Finding 4's coverage-boundary sub-item, Finding 5's two remaining Option 1 pieces plus the billing migration promoted from "long tail" to scheduled work per user decision — no idiom is grandfathered as permanent legacy), each sized Tier 1–2. Every item fit Tier 1–2 without splitting; the two items large enough to flag (SA50, the `OrgApiBaseView` fold; SA56, the billing DRF migration) are Tier 2, not Tier 3.
 
-> **Track status (2026-07-07, fix-plan pass):** Track 1 — **1 open item, ready now, no blockers** (SA50 — SA48/SA49 complete; remaining items still soft-sequenced on orgs files to limit rebase risk). Track 2 — **3 open items, all ready now, no blockers** (SA52, SA53, SA54 — SA51 complete; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **3 open items, all ready now, no blockers** (SA42 ready now; SA46 ready now — CR-SA46-REV-003 decision made; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA44 and SA55 complete).
+> **Track status (2026-07-07, fix-plan pass, updated for SA53):** Track 1 — **1 open item, ready now, no blockers** (SA50 — SA48/SA49 complete; remaining items still soft-sequenced on orgs files to limit rebase risk). Track 2 — **2 open items, 1 blocked** (SA51/SA52 complete; SA53 — **blocked by CR-SA53-REV-002** — fd-owned copy loop must handle short `os.write()` results; SA54 ready after SA53 unblocked; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **3 open items, all ready now, no blockers** (SA42 ready now; SA46 ready now — CR-SA46-REV-003 decision made; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA44 and SA55 complete).
 
 ### Dependency & parallelization overview
 
@@ -61,7 +61,7 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
 SA50 (deps: none; soft-seq after SA49)  SA52 (deps: none; soft-seq after SA51)    SA42 (deps: none)
-                                         SA53 (deps: none; soft-seq after SA52)    SA46 (deps: none) — CR-SA46-REV-003 fix, ready
+                                         SA53 (deps: none; soft-seq after SA52; **blocked by CR-SA53-REV-002**)    SA46 (deps: none) — CR-SA46-REV-003 fix, ready
                                          SA54 (deps: none; soft-seq after SA53)    SA56 (deps: none; soft-seq after SA55)
 ```
 
@@ -124,9 +124,12 @@ SA21.2, SA37, SA38, SA40, SA43, plus its earlier share of the SA19–SA33 batch,
   **SA52 — complete.**
 
 - [ ] **SA53 — Make the uploaded-restore-artifact copy crash-safe.** `Tier 1 · Track 2 · deps: none (soft-sequence after SA52 — same file)`
-  `prepare_admin_uploaded_restore_artifact` (`services.py:365-366`) unlinks the existing local artifact file before `shutil.copy2`, with no `try/finally` — a copy failure (disk full, permissions) destroys the prior local copy and leaks the `mkdtemp` staging directory. Fix: copy to a temp name and `os.replace` into place atomically, and clean up the staging directory in a `finally`.
+  `prepare_admin_uploaded_restore_artifact` (`services.py:365-366`) unlinks the existing local artifact file before `shutil.copy2`, with no `try/finally` — a copy failure (disk full, permissions) destroys the prior local copy and leaks the `mkdtemp` staging directory. Fix: copy to a temp file under the same directory and `os.replace` into place atomically, and clean up the staging directory in a `finally`.
   *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/services.py:281-370` (`prepare_admin_uploaded_restore_artifact`).
   *Acceptance:* a simulated copy failure (e.g. mocked `shutil.copy2` raising) leaves the pre-existing local artifact file intact and the staging directory removed; a regression test covers this path.
+  **Shipped (not complete — see blocker below):** Changed the local-artifact copy from `unlink(missing_ok=True)` + `shutil.copy2` (destroy-on-failure) to `shutil.copy2` to a `.tmp` suffix file + `os.replace` (atomic same-filesystem swap), preserving the existing artifact on any copy failure. All manual `_cleanup_admin_restore_upload_directory` calls in early-exit paths were consolidated into a single `finally` block so the staging directory is never leaked. Added `TestPrepareAdminUploadedRestoreArtifactSA53` in `test_services.py` with two regression tests: one proving a mocked `shutil.copy2` `OSError` leaves both the pre-existing file intact and the staging directory cleaned, and one proving the happy path materializes content at the authoritative backup location and persists `local_path`.
+
+  **Blocking — CR-SA53-REV-002:** The fd-based copy loop in `services.py:376-381` ignores partial `os.write()` results, so a local restore artifact can be silently truncated/corrupted while the function reports success. Fix before closing SA53: handle short `os.write()` results (or use an fd-backed file object without reopening by pathname) and add a short-write regression test. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ### Track 3 — Core/CLI plumbing
 

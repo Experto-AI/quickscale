@@ -9,12 +9,12 @@ live here. Engine-pure orchestration logic belongs in
 
 from __future__ import annotations
 
-import shutil
+import os
 import subprocess
 import sys
 from datetime import timedelta
 from pathlib import Path
-from tempfile import mkdtemp
+from tempfile import mkdtemp, mkstemp
 from typing import Any, Protocol
 
 from quickscale_core.runtime import (  # noqa: F401
@@ -330,52 +330,72 @@ def prepare_admin_uploaded_restore_artifact(
         _cleanup_admin_restore_upload_directory(staging_directory)
         raise
 
-    # CR-SA20-REV-001: Reject already-restoring artifacts with parity to
-    # the recorded-artifact branch.  CR-SA38-001: stale-aware — a stale
-    # STATUS_RESTORING artifact surfaces the same recovery guidance as
-    # _get_admin_restore_ineligible_reason rather than a permanent block.
-    if trusted_artifact.status == BackupArtifact.STATUS_RESTORING:
-        _cleanup_admin_restore_upload_directory(staging_directory)
-        if is_restore_stale(trusted_artifact):
+    try:
+        # CR-SA20-REV-001: Reject already-restoring artifacts with parity to
+        # the recorded-artifact branch.  CR-SA38-001: stale-aware — a stale
+        # STATUS_RESTORING artifact surfaces the same recovery guidance as
+        # _get_admin_restore_ineligible_reason rather than a permanent block.
+        if trusted_artifact.status == BackupArtifact.STATUS_RESTORING:
+            if is_restore_stale(trusted_artifact):
+                raise BackupRestoreBlocked(
+                    "This backup artifact's restore appears stale "
+                    f"(started at {trusted_artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC) — "
+                    "the child process likely died. Reset the artifact status "
+                    "from the BackupArtifact admin list to retry."
+                )
             raise BackupRestoreBlocked(
-                "This backup artifact's restore appears stale "
-                f"(started at {trusted_artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC) — "
-                "the child process likely died. Reset the artifact status "
-                "from the BackupArtifact admin list to retry."
+                "This backup artifact is currently being "
+                "restored. Wait for the restore to "
+                "complete before retrying."
             )
-        raise BackupRestoreBlocked(
-            "This backup artifact is currently being "
-            "restored. Wait for the restore to "
-            "complete before retrying."
-        )
 
-    confirm_value = confirmation.strip()
-    if confirm_value != trusted_artifact.filename:
+        confirm_value = confirmation.strip()
+        if confirm_value != trusted_artifact.filename:
+            raise BackupRestoreBlocked(
+                "Confirmation must exactly match the backup filename."
+            )
+
+        # CR-SA20-005: Always remap to a trusted path under
+        # get_local_backup_directory().  Ignore any unsafe persisted
+        # local_path — persist only after a successful copy.
+        policy_snapshot = load_policy_snapshot()
+        local_dir = get_local_backup_directory(policy_snapshot)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        local_path = local_dir / trusted_artifact.filename
+
+        # CR-SA53 / CR-SA53-REV-001: Crash-safe copy — copy to a securely
+        # created unique temp file under the target directory (mkstemp
+        # prevents symlink pre-seeding attacks), then atomically replace
+        # into place so that a copy failure never destroys the existing
+        # local artifact.  The temp file is written through its file
+        # descriptor (fd) — never closed and reopened by pathname — so
+        # a swap-to-symlink race between close and reopen is eliminated.
+        if staged_upload.local_path.resolve() != local_path.resolve():
+            fd, tmp_path = mkstemp(dir=local_dir)
+            try:
+                with open(staged_upload.local_path, "rb") as src_f:
+                    while True:
+                        buf = src_f.read(65536)
+                        if not buf:
+                            break
+                        os.write(fd, buf)
+                os.fsync(fd)
+                os.replace(tmp_path, local_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            finally:
+                os.close(fd)
+
+        # Persist local_path only after a successful copy so a failed copy
+        # does not leave a dangling path on the artifact.
+        trusted_artifact.local_path = str(local_path)
+        trusted_artifact.save(update_fields=["local_path", "updated_at"])
+    finally:
         _cleanup_admin_restore_upload_directory(staging_directory)
-        raise BackupRestoreBlocked(
-            "Confirmation must exactly match the backup filename."
-        )
-
-    # CR-SA20-005: Always remap to a trusted path under
-    # get_local_backup_directory().  Ignore any unsafe persisted
-    # local_path — persist only after a successful copy.
-    policy_snapshot = load_policy_snapshot()
-    local_dir = get_local_backup_directory(policy_snapshot)
-    local_dir.mkdir(parents=True, exist_ok=True)
-    local_path = local_dir / trusted_artifact.filename
-
-    # Skip the copy when the staged upload is already at the
-    # target path (same file from testing or inline materialization).
-    if staged_upload.local_path.resolve() != local_path.resolve():
-        local_path.unlink(missing_ok=True)
-        shutil.copy2(staged_upload.local_path, local_path)
-
-    _cleanup_admin_restore_upload_directory(staging_directory)
-
-    # Persist local_path only after successful copy so a failed copy
-    # does not leave a dangling path on the artifact.
-    trusted_artifact.local_path = str(local_path)
-    trusted_artifact.save(update_fields=["local_path", "updated_at"])
 
     return trusted_artifact
 
