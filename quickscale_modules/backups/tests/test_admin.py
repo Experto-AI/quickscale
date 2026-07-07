@@ -2724,3 +2724,370 @@ class TestBackupArtifactAdmin:
 
         assert not local_path.exists()
         assert not BackupArtifact.objects.filter(pk=backup_artifact.pk).exists()
+
+
+@pytest.mark.django_db
+class TestBackupArtifactAdminStaleRestore:
+    """SA38: Stale restore detection and reset on BackupArtifactAdmin."""
+
+    def _make_stale_artifact(
+        self,
+        backup_artifact: BackupArtifact,
+        *,
+        stale: bool = True,
+    ) -> BackupArtifact:
+        """Set artifact to STATUS_RESTORING with an appropriate restore_started_at."""
+        backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        minutes = -31 if stale else -5
+        backup_artifact.restore_started_at = timezone.now() + timedelta(minutes=minutes)
+        backup_artifact.restore_error = ""
+        backup_artifact.save(
+            update_fields=[
+                "status",
+                "restore_started_at",
+                "restore_error",
+                "updated_at",
+            ]
+        )
+        return backup_artifact
+
+    def test_stale_restore_warning_empty_for_non_restoring(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """Non-RESTORING artifacts produce an empty warning."""
+        artifact_admin = _artifact_admin()
+        result = artifact_admin.stale_restore_warning(backup_artifact)
+        assert result == ""
+
+    def test_stale_restore_warning_in_progress_for_recent_restore(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """Recent STATUS_RESTORING shows 'In progress…'."""
+        self._make_stale_artifact(backup_artifact, stale=False)
+        artifact_admin = _artifact_admin()
+        result = artifact_admin.stale_restore_warning(backup_artifact)
+        assert result == "In progress…"
+
+    def test_stale_restore_warning_stale_for_old_restore(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """Old STATUS_RESTORING shows a stale warning."""
+        self._make_stale_artifact(backup_artifact, stale=True)
+        artifact_admin = _artifact_admin()
+        result = artifact_admin.stale_restore_warning(backup_artifact)
+        assert "Stale" in result
+
+    def test_stale_restore_warning_appears_on_changelist(
+        self,
+        admin_client: Client,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """The stale warning column renders on the changelist."""
+        self._make_stale_artifact(backup_artifact, stale=True)
+        response = admin_client.get(
+            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+        )
+        content = response.content.decode("utf-8")
+        assert response.status_code == 200
+        assert "Stale" in content
+        assert backup_artifact.filename in content
+
+    def test_reset_stale_restore_action_resets_stale_artifact(
+        self,
+        admin_client: Client,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """The admin action resets a stale STATUS_RESTORING to FAILED."""
+        self._make_stale_artifact(backup_artifact, stale=True)
+
+        changelist_url = reverse(
+            "admin:quickscale_modules_backups_backupartifact_changelist"
+        )
+        response = admin_client.post(
+            changelist_url,
+            {
+                "action": "reset_stale_restore_action",
+                admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_artifact.pk)],
+                "index": 0,
+            },
+            follow=True,
+        )
+
+        assert response.status_code == 200
+        backup_artifact.refresh_from_db()
+        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+        assert "Restore reset" in backup_artifact.restore_error
+
+    def test_reset_stale_restore_action_skips_non_stale_artifact(
+        self,
+        admin_client: Client,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        """The admin action skips a recent STATUS_RESTORING artifact."""
+        self._make_stale_artifact(backup_artifact, stale=False)
+
+        changelist_url = reverse(
+            "admin:quickscale_modules_backups_backupartifact_changelist"
+        )
+        response = admin_client.post(
+            changelist_url,
+            {
+                "action": "reset_stale_restore_action",
+                admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_artifact.pk)],
+                "index": 0,
+            },
+            follow=True,
+        )
+
+        assert response.status_code == 200
+        backup_artifact.refresh_from_db()
+        assert backup_artifact.status == BackupArtifact.STATUS_RESTORING
+
+
+@pytest.mark.django_db
+class TestBackupPolicyAdminStaleRestore:
+    """SA38: Stale-aware restore eligibility on BackupPolicyAdmin."""
+
+    def _make_eligible_artifact(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        *,
+        stale: bool = False,
+    ) -> BackupArtifact:
+        """Set artifact to STATUS_RESTORING while keeping other eligibility."""
+        artifact = postgresql_backup_artifact
+        artifact.status = BackupArtifact.STATUS_RESTORING
+        minutes = -31 if stale else -5
+        artifact.restore_started_at = timezone.now() + timedelta(minutes=minutes)
+        artifact.save(update_fields=["status", "restore_started_at", "updated_at"])
+        return artifact
+
+    def test_restore_eligibility_reports_stale_for_old_restoring(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """A stale STATUS_RESTORING artifact shows the staleness message."""
+        self._make_eligible_artifact(postgresql_backup_artifact, stale=True)
+        policy_admin = _policy_admin()
+
+        reason = policy_admin._get_admin_restore_ineligible_reason(
+            postgresql_backup_artifact
+        )
+        assert reason is not None
+        assert "stale" in reason.lower()
+        assert "child process likely died" in reason
+
+    def test_restore_eligibility_still_refuses_recent_restoring(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """A recent STATUS_RESTORING artifact still shows the standard message."""
+        self._make_eligible_artifact(postgresql_backup_artifact, stale=False)
+        policy_admin = _policy_admin()
+
+        reason = policy_admin._get_admin_restore_ineligible_reason(
+            postgresql_backup_artifact
+        )
+        assert reason is not None
+        assert "currently being restored" in reason
+        assert "stale" not in reason.lower()
+
+    # CR-SA38-001: uploaded-file restore path stale-awareness —
+    # the stale-aware refusal message must match the recorded-artifact
+    # branch's recovery guidance instead of a permanent block.
+
+    def test_uploaded_restore_refuses_stale_artifact_with_recovery_guidance(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """CR-SA38-001: Uploaded-file restore shows recovery guidance for
+        a stale STATUS_RESTORING artifact instead of a permanent block."""
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        # Set artifact to stale STATUS_RESTORING (>30 minutes ago).
+        stale_started_at = timezone.now() - timedelta(minutes=45)
+        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        postgresql_backup_artifact.restore_started_at = stale_started_at
+        postgresql_backup_artifact.save(
+            update_fields=["status", "restore_started_at", "updated_at"]
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_modules_backups.services."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ),
+            patch(
+                "quickscale_modules_backups.services.subprocess.Popen",
+            ) as mocked_popen,
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
+                    "confirmation": (postgresql_backup_artifact.filename),
+                    "operation": "restore",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_popen.assert_not_called()
+        content = response.content.decode("utf-8")
+        # Must mention the child process likely died (recovery guidance)
+        # rather than the permanent "currently being restored" message.
+        assert "child process likely died" in content
+        assert "stale" in content.lower()
+        # Must NOT say "currently being restored" (the old permanent block).
+        assert "currently being restored" not in content
+
+    # CR-SA38-001: uploaded-file dry-run path stale-awareness —
+    # the stale-aware refusal message must match the recorded-artifact
+    # branch's recovery guidance instead of a permanent block.
+
+    def test_uploaded_dry_run_refuses_stale_artifact_with_recovery_guidance(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """CR-SA38-001: Uploaded-file dry-run rejects a stale
+        STATUS_RESTORING artifact with recovery guidance (child process
+        likely died), matching the recorded-artifact branch."""
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        # Set artifact to stale STATUS_RESTORING (>30 minutes ago).
+        stale_started_at = timezone.now() - timedelta(minutes=45)
+        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        postgresql_backup_artifact.restore_started_at = stale_started_at
+        postgresql_backup_artifact.save(
+            update_fields=["status", "restore_started_at", "updated_at"]
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                ("quickscale_core.dr_engine.orchestration._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_core.dr_engine.orchestration."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ),
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
+                    "confirmation": (postgresql_backup_artifact.filename),
+                    "operation": "dry_run",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        content = response.content.decode("utf-8")
+        # Recovery guidance for stale, not the permanent block.
+        assert "child process likely died" in content
+        assert "stale" in content.lower()
+        # Must NOT say "currently being restored" (old permanent block).
+        assert "currently being restored" not in content
+
+    def test_uploaded_dry_run_refuses_recent_restoring_artifact(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        """CR-SA38-001: Uploaded-file dry-run rejects a recent
+        STATUS_RESTORING artifact with the standard wait message,
+        matching the recorded-artifact branch."""
+        del backup_policy
+        content = postgresql_artifact_file.read_bytes()
+        uploaded_file = SimpleUploadedFile(
+            postgresql_backup_artifact.filename,
+            content,
+        )
+
+        # Set artifact to recent STATUS_RESTORING (within threshold).
+        recent_started_at = timezone.now() - timedelta(minutes=5)
+        postgresql_backup_artifact.status = BackupArtifact.STATUS_RESTORING
+        postgresql_backup_artifact.restore_started_at = recent_started_at
+        postgresql_backup_artifact.save(
+            update_fields=["status", "restore_started_at", "updated_at"]
+        )
+
+        staged = StagedAdminRestoreUpload(
+            local_path=postgresql_artifact_file,
+            checksum_sha256=postgresql_backup_artifact.checksum_sha256,
+            size_bytes=postgresql_backup_artifact.size_bytes,
+        )
+
+        with (
+            patch(
+                ("quickscale_core.dr_engine.orchestration._stage_admin_restore_upload"),
+                return_value=staged,
+            ),
+            patch(
+                (
+                    "quickscale_core.dr_engine.orchestration."
+                    "_resolve_admin_uploaded_restore_artifact"
+                ),
+                return_value=postgresql_backup_artifact,
+            ),
+        ):
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "source_mode": (BackupPolicyRestoreForm.SOURCE_MODE_UPLOADED_FILE),
+                    "confirmation": (postgresql_backup_artifact.filename),
+                    "operation": "dry_run",
+                    "uploaded_file": uploaded_file,
+                },
+            )
+
+        assert response.status_code == 200
+        content = response.content.decode("utf-8")
+        # Standard wait message for in-progress restore.
+        assert "currently being restored" in content
+        # Must NOT mention stale (not yet stale).
+        assert "stale" not in content.lower()

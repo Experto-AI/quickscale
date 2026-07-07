@@ -21,6 +21,7 @@ from quickscale_modules_backups.models import (
 )
 from quickscale_modules_backups.services import (
     BackupError,
+    BackupRestoreBlocked,
     RestoreSourceResolutionMode,
     delete_artifact_files,
     dispatch_background_create,
@@ -28,7 +29,9 @@ from quickscale_modules_backups.services import (
     dispatch_background_restore,
     download_backup_path,
     ensure_default_policy,
+    is_restore_stale,
     prepare_admin_uploaded_restore_artifact,
+    reset_stale_restore,
     restore_admin_uploaded_backup,
     restore_backup_artifact,
     validate_backup_artifact,
@@ -582,6 +585,13 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         if artifact.status == BackupArtifact.STATUS_DELETED:
             return "Deleted backup artifacts cannot be restored from admin."
         if artifact.status == BackupArtifact.STATUS_RESTORING:
+            if is_restore_stale(artifact):
+                return (
+                    "This backup artifact's restore appears stale "
+                    f"(started at {artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC) — "
+                    "the child process likely died. Reset the artifact status "
+                    "from the BackupArtifact admin list to retry."
+                )
             return (
                 "This backup artifact is currently being restored. "
                 "Wait for the restore to complete before retrying."
@@ -724,6 +734,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     list_display = [
         "filename",
         "status",
+        "stale_restore_warning",
         "snapshot_status_badge",
         "snapshot_provenance",
         "restore_scope_badge",
@@ -746,6 +757,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         "snapshot_source_environment",
         "storage_target",
         "restore_scope_badge",
+        "stale_restore_warning",
         "local_path",
         "remote_key",
         "checksum_sha256",
@@ -826,7 +838,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             },
         ),
     ]
-    actions = ["validate_selected_backups"]
+    actions = ["validate_selected_backups", "reset_stale_restore_action"]
     change_list_template = (
         "admin/quickscale_modules_backups/backupartifact/change_list.html"
     )
@@ -973,6 +985,18 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     def restore_scope_badge(self, obj: BackupArtifact) -> str:
         return obj.effective_restore_scope() or "unclassified"
 
+    @admin.display(description="Stale restore")
+    def stale_restore_warning(self, obj: BackupArtifact) -> str:
+        """Show a staleness warning when a STATUS_RESTORING artifact is stale."""
+        if obj.status != BackupArtifact.STATUS_RESTORING:
+            return ""
+        if not is_restore_stale(obj):
+            return "In progress\u2026"
+        return format_html(
+            '<span style="color: #856404; font-weight: bold;">{}</span>',
+            "\u26a0 Stale",
+        )
+
     @admin.display(description="Snapshot status")
     def snapshot_status_badge(self, obj: BackupArtifact) -> str:
         snapshot_status = self._snapshot_status_value(obj)
@@ -1099,6 +1123,57 @@ class BackupArtifactAdmin(admin.ModelAdmin):
                 request,
                 "All selected backup artifacts validated successfully.",
                 level=messages.SUCCESS,
+            )
+
+    @admin.action(
+        description="Reset stale restore",
+        permissions=["change"],
+    )
+    def reset_stale_restore_action(
+        self,
+        request: HttpRequest,
+        queryset: Any,
+    ) -> None:
+        """Reset stranded STATUS_RESTORING artifacts that exceed the stale threshold."""
+        reset_count = 0
+        skip_count = 0
+        error_count = 0
+        for artifact in queryset:
+            if artifact.status != BackupArtifact.STATUS_RESTORING:
+                skip_count += 1
+                continue
+            if not is_restore_stale(artifact):
+                skip_count += 1
+                continue
+            try:
+                reset_stale_restore(artifact)
+                reset_count += 1
+            except BackupRestoreBlocked:
+                skip_count += 1
+            except Exception:
+                error_count += 1
+
+        parts: list[str] = []
+        if reset_count:
+            parts.append(f"{reset_count} stale restore(s) reset to Failed")
+        if skip_count:
+            parts.append(f"{skip_count} artifact(s) skipped")
+        if error_count:
+            parts.append(f"{error_count} artifact(s) errored")
+
+        if parts:
+            self.message_user(
+                request,
+                ". ".join(parts) + ".",
+                level=messages.SUCCESS
+                if reset_count and not error_count
+                else messages.WARNING,
+            )
+        else:
+            self.message_user(
+                request,
+                "No stale restore artifacts were selected.",
+                level=messages.WARNING,
             )
 
     def delete_model(self, request: HttpRequest, obj: BackupArtifact) -> None:
