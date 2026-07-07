@@ -53,29 +53,22 @@ git merge --no-ff wt-track{N}
 >
 > **Origin note (2026-07-07, fix-plan pass):** SA48–SA56 trace to the 2026-07-07 delta-pass findings in [tech-audit.md](../others/tech-audit.md) (TA42–TA46) and [arch-audit.md](../others/arch-audit.md) (Finding 1's red flags and CR-SA44-REV-001 blocker, Finding 4's coverage-boundary sub-item, Finding 5's two remaining Option 1 pieces plus the billing migration promoted from "long tail" to scheduled work per user decision — no idiom is grandfathered as permanent legacy), each sized Tier 1–2. Every item fit Tier 1–2 without splitting; the two items large enough to flag (SA50, the `OrgApiBaseView` fold; SA56, the billing DRF migration) are Tier 2, not Tier 3.
 
-> **Track status (2026-07-07, cleanup + SA42 pass, updated for SA53 checkpoint):** Track 1 — **0 open items, all complete** (SA48, SA49, SA50 — SA50 now complete). Track 2 — **2 open items, 1 blocked** (SA51/SA52 complete; SA53 — **blocked by CR-SA53-REV-002** — the fd-owned copy loop must handle short `os.write()` results before closeout; SA54 ready after SA53 is unblocked; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **2 open items, all ready now, no blockers** (SA46 ready now — CR-SA46-REV-003 decision made; SA56 ready now, no longer soft-sequenced since SA55 already landed; SA42, SA44 and SA55 complete).
+> **Track status (2026-07-07, SA46 review follow-up resolved):** Track 1 — **0 open items, all complete** (SA48, SA49, SA50 — SA50 now complete). Track 2 — **2 open items, 1 blocked** (SA51/SA52 complete; SA53 — **blocked by CR-SA53-REV-002** — the fd-owned copy loop must handle short `os.write()` results before closeout; SA54 ready after SA53 is unblocked; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **1 open item, ready now, no blockers** (SA56 ready now — SA42, SA44, SA46 and its review follow-up, and SA55 complete).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-(none — track complete)                 SA53 (deps: none; **blocked by CR-SA53-REV-002**)  SA46 (deps: none) — CR-SA46-REV-003 fix, ready
-                                        SA54 (deps: none; soft-seq after SA53)              SA56 (deps: none)
+(none — track complete)                 SA53 (deps: none; **blocked by CR-SA53-REV-002**)  SA56 (deps: none)
+                                         SA54 (deps: none; soft-seq after SA53)
 ```
 
-All three tracks run fully in parallel — no cross-track file overlap exists. The "soft-seq" notes above are intra-track only: same-file edits ordered to avoid needless rebasing, not hard technical dependencies.
+All three tracks run fully in parallel — no hard cross-track implementation dependencies exist; each track's implementation files are independent. (The shared closeout files `CHANGELOG.md` and `docs/technical/roadmap.md` are the one exception — every track touches them during closeout, but that overlap is managed by the merge procedure above rather than being an implementation dependency.) The "soft-seq" notes above are intra-track only: same-file edits ordered to avoid needless rebasing, not hard technical dependencies.
 
 ### Track 1 — Tenant-context surface
 
-SA47, SA48, SA49 are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). New open item this pass, below.
-
-#### Finding — `json-api-boundary-idiom-fragmentation` (`why →` [arch-audit.md Finding 5](../others/arch-audit.md), Option 1 remaining piece — the fold)
-
-- [x] **SA50 — Fold orgs' `JsonApiMixin`/`JsonOrganizationAccessMixin` stack into one `OrgApiBaseView`.** `Tier 2 · Track 1 · deps: none (soft-sequence after SA49 — both touch orgs surfaces; arch-audit's fix-order note recommends sequencing within one track)`
-  Eight `OrgApi*` views (`orgs/views.py:944-1271`) each subclass a two-level mixin stack (`JsonApiMixin` → `JsonAuthenticationRequiredMixin`/`JsonOrganizationAccessMixin`) that re-implements CSRF/auth/org-role/parsing per view — one of three coexisting idioms for authed state-changing JSON endpoints (SA46 already gated the silent-miss failure mode across all three; this fold reduces the template count). Fold the stack into one `OrgApiBaseView` that every `OrgApi*` view subclasses, preserving current behavior (auth, org-role checks, JSON error bodies) with a single implementation.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/views.py:219-1271`.
-  *Acceptance:* all eight `OrgApi*` views subclass the new `OrgApiBaseView`; `JsonApiMixin`/`JsonAuthenticationRequiredMixin`/`JsonOrganizationAccessMixin` are removed or reduced to thin aliases if still referenced elsewhere; the existing `orgs` API test suite passes unchanged (behavior-preserving refactor, not a new contract).
+All items in Track 1 are complete (SA47, SA48, SA49, SA50) — detail in [CHANGELOG.md](../../CHANGELOG.md). SA50 folded the `JsonApiMixin`/`JsonOrganizationAccessMixin` stack into one `OrgApiBaseView` as part of the `json-api-boundary-idiom-fragmentation` finding (see [arch-audit.md Finding 5](../others/arch-audit.md)).
 
 ### Track 2 — Module contracts & settings
 
@@ -115,10 +108,8 @@ SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`) is complete — de
 
 #### Finding — `json-api-boundary-idiom-fragmentation` (`why →` [arch-audit.md Finding 5](../others/arch-audit.md), first step only)
 
-- [ ] **SA46 (CR-SA46-REV-003) — Fold `not`/`~`/unary-on-bool into `_literal_truthiness()`.** `Tier 2 · Track 3 · deps: none (CR-SA46-001 and CR-SA46-REV-002 already shipped, see CHANGELOG.md)`
-  Decision made 2026-07-07: finish the evaluator rather than accept the gap (matches this project's precedent of iterating an AST/lint gate to full coverage — SA13.1→13.4, SA21.1→21.2→SA36 — over leaving a security-adjacent gate partially complete). `scripts/check_csrf_exempt_gate.py`'s `_literal_truthiness()` currently returns `None` (uncertain) for compile-time unary expressions beyond signed numerics — `not <literal>`, `~<literal>` on `int`/`bool`, and unary `+`/`-` on `bool` (e.g. `+True`) — so a dead `if`-branch written in one of these forms isn't caught by the hard-fail gate (conservative fallback only; no CSRF-pairing hole). Extend `_literal_truthiness()` with the same pattern CR-SA46-REV-002 used for signed numerics: fold `ast.UnaryOp` with `ast.Not` (invert the operand's truthiness when defined), `~` over `int`/`bool` constants, and unary `+`/`-` over `bool` constants.
-  *Files:* `scripts/check_csrf_exempt_gate.py` (`_literal_truthiness()` and its `ast.UnaryOp` handling).
-  *Acceptance:* `_literal_truthiness()` returns a definite `True`/`False` for `not <literal>`, `~<literal>` (int/bool), and unary `+`/`-` on `bool`, matching Python's actual runtime truthiness; regression tests at both function-level and class-level visitor scope (mirroring the existing signed-numeric tests) prove `if not 0:`-style dead branches are now caught by the hard-fail gate; all existing SA46/CR-SA46-001/CR-SA46-REV-002 tests continue to pass. Closes CR-SA46-REV-003 and SA46 as a whole.
+- [x] **SA46 (CR-SA46-REV-003) — Fold `not`/`~`/unary-on-bool into `_literal_truthiness()`.** `Tier 2 · Track 3 · deps: none (CR-SA46-001 and CR-SA46-REV-002 already shipped, see CHANGELOG.md)`
+  Extended `_literal_truthiness()` to fold the remaining compile-time unary literal cases: `ast.Not` on any literal with defined truthiness (inverts the operand), `ast.Invert` (~) on `int`/`bool` constants, and `UAdd`/`USub` on `bool` constants (`+True`→truthy, `-False`→falsey). Added 28 focused `_literal_truthiness` unit tests covering `not` on all literal types, `~` on int/bool, and `+`/`-` on bool, plus 10 function-level and 10 class-level visitor reachability tests proving `if not 0:`-style dead branches are now reliably caught by the hard-fail gate. All existing SA46/CR-SA46-001/CR-SA46-REV-002 tests continue to pass. Closes CR-SA46-REV-003 and SA46 as a whole.
 
 - [x] **SA55 — Add a decisions.md rule naming the two sanctioned JSON-API bases.** `Tier 1 · Track 3 · deps: none`
   **SA55 — complete.** Added [`§json-api-endpoint-base-contract`](./decisions.md#json-api-endpoint-base-contract) to decisions.md: DRF baseline for generic authed endpoints, `OrgApiBaseView` (SA50 now complete) for org-role-scoped endpoints, and an explicit statement that billing's plain-View + manual-CSRF idiom is scheduled for removal (SA56) rather than grandfathered as permanent legacy — matches the project's fail-hard/no-workarounds posture rather than the "migrate opportunistically" framing this item started with.
