@@ -46,8 +46,8 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
 
 | # | ID | Horizon | Size | One-line problem |
 |---|----|---------|------|------------------|
-| 1 | `dr-engine-module-circular-lattice` | now | M (first stage = SA44, ready) | DR logic lives in core but its state and lifecycle live in the backups module, producing a bidirectional import lattice held together by hand-maintained symbol tables, a string-matching exception classifier — and now hand-copied parity guards across the boundary |
-| 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months (teams) | M (first step = SA47, ready) | Org/billing invariants at the account-deletion boundary are re-implemented per callsite with divergent semantics instead of being owned by their domain modules |
+| 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2; stage 1/SA44 landed 2026-07-07) | DR logic lives in core but its state and lifecycle live in the backups module, producing a bidirectional import lattice held together by hand-maintained symbol tables, a string-matching exception classifier — and now hand-copied parity guards across the boundary |
+| 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months (teams) | M remaining (receiver backstop + billing seam; first step/SA47 landed 2026-07-07) | Org/billing invariants at the account-deletion boundary are re-implemented per callsite with divergent semantics instead of being owned by their domain modules |
 | 4 | `org-model-universe-hand-enumerated` | 6–18 months (teams) | M remaining (Option 2) | orgs hand-enumerates the cross-module tenant-model universe in literals; both literals are now CI-gated against derivations (SA15.3 + SA45), but the purge plan is still hand-ordered and every gate sees only what orgs' hand-maintained test env installs |
 | 5 | `json-api-boundary-idiom-fragmentation` | 6–18 months (teams) | M remaining (fold + migration) | Three coexisting idioms for authed state-changing JSON endpoints; the silent-hole class is now closed by the SA46 CI gate, but the three templates remain and teams needs the one it should copy |
 
@@ -422,22 +422,10 @@ the commons decision (watchlist).
 
 ### Red flags (out of scope — fix now)
 
-- **`_get_manage_py()` silent fallback** (`backups/services.py:264–280`): resolution failure is
-  swallowed (`except Exception: pass`) and the function returns bare `"manage.py"`, so a
-  dispatch from an unexpected CWD launches a child that dies with a confusing error *after*
-  `_atomic_claim_restore` has already flipped the artifact to `STATUS_RESTORING` (spawn-failure
-  rollback covers `Popen` raising, not the child failing to start). Fail-hard candidate:
-  raise when no manage.py is resolvable. (TA-class hand-off.)
-- **SA21.2 helper reads settings permissively** (`current_org.py:596–597`):
-  `getattr(settings, "USE_X_FORWARDED_FOR", False)` / `getattr(..., "TRUSTED_PROXY_COUNT", 0)` —
-  fail-closed in direction (falls back to `REMOTE_ADDR`), but it is the `getattr`-default read
-  class SA14.6/SA30 purged elsewhere, and generated apps always define both settings. A typo'd
-  settings name would silently disable proxy resolution in production. Direct required reads
-  would match project policy. (TA-class hand-off.)
-- **`backups/services.py:1–10` header contract is false** ("intentionally under 400 LOC", "every
-  new feature goes in dr_engine/") — 620 lines and the SA43 batch correctly did the opposite;
-  rewrite the header to state the real (model-touching-lifecycle-lives-here) rule before it
-  misdirects the next contributor. One-line fix, part of Finding 1's story.
+- **Resolved 2026-07-07 (roadmap cleanup), no longer re-flagged:** `_get_manage_py()`'s silent
+  fallback (SA52), the SA21.2 helper's permissive `getattr` settings reads (SA48), and the false
+  `backups/services.py:1–10` header contract (SA51) — all three landed; detail in CHANGELOG.md
+  and the tech-audit.md reconciliation log (TA42/TA43/TA44).
 - **Carried → now scheduled, no longer re-flagged:** the `entry_point.py` post-hook permissive
   coercion defaults (flagged 2026-07-05 and 2026-07-06) are tracked as SA42, open on Track 3.
 
@@ -605,3 +593,24 @@ CAS verified), security architecture (SA26 copies noted → watchlist), build/su
   `getattr`-default settings reads; stale `services.py` header contract. Questions updated: the
   registry-retirement question is partially answered in code ("temporary SSOT … eventually
   replace"); T2.4/T2.5 hits its fourth unanswered pass with the teams boundary now imminent.
+- 2026-07-07 (roadmap cleanup) — **progress recorded on all four open findings; none closed.**
+  `dr-engine-module-circular-lattice`: SA44 (Option 1, stage 1) **landed** — the string-matching
+  classifier is deleted and adapter registration is explicit; the finding stays open, Option 2
+  (persistence port) is unscheduled and remains the next trigger (the CR-SA38-001 copy-pair is
+  untouched by SA44, as noted when SA44 was scheduled). `deletion-invariants-per-boundary-reimplementation`:
+  SA47 (first step) **landed** — the three divergent last-owner implementations are now one
+  canonical `OrganizationMembership.is_last_owner_with_members()` with lock-guarded concurrent-deletion
+  protection; the finding stays open pending a `pre_delete` receiver backstop and the teams build.
+  `org-model-universe-hand-enumerated`: SA49 (coverage-boundary sub-item) **landed** — orgs'
+  conformance-env module list is now CI-derived from `quickscale_modules/*/pyproject.toml`
+  presence instead of hand-listed; the finding stays open pending Option 2 (purge-order
+  derivation), scoped for teams kickoff. `json-api-boundary-idiom-fragmentation`: SA55 (the
+  decisions.md rule) **landed** — `§json-api-endpoint-base-contract` now names the two sanctioned
+  bases and schedules billing's migration (SA56) rather than grandfathering it; the finding stays
+  open pending the `OrgApiBaseView` fold (SA50, open on Track 1) and the billing migration (SA56,
+  open on Track 3). Red flags reconciled: `_get_manage_py()` silent fallback → **fixed** (SA52);
+  SA21.2 helper's `getattr`-default settings reads → **fixed** (SA48); stale `services.py` header
+  contract → **fixed** (SA51) — all three removed from the Red flags section, detail in
+  CHANGELOG.md and tech-audit.md (TA42/TA43/TA44). Full narrative re-verification of Findings
+  1/2/4/5's evidence prose is deferred to the next full autopsy re-run; this entry records what
+  changed since the 2026-07-07 delta pass above without rewriting it.

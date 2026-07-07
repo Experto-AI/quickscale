@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -732,3 +734,244 @@ class TestOrgsStorageAdapterFailClosed:
         )
         assert isinstance(spec, ModuleWiringSpec)
         assert "quickscale_modules_storage" in spec.apps
+
+
+# ---------------------------------------------------------------------------
+# SA42: Post-hook settings reads fail hard instead of silently coercing
+# via .get(key, default).  Missing key -> KeyError; empty blog rate limit
+# -> ManifestError (matching SA18.2 precedent).
+# ---------------------------------------------------------------------------
+
+
+class TestBlogPostHookFailHard:
+    """Missing/empty blog post-hook settings raise instead of defaulting (SA42)."""
+
+    def test_missing_posts_per_page_raises_key_error(self) -> None:
+        """A missing BLOG_POSTS_PER_PAGE raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "BLOG_ENABLE_RSS": True,
+                "BLOG_API_RATE_LIMIT": "5/hour",
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="BLOG_POSTS_PER_PAGE"):
+            entry_point_module._blog_post_hook(spec, resolved)
+
+    def test_missing_enable_rss_raises_key_error(self) -> None:
+        """A missing BLOG_ENABLE_RSS raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "BLOG_POSTS_PER_PAGE": 10,
+                "BLOG_API_RATE_LIMIT": "5/hour",
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="BLOG_ENABLE_RSS"):
+            entry_point_module._blog_post_hook(spec, resolved)
+
+    def test_missing_rate_limit_raises_key_error(self) -> None:
+        """A missing BLOG_API_RATE_LIMIT raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "BLOG_POSTS_PER_PAGE": 10,
+                "BLOG_ENABLE_RSS": True,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="BLOG_API_RATE_LIMIT"):
+            entry_point_module._blog_post_hook(spec, resolved)
+
+    def test_empty_rate_limit_raises_manifest_error(self) -> None:
+        """An empty BLOG_API_RATE_LIMIT raises ManifestError instead of defaulting."""
+        from quickscale_core.manifest import ManifestError
+
+        spec = ModuleWiringSpec(
+            settings={
+                "BLOG_POSTS_PER_PAGE": 10,
+                "BLOG_ENABLE_RSS": True,
+                "BLOG_API_RATE_LIMIT": "",
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
+            entry_point_module._blog_post_hook(spec, resolved)
+
+    def test_blog_whitespace_only_rate_limit_raises_manifest_error(self) -> None:
+        """A whitespace-only BLOG_API_RATE_LIMIT raises ManifestError."""
+        from quickscale_core.manifest import ManifestError
+
+        spec = ModuleWiringSpec(
+            settings={
+                "BLOG_POSTS_PER_PAGE": 10,
+                "BLOG_ENABLE_RSS": True,
+                "BLOG_API_RATE_LIMIT": "   ",
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
+            entry_point_module._blog_post_hook(spec, resolved)
+
+    def test_blog_all_settings_present_passes(self) -> None:
+        """All blog settings present and valid pass through without error."""
+        spec = ModuleWiringSpec(
+            settings={
+                "BLOG_POSTS_PER_PAGE": 10,
+                "BLOG_ENABLE_RSS": True,
+                "BLOG_API_RATE_LIMIT": "5/hour",
+            }
+        )
+        resolved: dict[str, Any] = {}
+        result = entry_point_module._blog_post_hook(spec, resolved)
+        assert isinstance(result, ModuleWiringSpec)
+        assert result.settings["BLOG_POSTS_PER_PAGE"] == 10
+        assert result.settings["BLOG_ENABLE_RSS"] is True
+        assert result.settings["BLOG_API_RATE_LIMIT"] == "5/hour"
+
+
+class TestListingsPostHookFailHard:
+    """Missing listings post-hook settings raise instead of defaulting (SA42)."""
+
+    def test_missing_listings_per_page_raises_key_error(self) -> None:
+        """A missing LISTINGS_PER_PAGE raises KeyError."""
+        spec = ModuleWiringSpec(settings={})
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="LISTINGS_PER_PAGE"):
+            entry_point_module._listings_post_hook(spec, resolved)
+
+    def test_listings_setting_present_passes(self) -> None:
+        """A valid LISTINGS_PER_PAGE passes through without error."""
+        spec = ModuleWiringSpec(settings={"LISTINGS_PER_PAGE": 24})
+        resolved: dict[str, Any] = {}
+        result = entry_point_module._listings_post_hook(spec, resolved)
+        assert isinstance(result, ModuleWiringSpec)
+        assert result.settings["LISTINGS_PER_PAGE"] == 24
+
+
+class TestFormsPostHookFailHard:
+    """Missing forms post-hook settings raise instead of defaulting (SA42)."""
+
+    def test_missing_forms_per_page_raises_key_error(self) -> None:
+        """A missing FORMS_PER_PAGE raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "FORMS_SPAM_PROTECTION": True,
+                "FORMS_RATE_LIMIT": "5/hour",
+                "FORMS_DATA_RETENTION_DAYS": 365,
+                "FORMS_SUBMISSIONS_API": True,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="FORMS_PER_PAGE"):
+            entry_point_module._forms_post_hook(spec, resolved)
+
+    def test_missing_spam_protection_raises_key_error(self) -> None:
+        """A missing FORMS_SPAM_PROTECTION raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "FORMS_PER_PAGE": 25,
+                "FORMS_RATE_LIMIT": "5/hour",
+                "FORMS_DATA_RETENTION_DAYS": 365,
+                "FORMS_SUBMISSIONS_API": True,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="FORMS_SPAM_PROTECTION"):
+            entry_point_module._forms_post_hook(spec, resolved)
+
+    def test_missing_rate_limit_raises_key_error(self) -> None:
+        """A missing FORMS_RATE_LIMIT raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "FORMS_PER_PAGE": 25,
+                "FORMS_SPAM_PROTECTION": True,
+                "FORMS_DATA_RETENTION_DAYS": 365,
+                "FORMS_SUBMISSIONS_API": True,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="FORMS_RATE_LIMIT"):
+            entry_point_module._forms_post_hook(spec, resolved)
+
+    def test_missing_data_retention_days_raises_key_error(self) -> None:
+        """A missing FORMS_DATA_RETENTION_DAYS raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "FORMS_PER_PAGE": 25,
+                "FORMS_SPAM_PROTECTION": True,
+                "FORMS_RATE_LIMIT": "5/hour",
+                "FORMS_SUBMISSIONS_API": True,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="FORMS_DATA_RETENTION_DAYS"):
+            entry_point_module._forms_post_hook(spec, resolved)
+
+    def test_missing_submissions_api_raises_key_error(self) -> None:
+        """A missing FORMS_SUBMISSIONS_API raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "FORMS_PER_PAGE": 25,
+                "FORMS_SPAM_PROTECTION": True,
+                "FORMS_RATE_LIMIT": "5/hour",
+                "FORMS_DATA_RETENTION_DAYS": 365,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="FORMS_SUBMISSIONS_API"):
+            entry_point_module._forms_post_hook(spec, resolved)
+
+    def test_forms_all_settings_present_passes(self) -> None:
+        """All forms settings present and valid pass through without error."""
+        spec = ModuleWiringSpec(
+            settings={
+                "FORMS_PER_PAGE": 25,
+                "FORMS_SPAM_PROTECTION": True,
+                "FORMS_RATE_LIMIT": "5/hour",
+                "FORMS_DATA_RETENTION_DAYS": 365,
+                "FORMS_SUBMISSIONS_API": True,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        result = entry_point_module._forms_post_hook(spec, resolved)
+        assert isinstance(result, ModuleWiringSpec)
+        assert result.settings["FORMS_PER_PAGE"] == 25
+
+
+class TestNotificationsPostHookFailHard:
+    """Notifications derived_settings use direct access instead of .get() defaults (SA42).
+
+    The notifications post-hook is nested inside _notifications_manifest_adapter
+    and not directly importable.  We verify through the full adapter path:
+    the existing integration test (test_notifications_adapter_returns_spec) proves
+    the happy path still works.  The code change from .get(key, default) to
+    settings[key] means any missing required setting will now raise KeyError
+    instead of silently defaulting.
+    """
+
+    def test_notifications_adapter_returns_spec(self) -> None:
+        """Notifications adapter still produces a valid spec (SA42 happy path)."""
+        spec = build_manifest_wiring_spec("notifications", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert "quickscale_modules_notifications" in spec.apps
+        assert spec.settings.get("QUICKSCALE_NOTIFICATIONS_ENABLED") is True
+
+    def test_notifications_missing_enabled_raises_key_error(self) -> None:
+        """A missing QUICKSCALE_NOTIFICATIONS_ENABLED raises KeyError (SA42)."""
+        import quickscale_core.manifest.resolver as _resolver_mod
+
+        _original = _resolver_mod._project_all_derived_settings
+
+        def _strip_enabled(schema, resolved):
+            result = _original(schema, resolved)
+            if schema.module_name == "notifications":
+                result.pop("QUICKSCALE_NOTIFICATIONS_ENABLED", None)
+            return result
+
+        with patch.object(
+            _resolver_mod,
+            "_project_all_derived_settings",
+            side_effect=_strip_enabled,
+        ):
+            with pytest.raises(KeyError, match="QUICKSCALE_NOTIFICATIONS_ENABLED"):
+                build_manifest_wiring_spec("notifications", {})

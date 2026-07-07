@@ -388,11 +388,18 @@ def _blog_post_hook(
     """Apply blog-specific type coercions and static markdownx settings."""
     settings = dict(spec.settings)
 
-    # Legacy int()/bool()/str() coercions.
-    settings["BLOG_POSTS_PER_PAGE"] = int(settings.get("BLOG_POSTS_PER_PAGE", 10))
-    settings["BLOG_ENABLE_RSS"] = bool(settings.get("BLOG_ENABLE_RSS", True))
-    api_rate = str(settings.get("BLOG_API_RATE_LIMIT", "")).strip()
-    settings["BLOG_API_RATE_LIMIT"] = api_rate or "5/hour"
+    # SA42: direct required reads — no .get() defaults (SA18.2 pattern).
+    # Missing/invalid raises KeyError or ManifestError instead of silently
+    # defaulting to baked literals.
+    settings["BLOG_POSTS_PER_PAGE"] = int(settings["BLOG_POSTS_PER_PAGE"])
+    settings["BLOG_ENABLE_RSS"] = bool(settings["BLOG_ENABLE_RSS"])
+    api_rate = str(settings["BLOG_API_RATE_LIMIT"]).strip()
+    if not api_rate:
+        raise ManifestError(
+            "Blog manifest setting BLOG_API_RATE_LIMIT resolved to empty value. "
+            "The manifest derivation produced an invalid result."
+        )
+    settings["BLOG_API_RATE_LIMIT"] = api_rate
 
     # Static markdownx settings (identical to legacy).
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
@@ -452,8 +459,8 @@ def _listings_post_hook(
     """Apply listings-specific int coercion and static markdownx settings."""
     settings = dict(spec.settings)
 
-    # Legacy int() coercion.
-    settings["LISTINGS_PER_PAGE"] = int(settings.get("LISTINGS_PER_PAGE", 12))
+    # SA42: direct required read — no .get() default (SA18.2 pattern).
+    settings["LISTINGS_PER_PAGE"] = int(settings["LISTINGS_PER_PAGE"])
 
     # Static markdownx settings (identical to legacy).
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
@@ -521,18 +528,12 @@ def _forms_post_hook(
     """Apply forms-specific int/bool/str coercions."""
     settings = dict(spec.settings)
 
-    # Legacy int()/bool()/str() coercions.
-    settings["FORMS_PER_PAGE"] = int(settings.get("FORMS_PER_PAGE", 25))
-    settings["FORMS_SPAM_PROTECTION"] = bool(
-        settings.get("FORMS_SPAM_PROTECTION", True)
-    )
-    settings["FORMS_RATE_LIMIT"] = str(settings.get("FORMS_RATE_LIMIT", "5/hour"))
-    settings["FORMS_DATA_RETENTION_DAYS"] = int(
-        settings.get("FORMS_DATA_RETENTION_DAYS", 365)
-    )
-    settings["FORMS_SUBMISSIONS_API"] = bool(
-        settings.get("FORMS_SUBMISSIONS_API", True)
-    )
+    # SA42: direct required reads — no .get() defaults (SA18.2 pattern).
+    settings["FORMS_PER_PAGE"] = int(settings["FORMS_PER_PAGE"])
+    settings["FORMS_SPAM_PROTECTION"] = bool(settings["FORMS_SPAM_PROTECTION"])
+    settings["FORMS_RATE_LIMIT"] = str(settings["FORMS_RATE_LIMIT"])
+    settings["FORMS_DATA_RETENTION_DAYS"] = int(settings["FORMS_DATA_RETENTION_DAYS"])
+    settings["FORMS_SUBMISSIONS_API"] = bool(settings["FORMS_SUBMISSIONS_API"])
 
     return ModuleWiringSpec(
         apps=spec.apps,
@@ -900,9 +901,9 @@ def _notifications_manifest_adapter(
     wiring = _project_all_wiring(schema, resolved)
     derived_settings = _project_all_derived_settings(schema, resolved)
 
-    # Reproduce legacy coercions exactly.
+    # SA42: direct required reads — no .get() defaults (SA18.2 pattern).
     derived_settings["QUICKSCALE_NOTIFICATIONS_ENABLED"] = bool(
-        derived_settings.get("QUICKSCALE_NOTIFICATIONS_ENABLED", True)
+        derived_settings["QUICKSCALE_NOTIFICATIONS_ENABLED"]
     )
     for str_key in (
         "QUICKSCALE_NOTIFICATIONS_SENDER_NAME",
@@ -916,13 +917,13 @@ def _notifications_manifest_adapter(
             derived_settings[str_key] = str(derived_settings[str_key]).strip()
 
     derived_settings["QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS"] = list(
-        derived_settings.get("QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS", [])
+        derived_settings["QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS"]
     )
     derived_settings["QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS"] = list(
-        derived_settings.get("QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS", [])
+        derived_settings["QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS"]
     )
     derived_settings["QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS"] = int(
-        derived_settings.get("QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS", 300)
+        derived_settings["QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS"]
     )
 
     # Static setting that is not derived from any option.
