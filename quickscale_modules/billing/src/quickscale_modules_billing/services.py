@@ -92,6 +92,16 @@ class BillingValidationError(BillingError):
     """Raised when a billing request is structurally invalid."""
 
 
+class BillingSubscriptionAnomalyError(BillingError):
+    """Raised when a local subscription row exists but is in an
+    anomalous state — e.g. missing its Stripe subscription id.
+
+    This is distinct from ``BillingValidationError`` so that callers
+    such as account-deletion can surface the anomaly (log it, flag it)
+    instead of silently treating it as "no subscription to cancel."
+    """
+
+
 class BillingWebhookError(BillingError):
     """Raised when Stripe webhook handling fails."""
 
@@ -744,7 +754,7 @@ def cancel_current_subscription(
 
     stripe_subscription_id = str(subscription.stripe_subscription_id or "").strip()
     if not stripe_subscription_id:
-        raise BillingValidationError(
+        raise BillingSubscriptionAnomalyError(
             "Current recurring subscription is missing a Stripe subscription id."
         )
 
@@ -2345,6 +2355,7 @@ __all__ = [
     "BillingDisabledError",
     "BillingError",
     "BillingSettingsSnapshot",
+    "BillingSubscriptionAnomalyError",
     "BillingValidationError",
     "BillingWebhookError",
     "BillingWebhookSignatureError",
