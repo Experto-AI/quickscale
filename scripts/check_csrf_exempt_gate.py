@@ -210,6 +210,11 @@ def _literal_truthiness(node: ast.expr) -> bool | None:
       * literal ``tuple``/``list``/``dict``/``set`` — empty containers (``()`` / ``[]`` / ``{}``)
         are falsey; any non-empty literal container is truthy regardless of
         element values, since ``bool`` on a container depends only on length.
+      * containers with unpack elements (``[*x]``, ``(*x,)``, ``{*x}``,
+        ``{**x}``) — pure unpack-only containers have runtime-dependent length
+        and are treated as uncertain (``None``); mixed fixed+unpack containers
+        (``[1, *x]``, ``(1, *x)``, ``{1, *x}``, ``{"k": 1, **x}``) are
+        guaranteed nonempty and return ``True``.
 
     Also folds parsed-source signed numeric literals:
 
@@ -217,25 +222,56 @@ def _literal_truthiness(node: ast.expr) -> bool | None:
       * ``-1.5`` (truthy), ``-0.0``, ``+0.0`` (falsey)
       * ``-1j`` (truthy), ``-0j``, ``+0j`` (falsey)
 
-    Only ``ast.UnaryOp`` with ``UAdd`` or ``USub`` over a numeric
-    ``ast.Constant`` (``int``, ``float``, ``complex``, excluding ``bool``) is
-    folded.  Every other unary expression (``not``, ``~``, nested unary,
-    non-constant operand) returns ``None`` (conservative "scan both branches").
+    Also folds unary ``not`` expressions where the operand truthiness is
+    known:
+
+      * ``not True`` (falsey), ``not False`` (truthy)
+      * ``not 0`` (truthy), ``not 1`` (falsey)
+      * ``not ""`` (truthy), ``not "x"`` (falsey)
+      * (any literal for which ``_literal_truthiness`` returns a definite value)
+
+    Also folds ``~`` (bitwise invert) over ``int`` and ``bool`` constant
+    operands:
+
+      * ``~0`` (truthy, ``~0 == -1``), ``~1`` (truthy, ``~1 == -2``)
+      * ``~True`` (truthy, ``~True == -2``), ``~False`` (truthy, ``~False == -1``)
+      * ``~-1`` is **not** folded (operand is a signed expression, not a bare
+        constant — nested unary is conservatively treated as uncertain)
+
+    Also folds ``+``/``-`` over ``bool`` constant operands (previously excluded):
+
+      * ``+True`` (truthy), ``+False`` (falsey)
+      * ``-True`` (truthy, ``-True == -1``), ``-False`` (falsey)
     """
-    # --- Signed numeric literals (parsed-source form) -----------------------
-    # ``-1``, ``+0.0``, ``-1j`` etc. are parsed as
-    # ``ast.UnaryOp(op=ast.USub()|ast.UAdd(), operand=ast.Constant(...))``.
+    # --- Unary operators ----------------------------------------------------
     if isinstance(node, ast.UnaryOp):
+        # ``-1``, ``+0.0``, ``-1j`` etc. are parsed as
+        # ``ast.UnaryOp(op=ast.USub()|ast.UAdd(), operand=ast.Constant(...))``.
         if isinstance(node.op, (ast.UAdd, ast.USub)):
             if isinstance(node.operand, ast.Constant):
                 val = node.operand.value
-                # ``bool`` is excluded — +True/-True are nonsensical in practice
-                if isinstance(val, bool):
-                    return None
-                if isinstance(val, (int, float, complex)):
+                if isinstance(val, (int, float, complex, bool)):
                     if isinstance(node.op, ast.USub):
                         return -val != 0
                     return val != 0
+            return None
+
+        # ``not <literal>`` — invert truthiness when operand is defined
+        if isinstance(node.op, ast.Not):
+            operand_truth = _literal_truthiness(node.operand)
+            if operand_truth is not None:
+                return not operand_truth
+            return None
+
+        # ``~<int>`` / ``~<bool>`` — bitwise invert; compute on int/bool
+        if isinstance(node.op, ast.Invert):
+            if isinstance(node.operand, ast.Constant):
+                val = node.operand.value
+                if isinstance(val, (int, bool)):
+                    return ~val != 0
+            return None
+
+        # Any other unary op (nested unary, non-constant operand, …)
         return None
 
     # --- ``ast.Constant`` values --------------------------------------------
@@ -270,16 +306,38 @@ def _literal_truthiness(node: ast.expr) -> bool | None:
     # ``bool(literal_container)`` is equivalent to ``len(container) > 0``
     # regardless of the elements' types, so we do not need to recursively
     # verify that every element is itself a literal.
+    #
+    # However, containers with starred/unpack elements (``[*x]``, ``(*x,)``,
+    # ``{*x}``, ``{**x}``) have runtime-dependent length — the unpacked
+    # iterable could be empty, making the container empty.  Treat such
+    # containers as uncertain (``None``) so ``not`` folding stays
+    # conservative (CR-SA46-REV-UNPACK-001).
     if isinstance(node, (ast.Tuple, ast.List)):
+        # ``ast.Starred`` elements indicate unpacking (``*args``).
+        # Pure unpack-only containers (``[*x]``, ``(*x,)``) have
+        # runtime-dependent length; mixed fixed+unpack (``[1, *x]``)
+        # are guaranteed nonempty.
+        if node.elts and all(isinstance(elt, ast.Starred) for elt in node.elts):
+            return None
         return bool(node.elts)
 
     if isinstance(node, ast.Dict):
+        # ``None`` keys indicate ``**dict`` unpack syntax (e.g. ``{**x}``).
+        # Pure unpack-only dicts have runtime-dependent length; mixed
+        # fixed+unpack (``{"k": 1, **x}``) are guaranteed nonempty.
+        if node.keys and all(key is None for key in node.keys):
+            return None
         return bool(node.keys)
 
     # ``ast.Set`` — no empty-set literal syntax in Python, so ``ast.Set``
     # always has at least one element at the AST level. The container-length
     # rule still applies: ``bool({1})`` is ``True``.
     if isinstance(node, ast.Set):
+        # Starred elements in set displays indicate unpacking (``{*x}``).
+        # Pure unpack-only sets have runtime-dependent length; mixed
+        # fixed+unpack (``{1, *x}``) are guaranteed nonempty.
+        if node.elts and all(isinstance(elt, ast.Starred) for elt in node.elts):
+            return None
         return bool(node.elts)
 
     return None

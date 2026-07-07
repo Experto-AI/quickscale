@@ -322,6 +322,42 @@ class TestLiteralTruthiness:
     def test_nonempty_set(self) -> None:
         assert self._truth("{1}") is True
 
+    # --- Unpacked containers (CR-SA46-REV-UNPACK-001) ----------------------
+
+    def test_starred_list_is_uncertain(self) -> None:
+        """``[*x]`` — starred unpack makes runtime length uncertain."""
+        assert self._truth("[*x]") is None
+
+    def test_starred_tuple_is_uncertain(self) -> None:
+        """``(*x,)`` — starred unpack makes runtime length uncertain."""
+        assert self._truth("(*x,)") is None
+
+    def test_starred_set_is_uncertain(self) -> None:
+        """``{*x}`` — starred unpack makes runtime length uncertain."""
+        assert self._truth("{*x}") is None
+
+    def test_starred_dict_is_uncertain(self) -> None:
+        """``{**x}`` — dict unpack makes runtime length uncertain."""
+        assert self._truth("{**x}") is None
+
+    # --- Mixed fixed+unpack containers (CR-SA46-REV-UNPACK-001) ------------
+
+    def test_mixed_list_guaranteed_truthy(self) -> None:
+        """``[1, *x]`` — mixed fixed+unpack is guaranteed nonempty."""
+        assert self._truth("[1, *x]") is True
+
+    def test_mixed_tuple_guaranteed_truthy(self) -> None:
+        """``(1, *x)`` — mixed fixed+unpack is guaranteed nonempty."""
+        assert self._truth("(1, *x)") is True
+
+    def test_mixed_set_guaranteed_truthy(self) -> None:
+        """``{1, *x}`` — mixed fixed+unpack is guaranteed nonempty."""
+        assert self._truth("{1, *x}") is True
+
+    def test_mixed_dict_guaranteed_truthy(self) -> None:
+        r"""``{\"k\": 1, **x}`` — mixed fixed+unpack is guaranteed nonempty."""
+        assert self._truth('{"k": 1, **x}') is True
+
     # --- Signed numeric literals (``ast.UnaryOp`` with ``UAdd``/``USub``) --
 
     def test_neg_int_nonzero(self) -> None:
@@ -368,17 +404,179 @@ class TestLiteralTruthiness:
         """``~x`` is not folded."""
         assert self._truth("~x") is None
 
-    def test_unary_uadd_bool_returns_none(self) -> None:
-        """``+True`` is excluded (``bool`` is not numeric for signed folding)."""
-        assert self._truth("+True") is None
+    def test_unary_uadd_bool_folded(self) -> None:
+        """``+True`` is truthy (``+True == True``)."""
+        assert self._truth("+True") is True
 
-    def test_unary_usub_bool_returns_none(self) -> None:
-        """``-True`` is excluded (``bool`` is not numeric for signed folding)."""
-        assert self._truth("-True") is None
+    def test_unary_usub_bool_truthy(self) -> None:
+        """``-True`` is truthy (``-True == -1``)."""
+        assert self._truth("-True") is True
 
     def test_unary_nested_returns_none(self) -> None:
         """``--1`` (nested unary) is not folded — operand is not Constant."""
         assert self._truth("--1") is None
+
+    # --- ``ast.Not`` literal folding (CR-SA46-REV-003) ---------------------
+
+    def test_not_true(self) -> None:
+        """``not True`` is falsey."""
+        assert self._truth("not True") is False
+
+    def test_not_false(self) -> None:
+        """``not False`` is truthy."""
+        assert self._truth("not False") is True
+
+    def test_not_int_nonzero(self) -> None:
+        """``not 1`` is falsey."""
+        assert self._truth("not 1") is False
+
+    def test_not_int_zero(self) -> None:
+        """``not 0`` is truthy."""
+        assert self._truth("not 0") is True
+
+    def test_not_float_nonzero(self) -> None:
+        """``not 1.5`` is falsey."""
+        assert self._truth("not 1.5") is False
+
+    def test_not_float_zero(self) -> None:
+        """``not 0.0`` is truthy."""
+        assert self._truth("not 0.0") is True
+
+    def test_not_complex_nonzero(self) -> None:
+        """``not 1j`` is falsey."""
+        assert self._truth("not 1j") is False
+
+    def test_not_complex_zero(self) -> None:
+        """``not 0j`` is truthy."""
+        assert self._truth("not 0j") is True
+
+    def test_not_none(self) -> None:
+        """``not None`` is truthy."""
+        assert self._truth("not None") is True
+
+    def test_not_ellipsis(self) -> None:
+        """``not ...`` is falsey."""
+        assert self._truth("not ...") is False
+
+    def test_not_nonempty_str(self) -> None:
+        r"""``not "x"`` is falsey."""
+        assert self._truth('not "x"') is False
+
+    def test_not_empty_str(self) -> None:
+        r"""``not ""`` is truthy."""
+        assert self._truth('not ""') is True
+
+    def test_not_nonempty_bytes(self) -> None:
+        r"""``not b"x"`` is falsey."""
+        assert self._truth('not b"x"') is False
+
+    def test_not_empty_bytes(self) -> None:
+        r"""``not b""`` is truthy."""
+        assert self._truth('not b""') is True
+
+    def test_not_empty_tuple(self) -> None:
+        """``not ()`` is truthy."""
+        assert self._truth("not ()") is True
+
+    def test_not_nonempty_tuple(self) -> None:
+        """``not (1,)`` is falsey."""
+        assert self._truth("not (1,)") is False
+
+    def test_not_empty_list(self) -> None:
+        """``not []`` is truthy."""
+        assert self._truth("not []") is True
+
+    def test_not_nonempty_list(self) -> None:
+        """``not [1]`` is falsey."""
+        assert self._truth("not [1]") is False
+
+    def test_not_empty_dict(self) -> None:
+        """``not {}`` is truthy."""
+        assert self._truth("not {}") is True
+
+    def test_not_nonempty_dict(self) -> None:
+        r"""``not {"k": "v"}`` is falsey."""
+        assert self._truth('not {"k": "v"}') is False
+
+    def test_not_nonempty_set(self) -> None:
+        """``not {1}`` is falsey."""
+        assert self._truth("not {1}") is False
+
+    def test_not_nonconstant(self) -> None:
+        """``not x`` (non-constant) is not folded."""
+        assert self._truth("not x") is None
+
+    # --- ``ast.Not`` on unpacked containers (CR-SA46-REV-UNPACK-001) ------
+
+    def test_not_starred_list_is_uncertain(self) -> None:
+        """``not [*x]`` — starred unpack makes operand uncertain."""
+        assert self._truth("not [*x]") is None
+
+    def test_not_starred_tuple_is_uncertain(self) -> None:
+        """``not (*x,)`` — starred unpack makes operand uncertain."""
+        assert self._truth("not (*x,)") is None
+
+    def test_not_starred_set_is_uncertain(self) -> None:
+        """``not {*x}`` — starred unpack makes operand uncertain."""
+        assert self._truth("not {*x}") is None
+
+    def test_not_starred_dict_is_uncertain(self) -> None:
+        """``not {**x}`` — dict unpack makes operand uncertain."""
+        assert self._truth("not {**x}") is None
+
+    # --- ``not`` on mixed fixed+unpack containers (CR-SA46-REV-UNPACK-001)
+
+    def test_not_mixed_list_guaranteed_falsey(self) -> None:
+        """``not [1, *x]`` — mixed fixed+unpack is guaranteed truthy, not is falsey."""
+        assert self._truth("not [1, *x]") is False
+
+    def test_not_mixed_tuple_guaranteed_falsey(self) -> None:
+        """``not (1, *x)`` — mixed fixed+unpack is guaranteed truthy, not is falsey."""
+        assert self._truth("not (1, *x)") is False
+
+    def test_not_mixed_set_guaranteed_falsey(self) -> None:
+        """``not {1, *x}`` — mixed fixed+unpack is guaranteed truthy, not is falsey."""
+        assert self._truth("not {1, *x}") is False
+
+    def test_not_mixed_dict_guaranteed_falsey(self) -> None:
+        r"""``not {\"k\": 1, **x}`` — mixed fixed+unpack is guaranteed truthy, not is falsey."""
+        assert self._truth('not {"k": 1, **x}') is False
+
+    # --- ``ast.Invert`` literal folding (CR-SA46-REV-003) ------------------
+
+    def test_invert_int_zero(self) -> None:
+        """``~0`` is truthy (``~0 == -1``)."""
+        assert self._truth("~0") is True
+
+    def test_invert_int_nonzero(self) -> None:
+        """``~1`` is truthy (``~1 == -2``)."""
+        assert self._truth("~1") is True
+
+    def test_invert_bool_true(self) -> None:
+        """``~True`` is truthy (``~True == -2``)."""
+        assert self._truth("~True") is True
+
+    def test_invert_bool_false(self) -> None:
+        """``~False`` is truthy (``~False == -1``)."""
+        assert self._truth("~False") is True
+
+    def test_invert_nonconstant(self) -> None:
+        """``~x`` (non-constant) is not folded."""
+        assert self._truth("~x") is None
+
+    # --- ``UAdd``/``USub`` over ``bool`` (CR-SA46-REV-003) -----------------
+
+    def test_uadd_bool_true(self) -> None:
+        """``+True`` is truthy."""
+        assert self._truth("+True") is True
+
+    def test_uadd_bool_false(self) -> None:
+        """``+False`` is falsey."""
+        assert self._truth("+False") is False
+
+    def test_usub_bool_false(self) -> None:
+        """``-False`` is falsey (``-False == 0``)."""
+        assert self._truth("-False") is False
 
     # --- Non-constant expressions (should return None) ---------------------
 
@@ -1064,6 +1262,349 @@ class TestCsrfExemptVisitorClassLevel:
         )
         assert _get_violation_count(source) == 1
 
+    # ------------------------------------------------------------------
+    # Unary literal reachability — class-level (CR-SA46-REV-003)
+    # ------------------------------------------------------------------
+
+    def test_class_helper_under_if_not_zero_is_reachable_passes(self) -> None:
+        """Helper inside ``if not 0:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not 0:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_not_one_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not 1:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not 1:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_not_zero_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if not 0: return ...`` in class handler."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not 0:\n"
+            "            return JsonResponse({})\n"
+            "        else:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_invert_zero_is_reachable_passes(self) -> None:
+        """Helper inside ``if ~0:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if ~0:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_plus_true_is_reachable_passes(self) -> None:
+        """Helper inside ``if +True:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if +True:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_minus_true_is_reachable_passes(self) -> None:
+        """Helper inside ``if -True:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if -True:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_minus_false_is_unreachable_fails(self) -> None:
+        """Helper inside ``if -False:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if -False:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_not_nonempty_str_is_unreachable_fails(self) -> None:
+        r"""Helper inside ``if not \"x\":`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            '        if not "x":\n'
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_not_empty_str_is_reachable_passes(self) -> None:
+        r"""Helper inside ``if not \"\":`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            '        if not "":\n'
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    # --- Unpacked-container reachability — class-level (CR-SA46-REV-UNPACK-001)
+
+    def test_class_helper_under_if_not_starred_list_is_reachable_passes(self) -> None:
+        """Helper inside ``if not [*x]:`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not [*x]:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_not_starred_tuple_is_reachable_passes(self) -> None:
+        """Helper inside ``if not (*x,):`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not (*x,):\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_not_starred_set_is_reachable_passes(self) -> None:
+        """Helper inside ``if not {*x}:`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not {*x}:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_not_starred_dict_is_reachable_passes(self) -> None:
+        """Helper inside ``if not {**x}:`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not {**x}:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_after_if_not_starred_list_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not [*x]: return`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not [*x]:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_after_if_not_starred_tuple_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not (*x,): return`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not (*x,):\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_after_if_not_starred_set_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not {*x}: return`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not {*x}:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_after_if_not_starred_dict_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not {**x}: return`` in class handler is reachable (uncertain)."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not {**x}:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    # --- Mixed fixed+unpack container reachability — class-level (CR-SA46-REV-UNPACK-001)
+
+    def test_class_helper_under_if_not_mixed_list_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not [1, *x]:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not [1, *x]:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_not_mixed_tuple_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not (1, *x):`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not (1, *x):\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_not_mixed_set_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not {1, *x}:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not {1, *x}:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_not_mixed_dict_is_unreachable_fails(self) -> None:
+        r"""Helper inside ``if not {\"k\": 1, **x}:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if not {'k': 1, **x}:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_if_mixed_list_return_is_unreachable_fails(self) -> None:
+        """Helper after ``if [1, *x]: return`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if [1, *x]:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_if_mixed_tuple_return_is_unreachable_fails(self) -> None:
+        """Helper after ``if (1, *x): return`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if (1, *x):\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_if_mixed_set_return_is_unreachable_fails(self) -> None:
+        """Helper after ``if {1, *x}: return`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if {1, *x}:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_if_mixed_dict_return_is_unreachable_fails(self) -> None:
+        r"""Helper after ``if {\"k\": 1, **x}: return`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if {'k': 1, **x}:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
 
 # ---------------------------------------------------------------------------
 # _CsrfExemptVisitor  —  function-level scans (nested-def gate)
@@ -1543,6 +2084,300 @@ class TestCsrfExemptVisitorFunctionLevel:
             "def my_view(request):\n"
             "    if -0j:\n"
             "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    # ------------------------------------------------------------------
+    # Unary literal reachability — ``not`` / ``~`` / unary-on-bool
+    # (CR-SA46-REV-003)
+    # ------------------------------------------------------------------
+
+    def test_helper_under_if_not_zero_is_reachable_passes(self) -> None:
+        """Helper inside ``if not 0:`` body is reachable (``not 0`` is True)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not 0:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_not_one_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not 1:`` body is unreachable (``not 1`` is False)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not 1:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_not_zero_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if not 0: return ...`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not 0:\n"
+            "        return JsonResponse({})\n"
+            "    else:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_invert_zero_is_reachable_passes(self) -> None:
+        """Helper inside ``if ~0:`` body is reachable (``~0`` is -1, truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if ~0:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_plus_true_is_reachable_passes(self) -> None:
+        """Helper inside ``if +True:`` body is reachable (``+True`` is True)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if +True:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_minus_true_is_reachable_passes(self) -> None:
+        """Helper inside ``if -True:`` body is reachable (``-True`` is -1, truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if -True:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_minus_false_is_unreachable_fails(self) -> None:
+        """Helper inside ``if -False:`` body is unreachable (``-False`` is 0)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if -False:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_not_nonempty_str_is_unreachable_fails(self) -> None:
+        r"""Helper inside ``if not \"x\":`` is unreachable (``not \"x"`` is False)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            '    if not "x":\n'
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_not_empty_str_is_reachable_passes(self) -> None:
+        r"""Helper inside ``if not \"\":`` is reachable (``not \"\"`` is True)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            '    if not "":\n'
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    # --- Unpacked-container reachability (CR-SA46-REV-UNPACK-001) --------
+
+    def test_helper_under_if_not_starred_list_is_reachable_passes(self) -> None:
+        """Helper inside ``if not [*x]:`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not [*x]:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_not_starred_tuple_is_reachable_passes(self) -> None:
+        """Helper inside ``if not (*x,):`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not (*x,):\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_not_starred_set_is_reachable_passes(self) -> None:
+        """Helper inside ``if not {*x}:`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not {*x}:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_not_starred_dict_is_reachable_passes(self) -> None:
+        """Helper inside ``if not {**x}:`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not {**x}:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_after_if_not_starred_list_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not [*x]: return`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not [*x]:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_after_if_not_starred_tuple_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not (*x,): return`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not (*x,):\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_after_if_not_starred_set_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not {*x}: return`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not {*x}:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_after_if_not_starred_dict_return_is_reachable_passes(self) -> None:
+        """Helper after ``if not {**x}: return`` is reachable (uncertain condition)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not {**x}:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    # --- Mixed fixed+unpack container reachability (CR-SA46-REV-UNPACK-001)
+
+    def test_helper_under_if_not_mixed_list_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not [1, *x]:`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not [1, *x]:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_not_mixed_tuple_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not (1, *x):`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not (1, *x):\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_not_mixed_set_is_unreachable_fails(self) -> None:
+        """Helper inside ``if not {1, *x}:`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not {1, *x}:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_not_mixed_dict_is_unreachable_fails(self) -> None:
+        r"""Helper inside ``if not {\"k\": 1, **x}:`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if not {'k': 1, **x}:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_mixed_list_return_is_unreachable_fails(self) -> None:
+        """Helper after ``if [1, *x]: return`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if [1, *x]:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_mixed_tuple_return_is_unreachable_fails(self) -> None:
+        """Helper after ``if (1, *x): return`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if (1, *x):\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_mixed_set_return_is_unreachable_fails(self) -> None:
+        """Helper after ``if {1, *x}: return`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if {1, *x}:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_mixed_dict_return_is_unreachable_fails(self) -> None:
+        r"""Helper after ``if {\"k\": 1, **x}: return`` is unreachable (guaranteed truthy)."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if {'k': 1, **x}:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"  # unreachable
             "    return JsonResponse({})\n"
         )
         assert _get_violation_count(source) == 1
