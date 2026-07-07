@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import (
+from quickscale_core.runtime.manifest import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,

@@ -255,7 +255,32 @@ class TestRegenerateManagedWiringSkipUnknown:
 
 
 class TestManifestAdapterRegistryCompleteness:
-    """Verify all expected modules are registered in the manifest adapter registry."""
+    """Verify all expected modules are registered in the manifest adapter registry.
+
+    Uses an autouse fixture to refresh managed adapters so the test is
+    self-contained and does not depend on prior tests priming the registry
+    via regenerate_managed_wiring (CR-SA44-REV-001).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _refresh_registry(self) -> None:
+        """Refresh managed adapters before checking registry completeness.
+
+        Without this, the test is order-dependent: managed-module entries
+        (billing, crm, social) are only populated by
+        refresh_managed_adapters(), which previously was only called on
+        certain regenerate_managed_wiring code paths.
+        """
+        from quickscale_core.manifest.entry_point import (
+            MANAGED_ADAPTER_ORIGINS,
+            refresh_managed_adapters,
+        )
+
+        if MANAGED_ADAPTER_ORIGINS:
+            try:
+                refresh_managed_adapters()
+            except Exception:
+                pass  # Best-effort — may not have a modules base path
 
     @pytest.mark.parametrize(
         "module_name",
@@ -551,3 +576,101 @@ class TestRegenerateManagedWiringSkipManifestNotFound:
         # Verify analytics wiring was written.
         content = (project / "myapp" / "settings" / "modules.py").read_text()
         assert "quickscale_modules_analytics" in content
+
+
+class TestRegenerateManagedWiringPriorBasePath:
+    """regenerate_managed_wiring refreshes managed adapters when a prior base
+    path exists but no embedded module manifests are present.
+
+    Regression coverage for CR-SA44-REV-001: before the fix,
+    refresh_managed_adapters() was only called on the embedded-manifests
+    branch.  When a prior base path was active (e.g. maintainer monorepo)
+    and the project had no embedded module manifests, managed-module specs
+    (social, billing, CRM) could be built against an unrefreshed registry.
+    """
+
+    def test_social_via_prior_base_path(self, tmp_path: Path) -> None:
+        """A managed module (social) builds successfully when a prior base path
+        is active and no embedded module manifests exist, because
+        refresh_managed_adapters() is now called on the prior-base-path branch."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(
+            project,
+            modules={
+                "social": {
+                    "provider_allowlist": ["x"],
+                    "layout_variant": "list",
+                }
+            },
+        )
+
+        # Set the modules base path to the maintainer monorepo so that
+        # _prior_base_path is not None and _has_real_manifests is False
+        # (the test project has no modules/<name>/module.yml).
+        monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
+        assert monorepo_path.is_dir(), "Maintainer monorepo must exist for this test"
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = monorepo_path
+
+        try:
+            # Verify precondition: no embedded manifests
+            modules_dir = project / "modules"
+            assert not modules_dir.is_dir() or not any(
+                (modules_dir / entry.name / "module.yml").exists()
+                for entry in modules_dir.iterdir()
+                if modules_dir.is_dir()
+            )
+
+            success, message = regenerate_managed_wiring(
+                project, module_names=["social"]
+            )
+            assert success, (
+                f"regenerate_managed_wiring for social via prior base path "
+                f"failed: {message}"
+            )
+
+            # Verify managed wiring was actually written.
+            managed_views = project / "myapp" / "quickscale_managed" / "social_views.py"
+            assert managed_views.exists(), (
+                "Managed social_views.py not written via prior-base-path branch"
+            )
+            assert "x" in managed_views.read_text().lower() or (
+                "twitter" in managed_views.read_text().lower()
+            )
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_billing_via_prior_base_path(self, tmp_path: Path) -> None:
+        """A managed module (billing) builds successfully via the prior-base-path
+        branch, verifying that refresh_managed_adapters() runs for all managed
+        origins before building specs."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(
+            project,
+            modules={"billing": {"enabled": True}},
+        )
+
+        monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
+        original_override = _md._modules_base_path
+        _md._modules_base_path = monorepo_path
+
+        try:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["billing"]
+            )
+            assert success, (
+                f"regenerate_managed_wiring for billing via prior base path "
+                f"failed: {message}"
+            )
+
+            settings_modules = project / "myapp" / "settings" / "modules.py"
+            assert settings_modules.exists()
+            content = settings_modules.read_text()
+            assert "quickscale_modules_billing" in content
+        finally:
+            _md._modules_base_path = original_override

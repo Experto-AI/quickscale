@@ -10,6 +10,10 @@ quickscale_core without a quickscale_cli dependency:
 - Provenance-sensitive checks for module-owned vs core fallback adapters.
 - Managed-adapter import/factory failure at an active base path.
 
+SA44 Phase 1: managed adapters (social, billing, CRM) are NOT registered at
+import time.  The module-level ``refresh_managed_adapters()`` call below
+registers them explicitly before any test runs.
+
 Integration tests that call build_manifest_wiring_spec('analytics', ...)
 live in quickscale_cli/tests/test_manifest_entry_point_integration.py,
 where both packages are on sys.path.
@@ -38,6 +42,12 @@ from quickscale_core.manifest.entry_point import (
     build_manifest_wiring_spec as build_manifest_wiring_spec_direct,
 )
 from quickscale_core.module_wiring import ModuleWiringSpec
+
+# SA44 Phase 1: managed adapters (social, billing, CRM) are NOT registered
+# at import time.  ``refresh_managed_adapters()`` must be called explicitly
+# before tests that expect managed adapters in the registry.
+# This module-level call runs once when the test file is loaded.
+refresh_managed_adapters()
 
 
 # ---------------------------------------------------------------------------
@@ -92,21 +102,17 @@ class TestManifestAdapterRegistry:
         """The storage registry entry is callable."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["storage"])
 
-    def test_social_registered_at_import(self) -> None:
-        """Social adapter is available (import-time or deferred lazy init).
+    def test_social_registered_via_explicit_refresh(self) -> None:
+        """Social adapter is registered after explicit refresh_managed_adapters().
 
-        The social adapter is a managed adapter owned by the module package
-        (``quickscale_modules_social.adapter``).  When the managed adapter
-        import triggers a ``quickscale_core.runtime`` circular import
-        (e.g. because the backups module loaded first), the import-time
-        initialisation is deferred to :func:`_ensure_adapters_initialized`.
+        SA44 Phase 1: managed adapters are no longer registered at import time.
+        The module-level ``refresh_managed_adapters()`` call in this test file
+        ensures social is available.
         """
-        entry_point_module._ensure_adapters_initialized()
         assert "social" in MANIFEST_ADAPTER_REGISTRY
 
     def test_social_value_is_callable(self) -> None:
-        """The social registry entry is callable (import-time or deferred)."""
-        entry_point_module._ensure_adapters_initialized()
+        """The social registry entry is callable after explicit refresh."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["social"])
 
     def test_importable_from_manifest_package(self) -> None:
@@ -242,7 +248,10 @@ class TestCustomAdapterRegistration:
 # build_manifest_wiring_spec and verify the returned ModuleWiringSpec.
 # ---------------------------------------------------------------------------
 
-# All adapters registered at import time.
+# All catalog adapters expected in the registry.  Inline-registered modules
+# (analytics, auth, blog, …) are set at module load time.  Managed modules
+# (billing, crm, social) are registered by the module-level
+# ``refresh_managed_adapters()`` call above (SA44 Phase 1).
 _REGISTERED_ADAPTERS = [
     "analytics",
     "auth",
@@ -569,194 +578,6 @@ class TestRefreshManagedAdaptersFailure:
             MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
-
-
-class TestImportTimeManagedAdapterInitialization:
-    """Import-time managed-adapter init only defers the known circular import."""
-
-    def test_circular_import_is_deferred_to_lazy_init(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from django.core.exceptions import ImproperlyConfigured
-
-        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
-
-        circular_import = ImportError(
-            "cannot import name 'build_generic_manifest_spec' from partially "
-            "initialized module 'quickscale_core.manifest.entry_point' "
-            "(most likely due to a circular import)"
-        )
-
-        def _raise_circular_import() -> None:
-            raise ImproperlyConfigured("circular import during adapter init") from (
-                circular_import
-            )
-
-        monkeypatch.setattr(
-            entry_point_module,
-            "refresh_managed_adapters",
-            _raise_circular_import,
-        )
-
-        entry_point_module._initialize_managed_adapters_at_import()
-
-        assert entry_point_module._ADAPTERS_INITIALIZED is False
-
-    def test_runtime_circular_import_is_deferred_to_lazy_init(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """``quickscale_core.runtime`` circular import is recognised and
-        deferred to lazy init (SA20 closeout — social adapter via backups
-        admin autodiscovery)."""
-        from django.core.exceptions import ImproperlyConfigured
-
-        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
-
-        runtime_circular = ImportError(
-            "cannot import name 'SOCIAL_EMBEDS_PATH' from partially "
-            "initialized module 'quickscale_core.runtime' "
-            "(most likely due to a circular import)"
-        )
-
-        def _raise_circular_import() -> None:
-            raise ImproperlyConfigured(
-                "circular import during adapter init"
-            ) from runtime_circular
-
-        monkeypatch.setattr(
-            entry_point_module,
-            "refresh_managed_adapters",
-            _raise_circular_import,
-        )
-
-        entry_point_module._initialize_managed_adapters_at_import()
-
-        assert entry_point_module._ADAPTERS_INITIALIZED is False
-
-    def test_non_circular_improperly_configured_is_not_swallowed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from django.core.exceptions import ImproperlyConfigured
-
-        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
-
-        missing_dependency = ImportError("No module named 'missing_dependency'")
-
-        def _raise_missing_dependency() -> None:
-            raise ImproperlyConfigured("broken adapter import") from missing_dependency
-
-        monkeypatch.setattr(
-            entry_point_module,
-            "refresh_managed_adapters",
-            _raise_missing_dependency,
-        )
-
-        with pytest.raises(ImproperlyConfigured, match="broken adapter import"):
-            entry_point_module._initialize_managed_adapters_at_import()
-
-        assert entry_point_module._ADAPTERS_INITIALIZED is False
-
-    def test_success_marks_import_time_initialization_complete(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        calls: list[str] = []
-
-        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
-        monkeypatch.setattr(
-            entry_point_module,
-            "refresh_managed_adapters",
-            lambda: calls.append("called"),
-        )
-
-        entry_point_module._initialize_managed_adapters_at_import()
-
-        assert calls == ["called"]
-        assert entry_point_module._ADAPTERS_INITIALIZED is True
-
-
-# ---------------------------------------------------------------------------
-# Lazy-init regression (CR-SA18.1-002): _ensure_adapters_initialized must not
-# latch _ADAPTERS_INITIALIZED across a failed lazy refresh after the deferred
-# circular-import path.  Repeated build attempts must continue surfacing the
-# real managed-adapter failure.
-# ---------------------------------------------------------------------------
-
-
-class TestLazyInitFailureDoesNotLatch:
-    """When lazy init (via _ensure_adapters_initialized) fails,
-    _ADAPTERS_INITIALIZED must remain False so subsequent calls retry and
-    continue surfacing the real managed-adapter failure (CR-SA18.1-002)."""
-
-    def test_failure_does_not_latch_adapter_flag(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """_ensure_adapters_initialized must not set _ADAPTERS_INITIALIZED
-        when refresh_managed_adapters raises."""
-        from django.core.exceptions import ImproperlyConfigured
-
-        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
-
-        def _raise() -> None:
-            raise ImproperlyConfigured("managed adapter failure")
-
-        monkeypatch.setattr(
-            entry_point_module,
-            "refresh_managed_adapters",
-            _raise,
-        )
-
-        with pytest.raises(ImproperlyConfigured, match="managed adapter failure"):
-            entry_point_module._ensure_adapters_initialized()
-
-        # Flag must still be False — not latched.
-        assert entry_point_module._ADAPTERS_INITIALIZED is False
-
-    def test_repeated_calls_still_surface_failure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Repeated calls to _ensure_adapters_initialized must continue
-        raising when refresh_managed_adapters has not recovered."""
-        from django.core.exceptions import ImproperlyConfigured
-
-        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
-
-        call_count = 0
-
-        def _raise() -> None:
-            nonlocal call_count
-            call_count += 1
-            raise ImproperlyConfigured("managed adapter failure")
-
-        monkeypatch.setattr(
-            entry_point_module,
-            "refresh_managed_adapters",
-            _raise,
-        )
-
-        # First call raises.
-        with pytest.raises(ImproperlyConfigured, match="managed adapter failure"):
-            entry_point_module._ensure_adapters_initialized()
-        assert call_count == 1
-        assert entry_point_module._ADAPTERS_INITIALIZED is False
-
-        # Second call also raises (was not latched).
-        with pytest.raises(ImproperlyConfigured, match="managed adapter failure"):
-            entry_point_module._ensure_adapters_initialized()
-        assert call_count == 2
-        assert entry_point_module._ADAPTERS_INITIALIZED is False
-
-    def test_success_sets_adapter_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """When refresh_managed_adapters succeeds, _ADAPTERS_INITIALIZED
-        is set to True."""
-        monkeypatch.setattr(entry_point_module, "_ADAPTERS_INITIALIZED", False)
-        monkeypatch.setattr(
-            entry_point_module,
-            "refresh_managed_adapters",
-            lambda: None,
-        )
-
-        entry_point_module._ensure_adapters_initialized()
-        assert entry_point_module._ADAPTERS_INITIALIZED is True
 
 
 # ---------------------------------------------------------------------------

@@ -25,16 +25,12 @@ import pytest
 # ---------------------------------------------------------------------------
 # Safe import of the management Command class
 # ---------------------------------------------------------------------------
-# ``quickscale_core.manifest.entry_point`` triggers ``refresh_managed_adapters``
-# at import time, which imports module adapters that may circular-import back
-# into ``quickscale_core.runtime``.  We patch around that by pre-setting the
-# initialization flag so the refresh is a no-op.
+# SA44 Phase 1: ``quickscale_core.manifest.entry_point`` no longer triggers
+# ``refresh_managed_adapters`` at import time, so the pre-import shim
+# (``_ADAPTERS_INITIALIZED`` / ``_initialize_managed_adapters_at_import``)
+# has been removed.  The DR management command imports safely without
+# circular-import risk.
 # pylint: disable=wrong-import-position
-
-import quickscale_core.manifest.entry_point as _ep  # noqa: E402
-
-_ep._ADAPTERS_INITIALIZED = True  # noqa: SLF001
-_ep._initialize_managed_adapters_at_import = lambda: None  # type: ignore[method-assign]  # noqa: E501
 
 from quickscale_modules_backups.management.commands.dr_adapter_call import (  # noqa: E402
     Command,

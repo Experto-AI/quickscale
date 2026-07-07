@@ -10,7 +10,11 @@ Module adapter registration
 Manifest adapters are registered in :data:`MANIFEST_ADAPTER_REGISTRY` via one
 of two paths:
 
-1. **Managed origin** (AF7) — modules whose adapter is owned by the module
+1. **Inline registration** — modules registered directly at module load time
+   (analytics, blog, listings, forms, backups, notifications, auth, orgs,
+   storage).  These are not affected by :func:`refresh_managed_adapters`.
+
+2. **Managed origin** (AF7) — modules whose adapter is owned by the module
    package (social, billing, CRM).  The registry entry is established by
    :func:`refresh_managed_adapters`, which imports the module-owned adapter
    from ``quickscale_modules_{name}.adapter`` and fails hard (raises
@@ -18,9 +22,10 @@ of two paths:
    package is not importable.  Bundled/installed-without-module-source is
    not a supported context.
 
-2. **Import-time** — modules registered directly at module load time
-   (analytics, blog, listings, forms, backups, notifications, auth, orgs,
-   storage).  These are not affected by :func:`refresh_managed_adapters`.
+   Managed adapters are NOT registered at import time.  The caller (typically
+   :func:`~quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring`)
+   must invoke :func:`refresh_managed_adapters` explicitly before calling
+   :func:`build_manifest_wiring_spec` for managed modules.
 
 All catalog modules are registered: analytics, billing, blog, listings, CRM,
 forms, backups, notifications, auth, orgs, storage, and social.
@@ -1423,95 +1428,6 @@ MANIFEST_ADAPTER_REGISTRY["storage"] = _storage_manifest_adapter
 MANAGED_ADAPTER_ORIGINS.add("social")
 
 # ---------------------------------------------------------------------------
-# Lazy initialisation guard
-# ---------------------------------------------------------------------------
-# The import-time refresh_managed_adapters() call below can fail due to a
-# circular import when the import chain goes through contracts.resolvers
-# before that module has finished loading (e.g. via module_wiring_manager).
-# If it fails, the adapters are registered lazily on first use.
-
-_ADAPTERS_INITIALIZED: bool = False
-
-
-def _is_import_time_adapter_circular_import(error: Exception) -> bool:
-    """
-    Return True when *error* is the documented lazy-init circular import.
-
-    The only tolerated import-time failures are the known partially-initialized
-    core-module cycles encountered while module-owned adapters import
-    ``build_generic_manifest_spec`` during entry-point initialisation.
-    Recognised patterns:
-    - ``quickscale_core.manifest.entry_point``
-    - ``quickscale_core.contracts.resolvers``
-    - ``quickscale_core.runtime``  (SA20 closeout — e.g. social adapter via
-      backups admin autodiscovery)
-    """
-    cause = error.__cause__
-    if not isinstance(cause, ImportError):
-        return False
-
-    message = str(cause)
-    return (
-        "partially initialized module" in message
-        and "circular import" in message
-        and (
-            "quickscale_core.manifest.entry_point" in message
-            or "quickscale_core.contracts.resolvers" in message
-            or "quickscale_core.runtime" in message
-        )
-    )
-
-
-def _ensure_adapters_initialized() -> None:
-    """
-    One-time lazy initialisation of managed adapters.
-
-    Called by :func:`build_manifest_wiring_spec` when the import-time
-    refresh failed (circular import during module initialisation).
-
-    If the refresh fails (e.g. a managed module's Python adapter package
-    is not importable), the ``_ADAPTERS_INITIALIZED`` flag is NOT set so
-    that subsequent calls retry the initialisation and continue surfacing
-    the real managed-adapter failure (CR-SA18.1-002).
-    """
-    global _ADAPTERS_INITIALIZED
-    if not _ADAPTERS_INITIALIZED:
-        refresh_managed_adapters()
-        _ADAPTERS_INITIALIZED = True
-
-
-def _initialize_managed_adapters_at_import() -> None:
-    """
-    Eagerly initialise managed adapters unless the known circular import hits.
-
-    Broken adapter imports must fail at import time. Only the documented
-    partially-initialized core-module circular import is deferred to
-    :func:`build_manifest_wiring_spec`'s lazy initialisation path.
-    """
-    from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
-
-    global _ADAPTERS_INITIALIZED
-
-    try:
-        refresh_managed_adapters()
-    except ImproperlyConfigured as exc:
-        if _is_import_time_adapter_circular_import(exc):
-            return
-        raise
-
-    _ADAPTERS_INITIALIZED = True
-
-
-# Initialise all managed adapters (social, billing, CRM) in one pass so
-# the registry is consistent at import time.  Gracefully handle circular
-# imports during module initialisation (ImportError raised from adapter
-# package imports, then re-raised as ImproperlyConfigured by
-# refresh_managed_adapters) — the adapters are lazily initialised on the
-# first call to :func:`build_manifest_wiring_spec`.
-_initialize_managed_adapters_at_import()
-
-
-# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -1548,7 +1464,6 @@ def build_manifest_wiring_spec(
             *module_name*.  The caller should fall back to the legacy builder
             or handle the error.
     """
-    _ensure_adapters_initialized()
     adapter = MANIFEST_ADAPTER_REGISTRY.get(module_name)
     if adapter is None:
         raise ManifestAdapterNotFound(

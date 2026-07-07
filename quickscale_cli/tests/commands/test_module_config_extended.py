@@ -52,7 +52,10 @@ from quickscale_cli.commands.module_config import (
     format_auth_migration_remediation,
     validate_backups_module_options,
 )
-from quickscale_core.manifest.entry_point import build_manifest_wiring_spec
+from quickscale_core.manifest.entry_point import (
+    build_manifest_wiring_spec,
+    refresh_managed_adapters,
+)
 from quickscale_core.contracts.module_options import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
@@ -77,6 +80,13 @@ from quickscale_cli.utils.module_dependency_sync import (
     resolve_embedded_module_install_path,
 )
 from quickscale_core.module_wiring import collect_wiring
+
+# Prime managed-adapter registry (CRM, social, billing) so that
+# _build_specs() calls for managed modules are self-contained and
+# do not depend on prior test-module execution order.  Follows
+# the established pattern in test_manifest_entry_point_integration.py
+# and test_manifest_entry_point.py.
+refresh_managed_adapters()
 
 
 def _build_specs(
