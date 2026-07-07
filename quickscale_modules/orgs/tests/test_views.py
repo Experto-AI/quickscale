@@ -2151,3 +2151,103 @@ def test_org_api_settings_updates_slug_and_returns_json(client, settings) -> Non
     }
     assert organization.name == "Beacon Labs"
     assert organization.slug == "beacon-labs"
+
+
+# ---------------------------------------------------------------------------
+# SA50 — missing-slug vs unauthorized-slug parity on role-scoped OrgApi views
+# ---------------------------------------------------------------------------
+
+
+_MISSING_SLUG_403_RESPONSE = {"error": "Forbidden"}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "path",
+    [
+        # OrgApiDetailView (VIEWER): GET /api/orgs/<slug>/
+        "/api/orgs/nonexistent-slug/",
+        # OrgApiMembersView (ADMIN): GET /api/orgs/<slug>/members/
+        "/api/orgs/nonexistent-slug/members/",
+        # OrgApiSettingsView (ADMIN): POST /api/orgs/<slug>/settings/
+        "/api/orgs/nonexistent-slug/settings/",
+    ],
+)
+def test_org_api_missing_slug_returns_403_not_404(client, settings, path) -> None:
+    """Missing org slug on role-scoped OrgApi endpoints returns 403 (no oracle).
+
+    Previously returned 404, which created an org-slug existence oracle:
+    missing slug -> 404, unauthorized access to existing org -> 403.
+    Both now return 403, matching the HTML view's 403 gate.
+    """
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="missing-slug-test",
+        email="missing-slug@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    if "settings" in path:
+        response = client.post(
+            path, data=json.dumps({}), content_type="application/json"
+        )
+    else:
+        response = client.get(path)
+
+    assert response.status_code == 403
+    assert response.json() == _MISSING_SLUG_403_RESPONSE
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("org_slug", "path_pattern"),
+    [
+        # OrgApiDetailView (VIEWER)
+        ("parity-org", "/api/orgs/{slug}/"),
+        # OrgApiMembersView (ADMIN)
+        ("parity-org", "/api/orgs/{slug}/members/"),
+        # OrgApiSettingsView (ADMIN) — POST
+        ("parity-org", "/api/orgs/{slug}/settings/"),
+    ],
+)
+def test_org_api_unauthorized_slug_and_missing_slug_return_same_403(
+    client, settings, org_slug, path_pattern
+) -> None:
+    """Unauthorized (non-member on existing org) and missing-slug return
+    identical 403 responses — no way to distinguish them from the response."""
+    settings.QUICKSCALE_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="parity-test-user",
+        email="parity@example.com",
+        password="secret123",
+    )
+    Organization.objects.create(name="ParityOrg", slug=org_slug)
+    client.force_login(user)
+
+    # Unauthorized: user exists but has no membership on the org
+    if "settings" in path_pattern:
+        unauthorized_response = client.post(
+            path_pattern.format(slug=org_slug),
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+    else:
+        unauthorized_response = client.get(path_pattern.format(slug=org_slug))
+
+    assert unauthorized_response.status_code == 403
+    assert unauthorized_response.json() == _MISSING_SLUG_403_RESPONSE
+
+    # Missing slug: same path, non-existent slug
+    missing_path = path_pattern.format(slug="completely-unknown-slug")
+    if "settings" in missing_path:
+        missing_response = client.post(
+            missing_path,
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+    else:
+        missing_response = client.get(missing_path)
+
+    assert missing_response.status_code == 403
+    assert missing_response.json() == _MISSING_SLUG_403_RESPONSE

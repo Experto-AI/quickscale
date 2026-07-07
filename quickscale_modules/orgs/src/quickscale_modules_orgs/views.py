@@ -216,65 +216,6 @@ class SaasModeRequiredMixin:
         return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
 
 
-class JsonApiMixin:
-    """Helpers for additive org JSON endpoints."""
-
-    def json_error(
-        self,
-        message: str,
-        *,
-        status: int,
-        **payload: Any,
-    ) -> JsonResponse:
-        response_payload: dict[str, Any] = {"error": message}
-        response_payload.update(payload)
-        return JsonResponse(response_payload, status=status)
-
-    def http_method_not_allowed(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> JsonResponse:
-        del request, args, kwargs
-        return self.json_error(
-            "Method not allowed",
-            status=405,
-            allowed_methods=list(self._allowed_methods()),
-        )
-
-    def get_json_payload(
-        self,
-        request: HttpRequest,
-    ) -> tuple[dict[str, Any] | None, JsonResponse | None]:
-        try:
-            payload = json.loads(request.body.decode("utf-8") or "{}")
-        except UnicodeDecodeError:
-            return None, self.json_error("Invalid JSON payload", status=400)
-        except json.JSONDecodeError:
-            return None, self.json_error("Invalid JSON payload", status=400)
-
-        if not isinstance(payload, dict):
-            return None, self.json_error("JSON object payload expected", status=400)
-        return payload, None
-
-
-class JsonAuthenticationRequiredMixin(JsonApiMixin):
-    """Return JSON 401 responses for unauthenticated API requests."""
-
-    def dispatch(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
-        user = getattr(request, "user", None)
-        if not bool(user is not None and getattr(user, "is_authenticated", False)):
-            return self.json_error("Authentication required", status=401)
-        next_dispatch = getattr(super(), "dispatch")
-        return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
-
-
 class OrganizationContextMixin:
     """Resolve the active organization and acting membership for the current view."""
 
@@ -325,10 +266,58 @@ class OrganizationContextMixin:
         )
 
 
-class JsonOrganizationAccessMixin(JsonApiMixin, OrganizationContextMixin):
-    """Resolve org access for JSON endpoints while preserving role rules."""
+class OrgApiBaseView(OrganizationContextMixin, View):
+    """Base view for all OrgApi* JSON endpoints.
 
-    min_org_role = OrgRole.VIEWER
+    Provides SaaS-mode gating, authentication checking, JSON error helpers,
+    request body parsing, org context resolution (OrganizationContextMixin),
+    and optional org-role-based access control.
+
+    Subclasses set ``min_org_role`` to an OrgRole value to enable
+    org-scoped access gating. When ``min_org_role`` is None (the default),
+    the view handles all orgs the user belongs to without scoping.
+    """
+
+    min_org_role: OrgRole | None = None
+
+    def json_error(
+        self,
+        message: str,
+        *,
+        status: int,
+        **payload: Any,
+    ) -> JsonResponse:
+        response_payload: dict[str, Any] = {"error": message}
+        response_payload.update(payload)
+        return JsonResponse(response_payload, status=status)
+
+    def http_method_not_allowed(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> JsonResponse:
+        del request, args, kwargs
+        return self.json_error(
+            "Method not allowed",
+            status=405,
+            allowed_methods=list(self._allowed_methods()),
+        )
+
+    def get_json_payload(
+        self,
+        request: HttpRequest,
+    ) -> tuple[dict[str, Any] | None, JsonResponse | None]:
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except UnicodeDecodeError:
+            return None, self.json_error("Invalid JSON payload", status=400)
+        except json.JSONDecodeError:
+            return None, self.json_error("Invalid JSON payload", status=400)
+
+        if not isinstance(payload, dict):
+            return None, self.json_error("JSON object payload expected", status=400)
+        return payload, None
 
     def dispatch(
         self,
@@ -336,14 +325,22 @@ class JsonOrganizationAccessMixin(JsonApiMixin, OrganizationContextMixin):
         *args: Any,
         **kwargs: Any,
     ) -> HttpResponse:
-        try:
-            organization = self.get_organization()
-        except Http404 as error:
-            return self.json_error(str(error), status=404)
+        if not _is_saas_mode():
+            raise Http404("Org routes are hidden in solo mode.")
 
-        setattr(request, "org", organization)
-        if not user_has_org_role(request.user, organization, self.min_org_role):
-            return self.json_error("Forbidden", status=403)
+        user = getattr(request, "user", None)
+        if not bool(user is not None and getattr(user, "is_authenticated", False)):
+            return self.json_error("Authentication required", status=401)
+
+        if self.min_org_role is not None:
+            try:
+                organization = self.get_organization()
+            except Http404:
+                return self.json_error("Forbidden", status=403)
+
+            setattr(request, "org", organization)
+            if not user_has_org_role(request.user, organization, self.min_org_role):
+                return self.json_error("Forbidden", status=403)
 
         next_dispatch = getattr(super(), "dispatch")
         return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
@@ -941,11 +938,7 @@ class OrgSettingsView(
         )
 
 
-class OrgApiListCreateView(
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    View,
-):
+class OrgApiListCreateView(OrgApiBaseView):
     """Return the acting user's org list or create a new org from JSON."""
 
     def get(
@@ -1000,12 +993,7 @@ class OrgApiListCreateView(
         )
 
 
-class OrgApiDetailView(
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    JsonOrganizationAccessMixin,
-    View,
-):
+class OrgApiDetailView(OrgApiBaseView):
     """Return JSON metadata for the active organization."""
 
     min_org_role = OrgRole.VIEWER
@@ -1040,13 +1028,7 @@ class OrgApiDetailView(
         )
 
 
-class OrgApiMembersView(
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    JsonOrganizationAccessMixin,
-    MemberManagementContextMixin,
-    View,
-):
+class OrgApiMembersView(OrgApiBaseView, MemberManagementContextMixin):
     """Return JSON members and pending invitations for org admins."""
 
     min_org_role = OrgRole.ADMIN
@@ -1086,11 +1068,8 @@ class OrgApiMembersView(
 
 class OrgApiInviteView(
     InvitationNotificationMixin,
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    JsonOrganizationAccessMixin,
+    OrgApiBaseView,
     MemberManagementContextMixin,
-    View,
 ):
     """Create an organization invitation from a JSON payload."""
 
@@ -1121,13 +1100,7 @@ class OrgApiInviteView(
         )
 
 
-class OrgApiMemberRoleView(
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    JsonOrganizationAccessMixin,
-    MemberManagementContextMixin,
-    View,
-):
+class OrgApiMemberRoleView(OrgApiBaseView, MemberManagementContextMixin):
     """Update a member role from a JSON payload."""
 
     min_org_role = OrgRole.ADMIN
@@ -1166,13 +1139,7 @@ class OrgApiMemberRoleView(
         return JsonResponse({"member": _serialize_membership(updated_membership)})
 
 
-class OrgApiMemberRemoveView(
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    JsonOrganizationAccessMixin,
-    MemberManagementContextMixin,
-    View,
-):
+class OrgApiMemberRemoveView(OrgApiBaseView, MemberManagementContextMixin):
     """Remove an organization member."""
 
     min_org_role = OrgRole.ADMIN
@@ -1208,13 +1175,7 @@ class OrgApiMemberRemoveView(
         return JsonResponse({"status": "removed", "member_id": removed_member_id})
 
 
-class OrgApiRevokeInvitationView(
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    JsonOrganizationAccessMixin,
-    MemberManagementContextMixin,
-    View,
-):
+class OrgApiRevokeInvitationView(OrgApiBaseView, MemberManagementContextMixin):
     """Revoke an active pending organization invitation."""
 
     min_org_role = OrgRole.ADMIN
@@ -1236,12 +1197,7 @@ class OrgApiRevokeInvitationView(
         return JsonResponse({"status": "revoked", "invitation_id": invitation_id})
 
 
-class OrgApiSettingsView(
-    SaasModeRequiredMixin,
-    JsonAuthenticationRequiredMixin,
-    JsonOrganizationAccessMixin,
-    View,
-):
+class OrgApiSettingsView(OrgApiBaseView):
     """Update the active organization's display name and slug from JSON."""
 
     min_org_role = OrgRole.ADMIN
