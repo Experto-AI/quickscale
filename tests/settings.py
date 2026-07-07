@@ -33,6 +33,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+QUICKSCALE_MODE = "solo"
 QUICKSCALE_BILLING_ENABLED = True
 ROOT_URLCONF = "tests.urls"
 

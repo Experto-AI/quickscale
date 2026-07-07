@@ -23,6 +23,7 @@ from quickscale_modules_billing.services import (
     BillingDisabledError,
     BillingError,
     BillingSettingsSnapshot,
+    BillingSubscriptionAnomalyError,
     BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
@@ -734,7 +735,7 @@ def test_cancel_current_subscription_rejects_missing_stripe_subscription_id(
         status=Subscription.Status.INCOMPLETE,
     )
 
-    with pytest.raises(BillingValidationError, match="Stripe subscription id"):
+    with pytest.raises(BillingSubscriptionAnomalyError, match="Stripe subscription id"):
         cancel_current_subscription(
             user, organization=organization, stripe_client=FakeStripeClient()
         )
