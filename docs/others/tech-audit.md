@@ -1,20 +1,16 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit date:** 2026-07-06 (re-run + module-by-module deep pass) · **Branch:** `v87` (HEAD `3056186a`)
-> **Mode:** re-run against the SA19–SA33 remediation batch (every prior open finding
-> re-verified, full delta since `a6706db1` deep-read), **followed by a module-by-module
-> deep pass** (core → orgs → billing → forms → auth/backups → periphery) reading interiors
-> the earlier passes only sampled: DR primitives/recovery, `module_wiring`, the generator
-> and its deploy templates; orgs tenant-context save/restore, `TenantManager`, the
-> last-owner model guards, the 1,273-line views, permissions; billing webhook idempotency
-> and the credit-grant path; the forms public-submit serializer/validator chain. Prior IDs
-> are stable; this document states **present reality for planning** —
-> closed findings live only in the Reconciliation log at the bottom. Structural findings
-> live in [arch-audit.md](arch-audit.md); fail-hard policy SSOT is
+> **Audit date:** 2026-07-07 (re-run, delta pass) · **Branch:** `v87` (HEAD `1e618ed8`)
+> **Mode:** re-run against the SA21.2/SA34–SA46 closeout batch. Every prior open finding
+> (TA18, TA37, TA39, TA40) re-verified directly in code; the full first-party diff
+> `3056186a..HEAD` read (54 files, ~6.9k insertions); the three arch-audit red flags from the
+> 2026-07-07 delta autopsy independently verified and accepted (TA42/TA43/TA44). Prior IDs are
+> stable; this document states **present reality for planning** — closed findings live only in
+> the Reconciliation log at the bottom. Structural findings live in
+> [arch-audit.md](arch-audit.md); fail-hard policy SSOT is
 > [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
-> Remediation mapping this pass: TA21→SA23, TA22→SA24, TA24→SA21.1, TA31→SA29 (all
-> resolved); TA17→SA20 (anchor resolved, residual narrowed); TA18→SA21.1 (settings half
-> resolved, module half tracked as SA21.2).
+> Remediation mapping this pass: TA18→SA21.2, TA37→SA38, TA39→SA41 (all resolved);
+> TA40→SA42 (scheduled, still open).
 
 ## Orientation summary
 
@@ -23,79 +19,61 @@ manifest/apply/generator/DR engine, `quickscale_cli` Click CLI, 13 shipped `quic
 Django apps + an empty `teams` placeholder, Jinja2 generator templates). Two deployment realities:
 **(a)** the *generated project* — an internet-facing Django app targeting Railway (edge proxy →
 gunicorn `--workers 1 --timeout 60`, non-root container, fail-closed runtime DB role, production
-settings enforce HTTPS/HSTS/secure cookies, reject placeholder `SECRET_KEY`, and — new since
-SA21.1 — ship trusted-proxy client-IP settings plus an active `CACHES` backend); **(b)** the
-*CLI/generator* — a local developer tool. Trust boundaries: module HTTP surfaces in generated apps
-(Stripe/notifications webhooks — signature-verified + idempotent; public form submit; blog/listings
-token APIs; org invitations; admin backup/restore — now async-dispatched), then generator templates
-(they *become* production config), then the CLI (destructive local ops, Railway deploy plumbing).
-DRF baseline is fail-closed `IsAuthenticated`; tenant isolation is DB-level RLS (`SET LOCAL
-app.current_org_id`, FORCE RLS, fail-closed `TenantManager → .none()`), with the SA14.5 split:
-`operator_access` grants **read-only** cross-tenant visibility via a separate `FOR SELECT`
-sub-policy. `QUICKSCALE_MODE` is now boot-guard-enforced (SA14.6). Tooling baseline: ruff
-(E/W/F/I/N/UP/D) + strict mypy in CI; **no dependency-audit / bandit / semgrep / vulture step;
-pylint duplication-only, not CI-wired**.
+settings enforce HTTPS/HSTS/secure cookies, reject placeholder `SECRET_KEY`, trusted-proxy
+client-IP settings with corrected `ips[-N]` math (SA36), active `CACHES` backend with
+Redis-gated `createcachetable` in `start.sh` (SA34)); **(b)** the *CLI/generator* — a local
+developer tool. Trust boundaries: module HTTP surfaces in generated apps (Stripe/notifications
+webhooks — signature-verified + idempotent; public form submit — string-typed + throttled on
+real client IP; blog/listings token APIs; org invitations; admin backup/restore — async-dispatched
+with CAS claim + stale-reset recovery), then generator templates (they *become* production
+config), then the CLI (destructive local ops, Railway deploy plumbing). DRF baseline is
+fail-closed `IsAuthenticated`; tenant isolation is DB-level RLS (`SET LOCAL app.current_org_id`,
+FORCE RLS, fail-closed `TenantManager → .none()`), with `operator_access` read-only cross-tenant
+visibility now fail-hard outside transactions (SA39). Module client-IP resolution is canonical
+via `quickscale_modules_orgs.current_org.get_client_ip()` (SA21.2). Tooling baseline: ruff
+(E/W/F/I/N/UP/D) + strict mypy in CI, plus a new hard-fail **csrf_exempt pairing gate** (SA46,
+CI-wired); **no dependency-audit / bandit / semgrep / vulture step; pylint duplication-only,
+not CI-wired**.
 
-**Coverage (this pass):** read in full — backups admin restore dispatch flow (`admin.py`
-restore/create/prune views, eligibility, staging seam), `backups_restore` management command,
-backups `services.py`, migration `0005_backupartifact_restore_execution`, DR
-`_persist_restore_artifact_metadata`; orgs `tenancy.py` (complete, incl. RLS templates and
-policy-refresh derivation), operator-access GUC helpers in `current_org.py`, migrations
-0005/0006, `apps.py` mode guard, adapters/middleware/views diffs; auth `views.py`
-(`AccountDeleteView` complete) + `urls.py`; billing `cancel_current_subscription` + Stripe client
-cancel wrapper; settings templates `base.py.j2`/`production.py.j2` diffs (client-IP helper,
-NUM_PROXIES, CACHES) and `start.sh.j2`; storage manifest adapter in `entry_point.py`, storage
-`module.yml`, README.md.j2 storage section, `module_wiring.py` `__QS_ENV__` rendering;
-`resolvers.py`/`module_options.py`/`assembler.py`/`module_config.py`/`apply_command.py` force-path
-/`railway_utils.py`/`dr_adapter_call.py`/`dr_commands.py`/`deployment_commands.py` diffs; blog
-rate limiter + forms throttle + forms submit view; `analytics_tags.py`; orgs `debug_views.py`;
-entry_point post-hooks (blog/listings/forms/notifications). Sampled — module admin
-`TenantModelAdmin` port diffs (billing/blog/forms/listings), `module_catalog.py` delegate
-removal, `runtime.py` re-export diff, listings/storage runtime helpers (re-verification), user-FK
-`on_delete` extraction across all module models. Skipped — test bodies (except pytest-marker
-confirmation), `htmlcov/`, `graphify-out/`, unchanged module interiors already deep-read
-2026-07-05. Audit tools run: none available (`pip-audit`/`bandit`/`safety` not installed; installs
+**Coverage (this pass):** read in full — the entire first-party production diff
+`3056186a..HEAD`: backups `services.py` current state (all 621 lines — SA43 dispatch lifecycle,
+SA37 create/prune dispatch, SA38 staleness detection/reset, `_get_manage_py`),
+`backups/admin.py` `restore_backup_view` complete plus structure map and stale surfacing
+(`stale_restore_warning`, `reset_stale_restore_action` gating), `backups_create` `--trigger`
+plumbing, DR `orchestration.py` CR-SA38-001 parity block, orgs `current_org.py` complete
+(SA21.2 `get_client_ip`, SA39 operator-access guards, AF9 wrapper unchanged), blog/listings
+SA26 sanitizers + SA30 fail-hard reads + SA35 FK migrations, forms SA40
+serializer/validator hardening + SA21.2 throttle ident, billing SA41 anomaly-error path
+(services + views), auth `AccountDeleteView` SA41 handling, storage `helpers.py` SA30 diff,
+settings templates `base.py.j2`/`production.py.j2` SA36 math + `start.sh.j2` SA34 step,
+`scripts/check_csrf_exempt_gate.py` complete (613 lines), ci.yml/Makefile/check_ci_locally.sh
+gate wiring. Sampled — `backups/admin.py` remaining views (permission scaffolding, badges),
+`entry_point.py` TA40 locations (re-verified byte-identical). Skipped — test bodies (except to
+confirm regression coverage exists: SA35 conformance, throttle, stale-reset, gate self-tests),
+`htmlcov/`, `graphify-out/`, module interiors unchanged since the 2026-07-05/06 deep passes.
+Audit tools run: none available (`pip-audit`/`bandit`/`safety` not installed; installs
 prohibited); dependency posture verified unchanged via git — `poetry.lock` untouched since
-2026-06-17, module `pyproject.toml` changes are pytest markers only.
+2026-06-17 (`5ffa8cdc`); coverage artifacts confirmed still untracked (TA23 holds).
 
-**Coverage (module-by-module deep pass, same day):** read in full — quickscale_core: DR
-`primitives.py` (pg_dump/restore command building, `PGPASSWORD` via env dict, list-form
-subprocess) and `recovery.py` (restore-source resolution — checksum + `PGDMP` magic + `pg_restore
---list` + PG18 version contract + `QUICKSCALE_BACKUPS_ALLOW_RESTORE` env gate, all chained before
-execution), `module_wiring.py` (collect/render, `__QS_ENV__` substitution), `generator.py` (path
-resolution, `poetry lock` subprocess, temp+move), `file_utils.py`, Dockerfile/start.sh/railway.json
-templates. orgs: `current_org.py` (ContextVar + GUC save/restore in `_tenant_context`/`org_scope`,
-the AF9 priming execute-wrapper with its atomic-identity memo, operator-access GUC), `managers.py`
-(`TenantManager` fail-closed `.none()`, `OrganizationManager` system-org + personal-org creation
-races), `models.py` (last-owner `save`/`delete` guards, both `select_for_update` on the Organization
-row), `permissions.py`, `views.py` (invitation accept lock-guarded/email-matched, JSON API mixin
-authz, member management), invitation token = uuid4. billing: `handle_stripe_event` idempotency and
-`credit_user`/`_find_existing_credit_transaction` (DB unique constraint + savepoint rollback +
-re-fetch — verified idempotent under concurrent duplicate delivery). forms: `serializers.py` +
-`validators.py` (public-submit dynamic validation) + submit view. Sampled — auth adapters, backups
-admin remaining views, social embed resolution (`contracts.py`), analytics capture catch,
-notifications settings snapshot, purge_organization registry. **New finding from this pass: TA41**
-(forms public-submit type-confusion 500).
-
-**Clean sweeps worth recording:** no dangerous sinks in first-party core (`eval`/`exec`/`pickle`/
-`yaml.load`/`shell=True`/weak-hash — none); DR subprocess calls list-form with `PGPASSWORD` in an
-env dict; the guarded restore pipeline chains every check before `pg_restore`; billing webhook is
-idempotent even though the dedup lock releases before processing (each handler is independently
-idempotent via the `(stripe_event_id, transaction_type)` unique constraint + atomic
-balance-delta-with-insert rollback); the orgs last-owner invariant is race-safe at the model layer
-(Organization-row `select_for_update` in both `save` demotion and `delete`), so the unguarded
-view-level owner pre-check is only UX; the tenant-context save/restore correctly restores both the
-ContextVar and the DB GUC on exit (nested-scope safe); invitation acceptance is `select_for_update`
-+ email-matched + terminal-state-gated. SA31 stdin transport correct on both ends (Railway `--stdin`
-with forced `--skip-deploys`; `dr_adapter_call` reads stdin, argv path deprecated); SA22 force-path
-is backup+swap+rollback with temp dirs cleaned on all paths; SA27 removals verified (orgs mode and
-storage backend no longer silently coerce; assembler raises on validation issues; apply-gate calls
-all five validators); SA19 start.sh prints set/MISSING only; SA14.6 boot guard rejects
-missing/invalid `QUICKSCALE_MODE` on every startup path; SA14.2/14.3 admin `all_objects` escapes
-replaced by `TenantModelAdmin`; the SA14.5 policy-refresh table-name derivation was checked against
-every enrolled model's explicit `db_table` — all match the default convention, so no table is
-silently skipped; RLS split-policy SQL grants operator SELECT only; fresh-DB ordering of the
-refresh migrations is safe (module `enable_rls` migrations use the current shared template).
+**Clean sweeps worth recording (delta):** SA26 href sanitizer handles tab/CR/LF and leading-
+whitespace scheme obfuscation, matches only the double-quoted attributes `markdownify` emits on
+escaped input, and its regexes are ReDoS-safe; SA40 serializer rejects `None`/non-string JSON
+values with field-level 400s and maps malformed staff `min_length`/`max_length` rules to field
+errors at validator-construction time; SA30 storage/listings reads fail hard
+(`ImproperlyConfigured`) on missing/invalid settings; SA35 migrations match the model changes
+(`SET_NULL`, already-nullable columns) and ship with a cross-module FK-delete-rule conformance
+gate; SA37/SA38/SA43 dispatch lifecycle is race-safe at code level — CAS claim
+(`_atomic_claim_restore`), pre-spawn snapshot/rollback on `Popen` failure, stale reset via CAS
+that can never overwrite a concurrently finishing child's terminal status, and the admin action
+pre-filters with `is_restore_stale()` so the `None`-`restore_started_at` format-string edge in
+`reset_stale_restore` is unreachable from any live caller; SA36 `ips[-N]`/`len >= N` math is
+consistent across both settings templates and the shared SA21.2 helper and matches DRF
+`NUM_PROXIES` semantics; SA34 `createcachetable` correctly unsets `RUNTIME_DATABASE_URL` (DDL
+via superuser role) and is gated on `REDIS_URL` absence; SA46 gate + CI wiring are sound
+(scope-boundary-aware reachability analysis, hard-fail, wired into `make check`, local CI
+script, and as a `needs:` gate for test/isolation/lint jobs); `backups_create --trigger` uses
+`choices=` and list-form argv (no injection surface); SA41 anomaly path verified end-to-end
+(raise site → distinct exception → logged WARNING in account deletion, 400 in cancel view).
 
 ---
 
@@ -103,46 +81,121 @@ refresh migrations is safe (module `enable_rls` migrations use the current share
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
-| TA18 | S3 | security / rate limiting | Module callsites still read raw `REMOTE_ADDR` behind the proxy: blog API limiter collapses to one bucket; `FormSubmission.ip_address` records the proxy (DRF half fixed by SA21.1; off-by-one trap fixed by SA36; residual tracked as SA21.2) | Small | High | open (narrowed) |
-| TA37 | S3 | operability | A killed restore child (OOM, redeploy) strands `STATUS_RESTORING` forever; admin then permanently refuses retry; no staleness detection despite `restore_started_at` existing | Small | High | open (new) |
-| TA39 | S4 | correctness / error context | `AccountDeleteView._cancel_personal_org_subscriptions` swallows `BillingValidationError` unconditionally — "no subscription" and "subscription row missing its Stripe id" are indistinguishable | Trivial | High | open (new; arch-audit hand-off) |
-| TA40 | S4 | fail-open config | `entry_point.py` post-hooks retain permissive coercion defaults for blog/listings/forms/notifications — the SA18.2/SA27 fail-open class, one layer down | Small | High | open (new; arch-audit hand-off, flagged twice) |
+| TA42 | S3 | error handling / fail-open | `_get_manage_py()` swallows resolution failure and returns bare `"manage.py"` — a background dispatch from an unexpected CWD spawns a child that dies instantly, after the artifact was already claimed `STATUS_RESTORING` (create/prune fail silently) | Trivial | High | open (new; arch-audit hand-off) |
+| TA40 | S4 | fail-open config | `entry_point.py` post-hooks retain permissive coercion defaults for blog/listings/forms/notifications — the SA18.2/SA27 fail-open class, one layer down | Small | High | open (SA42 scheduled, Track 3) |
+| TA43 | S4 | fail-open config | SA21.2 `get_client_ip()` reads `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` via `getattr` defaults — a typo'd or missing setting silently disables proxy resolution instead of failing loud | Trivial | High | open (new; arch-audit hand-off) |
+| TA44 | S4 | doc drift | `backups/services.py:1-10` header contract is false ("intentionally under 400 LOC; every new feature goes in dr_engine/") on a 621-line file that SA43 deliberately grew | Trivial | High | open (new; arch-audit hand-off) |
+| TA45 | S4 | duplication drift | 30-minute stale-restore threshold is a bare literal in `orchestration.py:2804` but a named constant (`STALE_RESTORE_THRESHOLD_MINUTES`) in `services.py` — the two can drift silently | Trivial | High | open (new) |
+| TA46 | S4 | partial failure | `prepare_admin_uploaded_restore_artifact` unlinks the existing local artifact file before `shutil.copy2` with no failure cleanup — a copy failure (disk full) destroys the prior local copy and leaks the staging temp dir | Small | High | open (new) |
 
-Counts: **S1: 0 · S2: 0 · S3: 2 · S4: 2.** No quick wins (Trivial/Small-effort S2/S3) remain open.
-Resolved since the 2026-07-05 audit: **TA21, TA22, TA24, TA25, TA31, TA36, TA32, TA33, TA38, TA41** (see Reconciliation log); **TA34, TA17, TA35 resolved 2026-07-07** (SA35, SA37, SA36 — see Reconciliation log).
+Counts: **S1: 0 · S2: 0 · S3: 1 · S4: 5.** Quick wins: TA42, TA43, TA44, TA45 are all
+Trivial-effort. Resolved since the 2026-07-06/07 passes: **TA18, TA37, TA39** (see
+Reconciliation log).
 
 ---
 
 ## Findings detail — S3 (compact)
 
-- **TA18** (`throttle-remote-addr-behind-proxy`, S3, narrowed 2026-07-06) — SA21.1 fixed the DRF half (`NUM_PROXIES` wired, production defaults `USE_X_FORWARDED_FOR=True`/`TRUSTED_PROXY_COUNT=1`, so `FormSubmitThrottle` now resolves real client IPs); SA36 fixed the off-by-one in the underlying `get_client_ip()` math (closes TA35). Still raw `REMOTE_ADDR`: blog API limiter ident (`blog/views.py:261-268` — all authenticated API clients share one bucket behind the proxy) and `FormSubmission.ip_address` forensics (`forms/views.py:231,257` — records the proxy). Known and tracked as **SA21.2** ("Unblocks SA21.2", CHANGELOG); the structural obstacle is that modules cannot import the generated-settings helper (see Structural smells). Fix per SA21.2. **Effort:** Small · Confidence High.
-- **TA37** (`restore-status-stranded-no-staleness`, S3) — the child records `STATUS_FAILED` only on Python exceptions (`backups_restore.py:132-153`); a SIGKILL (OOM during a big restore, container redeploy) strands `STATUS_RESTORING` forever. The admin then *permanently refuses retry* ("Wait for the restore to complete…", `admin.py:776-780`) and no code reads `restore_started_at` for staleness — the operator must hand-edit the DB, mid-incident, with the database possibly half-restored. Fix: surface staleness in the admin (e.g. `restore_started_at` older than a threshold ⇒ "stale — child likely dead" + a guarded reset-to-FAILED action); optionally record the child PID for a liveness probe. **Effort:** Small · Confidence High.
+- **TA42** (`manage-py-silent-fallback`, S3) — `backups/services.py:264-278`: `_get_manage_py()`
+  wraps the `settings.BASE_DIR` resolution in `except Exception: pass` and falls through to
+  returning bare `"manage.py"`. All three background dispatchers use it
+  (`dispatch_background_restore:400`, `dispatch_background_create:479`,
+  `dispatch_background_prune:508`). Failure scenario: a deployment where `sys.argv[0]` is not
+  `manage.py` (gunicorn — the production norm) *and* `BASE_DIR/manage.py` is absent or resolution
+  raises → `Popen` succeeds (spawn works), the child Python dies immediately with "can't open
+  file 'manage.py'", and the parent's spawn-failure rollback never fires. For restore the
+  artifact sits in `STATUS_RESTORING` until the 30-minute stale threshold (SA38 softened this
+  from "forever" to "30 minutes of confusion mid-incident"); for create/prune the admin reports
+  "initiated" and **nothing happens, silently** — an unnoticed backup gap. In the supported
+  Railway deployment resolution succeeds, so the fallback branch needs unusual conditions —
+  hence S3 not S2. Fix: raise `BackupError` when no `manage.py` is resolvable (fail-hard policy,
+  decisions.md §fail-hard-principle) — and do it *before* `_atomic_claim_restore` so a resolution
+  failure never claims the artifact (the current call order at `:400` already does this; keep it).
+  **Effort:** Trivial · **Verification:** unit test asserting `BackupError` when `sys.argv[0]`
+  isn't manage.py and `BASE_DIR` lacks one. **Deliberate?** none found — no comment, no
+  suppression; arch-audit red-flag hand-off, independently verified. **Age:** introduced with
+  SA20's async dispatch (2026-07-05), extended to create/prune by SA37.
 
 ## Findings detail — S4 (one line each)
 
-- **TA39** — `auth/views.py:212-213`: `except (BillingDisabledError, BillingValidationError): pass` conflates the benign "no current subscription" with "subscription row exists but has no Stripe id" (`billing/services.py:740-749` raises both as `BillingValidationError`) — the latter deletes the account while an unresolved subscription row (and possibly a live Stripe subscription) remains. Stripe API failures do propagate (fail-hard ✓). Fix: distinguish the no-subscription case (dedicated exception or pre-check) and let/log the missing-id case. (Arch-audit red-flag hand-off.)
-- **TA40** — `manifest/entry_point.py:386-390` (blog: `POSTS_PER_PAGE`→10, `ENABLE_RSS`→True, empty rate→`"5/hour"`), `:451` (listings→12), `:520-531` (forms: five defaults incl. `SPAM_PROTECTION`→True), `:898-921` (notifications: `ENABLED`→True, TTL→300): post-hook `settings.get(key, default)` coercions second-guess SA27-validated input — dead today, but the permissive default is what executes on any upstream resolver regression, reopening the TA2/TA19/TA26 class silently. Fix: direct required reads (`settings["KEY"]`), fail loud, matching the SA18.2 analytics-hook purge. (Arch-audit red-flag hand-off, flagged twice; collapsed class — 4 locations listed.)
+- **TA40** — `manifest/entry_point.py:387-389` (blog), `:451` (listings), `:520-529` (forms),
+  `:900-920` (notifications): post-hook `settings.get(key, default)` coercions second-guess
+  SA27-validated input — dead today, but the permissive default is what executes on any upstream
+  resolver regression, reopening the TA2/TA19/TA26 class silently. Re-verified byte-identical
+  this pass. Fix per **SA42** (scheduled, Track 3): direct required reads, fail loud. (Collapsed
+  class — 4 locations.)
+- **TA43** — `orgs/current_org.py:598-599`: `getattr(settings, "USE_X_FORWARDED_FOR", False)` /
+  `getattr(..., "TRUSTED_PROXY_COUNT", 0)` in the shared `get_client_ip()`. Fail-closed in
+  direction (falls back to `REMOTE_ADDR`), but it is the `getattr`-default read class SA14.6/SA30
+  purged elsewhere, and generated apps always define both settings — a typo'd settings name would
+  silently disable proxy resolution in production (throttle buckets collapse to the proxy IP,
+  forensics record the proxy). Fix: direct required reads (module fail-hard startup guard or
+  `settings.USE_X_FORWARDED_FOR` raising `ImproperlyConfigured` when absent), matching SA30.
+- **TA44** — `backups/services.py:1-10`: header claims "intentionally under 400 LOC" and "every
+  new orchestration feature should go in dr_engine/" — the file is 621 lines and SA43 correctly
+  moved the model-touching dispatch lifecycle *into* it. Rewrite the header to the real rule
+  (model-touching lifecycle lives here; engine-pure logic in dr_engine/) before it misdirects the
+  next contributor.
+- **TA45** — `dr_engine/orchestration.py:2804` hardcodes `timedelta(minutes=30)` where
+  `backups/services.py:524` defines `STALE_RESTORE_THRESHOLD_MINUTES = 30` — the CR-SA38-001
+  parity block and the canonical threshold can drift silently (import direction prevents
+  orchestration importing from the module app; move the constant to the engine and re-export, or
+  pass it in).
+- **TA46** — `backups/services.py:364-366`: `local_path.unlink(missing_ok=True)` then
+  `shutil.copy2(...)` with no `try/finally` — a copy failure (disk full, permissions) deletes the
+  pre-existing local artifact copy, leaves `trusted_artifact.local_path` (when previously
+  persisted) dangling, and leaks the `mkdtemp` staging directory (`:368` cleanup is skipped on
+  raise). Fix: copy to a temp name + `os.replace`, and clean the staging dir in a `finally`.
 
 ---
 
 ## Structural smells (candidates for `arch-audit.md`)
 
-- **Client-IP knowledge has no importable seam (TA18):** the canonical resolution lives in *generated settings* (a Jinja template), but the consumers that still need it (blog limiter, forms attribution) live in installed packages that cannot import the generated project's settings module by name. SA21.2 will either duplicate the logic per module or need a shared runtime helper (e.g. an orgs/core utility reading `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` via `django.conf.settings`). Decide the seam before SA21.2 — the off-by-one class itself is already fixed (TA35, closed via SA36), so a duplicated seam would at least duplicate correct math, not the original bug.
-- **Backups admin as orchestration engine (TA37):** arch-audit `backups-admin-orchestration-accretion` (the dispatch-lifecycle duplication) is now resolved (SA43 extracted `dispatch_background_restore()`); TA37 (staleness detection) is a ticket-shaped follow-up that now has a natural home in that same service function — a restore-attempt *entity* is still the shape staleness detection would naturally own.
-- **Deletion invariants enforced per boundary:** already opened as arch-audit `deletion-invariants-per-boundary-reimplementation` (still open, SA47 pending); TA34 (closed via SA35) was one piece of evidence for it — the view-level guard list (owners, subscriptions) cannot enumerate every consequence the schema encodes, which is why the finding stays open beyond the one content-cascade fix.
-- **No single "how does a generated app get configured at deploy time" contract:** carried — SA29 fixed the storage instance; TA33 was a second instance of the same drift (a settings template acquiring a runtime prerequisite no deploy artifact fulfilled) and is now fixed too (SA34), but no generator-wide rule exists yet — a template requiring a deploy-script step is still discovered per-instance, not systematically. A generator-wide rule ("every settings-template requirement must map to a start.sh/README step, asserted by a template test") would close the class.
+- **Deletion invariants enforced per boundary:** carried — open as arch-audit
+  `deletion-invariants-per-boundary-reimplementation` (SA47 pending); the view-level guard list
+  (owners, subscriptions) cannot enumerate every consequence the schema encodes.
+- **No single "how does a generated app get configured at deploy time" contract:** carried —
+  SA29/SA34 fixed instances, but a template requiring a deploy-script step is still discovered
+  per-instance, not systematically; a generator-wide rule ("every settings-template requirement
+  maps to a start.sh/README step, asserted by a template test") would close the class.
+- **Verbatim security-code copies accumulating:** the SA26 `_sanitize_href`/
+  `_sanitize_rendered_html` pair is duplicated identically in blog and listings, and TA45 shows
+  the same pattern for the SA38 threshold — module code that cannot import a shared runtime seam
+  keeps cloning security-relevant logic. Already on the arch-audit watchlist ("SA26 copies");
+  TA45 is fresh evidence the class is growing.
+- ~~Client-IP knowledge has no importable seam~~ — **resolved**: SA21.2 chose the orgs-runtime
+  helper seam (`current_org.get_client_ip`); blog/forms consume it. Residual: TA43 (its settings
+  reads).
+- ~~Backups admin as orchestration engine~~ — **resolved**: SA43 extracted the dispatch
+  lifecycle into `services.py`; SA38 gave staleness detection its natural home there.
 
 ## Tooling gaps
 
-- **`pip-audit`/`safety` CI step** — no dependency-CVE gate; the lockfile read stays manual and low-confidence. (Dependency class, ongoing.)
-- **`bandit`/`semgrep` CI step** — would systematically catch the TA25 class (`|safe`/`mark_safe` on non-constant) and argv/redirect classes as they recur.
-- **Generated-project boot smoke test** — render + boot the generated app in CI with *minimal* env (no `REDIS_URL`) and hit one throttled endpoint; would have caught TA33 and any future settings-template/deploy-script drift.
-- **Delete-rule conformance test** — landed via SA35 (`TestUserFkDeleteRuleConformance` in the orgs cross-module harness), asserting every user-FK in `quickscale_modules_*` uses `SET_NULL`/`PROTECT` unless allowlisted. Closes this gap; keeps the TA34 class from recurring as new modules (teams!) land.
-- **Public-endpoint fuzz/negative test on form submit** — POST non-string JSON value types (array, number, object, null) at the public submit endpoint and assert 400, never 500; would have caught TA41 and guards the dynamic-validation surface as field types grow.
-- **Apply-gate completeness check** — CI assertion that every exported `validate_*_module_options` is invoked on the apply path — now landed for the five modules (SA27); extend to fail on *post-hook* `.get(key, default)` patterns to close TA40's class.
-- **Settings-contract system check** — startup assertion for required `QUICKSCALE_*` settings: landed for orgs (SA14.6) and, per SA30, for listings/storage as well (TA32 resolved).
+- **`pip-audit`/`safety` CI step** — no dependency-CVE gate; the lockfile read stays manual and
+  low-confidence. (Dependency class, ongoing.)
+- **`bandit`/`semgrep` CI step** — would systematically catch the TA25 class (`|safe`/`mark_safe`
+  on non-constant), the argv/redirect classes, and `except Exception: pass` fallbacks (TA42's
+  shape) as they recur.
+- **Generated-project boot smoke test** — render + boot the generated app in CI with *minimal*
+  env and hit one throttled endpoint; would catch settings-template/deploy-script drift (TA33's
+  class) and TA43's silent-disable scenario.
+- **Apply-gate post-hook check** — extend the SA27 apply-gate assertion to fail on post-hook
+  `.get(key, default)` patterns (closes TA40's class when SA42 lands).
+- **csrf_exempt gate coverage** — `check_csrf_exempt_gate.py` matches `csrf_exempt` only as a
+  bare `ast.Name`; attribute-form usage (`@csrf.csrf_exempt`), list/tuple arguments inside
+  `method_decorator`, and URLconf-level `csrf_exempt(view)` wrapping slip past. Not a live
+  defect (no such usage exists today) — extend the matcher when convenient so the gate keeps its
+  guarantee as contributors vary idiom.
+- **Landed since last pass:** delete-rule conformance gate (SA35,
+  `TestUserFkDeleteRuleConformance`); public-submit negative-type tests (SA40); settings-contract
+  startup checks for orgs/listings/storage (SA14.6/SA30); csrf_exempt pairing gate itself (SA46).
 
-Categories swept with no qualifying finding this pass: injection sinks (stdin JSON transport verified), deserialization, crypto misuse, SSRF/open-redirect (SA23 verified fixed), resource leaks (temp dirs cleaned on all apply paths; Popen without wait leaves at most one transient zombie per rare restore — not consequential), timeouts, N+1/perf, import-time side effects, dependency CVEs (lockfile unchanged; low confidence without a scanner).
+Categories swept with no qualifying finding this pass: injection sinks (argv list-form
+verified on all three dispatchers; `--trigger` choice-constrained), XSS (SA26 obfuscation
+handling verified), deserialization, crypto misuse, SSRF/open-redirect, concurrency (CAS
+claim/reset verified race-safe), timeouts, N+1/perf, import-time side effects, dependency CVEs
+(lockfile unchanged since 2026-06-17; low confidence without a scanner), test-quality (new
+regression suites assert real behavior).
 
 ---
 
@@ -181,12 +234,32 @@ Categories swept with no qualifying finding this pass: injection sinks (stdin JS
 - 2026-07-06 (module-by-module deep pass, core and cli included as modules) — **TA41 opened** (forms public-submit `TypeError`→500 on non-string JSON values, found reading the serializer/validator chain in full). Modules read deeply and found clean this pass: quickscale_core (DR primitives/recovery restore gate, module_wiring, generator + deploy templates — no dangerous sinks), orgs (tenant-context save/restore, `TenantManager`, last-owner model guards race-safe via Organization-row lock, invitation accept, permissions), billing (webhook idempotency + credit-grant unique-constraint rollback verified idempotent under concurrent duplicate delivery). Secondary items recorded inside existing findings rather than as new IDs: the concurrent-account-deletion last-owner race (folded into TA34), the staff-authored ReDoS via form-field `regex` rules (folded into TA41), and the staff-authored unvalidated YouTube/TikTok embed-id interpolation (`social/contracts.py:235,251` — same trust class as TA25, React-escaped at the sink, not promoted).
 - 2026-07-06 (roadmap closeout) — **TA33: resolved** (SA34 — `createcachetable` added to `start.sh.j2` after the migrate step, gated behind `[[ -z "${REDIS_URL:-}" ]]` so it only runs when `DatabaseCache` is the active backend). **TA38: resolved** (SA39 — `operator_access()`/`_set_operator_access()` now raise `ImproperlyConfigured` when called outside an open transaction, instead of silently no-opping). **TA41: resolved** (SA40 — public form-submit validation now rejects non-string JSON values with 400s instead of an uncaught `TypeError`/500; the staff-authored ReDoS-via-`regex` residual noted when TA41 opened remains an accepted low-priority watch item, same trust class as the pre-SA26 TA25 pattern, not promoted to its own ID). **TA32: resolved** (SA30 — confirmed directly in code: `listings/views.py` and `storage/helpers.py` now raise `ImproperlyConfigured` on missing/invalid runtime settings instead of silently defaulting/coercing; this closure was flagged in `roadmap.md`'s 2026-07-06 triage note but not yet reconciled here — corrected in this pass). Findings-table counts updated (S2 2→1, S3 6→4, S4 3→2); full detail for all four lives in CHANGELOG.md (SA34/SA39/SA40) and the SA30 CHANGELOG entry.
 - 2026-07-07 (roadmap cleanup) — **TA34: resolved** (SA35 — `Post.author`/`ContactNote.created_by`/`DealNote.created_by` changed `CASCADE`→`SET_NULL`; `OrganizationInvitation.invited_by`'s CASCADE documented as intentional in `decisions.md`; new `TestUserFkDeleteRuleConformance` cross-module gate closes the matching tooling gap below). **TA17: resolved** (SA37 — admin backup create/prune moved to background dispatch via `dispatch_background_create()`/`dispatch_background_prune()`, following the SA20/SA43 restore-dispatch pattern; restore itself was already resolved by SA20). **TA35: resolved** (SA36 — `get_client_ip()` guard changed to `len(ips) >= TRUSTED_PROXY_COUNT`, index to `ips[-TRUSTED_PROXY_COUNT]`, matching DRF's `NUM_PROXIES` semantics; landed before SA21.2 consumes the helper). Findings-table counts updated (S2 1→0, S3 4→2); full detail for all three lives in CHANGELOG.md (SA35/SA37/SA36 entries).
+- 2026-07-07 (re-run, HEAD `1e618ed8`) — **TA18: resolved** (SA21.2, `3e48d04f` — shared canonical `get_client_ip()` added to `orgs/current_org.py`; blog API limiter ident (`blog/views.py:328`), forms `FormSubmission.ip_address` (`forms/views.py:231,257`), and `FormSubmitThrottle.get_ident` all switched off raw `REMOTE_ADDR`; verified in code. Residual: the helper's `getattr`-default settings reads opened as **TA43**). **TA37: resolved** (SA38, `16ede27a` — `is_restore_stale()` + CAS `reset_stale_restore()` in `services.py`, admin list column `stale_restore_warning` + guarded `reset_stale_restore_action`, stale-aware guidance on both upload-path guards (`services.py` + `orchestration.py` CR-SA38-001 parity); CAS verified unable to overwrite a concurrently finishing child. Residual: threshold-literal duplication opened as **TA45**). **TA39: resolved** (SA41, `2305591f` — `cancel_current_subscription` raises distinct `BillingSubscriptionAnomalyError` for the missing-Stripe-id case; `AccountDeleteView` logs it at WARNING with user/org identifiers and proceeds; `CancelSubscriptionView` maps it to 400; verified end-to-end). **TA40: still-open** (all four location groups re-verified byte-identical; SA42 scheduled on Track 3 — carried, not re-argued). **TA42–TA46: opened this pass** (TA42/TA43/TA44 accepted from arch-audit red-flag hand-off after independent verification; TA45/TA46 found reading the SA38/SA43 delta in full).
 
 ## Notes (not violations, watch items)
 
-- **CR-SA20-007 (resolved):** was tracked here as blocking SA20 closeout — the spawn-failure rollback in the admin dispatch restored `status` but not pre-spawn `restore_started_at`/`restore_error` when retrying a previously FAILED/RESTORED artifact. Fixed (both branches now snapshot and restore all three pre-spawn fields); see CHANGELOG.md SA20 entry. Kept here only as a pointer since TA37 should land in the same code region.
-- **Storage legacy-credential conversion is deliberate:** `normalize_storage_module_options` silently pops literal `access_key_id`/`secret_access_key` and substitutes default env-var references — CHANGELOG documents this as the SA29 migration behavior ("silently converted"), and the failure is loud at first upload if the env vars are unset. Watch: a one-line apply-time notice would improve the upgrade story, but this is a chosen trade-off, not a defect.
-- `orgs/public_context.py:140-144`: `except Exception: return None` on system-org lookup is **fail-closed** (tenant managers return `.none()`) — isolation preserved, but a DB-level error renders as "no data" instead of a 500; consider letting non-`DoesNotExist` errors propagate.
-- DR engine fallback modes (`REMOTE_FALLBACK`, JSON fallback backups, `QUICKSCALE_ENVIRONMENT` default `local`) are by-design recovery behavior, exempt per §fail-hard-principle; the SA20 admin path correctly forces `LOCAL_ONLY` (CR-SA20-006 verified).
-- Analytics runtime missing-API-key → silent disable (`services.py:215-216`) is the deliberate SA17.7 shape — chosen trade-off, tested.
-- `subprocess.Popen` in the restore dispatch is never `wait()`ed — at most one transient zombie per restore until the worker's next subprocess call or recycle; harmless at this frequency, noted for completeness.
+- **`reset_stale_restore` `None`-`restore_started_at` edge** (`services.py:604-608`): the
+  f-string in the `update()` call would raise `TypeError` if a `STATUS_RESTORING` artifact had
+  `restore_started_at=None` (conceivable only for rows stranded before migration 0005). Not
+  reachable today — the only caller (`reset_stale_restore_action`) pre-filters with
+  `is_restore_stale()`, which returns `False` for `None`. Flagged in case a second caller
+  arrives; such legacy rows would also be permanently un-resettable from admin (the pre-SA38
+  TA37 condition), which is acceptable given no known deployments predate the migration.
+- **CR-SA20-007 (resolved):** both admin dispatch branches snapshot and restore all three
+  pre-spawn fields; kept here only as a pointer since TA42 lands in the same code region.
+- **Storage legacy-credential conversion is deliberate:** `normalize_storage_module_options`
+  silently pops literal credentials and substitutes default env-var references — documented
+  SA29 migration behavior; loud at first upload if env vars unset. Chosen trade-off.
+- `orgs/public_context.py:140-144`: `except Exception: return None` on system-org lookup is
+  **fail-closed** (tenant managers return `.none()`) — isolation preserved, but a DB-level error
+  renders as "no data" instead of a 500; consider letting non-`DoesNotExist` errors propagate.
+- DR engine fallback modes (`REMOTE_FALLBACK`, JSON fallback backups, `QUICKSCALE_ENVIRONMENT`
+  default `local`) are by-design recovery behavior, exempt per §fail-hard-principle; the SA20
+  admin path correctly forces `LOCAL_ONLY` (CR-SA20-006 verified).
+- Analytics runtime missing-API-key → silent disable (`services.py:215-216`) is the deliberate
+  SA17.7 shape — chosen trade-off, tested.
+- `subprocess.Popen` in the dispatchers is never `wait()`ed — at most one transient zombie per
+  dispatch until the worker's next subprocess call or recycle; harmless at this frequency.
+- Malformed staff-authored validation rules now surface as field-level 400s to public submitters
+  (SA40/`9ee27d93`) — the form stays broken until staff notice; a staff-facing surfacing (admin
+  check on rule save) would close the loop, but the current behavior is a reviewed choice.

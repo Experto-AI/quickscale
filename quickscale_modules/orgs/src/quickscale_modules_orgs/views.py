@@ -9,8 +9,8 @@ from typing import Any, cast
 
 from django.apps import apps
 from django.conf import settings
-from django.contrib.auth.views import redirect_to_login
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
 from django.db.models import QuerySet
@@ -28,13 +28,12 @@ from .constants import (
 )
 from .forms import InviteForm, OrgCreateForm, OrgSettingsForm, RoleChangeForm
 from .models import (
-    OrgRole,
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
+    OrgRole,
 )
 from .permissions import OrgRoleMixin, user_has_org_role
-
 
 _UNSET = object()
 _ORG_INVITATION_TEMPLATE_KEY = "notifications.org_invitation"
@@ -809,11 +808,10 @@ class MemberListView(
                 )
                 return self.render_to_response(context, status=400)
         elif action == "remove":
-            owner_count = OrganizationMembership.objects.filter(
+            if OrganizationMembership.is_last_owner_with_members(
+                user=membership.user,
                 organization=organization,
-                role=OrgRole.OWNER,
-            ).count()
-            if membership.role == OrgRole.OWNER and owner_count <= 1:
+            ):
                 context = self.get_context_data(
                     form_error="You cannot remove the last owner."
                 )
@@ -1193,11 +1191,10 @@ class OrgApiMemberRemoveView(
         except Http404:
             return self.json_error("Member not found", status=404)
 
-        owner_count = OrganizationMembership.objects.filter(
+        if OrganizationMembership.is_last_owner_with_members(
+            user=membership.user,
             organization=self.get_organization(),
-            role=OrgRole.OWNER,
-        ).count()
-        if membership.role == OrgRole.OWNER and owner_count <= 1:
+        ):
             return JsonResponse(
                 {"errors": {"non_field_errors": ["You cannot remove the last owner."]}},
                 status=400,

@@ -649,6 +649,100 @@ class TestAdminSubmissionDetailNotFound:
 
 
 @pytest.mark.django_db
+class TestFormSubmissionCanonicalIp:
+    """SA21.2 — verify that FormSubmission.ip_address uses the canonical
+    client IP (via the shared get_client_ip helper) instead of raw REMOTE_ADDR."""
+
+    def test_ip_address_uses_xff_when_configured(
+        self, api_client, form, form_field, email_field
+    ):
+        """When USE_X_FORWARDED_FOR and TRUSTED_PROXY_COUNT are configured,
+        ip_address records the X-Forwarded-For client IP, not REMOTE_ADDR."""
+        from django.test import override_settings
+
+        from quickscale_modules_forms.models import FormSubmission
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        with override_settings(
+            USE_X_FORWARDED_FOR=True,
+            TRUSTED_PROXY_COUNT=1,
+        ):
+            response = api_client.post(
+                url,
+                data=data,
+                format="json",
+                REMOTE_ADDR="10.0.0.1",
+                HTTP_X_FORWARDED_FOR="198.51.100.10",
+            )
+
+        assert response.status_code == 201
+        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        assert submission.ip_address == "198.51.100.10", (
+            f"Expected canonical client IP 198.51.100.10, got {submission.ip_address!r}"
+        )
+
+    def test_ip_address_falls_back_to_remote_addr_by_default(
+        self, api_client, form, form_field, email_field
+    ):
+        """When USE_X_FORWARDED_FOR is not configured, ip_address records
+        REMOTE_ADDR."""
+        from quickscale_modules_forms.models import FormSubmission
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Bob", "email": "bob@example.com"}
+
+        response = api_client.post(
+            url,
+            data=data,
+            format="json",
+            REMOTE_ADDR="10.0.0.2",
+            HTTP_X_FORWARDED_FOR="198.51.100.20",
+        )
+
+        assert response.status_code == 201
+        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        assert submission.ip_address == "10.0.0.2", (
+            f"Expected REMOTE_ADDR 10.0.0.2, got {submission.ip_address!r}"
+        )
+
+    def test_honeypot_ip_address_uses_xff_when_configured(
+        self, api_client, form, form_field, email_field
+    ):
+        """Honeypot-triggered submissions also use the canonical IP when configured."""
+        from django.test import override_settings
+
+        from quickscale_modules_forms.models import FormSubmission
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {
+            "full_name": "Bot",
+            "email": "bot@spam.com",
+            "_hp_name": "I am a bot",
+        }
+
+        with override_settings(
+            USE_X_FORWARDED_FOR=True,
+            TRUSTED_PROXY_COUNT=1,
+        ):
+            response = api_client.post(
+                url,
+                data=data,
+                format="json",
+                REMOTE_ADDR="10.0.0.3",
+                HTTP_X_FORWARDED_FOR="203.0.113.50",
+            )
+
+        assert response.status_code == 201
+        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        assert submission.is_spam is True
+        assert submission.ip_address == "203.0.113.50", (
+            f"Expected canonical IP 203.0.113.50, got {submission.ip_address!r}"
+        )
+
+
+@pytest.mark.django_db
 class TestPublicViewsDbOrgScope:
     """AF1-CR-001: Verify FormSchemaAPIView and FormSubmitAPIView establish
     DB-side app.current_org_id via tenant_context(), not just ContextVar state."""

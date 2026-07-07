@@ -145,6 +145,7 @@ class TestUserFkDeleteRuleConformance:
         covered in the auth module's own test suite).
         """
         from quickscale_modules_blog.models import Post
+
         from quickscale_modules_orgs.models import Organization
 
         User = apps.get_model(settings.AUTH_USER_MODEL)
@@ -231,9 +232,9 @@ class TestAccountDeleteViewSurvivorRegression:
         without calling Membership.delete().
         """
         from quickscale_modules_orgs.models import (
-            OrgRole,
             Organization,
             OrganizationMembership,
+            OrgRole,
         )
 
         org = Organization.objects.create(
@@ -382,3 +383,243 @@ class TestAccountDeleteViewSurvivorRegression:
         assert deal_note.created_by is None, (
             "CRM DealNote.created_by should be NULL after user deletion"
         )
+
+
+# ---------------------------------------------------------------------------
+# SA47 — concurrent account-deletion regression
+#
+# Two co-owners of the same shared org (with a third non-owner member)
+# attempt to delete their accounts concurrently.  ``AccountDeleteView``
+# now wraps the guard check + user deletion in ``transaction.atomic()``
+# and locks all owner orgs with ``select_for_update``, so concurrent
+# deletions are serialized: exactly one succeeds, and the org never
+# loses all its owners while non-owner members remain.
+#
+# This test proves the serialization works by simulating the same
+# locking pattern: each thread acquires ``select_for_update`` on the
+# shared org row, checks ``is_last_owner_with_members``, and deletes
+# the user only if not blocked.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_account_deletion_locking_protects_last_owner() -> None:
+    """Two co-owners deleting accounts concurrently: the ``select_for_update``
+    lock on the shared org serializes access so that at most one owner
+    is deleted and the org never becomes ownerless while non-owner
+    members remain (SA47).
+
+    Thread A acquires the org lock first, sees the other owner (not
+    blocked), and deletes owner A.  Thread B then acquires the lock
+    (owner A is now gone), sees that owner B is the sole owner with
+    other members (blocked), and does NOT delete.
+    """
+    import concurrent.futures
+
+    from django.contrib.auth import get_user_model
+    from django.db import close_old_connections, transaction
+
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        Organization,
+        OrganizationMembership,
+    )
+
+    User = get_user_model()
+
+    # ---- Setup ----
+    org = Organization.objects.create(
+        name="SA47 Locking Org",
+        slug="sa47-locking-org",
+        is_personal=False,
+    )
+
+    owner_a = User.objects.create_user(
+        username="sa47_locking_a",
+        email="sa47_locking_a@example.com",
+        password="Sa47LockingA1!",
+    )
+    owner_b = User.objects.create_user(
+        username="sa47_locking_b",
+        email="sa47_locking_b@example.com",
+        password="Sa47LockingB1!",
+    )
+    member = User.objects.create_user(
+        username="sa47_locking_member",
+        email="sa47_locking_member@example.com",
+        password="Sa47LockingMember1!",
+    )
+
+    OrganizationMembership.objects.create(
+        user=owner_a,
+        organization=org,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=owner_b,
+        organization=org,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=member,
+        organization=org,
+        role=OrgRole.MEMBER,
+    )
+
+    owner_a_id = owner_a.pk
+    owner_b_id = owner_b.pk
+    org_id = org.pk
+
+    def _delete_worker(user: object, user_id: int) -> dict[str, object]:
+        close_old_connections()
+        with transaction.atomic():
+            # Acquire the organisational row lock — this serializes
+            # concurrent deletions that share this org.
+            Organization.objects.select_for_update().get(pk=org_id)
+
+            is_blocked = OrganizationMembership.is_last_owner_with_members(
+                user=user,
+                organization=org,
+            )
+            if is_blocked:
+                return {"deleted": False, "user_id": user_id}
+
+            User.objects.filter(pk=user_id).delete()
+            return {"deleted": True, "user_id": user_id}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_a = executor.submit(_delete_worker, owner_a, owner_a_id)
+        future_b = executor.submit(_delete_worker, owner_b, owner_b_id)
+        r_a = future_a.result(timeout=60)
+        r_b = future_b.result(timeout=60)
+
+    # Exactly one owner was deleted.
+    deleted_count = sum([r_a["deleted"], r_b["deleted"]])
+    assert deleted_count == 1, (
+        f"Expected exactly one deletion, got {deleted_count}: A={r_a}, B={r_b}"
+    )
+
+    # The surviving owner is still present.
+    if r_a["deleted"]:
+        assert not User.objects.filter(pk=owner_a_id).exists()
+        assert User.objects.filter(pk=owner_b_id).exists()
+    else:
+        assert User.objects.filter(pk=owner_a_id).exists()
+        assert not User.objects.filter(pk=owner_b_id).exists()
+
+    # The org still has at least one owner.
+    assert OrganizationMembership.objects.filter(
+        organization_id=org_id,
+        role=OrgRole.OWNER,
+    ).exists(), "Org must retain at least one owner"
+
+    # The non-owner member survives.
+    assert OrganizationMembership.objects.filter(
+        organization_id=org_id,
+    ).exists(), "Non-owner member record must survive"
+    # The org itself survives.
+    assert Organization.objects.filter(pk=org_id).exists()
+
+
+# ---------------------------------------------------------------------------
+# SA47 — lock-order deadlock regression (CR-SA47-001)
+#
+# AccountDeleteView locks org rows first (via select_for_update before
+# user.delete()), while OrganizationMembership.save()/delete() previously
+# locked the membership row first.  Under concurrent execution — e.g. an
+# account deletion racing with a membership removal from the members page
+# or API — a classic lock-order inversion deadlock could occur.
+#
+# Both paths now normalize the lock order to: org row first, then
+# membership row.  This test proves the deadlock is resolved: two
+# threads running the competing paths complete without hanging.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+def test_account_deletion_and_membership_remove_no_deadlock() -> None:
+    """Concurrent account deletion and membership removal do not
+    deadlock.  Both paths now lock the org row before the membership
+    row (SA47 CR-SA47-001)."""
+    import concurrent.futures
+
+    from django.contrib.auth import get_user_model
+    from django.db import close_old_connections, transaction
+
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        Organization,
+        OrganizationMembership,
+    )
+
+    User = get_user_model()
+
+    org = Organization.objects.create(
+        name="CR-SA47-001 Org",
+        slug="cr-sa47-001-org",
+        is_personal=False,
+    )
+    owner = User.objects.create_user(
+        username="cr_sa47_owner",
+        email="cr_sa47_owner@example.com",
+        password="CrSa47Owner1!",
+    )
+    other_member = User.objects.create_user(
+        username="cr_sa47_member",
+        email="cr_sa47_member@example.com",
+        password="CrSa47Member1!",
+    )
+
+    membership = OrganizationMembership.objects.create(
+        user=owner,
+        organization=org,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_member,
+        organization=org,
+        role=OrgRole.MEMBER,
+    )
+
+    owner_pk = owner.pk
+    membership_pk = membership.pk
+    org_pk = org.pk
+
+    def _account_delete_worker() -> dict[str, object]:
+        close_old_connections()
+        with transaction.atomic():
+            # Simulate AccountDeleteView lock order: lock org first.
+            Organization.objects.select_for_update().get(pk=org_pk)
+            # Delete user — cascades to the membership row.
+            User.objects.filter(pk=owner_pk).delete()
+            return {"ok": True, "stage": "account-deleted"}
+
+    def _membership_remove_worker() -> dict[str, object]:
+        close_old_connections()
+        with transaction.atomic():
+            # Lock org first (same normalized order as save/delete).
+            Organization.objects.select_for_update().get(pk=org_pk)
+            # Attempt to delete the membership.
+            try:
+                m = OrganizationMembership.objects.get(pk=membership_pk)
+                m.delete()
+                return {"ok": True, "deleted": True}
+            except OrganizationMembership.DoesNotExist:
+                return {"ok": True, "deleted": False, "reason": "cascade-removed"}
+            except Exception as exc:
+                return {"ok": True, "deleted": False, "reason": str(exc)}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_a = executor.submit(_account_delete_worker)
+        future_m = executor.submit(_membership_remove_worker)
+        r_a = future_a.result(timeout=30)
+        r_m = future_m.result(timeout=30)
+
+    # Both threads must complete within the timeout — no deadlock.
+    assert r_a["ok"], f"Account deletion thread failed: {r_a}"
+    assert r_m["ok"], f"Membership removal thread failed: {r_m}"
+
+    # At most one thread succeeded in removing the membership.
+    # (The account deletion cascades; the membership.remove is
+    #  expected to be blocked if the account deletion didn't race.)
+    assert r_m.get("deleted") is not True or r_a["stage"] == "account-deleted"

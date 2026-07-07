@@ -288,6 +288,65 @@ class TestPublishPostApi:
         assert int(second_response["Retry-After"]) > 0
         assert Post.objects.filter(slug="token-post-two").count() == 0
 
+    def test_publish_post_api_token_auth_uses_xff_when_configured(
+        self,
+        settings,
+        staff_user,
+    ):
+        """When USE_X_FORWARDED_FOR and TRUSTED_PROXY_COUNT are configured,
+        the blog rate limiter uses the X-Forwarded-For client IP for buckets."""
+        from django.test import override_settings
+
+        settings.BLOG_API_RATE_LIMIT = "1/hour"
+        settings.BLOG_API_TOKENS = [
+            {"token": "publish-token", "username": staff_user.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        with override_settings(
+            USE_X_FORWARDED_FOR=True,
+            TRUSTED_PROXY_COUNT=1,
+        ):
+            first_response = csrf_client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Xff Post One", "content": "Body"}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION="Bearer publish-token",
+                HTTP_X_FORWARDED_FOR="198.51.100.10",
+                REMOTE_ADDR="10.0.0.8",
+            )
+            second_response = csrf_client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Xff Post Two", "content": "Body"}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION="Bearer publish-token",
+                HTTP_X_FORWARDED_FOR="198.51.100.11",
+                REMOTE_ADDR="10.0.0.9",
+            )
+
+        # Different XFF values should NOT share a bucket (canonical IP differs)
+        assert first_response.status_code == 201
+        assert second_response.status_code == 201, (
+            "Different X-Forwarded-For values should get independent buckets "
+            "when USE_X_FORWARDED_FOR is enabled"
+        )
+
+        # Third request with SAME XFF as first should be rate-limited
+        with override_settings(
+            USE_X_FORWARDED_FOR=True,
+            TRUSTED_PROXY_COUNT=1,
+        ):
+            third_response = csrf_client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "Xff Post Three", "content": "Body"}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION="Bearer publish-token",
+                HTTP_X_FORWARDED_FOR="198.51.100.10",
+                REMOTE_ADDR="10.0.0.8",
+            )
+
+        assert third_response.status_code == 429
+
     def test_publish_post_api_missing_csrf_still_returns_403_when_rate_limited(
         self,
         settings,
