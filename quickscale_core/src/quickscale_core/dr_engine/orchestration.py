@@ -2795,6 +2795,29 @@ def restore_admin_uploaded_backup(
             checksum_sha256=staged_upload.checksum_sha256,
             size_bytes=staged_upload.size_bytes,
         )
+
+        # CR-SA38-001: stale-aware RESTORING guard — parity with
+        # prepare_admin_uploaded_restore_artifact (services.py) so the
+        # uploaded-file dry-run path applies the same eligibility guard
+        # and recovery guidance as the recorded-artifact branch.
+        if trusted_artifact.status == BackupArtifact.STATUS_RESTORING:
+            stale_threshold = django_timezone.now() - timedelta(minutes=30)
+            if (
+                trusted_artifact.restore_started_at is not None
+                and trusted_artifact.restore_started_at < stale_threshold
+            ):
+                raise BackupRestoreBlocked(
+                    "This backup artifact's restore appears stale "
+                    f"(started at {trusted_artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC) — "
+                    "the child process likely died. Reset the artifact status "
+                    "from the BackupArtifact admin list to retry."
+                )
+            raise BackupRestoreBlocked(
+                "This backup artifact is currently being "
+                "restored. Wait for the restore to "
+                "complete before retrying."
+            )
+
         result = _execute_restore_for_resolved_source(
             ResolvedRestoreSource(
                 confirmation_value=trusted_artifact.filename,
