@@ -53,7 +53,7 @@ git merge --no-ff wt-track{N}
 >
 > **Origin note (2026-07-07, fix-plan pass):** SA48–SA56 trace to the 2026-07-07 delta-pass findings in [tech-audit.md](../others/tech-audit.md) (TA42–TA46) and [arch-audit.md](../others/arch-audit.md) (Finding 1's red flags and CR-SA44-REV-001 blocker, Finding 4's coverage-boundary sub-item, Finding 5's two remaining Option 1 pieces plus the billing migration promoted from "long tail" to scheduled work per user decision — no idiom is grandfathered as permanent legacy), each sized Tier 1–2. Every item fit Tier 1–2 without splitting; the two items large enough to flag (SA50, the `OrgApiBaseView` fold; SA56, the billing DRF migration) are Tier 2, not Tier 3.
 
-> **Track status (2026-07-07, fix-plan pass):** Track 1 — **2 open items, all ready now, no blockers** (SA49, SA50 — SA48 complete; remaining items still soft-sequenced on orgs files to limit rebase risk). Track 2 — **3 open items, all ready now, no blockers** (SA52, SA53, SA54 — SA51 complete; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **3 open items, all ready now, no blockers** (SA42 ready now; SA46 ready now — CR-SA46-REV-003 decision made; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA44 and SA55 complete).
+> **Track status (2026-07-07, SA42 pass):** Track 1 — **2 open items, all ready now, no blockers** (SA49, SA50 — SA48 complete; remaining items still soft-sequenced on orgs files to limit rebase risk). Track 2 — **3 open items, all ready now, no blockers** (SA52, SA53, SA54 — SA51 complete; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **2 open items, all ready now, no blockers** (SA46 ready now — CR-SA46-REV-003 decision made; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA42, SA44 and SA55 complete).
 
 ### Dependency & parallelization overview
 
@@ -139,10 +139,11 @@ SA21.2, SA37, SA38, SA40, SA43, plus its earlier share of the SA19–SA33 batch,
 
 #### Finding — `entry-point-posthook-permissive-coercion-defaults` (`why →` [TA40](../others/tech-audit.md))
 
-- [ ] **SA42 — Make module post-hook settings reads fail hard instead of silently coercing.** `Tier 2 · Track 3 · deps: none`
+- [x] **SA42 — Make module post-hook settings reads fail hard instead of silently coercing.** `Tier 2 · Track 3 · deps: none`
   `entry_point.py` post-hooks retain permissive `.get(key, default)` coercions for blog (`POSTS_PER_PAGE`→10, `ENABLE_RSS`→True, empty rate→`"5/hour"`), listings (→12), forms (five defaults incl. `SPAM_PROTECTION`→True), and notifications (`ENABLED`→True, TTL→300) — second-guessing SA27-validated input one layer down. Dead today (SA27 guarantees valid baked literals) but reopens the TA2/TA19/TA26 fail-open class silently on any upstream resolver regression. Fix: direct required reads (`settings["KEY"]`), matching the SA18.2 analytics-hook purge.
   *Files:* `manifest/entry_point.py:386-390` (blog), `:451` (listings), `:520-531` (forms), `:898-921` (notifications).
   *Acceptance:* each of the four post-hooks reads its settings via direct required access instead of `.get(key, default)`; a missing/invalid post-hook setting raises `ImproperlyConfigured`/equivalent at apply time instead of silently defaulting.
+  **SA42 — complete.** Replaced all `.get(key, default)` coercions in `_blog_post_hook`, `_listings_post_hook`, `_forms_post_hook`, and the notifications `derived_settings` coercions with direct dict access (`settings["KEY"]`). The blog `BLOG_API_RATE_LIMIT` empty-string fallback (`or "5/hour"`) is replaced with a `ManifestError` raise matching the SA18.2 analytics precedent. Added 12 negative-path regression tests and 3 happy-path pass-through tests in `TestBlogPostHookFailHard` (5 negative + 1 happy), `TestListingsPostHookFailHard` (1 negative + 1 happy), `TestFormsPostHookFailHard` (5 negative + 1 happy), and `TestNotificationsPostHookFailHard` (2) covering missing-key `KeyError` and empty-value `ManifestError` paths (16 total). Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `json-api-boundary-idiom-fragmentation` (`why →` [arch-audit.md Finding 5](../others/arch-audit.md), first step only)
 
