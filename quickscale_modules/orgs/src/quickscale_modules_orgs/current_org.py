@@ -564,6 +564,57 @@ def install_priming_wrapper(connection: Any) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# SA21.2 — shared canonical client-IP resolver for module/runtime code
+# ---------------------------------------------------------------------------
+# Provides an importable ``get_client_ip(request)`` that mirrors the
+# generated settings helper from SA21.1/SA36.  Both forms and blog use it
+# (they already depend on orgs) instead of reading ``REMOTE_ADDR`` directly.
+#
+# Semantics (identical to the generated template):
+# * When ``USE_X_FORWARDED_FOR`` is truthy and ``TRUSTED_PROXY_COUNT > 0``,
+#   resolve the real client IP from the ``X-Forwarded-For`` chain (counting
+#   ``-TRUSTED_PROXY_COUNT`` from the right, matching DRF NUM_PROXIES).
+# * Otherwise fall back to ``request.META.get("REMOTE_ADDR", "")``.
+# * A chain shorter than the declared proxy count also falls back to
+#   REMOTE_ADDR (fail-closed — never trust a potentially spoofed leftmost
+#   address).
+# ---------------------------------------------------------------------------
+
+
+def get_client_ip(request: object) -> str:
+    """Return the canonical client IP address for *request*.
+
+    When ``USE_X_FORWARDED_FOR`` is enabled and a positive
+    ``TRUSTED_PROXY_COUNT`` is configured, resolves the real
+    client IP from the ``X-Forwarded-For`` header chain.
+
+    In all other cases — including the default configuration of
+    ``USE_X_FORWARDED_FOR=False`` and/or ``TRUSTED_PROXY_COUNT=0`` —
+    returns ``request.META.get("REMOTE_ADDR", "")``, preserving
+    single-host behaviour with no configuration change.
+    """
+    from django.conf import settings
+
+    use_xff = getattr(settings, "USE_X_FORWARDED_FOR", False)
+    proxy_count = getattr(settings, "TRUSTED_PROXY_COUNT", 0)
+
+    if not use_xff or proxy_count <= 0:
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+    x_forwarded_for: str = (
+        request.META.get("HTTP_X_FORWARDED_FOR", "")  # type: ignore[union-attr]
+    ).strip()
+    if not x_forwarded_for:
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+    ips = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
+    if len(ips) >= proxy_count:
+        return ips[-proxy_count]
+
+    return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
 # SA14.5 — operator_access context manager
 # ---------------------------------------------------------------------------
 # Superuser-gated, audit-logged context manager for cross-tenant reads.

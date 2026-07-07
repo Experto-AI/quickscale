@@ -25,6 +25,7 @@ from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 from PIL import Image, UnidentifiedImageError
 
+from quickscale_modules_orgs.current_org import get_client_ip
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 
 from .models import BlogMediaAsset, Category, Post, Tag
@@ -318,11 +319,15 @@ def _parse_blog_api_rate_limit(rate_value: Any) -> tuple[int, int]:
 
 
 def _get_blog_api_rate_limit_ident(request: HttpRequest) -> str:
-    """Return the client identifier used for blog API throttling."""
-    remote_addr = request.META.get("REMOTE_ADDR", "")
-    if isinstance(remote_addr, str) and remote_addr.strip():
-        return remote_addr.strip()
+    """Return the client identifier used for blog API throttling.
 
+    Uses the shared :func:`get_client_ip` helper so that when
+    ``USE_X_FORWARDED_FOR`` and ``TRUSTED_PROXY_COUNT`` are configured,
+    the real client IP (not the proxy's) is used for throttle buckets.
+    """
+    client_ip = get_client_ip(request)
+    if client_ip.strip():
+        return client_ip.strip()
     return "unknown"
 
 
