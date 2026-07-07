@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django import forms
 from django.contrib import admin, messages
@@ -22,20 +22,17 @@ from quickscale_modules_backups.models import (
 from quickscale_modules_backups.services import (
     BackupError,
     RestoreSourceResolutionMode,
-    create_backup,
     delete_artifact_files,
+    dispatch_background_create,
+    dispatch_background_prune,
     dispatch_background_restore,
     download_backup_path,
     ensure_default_policy,
     prepare_admin_uploaded_restore_artifact,
-    prune_expired_backups,
     restore_admin_uploaded_backup,
     restore_backup_artifact,
     validate_backup_artifact,
 )
-
-if TYPE_CHECKING:
-    from django.contrib.auth.base_user import AbstractBaseUser
 
 
 class BackupPolicyRestoreForm(forms.Form):
@@ -681,33 +678,41 @@ class BackupPolicyAdmin(admin.ModelAdmin):
 
     @admin.action(description="Create backup now", permissions=["change"])
     def create_backup_now(self, request: HttpRequest, queryset: Any) -> None:
-        """Create a new backup artifact from the admin surface."""
+        """Dispatch background backup creation from the admin surface."""
         self._require_change_permission(request)
-        initiated_by: AbstractBaseUser | None = None
-        if request.user.is_authenticated:
-            initiated_by = request.user
         try:
-            artifact = create_backup(initiated_by=initiated_by, trigger="admin")
+            dispatch_background_create(trigger="admin")
         except BackupError as exc:
             self.message_user(
-                request, f"Backup creation failed: {exc}", level=messages.ERROR
+                request,
+                f"Backup creation failed: {exc}",
+                level=messages.ERROR,
             )
             return
 
         self.message_user(
             request,
-            f"Created backup artifact {artifact.filename}",
+            "Backup creation has been initiated in the background.",
             level=messages.SUCCESS,
         )
 
     @admin.action(description="Prune expired backups now", permissions=["change"])
     def prune_expired_backups_now(self, request: HttpRequest, queryset: Any) -> None:
-        """Prune expired backup files and mark their metadata as deleted."""
+        """Dispatch background backup pruning from the admin surface."""
         self._require_change_permission(request)
-        deleted_count = prune_expired_backups()
+        try:
+            dispatch_background_prune()
+        except BackupError as exc:
+            self.message_user(
+                request,
+                f"Backup pruning failed: {exc}",
+                level=messages.ERROR,
+            )
+            return
+
         self.message_user(
             request,
-            f"Pruned {deleted_count} expired backup artifact(s).",
+            "Backup pruning has been initiated in the background.",
             level=messages.SUCCESS,
         )
 

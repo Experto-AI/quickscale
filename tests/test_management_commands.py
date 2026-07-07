@@ -86,6 +86,59 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# CR-SA37-001: regression — async admin dispatching must preserve
+# trigger="admin" instead of falling back to "manual"
+# ---------------------------------------------------------------------------
+
+
+def test_backups_create_command_routes_admin_trigger() -> None:
+    """``backups_create --trigger admin`` preserves admin provenance.
+
+    CR-SA37-001: ``dispatch_background_create(trigger="admin")`` spawns
+    ``backups_create --trigger admin``.  The management command must pass
+    ``trigger="admin"`` through to the adapter so the resulting artifact
+    records admin provenance instead of silently falling back to
+    ``"manual"``.
+    """
+    stdout = StringIO()
+    report = {
+        "snapshot_id": "snap-admin",
+        "status": "ready",
+        "local_root_path": "/tmp/backups/snap-admin",
+        "failure_note": "",
+        "authoritative_dump": {
+            "artifact_id": 99,
+            "filename": "db-admin-trigger.dump",
+            "local_path": "/tmp/db-admin-trigger.dump",
+            "remote_key": "",
+        },
+    }
+    mock_capture = MagicMock(return_value=report)
+
+    with patch.dict(
+        "quickscale_core.runtime.ADAPTER_FUNCTIONS",
+        {"capture_snapshot": mock_capture},
+    ):
+        call_command(
+            "backups_create",
+            "--trigger",
+            "admin",
+            stdout=stdout,
+            stderr=StringIO(),
+        )
+
+    mock_capture.assert_called_once_with(trigger="admin")
+    assert stdout.getvalue() == (
+        "Created backup db-admin-trigger.dump\n"
+        "Artifact id: 99\n"
+        "Snapshot id: snap-admin\n"
+        "Snapshot status: ready\n"
+        "Snapshot root: /tmp/backups/snap-admin\n"
+        "Local path: /tmp/db-admin-trigger.dump\n"
+    )
+
+
 def test_backups_create_command_routes_resume_snapshot_id() -> None:
     stdout = StringIO()
     report = {
