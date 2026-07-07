@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "quickscale_modules_blog",
     "quickscale_modules_crm",
     "quickscale_modules_backups",
+    "quickscale_modules_notifications",
 ]
 
 MIDDLEWARE = [
@@ -111,4 +112,7 @@ FORMS_RATE_LIMIT = "5/hour"
 FORMS_SPAM_PROTECTION = True
 # SA17.5 — blog settings
 BLOG_ENABLE_RSS = True
+# SA17.6 — notifications required settings
+QUICKSCALE_NOTIFICATIONS_ENABLED = True
+QUICKSCALE_NOTIFICATIONS_PROVIDER = "log"
 MEDIA_URL = "/media/"

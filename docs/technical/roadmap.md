@@ -53,15 +53,15 @@ git merge --no-ff wt-track{N}
 >
 > **Origin note (2026-07-07, fix-plan pass):** SA48–SA56 trace to the 2026-07-07 delta-pass findings in [tech-audit.md](../others/tech-audit.md) (TA42–TA46) and [arch-audit.md](../others/arch-audit.md) (Finding 1's red flags and CR-SA44-REV-001 blocker, Finding 4's coverage-boundary sub-item, Finding 5's two remaining Option 1 pieces plus the billing migration promoted from "long tail" to scheduled work per user decision — no idiom is grandfathered as permanent legacy), each sized Tier 1–2. Every item fit Tier 1–2 without splitting; the two items large enough to flag (SA50, the `OrgApiBaseView` fold; SA56, the billing DRF migration) are Tier 2, not Tier 3.
 
-> **Track status (2026-07-07, fix-plan pass):** Track 1 — **2 open items, all ready now, no blockers** (SA49, SA50 — SA48 complete; remaining items still soft-sequenced on orgs files to limit rebase risk). Track 2 — **3 open items, all ready now, no blockers** (SA52, SA53, SA54 — SA51 complete; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **3 open items, all ready now, no blockers** (SA42 ready now; SA46 ready now — CR-SA46-REV-003 decision made; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA44 and SA55 complete).
+> **Track status (2026-07-07, fix-plan pass):** Track 1 — **1 open item, ready now, no blockers** (SA50 — SA48/SA49 complete; remaining items still soft-sequenced on orgs files to limit rebase risk). Track 2 — **3 open items, all ready now, no blockers** (SA52, SA53, SA54 — SA51 complete; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **3 open items, all ready now, no blockers** (SA42 ready now; SA46 ready now — CR-SA46-REV-003 decision made; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA44 and SA55 complete).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA49 (deps: none; soft-seq after SA48)  SA52 (deps: none; soft-seq after SA51)    SA42 (deps: none)
-SA50 (deps: none; soft-seq after SA49)  SA53 (deps: none; soft-seq after SA52)    SA46 (deps: none) — CR-SA46-REV-003 fix, ready
+SA50 (deps: none; soft-seq after SA49)  SA52 (deps: none; soft-seq after SA51)    SA42 (deps: none)
+                                         SA53 (deps: none; soft-seq after SA52)    SA46 (deps: none) — CR-SA46-REV-003 fix, ready
                                          SA54 (deps: none; soft-seq after SA53)    SA56 (deps: none; soft-seq after SA55)
 ```
 
@@ -84,10 +84,11 @@ All three tracks run fully in parallel — no cross-track file overlap exists. T
 
 #### Finding — `org-model-universe-hand-enumerated` (`why →` [arch-audit.md Finding 4](../others/arch-audit.md), coverage-boundary sub-item)
 
-- [ ] **SA49 — Derive orgs' cross-module conformance-env module list instead of hand-listing it.** `Tier 1 · Track 1 · deps: none (soft-sequence after SA48 — same module, sequence to limit rebase risk)`
+- [x] **SA49 — Derive orgs' cross-module conformance-env module list instead of hand-listing it.** `Tier 1 · Track 1 · deps: none (soft-sequence after SA48 — same module, sequence to limit rebase risk)`
   `orgs/tests/settings.py:34-42`'s `INSTALLED_APPS` hand-lists 9 of 13 shipped modules (missing notifications, storage, analytics; teams is a placeholder) — every derivation gate that runs against this test env (SA15.3 registry cross-check, SA45 purge-spec completeness, SA35 FK-conformance) is blind to any tenant model in an app absent from this list. Fix: derive the expected module set from `quickscale_modules/*/pyproject.toml` presence and assert it in CI against the hand-maintained `INSTALLED_APPS`, failing when a shipped module with models is missing from the conformance env.
-  *Files:* `quickscale_modules/orgs/tests/settings.py:34-42`; new CI assertion (script or test) deriving the expected app list from `quickscale_modules/*/pyproject.toml` presence.
+  *Files:* `quickscale_modules/orgs/tests/settings.py:34-42`; new CI assertion (test or script) deriving the expected app list from `quickscale_modules/*/pyproject.toml` presence.
   *Acceptance:* a shipped module directory with a `pyproject.toml` and models that is absent from `orgs/tests/settings.py`'s `INSTALLED_APPS` fails CI; notifications/storage/analytics are either added to the list or their omission is asserted as a deliberate, named exception as part of landing this.
+  **SA49 — complete.** Added `quickscale_modules_notifications` to `orgs/tests/settings.py` `INSTALLED_APPS` with its required settings (`QUICKSCALE_NOTIFICATIONS_ENABLED=True`, `QUICKSCALE_NOTIFICATIONS_PROVIDER='log'`). Added `test_sa49_conformance.py` — a CI conformance gate that derives the expected shipped module set from `quickscale_modules/*/pyproject.toml` presence and asserts every module with a `models.py` is present in the orgs conformance environment. `analytics` and `storage` are listed as deliberate named exceptions (no tenant-scoped models). `teams` (placeholder, no `pyproject.toml`) is skipped by the derivation. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `json-api-boundary-idiom-fragmentation` (`why →` [arch-audit.md Finding 5](../others/arch-audit.md), Option 1 remaining piece — the fold)
 
