@@ -10,7 +10,8 @@
 > [arch-audit.md](arch-audit.md); fail-hard policy SSOT is
 > [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
 > Remediation mapping this pass: TA18→SA21.2, TA37→SA38, TA39→SA41 (all resolved);
-> TA40→SA42 (scheduled, still open).
+> TA42→SA52, TA43→SA48, TA44→SA51 (resolved 2026-07-07, roadmap cleanup pass);
+> TA40→SA42 (scheduled, still open); TA45→SA54, TA46→SA53 (scheduled, still open).
 
 ## Orientation summary
 
@@ -81,40 +82,14 @@ script, and as a `needs:` gate for test/isolation/lint jobs); `backups_create --
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
-| TA42 | S3 | error handling / fail-open | `_get_manage_py()` swallows resolution failure and returns bare `"manage.py"` — a background dispatch from an unexpected CWD spawns a child that dies instantly, after the artifact was already claimed `STATUS_RESTORING` (create/prune fail silently) | Trivial | High | open (new; arch-audit hand-off) |
 | TA40 | S4 | fail-open config | `entry_point.py` post-hooks retain permissive coercion defaults for blog/listings/forms/notifications — the SA18.2/SA27 fail-open class, one layer down | Small | High | open (SA42 scheduled, Track 3) |
-| TA43 | S4 | fail-open config | SA21.2 `get_client_ip()` reads `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` via `getattr` defaults — a typo'd or missing setting silently disables proxy resolution instead of failing loud | Trivial | High | open (new; arch-audit hand-off) |
-| TA44 | S4 | doc drift | `backups/services.py:1-10` header contract is false ("intentionally under 400 LOC; every new feature goes in dr_engine/") on a 621-line file that SA43 deliberately grew | Trivial | High | open (new; arch-audit hand-off) |
-| TA45 | S4 | duplication drift | 30-minute stale-restore threshold is a bare literal in `orchestration.py:2804` but a named constant (`STALE_RESTORE_THRESHOLD_MINUTES`) in `services.py` — the two can drift silently | Trivial | High | open (new) |
-| TA46 | S4 | partial failure | `prepare_admin_uploaded_restore_artifact` unlinks the existing local artifact file before `shutil.copy2` with no failure cleanup — a copy failure (disk full) destroys the prior local copy and leaks the staging temp dir | Small | High | open (new) |
+| TA45 | S4 | duplication drift | 30-minute stale-restore threshold is a bare literal in `orchestration.py:2804` but a named constant (`STALE_RESTORE_THRESHOLD_MINUTES`) in `services.py` — the two can drift silently | Trivial | High | open (SA54 scheduled, Track 2) |
+| TA46 | S4 | partial failure | `prepare_admin_uploaded_restore_artifact` unlinks the existing local artifact file before `shutil.copy2` with no failure cleanup — a copy failure (disk full) destroys the prior local copy and leaks the staging temp dir | Small | High | open (SA53 scheduled, Track 2) |
 
-Counts: **S1: 0 · S2: 0 · S3: 1 · S4: 5.** Quick wins: TA42, TA43, TA44, TA45 are all
-Trivial-effort. Resolved since the 2026-07-06/07 passes: **TA18, TA37, TA39** (see
-Reconciliation log).
+Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 3.** Quick wins: TA45 is Trivial-effort. Resolved since
+the 2026-07-06/07 passes: **TA18, TA37, TA39, TA42, TA43, TA44** (see Reconciliation log).
 
 ---
-
-## Findings detail — S3 (compact)
-
-- **TA42** (`manage-py-silent-fallback`, S3) — `backups/services.py:264-278`: `_get_manage_py()`
-  wraps the `settings.BASE_DIR` resolution in `except Exception: pass` and falls through to
-  returning bare `"manage.py"`. All three background dispatchers use it
-  (`dispatch_background_restore:400`, `dispatch_background_create:479`,
-  `dispatch_background_prune:508`). Failure scenario: a deployment where `sys.argv[0]` is not
-  `manage.py` (gunicorn — the production norm) *and* `BASE_DIR/manage.py` is absent or resolution
-  raises → `Popen` succeeds (spawn works), the child Python dies immediately with "can't open
-  file 'manage.py'", and the parent's spawn-failure rollback never fires. For restore the
-  artifact sits in `STATUS_RESTORING` until the 30-minute stale threshold (SA38 softened this
-  from "forever" to "30 minutes of confusion mid-incident"); for create/prune the admin reports
-  "initiated" and **nothing happens, silently** — an unnoticed backup gap. In the supported
-  Railway deployment resolution succeeds, so the fallback branch needs unusual conditions —
-  hence S3 not S2. Fix: raise `BackupError` when no `manage.py` is resolvable (fail-hard policy,
-  decisions.md §fail-hard-principle) — and do it *before* `_atomic_claim_restore` so a resolution
-  failure never claims the artifact (the current call order at `:400` already does this; keep it).
-  **Effort:** Trivial · **Verification:** unit test asserting `BackupError` when `sys.argv[0]`
-  isn't manage.py and `BASE_DIR` lacks one. **Deliberate?** none found — no comment, no
-  suppression; arch-audit red-flag hand-off, independently verified. **Age:** introduced with
-  SA20's async dispatch (2026-07-05), extended to create/prune by SA37.
 
 ## Findings detail — S4 (one line each)
 
@@ -124,18 +99,6 @@ Reconciliation log).
   resolver regression, reopening the TA2/TA19/TA26 class silently. Re-verified byte-identical
   this pass. Fix per **SA42** (scheduled, Track 3): direct required reads, fail loud. (Collapsed
   class — 4 locations.)
-- **TA43** — `orgs/current_org.py:598-599`: `getattr(settings, "USE_X_FORWARDED_FOR", False)` /
-  `getattr(..., "TRUSTED_PROXY_COUNT", 0)` in the shared `get_client_ip()`. Fail-closed in
-  direction (falls back to `REMOTE_ADDR`), but it is the `getattr`-default read class SA14.6/SA30
-  purged elsewhere, and generated apps always define both settings — a typo'd settings name would
-  silently disable proxy resolution in production (throttle buckets collapse to the proxy IP,
-  forensics record the proxy). Fix: direct required reads (module fail-hard startup guard or
-  `settings.USE_X_FORWARDED_FOR` raising `ImproperlyConfigured` when absent), matching SA30.
-- **TA44** — `backups/services.py:1-10`: header claims "intentionally under 400 LOC" and "every
-  new orchestration feature should go in dr_engine/" — the file is 621 lines and SA43 correctly
-  moved the model-touching dispatch lifecycle *into* it. Rewrite the header to the real rule
-  (model-touching lifecycle lives here; engine-pure logic in dr_engine/) before it misdirects the
-  next contributor.
 - **TA45** — `dr_engine/orchestration.py:2804` hardcodes `timedelta(minutes=30)` where
   `backups/services.py:524` defines `STALE_RESTORE_THRESHOLD_MINUTES = 30` — the CR-SA38-001
   parity block and the canonical threshold can drift silently (import direction prevents
@@ -152,8 +115,9 @@ Reconciliation log).
 ## Structural smells (candidates for `arch-audit.md`)
 
 - **Deletion invariants enforced per boundary:** carried — open as arch-audit
-  `deletion-invariants-per-boundary-reimplementation` (SA47 pending); the view-level guard list
-  (owners, subscriptions) cannot enumerate every consequence the schema encodes.
+  `deletion-invariants-per-boundary-reimplementation`; SA47 (first step) landed 2026-07-07, but
+  the finding itself remains open (no domain-level `pre_delete` backstop yet) — see
+  arch-audit.md.
 - **No single "how does a generated app get configured at deploy time" contract:** carried —
   SA29/SA34 fixed instances, but a template requiring a deploy-script step is still discovered
   per-instance, not systematically; a generator-wide rule ("every settings-template requirement
@@ -164,8 +128,8 @@ Reconciliation log).
   keeps cloning security-relevant logic. Already on the arch-audit watchlist ("SA26 copies");
   TA45 is fresh evidence the class is growing.
 - ~~Client-IP knowledge has no importable seam~~ — **resolved**: SA21.2 chose the orgs-runtime
-  helper seam (`current_org.get_client_ip`); blog/forms consume it. Residual: TA43 (its settings
-  reads).
+  helper seam (`current_org.get_client_ip`); blog/forms consume it. Its settings-read residual
+  (TA43) is also resolved (SA48).
 - ~~Backups admin as orchestration engine~~ — **resolved**: SA43 extracted the dispatch
   lifecycle into `services.py`; SA38 gave staleness detection its natural home there.
 
@@ -174,11 +138,11 @@ Reconciliation log).
 - **`pip-audit`/`safety` CI step** — no dependency-CVE gate; the lockfile read stays manual and
   low-confidence. (Dependency class, ongoing.)
 - **`bandit`/`semgrep` CI step** — would systematically catch the TA25 class (`|safe`/`mark_safe`
-  on non-constant), the argv/redirect classes, and `except Exception: pass` fallbacks (TA42's
-  shape) as they recur.
+  on non-constant), the argv/redirect classes, and `except Exception: pass` fallbacks (the
+  now-resolved TA42's shape) as they recur.
 - **Generated-project boot smoke test** — render + boot the generated app in CI with *minimal*
   env and hit one throttled endpoint; would catch settings-template/deploy-script drift (TA33's
-  class) and TA43's silent-disable scenario.
+  class) and silent-disable scenarios of TA43's now-resolved shape.
 - **Apply-gate post-hook check** — extend the SA27 apply-gate assertion to fail on post-hook
   `.get(key, default)` patterns (closes TA40's class when SA42 lands).
 - **csrf_exempt gate coverage** — `check_csrf_exempt_gate.py` matches `csrf_exempt` only as a
@@ -235,6 +199,7 @@ regression suites assert real behavior).
 - 2026-07-06 (roadmap closeout) — **TA33: resolved** (SA34 — `createcachetable` added to `start.sh.j2` after the migrate step, gated behind `[[ -z "${REDIS_URL:-}" ]]` so it only runs when `DatabaseCache` is the active backend). **TA38: resolved** (SA39 — `operator_access()`/`_set_operator_access()` now raise `ImproperlyConfigured` when called outside an open transaction, instead of silently no-opping). **TA41: resolved** (SA40 — public form-submit validation now rejects non-string JSON values with 400s instead of an uncaught `TypeError`/500; the staff-authored ReDoS-via-`regex` residual noted when TA41 opened remains an accepted low-priority watch item, same trust class as the pre-SA26 TA25 pattern, not promoted to its own ID). **TA32: resolved** (SA30 — confirmed directly in code: `listings/views.py` and `storage/helpers.py` now raise `ImproperlyConfigured` on missing/invalid runtime settings instead of silently defaulting/coercing; this closure was flagged in `roadmap.md`'s 2026-07-06 triage note but not yet reconciled here — corrected in this pass). Findings-table counts updated (S2 2→1, S3 6→4, S4 3→2); full detail for all four lives in CHANGELOG.md (SA34/SA39/SA40) and the SA30 CHANGELOG entry.
 - 2026-07-07 (roadmap cleanup) — **TA34: resolved** (SA35 — `Post.author`/`ContactNote.created_by`/`DealNote.created_by` changed `CASCADE`→`SET_NULL`; `OrganizationInvitation.invited_by`'s CASCADE documented as intentional in `decisions.md`; new `TestUserFkDeleteRuleConformance` cross-module gate closes the matching tooling gap below). **TA17: resolved** (SA37 — admin backup create/prune moved to background dispatch via `dispatch_background_create()`/`dispatch_background_prune()`, following the SA20/SA43 restore-dispatch pattern; restore itself was already resolved by SA20). **TA35: resolved** (SA36 — `get_client_ip()` guard changed to `len(ips) >= TRUSTED_PROXY_COUNT`, index to `ips[-TRUSTED_PROXY_COUNT]`, matching DRF's `NUM_PROXIES` semantics; landed before SA21.2 consumes the helper). Findings-table counts updated (S2 1→0, S3 4→2); full detail for all three lives in CHANGELOG.md (SA35/SA37/SA36 entries).
 - 2026-07-07 (re-run, HEAD `1e618ed8`) — **TA18: resolved** (SA21.2, `3e48d04f` — shared canonical `get_client_ip()` added to `orgs/current_org.py`; blog API limiter ident (`blog/views.py:328`), forms `FormSubmission.ip_address` (`forms/views.py:231,257`), and `FormSubmitThrottle.get_ident` all switched off raw `REMOTE_ADDR`; verified in code. Residual: the helper's `getattr`-default settings reads opened as **TA43**). **TA37: resolved** (SA38, `16ede27a` — `is_restore_stale()` + CAS `reset_stale_restore()` in `services.py`, admin list column `stale_restore_warning` + guarded `reset_stale_restore_action`, stale-aware guidance on both upload-path guards (`services.py` + `orchestration.py` CR-SA38-001 parity); CAS verified unable to overwrite a concurrently finishing child. Residual: threshold-literal duplication opened as **TA45**). **TA39: resolved** (SA41, `2305591f` — `cancel_current_subscription` raises distinct `BillingSubscriptionAnomalyError` for the missing-Stripe-id case; `AccountDeleteView` logs it at WARNING with user/org identifiers and proceeds; `CancelSubscriptionView` maps it to 400; verified end-to-end). **TA40: still-open** (all four location groups re-verified byte-identical; SA42 scheduled on Track 3 — carried, not re-argued). **TA42–TA46: opened this pass** (TA42/TA43/TA44 accepted from arch-audit red-flag hand-off after independent verification; TA45/TA46 found reading the SA38/SA43 delta in full).
+- 2026-07-07 (roadmap cleanup) — **TA42: resolved** (SA52 — `_get_manage_py()` now raises `BackupError` instead of swallowing resolution failure and falling back to a bare `"manage.py"` literal; the fail-hard raise happens before `_atomic_claim_restore`, so a resolution failure never leaves an artifact claimed; 5 regressions in `TestGetManagePySA52`). **TA43: resolved** (SA48 — `get_client_ip()` reads `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` via direct required access, raising `ImproperlyConfigured` on missing/invalid values instead of silently defaulting). **TA44: resolved** (SA51 — `backups/services.py:1-10` header rewritten to state the real division of responsibility; no more false "under 400 LOC" claim). Findings-table counts updated (S3 1→0, S4 5→3); full detail for all three lives in CHANGELOG.md (SA52/SA48/SA51 entries). TA45 and TA46 remain open (SA54/SA53, both scheduled on Track 2, not yet landed).
 
 ## Notes (not violations, watch items)
 
@@ -246,7 +211,8 @@ regression suites assert real behavior).
   arrives; such legacy rows would also be permanently un-resettable from admin (the pre-SA38
   TA37 condition), which is acceptable given no known deployments predate the migration.
 - **CR-SA20-007 (resolved):** both admin dispatch branches snapshot and restore all three
-  pre-spawn fields; kept here only as a pointer since TA42 lands in the same code region.
+  pre-spawn fields; kept here only as a pointer since TA42 (resolved via SA52) landed in the
+  same code region.
 - **Storage legacy-credential conversion is deliberate:** `normalize_storage_module_options`
   silently pops literal credentials and substitutes default env-var references — documented
   SA29 migration behavior; loud at first upload if env vars unset. Chosen trade-off.
