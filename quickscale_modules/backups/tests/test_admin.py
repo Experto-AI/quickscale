@@ -669,7 +669,7 @@ class TestBackupPolicyAdmin:
         del backup_policy
 
         with patch(
-            "quickscale_modules_backups.admin.subprocess.Popen",
+            "quickscale_modules_backups.services.subprocess.Popen",
             return_value=MagicMock(),
         ) as mocked_popen:
             response = admin_client.post(
@@ -901,18 +901,18 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ) as mocked_stage,
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ) as mocked_resolve,
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 return_value=MagicMock(),
             ) as mocked_popen,
         ):
@@ -1018,18 +1018,18 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
             ) as mocked_popen,
         ):
             response = admin_client.post(
@@ -1068,7 +1068,7 @@ class TestBackupPolicyAdmin:
         original_status = postgresql_backup_artifact.status
 
         with patch(
-            "quickscale_modules_backups.admin.subprocess.Popen",
+            "quickscale_modules_backups.services.subprocess.Popen",
             side_effect=OSError("manage.py not found"),
         ) as mocked_popen:
             response = admin_client.post(
@@ -1113,18 +1113,18 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 side_effect=OSError("manage.py not found"),
             ) as mocked_popen,
         ):
@@ -1183,7 +1183,7 @@ class TestBackupPolicyAdmin:
             return MagicMock()
 
         with patch(
-            "quickscale_modules_backups.admin.subprocess.Popen",
+            "quickscale_modules_backups.services.subprocess.Popen",
             side_effect=_simulate_fast_child_first,
         ) as mocked_popen:
             response = admin_client.post(
@@ -1241,18 +1241,18 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 side_effect=_simulate_fast_child_first,
             ) as mocked_popen,
         ):
@@ -1305,7 +1305,7 @@ class TestBackupPolicyAdmin:
         )
 
         with patch(
-            "quickscale_modules_backups.admin.subprocess.Popen",
+            "quickscale_modules_backups.services.subprocess.Popen",
             side_effect=OSError("manage.py not found"),
         ) as mocked_popen:
             response = admin_client.post(
@@ -1368,15 +1368,15 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                "quickscale_modules_backups.admin._stage_admin_restore_upload",
+                "quickscale_modules_backups.services._stage_admin_restore_upload",
                 return_value=staged,
             ),
             patch(
-                "quickscale_modules_backups.admin._resolve_admin_uploaded_restore_artifact",
+                "quickscale_modules_backups.services._resolve_admin_uploaded_restore_artifact",
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 side_effect=OSError("manage.py not found"),
             ) as mocked_popen,
         ):
@@ -1426,7 +1426,7 @@ class TestBackupPolicyAdmin:
         )
 
         with patch(
-            "quickscale_modules_backups.admin.subprocess.Popen",
+            "quickscale_modules_backups.services.subprocess.Popen",
             side_effect=OSError("manage.py not found"),
         ) as mocked_popen:
             response = admin_client.post(
@@ -1486,15 +1486,15 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                "quickscale_modules_backups.admin._stage_admin_restore_upload",
+                "quickscale_modules_backups.services._stage_admin_restore_upload",
                 return_value=staged,
             ),
             patch(
-                "quickscale_modules_backups.admin._resolve_admin_uploaded_restore_artifact",
+                "quickscale_modules_backups.services._resolve_admin_uploaded_restore_artifact",
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 side_effect=OSError("manage.py not found"),
             ) as mocked_popen,
         ):
@@ -1552,12 +1552,12 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 side_effect=BackupRestoreBlocked(
@@ -1610,12 +1610,12 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 side_effect=BackupRestoreBlocked(
@@ -1687,15 +1687,15 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                "quickscale_modules_backups.admin._stage_admin_restore_upload",
+                "quickscale_modules_backups.services._stage_admin_restore_upload",
                 return_value=staged,
             ),
             patch(
-                "quickscale_modules_backups.admin._resolve_admin_uploaded_restore_artifact",
+                "quickscale_modules_backups.services._resolve_admin_uploaded_restore_artifact",
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 return_value=MagicMock(),
             ),
         ):
@@ -1772,15 +1772,15 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                "quickscale_modules_backups.admin._stage_admin_restore_upload",
+                "quickscale_modules_backups.services._stage_admin_restore_upload",
                 return_value=staged,
             ),
             patch(
-                "quickscale_modules_backups.admin._resolve_admin_uploaded_restore_artifact",
+                "quickscale_modules_backups.services._resolve_admin_uploaded_restore_artifact",
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 return_value=MagicMock(),
             ),
         ):
@@ -1843,7 +1843,7 @@ class TestBackupPolicyAdmin:
 
         # First submission — must succeed
         with patch(
-            "quickscale_modules_backups.admin.subprocess.Popen",
+            "quickscale_modules_backups.services.subprocess.Popen",
             return_value=MagicMock(),
         ):
             response1 = admin_client.post(
@@ -1862,7 +1862,7 @@ class TestBackupPolicyAdmin:
 
         # Second submission — must be blocked without reaching Popen
         with patch(
-            "quickscale_modules_backups.admin.subprocess.Popen",
+            "quickscale_modules_backups.services.subprocess.Popen",
         ) as mocked_popen2:
             response2 = admin_client.post(
                 reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
@@ -1912,18 +1912,18 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
                 return_value=MagicMock(),
             ),
         ):
@@ -1952,18 +1952,18 @@ class TestBackupPolicyAdmin:
         )
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
             ) as mocked_popen2,
         ):
             response2 = admin_client.post(
@@ -2016,11 +2016,11 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                "quickscale_modules_backups.admin._atomic_claim_restore",
+                "quickscale_modules_backups.services._atomic_claim_restore",
                 side_effect=_fail_claim_set_restoring,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
             ) as mocked_popen,
         ):
             response = admin_client.post(
@@ -2063,11 +2063,11 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                "quickscale_modules_backups.admin._atomic_claim_restore",
+                "quickscale_modules_backups.services._atomic_claim_restore",
                 side_effect=_fail_claim_set_ready,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
             ) as mocked_popen,
         ):
             response = admin_client.post(
@@ -2121,22 +2121,22 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin._atomic_claim_restore",
+                "quickscale_modules_backups.services._atomic_claim_restore",
                 side_effect=_fail_claim_set_deleted,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
             ) as mocked_popen,
         ):
             response = admin_client.post(
@@ -2191,22 +2191,22 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                ("quickscale_modules_backups.admin._stage_admin_restore_upload"),
+                ("quickscale_modules_backups.services._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_modules_backups.admin."
+                    "quickscale_modules_backups.services."
                     "_resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
             patch(
-                "quickscale_modules_backups.admin._atomic_claim_restore",
+                "quickscale_modules_backups.services._atomic_claim_restore",
                 side_effect=_fail_claim_set_failed,
             ),
             patch(
-                "quickscale_modules_backups.admin.subprocess.Popen",
+                "quickscale_modules_backups.services.subprocess.Popen",
             ) as mocked_popen,
         ):
             response = admin_client.post(
