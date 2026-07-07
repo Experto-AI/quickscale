@@ -265,3 +265,131 @@ class TestPublicSystemOrgReadMixinInterface:
                 assert yielded_id is None
                 # ContextVar should be None (fail-closed) inside the block.
                 assert get_current_org_id() is None
+
+
+# =========================================================================
+# SA21.2 — get_client_ip helper
+# =========================================================================
+
+
+class TestGetClientIp:
+    """Tests for the shared ``get_client_ip`` utility."""
+
+    def test_returns_remote_addr_by_default(self) -> None:
+        """When USE_X_FORWARDED_FOR is not set, returns REMOTE_ADDR."""
+        from unittest.mock import MagicMock
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {"REMOTE_ADDR": "10.0.0.1"}
+        assert get_client_ip(request) == "10.0.0.1"
+
+    def test_returns_remote_addr_when_xff_disabled(self) -> None:
+        """When USE_X_FORWARDED_FOR is False, returns REMOTE_ADDR."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {
+            "REMOTE_ADDR": "10.0.0.1",
+            "HTTP_X_FORWARDED_FOR": "192.168.1.100",
+        }
+        with override_settings(USE_X_FORWARDED_FOR=False, TRUSTED_PROXY_COUNT=1):
+            assert get_client_ip(request) == "10.0.0.1"
+
+    def test_returns_remote_addr_when_proxy_count_zero(self) -> None:
+        """When TRUSTED_PROXY_COUNT is 0, returns REMOTE_ADDR."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {
+            "REMOTE_ADDR": "10.0.0.1",
+            "HTTP_X_FORWARDED_FOR": "192.168.1.100",
+        }
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=0):
+            assert get_client_ip(request) == "10.0.0.1"
+
+    def test_resolves_xff_client_ip_behind_single_proxy(self) -> None:
+        """With USE_X_FORWARDED_FOR=True and TRUSTED_PROXY_COUNT=1, returns
+        the client IP from a single-hop X-Forwarded-For chain."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {
+            "REMOTE_ADDR": "10.0.0.1",
+            "HTTP_X_FORWARDED_FOR": "198.51.100.10",
+        }
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=1):
+            assert get_client_ip(request) == "198.51.100.10"
+
+    def test_resolves_xff_client_ip_behind_two_proxies(self) -> None:
+        """With TRUSTED_PROXY_COUNT=2, returns the second-from-right entry."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {
+            "REMOTE_ADDR": "10.0.0.2",
+            "HTTP_X_FORWARDED_FOR": "203.0.113.50, 192.168.1.10, 10.0.0.2",
+        }
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=2):
+            # Chain: client=203.0.113.50, proxy1=192.168.1.10, proxy2=10.0.0.2
+            # With TRUSTED_PROXY_COUNT=2, client IP = ips[-2] = 192.168.1.10
+            assert get_client_ip(request) == "192.168.1.10"
+
+    def test_falls_back_to_remote_addr_when_xff_empty(self) -> None:
+        """When X-Forwarded-For header is absent, falls back to REMOTE_ADDR."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {"REMOTE_ADDR": "10.0.0.1"}
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=1):
+            assert get_client_ip(request) == "10.0.0.1"
+
+    def test_falls_back_to_remote_addr_when_xff_chain_too_short(self) -> None:
+        """When the XFF chain is shorter than TRUSTED_PROXY_COUNT, falls
+        back to REMOTE_ADDR (fail-closed — never trust a potentially
+        spoofed leftmost address)."""
+        from unittest.mock import MagicMock
+
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {
+            "REMOTE_ADDR": "10.0.0.1",
+            "HTTP_X_FORWARDED_FOR": "203.0.113.50",
+        }
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT=2):
+            # Chain has 1 entry but proxy_count expects 2 — fail-closed
+            assert get_client_ip(request) == "10.0.0.1"
+
+    def test_returns_empty_string_when_remote_addr_unset(self) -> None:
+        """When neither REMOTE_ADDR nor XFF is present, returns empty string."""
+        from unittest.mock import MagicMock
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {}
+        assert get_client_ip(request) == ""
