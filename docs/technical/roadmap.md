@@ -53,15 +53,14 @@ git merge --no-ff wt-track{N}
 >
 > **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **2 open items** (SA38 dependency-ready now that SA43 is complete, but implementation is paused pending stale-threshold/admin-reset decisions; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46 — partial, blocked; SA34/SA36 complete).
-
+> **Track status (2026-07-07):** Track 1 — **2 open items** (SA41, SA47; SA35/SA39/SA45 complete). Track 2 — **2 open items** (SA38 dependency-ready now that SA43 is complete, but implementation is paused pending stale-threshold/admin-reset decisions; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46 — partial, blocked; SA34/SA36 complete).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
-SA35 (deps: none)                         SA43 (deps: none) — complete                 SA36 (deps: none) — complete
+SA35 (deps: none) — complete [AccountDeleteView survivor regression]              SA43 (deps: none) — complete                 SA36 (deps: none) — complete
 SA41 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36 complete) SA46 (deps: none) — partial, blocked on CR-SA46-001
 SA47 (deps: SA35, SA41 — soft sequence)   SA37 (deps: SA43) — complete                 SA44 (deps: none)      │
                                            SA38 (deps: SA43)                           SA42 (deps: none)      │
@@ -83,10 +82,7 @@ Cross-track dependency update: **SA36 is now complete**, so SA21.2 is no longer 
 
 #### Finding — `account-delete-cascade-content-loss` (`why →` [TA34](../others/tech-audit.md))
 
-- [ ] **SA35 — Stop account deletion from CASCADE-destroying org content across organizations.** `Tier 2 · Track 1 · deps: none`
-  `Post.author`, `ContactNote.created_by`, `DealNote.created_by` are `on_delete=CASCADE` — deleting a user destroys every blog post they authored (drafts **and published**) and every CRM note they wrote, across all orgs they belonged to; RLS does not intervene because FK referential actions bypass it. Migrate all three to `SET_NULL` (`Post.author` is already nullable; the CRM fields need `null=True` added — display already tolerates `None`). Decide and document `OrganizationInvitation.invited_by`'s CASCADE (defensible as intentional — a pending invite disappearing with its sender) rather than changing it silently.
-  *Files:* `quickscale_modules/blog/src/quickscale_modules_blog/models.py:276-282`, `quickscale_modules/crm/src/quickscale_modules_crm/models.py:236-247,277-288`, `quickscale_modules/orgs/src/quickscale_modules_orgs/models.py:286`.
-  *Acceptance:* create a user, author a post + CRM note in a shared org, delete the account via `AccountDeleteView`, assert the post/note survive with null attribution; add a delete-rule conformance test asserting every user-FK in `quickscale_modules_*` is `SET_NULL`/`PROTECT` unless allowlisted (`OrganizationMembership.user`, blog `AuthorProfile.user`).
+- [x] **SA35 — complete.** `Post.author`, `ContactNote.created_by`, and `DealNote.created_by` changed from `on_delete=CASCADE` to `on_delete=SET_NULL`, with `null=True` added to the CRM fields. `OrganizationInvitation.invited_by`'s CASCADE documented as intentional in `decisions.md`. Blog migration `0005`, CRM migration `0012`. Orgs cross-module conformance harness (`TestUserFkDeleteRuleConformance` in `orgs/tests/test_sa35_conformance.py`) gates against new CASCADE user-FKs and includes AccountDeleteView view-level survivor regression for blog Post + CRM ContactNote/DealNote. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `account-delete-billing-exception-swallowed` (`why →` [TA39](../others/tech-audit.md))
 

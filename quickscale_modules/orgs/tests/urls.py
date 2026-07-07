@@ -154,5 +154,8 @@ urlpatterns = [
         name="sa41-org-dashboard",
     ),
     path("", include("quickscale_modules_orgs.urls")),
+    # SA35: AccountDeleteView needs auth URL routing in the test harness
+    # so view-level survivor regression can reach it.
+    path("accounts/", include("quickscale_modules_auth.urls")),
     path("admin/", admin.site.urls),
 ]
