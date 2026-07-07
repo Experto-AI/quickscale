@@ -86,6 +86,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Blog module required settings (SA17.5: fail-hard defaults)
 BLOG_ENABLE_RSS = True
 
+# SA48 — trusted-proxy settings required by get_client_ip()
+USE_X_FORWARDED_FOR = False
+TRUSTED_PROXY_COUNT = 0
+
 # Markdownx settings
 MARKDOWNX_MARKDOWN_EXTENSIONS = [
     "markdown.extensions.fenced_code",

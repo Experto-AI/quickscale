@@ -53,18 +53,18 @@ git merge --no-ff wt-track{N}
 >
 > **Origin note (2026-07-07, fix-plan pass):** SA48–SA56 trace to the 2026-07-07 delta-pass findings in [tech-audit.md](../others/tech-audit.md) (TA42–TA46) and [arch-audit.md](../others/arch-audit.md) (Finding 1's red flags and CR-SA44-REV-001 blocker, Finding 4's coverage-boundary sub-item, Finding 5's two remaining Option 1 pieces plus the billing migration promoted from "long tail" to scheduled work per user decision — no idiom is grandfathered as permanent legacy), each sized Tier 1–2. Every item fit Tier 1–2 without splitting; the two items large enough to flag (SA50, the `OrgApiBaseView` fold; SA56, the billing DRF migration) are Tier 2, not Tier 3.
 
-> **Track status (2026-07-07, fix-plan pass):** Track 1 — **3 open items, all ready now, no blockers** (SA48, SA49, SA50 — new this pass, soft-sequenced on orgs files to limit rebase risk). Track 2 — **4 open items, all ready now, no blockers** (SA51, SA52, SA53, SA54 — new this pass, soft-sequenced on `backups/services.py`). Track 3 — **4 open items + 1 partial** (SA42 ready now; SA46 ready now — CR-SA46-REV-003 decision made; SA55 **complete** — decisions.md rule landed same-session; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA44 partial — CR-SA44-REV-001 remains blocking and is now the track's first task).
+> **Track status (2026-07-07, fix-plan pass):** Track 1 — **2 open items, all ready now, no blockers** (SA49, SA50 — SA48 complete; remaining items still soft-sequenced on orgs files to limit rebase risk). Track 2 — **4 open items, all ready now, no blockers** (SA51, SA52, SA53, SA54 — new this pass, soft-sequenced on `backups/services.py`). Track 3 — **4 open items + 1 partial** (SA42 ready now; SA46 ready now — CR-SA46-REV-003 decision made; SA55 **complete** — decisions.md rule landed same-session; SA56 ready now — new this pass, no longer soft-sequenced since SA55 already landed; SA44 partial — CR-SA44-REV-001 remains blocking and is now the track's first task).
 
 ### Dependency & parallelization overview
 
 ```
-Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
-───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA48 (deps: none)                       SA51 (deps: none)                         SA44-cont'd (deps: none) — do first, resolves CR-SA44-REV-001
-SA49 (deps: none; soft-seq after SA48)  SA52 (deps: none; soft-seq after SA51)    SA42 (deps: none)
-SA50 (deps: none; soft-seq after SA49)  SA53 (deps: none; soft-seq after SA52)    SA46 (deps: none) — CR-SA46-REV-003 fix, ready
-                                         SA54 (deps: none; soft-seq after SA53)   SA55 (deps: none)
-                                                                                  SA56 (deps: none; soft-seq after SA55)
+Track 1 (tenant-context surface)               Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
+──────────────────────────────────             ───────────────────────────────────       ───────────────────────────
+SA49 (deps: none; soft-seq after SA48)         SA51 (deps: none)                         SA44-cont'd (deps: none) — do first, resolves CR-SA44-REV-001
+SA50 (deps: none; soft-seq after SA49)         SA52 (deps: none; soft-seq after SA51)    SA42 (deps: none)
+                                               SA53 (deps: none; soft-seq after SA52)    SA46 (deps: none) — CR-SA46-REV-003 fix, ready
+                                               SA54 (deps: none; soft-seq after SA53)    SA55 (deps: none)
+                                                                                         SA56 (deps: none; soft-seq after SA55)
 ```
 
 All three tracks run fully in parallel — no cross-track file overlap exists. The "soft-seq" notes above are intra-track only: same-file edits ordered to avoid needless rebasing, not hard technical dependencies.
@@ -78,10 +78,11 @@ All three tracks run fully in parallel — no cross-track file overlap exists. T
 
 #### Finding — `client-ip-settings-permissive-defaults` (`why →` [tech-audit.md TA43](../others/tech-audit.md))
 
-- [ ] **SA48 — Fail-hard the `get_client_ip()` trusted-proxy settings reads.** `Tier 1 · Track 1 · deps: none`
+- [x] **SA48 — Fail-hard the `get_client_ip()` trusted-proxy settings reads.** `Tier 1 · Track 1 · deps: none`
   `current_org.py:598-599` reads `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` via `getattr(settings, ..., default)` — fail-closed in direction (falls back to `REMOTE_ADDR`) but silently disables proxy resolution on a typo'd or missing setting name instead of failing loud, the same `getattr`-default class SA14.6/SA30 purged elsewhere; generated apps always define both settings. Fix: direct required reads, raising `ImproperlyConfigured` when absent, matching SA30's shape.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py:598-599`.
   *Acceptance:* both settings are read directly (no `getattr` default); a missing/invalid value raises `ImproperlyConfigured` at first call instead of silently falling back to `REMOTE_ADDR`; existing throttle/forensics tests plus a new missing-setting regression test pass.
+  **SA48 — complete.** `get_client_ip()` now reads both trusted-proxy settings via direct required access, raises `ImproperlyConfigured` on missing/invalid values instead of silently defaulting, and keeps the existing fail-closed `REMOTE_ADDR` fallback only for explicit `USE_X_FORWARDED_FOR=False` / `TRUSTED_PROXY_COUNT=0` configurations. Added orgs test-setting defaults for both settings plus focused regressions for missing/invalid configuration. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `org-model-universe-hand-enumerated` (`why →` [arch-audit.md Finding 4](../others/arch-audit.md), coverage-boundary sub-item)
 

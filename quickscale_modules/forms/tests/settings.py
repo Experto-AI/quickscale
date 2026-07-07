@@ -68,6 +68,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+# SA48 — trusted-proxy settings required by get_client_ip()
+USE_X_FORWARDED_FOR = False
+TRUSTED_PROXY_COUNT = 0
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

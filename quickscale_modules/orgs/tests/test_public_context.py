@@ -276,7 +276,7 @@ class TestGetClientIp:
     """Tests for the shared ``get_client_ip`` utility."""
 
     def test_returns_remote_addr_by_default(self) -> None:
-        """When USE_X_FORWARDED_FOR is not set, returns REMOTE_ADDR."""
+        """When proxy parsing is disabled by default, returns REMOTE_ADDR."""
         from unittest.mock import MagicMock
 
         from quickscale_modules_orgs.current_org import get_client_ip
@@ -393,3 +393,37 @@ class TestGetClientIp:
         request = MagicMock()
         request.META = {}
         assert get_client_ip(request) == ""
+
+    def test_raises_when_use_x_forwarded_for_setting_missing(self) -> None:
+        """Missing USE_X_FORWARDED_FOR must raise ImproperlyConfigured."""
+        from unittest.mock import MagicMock
+
+        from django.conf import settings
+        from django.core.exceptions import ImproperlyConfigured
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {"REMOTE_ADDR": "10.0.0.1"}
+
+        with override_settings(USE_X_FORWARDED_FOR=False, TRUSTED_PROXY_COUNT=0):
+            del settings.USE_X_FORWARDED_FOR
+            with pytest.raises(ImproperlyConfigured, match="USE_X_FORWARDED_FOR"):
+                get_client_ip(request)
+
+    def test_raises_when_trusted_proxy_count_is_invalid(self) -> None:
+        """Invalid TRUSTED_PROXY_COUNT must raise ImproperlyConfigured."""
+        from unittest.mock import MagicMock
+
+        from django.core.exceptions import ImproperlyConfigured
+        from django.test.utils import override_settings
+
+        from quickscale_modules_orgs.current_org import get_client_ip
+
+        request = MagicMock()
+        request.META = {"REMOTE_ADDR": "10.0.0.1"}
+
+        with override_settings(USE_X_FORWARDED_FOR=True, TRUSTED_PROXY_COUNT="1"):
+            with pytest.raises(ImproperlyConfigured, match="TRUSTED_PROXY_COUNT"):
+                get_client_ip(request)

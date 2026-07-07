@@ -592,11 +592,36 @@ def get_client_ip(request: object) -> str:
     ``USE_X_FORWARDED_FOR=False`` and/or ``TRUSTED_PROXY_COUNT=0`` —
     returns ``request.META.get("REMOTE_ADDR", "")``, preserving
     single-host behaviour with no configuration change.
+
+    Raises ``ImproperlyConfigured`` when either trusted-proxy setting is
+    missing or invalid instead of silently defaulting.
     """
     from django.conf import settings
+    from django.core.exceptions import ImproperlyConfigured
 
-    use_xff = getattr(settings, "USE_X_FORWARDED_FOR", False)
-    proxy_count = getattr(settings, "TRUSTED_PROXY_COUNT", 0)
+    try:
+        use_xff = settings.USE_X_FORWARDED_FOR
+    except AttributeError as exc:
+        raise ImproperlyConfigured("USE_X_FORWARDED_FOR setting is required.") from exc
+
+    if not isinstance(use_xff, bool):
+        raise ImproperlyConfigured(
+            f"USE_X_FORWARDED_FOR must be a bool, got {use_xff!r}"
+        )
+
+    try:
+        proxy_count = settings.TRUSTED_PROXY_COUNT
+    except AttributeError as exc:
+        raise ImproperlyConfigured("TRUSTED_PROXY_COUNT setting is required.") from exc
+
+    if isinstance(proxy_count, bool) or not isinstance(proxy_count, int):
+        raise ImproperlyConfigured(
+            f"TRUSTED_PROXY_COUNT must be a non-negative integer, got {proxy_count!r}"
+        )
+    if proxy_count < 0:
+        raise ImproperlyConfigured(
+            f"TRUSTED_PROXY_COUNT must be a non-negative integer, got {proxy_count}"
+        )
 
     if not use_xff or proxy_count <= 0:
         return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
