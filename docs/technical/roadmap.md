@@ -53,22 +53,22 @@ git merge --no-ff wt-track{N}
 >
 > **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **3 open items** (SA37, SA38 chained on SA43; SA21.2 blocked on Track 3's SA36; SA40/SA43 complete). Track 3 — **4 open items** (SA36, SA42, SA44, SA46; SA34 complete).
+> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **3 open items** (SA37/SA38 ready now that SA43 is complete; SA21.2 unblocked now that Track 3's SA36 is complete; SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46; SA34/SA36 complete).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
-SA35 (deps: none)                         SA43 (deps: none) — complete                           SA36 (deps: none)
-SA41 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA46 (deps: none)      │
+SA35 (deps: none)                         SA43 (deps: none) — complete                 SA36 (deps: none) — complete
+SA41 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36 complete) SA46 (deps: none)      │
 SA47 (deps: SA35, SA41 — soft sequence)   SA37 (deps: SA43)                           SA44 (deps: none)      │
                                            SA38 (deps: SA43)                           SA42 (deps: none)      │
-                                                 ▲                                                        │
-                                                 └───────────────────── * cross-track: SA36 → SA21.2 ─────────
+                                                  ▲                                                        │
+                                                  └──────────────── completed cross-track sequence: SA36 → SA21.2 ──────
 ```
 
-Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the generated `get_client_ip()` helper until **SA36** (Track 3) fixes its off-by-one — otherwise SA21.2 ships the attacker-controlled variant of TA18 that TA35 warns about. This mirrors the existing SA21.1 → SA21.2 pattern (settings landed by Track 3, consumed by Track 2). All other listed deps are same-track, same-file sequencing (noted per item below) rather than hard blockers, since each track's worktree processes one item at a time anyway. Rebalancing history (2026-07-05/06, preserved for context): SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3 to restore 3/3/2 parallelism when Track 2 was carrying six open items; SA26 then moved Track 2 → Track 3 for 1/2/1 parallelism. All of those items are now complete; this triage pass restores 5/5/5 parallelism by assigning SA34–SA47 across the three tracks.
+Cross-track dependency update: **SA36 is now complete**, so SA21.2 is no longer blocked on Track 3 and can safely consume the canonical `get_client_ip()` helper landed after SA21.1. This preserves the intended SA21.1 → SA36 → SA21.2 sequencing that avoided shipping the attacker-controlled TA18 variant TA35 warned about. All other listed deps are same-track, same-file sequencing (noted per item below) rather than hard blockers, since each track's worktree processes one item at a time anyway. Rebalancing history (2026-07-05/06, preserved for context): SA24/SA29/SA30 moved Track 2 → Track 1 and SA32 moved Track 2 → Track 3 to restore 3/3/2 parallelism when Track 2 was carrying six open items; SA26 then moved Track 2 → Track 3 for 1/2/1 parallelism. All of those items are now complete; this triage pass restores 5/5/5 parallelism by assigning SA34–SA47 across the three tracks.
 
 ### Track 1 — Tenant-context surface
 
@@ -151,7 +151,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
 
-- [ ] **SA21.2 — Wire forms/blog throttles and IP logging to the new canonical-IP and cache infrastructure.** `Tier 2 · Track 2 · deps: SA21.1 (complete), SA36 (Track 3 — land first: don't wire consumers to the off-by-one helper)`
+- [ ] **SA21.2 — Wire forms/blog throttles and IP logging to the new canonical-IP and cache infrastructure.** `Tier 2 · Track 2 · deps: SA21.1 (complete), SA36 (complete)`
   Point `FormSubmitThrottle.get_cache_key`, `_get_blog_api_rate_limit_ident`, and the IP fields recorded on `FormSubmission`/blog rate-limit logging at the canonical client-IP helper landed by SA21.1, and confirm both throttles run against the shared cache backend instead of the default in-memory one.
   *Files:* `quickscale_modules/forms/src/quickscale_modules_forms/throttles.py:26-30`, `quickscale_modules/forms/src/quickscale_modules_forms/views.py:231,257`, `quickscale_modules/blog/src/quickscale_modules_blog/views.py:260-266,277-304`.
   *Acceptance:* two requests with different `X-Forwarded-For` values (fixed `REMOTE_ADDR`) get independent throttle buckets and are logged with the forwarded client IP, not the proxy's; a 6th form submission within the configured window from one distinct client is rejected regardless of which worker/replica serves it.
@@ -164,7 +164,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `get-client-ip-off-by-one` (`why →` [TA35](../others/tech-audit.md))
 
-- [ ] **SA36 — Fix the off-by-one in the generated `get_client_ip()` proxy-count math before SA21.2 wires consumers to it.** `Tier 1 · Track 3 · deps: none — land before SA21.2 (Track 2)`
+- [x] **SA36 — Fix the off-by-one in the generated `get_client_ip()` proxy-count math before SA21.2 wires consumers to it.** `Tier 1 · Track 3 · deps: none — land before SA21.2 (Track 2)`
   `get_client_ip()` extracts `ips[-(TRUSTED_PROXY_COUNT + 1)]` guarded by `len(ips) > TRUSTED_PROXY_COUNT`. With Railway's single hop, an honest request has chain length 1 → the guard fails → returns the **proxy IP**; a request with an attacker-supplied `X-Forwarded-For` entry returns the **attacker-controlled** value. Currently zero consumers, but it's the designated foundation for SA21.2 — fix now or TA18 goes from "collapsed" to "spoofable". Fix: `ips[-TRUSTED_PROXY_COUNT]` with `len(ips) >= TRUSTED_PROXY_COUNT`, matching DRF's own `NUM_PROXIES` semantics.
   *Files:* `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2:63-97` and the duplicate copy in `production.py.j2`.
   *Acceptance:* a template test with fixed `REMOTE_ADDR` asserts an honest single-hop request resolves to the real client IP (not the proxy), and a request with an extra attacker-supplied XFF entry does not resolve to the attacker-controlled value.
