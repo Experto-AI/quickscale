@@ -49,7 +49,7 @@ from quickscale_modules_forms.serializers import (
     FormSubmissionCreateSerializer,
 )
 from quickscale_modules_forms.throttles import FormSubmitThrottle
-from quickscale_modules_orgs.current_org import org_scope
+from quickscale_modules_orgs.current_org import get_client_ip, org_scope
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +228,7 @@ class FormSubmitAPIView(CreateAPIView):
                     submission = FormSubmission.objects.create(
                         form=form,
                         organization=form.organization,
-                        ip_address=request.META.get("REMOTE_ADDR"),
+                        ip_address=get_client_ip(request),
                         user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
                         is_spam=True,
                     )
@@ -254,7 +254,7 @@ class FormSubmitAPIView(CreateAPIView):
                 submission = FormSubmission.objects.create(
                     form=form,
                     organization=form.organization,
-                    ip_address=request.META.get("REMOTE_ADDR"),
+                    ip_address=get_client_ip(request),
                     user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
                     is_spam=False,
                 )
