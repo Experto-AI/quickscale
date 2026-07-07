@@ -53,7 +53,7 @@ git merge --no-ff wt-track{N}
 >
 > **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **2 open items** (SA38 ready now that SA43 is complete; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46; SA34/SA36 complete).
+> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **2 open items** (SA38 dependency-ready now that SA43 is complete, but implementation is paused pending stale-threshold/admin-reset decisions; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46; SA34/SA36 complete).
 
 ### Dependency & parallelization overview
 
@@ -145,6 +145,8 @@ Cross-track dependency update: **SA36 is now complete**, so SA21.2 is no longer 
   A killed restore child (OOM, redeploy) strands `STATUS_RESTORING` forever — the child only sets `STATUS_FAILED` on Python exceptions, never on SIGKILL. The admin then permanently refuses retry ("Wait for the restore to complete…") and nothing reads `restore_started_at` for staleness, so the operator must hand-edit the DB mid-incident. Surface staleness in the admin (`restore_started_at` older than a threshold ⇒ "stale — child likely dead" + a guarded reset-to-FAILED action).
   *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py:776-780`, `backups_restore` management command.
   *Acceptance:* simulate a killed restore child (status stuck `RESTORING` with an old `restore_started_at`) — admin surfaces a staleness warning and offers a guarded reset action; a genuinely recent in-progress restore is not flagged stale.
+  *Status (2026-07-07):* discovery-only prep pass complete in `wt-track2`: SA43 was re-confirmed complete, and the likely edit/test surface was narrowed to `quickscale_modules/backups/src/quickscale_modules_backups/admin.py` (restore eligibility + admin notices/routes), `services.py` (restore claim/dispatch helpers), `models.py` (`restore_started_at` / status constants), `management/commands/backups_restore.py`, and `quickscale_modules/backups/tests/test_admin.py` (primary regression target; `test_restore_command.py` / `test_services.py` secondary as needed).
+  *Blocked pending decisions:* choose the stale threshold value; choose whether the stale warning/reset entry point should surface on the restore flow, the `BackupArtifact` admin page, or both; and choose the guarded reset-to-`FAILED` boundary (service helper + admin wrapper vs admin-only, with the permission boundary still unspecified).
 
 #### Finding — `throttle-identity-and-backing-store-unreliable-behind-proxy` (`why →` [TA18/TA24](../others/tech-audit.md))
 
