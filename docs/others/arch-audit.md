@@ -47,7 +47,6 @@ SA28 added a second, divergent implementation of an org invariant at a new bound
 |---|----|---------|------|------------------|
 | 1 | `dr-engine-module-circular-lattice` | now | M (first stage) | DR logic lives in core but its state and shims live in the backups module, producing a bidirectional import lattice held together by hand-maintained symbol tables and a string-matching exception classifier |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months (teams) | M | Org/billing invariants at the account-deletion boundary are re-implemented per callsite with divergent semantics instead of being owned by their domain modules |
-| 3 | `backups-admin-orchestration-accretion` | now (structural duplication persists post-closeout) | S–M | The async-restore job lifecycle landed inline in the admin view, duplicated across two dispatch branches, against the recorded SA20 shape guidance |
 | 4 | `org-model-universe-hand-enumerated` | 6–18 months (teams) | M | orgs hand-enumerates the cross-module tenant-model universe in unlinked literals (classification registry, purge delete-order registry, test-side copies) with no derivation from the marker/FK sources of truth — opened by the module deep pass below |
 | 5 | `json-api-boundary-idiom-fragmentation` | 6–18 months (teams) | M | Three coexisting idioms for authed state-changing JSON endpoints (DRF baseline, orgs mixin stack, billing plain-View + manual CSRF) each re-implement the boundary by hand — opened by the module deep pass below |
 
@@ -228,78 +227,12 @@ SA28 added a second, divergent implementation of an org invariant at a new bound
 
 ---
 
-### Finding 3: The async-restore job lifecycle landed inside the admin view, duplicated per branch
-
-- **ID:** `backups-admin-orchestration-accretion`
-- **Rank rationale (blast radius × likelihood):** contained to the backups module, but the cost was
-  already paid twice over — CR-SA20-005 through CR-SA20-008 and CR-SA20-REV-001/002 (all now
-  resolved, including the TA36 atomic-claim fix) each had to be implemented and re-verified once per
-  duplicated branch.
-- **Horizon & trigger:** `now` — SA20 closed in full (CR-SA20-007 and the TA36 CAS fix included)
-  with the duplication still in place; the cheap moment to extract (bundled into that closeout) has
-  passed, so the next lifecycle change pays the two-branch tax at full price with no closeout to
-  ride along with.
-- **Confidence:** High — `admin.py:380–742` read this pass; the duplication and the parity tax are
-  documented in the roadmap's own CR-SA20-007 checklist ("4 new/adjusted cases total, matching the
-  existing branch-parity pattern", `roadmap.md:119–123`).
-- **Context dependence:** wrong-for-now on the dimension of DR feature velocity — acceptable in a
-  frozen module, not in one with an open remediation queue and a "second storage backend" watch
-  item.
-- **Problem:** the project's first background-job lifecycle contract (persist `STATUS_RESTORING` →
-  spawn `subprocess.Popen` → rollback pre-spawn state on spawn failure → never clobber a fast
-  child's terminal status) has no owner other than a ~360-line admin view method, and exists as two
-  inline copies.
-- **Evidence:** `backups/admin.py:380–742` (`restore_backup_view`): recorded-artifact dispatch
-  block `:496–552` and uploaded-file dispatch block `:641–688` each carry the full lifecycle
-  (status write `:506–525`, `Popen` `:527–538`, rollback `:539–552`). `admin.py` grew 1,096 →
-  1,344 lines with SA20. The 2026-07-04 pass recorded explicit shape guidance for exactly this
-  work: "extract the restore orchestration into `services.py` while doing it, so the admin becomes
-  a thin trigger" — the async lifecycle landed inline instead. `services.py`'s own docstring caps
-  it "intentionally under 400 LOC" and it has ample headroom for a single dispatch function.
-- **Why it compounds:** every lifecycle rule change is a two-site edit plus paired tests (the
-  CR-SA20-005→008 review cycle already demonstrated the cost: each fix was applied and re-verified
-  per branch). The next entry point that needs a background restore (CLI parity, scheduled
-  restore, an API) either triplicates the lifecycle or finally forces the extraction — under more
-  pressure. And as the project's only async-work pattern, it is what the next long-running
-  operation (media sync, exports) will be copied from.
-- **Detection signal:** the two branches drifting — a lifecycle assertion that passes for one
-  branch's test and fails for the other's; CR-SA20-007 and CR-SA20-REV-002 were both live instances
-  of exactly this (each required a paired fix and paired regression per branch) before they closed.
-- **Steelman:** admin is the only trigger today; a Popen from the WSGI worker is a pragmatic,
-  deliberate choice for a single-service Railway app with no queue infra (adding a queue would be
-  the real over-engineering); and the branch duplication was the fastest path to closing a
-  medium-risk finding. All true — which is why the finding is the *placement and duplication*, not
-  the Popen design. DR admin work (SA20, including CR-SA20-007 and the REV-001/002 atomic-claim fix)
-  is now fully closed with the duplication still intact — the free ride-along window closed without
-  the extraction happening, so it is now a standalone piece of follow-up work rather than a
-  bundled one.
-- **Correct shape:** one function owns the dispatch lifecycle (snapshot pre-spawn state → persist
-  RESTORING → spawn → rollback on spawn failure), parameterized by artifact, and every entry
-  branch calls it; the admin view does form handling and messaging only.
-- **Options:**
-  1. **Extract to `backups/services.py` as standalone follow-up (recommended):**
-     `dispatch_background_restore(artifact, *, confirmation) -> None` capturing all three
-     pre-spawn fields and the atomic claim; both branches call it; the existing CR-SA20-007/
-     REV-002 regressions become the target for the extracted function once, plus one thin wiring
-     test per branch.
-  2. **Push into `dr_engine`** per `services.py`'s "every new orchestration feature should go in
-     dr_engine" rule — but that deepens Finding 1's lattice (more model-touching code in core, more
-     lazy-table entries); reject until Finding 1's first stage lands.
-- **Recommendation:** Option 1, as its own ticket (the SA20 closeout that would have bundled it for
-  free has already happened) · **Size:** S–M · **First step:** lift the recorded-artifact branch's
-  lifecycle block (including `_atomic_claim_restore`) into the service function and make the
-  uploaded-file branch call it.
-
----
-
 ### Fix order and interactions
 
-1. **Finding 3 first** — SA20 (including CR-SA20-007) has now closed with the duplication intact,
-   so this is a standalone extraction of the same two blocks/test files; doing it before Finding 1's
-   later stages shrinks the surface those stages would have to move.
-2. **Finding 1 stage 1** (registration-not-import + facade split) next — independent of SA20's
-   closeout, and every future DR/module feature benefits.
-3. **The three pre-teams seams — Findings 2, 4, and 5 — before teams kickoff**, in whatever track
+1. **Finding 1 stage 1** (registration-not-import + facade split) next — Finding 3
+   (`backups-admin-orchestration-accretion`) is resolved (SA43, see reconciliation log); every
+   future DR/module feature benefits from stage 1 landing.
+2. **The three pre-teams seams — Findings 2, 4, and 5 — before teams kickoff**, in whatever track
    order fits, since all three are independent of each other: Finding 2 decides where teams'
    membership invariants live; Finding 4's derivation gate (its S-size first step) must exist
    before teams authors models, or every teams model needs triple entry in orgs literals;
@@ -369,7 +302,8 @@ Declarative manifest path (freeze enforces) · `TenantModel` base + markers for 
 exclusion review at kickoff · expect orgs' `TENANT_TABLE_REGISTRY` double-entry if its models
 enter orgs' test env (see Questions) · **new:** membership/ownership invariants go into the
 Finding 2 seam (orgs-owned deletion/lifecycle services + receivers), not into views ·
-**new:** any teams background work reuses the Finding 3 dispatch service, not a fresh Popen block.
+**new:** any teams background work reuses the `dispatch_background_restore`-pattern dispatch
+service (the shape landed resolving Finding 3), not a fresh Popen block.
 
 ### Questions that would change the ranking
 
@@ -744,3 +678,11 @@ conflicts beyond Finding 2, concurrency, security architecture (SA26 tracked), b
   equivalent derivation check (Option 1's other half) and the full purge-plan derivation (Option 2)
   remain open; Finding 4 stays open pending those, and pending the teams build that motivates its
   horizon.
+- 2026-07-07 (roadmap cleanup) — **Finding 3 (`backups-admin-orchestration-accretion`): resolved.**
+  SA43 landed exactly the recommended first step: `dispatch_background_restore(artifact, *,
+  confirmation)` (plus `_atomic_claim_restore`, `_get_manage_py`, and the claimable-status set) was
+  extracted into `backups/services.py`, and both the recorded-artifact and uploaded-file admin
+  dispatch branches now call the same function instead of carrying two inline copies. The
+  2026-07-06 "reframed, not resolved" note above is superseded — the extraction it flagged as
+  still-pending has since landed. Summary table and fix-order renumbered accordingly (Finding 3 row
+  dropped; findings 1/2/4/5 keep their stable IDs and numbers).
