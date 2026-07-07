@@ -189,41 +189,135 @@ def _extract_method_decorator_name(decorator: ast.AST) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _is_constant_true(node: ast.expr) -> bool:
+def _literal_truthiness(node: ast.expr) -> bool | None:
     """
-    Return ``True`` if *node* is a compile-time constant-true expression.
+    Return the truthiness of *node* if it is a compile-time literal constant.
 
-    Handles ``True``, non-zero integers (``1``, ``2``, etc.), and non-empty
-    strings.  This is intentionally conservative — only obvious literal
-    constants are recognised.
+    Returns ``True`` for truthy constants, ``False`` for falsey constants,
+    and ``None`` for non-constant expressions (the caller should treat as
+    uncertain and conservatively scan both branches).
+
+    Handles all Python literal types:
+
+      * ``True`` (truthy), ``False`` (falsey)
+      * non-zero ``int`` (truthy), ``0`` (falsey)
+      * non-zero ``float`` (truthy), ``0.0``/``-0.0`` (falsey)
+      * non-zero ``complex`` (truthy), ``0j`` (falsey)
+      * ``None`` (falsey)
+      * ``...`` / ``Ellipsis`` (truthy)
+      * non-empty ``str`` (truthy), ``""`` (falsey)
+      * non-empty ``bytes`` (truthy), ``b""`` (falsey)
+      * literal ``tuple``/``list``/``dict``/``set`` — empty containers (``()`` / ``[]`` / ``{}``)
+        are falsey; any non-empty literal container is truthy regardless of
+        element values, since ``bool`` on a container depends only on length.
+
+    Also folds parsed-source signed numeric literals:
+
+      * ``-1``, ``+1`` (truthy), ``-0``, ``+0`` (falsey)
+      * ``-1.5`` (truthy), ``-0.0``, ``+0.0`` (falsey)
+      * ``-1j`` (truthy), ``-0j``, ``+0j`` (falsey)
+
+    Only ``ast.UnaryOp`` with ``UAdd`` or ``USub`` over a numeric
+    ``ast.Constant`` (``int``, ``float``, ``complex``, excluding ``bool``) is
+    folded.  Every other unary expression (``not``, ``~``, nested unary,
+    non-constant operand) returns ``None`` (conservative "scan both branches").
     """
-    if isinstance(node, ast.Constant) and isinstance(node.value, bool) and node.value:
-        return True
-    if isinstance(node, ast.Constant) and isinstance(node.value, int) and node.value != 0:
-        return True
-    if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value != "":
-        return True
-    if isinstance(node, ast.Constant) and isinstance(node.value, bytes) and node.value != b"":
-        return True
-    return False
+    # --- Signed numeric literals (parsed-source form) -----------------------
+    # ``-1``, ``+0.0``, ``-1j`` etc. are parsed as
+    # ``ast.UnaryOp(op=ast.USub()|ast.UAdd(), operand=ast.Constant(...))``.
+    if isinstance(node, ast.UnaryOp):
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            if isinstance(node.operand, ast.Constant):
+                val = node.operand.value
+                # ``bool`` is excluded — +True/-True are nonsensical in practice
+                if isinstance(val, bool):
+                    return None
+                if isinstance(val, (int, float, complex)):
+                    if isinstance(node.op, ast.USub):
+                        return -val != 0
+                    return val != 0
+        return None
+
+    # --- ``ast.Constant`` values --------------------------------------------
+    if isinstance(node, ast.Constant):
+        val = node.value
+
+        # ``bool`` is a subclass of ``int`` in Python — check first
+        if isinstance(val, bool):
+            return val
+
+        if isinstance(val, (int, float)):
+            return val != 0
+
+        if isinstance(val, complex):
+            return val != 0j
+
+        if val is None:
+            return False
+
+        if val is Ellipsis:
+            return True
+
+        if isinstance(val, str):
+            return val != ""
+
+        if isinstance(val, bytes):
+            return val != b""
+
+    # --- Literal containers: truthiness depends only on length -------------
+    # ``ast.Tuple`` and ``ast.List`` are used for literal ``()``, ``(1,)``,
+    # ``[]``, ``[1]`` etc. in the AST — they are not ``ast.Constant`` nodes.
+    # ``bool(literal_container)`` is equivalent to ``len(container) > 0``
+    # regardless of the elements' types, so we do not need to recursively
+    # verify that every element is itself a literal.
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return bool(node.elts)
+
+    if isinstance(node, ast.Dict):
+        return bool(node.keys)
+
+    # ``ast.Set`` — no empty-set literal syntax in Python, so ``ast.Set``
+    # always has at least one element at the AST level. The container-length
+    # rule still applies: ``bool({1})`` is ``True``.
+    if isinstance(node, ast.Set):
+        return bool(node.elts)
+
+    return None
 
 
-def _is_constant_false(node: ast.expr) -> bool:
+def _body_always_exits(body: list[ast.stmt]) -> bool:
     """
-    Return ``True`` if *node* is a compile-time constant-false expression.
+    Return ``True`` if *body* always exits on every control-flow path.
 
-    Handles ``False``, ``0``, ``0.0``, ``None``, and empty strings.
+    Scans forward through *body* — an unconditional ``return``/``raise`` at
+    any position makes subsequent sibling statements unreachable, so the
+    body always exits regardless of dead trailing code.  An ``if``/``elif``
+    chain where every reachable branch always exits also makes the body
+    terminal.
     """
-    if isinstance(node, ast.Constant) and isinstance(node.value, bool) and not node.value:
-        return True
-    if isinstance(node, ast.Constant) and isinstance(node.value, int) and node.value == 0:
-        return True
-    if isinstance(node, ast.Constant) and isinstance(node.value, float) and node.value == 0.0:
-        return True
-    if isinstance(node, ast.Constant) and node.value is None:
-        return True
-    if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value == "":
-        return True
+    if not body:
+        return False
+
+    for stmt in body:
+        if isinstance(stmt, (ast.Return, ast.Raise)):
+            return True
+        if isinstance(stmt, ast.If):
+            truth = _literal_truthiness(stmt.test)
+            if truth is True:
+                if _body_always_exits(stmt.body):
+                    return True
+                # if-body doesn't exit — execution falls through
+                continue
+            if truth is False:
+                if stmt.orelse and _body_always_exits(stmt.orelse):
+                    return True
+                continue
+            # Non-constant condition: both branches must exit
+            if _body_always_exits(stmt.body) and stmt.orelse and _body_always_exits(stmt.orelse):
+                return True
+            continue
+        # Any other reachable statement — execution continues
+
     return False
 
 
@@ -239,8 +333,13 @@ def _has_reachable_helper_in_body(body: list[ast.stmt]) -> bool:
       treated as unreachable; the ``else`` / ``elif`` branch is still checked.
     * The body of ``if True:`` / ``if 1:`` (constant-true condition) is
       treated as reachable; the ``else`` branch is skipped.
+    * When a constant-condition ``if`` body (or its ``else``/``elif`` chain)
+      always exits (ends with ``return``/``raise`` on every path), the
+      terminal exit propagates — subsequent sibling statements are treated
+      as unreachable.
     * Non-constant ``if`` conditions have both branches scanned as reachable
-      (fails open for uncertainty).
+      (fails open for uncertainty); when both branches always exit, the
+      terminal exit also propagates.
     * ``try`` / ``with`` / ``for`` / ``while`` compound statements are
       scanned at the surface level via ``_node_walks_helper_call``.
 
@@ -251,20 +350,33 @@ def _has_reachable_helper_in_body(body: list[ast.stmt]) -> bool:
     for stmt in body:
         # --- ``if`` statements: special reachability handling ---------------
         if isinstance(stmt, ast.If):
-            if _is_constant_false(stmt.test):
+            truth = _literal_truthiness(stmt.test)
+            if truth is False:
                 # Body is unreachable; check orelse (elif/else) only
                 if stmt.orelse and _has_reachable_helper_in_body(stmt.orelse):
                     return True
-            elif _is_constant_true(stmt.test):
+                # If the else/elif chain always exits, subsequent code is
+                # unreachable — propagate the terminal exit.
+                if stmt.orelse and _body_always_exits(stmt.orelse):
+                    return False
+            elif truth is True:
                 # Body is definitely reachable; else branch is unreachable
                 if _has_reachable_helper_in_body(stmt.body):
                     return True
+                # If the body always exits, subsequent code is unreachable.
+                if _body_always_exits(stmt.body):
+                    return False
             else:
                 # Non-constant condition: scan both branches conservatively
                 if _has_reachable_helper_in_body(stmt.body):
                     return True
                 if stmt.orelse and _has_reachable_helper_in_body(stmt.orelse):
                     return True
+                # If both branches always exit, subsequent code is unreachable.
+                body_exits = _body_always_exits(stmt.body)
+                orelse_exits = stmt.orelse and _body_always_exits(stmt.orelse)
+                if body_exits and orelse_exits:
+                    return False
             continue
 
         # --- Other statement types -----------------------------------------

@@ -19,10 +19,12 @@ from __future__ import annotations
 import ast
 
 from scripts.check_csrf_exempt_gate import (
+    _body_always_exits,
     _body_contains_helper_call,
     _CsrfExemptVisitor,
     _extract_method_decorator_name,
     _is_csrf_exempt_decorator,
+    _literal_truthiness,
 )
 
 # ---------------------------------------------------------------------------
@@ -157,6 +159,234 @@ class TestNodeWalksHelperCall:
             "    return\n"
         )
         assert _body_contains_helper_call(body)
+
+
+# ---------------------------------------------------------------------------
+# _body_always_exits  —  terminal-exit detection
+# ---------------------------------------------------------------------------
+
+
+class TestBodyAlwaysExits:
+    """``_body_always_exits`` detects terminal exits even with dead trailing code."""
+
+    def _body(self, source: str) -> list[ast.stmt]:
+        return _parse_body(source)
+
+    def test_empty_body(self) -> None:
+        assert not _body_always_exits([])
+
+    def test_single_return_exits(self) -> None:
+        """A single ``return`` exits."""
+        assert _body_always_exits(self._body("def f():\n    return\n"))
+
+    def test_single_raise_exits(self) -> None:
+        """A single ``raise`` exits."""
+        assert _body_always_exits(self._body("def f():\n    raise NotImplementedError()\n"))
+
+    def test_return_with_dead_trailing_stmt_exits(self) -> None:
+        """``return`` followed by a dead statement still exits."""
+        assert _body_always_exits(self._body("def f():\n    return\n    x = 1\n"))
+
+    def test_raise_with_dead_trailing_stmt_exits(self) -> None:
+        """``raise`` followed by a dead statement still exits."""
+        assert _body_always_exits(
+            self._body("def f():\n    raise NotImplementedError()\n    x = 1\n")
+        )
+
+    def test_if_true_return_with_dead_trailing_stmt_exits(self) -> None:
+        """``if True: return`` followed by a dead statement exits."""
+        assert _body_always_exits(self._body("def f():\n    if True:\n        return\n    x = 1\n"))
+
+    def test_if_true_branch_with_dead_trailing_stmt_exits(self) -> None:
+        """``if True: [return, dead_stmt]`` — dead trailing inside if-body."""
+        assert _body_always_exits(
+            self._body("def f():\n    if True:\n        return\n        x = 1\n")
+        )
+
+    def test_non_exiting_body_returns_false(self) -> None:
+        """A body with just ``pass`` does not exit."""
+        assert not _body_always_exits(self._body("def f():\n    pass\n"))
+
+    def test_if_true_pass_does_not_exit(self) -> None:
+        """``if True: pass`` does not exit — execution falls through."""
+        assert not _body_always_exits(self._body("def f():\n    if True:\n        pass\n"))
+
+    def test_if_false_else_return_exits(self) -> None:
+        """``if False: pass; else: return`` exits via else."""
+        assert _body_always_exits(
+            self._body("def f():\n    if False:\n        pass\n    else:\n        return\n")
+        )
+
+    def test_both_branches_return_exits(self) -> None:
+        """``if x: return; else: return`` exits."""
+        assert _body_always_exits(
+            self._body(
+                "def f():\n    if some_condition:\n        return\n    else:\n        return\n"
+            )
+        )
+
+    def test_assignment_then_return_exits(self) -> None:
+        """``x = 1; return`` exits — all paths reach the return."""
+        assert _body_always_exits(self._body("def f():\n    x = 1\n    return\n"))
+
+    def test_return_dead_if_exits(self) -> None:
+        """``return; if True: pass`` — if is dead, body exits via return."""
+        assert _body_always_exits(self._body("def f():\n    return\n    if True:\n        pass\n"))
+
+
+# ---------------------------------------------------------------------------
+# _literal_truthiness  —  direct literal-truthiness tests (CR-SA46-REV-002)
+# ---------------------------------------------------------------------------
+
+
+class TestLiteralTruthiness:
+    """``_literal_truthiness`` handles all Python literal types."""
+
+    @staticmethod
+    def _truth(source: str) -> bool | None:
+        tree = ast.parse(source, mode="eval")
+        assert isinstance(tree, ast.Expression)
+        return _literal_truthiness(tree.body)
+
+    # --- ast.Constant types ------------------------------------------------
+
+    def test_true(self) -> None:
+        assert self._truth("True") is True
+
+    def test_false(self) -> None:
+        assert self._truth("False") is False
+
+    def test_int_nonzero(self) -> None:
+        assert self._truth("42") is True
+
+    def test_int_zero(self) -> None:
+        assert self._truth("0") is False
+
+    def test_float_nonzero(self) -> None:
+        assert self._truth("1.5") is True
+
+    def test_float_zero(self) -> None:
+        assert self._truth("0.0") is False
+
+    def test_float_neg_zero(self) -> None:
+        # ``-0.0`` in source code parses as ``UnaryOp(USub, Constant(0.0))``,
+        # but the float value ``-0.0`` can appear directly in an ``ast.Constant``
+        # node (e.g. from generated/transformed ASTs).  Test both forms.
+        assert _literal_truthiness(ast.Constant(value=-0.0)) is False
+        assert self._truth("0.0") is False  # positive zero also falsey
+
+    def test_complex_nonzero(self) -> None:
+        assert self._truth("1j") is True
+
+    def test_complex_zero(self) -> None:
+        assert self._truth("0j") is False
+
+    def test_none(self) -> None:
+        assert self._truth("None") is False
+
+    def test_ellipsis(self) -> None:
+        assert self._truth("...") is True
+
+    def test_nonempty_str(self) -> None:
+        assert self._truth('"x"') is True
+
+    def test_empty_str(self) -> None:
+        assert self._truth('""') is False
+
+    def test_nonempty_bytes(self) -> None:
+        assert self._truth('b"x"') is True
+
+    def test_empty_bytes(self) -> None:
+        assert self._truth('b""') is False
+
+    # --- Literal containers ------------------------------------------------
+
+    def test_empty_tuple(self) -> None:
+        assert self._truth("()") is False
+
+    def test_nonempty_tuple(self) -> None:
+        assert self._truth("(1,)") is True
+
+    def test_empty_list(self) -> None:
+        assert self._truth("[]") is False
+
+    def test_nonempty_list(self) -> None:
+        assert self._truth("[1]") is True
+
+    def test_empty_dict(self) -> None:
+        assert self._truth("{}") is False
+
+    def test_nonempty_dict(self) -> None:
+        assert self._truth('{"k": "v"}') is True
+
+    def test_nonempty_set(self) -> None:
+        assert self._truth("{1}") is True
+
+    # --- Signed numeric literals (``ast.UnaryOp`` with ``UAdd``/``USub``) --
+
+    def test_neg_int_nonzero(self) -> None:
+        """``-1`` is truthy."""
+        assert self._truth("-1") is True
+
+    def test_pos_int_nonzero(self) -> None:
+        """``+1`` is truthy."""
+        assert self._truth("+1") is True
+
+    def test_neg_int_zero(self) -> None:
+        """``-0`` is falsey (``-0 == 0``)."""
+        assert self._truth("-0") is False
+
+    def test_pos_int_zero(self) -> None:
+        """``+0`` is falsey."""
+        assert self._truth("+0") is False
+
+    def test_neg_float_nonzero(self) -> None:
+        """``-1.5`` is truthy."""
+        assert self._truth("-1.5") is True
+
+    def test_neg_float_zero(self) -> None:
+        """``-0.0`` is falsey."""
+        assert self._truth("-0.0") is False
+
+    def test_pos_float_zero(self) -> None:
+        """``+0.0`` is falsey."""
+        assert self._truth("+0.0") is False
+
+    def test_neg_complex_nonzero(self) -> None:
+        """``-1j`` is truthy."""
+        assert self._truth("-1j") is True
+
+    def test_neg_complex_zero(self) -> None:
+        """``-0j`` is falsey."""
+        assert self._truth("-0j") is False
+
+    def test_unary_not_returns_none(self) -> None:
+        """``not x`` is not folded."""
+        assert self._truth("not x") is None
+
+    def test_unary_invert_returns_none(self) -> None:
+        """``~x`` is not folded."""
+        assert self._truth("~x") is None
+
+    def test_unary_uadd_bool_returns_none(self) -> None:
+        """``+True`` is excluded (``bool`` is not numeric for signed folding)."""
+        assert self._truth("+True") is None
+
+    def test_unary_usub_bool_returns_none(self) -> None:
+        """``-True`` is excluded (``bool`` is not numeric for signed folding)."""
+        assert self._truth("-True") is None
+
+    def test_unary_nested_returns_none(self) -> None:
+        """``--1`` (nested unary) is not folded — operand is not Constant."""
+        assert self._truth("--1") is None
+
+    # --- Non-constant expressions (should return None) ---------------------
+
+    def test_name(self) -> None:
+        assert self._truth("x") is None
+
+    def test_call(self) -> None:
+        assert self._truth("foo()") is None
 
 
 # ---------------------------------------------------------------------------
@@ -448,6 +678,314 @@ class TestCsrfExemptVisitorClassLevel:
         )
         assert _get_violation_count(source) == 1
 
+    # ------------------------------------------------------------------
+    # Additional literal type coverage — class-level (CR-SA46-001)
+    # ------------------------------------------------------------------
+
+    def test_class_helper_under_if_nonzero_float_is_reachable_passes(self) -> None:
+        """Helper inside ``if 1.0:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if 1.0:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_nonzero_float_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if 1.0: return ...`` in class handler."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if 1.0:\n"
+            "            return JsonResponse({})\n"
+            "        else:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_empty_bytes_unreachable_fails(self) -> None:
+        r"""Helper inside ``if b"":`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            '        if b"":\n'
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_empty_tuple_unreachable_fails(self) -> None:
+        """Helper inside ``if ():`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if ():\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_empty_list_unreachable_fails(self) -> None:
+        """Helper inside ``if []:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if []:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_empty_dict_unreachable_fails(self) -> None:
+        """Helper inside ``if {}:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if {}:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_nonempty_tuple_is_reachable_passes(self) -> None:
+        """Helper inside ``if (1,):`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if (1,):\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_nonempty_list_is_reachable_passes(self) -> None:
+        """Helper inside ``if [1]:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if [1]:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_nonempty_dict_is_reachable_passes(self) -> None:
+        """Helper inside ``if {'k': 'v'}:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if {'k': 'v'}:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    # ------------------------------------------------------------------
+    # complex and Ellipsis literal coverage — class-level (CR-SA46-REV-002)
+    # ------------------------------------------------------------------
+
+    def test_class_helper_under_if_nonzero_complex_is_reachable_passes(self) -> None:
+        """Helper inside ``if 1j:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if 1j:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_zero_complex_is_unreachable_fails(self) -> None:
+        """Helper inside ``if 0j:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if 0j:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_nonzero_complex_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if 1j: return ...`` in class handler."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if 1j:\n"
+            "            return JsonResponse({})\n"
+            "        else:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_ellipsis_is_reachable_passes(self) -> None:
+        """Helper inside ``if ...:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if ...:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_ellipsis_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if ...: return ...`` in class handler."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if ...:\n"
+            "            return JsonResponse({})\n"
+            "        else:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    # ------------------------------------------------------------------
+    # ast.Set literal coverage  (CR-SA46-REV-002)
+    # ------------------------------------------------------------------
+
+    def test_class_helper_under_if_nonempty_set_is_reachable_passes(self) -> None:
+        """Helper inside ``if {1}:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if {1}:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    # ------------------------------------------------------------------
+    # Terminal-exit propagation through if/elif/else  (CR-SA46-REV-001)
+    # ------------------------------------------------------------------
+
+    def test_class_helper_after_if_true_return_unreachable_fails(self) -> None:
+        """Helper after ``if True: return`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if True:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_if_true_return_dead_trailing_stmt_unreachable_fails(
+        self,
+    ) -> None:
+        """Helper after ``if True: return; x=1`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if True:\n"
+            "            return JsonResponse({})\n"
+            "            x = 1\n"  # dead trailing statement
+            "        _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_return_dead_trailing_stmt_unreachable_fails(
+        self,
+    ) -> None:
+        """Helper after ``return; x=1`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        return JsonResponse({})\n"
+            "        x = 1\n"  # dead trailing statement
+            "        _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_if_true_return_dead_trailing_if_unreachable_fails(
+        self,
+    ) -> None:
+        """Helper after ``if True: return; if True: pass`` in class handler."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if True:\n"
+            "            return JsonResponse({})\n"
+            "        if True:\n"
+            "            pass\n"  # dead trailing if (unreachable)
+            "        _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_if_false_else_return_unreachable_fails(self) -> None:
+        """Helper after ``if False: pass; else: return`` in class handler."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if False:\n"
+            "            pass\n"
+            "        else:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_after_nonconstant_if_both_return_unreachable_fails(self) -> None:
+        """Helper after ``if x: return; else: return`` in class handler."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if some_condition:\n"
+            "            return JsonResponse({})\n"
+            "        else:\n"
+            "            return JsonResponse({})\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
     def test_no_http_method_names_allows_all_handlers(self) -> None:
         """Without ``http_method_names``, all standard handlers are checked."""
         source = (
@@ -466,6 +1004,62 @@ class TestCsrfExemptVisitorClassLevel:
             "class MyView(View):\n"
             "    http_method_names = ['get']\n"
             "    def get(self, request):\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    # ------------------------------------------------------------------
+    # Signed numeric literal reachability — class-level (CR-SA46-REV-002)
+    # ------------------------------------------------------------------
+
+    def test_class_helper_under_if_neg_int_reachable_passes(self) -> None:
+        """Helper inside ``if -1:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if -1:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_neg_float_zero_unreachable_fails(self) -> None:
+        """Helper inside ``if -0.0:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if -0.0:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_class_helper_under_if_neg_complex_reachable_passes(self) -> None:
+        """Helper inside ``if -1j:`` in class handler is reachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if -1j:\n"
+            "            _enforce_csrf(request)\n"
+            "        return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_class_helper_under_if_neg_complex_zero_unreachable_fails(self) -> None:
+        """Helper inside ``if -0j:`` in class handler is unreachable."""
+        source = (
+            "@method_decorator(csrf_exempt, name='dispatch')\n"
+            "class MyView(View):\n"
+            "    http_method_names = ['post']\n"
+            "    def post(self, request):\n"
+            "        if -0j:\n"
+            "            _enforce_csrf(request)\n"  # unreachable
             "        return JsonResponse({})\n"
         )
         assert _get_violation_count(source) == 1
@@ -686,7 +1280,7 @@ class TestCsrfExemptVisitorFunctionLevel:
         assert _get_violation_count(source) == 0
 
     def test_helper_under_if_empty_string_is_unreachable_fails(self) -> None:
-        r"""Helper inside ``if \"\":`` body is unreachable and rejected."""
+        r"""Helper inside ``if "":`` body is unreachable and rejected."""
         source = (
             "@csrf_exempt\n"
             "def my_view(request):\n"
@@ -696,7 +1290,358 @@ class TestCsrfExemptVisitorFunctionLevel:
         )
         assert _get_violation_count(source) == 1
 
+    # ------------------------------------------------------------------
+    # Additional literal type coverage (CR-SA46-001 resolution)
+    # ------------------------------------------------------------------
 
+    def test_helper_under_if_nonzero_float_is_reachable_passes(self) -> None:
+        """Helper inside ``if 1.0:`` body is reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if 1.0:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_nonzero_float_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if 1.0: return ...`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if 1.0:\n"
+            "        return JsonResponse({})\n"
+            "    else:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_empty_bytes_is_unreachable_fails(self) -> None:
+        r"""Helper inside ``if b"":`` body is unreachable and rejected."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            '    if b"":\n'
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_empty_tuple_is_unreachable_fails(self) -> None:
+        """Helper inside ``if ():`` body is unreachable and rejected."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if ():\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_empty_list_is_unreachable_fails(self) -> None:
+        """Helper inside ``if []:`` body is unreachable and rejected."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if []:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_empty_dict_is_unreachable_fails(self) -> None:
+        """Helper inside ``if {}:`` body is unreachable and rejected."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if {}:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_nonempty_tuple_is_reachable_passes(self) -> None:
+        """Helper inside ``if (1,):`` body is reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if (1,):\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_nonempty_list_is_reachable_passes(self) -> None:
+        """Helper inside ``if [1]:`` body is reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if [1]:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_nonempty_dict_is_reachable_passes(self) -> None:
+        """Helper inside ``if {'k': 'v'}:`` body is reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if {'k': 'v'}:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_nonempty_tuple_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if (1,): return ...`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if (1,):\n"
+            "        return JsonResponse({})\n"
+            "    else:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    # ------------------------------------------------------------------
+    # complex and Ellipsis literal coverage  (CR-SA46-REV-002)
+    # ------------------------------------------------------------------
+
+    def test_helper_under_if_nonzero_complex_is_reachable_passes(self) -> None:
+        """Helper inside ``if 1j:`` body is reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if 1j:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_zero_complex_is_unreachable_fails(self) -> None:
+        """Helper inside ``if 0j:`` body is unreachable and rejected."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if 0j:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_nonzero_complex_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if 1j: return ...`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if 1j:\n"
+            "        return JsonResponse({})\n"
+            "    else:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_ellipsis_is_reachable_passes(self) -> None:
+        """Helper inside ``if ...:`` body is reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if ...:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_ellipsis_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if ...: return ...`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if ...:\n"
+            "        return JsonResponse({})\n"
+            "    else:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    # ------------------------------------------------------------------
+    # ast.Set literal coverage  (CR-SA46-REV-002)
+    # ------------------------------------------------------------------
+
+    def test_helper_under_if_nonempty_set_is_reachable_passes(self) -> None:
+        """Helper inside ``if {1}:`` body is reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if {1}:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_nonempty_set_else_unreachable_fails(self) -> None:
+        """Helper in ``else`` of ``if {1}: return ...`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if {1}:\n"
+            "        return JsonResponse({})\n"
+            "    else:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    # ------------------------------------------------------------------
+    # Signed numeric literal reachability  (CR-SA46-REV-002)
+    # ------------------------------------------------------------------
+
+    def test_helper_under_if_neg_int_reachable_passes(self) -> None:
+        """Helper inside ``if -1:`` body is reachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if -1:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_neg_float_zero_unreachable_fails(self) -> None:
+        """Helper inside ``if -0.0:`` body is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if -0.0:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_under_if_neg_complex_reachable_passes(self) -> None:
+        """Helper inside ``if -1j:`` body is reachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if -1j:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_helper_under_if_neg_complex_zero_unreachable_fails(self) -> None:
+        """Helper inside ``if -0j:`` body is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if -0j:\n"
+            "        _enforce_csrf(request)\n"  # unreachable
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 1
+
+    # ------------------------------------------------------------------
+    # Terminal-exit propagation through if/elif/else  (CR-SA46-REV-001)
+    # ------------------------------------------------------------------
+
+    def test_helper_after_if_true_return_unreachable_fails(self) -> None:
+        """Helper after ``if True: return`` is unreachable and rejected."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if True:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_true_raise_unreachable_fails(self) -> None:
+        """Helper after ``if True: raise`` is unreachable and rejected."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if True:\n"
+            "        raise NotImplementedError()\n"
+            "    _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_true_return_dead_trailing_stmt_unreachable_fails(
+        self,
+    ) -> None:
+        """Helper after ``if True: return; x=1`` is unreachable — dead trailing stmt."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if True:\n"
+            "        return JsonResponse({})\n"
+            "        x = 1\n"  # dead trailing statement
+            "    _enforce_csrf(request)\n"  # unreachable (was scanned w/o fix)
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_return_dead_trailing_stmt_unreachable_fails(self) -> None:
+        """Helper after ``return; x=1`` is unreachable — dead trailing stmt."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    return JsonResponse({})\n"
+            "    x = 1\n"  # dead trailing statement
+            "    _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_true_return_dead_trailing_if_unreachable_fails(
+        self,
+    ) -> None:
+        """Helper after ``if True: return; if True: pass`` — dead trailing if stmt."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if True:\n"
+            "        return JsonResponse({})\n"
+            "    if True:\n"
+            "        pass\n"  # dead trailing if (unreachable)
+            "    _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_if_false_else_return_unreachable_fails(self) -> None:
+        """Helper after ``if False: pass; else: return`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if False:\n"
+            "        pass\n"
+            "    else:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+    def test_helper_after_nonconstant_if_both_return_unreachable_fails(self) -> None:
+        """Helper after ``if x: return; else: return`` is unreachable."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if some_condition:\n"
+            "        return JsonResponse({})\n"
+            "    else:\n"
+            "        return JsonResponse({})\n"
+            "    _enforce_csrf(request)\n"  # unreachable
+        )
+        assert _get_violation_count(source) == 1
+
+
+# ---------------------------------------------------------------------------
+# Integration: all currently valid real-world patterns still pass
 # ---------------------------------------------------------------------------
 # Integration: all currently valid real-world patterns still pass
 # ---------------------------------------------------------------------------
