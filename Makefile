@@ -57,6 +57,7 @@
         check-llm lint-llm typecheck-llm test-llm test-cov-llm \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
+        check-csrf-exempt \
         help
 
 # Default Python command (uses root Poetry environment)
@@ -168,6 +169,12 @@ help:
 	@echo "                               violation — all SA13.2/SA13.3 migrations"
 	@echo "                               are complete. AF9 None-path hardening"
 	@echo "                               deferred (see roadmap.md)."
+	@echo ""
+	@echo "CSRF-Exempt Gate (SA46):"
+	@echo "  make check-csrf-exempt      - Hard-fail gate pairing every csrf_exempt"
+	@echo "                               callsite with _enforce_csrf or cryptographic"
+	@echo "                               signature verification. Exits 1 on any"
+	@echo "                               unprotected csrf_exempt usage."
 	@echo ""
 	@echo "LLM Optimized Checks (Quiet on success):"
 	@echo "  make check-llm            - Run all checks quietly"
@@ -566,16 +573,24 @@ manifest-sync:
 # --- Org-Context Primitives Gate (SA13.4) ---
 
 # Hard-fail lint gate for direct external use of the three privatized
-# org-context primitives.  Exits 1 on any violation — all SA13.2/13.3
+# org-context primitives.  Exits 1 on any violation — all SA13.2/SA13.3
 # migrations are complete.  AF9 None-path hardening deferred;
 # compatibility aliases remain but trigger the gate.
 check-org-context-primitives:
 	@$(PYTHON) scripts/check_org_context_primitives.py
 
+# --- CSRF-Exempt Gate (SA46) ---
+
+# Hard-fail AST gate that requires every csrf_exempt callsite to pair
+# with _enforce_csrf or cryptographic signature verification.
+# Exits 1 on any unprotected csrf_exempt usage.
+check-csrf-exempt:
+	@$(PYTHON) scripts/check_csrf_exempt_gate.py
+
 # --- Combined Checks ---
 
-# Run all checks (lint + typecheck + test + core-compat + import-linter + manifest-sync)
-check: lint typecheck test check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives
+# Run all checks (lint + typecheck + test + core-compat + import-linter + manifest-sync + gates)
+check: lint typecheck test check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
 	@echo ""
 	@echo "🎉 All checks passed!"
 

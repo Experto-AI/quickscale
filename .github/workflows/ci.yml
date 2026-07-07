@@ -203,9 +203,37 @@ jobs:
       run: |
         make check-org-context-primitives
 
+  csrf-exempt-gate:
+    name: CSRF-Exempt Gate (SA46)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Verify every csrf_exempt callsite pairs with _enforce_csrf or signature verification
+      run: |
+        make check-csrf-exempt
+
   test:
     name: Run Tests (Unit + Integration)
-    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, org-context-primitives-gate]
+    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -324,7 +352,7 @@ jobs:
 
   isolation-conformance:
     name: Isolation Conformance (AF10)
-    needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate]
+    needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -405,7 +433,7 @@ jobs:
 
   lint-cli:
     name: Lint CLI Package
-    needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate]
+    needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]
     runs-on: ubuntu-latest
 
     steps:
