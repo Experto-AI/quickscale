@@ -14,6 +14,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from datetime import timedelta
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any, Protocol
@@ -325,9 +326,18 @@ def prepare_admin_uploaded_restore_artifact(
         raise
 
     # CR-SA20-REV-001: Reject already-restoring artifacts with parity to
-    # the recorded-artifact branch.
+    # the recorded-artifact branch.  CR-SA38-001: stale-aware — a stale
+    # STATUS_RESTORING artifact surfaces the same recovery guidance as
+    # _get_admin_restore_ineligible_reason rather than a permanent block.
     if trusted_artifact.status == BackupArtifact.STATUS_RESTORING:
         _cleanup_admin_restore_upload_directory(staging_directory)
+        if is_restore_stale(trusted_artifact):
+            raise BackupRestoreBlocked(
+                "This backup artifact's restore appears stale "
+                f"(started at {trusted_artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC) — "
+                "the child process likely died. Reset the artifact status "
+                "from the BackupArtifact admin list to retry."
+            )
         raise BackupRestoreBlocked(
             "This backup artifact is currently being "
             "restored. Wait for the restore to "
@@ -505,3 +515,106 @@ def dispatch_background_prune() -> None:
         raise BackupError(
             f"Failed to dispatch background backup pruning: {exc}"
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# SA38 — Stale restore detection and guarded reset
+# ---------------------------------------------------------------------------
+
+STALE_RESTORE_THRESHOLD_MINUTES: int = 30
+"""Threshold beyond which a STATUS_RESTORING artifact is considered stale.
+
+A killed restore child (OOM, redeploy) can strand STATUS_RESTORING
+indefinitely because the child only sets STATUS_FAILED on Python
+exceptions, never on SIGKILL.  This constant defines the staleness
+boundary so operators can reset stranded artifacts without manual
+DB edits.
+"""
+
+
+def is_restore_stale(artifact: BackupArtifact) -> bool:
+    """Return whether a ``STATUS_RESTORING`` artifact exceeds the stale threshold.
+
+    Parameters
+    ----------
+    artifact :
+        The backup artifact to check.  Only ``STATUS_RESTORING`` artifacts
+        with a non-None ``restore_started_at`` older than 30 minutes are
+        considered stale.
+
+    Returns
+    -------
+    bool
+        ``True`` when the artifact is stale and eligible for reset.
+    """
+    if artifact.status != BackupArtifact.STATUS_RESTORING:
+        return False
+    if artifact.restore_started_at is None:
+        return False
+    threshold = django_timezone.now() - timedelta(
+        minutes=STALE_RESTORE_THRESHOLD_MINUTES
+    )
+    return artifact.restore_started_at < threshold
+
+
+def reset_stale_restore(artifact: BackupArtifact) -> None:
+    """Reset a stranded ``STATUS_RESTORING`` artifact to ``STATUS_FAILED``.
+
+    Uses a database-level compare-and-swap (CAS) so a concurrently
+    finishing child process never has its terminal status overwritten.
+    Only resets artifacts whose ``restore_started_at`` exceeds the stale
+    threshold (30 minutes).  Non-stale ``STATUS_RESTORING`` artifacts and
+    artifacts not in ``STATUS_RESTORING`` are rejected with
+    ``BackupRestoreBlocked``.
+
+    After a successful reset the in-memory *artifact* is refreshed from
+    the database.  After a failed CAS the in-memory *artifact* is also
+    refreshed so the caller can inspect the current status.
+
+    Parameters
+    ----------
+    artifact :
+        The backup artifact to reset.
+
+    Raises
+    ------
+    BackupRestoreBlocked
+        When the artifact is not ``STATUS_RESTORING``, or when the restore
+        is still within the stale threshold.
+    """
+    # Early guard: reject non-RESTORING artifacts immediately so the
+    # restore_error format string below never receives None
+    # restore_started_at.
+    if artifact.status != BackupArtifact.STATUS_RESTORING:
+        artifact.refresh_from_db()
+        raise BackupRestoreBlocked(
+            "Only backup artifacts with status 'Restoring...' can be reset."
+        )
+
+    threshold = django_timezone.now() - timedelta(
+        minutes=STALE_RESTORE_THRESHOLD_MINUTES
+    )
+    now = django_timezone.now()
+    updated = BackupArtifact.objects.filter(
+        pk=artifact.pk,
+        status=BackupArtifact.STATUS_RESTORING,
+        restore_started_at__lt=threshold,
+    ).update(
+        status=BackupArtifact.STATUS_FAILED,
+        restore_error=(
+            "Restore reset: the child process likely died or was killed. "
+            f"Artifact was stranded in STATUS_RESTORING since "
+            f"{artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC."
+        ),
+        updated_at=now,
+    )
+    artifact.refresh_from_db()
+    if updated == 0:
+        if artifact.status != BackupArtifact.STATUS_RESTORING:
+            raise BackupRestoreBlocked(
+                "Only backup artifacts with status 'Restoring...' can be reset."
+            )
+        raise BackupRestoreBlocked(
+            "This backup artifact's restore is still in progress — "
+            "restore_started_at is within the 30-minute stale threshold."
+        )
