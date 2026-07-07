@@ -51,14 +51,14 @@ git merge --no-ff wt-track{N}
 >
 > **Origin note:** SA34–SA47 trace to the 2026-07-06 triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5), each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred and remain tracked in arch-audit.md itself).
 
-> **Track status (2026-07-07, roadmap cleanup pass):** Track 1 — **0 open items, clear to continue** (SA47 complete; SA35/SA41 both complete, no blocker). Track 2 — **0 open items, complete** — all assigned work landed; idle until new work is assigned. Track 3 — **3 open items, clear to continue** (SA44, SA42 ready now, no deps; SA46's CR-SA46-REV-003 decision is made — see below — and it is now a ready Small-effort item, no longer blocked).
+> **Track status (2026-07-07, roadmap cleanup pass):** Track 1 — **0 open items, clear to continue** (SA47 complete; SA35/SA41 both complete, no blocker). Track 2 — **0 open items, complete** — all assigned work landed; idle until new work is assigned. Track 3 — **2 open items + 1 partial (blocker pending)** (SA42 ready now, no deps; SA46 ready now — CR-SA46-REV-003 decision made, see below; SA44 partial — CR-SA44-REV-001 **[module-level refresh_managed_adapters() not self-contained across test ordering]** remains blocking).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────     ───────────────────────────
-— no open items —                       — no open items —                       SA44 (deps: none)
+— no open items —                       — no open items —                       SA44 (deps: none) — partial (CR-SA44-REV-001 blocking)
                                                                                 SA42 (deps: none)
                                                                                 SA46 (deps: none) — CR-SA46-REV-003 fix, ready
 ```
@@ -78,10 +78,9 @@ No open items. All Track 2 work (SA21.2, SA37, SA38, SA40, SA43, plus its earlie
 
 #### Finding — `dr-engine-module-circular-lattice` (`why →` [arch-audit.md Finding 1](../others/arch-audit.md), stage 1 only)
 
-- [ ] **SA44 — Replace import-time adapter registration with explicit registration; delete the circular-import string-matching classifier.** `Tier 2 · Track 3 · deps: none`
-  `_initialize_managed_adapters_at_import()` triggers adapter registration as an import-time side effect, guarded by `_is_import_time_adapter_circular_import` — a classifier that string-matches CPython's "partially initialized module"/"circular import" exception text against a hand-maintained module-name allowlist (grown from 2 to 3 entries in the SA20 closeout). Replace with explicit registration (module `AppConfig.ready()` or `importlib.metadata` entry points); delete the classifier outright; split `runtime.py` into `runtime.dr` and `runtime.manifest` so the two domains stop interlocking. Does not remove core→module imports (that's arch-audit Option 2 — persistence port — deferred to a future phase).
-  *Files:* `manifest/entry_point.py:1436-1462,1511`, `quickscale_core/src/quickscale_core/runtime.py:107-141,152-272`.
-  *Acceptance:* `test_manifest_entry_point.py` (the SA20 test for the classifier) becomes the regression harness for the replacement and passes; the string-matching classifier is gone; adapter registration is an explicit act, not an import-time side effect; importing DR-flavored code no longer trips manifest-adapter registration as a side effect.
+> **SA44 — partial** (blocking finding CR-SA44-REV-001 remains — see below). Replaced import-time adapter registration with explicit registration via `MANAGED_ADAPTER_ORIGINS.add("social")` + `refresh_managed_adapters()`. Deleted the `_is_import_time_adapter_circular_import` string-matching classifier outright. Split `runtime.py` into `runtime/__init__.py` (combined facade), `runtime/dr.py` (DR surface), and `runtime/manifest.py` (manifest/social surface) so the two domains stop interlocking at import time. Repointed social module's adapter imports from `quickscale_core.manifest.entry_point` to `quickscale_core.runtime.manifest` (the new canonical seam). Production prior-base-path refresh fix landed in `module_wiring_manager.py`. Broad targeted validation green across all changed files. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
+>
+> **Remaining blocker (CR-SA44-REV-001):** the module-level `refresh_managed_adapters()` reduces one import-order dependency, but `_build_specs()` is still not self-contained because later tests can mutate the global managed-adapter registry before the helper runs. Suggested next step: refresh at point of use inside `_build_specs()` or add a function-scoped autouse fixture so managed-module builds are self-contained regardless of prior suite state. Blocking finding at `quickscale_cli/tests/commands/test_module_config_extended.py`. The user chose to stop further fixing, keep the shipped work, and record this blocker. SA44 as a whole remains open pending resolution of this blocker.
 
 #### Finding — `entry-point-posthook-permissive-coercion-defaults` (`why →` [TA40](../others/tech-audit.md))
 

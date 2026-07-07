@@ -160,7 +160,18 @@ def regenerate_managed_wiring(
                     False,
                     f"Managed adapter wiring failed: {error}",
                 )
-        elif _prior_base_path is None:
+        elif _prior_base_path is not None:
+            # Prior base path is active (e.g. maintainer monorepo) — refresh
+            # managed adapters so the registry is current before building
+            # managed-module specs (CR-SA44-REV-001).
+            try:
+                refresh_managed_adapters()
+            except ImproperlyConfigured as error:
+                return (
+                    False,
+                    f"Managed adapter wiring failed: {error}",
+                )
+        else:
             return (
                 False,
                 "Modules base path not configured and no embedded module "

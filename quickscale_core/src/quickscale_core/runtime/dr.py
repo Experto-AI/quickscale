@@ -1,39 +1,16 @@
 """
-QuickScale runtime API facade — public re-export surface for generated-project code.
+QuickScale runtime API facade — DR / disaster recovery re-export surface.
 
-SA9.3: Pure re-export layer. No behavior change. All symbols are imported from
-their canonical internal locations and re-exported so that module code imports
-only from ``quickscale_core.runtime`` instead of reaching directly into
-``dr_engine``, ``contracts``, or ``manifest`` internals.
-
-SA9.4: Backups module imports now go through this facade instead of reaching
-directly into ``dr_engine.{orchestration,primitives,recovery,verification}``.
-
-NOTE: Symbols from ``dr_engine.orchestration``, ``dr_engine.recovery``, and
-``dr_engine.verification`` are loaded lazily because ``orchestration`` depends
-on ``quickscale_modules_backups.models`` at module level.  Direct imports
-(``from quickscale_core.runtime import X``) work transparently via
-``__getattr__`` — no extra imports needed by callers.
+This sub-module exports the DR adapter surface (``ADAPTER_FUNCTIONS``,
+``BackupError``, ``capture_snapshot``, …) and lazy backup-dependent symbols
+from the ``dr_engine`` sub-packages.  Module-owned manifest adapters that
+only need the manifest/resolver surface should import from
+``quickscale_core.runtime.manifest`` instead.
 """
 
 from __future__ import annotations
 
 import typing
-
-# ---------------------------------------------------------------------------
-# Social-manifest surface: path constants
-# ---------------------------------------------------------------------------
-from quickscale_core.contracts.module_options import (
-    SOCIAL_EMBEDS_PATH,
-    SOCIAL_INTEGRATION_BASE_PATH,
-    SOCIAL_INTEGRATION_EMBEDS_PATH,
-    SOCIAL_LINK_TREE_PATH,
-)
-
-# ---------------------------------------------------------------------------
-# Social-manifest surface: resolver
-# ---------------------------------------------------------------------------
-from quickscale_core.contracts.resolvers import resolve_social_module_options
 
 # ---------------------------------------------------------------------------
 # DR adapter surface
@@ -51,29 +28,7 @@ from quickscale_core.dr_engine.adapter import (
 from quickscale_core.dr_engine.primitives import BackupError
 
 # ---------------------------------------------------------------------------
-# Manifest assembler and resolver
-# ---------------------------------------------------------------------------
-from quickscale_core.manifest.assembler import assemble_wiring_spec
-from quickscale_core.manifest.resolver import ResolverResult
-
-# ---------------------------------------------------------------------------
-# Social-manifest surface: renderers and helpers
-# ---------------------------------------------------------------------------
-from quickscale_core.manifest.social_manifest import (
-    load_social_manifest,
-    render_social_managed_init_module,
-    render_social_managed_urls_module,
-    render_social_managed_views_module,
-    social_provider_supports_embeds,
-)
-
-# ---------------------------------------------------------------------------
-# Module wiring spec
-# ---------------------------------------------------------------------------
-from quickscale_core.module_wiring import ModuleWiringSpec
-
-# ---------------------------------------------------------------------------
-# Public API — __all__ includes both eagerly-available and lazy symbols
+# Public API — DR surface (both eagerly-available and lazy symbols)
 # ---------------------------------------------------------------------------
 
 __all__ = [
@@ -123,22 +78,6 @@ __all__ = [
     "RestoreResult",  # noqa: F822
     "RestoreSourceResolutionMode",  # noqa: F822
     "RestoreWarning",  # noqa: F822
-    # Manifest/resolver types
-    "ModuleWiringSpec",
-    "ResolverResult",
-    "assemble_wiring_spec",
-    # Social-manifest path constants
-    "SOCIAL_EMBEDS_PATH",
-    "SOCIAL_INTEGRATION_BASE_PATH",
-    "SOCIAL_INTEGRATION_EMBEDS_PATH",
-    "SOCIAL_LINK_TREE_PATH",
-    # Social-manifest surface
-    "load_social_manifest",
-    "render_social_managed_init_module",
-    "render_social_managed_urls_module",
-    "render_social_managed_views_module",
-    "resolve_social_module_options",
-    "social_provider_supports_embeds",
 ]
 
 # ---------------------------------------------------------------------------
@@ -149,7 +88,6 @@ __all__ = [
 # installed.  The following tables define which symbols belong to which
 # submodule.  ``__getattr__`` loads the correct submodule on first access.
 
-_LAZY_ADAPTER_SYMBOLS: set[str] = set()
 _LAZY_ORCHESTRATION_SYMBOLS: frozenset[str] = frozenset(
     {
         "BackupLockError",
