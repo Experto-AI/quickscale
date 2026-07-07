@@ -47,35 +47,28 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA21.2 (2026-07-07), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05), SA34 (2026-07-06), SA35 (2026-07-07), SA36 (2026-07-07), SA37 (2026-07-07), SA38 (2026-07-07), SA39 (2026-07-06), SA40 (2026-07-06), SA41 (2026-07-07), SA43 (2026-07-07), SA44 (2026-07-07), SA45 (2026-07-06), SA47 (2026-07-07), SA48 (2026-07-07), SA49 (2026-07-07), SA51 (2026-07-07), SA52 (2026-07-07), SA55 (2026-07-07). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA21.2 (2026-07-07), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05), SA34 (2026-07-06), SA35 (2026-07-07), SA36 (2026-07-07), SA37 (2026-07-07), SA38 (2026-07-07), SA39 (2026-07-06), SA40 (2026-07-06), SA41 (2026-07-07), SA43 (2026-07-07), SA44 (2026-07-07), SA45 (2026-07-06), SA47 (2026-07-07), SA48 (2026-07-07), SA49 (2026-07-07), SA50 (2026-07-07), SA51 (2026-07-07), SA52 (2026-07-07), SA55 (2026-07-07). All closed per template rule — detail lives in CHANGELOG.md.
 >
 > **Origin note:** SA34–SA47 trace to the 2026-07-06 triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5), each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred and remain tracked in arch-audit.md itself).
 >
 > **Origin note (2026-07-07, fix-plan pass):** SA48–SA56 trace to the 2026-07-07 delta-pass findings in [tech-audit.md](../others/tech-audit.md) (TA42–TA46) and [arch-audit.md](../others/arch-audit.md) (Finding 1's red flags and CR-SA44-REV-001 blocker, Finding 4's coverage-boundary sub-item, Finding 5's two remaining Option 1 pieces plus the billing migration promoted from "long tail" to scheduled work per user decision — no idiom is grandfathered as permanent legacy), each sized Tier 1–2. Every item fit Tier 1–2 without splitting; the two items large enough to flag (SA50, the `OrgApiBaseView` fold; SA56, the billing DRF migration) are Tier 2, not Tier 3.
 
-> **Track status (2026-07-07, SA46 review follow-up resolved):** Track 1 — **1 open item, ready now, no blockers** (SA50 — SA47/SA48/SA49 complete). Track 2 — **2 open items, ready now, no blockers** (SA53, SA54 — SA51/SA52 complete; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **1 open item, ready now, no blockers** (SA56 ready now — SA42, SA44, SA46 and its review follow-up, and SA55 complete). No track is blocked — all open items are actionable with no user decision required.
+> **Track status (2026-07-07, SA46 review follow-up resolved):** Track 1 — **0 open items, all complete** (SA48, SA49, SA50 — SA50 now complete). Track 2 — **2 open items, 1 blocked** (SA51/SA52 complete; SA53 — **blocked by CR-SA53-REV-002** — the fd-owned copy loop must handle short `os.write()` results before closeout; SA54 ready after SA53 is unblocked; remaining items still soft-sequenced on `backups/services.py`). Track 3 — **1 open item, ready now, no blockers** (SA56 ready now — SA42, SA44, SA46 and its review follow-up, and SA55 complete).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA50 (deps: none)                       SA53 (deps: none)                         SA42 (deps: none)
-                                         SA54 (deps: none; soft-seq after SA53)    SA56 (deps: none)
+(none — track complete)                 SA53 (deps: none; **blocked by CR-SA53-REV-002**)  SA56 (deps: none)
+                                         SA54 (deps: none; soft-seq after SA53)
 ```
 
-All three tracks run fully in parallel — no cross-track file overlap exists. The "soft-seq" notes above are intra-track only: same-file edits ordered to avoid needless rebasing, not hard technical dependencies.
+All three tracks run fully in parallel — no hard cross-track implementation dependencies exist; each track's implementation files are independent. (The shared closeout files `CHANGELOG.md` and `docs/technical/roadmap.md` are the one exception — every track touches them during closeout, but that overlap is managed by the merge procedure above rather than being an implementation dependency.) The "soft-seq" notes above are intra-track only: same-file edits ordered to avoid needless rebasing, not hard technical dependencies.
 
 ### Track 1 — Tenant-context surface
 
-SA47, SA48, SA49 are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). New open item this pass, below.
-
-#### Finding — `json-api-boundary-idiom-fragmentation` (`why →` [arch-audit.md Finding 5](../others/arch-audit.md), Option 1 remaining piece — the fold)
-
-- [ ] **SA50 — Fold orgs' `JsonApiMixin`/`JsonOrganizationAccessMixin` stack into one `OrgApiBaseView`.** `Tier 2 · Track 1 · deps: none`
-  Eight `OrgApi*` views (`orgs/views.py:944-1271`) each subclass a two-level mixin stack (`JsonApiMixin` → `JsonAuthenticationRequiredMixin`/`JsonOrganizationAccessMixin`) that re-implements CSRF/auth/org-role/parsing per view — one of three coexisting idioms for authed state-changing JSON endpoints (SA46 already gated the silent-miss failure mode across all three; this fold reduces the template count). Fold the stack into one `OrgApiBaseView` that every `OrgApi*` view subclasses, preserving current behavior (auth, org-role checks, JSON error bodies) with a single implementation.
-  *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/views.py:219-1271`.
-  *Acceptance:* all eight `OrgApi*` views subclass the new `OrgApiBaseView`; `JsonApiMixin`/`JsonAuthenticationRequiredMixin`/`JsonOrganizationAccessMixin` are removed or reduced to thin aliases if still referenced elsewhere; the existing `orgs` API test suite passes unchanged (behavior-preserving refactor, not a new contract).
+All items in Track 1 are complete (SA47, SA48, SA49, SA50) — detail in [CHANGELOG.md](../../CHANGELOG.md). SA50 folded the `JsonApiMixin`/`JsonOrganizationAccessMixin` stack into one `OrgApiBaseView` as part of the `json-api-boundary-idiom-fragmentation` finding (see [arch-audit.md Finding 5](../others/arch-audit.md)).
 
 ### Track 2 — Module contracts & settings
 
@@ -94,9 +87,12 @@ SA21.2, SA37, SA38, SA40, SA43, SA51, plus its earlier share of the SA19–SA33 
 SA52 is complete — detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 - [ ] **SA53 — Make the uploaded-restore-artifact copy crash-safe.** `Tier 1 · Track 2 · deps: none`
-  `prepare_admin_uploaded_restore_artifact` (`services.py:365-366`) unlinks the existing local artifact file before `shutil.copy2`, with no `try/finally` — a copy failure (disk full, permissions) destroys the prior local copy and leaks the `mkdtemp` staging directory. Fix: copy to a temp name and `os.replace` into place atomically, and clean up the staging directory in a `finally`.
+  `prepare_admin_uploaded_restore_artifact` (`services.py:365-366`) unlinks the existing local artifact file before `shutil.copy2`, with no `try/finally` — a copy failure (disk full, permissions) destroys the prior local copy and leaks the `mkdtemp` staging directory. Fix: copy to a temp file under the same directory and `os.replace` into place atomically, and clean up the staging directory in a `finally`.
   *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/services.py:281-370` (`prepare_admin_uploaded_restore_artifact`).
   *Acceptance:* a simulated copy failure (e.g. mocked `shutil.copy2` raising) leaves the pre-existing local artifact file intact and the staging directory removed; a regression test covers this path.
+  **Shipped (not complete — see blocker below):** Changed the local-artifact copy from `unlink(missing_ok=True)` + `shutil.copy2` (destroy-on-failure) to `shutil.copy2` to a `.tmp` suffix file + `os.replace` (atomic same-filesystem swap), preserving the existing artifact on any copy failure. All manual `_cleanup_admin_restore_upload_directory` calls in early-exit paths were consolidated into a single `finally` block so the staging directory is never leaked. Added `TestPrepareAdminUploadedRestoreArtifactSA53` in `test_services.py` with two regression tests: one proving a mocked `shutil.copy2` `OSError` leaves both the pre-existing file intact and the staging directory cleaned, and one proving the happy path materializes content at the authoritative backup location and persists `local_path`.
+
+  **Blocking — CR-SA53-REV-002:** The fd-based copy loop in `services.py:376-381` ignores partial `os.write()` results, so a local restore artifact can be silently truncated/corrupted while the function reports success. Fix before closing SA53: handle short `os.write()` results (or use an fd-backed file object without reopening by pathname) and add a short-write regression test. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ### Track 3 — Core/CLI plumbing
 
@@ -115,7 +111,9 @@ SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`) is complete — de
 - [x] **SA46 (CR-SA46-REV-003) — Fold `not`/`~`/unary-on-bool into `_literal_truthiness()`.** `Tier 2 · Track 3 · deps: none (CR-SA46-001 and CR-SA46-REV-002 already shipped, see CHANGELOG.md)`
   Extended `_literal_truthiness()` to fold the remaining compile-time unary literal cases: `ast.Not` on any literal with defined truthiness (inverts the operand), `ast.Invert` (~) on `int`/`bool` constants, and `UAdd`/`USub` on `bool` constants (`+True`→truthy, `-False`→falsey). Added 28 focused `_literal_truthiness` unit tests covering `not` on all literal types, `~` on int/bool, and `+`/`-` on bool, plus 10 function-level and 10 class-level visitor reachability tests proving `if not 0:`-style dead branches are now reliably caught by the hard-fail gate. All existing SA46/CR-SA46-001/CR-SA46-REV-002 tests continue to pass. Closes CR-SA46-REV-003 and SA46 as a whole.
 
-SA55 is complete — detail in [CHANGELOG.md](../../CHANGELOG.md).
+- [x] **SA55 — Add a decisions.md rule naming the two sanctioned JSON-API bases.** `Tier 1 · Track 3 · deps: none`
+  **SA55 — complete.** Added [`§json-api-endpoint-base-contract`](./decisions.md#json-api-endpoint-base-contract) to decisions.md: DRF baseline for generic authed endpoints, `OrgApiBaseView` (SA50 now complete) for org-role-scoped endpoints, and an explicit statement that billing's plain-View + manual-CSRF idiom is scheduled for removal (SA56) rather than grandfathered as permanent legacy — matches the project's fail-hard/no-workarounds posture rather than the "migrate opportunistically" framing this item started with.
+  *(why →* [arch-audit.md Finding 5](../others/arch-audit.md)*, Option 1 remaining pieces — the rule and the migration)*
 
 - [ ] **SA56 — Migrate billing's four plain-View state-changing endpoints onto the DRF baseline.** `Tier 2 · Track 3 · deps: none (SA55 complete — the sanctioned-base rule now exists in decisions.md)`
   `CreateCheckoutSessionView` (`:160`), `CreateSubscriptionCheckoutView` (`:216`), `CancelSubscriptionView` (`:272`), and `CreateBillingPortalSessionView` (`:327`) are plain Django `View` classes wrapped in `@method_decorator(csrf_exempt, name="dispatch")` with a hand-written `_enforce_csrf()` call at the top of each `post()` — the idiom SA46's gate now polices but doesn't remove. The same file already has four `APIView`-based endpoints (`PlanListView`, `CreditBalanceView`, `CreditTransactionListView`, `SubscriptionDetailView`, `StripePublishableKeyView`) proving the DRF pattern works in this exact module: DRF's `SessionAuthentication` enforces CSRF automatically for session-authenticated requests, so migrating removes the manual `csrf_exempt`/`_enforce_csrf` pair entirely rather than just gating it. `StripeWebhookView`'s `csrf_exempt` is out of scope — it is signature-verified, a different trust class already in SA46's allowlist, not a login-required user endpoint.

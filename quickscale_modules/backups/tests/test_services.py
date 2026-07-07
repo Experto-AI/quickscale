@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
@@ -1134,7 +1135,7 @@ class TestBackupLifecycle:
             call_count += 1
             if call_count == 1:
                 raise BackupError("release metadata exploded")
-            return original_builder(captured_at=captured_at)
+            return original_builder(captured_at=captured_at)  # type: ignore[no-any-return]
 
         monkeypatch.setattr(
             "quickscale_core.dr_engine.orchestration._build_release_metadata",
@@ -4168,3 +4169,374 @@ class TestGetManagePySA52:
         with patch.object(backup_services.sys, "argv", [str(manage_py)]):
             result = backup_services._get_manage_py()
         assert result == str(manage_py)
+
+
+# ---------------------------------------------------------------------------
+# SA53 — Crash-safe copy for prepare_admin_uploaded_restore_artifact
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestPrepareAdminUploadedRestoreArtifactSA53:
+    """SA53: Crash-safe local artifact copy in prepare_admin_uploaded_restore_artifact."""
+
+    def test_copy_failure_preserves_existing_artifact_and_cleans_staging(
+        self,
+        tmp_path: Path,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """SA53 / CR-SA53-REV-001: A write failure (disk full, permissions)
+        during the fd-based copy leaves the pre-existing local artifact file
+        intact and the staging directory is cleaned up."""
+        # Pre-existing artifact file at the target backup location
+        existing_file = tmp_path / "backups" / backup_artifact.filename
+        existing_file.parent.mkdir(parents=True, exist_ok=True)
+        existing_file.write_bytes(b"pre-existing backup content")
+        original_content = existing_file.read_bytes()
+
+        # Artifact must be in a claimable status so the STATUS_RESTORING
+        # guard passes.
+        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.save(update_fields=["status", "updated_at"])
+
+        # Staged upload — a different file from the existing one
+        staged_file = tmp_path / "staged" / "upload.dump"
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        staged_file.write_bytes(b"staged upload content")
+        staged = backup_services.StagedAdminRestoreUpload(
+            local_path=staged_file,
+            checksum_sha256=backup_artifact.checksum_sha256,
+            size_bytes=backup_artifact.size_bytes,
+        )
+
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(tmp_path / "backups"),
+            remote_bucket_name="",
+            remote_prefix="",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+
+        monkeypatch.setattr(
+            backup_services,
+            "_stage_admin_restore_upload",
+            lambda uploaded_file, staging_directory=None: staged,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "_resolve_admin_uploaded_restore_artifact",
+            lambda checksum_sha256, size_bytes: backup_artifact,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "load_policy_snapshot",
+            lambda: policy,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "get_local_backup_directory",
+            lambda policy: Path(policy.local_directory),
+        )
+
+        cleanup_calls: list[Path] = []
+        original_cleanup = backup_services._cleanup_admin_restore_upload_directory
+
+        def track_cleanup(directory: Path) -> None:
+            cleanup_calls.append(directory)
+            original_cleanup(directory)
+
+        monkeypatch.setattr(
+            backup_services,
+            "_cleanup_admin_restore_upload_directory",
+            track_cleanup,
+        )
+
+        def failing_write(_fd: int, _data: bytes) -> int:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(os, "write", failing_write)
+
+        with pytest.raises(OSError, match="disk full"):
+            backup_services.prepare_admin_uploaded_restore_artifact(
+                SimpleUploadedFile("upload.dump", b"data"),
+                confirmation=backup_artifact.filename,
+            )
+
+        # The pre-existing file at the target location must still be intact
+        assert existing_file.read_bytes() == original_content
+
+        # The staging cleanup must have been called (proves the finally
+        # block executed despite the copy failure).
+        assert len(cleanup_calls) >= 1
+
+    def test_copy_success_uses_atomic_replace(
+        self,
+        tmp_path: Path,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """SA53: On success, the staged file is safely materialized at the
+        authoritative backup location and local_path is persisted."""
+        target_dir = tmp_path / "backups"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.save(update_fields=["status", "updated_at"])
+
+        staged_file = tmp_path / "staged" / "upload.dump"
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        staged_file.write_bytes(b"staged upload content")
+        staged = backup_services.StagedAdminRestoreUpload(
+            local_path=staged_file,
+            checksum_sha256=backup_artifact.checksum_sha256,
+            size_bytes=backup_artifact.size_bytes,
+        )
+
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(target_dir),
+            remote_bucket_name="",
+            remote_prefix="",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+
+        monkeypatch.setattr(
+            backup_services,
+            "_stage_admin_restore_upload",
+            lambda uploaded_file, staging_directory=None: staged,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "_resolve_admin_uploaded_restore_artifact",
+            lambda checksum_sha256, size_bytes: backup_artifact,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "load_policy_snapshot",
+            lambda: policy,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "get_local_backup_directory",
+            lambda policy: Path(policy.local_directory),
+        )
+
+        cleanup_calls: list[Path] = []
+        original_cleanup = backup_services._cleanup_admin_restore_upload_directory
+
+        def track_cleanup(directory: Path) -> None:
+            cleanup_calls.append(directory)
+            original_cleanup(directory)
+
+        monkeypatch.setattr(
+            backup_services,
+            "_cleanup_admin_restore_upload_directory",
+            track_cleanup,
+        )
+
+        result = backup_services.prepare_admin_uploaded_restore_artifact(
+            SimpleUploadedFile("upload.dump", b"data"),
+            confirmation=backup_artifact.filename,
+        )
+
+        assert result.pk == backup_artifact.pk
+        assert result.local_path == str(target_dir / backup_artifact.filename)
+        result.refresh_from_db()
+        assert result.local_path == str(target_dir / backup_artifact.filename)
+
+        target_file = target_dir / backup_artifact.filename
+        assert target_file.exists()
+        assert target_file.read_bytes() == b"staged upload content"
+
+        # Staging cleanup must have been called
+        assert len(cleanup_calls) >= 1
+
+    def test_symlink_preseed_at_deterministic_temp_path_does_not_escape(
+        self,
+        tmp_path: Path,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """CR-SA53-REV-001 regression: A symlink pre-seeded at the former
+        deterministic temp location must not redirect the copy. Because the
+        fix uses mkstemp (unique, non-deterministic path), the pre-seeded
+        symlink is never accessed. The final persisted path must be a regular
+        file inside the backup directory."""
+        target_dir = tmp_path / "backups"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        escape_target = tmp_path / "outside-root.json"
+        escape_target.write_text("do not touch")
+        original_escape_content = escape_target.read_bytes()
+
+        # Pre-seed the old deterministic temp path as an out-of-tree symlink
+        # (CR-SA53-REV-001 vulnerability vector)
+        artifact_filename = backup_artifact.filename
+        symlink_path = target_dir / f"{artifact_filename}.tmp"
+        symlink_path.symlink_to(escape_target)
+
+        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.save(update_fields=["status", "updated_at"])
+
+        staged_file = tmp_path / "staged" / "upload.dump"
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        staged_file.write_bytes(b"staged upload content")
+        staged = backup_services.StagedAdminRestoreUpload(
+            local_path=staged_file,
+            checksum_sha256=backup_artifact.checksum_sha256,
+            size_bytes=backup_artifact.size_bytes,
+        )
+
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(target_dir),
+            remote_bucket_name="",
+            remote_prefix="",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+
+        monkeypatch.setattr(
+            backup_services,
+            "_stage_admin_restore_upload",
+            lambda uploaded_file, staging_directory=None: staged,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "_resolve_admin_uploaded_restore_artifact",
+            lambda checksum_sha256, size_bytes: backup_artifact,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "load_policy_snapshot",
+            lambda: policy,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "get_local_backup_directory",
+            lambda policy: Path(policy.local_directory),
+        )
+
+        result = backup_services.prepare_admin_uploaded_restore_artifact(
+            SimpleUploadedFile("upload.dump", b"data"),
+            confirmation=backup_artifact.filename,
+        )
+
+        result.refresh_from_db()
+        persisted_path = Path(result.local_path)
+        assert persisted_path == target_dir / backup_artifact.filename
+        assert persisted_path.is_file()
+        assert not persisted_path.is_symlink()
+        assert persisted_path.read_bytes() == b"staged upload content"
+
+        # Escape target must be untouched — the pre-seeded symlink was
+        # never followed because mkstemp creates a unique temp file
+        # rather than reusing the deterministic path.
+        assert escape_target.read_bytes() == original_escape_content
+        assert escape_target.read_text() == "do not touch"
+
+    def test_fd_write_eliminates_close_then_reopen_race(
+        self,
+        tmp_path: Path,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """CR-SA53-REV-001 seam-specific regression: The implementation must
+        write through the file descriptor and never reopen the temp pathname
+        by name for writing.  After the fix, ``shutil.copy2`` must not be
+        called during the copy-and-replace sequence — that would reintroduce
+        the close-then-reopen race."""
+        copy2_calls: list[tuple[str | Path, str | Path]] = []
+
+        def tracking_copy2(src: str | Path, dst: str | Path) -> None:
+            copy2_calls.append((src, dst))
+
+        monkeypatch.setattr(shutil, "copy2", tracking_copy2)
+
+        target_dir = tmp_path / "backups"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.save(update_fields=["status", "updated_at"])
+
+        staged_file = tmp_path / "staged" / "upload.dump"
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        staged_file.write_bytes(b"staged upload content")
+        staged = backup_services.StagedAdminRestoreUpload(
+            local_path=staged_file,
+            checksum_sha256=backup_artifact.checksum_sha256,
+            size_bytes=backup_artifact.size_bytes,
+        )
+
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(target_dir),
+            remote_bucket_name="",
+            remote_prefix="",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+
+        monkeypatch.setattr(
+            backup_services,
+            "_stage_admin_restore_upload",
+            lambda uploaded_file, staging_directory=None: staged,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "_resolve_admin_uploaded_restore_artifact",
+            lambda checksum_sha256, size_bytes: backup_artifact,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "load_policy_snapshot",
+            lambda: policy,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "get_local_backup_directory",
+            lambda policy: Path(policy.local_directory),
+        )
+
+        result = backup_services.prepare_admin_uploaded_restore_artifact(
+            SimpleUploadedFile("upload.dump", b"data"),
+            confirmation=backup_artifact.filename,
+        )
+
+        # copy2 must NOT have been called — the fix eliminates the
+        # close-then-reopen-by-name pattern entirely.
+        assert len(copy2_calls) == 0
+
+        result.refresh_from_db()
+        target_file = target_dir / backup_artifact.filename
+        assert result.local_path == str(target_file)
+        assert target_file.exists()
+        assert target_file.is_file()
+        assert not target_file.is_symlink()
+        assert target_file.read_bytes() == b"staged upload content"
