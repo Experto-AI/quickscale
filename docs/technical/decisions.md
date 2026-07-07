@@ -1080,6 +1080,21 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 ---
 
+### JSON API Endpoint Base Contract {#json-api-endpoint-base-contract}
+
+**Rule (2026-07-07):** Every authed, state-changing JSON endpoint subclasses one of exactly two sanctioned bases. There is no third permanent option.
+
+- ✅ **DRF baseline** (`rest_framework.views.APIView` + `IsAuthenticated`) — the default for any new JSON endpoint that does not need organization-role scoping. Already used by billing's read endpoints, crm, and forms.
+- ✅ **`OrgApiBaseView`** (roadmap: [SA50](./roadmap.md)) — for endpoints that need organization-role/membership scoping specifically. Chosen as a second sanctioned base rather than reimplementing org-role checks as a DRF permission class, because that logic is tenant-isolation-adjacent (see §multitenant-saas-architecture) and rewriting working, tested code for stylistic consistency alone carries regression risk for no user-visible benefit — the same tradeoff arch-audit weighed and rejected when it evaluated full DRF consolidation for billing.
+- ❌ **Billing's plain-`View` + `@csrf_exempt` + manual `_enforce_csrf()` idiom is not a third sanctioned option and is not grandfathered as legacy-forever.** It predates this rule and is scheduled for removal (roadmap: [SA56](./roadmap.md)), not merely discouraged for new code — this project removes workarounds rather than permanently tolerating them alongside the sanctioned shape.
+- ❌ Signature-verified webhooks (Stripe, etc.) are a different trust class and are exempt from this rule — they use `csrf_exempt` because the calling party cannot present a CSRF token; verified instead by the SA46 pairing gate (`scripts/check_csrf_exempt_gate.py`).
+
+**Status (2026-07-07):** target state, not yet fully landed. `OrgApiBaseView` doesn't exist yet — orgs' `JsonApiMixin`/`JsonOrganizationAccessMixin` stack is still open work (SA50). Billing's four plain-View endpoints haven't been migrated yet (SA56). Until both land, the three idioms described in [arch-audit.md Finding 5](../others/arch-audit.md) (`json-api-boundary-idiom-fragmentation`) remain in code; the SA46 CI gate already closes the silent-CSRF-hole failure mode in the meantime.
+
+**Related docs:** [roadmap.md](./roadmap.md) (SA50, SA55, SA56) | [arch-audit.md](../others/arch-audit.md) (Finding 5)
+
+---
+
 ### Notifications Contract (v0.83.0 behavior)
 
 - Authoritative notifications configuration lives in `quickscale.yml`, generated Django settings, and environment variables. Any `NotificationSettings` admin surface is a read-only operational snapshot only, with no secrets and no alternate mutable config path.
