@@ -260,7 +260,14 @@ def _atomic_claim_restore(artifact: BackupArtifact) -> bool:
 
 
 def _get_manage_py() -> str:
-    """Return the path to manage.py for subprocess management-command dispatch."""
+    """Return the path to manage.py for subprocess management-command dispatch.
+
+    Raises
+    ------
+    BackupError
+        When neither ``sys.argv[0]`` nor ``settings.BASE_DIR / manage.py``
+        resolves to an existing file.
+    """
     script = Path(sys.argv[0])
     if script.name == "manage.py" and script.exists():
         return str(script)
@@ -273,7 +280,7 @@ def _get_manage_py() -> str:
             return str(candidate)
     except Exception:
         pass
-    return "manage.py"
+    raise BackupError("manage.py could not be resolved")
 
 
 def prepare_admin_uploaded_restore_artifact(
