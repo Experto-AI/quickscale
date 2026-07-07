@@ -1100,7 +1100,12 @@ def test_member_list_allows_superuser_without_membership(client, settings) -> No
 
 
 @pytest.mark.django_db
-def test_member_list_blocks_last_owner_demotion_and_removal(client, settings) -> None:
+def test_member_list_blocks_last_owner_demotion_but_allows_removal_when_sole_member(
+    client, settings
+) -> None:
+    """Last-owner demotion is blocked (model-level invariant) but
+    removal is now permitted when the owner is the sole member —
+    nobody is stranded (SA47)."""
     settings.QUICKSCALE_MODE = "saas"
     organization = Organization.objects.create(name="Orbit", slug="orbit")
     owner = get_user_model().objects.create_user(
@@ -1123,6 +1128,12 @@ def test_member_list_blocks_last_owner_demotion_and_removal(client, settings) ->
             "role": OrgRole.ADMIN,
         },
     )
+
+    # Demotion is blocked (last-owner invariant).
+    assert demote_response.status_code == 400
+    membership.refresh_from_db()
+    assert membership.role == OrgRole.OWNER
+
     remove_response = client.post(
         f"/orgs/{organization.slug}/members/",
         {
@@ -1131,11 +1142,52 @@ def test_member_list_blocks_last_owner_demotion_and_removal(client, settings) ->
         },
     )
 
-    membership.refresh_from_db()
-    assert demote_response.status_code == 400
+    # Removal succeeds — sole owner with no other members is not blocking.
+    assert remove_response.status_code == 302
+    assert not OrganizationMembership.objects.filter(pk=membership.pk).exists()
+
+
+@pytest.mark.django_db
+def test_member_list_blocks_last_owner_removal_when_other_members_exist(
+    client, settings
+) -> None:
+    """Last-owner removal is blocked when other members would be
+    stranded ownerless (SA47)."""
+    settings.QUICKSCALE_MODE = "saas"
+    organization = Organization.objects.create(name="Vega", slug="vega")
+    owner = get_user_model().objects.create_user(
+        username="vega-owner",
+        email="vega-owner@example.com",
+        password="secret123",
+    )
+    other_member = get_user_model().objects.create_user(
+        username="vega-member",
+        email="vega-member@example.com",
+        password="secret123",
+    )
+    owner_membership = OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    client.force_login(owner)
+
+    remove_response = client.post(
+        f"/orgs/{organization.slug}/members/",
+        {
+            "action": "remove",
+            "membership_id": owner_membership.pk,
+        },
+    )
+
     assert remove_response.status_code == 400
-    assert membership.role == OrgRole.OWNER
-    assert OrganizationMembership.objects.filter(pk=membership.pk).exists()
+    assert "You cannot remove the last owner" in remove_response.content.decode()
+    assert OrganizationMembership.objects.filter(pk=owner_membership.pk).exists()
 
 
 @pytest.mark.django_db

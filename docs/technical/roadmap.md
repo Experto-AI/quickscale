@@ -51,28 +51,24 @@ git merge --no-ff wt-track{N}
 >
 > **Origin note:** SA34–SA47 trace to the 2026-07-06 triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5), each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred and remain tracked in arch-audit.md itself).
 
-> **Track status (2026-07-07, roadmap cleanup pass):** Track 1 — **1 open item, clear to continue** (SA47; deps SA35/SA41 both complete, no blocker). Track 2 — **0 open items, complete** — all assigned work landed; idle until new work is assigned. Track 3 — **3 open items, clear to continue** (SA44, SA42 ready now, no deps; SA46's CR-SA46-REV-003 decision is made — see below — and it is now a ready Small-effort item, no longer blocked).
+> **Track status (2026-07-07, roadmap cleanup pass):** Track 1 — **0 open items, clear to continue** (SA47 complete; SA35/SA41 both complete, no blocker). Track 2 — **0 open items, complete** — all assigned work landed; idle until new work is assigned. Track 3 — **3 open items, clear to continue** (SA44, SA42 ready now, no deps; SA46's CR-SA46-REV-003 decision is made — see below — and it is now a ready Small-effort item, no longer blocked).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────     ───────────────────────────
-SA47 (deps: SA35, SA41 — both           — no open items —                       SA44 (deps: none)
-  complete; soft sequence only)                                                 SA42 (deps: none)
-                                                                                 SA46 (deps: none) — CR-SA46-REV-003 fix, ready
+— no open items —                       — no open items —                       SA44 (deps: none)
+                                                                                SA42 (deps: none)
+                                                                                SA46 (deps: none) — CR-SA46-REV-003 fix, ready
 ```
 
 ### Track 1 — Tenant-context surface
 
 #### Finding — `deletion-invariants-per-boundary-reimplementation` (`why →` [arch-audit.md Finding 2](../others/arch-audit.md), first step only)
 
-- [ ] **SA47 — Move the last-owner deletion-blocking check into orgs as the single implementation.** `Tier 2 · Track 1 · deps: SA35, SA41 (soft sequence — same files, land after to avoid rebasing onto still-changing exception handling)`
-  Two divergent implementations of "never remove the last owner" exist today: `OrganizationMembership.delete()` (lock-guarded, unconditional) and `AccountDeleteView._get_blocking_orgs_for_deletion` (unlocked check-then-act, "allowed when no other members"). Move the check into orgs as the canonical implementation, pick one semantic, and make `AccountDeleteView` call it. Full Option 1 (orgs-owned deletion service, `pre_delete` receiver backstop for every ORM path, billing seam integration) is out of scope for this phase — this is the first step only.
-  *Files:* `quickscale_modules/auth/src/quickscale_modules_auth/views.py:112-153`, `quickscale_modules/orgs/src/quickscale_modules_orgs/models.py:231-252`.
-  *Acceptance:* a single last-owner rule lives in orgs; both call sites (the model delete guard and `AccountDeleteView`) use it; existing SA28 tests pass against the unified implementation, plus a new concurrent-deletion test (two co-owners of the same org deleting accounts concurrently cannot both pass and leave the org ownerless).
-
-Deps (SA35, SA41) are both complete — SA47 is ready to start, no blocker.
+- [x] **SA47 — Move the last-owner deletion-blocking check into orgs as the single implementation.** `Tier 2 · Track 1 · deps: SA35, SA41 (soft sequence — same files, land after to avoid rebasing onto still-changing exception handling)`
+  **SA47 — complete.** Added `OrganizationMembership.is_last_owner_with_members()` — the canonical SA47 last-owner check that returns True when the user is the sole owner and the org has other members. All three prior call sites now use it: `OrganizationMembership.delete()` (model-level lock-guarded guard), `AccountDeleteView._get_blocking_orgs_for_deletion` (via delegation), `MemberListView.remove` and `OrgApiMemberRemoveView` (view-layer removal). `AccountDeleteView.form_valid` now wraps the guard check + user deletion in `transaction.atomic()` with `select_for_update` on all owner orgs, serializing concurrent account deletions that share an org. The concurrent regression test (`test_concurrent_account_deletion_locking_protects_last_owner`) proves exactly one deletion succeeds when two co-owners attempt to delete simultaneously — the org never becomes ownerless while non-owner members remain. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ### Track 2 — Module contracts & settings
 
