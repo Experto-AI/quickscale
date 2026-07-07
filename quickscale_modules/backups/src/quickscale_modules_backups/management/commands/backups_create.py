@@ -14,6 +14,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:  # type: ignore[no-untyped-def]
         parser.add_argument(
+            "--trigger",
+            choices=["manual", "scheduled", "admin"],
+            help="Explicit trigger provenance. Overrides --scheduled when given.",
+        )
+        parser.add_argument(
             "--scheduled",
             action="store_true",
             help="Mark the created artifact as coming from an external scheduler.",
@@ -31,7 +36,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
-        trigger = "scheduled" if options["scheduled"] else "manual"
+        raw_trigger = options.get("trigger")
+        trigger: str
+        if raw_trigger:
+            trigger = raw_trigger
+        elif options["scheduled"]:
+            trigger = "scheduled"
+        else:
+            trigger = "manual"
         resume_snapshot_id = (
             str(options.get("resume_snapshot_id") or "").strip() or None
         )

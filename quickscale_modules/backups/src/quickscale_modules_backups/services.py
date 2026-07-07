@@ -438,3 +438,70 @@ def dispatch_background_restore(
             ]
         )
         raise
+
+
+# ---------------------------------------------------------------------------
+# SA37 — Async create/prune dispatch lifecycle
+# ---------------------------------------------------------------------------
+
+
+def dispatch_background_create(
+    *,
+    trigger: str = "admin",
+) -> None:
+    """Dispatch ``backups_create`` via subprocess, returning immediately.
+
+    Spawns the ``backups_create`` management command in a background
+    subprocess so the admin request returns without blocking on
+    ``pg_dump`` or optional S3 upload.
+
+    Parameters
+    ----------
+    trigger :
+        Provenance to pass as ``--trigger <value>``.  Preserves
+        backward-compatible ``--scheduled`` for the scheduled path.
+
+    Raises
+    ------
+    BackupError
+        When ``subprocess.Popen`` itself fails (not a command error).
+    """
+    manage_py = _get_manage_py()
+    argv = [sys.executable, manage_py, "backups_create"]
+    if trigger == "scheduled":
+        argv.append("--scheduled")
+    elif trigger != "manual":
+        # CR-SA37-001: pass non-default triggers (e.g. "admin") as
+        # --trigger so the management command preserves provenance.
+        argv.extend(["--trigger", trigger])
+
+    try:
+        subprocess.Popen(argv, close_fds=True)
+    except Exception as exc:
+        raise BackupError(
+            f"Failed to dispatch background backup creation: {exc}"
+        ) from exc
+
+
+def dispatch_background_prune() -> None:
+    """Dispatch ``backups_prune`` via subprocess, returning immediately.
+
+    Spawns the ``backups_prune`` management command in a background
+    subprocess so the admin request returns without blocking on
+    file deletion or remote cleanup.
+
+    Raises
+    ------
+    BackupError
+        When ``subprocess.Popen`` itself fails (not a command error).
+    """
+    manage_py = _get_manage_py()
+    try:
+        subprocess.Popen(
+            [sys.executable, manage_py, "backups_prune"],
+            close_fds=True,
+        )
+    except Exception as exc:
+        raise BackupError(
+            f"Failed to dispatch background backup pruning: {exc}"
+        ) from exc
