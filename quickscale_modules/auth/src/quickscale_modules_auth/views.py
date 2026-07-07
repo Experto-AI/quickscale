@@ -6,15 +6,17 @@ from typing import Any
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView, DetailView, UpdateView
+from quickscale_modules_orgs.models import (
+    Organization,
+    OrganizationMembership,
+    OrgRole,
+)
 
 from quickscale_modules_auth.forms import ProfileUpdateForm
-from quickscale_modules_orgs.models import (
-    OrgRole,
-    OrganizationMembership,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -78,31 +80,61 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
     # ------------------------------------------------------------------
 
     def form_valid(self, form: Any) -> HttpResponse:
-        """Validate account-deletion invariants before proceeding."""
+        """Validate account-deletion invariants before proceeding.
+
+        Wraps the guard check, subscription cancellation, and user
+        deletion in a single atomic block.  All orgs where the user is
+        an owner are row-locked (``select_for_update``) before the
+        guard check, so concurrent account deletions that share an org
+        are serialized — preventing the SA47 race where two co-owners
+        both see "another owner exists" and both delete their accounts,
+        leaving the org ownerless.
+        """
         user = self.request.user
 
-        # 1. Last-owner guard — block deletion if the user is the sole
-        #    owner of any shared org that still has other members.
-        blocking_orgs = self._get_blocking_orgs_for_deletion(user)
-        if blocking_orgs:
-            messages.error(
-                self.request,
-                "Account cannot be deleted because you are the sole "
-                "owner of: "
-                + ", ".join(blocking_orgs)
-                + ". Transfer ownership to another member before "
-                "deleting your account.",
+        with transaction.atomic():
+            # Lock all orgs where the user is an owner to serialize
+            # concurrent deletions that share an organization.
+            owner_org_ids = list(
+                OrganizationMembership.objects.filter(
+                    user=user,
+                    role=OrgRole.OWNER,
+                ).values_list("organization_id", flat=True)
             )
-            return self.form_invalid(form)
+            if owner_org_ids:
+                list(
+                    Organization.objects.select_for_update()
+                    .filter(pk__in=owner_org_ids)
+                    .order_by("pk")
+                )
 
-        # 2. Cancel any active subscription on the user's personal org
-        #    so the Stripe subscription is not orphaned.
-        self._cancel_personal_org_subscriptions(user)
+            # 1. Last-owner guard — block deletion if the user is the
+            #    sole owner of any shared org that still has other
+            #    members.
+            blocking_orgs = self._get_blocking_orgs_for_deletion(user)
+            if blocking_orgs:
+                messages.error(
+                    self.request,
+                    "Account cannot be deleted because you are the sole "
+                    "owner of: "
+                    + ", ".join(blocking_orgs)
+                    + ". Transfer ownership to another member before "
+                    "deleting your account.",
+                )
+                return self.form_invalid(form)
 
-        # 3. Fire the success message (previously attempted in a dead
-        #    ``delete()`` override that never ran under Django >= 4.0).
-        messages.success(self.request, "Your account has been deleted successfully.")
-        return super().form_valid(form)
+            # 2. Cancel any active subscription on the user's personal
+            #    org so the Stripe subscription is not orphaned.
+            self._cancel_personal_org_subscriptions(user)
+
+            # 3. Fire the success message (previously attempted in a
+            #    dead ``delete()`` override that never ran under
+            #    Django >= 4.0).
+            messages.success(
+                self.request,
+                "Your account has been deleted successfully.",
+            )
+            return super().form_valid(form)
 
     def form_invalid(self, form: Any) -> HttpResponse:
         """Re-render the confirmation template on invariant failure."""
@@ -116,10 +148,11 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         """Return names of orgs where *user* is the sole owner and the
         org still has other members.
 
-        Sole-member personal orgs are naturally skipped here (no other
-        members to protect) and handled by the subscription-cancellation
-        path instead.  Personal orgs with other members are included so
-        that last-owner protection applies to them too.
+        Delegates to the canonical ``OrganizationMembership`` check
+        (SA47).  Sole-member personal orgs are naturally skipped here
+        (no other members to protect) because ``is_last_owner_with_members``
+        checks for other members first.  Personal orgs with other members
+        are included so that last-owner protection applies to them too.
         """
         blocking: list[str] = []
         owner_memberships = OrganizationMembership.objects.filter(
@@ -128,31 +161,11 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
         ).select_related("organization")
 
         for membership in owner_memberships:
-            org = membership.organization
-
-            # Skip orgs with no other members — nothing to protect.
-            other_members_exist = (
-                OrganizationMembership.objects.filter(organization=org)
-                .exclude(user=user)
-                .exists()
-            )
-            if not other_members_exist:
-                continue
-
-            # Skip orgs that have at least one other owner — they can
-            # manage without this user.
-            other_owners_exist = (
-                OrganizationMembership.objects.filter(
-                    organization=org,
-                    role=OrgRole.OWNER,
-                )
-                .exclude(user=user)
-                .exists()
-            )
-            if other_owners_exist:
-                continue
-
-            blocking.append(org.name)
+            if OrganizationMembership.is_last_owner_with_members(
+                user=user,
+                organization=membership.organization,
+            ):
+                blocking.append(membership.organization.name)
 
         return blocking
 
