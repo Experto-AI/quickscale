@@ -97,6 +97,8 @@ AUTHENTICATION_BACKENDS = [
 ]
 LOGIN_REDIRECT_URL = "/"
 QUICKSCALE_MODE = "solo"
+USE_X_FORWARDED_FOR = False
+TRUSTED_PROXY_COUNT = 0
 
 # Required by modules in INSTALLED_APPS that have AppConfig.ready() guards:
 # SA17.2 — billing enabled-flag
