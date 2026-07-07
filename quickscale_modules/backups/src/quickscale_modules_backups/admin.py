@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
-import sys
 from pathlib import Path
-from tempfile import mkdtemp
 from typing import TYPE_CHECKING, Any
 
 from django import forms
@@ -16,7 +12,6 @@ from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils import timezone as django_timezone
 from django.utils.html import format_html
 
 from quickscale_modules_backups.models import (
@@ -26,18 +21,13 @@ from quickscale_modules_backups.models import (
 )
 from quickscale_modules_backups.services import (
     BackupError,
-    BackupRestoreBlocked,
     RestoreSourceResolutionMode,
-    # Admin uploaded-file staging/resolution/cleanup seam
-    _cleanup_admin_restore_upload_directory,
-    _resolve_admin_uploaded_restore_artifact,
-    _stage_admin_restore_upload,
     create_backup,
     delete_artifact_files,
+    dispatch_background_restore,
     download_backup_path,
     ensure_default_policy,
-    get_local_backup_directory,
-    load_policy_snapshot,
+    prepare_admin_uploaded_restore_artifact,
     prune_expired_backups,
     restore_admin_uploaded_backup,
     restore_backup_artifact,
@@ -46,70 +36,6 @@ from quickscale_modules_backups.services import (
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
-
-
-_ARTIFACT_RESTORE_CLAIMABLE_STATUSES: frozenset[str] = frozenset(
-    {
-        BackupArtifact.STATUS_READY,
-        BackupArtifact.STATUS_VALIDATED,
-        BackupArtifact.STATUS_FAILED,
-        BackupArtifact.STATUS_RESTORED,
-    }
-)
-"""Pre-claim statuses eligible for an atomic restore claim.
-
-Excludes STATUS_DELETED (terminal — never restorable) and
-STATUS_RESTORING (already claimed by another request).
-"""
-
-
-def _atomic_claim_restore(artifact: BackupArtifact) -> bool:
-    """Atomically claim *artifact* for restore via DB compare-and-swap.
-
-    Uses a single filtered ``update()`` to transition the artifact from an
-    eligible pre-claim status to ``STATUS_RESTORING``.  Only the caller that
-    wins the race sees ``updated > 0``; losers re-read the artifact and
-    return ``False``.
-
-    After a successful claim the in-memory *artifact* is refreshed from the
-    database so its attributes reflect ``STATUS_RESTORING`` /
-    ``restore_started_at`` / ``restore_error``.  After a failed claim the
-    in-memory *artifact* is also refreshed so the caller can inspect the
-    current status to surface an appropriate reason.
-
-    Callers **must** snapshot ``artifact.status``, ``restore_started_at``,
-    and ``restore_error`` *before* calling this function if they need to
-    roll back on a subsequent spawn failure.
-    """
-    now = django_timezone.now()
-    updated = BackupArtifact.objects.filter(
-        pk=artifact.pk,
-        status__in=_ARTIFACT_RESTORE_CLAIMABLE_STATUSES,
-    ).update(
-        status=BackupArtifact.STATUS_RESTORING,
-        restore_started_at=now,
-        restore_error="",
-        updated_at=now,
-    )
-    artifact.refresh_from_db()
-    return updated > 0
-
-
-def _get_manage_py() -> str:
-    """Return the path to manage.py for subprocess management-command dispatch."""
-    script = Path(sys.argv[0])
-    if script.name == "manage.py" and script.exists():
-        return str(script)
-    try:
-        from django.conf import settings
-
-        base = Path(settings.BASE_DIR)
-        candidate = base / "manage.py"
-        if candidate.exists():
-            return str(candidate)
-    except Exception:
-        pass
-    return "manage.py"
 
 
 class BackupPolicyRestoreForm(forms.Form):
@@ -548,245 +474,29 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                             ):
                                 assert selected_artifact is not None
                                 confirm_value = form.cleaned_data["confirmation"]
-                                manage_py = _get_manage_py()
-
-                                # CR-SA20-007: Persist STATUS_RESTORING before
-                                # Popen so a fast child terminal update is never
-                                # missed or overwritten.  Roll back to the
-                                # pre-spawn status/metadata on spawn failure so a
-                                # retried FAILED/RESTORED artifact does not lose
-                                # its prior restore_started_at and restore_error.
-                                # CR-SA20-REV-002: Use atomic compare-and-swap
-                                # so concurrent submissions do not both dispatch
-                                # Popen for the same artifact.
-                                pre_spawn_status = selected_artifact.status
-                                pre_spawn_restore_started_at = (
-                                    selected_artifact.restore_started_at
+                                dispatch_background_restore(
+                                    selected_artifact,
+                                    confirmation=confirm_value,
                                 )
-                                pre_spawn_restore_error = (
-                                    selected_artifact.restore_error
-                                )
-                                if not _atomic_claim_restore(selected_artifact):
-                                    ineligible_reason = (
-                                        self._get_admin_restore_ineligible_reason(
-                                            selected_artifact
-                                        )
-                                    )
-                                    if ineligible_reason is not None:
-                                        raise BackupRestoreBlocked(ineligible_reason)
-                                    raise BackupRestoreBlocked(
-                                        "This backup artifact is currently being "
-                                        "restored. Wait for the restore to "
-                                        "complete before retrying."
-                                    )
-                                try:
-                                    subprocess.Popen(
-                                        [
-                                            sys.executable,
-                                            manage_py,
-                                            "backups_restore",
-                                            str(selected_artifact.pk),
-                                            "--confirm",
-                                            confirm_value,
-                                            "--local-only",
-                                        ],
-                                        close_fds=True,
-                                    )
-                                except Exception:
-                                    # Rollback: restore pre-spawn status/metadata
-                                    # so a spawn failure never strands the artifact
-                                    # in STATUS_RESTORING or loses prior failure
-                                    # metadata on retry.
-                                    selected_artifact.status = pre_spawn_status
-                                    selected_artifact.restore_started_at = (
-                                        pre_spawn_restore_started_at
-                                    )
-                                    selected_artifact.restore_error = (
-                                        pre_spawn_restore_error
-                                    )
-                                    selected_artifact.save(
-                                        update_fields=[
-                                            "status",
-                                            "restore_started_at",
-                                            "restore_error",
-                                            "updated_at",
-                                        ]
-                                    )
-                                    raise
                             else:
-                                # SA20 uploaded-file restore: route through
-                                # the trusted authoritative seam before
-                                # dispatching the background restore.  Uses
-                                # the same staging + trusted resolver as
-                                # restore_admin_uploaded_backup (sync flow)
-                                # so that ambiguous, incomplete-snapshot,
-                                # and untrusted cases are rejected
-                                # identically.
-                                uploaded_file = form.cleaned_data["uploaded_file"]
-                                staging_directory = Path(
-                                    mkdtemp(prefix=("quickscale-backups-admin-upload-"))
+                                # SA43: Delegate uploaded-file
+                                # materialization/persistence to the
+                                # service layer.  The admin view is now
+                                # limited to validated form input,
+                                # service calls, and operator messaging
+                                # for this flow.
+                                trusted_artifact = (
+                                    prepare_admin_uploaded_restore_artifact(
+                                        form.cleaned_data["uploaded_file"],
+                                        confirmation=(
+                                            form.cleaned_data["confirmation"]
+                                        ),
+                                    )
                                 )
-                                try:
-                                    staged_upload = _stage_admin_restore_upload(
-                                        uploaded_file,
-                                        staging_directory=(staging_directory),
-                                    )
-                                    trusted_artifact = (
-                                        _resolve_admin_uploaded_restore_artifact(
-                                            checksum_sha256=(
-                                                staged_upload.checksum_sha256
-                                            ),
-                                            size_bytes=(staged_upload.size_bytes),
-                                        )
-                                    )
-                                except Exception:
-                                    _cleanup_admin_restore_upload_directory(
-                                        staging_directory
-                                    )
-                                    raise
-
-                                # CR-SA20-REV-001: Reject already-restoring
-                                # artifacts with parity to the recorded-artifact
-                                # branch.  The resolver above does not check
-                                # STATUS_RESTORING (its trust model mirrors
-                                # the sync path), so we guard here before
-                                # copy or Popen.  CR-SA20-REV-002's atomic
-                                # compare-and-swap below is the real race-proof
-                                # gate; this early check is an optimization to
-                                # avoid unnecessary work on a clearly-stale
-                                # artifact.
-                                if (
-                                    trusted_artifact.status
-                                    == BackupArtifact.STATUS_RESTORING
-                                ):
-                                    _cleanup_admin_restore_upload_directory(
-                                        staging_directory
-                                    )
-                                    raise BackupRestoreBlocked(
-                                        "This backup artifact is currently being "
-                                        "restored. Wait for the restore to "
-                                        "complete before retrying."
-                                    )
-
-                                confirm_value = form.cleaned_data["confirmation"]
-                                if confirm_value.strip() != trusted_artifact.filename:
-                                    _cleanup_admin_restore_upload_directory(
-                                        staging_directory
-                                    )
-                                    raise BackupRestoreBlocked(
-                                        "Confirmation must exactly match "
-                                        "the backup filename."
-                                    )
-
-                                # CR-SA20-005: Always remap to a trusted
-                                # path under get_local_backup_directory().
-                                # Ignore any unsafe persisted local_path
-                                # — persist only after a successful copy.
-                                policy_snapshot = load_policy_snapshot()
-                                local_dir = get_local_backup_directory(policy_snapshot)
-                                local_dir.mkdir(parents=True, exist_ok=True)
-                                local_path = local_dir / trusted_artifact.filename
-
-                                # Skip the copy when the staged upload is already at the
-                                # artifact's expected local path (same file from
-                                # testing or inline materialization).  Use
-                                # resolve() to handle symlinks and relative
-                                # vs absolute path normalization.
-                                if (
-                                    staged_upload.local_path.resolve()
-                                    != local_path.resolve()
-                                ):
-                                    # CR-SA20-005: Remove any pre-existing
-                                    # destination (including symlinks) before
-                                    # copy so we always materialize a regular
-                                    # file inside the authoritative backup
-                                    # root.
-                                    local_path.unlink(missing_ok=True)
-                                    shutil.copy2(
-                                        staged_upload.local_path,
-                                        local_path,
-                                    )
-                                _cleanup_admin_restore_upload_directory(
-                                    staging_directory
+                                dispatch_background_restore(
+                                    trusted_artifact,
+                                    confirmation=(form.cleaned_data["confirmation"]),
                                 )
-
-                                # Persist local_path only after successful
-                                # copy so a failed copy does not leave a
-                                # dangling path on the artifact.
-                                trusted_artifact.local_path = str(local_path)
-                                trusted_artifact.save(
-                                    update_fields=[
-                                        "local_path",
-                                        "updated_at",
-                                    ]
-                                )
-
-                                # Dispatch async via artifact-id path.
-                                # CR-SA20-006: Always pass --local-only so
-                                # the child never remote-materializes.
-                                # CR-SA20-007: Persist STATUS_RESTORING before
-                                # Popen so a fast child terminal update is never
-                                # missed or overwritten.  Roll back to the
-                                # pre-spawn status/metadata on spawn failure so a
-                                # retried FAILED/RESTORED artifact does not lose
-                                # its prior restore_started_at and restore_error.
-                                # CR-SA20-REV-002: Use atomic compare-and-swap
-                                # so concurrent submissions do not both dispatch
-                                # Popen for the same artifact.
-                                manage_py = _get_manage_py()
-                                pre_spawn_status = trusted_artifact.status
-                                pre_spawn_restore_started_at = (
-                                    trusted_artifact.restore_started_at
-                                )
-                                pre_spawn_restore_error = trusted_artifact.restore_error
-                                if not _atomic_claim_restore(trusted_artifact):
-                                    if (
-                                        trusted_artifact.status
-                                        == BackupArtifact.STATUS_DELETED
-                                    ):
-                                        raise BackupRestoreBlocked(
-                                            "Deleted backup artifacts cannot be "
-                                            "restored from admin."
-                                        )
-                                    raise BackupRestoreBlocked(
-                                        "This backup artifact is currently being "
-                                        "restored. Wait for the restore to "
-                                        "complete before retrying."
-                                    )
-                                try:
-                                    subprocess.Popen(
-                                        [
-                                            sys.executable,
-                                            manage_py,
-                                            "backups_restore",
-                                            str(trusted_artifact.pk),
-                                            "--confirm",
-                                            confirm_value,
-                                            "--local-only",
-                                        ],
-                                        close_fds=True,
-                                    )
-                                except Exception:
-                                    # Rollback: restore pre-spawn status/metadata
-                                    # so a spawn failure never strands the artifact
-                                    # in STATUS_RESTORING or loses prior failure
-                                    # metadata on retry.
-                                    trusted_artifact.status = pre_spawn_status
-                                    trusted_artifact.restore_started_at = (
-                                        pre_spawn_restore_started_at
-                                    )
-                                    trusted_artifact.restore_error = (
-                                        pre_spawn_restore_error
-                                    )
-                                    trusted_artifact.save(
-                                        update_fields=[
-                                            "status",
-                                            "restore_started_at",
-                                            "restore_error",
-                                            "updated_at",
-                                        ]
-                                    )
-                                    raise
                         except Exception as exc:
                             form.add_error(
                                 None,

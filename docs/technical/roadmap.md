@@ -53,14 +53,14 @@ git merge --no-ff wt-track{N}
 >
 > **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-06):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **4 open items** (SA43 ready; SA37, SA38 chained on SA43; SA21.2 blocked on Track 3's SA36; SA40 complete). Track 3 — **4 open items** (SA36, SA42, SA44, SA46; SA34 complete).
+> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **3 open items** (SA37, SA38 chained on SA43; SA21.2 blocked on Track 3's SA36; SA40/SA43 complete). Track 3 — **4 open items** (SA36, SA42, SA44, SA46; SA34 complete).
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
-SA35 (deps: none)                         SA43 (deps: none)                           SA36 (deps: none)
+SA35 (deps: none)                         SA43 (deps: none) — complete                           SA36 (deps: none)
 SA41 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36*)       SA46 (deps: none)      │
 SA47 (deps: SA35, SA41 — soft sequence)   SA37 (deps: SA43)                           SA44 (deps: none)      │
                                            SA38 (deps: SA43)                           SA42 (deps: none)      │
@@ -133,10 +133,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `backups-admin-orchestration-accretion` (`why →` [arch-audit.md Finding 3](../others/arch-audit.md), first step only)
 
-- [ ] **SA43 — Extract the async-restore dispatch lifecycle out of `backups/admin.py` into a single service function.** `Tier 2 · Track 2 · deps: none`
-  The SA20 async-restore lifecycle (status write → `Popen` spawn → atomic claim → spawn-failure rollback) exists as two inline copies (recorded-artifact and uploaded-file dispatch branches), duplicating every subsequent fix (CR-SA20-005 through 008, REV-001/002 each needed a paired fix). Lift the recorded-artifact branch's lifecycle block into `dispatch_background_restore(artifact, *, confirmation) -> None` in `services.py`; make the uploaded-file branch call the same function.
-  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/admin.py:380-742` (both dispatch branches), `services.py`.
-  *Acceptance:* existing CR-SA20-007/REV-002 regression tests pass against the extracted function; both admin dispatch branches call the same service function with no behavior change; the admin view is left doing form handling and messaging only for this flow.
+> **SA43 — complete.** Extracted the async-restore dispatch lifecycle (atomic claim/status write → `Popen` spawn → spawn-failure rollback) from both recorded-artifact and uploaded-file admin dispatch branches into a single `dispatch_background_restore(artifact, *, confirmation)` service function. The shared `_atomic_claim_restore`, `_get_manage_py`, and `_ARTIFACT_RESTORE_CLAIMABLE_STATUSES` moved to `services.py` alongside it. Both admin dispatch branches now call the same extracted function. The uploaded-file materialization/persistence was later also moved to the service layer (`prepare_admin_uploaded_restore_artifact`), leaving the admin view responsible only for validated form input, service calls, and operator messaging for this flow. Monkeypatch targets in tests were updated from `admin.subprocess.Popen` and `admin._atomic_claim_restore` to their new `services.` locations. Full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Finding — `backups-sync-restore-blocks-worker` (`why →` [TA17](../others/tech-audit.md), narrowed to create/prune)
 
