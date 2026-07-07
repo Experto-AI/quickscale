@@ -39,6 +39,13 @@ from quickscale_modules_backups.services import (
     StagedAdminRestoreUpload,
 )
 
+# SA52: All TestBackupPolicyAdmin tests that exercise dispatch
+# (restore/create/prune) need _get_manage_py() to resolve to a valid
+# path since the test environment has no manage.py.  An autouse fixture
+# inside that class provides the patch; tests that explicitly test the
+# resolution-failure path use their own overrides.
+_PATCHED_MANAGE_PY_PATH = "/usr/bin/python3"
+
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
@@ -114,6 +121,15 @@ class TestAdminRegistration:
 @pytest.mark.django_db
 class TestBackupPolicyAdmin:
     """Tests for policy admin actions and singleton behavior."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_get_manage_py(self) -> None:
+        """Patch _get_manage_py so dispatch flows resolve in test env."""
+        with patch(
+            "quickscale_modules_backups.services._get_manage_py",
+            return_value=_PATCHED_MANAGE_PY_PATH,
+        ):
+            yield
 
     def test_has_add_permission_is_disabled_even_without_existing_policy(
         self,

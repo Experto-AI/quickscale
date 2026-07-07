@@ -4090,3 +4090,81 @@ class TestStaleRestoreDetection:
         # The child's terminal status must be preserved.
         assert backup_artifact.status == BackupArtifact.STATUS_FAILED
         assert backup_artifact.restore_error == "real child failure"
+
+
+# ---------------------------------------------------------------------------
+# SA52 — _get_manage_py fail-hard on unresolvable manage.py
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestGetManagePySA52:
+    """SA52: Regression tests for _get_manage_py fail-hard behavior."""
+
+    def test_get_manage_py_raises_when_unresolvable(self) -> None:
+        """SA52: _get_manage_py raises BackupError when neither sys.argv[0]
+        nor settings.BASE_DIR/manage.py resolves."""
+        with patch.object(backup_services.sys, "argv", ["/usr/bin/gunicorn"]):
+            with pytest.raises(BackupError, match="manage.py could not be resolved"):
+                backup_services._get_manage_py()
+
+    def test_dispatch_background_restore_fails_hard_before_claim(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """SA52: dispatch_background_restore raises BackupError from
+        _get_manage_py BEFORE _atomic_claim_restore, so no artifact
+        is left claimed."""
+        with patch.object(
+            backup_services,
+            "_get_manage_py",
+            side_effect=BackupError("manage.py could not be resolved"),
+        ):
+            with pytest.raises(BackupError, match="manage.py could not be resolved"):
+                backup_services.dispatch_background_restore(
+                    postgresql_backup_artifact,
+                    confirmation=postgresql_backup_artifact.filename,
+                )
+
+        postgresql_backup_artifact.refresh_from_db()
+        # Artifact must NOT be in STATUS_RESTORING — no claim was made.
+        assert postgresql_backup_artifact.status != BackupArtifact.STATUS_RESTORING
+        assert postgresql_backup_artifact.restore_started_at is None
+
+    def test_dispatch_background_create_fails_hard_when_unresolvable(
+        self,
+    ) -> None:
+        """SA52: dispatch_background_create raises BackupError from
+        _get_manage_py."""
+        with patch.object(
+            backup_services,
+            "_get_manage_py",
+            side_effect=BackupError("manage.py could not be resolved"),
+        ):
+            with pytest.raises(BackupError, match="manage.py could not be resolved"):
+                backup_services.dispatch_background_create(trigger="admin")
+
+    def test_dispatch_background_prune_fails_hard_when_unresolvable(
+        self,
+    ) -> None:
+        """SA52: dispatch_background_prune raises BackupError from
+        _get_manage_py."""
+        with patch.object(
+            backup_services,
+            "_get_manage_py",
+            side_effect=BackupError("manage.py could not be resolved"),
+        ):
+            with pytest.raises(BackupError, match="manage.py could not be resolved"):
+                backup_services.dispatch_background_prune()
+
+    def test_get_manage_py_returns_path_when_sys_argv_resolves(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """SA52: _get_manage_py returns the resolved path when
+        sys.argv[0] points to an existing manage.py."""
+        manage_py = tmp_path / "manage.py"
+        manage_py.touch()
+        with patch.object(backup_services.sys, "argv", [str(manage_py)]):
+            result = backup_services._get_manage_py()
+        assert result == str(manage_py)
