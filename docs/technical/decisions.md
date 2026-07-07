@@ -1116,6 +1116,7 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 - Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract.
 - Org ownership: System org owns all published-public content (blog feed, public listings, social links). Anonymous visitors see System-org rows; solo authenticated = personal org; saas authenticated = active org.
 - Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
+- **Intentional CASCADE exception (SA35):** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL/PROTECT rule for user-FKs in tenant-scoped models. Every other user-FK in `quickscale_modules_*` is SET_NULL or PROTECT (enforced by a conformance test in the orgs cross-module test harness at ``orgs/tests/test_sa35_conformance.py``).
 
 **Rejected alternatives (do not re-introduce):**
 - ❌ **Per-client Railway deployment** — linear operational overhead per tenant; not a SaaS platform

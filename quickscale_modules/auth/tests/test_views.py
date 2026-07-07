@@ -626,3 +626,110 @@ class TestAccountDeleteView:
             ANY,
             "Your account has been deleted successfully.",
         )
+
+
+# ------------------------------------------------------------------
+# SA35 — account-deletion must not CASCADE-destroy org content
+#
+# The cross-module user-FK conformance gate now lives in
+# ``orgs/tests/test_sa35_conformance.py``, where the test harness
+# includes blog, crm, and all other ``quickscale_modules_*`` apps.
+# ------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestAccountDeleteViewSA35:
+    """SA35 regression: account deletion preserves content authored by
+    the deleted user in org records that are reachable from the auth
+    test suite (orgs module installed).
+
+    Full end-to-end coverage for blog Post and CRM ContactNote /
+    DealNote requires the respective modules to be installed — those
+    tests live in each module's own test suite.
+    """
+
+    def test_account_delete_succeeds_with_personal_org_membership(
+        self, authenticated_client, user
+    ):
+        """Account deletion succeeds when the user has a personal org
+        membership (CASCADE-on-membership is intentional — SA35).  This
+        is the simplest case: a personal org where the user is the sole
+        member; no other members or shared-org protection applies."""
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        # Create an org and membership so the user has a personal org.
+        org = Organization.objects.create(
+            name="SA35 Test Org",
+            slug="sa35-test-org",
+            is_personal=True,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org,
+            role=OrgRole.OWNER,
+        )
+
+        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        # Deletion must succeed — no last-owner or other guard blocks it.
+        assert response.status_code == 302
+        assert not get_user_model().objects.filter(id=user.id).exists()
+
+    def test_account_delete_preserves_other_membership_records(
+        self, authenticated_client, user, user_data
+    ):
+        """When a user is one of multiple owners of a shared org, their
+        deletion removes only *their* membership record without affecting
+        other members or the org itself."""
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        org = Organization.objects.create(
+            name="SA35 Shared Org",
+            slug="sa35-shared-org",
+            is_personal=False,
+        )
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org,
+            role=OrgRole.OWNER,
+        )
+        User = get_user_model()
+        other_user = User.objects.create_user(
+            username="sa35_other",
+            email="sa35_other@example.com",
+            password="SA35Other123!",
+        )
+        OrganizationMembership.objects.create(
+            user=other_user,
+            organization=org,
+            role=OrgRole.OWNER,
+        )
+
+        user_id = user.id
+        org_id = org.id
+        other_user_id = other_user.id
+
+        response = authenticated_client.post(reverse("quickscale_auth:account-delete"))
+        assert response.status_code == 302
+        # User is gone.
+        assert not get_user_model().objects.filter(id=user_id).exists()
+        # Org still exists.
+        assert Organization.objects.filter(id=org_id).exists()
+        # Other user still exists.
+        assert get_user_model().objects.filter(id=other_user_id).exists()
+        # Other user's membership survives.
+        assert OrganizationMembership.objects.filter(
+            user=other_user,
+            organization=org,
+        ).exists()

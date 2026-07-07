@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "allauth",
     "allauth.account",
+    "quickscale_modules_auth",
     "quickscale_modules_orgs",
     "quickscale_modules_billing",
     "quickscale_modules_social",
@@ -38,6 +39,7 @@ INSTALLED_APPS = [
     "quickscale_modules_listings",
     "quickscale_modules_blog",
     "quickscale_modules_crm",
+    "quickscale_modules_backups",
 ]
 
 MIDDLEWARE = [
@@ -86,7 +88,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "/static/"
 SITE_ID = 1
 ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_ALLOW_REGISTRATION = True
 ACCOUNT_ADAPTER = "quickscale_modules_orgs.adapters.OrgsAccountAdapter"
+AUTH_USER_MODEL = "quickscale_modules_auth.User"
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",

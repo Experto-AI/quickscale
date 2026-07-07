@@ -275,7 +275,7 @@ class Post(TenantModel):
     slug = models.SlugField(max_length=200, blank=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="blog_posts",
         null=True,
         blank=True,
