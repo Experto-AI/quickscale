@@ -53,7 +53,8 @@ git merge --no-ff wt-track{N}
 >
 > **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **2 open items** (SA38 dependency-ready now that SA43 is complete, but implementation is paused pending stale-threshold/admin-reset decisions; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46; SA34/SA36 complete).
+> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **2 open items** (SA38 dependency-ready now that SA43 is complete, but implementation is paused pending stale-threshold/admin-reset decisions; SA21.2 unblocked now that Track 3's SA36 is complete; SA37/SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46 — partial, blocked; SA34/SA36 complete).
+
 
 ### Dependency & parallelization overview
 
@@ -61,7 +62,7 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)          Track 2 (module contracts & settings)       Track 3 (core/CLI plumbing)
 ───────────────────────────────           ───────────────────────────────────         ───────────────────────────
 SA35 (deps: none)                         SA43 (deps: none) — complete                 SA36 (deps: none) — complete
-SA41 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36 complete) SA46 (deps: none)      │
+SA41 (deps: none)                         SA21.2 (deps: SA21.1 complete, SA36 complete) SA46 (deps: none) — partial, blocked on CR-SA46-001
 SA47 (deps: SA35, SA41 — soft sequence)   SA37 (deps: SA43) — complete                 SA44 (deps: none)      │
                                            SA38 (deps: SA43)                           SA42 (deps: none)      │
                                                   ▲                                                        │
@@ -170,10 +171,14 @@ Cross-track dependency update: **SA36 is now complete**, so SA21.2 is no longer 
 
 #### Finding — `json-api-boundary-idiom-fragmentation` (`why →` [arch-audit.md Finding 5](../others/arch-audit.md), first step only)
 
-- [ ] **SA46 — Add a CI gate pairing every `csrf_exempt` callsite with a signature check or `_enforce_csrf`.** `Tier 1 · Track 3 · deps: none`
-  Three coexisting idioms exist for authed state-changing JSON endpoints (DRF baseline, orgs' `JsonApiMixin` stack, billing's plain Views manually re-implementing CSRF via `_enforce_csrf`); a new endpoint copying `@method_decorator(csrf_exempt, ...)` without the paired helper call fails no gate today. Add an AST gate — modeled on `scripts/check_org_context_primitives.py` — that fails CI when a `csrf_exempt`-decorated view doesn't call `_enforce_csrf` or verify a cryptographic signature. Full consolidation onto one base view (arch-audit's fold/migration options) is out of scope for this phase.
-  *Files:* new check module alongside `scripts/check_org_context_primitives.py`; `quickscale_modules/billing/src/quickscale_modules_billing/views.py` csrf_exempt callsites (`:82-84,158-376`) and the notifications webhook view as the correctly-exempt counter-example.
-  *Acceptance:* the gate fails CI on a `csrf_exempt` view missing `_enforce_csrf`/a signature check; existing billing and notifications callsites pass; wired into `ci.yml` alongside the other AST gates.
+- [ ] **SA46 — Add a CI gate pairing every `csrf_exempt` callsite with a signature check or `_enforce_csrf`.** `Tier 1 · Track 3 · deps: none — partial, blocked on CR-SA46-001`
+  Implementation landed: an AST gate — modeled on `scripts/check_org_context_primitives.py` — that fails CI when a `csrf_exempt`-decorated view doesn't call `_enforce_csrf` or verify a cryptographic signature. Three coexisting idioms exist for authed state-changing JSON endpoints (DRF baseline, orgs' `JsonApiMixin` stack, billing's plain Views manually re-implementing CSRF via `_enforce_csrf`); a new endpoint copying `@method_decorator(csrf_exempt, ...)` without the paired helper call fails no gate today.
+  **Implementation notes:** The gate (`scripts/check_csrf_exempt_gate.py`) scans `quickscale_modules/*/src/` for both direct `@csrf_exempt`, `@_typed_csrf_exempt` (blog wrapper), and `@method_decorator(csrf_exempt, ...)` decorators, verifying the same scope calls at least one approved helper: `_enforce_csrf`, `authenticate_blog_api_request`, `handle_stripe_event`, or `ingest_webhook_event`. Exempt modules: none. Wired as `make check-csrf-exempt`, included in `make check`, `check_ci_locally.sh` (step 7/10), and a new `csrf-exempt-gate` job in `ci.yml` (`needs` for `test`, `isolation-conformance`, `lint-cli`). Existing callsites (billing 4 session-authed views + StripeWebhookView, notifications NotificationWebhookView, blog 2 `_typed_csrf_exempt` views) all pass cleanly.
+  *Files:* `scripts/check_csrf_exempt_gate.py` (new), `Makefile`, `scripts/check_ci_locally.sh`, `.github/workflows/ci.yml`.
+  *Acceptance:* the gate fails CI on a `csrf_exempt` view missing `_enforce_csrf`/a signature check; existing billing, notifications, and blog callsites pass; wired into `ci.yml` alongside the other AST gates. Full consolidation onto one base view (arch-audit's fold/migration options) remains out of scope.
+  > **Blocked — CR-SA46-001 (high, security-boundary):** The reachability evaluator uses ad-hoc truthiness checks that miss some compile-time literal branch cases (non-zero float, empty bytes, literal tuple/list/dict). Unreachable helper code can still falsely satisfy the gate through those missed branches.
+  >
+  > **Decision needed:** Either **(A)** accept the current narrower gate (which catches the most common patterns) as sufficient and close SA46 as-is, or **(B)** do one follow-up replacing the ad-hoc truthiness checks with a safe literal-only evaluator plus focused regressions for the remaining literal-branch cases, then close SA46.
 
 #### Finding — `dr-engine-module-circular-lattice` (`why →` [arch-audit.md Finding 1](../others/arch-audit.md), stage 1 only)
 

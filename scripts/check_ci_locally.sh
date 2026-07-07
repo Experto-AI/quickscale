@@ -34,9 +34,10 @@ echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
 echo "  4. Module-core import linter (check_module_core_imports)"
 echo "  5. Manifest sync gate (sync_module_manifests)"
 echo "  6. Org-context primitives gate (check_org_context_primitives)"
-echo "  7. Type check (mypy)"
-echo "  8. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
-echo "  9. E2E tests (optional, with --e2e flag)"
+echo "  7. CSRF-exempt gate (check_csrf_exempt_gate)"
+echo "  8. Type check (mypy)"
+echo "  9. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
+echo " 10. E2E tests (optional, with --e2e flag)"
             exit 0
             ;;
     esac
@@ -95,7 +96,7 @@ fi
 echo "✓ Manifest snapshots in sync"
 
 echo ""
-echo "[6/9] Running org-context primitives gate..."
+echo "[6/10] Running org-context primitives gate..."
 make check-org-context-primitives || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -107,12 +108,24 @@ fi
 echo "✓ No direct external use of privatized org-context primitives"
 
 echo ""
-echo "[7/9] Running type checks (mypy)..."
+echo "[7/10] Running CSRF-exempt gate..."
+make check-csrf-exempt || FAILED=true
+if [ "$FAILED" = true ]; then
+    echo ""
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✗ CSRF-Exempt Gate Failed            ║"
+    echo "╚════════════════════════════════════════╝"
+    exit 1
+fi
+echo "✓ All csrf_exempt callsites are protected"
+
+echo ""
+echo "[8/10] Running type checks (mypy)..."
 make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""
-echo "[8/9] Running unit/integration tests..."
+echo "[9/10] Running unit/integration tests..."
 ./scripts/test_unit.sh || FAILED=true
 
 if [ "$FAILED" = true ]; then
@@ -127,7 +140,7 @@ echo "✓ All unit/integration tests passed"
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then
     echo ""
-    echo "[9/9] Running E2E tests (this may take several minutes)..."
+    echo "[10/10] Running E2E tests (this may take several minutes)..."
     ./scripts/test_e2e.sh || FAILED=true
 
     if [ "$FAILED" = true ]; then
@@ -140,7 +153,7 @@ if [ "$RUN_E2E" = true ]; then
     echo "✓ E2E tests passed"
 else
     echo ""
-    echo "[9/9] Skipping E2E tests (use --e2e to include)"
+    echo "[10/10] Skipping E2E tests (use --e2e to include)"
 fi
 
 echo ""
