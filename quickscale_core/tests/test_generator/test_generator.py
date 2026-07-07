@@ -12,7 +12,7 @@ from quickscale_core.generator import ProjectGenerator
 class TestProjectGeneratorInit:
     """Tests for ProjectGenerator initialization"""
 
-    def test_init_with_default_template_dir(self):
+    def test_init_with_default_template_dir(self) -> None:
         """Should initialize with default template directory"""
         generator = ProjectGenerator(theme="showcase_html")
 
@@ -20,7 +20,7 @@ class TestProjectGeneratorInit:
         assert generator.template_dir.name == "templates"
         assert generator.env is not None
 
-    def test_init_with_custom_template_dir(self, tmp_path):
+    def test_init_with_custom_template_dir(self, tmp_path: Path) -> None:
         """Should initialize with custom template directory"""
         custom_dir = tmp_path / "custom_templates"
         custom_dir.mkdir()
@@ -33,7 +33,7 @@ class TestProjectGeneratorInit:
 
         assert generator.template_dir == custom_dir
 
-    def test_init_with_nonexistent_dir(self, tmp_path):
+    def test_init_with_nonexistent_dir(self, tmp_path: Path) -> None:
         """Should raise FileNotFoundError for nonexistent directory"""
         nonexistent = tmp_path / "nonexistent"
 
@@ -44,21 +44,21 @@ class TestProjectGeneratorInit:
 class TestProjectGeneratorValidation:
     """Tests for project name validation in generator"""
 
-    def test_generate_with_invalid_name(self, tmp_path):
+    def test_generate_with_invalid_name(self, tmp_path: Path) -> None:
         """Should raise ValueError for invalid project name"""
         generator = ProjectGenerator(theme="showcase_html")
 
         with pytest.raises(ValueError, match="Invalid project name"):
             generator.generate("123invalid", tmp_path / "output")
 
-    def test_generate_with_keyword_name(self, tmp_path):
+    def test_generate_with_keyword_name(self, tmp_path: Path) -> None:
         """Should raise ValueError for Python keyword"""
         generator = ProjectGenerator(theme="showcase_html")
 
         with pytest.raises(ValueError, match="Invalid project name"):
             generator.generate("class", tmp_path / "output")
 
-    def test_generate_with_reserved_name(self, tmp_path):
+    def test_generate_with_reserved_name(self, tmp_path: Path) -> None:
         """Should raise ValueError for reserved name"""
         generator = ProjectGenerator(theme="showcase_html")
 
@@ -69,7 +69,7 @@ class TestProjectGeneratorValidation:
 class TestProjectGeneratorPathChecks:
     """Tests for output path validation"""
 
-    def test_generate_to_existing_path(self, tmp_path):
+    def test_generate_to_existing_path(self, tmp_path: Path) -> None:
         """Should raise FileExistsError if output path exists"""
         generator = ProjectGenerator(theme="showcase_html")
         existing_dir = tmp_path / "existing"
@@ -78,7 +78,7 @@ class TestProjectGeneratorPathChecks:
         with pytest.raises(FileExistsError, match="Output path already exists"):
             generator.generate("myproject", existing_dir)
 
-    def test_generate_to_unwritable_parent(self, tmp_path):
+    def test_generate_to_unwritable_parent(self, tmp_path: Path) -> None:
         """Should raise PermissionError for unwritable parent directory"""
         generator = ProjectGenerator(theme="showcase_html")
 
@@ -94,7 +94,7 @@ class TestProjectGeneratorPathChecks:
             # Restore permissions for cleanup
             readonly_dir.chmod(0o755)
 
-    def test_generate_creates_parent_directory(self, tmp_path):
+    def test_generate_creates_parent_directory(self, tmp_path: Path) -> None:
         """Should create parent directory if it does not exist"""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "myproject"
@@ -126,8 +126,8 @@ class TestProjectGeneratorGeneration:
         ],
     )
     def test_generate_emits_root_makefile_for_supported_themes(
-        self, tmp_path, theme, project_name
-    ):
+        self, tmp_path: Path, theme: str, project_name: str
+    ) -> None:
         """Supported themes should always emit the generated root Makefile."""
         generator = ProjectGenerator(theme=theme)
         output_path = tmp_path / project_name
@@ -138,7 +138,7 @@ class TestProjectGeneratorGeneration:
         assert makefile.exists()
         assert ".DEFAULT_GOAL := help" in makefile.read_text()
 
-    def test_generate_creates_project_structure(self, tmp_path):
+    def test_generate_creates_project_structure(self, tmp_path: Path) -> None:
         """Should create complete project structure"""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
@@ -171,7 +171,7 @@ class TestProjectGeneratorGeneration:
         assert (output_path / "templates" / "index.html").exists()
         assert (output_path / "static" / "css" / "style.css").exists()
 
-    def test_manage_py_is_executable(self, tmp_path):
+    def test_manage_py_is_executable(self, tmp_path: Path) -> None:
         """Should make manage.py executable"""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
@@ -182,7 +182,7 @@ class TestProjectGeneratorGeneration:
         manage_py = output_path / "manage.py"
         assert os.access(manage_py, os.X_OK)
 
-    def test_generated_files_contain_project_name(self, tmp_path):
+    def test_generated_files_contain_project_name(self, tmp_path: Path) -> None:
         """Generated files should contain the project name"""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "myapp"
@@ -197,7 +197,9 @@ class TestProjectGeneratorGeneration:
         urls_content = (output_path / project_name / "urls.py").read_text()
         assert project_name in urls_content
 
-    def test_generated_urls_modules_exports_placeholder_buckets(self, tmp_path):
+    def test_generated_urls_modules_exports_placeholder_buckets(
+        self, tmp_path: Path
+    ) -> None:
         """Generated urls_modules.py should expose raw placeholder buckets."""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "myapp"
@@ -223,7 +225,7 @@ class TestProjectGeneratorGeneration:
             in urls_modules_content
         )
 
-    def test_generated_python_files_are_valid(self, tmp_path):
+    def test_generated_python_files_are_valid(self, tmp_path: Path) -> None:
         """Generated Python files should be syntactically valid"""
         generator = ProjectGenerator(theme="showcase_html")
         project_name = "validproject"
@@ -249,10 +251,54 @@ class TestProjectGeneratorGeneration:
             compile(py_file.read_text(), str(py_file), "exec")
 
 
+class TestGeneratedProjectSettingsProxyMath:
+    """Validate emitted settings files after full project generation.
+
+    SA36 regression: the inline proxy-math comment in the generated
+    ``base.py`` must match the actual ``-TRUSTED_PROXY_COUNT`` indexing
+    used by ``get_client_ip()``. This test verifies the fix survives
+    a full project generation (regeneration-path validation).
+    """
+
+    def test_generated_base_settings_proxy_math_comment_corrected(
+        self, generated_project_path: Path
+    ) -> None:
+        """The emitted base.py must contain the corrected proxy-math comment."""
+        base_py = generated_project_path / "testproject" / "settings" / "base.py"
+        assert base_py.exists(), "Generated base.py not found"
+
+        content = base_py.read_text()
+
+        # Must contain the corrected formula (Nth from the right)
+        assert "-TRUSTED_PROXY_COUNT" in content, (
+            "Generated base.py should reference -TRUSTED_PROXY_COUNT (not the old +1 formula)"
+        )
+        # Must NOT contain the stale +1 formula
+        assert "-(TRUSTED_PROXY_COUNT + 1)" not in content, (
+            "Generated base.py must not contain the old stale +1 proxy-math formula"
+        )
+
+    def test_generated_base_settings_valid_python(
+        self, generated_project_path: Path
+    ) -> None:
+        """The emitted base.py must be syntactically valid Python."""
+        base_py = generated_project_path / "testproject" / "settings" / "base.py"
+        assert base_py.exists()
+        compile(base_py.read_text(), str(base_py), "exec")
+
+    def test_generated_settings_package_all_valid_python(
+        self, generated_project_path: Path
+    ) -> None:
+        """All emitted settings files must be syntactically valid."""
+        settings_dir = generated_project_path / "testproject" / "settings"
+        for py_file in sorted(settings_dir.glob("*.py")):
+            compile(py_file.read_text(), str(py_file), "exec")
+
+
 class TestProjectGeneratorAtomicCreation:
     """Tests for atomic project creation (rollback on failure)"""
 
-    def test_rollback_on_template_error(self, tmp_path):
+    def test_rollback_on_template_error(self, tmp_path: Path) -> None:
         """Should clean up temp directory if template rendering fails"""
         # Create generator with nonexistent template
         generator = ProjectGenerator(theme="showcase_html")
@@ -260,10 +306,10 @@ class TestProjectGeneratorAtomicCreation:
         # Monkey-patch to force an error during generation
         original_method = generator._generate_project
 
-        def failing_generate(*args, **kwargs):
+        def failing_generate(*args: object, **kwargs: object) -> None:
             raise RuntimeError("Simulated template error")
 
-        generator._generate_project = failing_generate
+        generator._generate_project = failing_generate  # type: ignore[method-assign]
 
         output_path = tmp_path / "failproject"
 
@@ -274,13 +320,13 @@ class TestProjectGeneratorAtomicCreation:
         assert not output_path.exists()
 
         # Restore original method
-        generator._generate_project = original_method
+        generator._generate_project = original_method  # type: ignore[method-assign]
 
 
 class TestProjectGeneratorMultipleProjects:
     """Tests for generating multiple projects"""
 
-    def test_generate_multiple_projects(self, tmp_path):
+    def test_generate_multiple_projects(self, tmp_path: Path) -> None:
         """Should be able to generate multiple projects"""
         generator = ProjectGenerator(theme="showcase_html")
 

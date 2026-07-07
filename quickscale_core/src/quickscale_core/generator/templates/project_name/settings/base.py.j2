@@ -48,8 +48,8 @@ ALLOWED_HOSTS = config(
 #   real client IP instead of ``REMOTE_ADDR``.
 # - ``TRUSTED_PROXY_COUNT`` (default ``0``): the number of trusted
 #   reverse proxies in front of the application.  The client IP is
-#   extracted at position ``-(TRUSTED_PROXY_COUNT + 1)`` in the
-#   ``X-Forwarded-For`` chain.
+#   extracted at position ``-TRUSTED_PROXY_COUNT`` (the Nth entry from
+#   the right) in the ``X-Forwarded-For`` chain.
 #
 # Both values feed into :func:`get_client_ip` below and into DRF's
 # ``NUM_PROXIES`` setting so that DRF throttles also resolve the
@@ -83,11 +83,13 @@ def get_client_ip(request: object) -> str:
 
     # X-Forwarded-For is a comma-separated list ordered from client to
     # most recent proxy:  client, proxy1, proxy2, ..., proxyN.
-    # When we trust N proxies, the client IP lives at index
-    # -(N + 1) in the split list.
+    # Each trusted proxy adds the previous hop's IP, so when we trust
+    # N proxies the chain has N entries and the client IP is the Nth
+    # from the right (``ips[-N]``).  This matches DRF's own
+    # ``NUM_PROXIES`` semantics.
     ips = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
-    if len(ips) > TRUSTED_PROXY_COUNT:
-        return ips[-(TRUSTED_PROXY_COUNT + 1)]
+    if len(ips) >= TRUSTED_PROXY_COUNT:
+        return ips[-TRUSTED_PROXY_COUNT]
     # Chain shorter than the declared proxy count — fail closed to
     # REMOTE_ADDR instead of trusting a potentially spoofed leftmost
     # address.

@@ -1507,12 +1507,13 @@ class TestClientIpAndSharedCache:
 
         get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
 
-        # With USE_X_FORWARDED_FOR=True and TRUSTED_PROXY_COUNT=1,
-        # the client IP should be the second-from-right in the XFF chain.
+        # Honest single-hop behind one trusted proxy:
+        # the proxy adds the client's IP to X-Forwarded-For, producing
+        # a 1-entry chain.  The client IP is ips[-1].
         class FakeRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1, 10.0.0.1",
+                "HTTP_X_FORWARDED_FOR": "198.51.100.1",
             }
 
         result = get_client_ip(FakeRequest())
@@ -1728,11 +1729,12 @@ class TestClientIpAndSharedCache:
         # get_client_ip must use production's globals at call time
         get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
 
-        # Behind one proxy — should resolve to the client, not REMOTE_ADDR
+        # Behind one proxy (honest single-hop) — should resolve to the
+        # client IP from the 1-entry XFF, not REMOTE_ADDR.
         class _FakeRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1, 10.0.0.1",
+                "HTTP_X_FORWARDED_FOR": "198.51.100.1",
             }
 
         result = get_client_ip(_FakeRequest())
@@ -1780,7 +1782,9 @@ class TestClientIpAndSharedCache:
 
         get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
 
-        # Case 1: Trailing comma produces empty hop (the reported vector)
+        # Case 1: Trailing comma produces empty hop (the reported vector).
+        # Empty hops are correctly stripped, leaving one non-empty entry
+        # which satisfies the >= guard with TRUSTED_PROXY_COUNT=1.
         class _FakeProdTrailingCommaRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
@@ -1788,17 +1792,17 @@ class TestClientIpAndSharedCache:
             }
 
         result = get_client_ip(_FakeProdTrailingCommaRequest())
-        assert result == "10.0.0.1", (
-            f"Expected REMOTE_ADDR for malformed XFF in production "
-            f"rebind, got {result!r}"
+        assert result == "203.0.113.99", (
+            f"Expected client IP from malformed XFF in production "
+            f"rebind (empty hops stripped), got {result!r}"
         )
 
-        # Case 2: Trailing comma on a valid proxied chain must not break
+        # Case 2: Trailing comma on an honest single-hop must not break
         # resolution in the production rebind.
         class _FakeProdValidTrailingCommaRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1, 10.0.0.1, ",
+                "HTTP_X_FORWARDED_FOR": "198.51.100.1, ",
             }
 
         result = get_client_ip(_FakeProdValidTrailingCommaRequest())
@@ -1807,20 +1811,20 @@ class TestClientIpAndSharedCache:
             f"in production rebind, got {result!r}"
         )
 
-    def test_get_client_ip_fails_closed_on_spoofed_xff(
+    def test_get_client_ip_attacker_xff_not_returned(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When the X-Forwarded-For chain is shorter than
-        ``TRUSTED_PROXY_COUNT``, the function must return
-        ``REMOTE_ADDR`` instead of trusting the leftmost
-        (potentially spoofed) address.
+        """When an attacker injects a spoofed ``X-Forwarded-For`` entry,
+        the function must not return the attacker-controlled value.
 
-        Regression for CR-SA21.1-002: the original algorithm fell back
-        to ``ips[0]`` when the chain was too short, letting an attacker
-        with a single spoofed XFF entry impersonate any IP.
+        SA36 regression: the original off-by-one guard (``>``) and index
+        (``-(N+1)``) let an attacker who sent a single spoofed XFF entry
+        impersonate any IP.  With the corrected ``>=`` guard and
+        ``-N`` index, the rightmost entry (vouched for by the trusted
+        proxy) is returned instead of the leftmost (attacker-controlled).
         """
         base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
@@ -1871,17 +1875,20 @@ class TestClientIpAndSharedCache:
 
         get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
 
-        # TRUSTED_PROXY_COUNT=1 but XFF has only one entry (spoof attempt)
-        class _FakeSpoofRequest:
+        # Attacker sends a spoofed XFF.  The trusted proxy appends the
+        # attacker's real IP, producing a 2-entry chain.  With
+        # TRUSTED_PROXY_COUNT=1, the rightmost entry (proxy-vouched)
+        # must be returned — not the attacker-controlled leftmost.
+        class _FakeAttackerXffRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "203.0.113.99",
+                "HTTP_X_FORWARDED_FOR": "203.0.113.99, 198.51.100.1",
             }
 
-        result = get_client_ip(_FakeSpoofRequest())
-        assert result == "10.0.0.1", (
-            f"Expected REMOTE_ADDR when XFF chain is shorter than "
-            f"TRUSTED_PROXY_COUNT, got {result!r}"
+        result = get_client_ip(_FakeAttackerXffRequest())
+        assert result == "198.51.100.1", (
+            f"Expected proxy-vouched IP (rightmost), not attacker-controlled "
+            f"leftmost, got {result!r}"
         )
 
     def test_get_client_ip_rejects_malformed_xff_empty_hops(
@@ -1947,7 +1954,9 @@ class TestClientIpAndSharedCache:
 
         get_client_ip = typing.cast(Callable[[object], str], namespace["get_client_ip"])
 
-        # Case 1: Trailing comma produces empty hop (the reported vector)
+        # Case 1: Trailing comma produces empty hop (the reported vector).
+        # Empty hops are correctly stripped, leaving one non-empty entry
+        # which satisfies the >= guard with TRUSTED_PROXY_COUNT=1.
         class _FakeTrailingCommaRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
@@ -1955,12 +1964,13 @@ class TestClientIpAndSharedCache:
             }
 
         result = get_client_ip(_FakeTrailingCommaRequest())
-        assert result == "10.0.0.1", (
-            f"Expected REMOTE_ADDR for malformed XFF with trailing "
-            f"comma, got {result!r}"
+        assert result == "203.0.113.99", (
+            f"Expected client IP from malformed XFF (empty hops stripped), "
+            f"got {result!r}"
         )
 
-        # Case 2: Double trailing comma — multiple empty trailing hops
+        # Case 2: Double trailing comma — multiple empty trailing hops.
+        # All empty hops are stripped, leaving one non-empty entry.
         class _FakeDoubleTrailingCommaRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
@@ -1968,16 +1978,17 @@ class TestClientIpAndSharedCache:
             }
 
         result = get_client_ip(_FakeDoubleTrailingCommaRequest())
-        assert result == "10.0.0.1", (
-            f"Expected REMOTE_ADDR for double trailing comma XFF, got {result!r}"
+        assert result == "203.0.113.99", (
+            f"Expected client IP from malformed XFF (empty hops stripped), "
+            f"got {result!r}"
         )
 
-        # Case 3: Trailing comma on a valid proxied chain must not break
+        # Case 3: Trailing comma on an honest single-hop must not break
         # resolution — the non-empty hops are still correctly counted.
         class _FakeValidWithTrailingCommaRequest:
             META: dict[str, str] = {
                 "REMOTE_ADDR": "10.0.0.1",
-                "HTTP_X_FORWARDED_FOR": "198.51.100.1, 10.0.0.1, ",
+                "HTTP_X_FORWARDED_FOR": "198.51.100.1, ",
             }
 
         result = get_client_ip(_FakeValidWithTrailingCommaRequest())
