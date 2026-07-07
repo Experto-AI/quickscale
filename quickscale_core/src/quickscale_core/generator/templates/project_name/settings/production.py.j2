@@ -130,8 +130,8 @@ def get_client_ip(request: object) -> str:
         return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
 
     ips = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
-    if len(ips) > TRUSTED_PROXY_COUNT:
-        return ips[-(TRUSTED_PROXY_COUNT + 1)]
+    if len(ips) >= TRUSTED_PROXY_COUNT:
+        return ips[-TRUSTED_PROXY_COUNT]
     # Chain shorter than the declared proxy count — fail closed to
     # REMOTE_ADDR instead of trusting a potentially spoofed leftmost
     # address.

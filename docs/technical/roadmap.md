@@ -53,7 +53,7 @@ git merge --no-ff wt-track{N}
 >
 > **Cleanup note (2026-07-06, later same day):** SA34, SA39, SA40, and SA45 landed and are condensed to one-line pointers above (detail in CHANGELOG.md). This pass also reconciled tech-audit.md directly — closed TA33 (SA34), TA38 (SA39), TA41 (SA40), and the TA32 doc-drift flagged in the triage note above (SA30) — and updated arch-audit.md's Finding 4 to record SA45 as a partial completion of Option 1 (purge-spec half only; `TENANT_TABLE_REGISTRY`'s derivation check and Option 2 remain open).
 
-> **Track status (2026-07-06):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **4 open items** (SA43 ready; SA37, SA38 chained on SA43; SA21.2 blocked on Track 3's SA36; SA40 complete). Track 3 — **4 open items** (SA36, SA42, SA44, SA46; SA34 complete).
+> **Track status (2026-07-07):** Track 1 — **3 open items** (SA35, SA41, SA47; SA39/SA45 complete). Track 2 — **4 open items** (SA43 ready; SA37, SA38 chained on SA43; SA21.2 blocked on Track 3's SA36; SA40 complete). Track 3 — **3 open items** (SA42, SA44, SA46; SA34/SA36 complete).
 
 ### Dependency & parallelization overview
 
@@ -167,7 +167,7 @@ Cross-track dependency: SA21.2 (Track 2) should not wire module consumers to the
 
 #### Finding — `get-client-ip-off-by-one` (`why →` [TA35](../others/tech-audit.md))
 
-- [ ] **SA36 — Fix the off-by-one in the generated `get_client_ip()` proxy-count math before SA21.2 wires consumers to it.** `Tier 1 · Track 3 · deps: none — land before SA21.2 (Track 2)`
+- [x] **SA36 — Fix the off-by-one in the generated `get_client_ip()` proxy-count math before SA21.2 wires consumers to it.** `Tier 1 · Track 3 · deps: none — land before SA21.2 (Track 2)`
   `get_client_ip()` extracts `ips[-(TRUSTED_PROXY_COUNT + 1)]` guarded by `len(ips) > TRUSTED_PROXY_COUNT`. With Railway's single hop, an honest request has chain length 1 → the guard fails → returns the **proxy IP**; a request with an attacker-supplied `X-Forwarded-For` entry returns the **attacker-controlled** value. Currently zero consumers, but it's the designated foundation for SA21.2 — fix now or TA18 goes from "collapsed" to "spoofable". Fix: `ips[-TRUSTED_PROXY_COUNT]` with `len(ips) >= TRUSTED_PROXY_COUNT`, matching DRF's own `NUM_PROXIES` semantics.
   *Files:* `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2:63-97` and the duplicate copy in `production.py.j2`.
   *Acceptance:* a template test with fixed `REMOTE_ADDR` asserts an honest single-hop request resolves to the real client IP (not the proxy), and a request with an extra attacker-supplied XFF entry does not resolve to the attacker-controlled value.
