@@ -428,13 +428,13 @@ class TestBackupPolicyAdmin:
             (
                 "create",
                 "admin:quickscale_modules_backups_backuppolicy_create",
-                "quickscale_modules_backups.admin.create_backup",
+                "quickscale_modules_backups.admin.dispatch_background_create",
                 False,
             ),
             (
                 "prune",
                 "admin:quickscale_modules_backups_backuppolicy_prune",
-                "quickscale_modules_backups.admin.prune_expired_backups",
+                "quickscale_modules_backups.admin.dispatch_background_prune",
                 False,
             ),
             (
@@ -476,11 +476,11 @@ class TestBackupPolicyAdmin:
         [
             (
                 "create_backup_now",
-                "quickscale_modules_backups.admin.create_backup",
+                "quickscale_modules_backups.admin.dispatch_background_create",
             ),
             (
                 "prune_expired_backups_now",
-                "quickscale_modules_backups.admin.prune_expired_backups",
+                "quickscale_modules_backups.admin.dispatch_background_prune",
             ),
         ],
     )
@@ -515,11 +515,11 @@ class TestBackupPolicyAdmin:
         [
             (
                 "admin:quickscale_modules_backups_backuppolicy_create",
-                "quickscale_modules_backups.admin.create_backup",
+                "quickscale_modules_backups.admin.dispatch_background_create",
             ),
             (
                 "admin:quickscale_modules_backups_backuppolicy_prune",
-                "quickscale_modules_backups.admin.prune_expired_backups",
+                "quickscale_modules_backups.admin.dispatch_background_prune",
             ),
         ],
     )
@@ -549,19 +549,55 @@ class TestBackupPolicyAdmin:
         request.user = superuser
         _attach_messages(request)
 
-        fake_artifact = BackupArtifact(
-            filename="db-project-local-20260326T120000Z.json",
-            checksum_sha256="abc",
-            size_bytes=1,
-            backup_format="json",
-            database_engine="django.db.backends.sqlite3",
-            database_name="test.sqlite3",
-        )
-
         with patch(
-            "quickscale_modules_backups.admin.create_backup", return_value=fake_artifact
-        ):
+            "quickscale_modules_backups.admin.dispatch_background_create",
+        ) as mocked_dispatch:
             policy_admin.create_backup_now(request, BackupPolicy.objects.all())
+
+        mocked_dispatch.assert_called_once_with(trigger="admin")
+        assert [message.message for message in get_messages(request)] == [
+            "Backup creation has been initiated in the background.",
+        ]
+
+    # ------------------------------------------------------------------
+    # CR-SA37-001: regression — async admin create dispatch preserves
+    # trigger="admin" in the subprocess argv
+    # ------------------------------------------------------------------
+
+    def test_async_create_dispatch_passes_admin_trigger_in_argv(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        """CR-SA37-001: Async create dispatch passes ``--trigger admin``
+        to the child process, not only in the admin-layer call.
+
+        Patches ``services.subprocess.Popen`` so we can inspect the argv
+        that reaches the OS.  This proves the full chain from the admin
+        endpoint through ``dispatch_background_create`` to the subprocess
+        invocation.
+        """
+        with patch(
+            "quickscale_modules_backups.services.subprocess.Popen",
+            return_value=MagicMock(),
+        ) as mocked_popen:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_create"),
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_popen.assert_called_once()
+        popen_args = mocked_popen.call_args[0][0]
+        assert "backups_create" in popen_args
+        assert "--trigger" in popen_args
+        trigger_index = popen_args.index("--trigger")
+        assert trigger_index + 1 < len(popen_args)
+        assert popen_args[trigger_index + 1] == "admin"
+
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Backup creation has been initiated in the background.",
+        ]
 
     def test_restore_notice_mentions_file_mode_without_broadening_admin_surface(
         self,
@@ -709,17 +745,8 @@ class TestBackupPolicyAdmin:
         admin_client: Client,
         backup_policy: BackupPolicy,
     ) -> None:
-        fake_artifact = BackupArtifact(
-            filename="db-project-local-20260326T120000Z.json",
-            checksum_sha256="abc",
-            size_bytes=1,
-            backup_format="json",
-            database_engine="django.db.backends.sqlite3",
-            database_name="test.sqlite3",
-        )
-
         with patch(
-            "quickscale_modules_backups.admin.create_backup", return_value=fake_artifact
+            "quickscale_modules_backups.admin.dispatch_background_create",
         ) as mocked_create:
             response = admin_client.post(
                 reverse("admin:quickscale_modules_backups_backuppolicy_create"),
@@ -727,9 +754,9 @@ class TestBackupPolicyAdmin:
             )
 
         assert response.status_code == 200
-        mocked_create.assert_called_once()
+        mocked_create.assert_called_once_with(trigger="admin")
         assert [message.message for message in get_messages(response.wsgi_request)] == [
-            "Created backup artifact db-project-local-20260326T120000Z.json"
+            "Backup creation has been initiated in the background.",
         ]
 
     def test_create_backup_now_button_reports_backup_errors(
@@ -738,7 +765,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
     ) -> None:
         with patch(
-            "quickscale_modules_backups.admin.create_backup",
+            "quickscale_modules_backups.admin.dispatch_background_create",
             side_effect=BackupError(
                 "Required executable 'pg_dump' is not installed in this runtime."
             ),
@@ -749,7 +776,7 @@ class TestBackupPolicyAdmin:
             )
 
         assert response.status_code == 200
-        mocked_create.assert_called_once()
+        mocked_create.assert_called_once_with(trigger="admin")
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             "Backup creation failed: Required executable 'pg_dump' is not installed in this runtime."
         ]
@@ -767,8 +794,7 @@ class TestBackupPolicyAdmin:
         client.force_login(user)
 
         with patch(
-            "quickscale_modules_backups.admin.prune_expired_backups",
-            return_value=2,
+            "quickscale_modules_backups.admin.dispatch_background_prune",
         ) as mocked_prune:
             response = client.post(
                 reverse("admin:quickscale_modules_backups_backuppolicy_prune"),
@@ -778,7 +804,7 @@ class TestBackupPolicyAdmin:
         assert response.status_code == 200
         mocked_prune.assert_called_once_with()
         assert [message.message for message in get_messages(response.wsgi_request)] == [
-            "Pruned 2 expired backup artifact(s)."
+            "Backup pruning has been initiated in the background.",
         ]
 
     def test_create_backup_action_allows_staff_user_with_change_permission(
@@ -791,18 +817,9 @@ class TestBackupPolicyAdmin:
         )
         client = Client()
         client.force_login(user)
-        fake_artifact = BackupArtifact(
-            filename="db-project-local-20260326T120000Z.json",
-            checksum_sha256="abc",
-            size_bytes=1,
-            backup_format="json",
-            database_engine="django.db.backends.sqlite3",
-            database_name="test.sqlite3",
-        )
 
         with patch(
-            "quickscale_modules_backups.admin.create_backup",
-            return_value=fake_artifact,
+            "quickscale_modules_backups.admin.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
                 reverse("admin:quickscale_modules_backups_backuppolicy_changelist"),
@@ -815,9 +832,9 @@ class TestBackupPolicyAdmin:
             )
 
         assert response.status_code == 200
-        mocked_create.assert_called_once_with(initiated_by=user, trigger="admin")
+        mocked_create.assert_called_once_with(trigger="admin")
         assert [message.message for message in get_messages(response.wsgi_request)] == [
-            "Created backup artifact db-project-local-20260326T120000Z.json"
+            "Backup creation has been initiated in the background.",
         ]
 
     def test_prune_expired_backups_action_runs_from_admin_changelist(
@@ -830,8 +847,7 @@ class TestBackupPolicyAdmin:
         )
 
         with patch(
-            "quickscale_modules_backups.admin.prune_expired_backups",
-            return_value=2,
+            "quickscale_modules_backups.admin.dispatch_background_prune",
         ) as mocked_prune:
             response = admin_client.post(
                 changelist_url,
@@ -846,7 +862,7 @@ class TestBackupPolicyAdmin:
         assert response.status_code == 200
         mocked_prune.assert_called_once_with()
         assert [message.message for message in get_messages(response.wsgi_request)] == [
-            "Pruned 2 expired backup artifact(s)."
+            "Backup pruning has been initiated in the background.",
         ]
 
     def test_prune_expired_backups_button_runs_from_custom_operator_endpoint(
@@ -855,8 +871,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
     ) -> None:
         with patch(
-            "quickscale_modules_backups.admin.prune_expired_backups",
-            return_value=2,
+            "quickscale_modules_backups.admin.dispatch_background_prune",
         ) as mocked_prune:
             response = admin_client.post(
                 reverse("admin:quickscale_modules_backups_backuppolicy_prune"),
@@ -866,7 +881,7 @@ class TestBackupPolicyAdmin:
         assert response.status_code == 200
         mocked_prune.assert_called_once_with()
         assert [message.message for message in get_messages(response.wsgi_request)] == [
-            "Pruned 2 expired backup artifact(s)."
+            "Backup pruning has been initiated in the background.",
         ]
 
     # ------------------------------------------------------------------
@@ -2358,18 +2373,9 @@ class TestBackupArtifactAdmin:
         )
         client = Client()
         client.force_login(user)
-        fake_artifact = BackupArtifact(
-            filename="db-project-local-20260326T120000Z.json",
-            checksum_sha256="abc",
-            size_bytes=1,
-            backup_format="json",
-            database_engine="django.db.backends.sqlite3",
-            database_name="test.sqlite3",
-        )
 
         with patch(
-            "quickscale_modules_backups.admin.create_backup",
-            return_value=fake_artifact,
+            "quickscale_modules_backups.admin.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
                 reverse("admin:quickscale_modules_backups_backupartifact_create"),
@@ -2377,9 +2383,9 @@ class TestBackupArtifactAdmin:
             )
 
         assert response.status_code == 200
-        mocked_create.assert_called_once_with(initiated_by=user, trigger="admin")
+        mocked_create.assert_called_once_with(trigger="admin")
         assert [message.message for message in get_messages(response.wsgi_request)] == [
-            "Created backup artifact db-project-local-20260326T120000Z.json"
+            "Backup creation has been initiated in the background.",
         ]
 
     def test_artifact_create_endpoint_denies_staff_user_without_policy_change_permission(
@@ -2393,7 +2399,9 @@ class TestBackupArtifactAdmin:
         client = Client()
         client.force_login(user)
 
-        with patch("quickscale_modules_backups.admin.create_backup") as mocked_create:
+        with patch(
+            "quickscale_modules_backups.admin.dispatch_background_create",
+        ) as mocked_create:
             response = client.post(
                 reverse("admin:quickscale_modules_backups_backupartifact_create")
             )
