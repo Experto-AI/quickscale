@@ -387,6 +387,7 @@ class TestBackupPolicyAdmin:
         assert kwargs == {
             "confirmation": postgresql_backup_artifact.filename,
             "dry_run": True,
+            "stale_threshold_minutes": 30,
         }
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             "Restore validation completed successfully (dry run)."
