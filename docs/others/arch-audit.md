@@ -33,8 +33,9 @@ test, roadmap/tech-audit in full. Sampled — SA35 conformance test, SA26 saniti
 since yesterday's deep pass (verified by diffstat: `apply_command.py`, `orgs/views.py`,
 `tenancy.py` trigger APIs, billing webhook phases all unchanged). Severity floor unchanged: CLI is
 a single-process local tool; generated apps are single-service WSGI; tenant isolation is the
-highest-blast property. Growth direction unchanged: teams is the next build; the roadmap now has
-exactly four open items (SA47, SA44, SA42, SA46-residual), all first steps of the findings below.
+highest-blast property. Growth direction unchanged: teams is the next build; SA44 and SA47 have since
+landed, SA42 is resolved, the SA46 gate is live, and SA56 (Finding 5's billing migration) is the
+remaining scheduled roadmap item.
 
 **Result: all four prior findings still open, zero new findings.** Finding 1 is *strengthened*
 (the batch paid its coordination tax again — CR-SA38-001 hand-copied a module-side guard into
@@ -49,7 +50,7 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
 | 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2; stage 1/SA44 landed 2026-07-07) | DR logic lives in core but its state and lifecycle live in the backups module, producing a bidirectional import lattice held together by hand-maintained symbol tables, a string-matching exception classifier — and now hand-copied parity guards across the boundary |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months (teams) | M remaining (receiver backstop + billing seam; first step/SA47 landed 2026-07-07) | Org/billing invariants at the account-deletion boundary are re-implemented per callsite with divergent semantics instead of being owned by their domain modules |
 | 4 | `org-model-universe-hand-enumerated` | 6–18 months (teams) | M remaining (Option 2) | orgs hand-enumerates the cross-module tenant-model universe in literals; both literals are now CI-gated against derivations (SA15.3 + SA45), but the purge plan is still hand-ordered and every gate sees only what orgs' hand-maintained test env installs |
-| 5 | `json-api-boundary-idiom-fragmentation` | 6–18 months (teams) | M remaining (fold + migration) | Three coexisting idioms for authed state-changing JSON endpoints; the silent-hole class is now closed by the SA46 CI gate, but the three templates remain and teams needs the one it should copy |
+| 5 | `json-api-boundary-idiom-fragmentation` | 6–18 months (teams) | S remaining (billing migration only) | Three coexisting idioms for authed state-changing JSON endpoints; the silent-hole class is now closed by the SA46 CI gate, the mixin fold is done (SA50), the sanctioned-base rule is done (SA55), and the billing migration (SA56) remains |
 
 ---
 
@@ -60,8 +61,8 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
   is now empirically ~1 per DR change: SA20 paid it (guard-allowlist growth), and this batch paid
   it again (CR-SA38-001 hand-copy). Failure containment remains a fragile exception-message
   classifier on the startup path of every generated app.
-- **Horizon & trigger:** `now` — SA44 (stage 1) is an open, ready roadmap item; any DR feature
-  before it lands pays the tax again.
+- **Horizon & trigger:** `now` — SA44 (stage 1) landed 2026-07-07; remaining live work is Option 2. Any DR feature
+  that needs Option 2 pays the tax again.
 - **Confidence:** High — every edge of the cycle re-verified this pass
   (`entry_point.py:1436–1511` classifier + import-time registration intact;
   `runtime.py:152–272` lazy tables intact), and the new compounding instance was read directly.
@@ -100,8 +101,8 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
     `__getattr__` lazy loader whose stated reason is the cycle itself.
   - The guard (unchanged): `manifest/entry_point.py:1436–1462` classifies benign-vs-broken adapter
     imports by string-matching CPython's exception text; `:1511`
-    `_initialize_managed_adapters_at_import()` still runs at import time. SA44 (open, Track 3,
-    ready) is scoped to exactly this.
+`_initialize_managed_adapters_at_import()` still runs at import time. SA44 (landed 2026-07-07)
+     was scoped to exactly this.
   - The linter still cannot see it: `scripts/check_module_core_imports.py` allows
     `quickscale_core.runtime` by module path only, so private-name crossings are invisible.
 - **Why it compounds:** every DR feature touches up to six stations — orchestration function +
@@ -123,7 +124,7 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
   underscore-private name crosses a package boundary; a boundary-crossing invariant (like restore
   staleness) has exactly one implementation.
 - **Options:**
-  1. **Registration-not-import + facade split (SA44, scheduled — recommended first stage).**
+   1. **Registration-not-import + facade split (SA44 — landed 2026-07-07, first stage complete).**
      Replace `_initialize_managed_adapters_at_import()` with explicit registration; delete the
      string-matching classifier; split `runtime.py` into `runtime.dr` and `runtime.manifest`.
      Removes the fragile classifier and the cross-domain trigger; does not yet remove core→module
@@ -134,12 +135,12 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
      core receiving it via the port). M–L effort.
   3. **Invert ownership.** Move all Django-model-touching orchestration into the backups module;
      core keeps only pure primitives. Largest migration; complicates the CLI's non-Django DR paths.
-- **Recommendation:** land SA44 (Option 1) now — it is scheduled and unblocked. The CR-SA38-001
-  copy-pair is the first concrete evidence for escalating to Option 2: do it the next time a DR
+- **Recommendation:** SA44 (Option 1) landed 2026-07-07. The CR-SA38-001
+   copy-pair is the first concrete evidence for escalating to Option 2: do it the next time a DR
   feature must either add lazy-table symbols *or* duplicate an invariant across the boundary.
-  · **Size:** M (stage 1) · **First step:** SA44 as written in roadmap.md — move managed-adapter
-  registration out of import time, delete the classifier; `test_manifest_entry_point.py` becomes
-  the regression harness.
+   · **Size:** M remaining · **First step:** SA44 (landed 2026-07-07) — moved managed-adapter
+   registration out of import time, deleted the classifier; `test_manifest_entry_point.py` is
+   the regression harness.
 
 ---
 
@@ -150,8 +151,8 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
   Stripe subscriptions, ownerless shared orgs); likelihood moderate today, rising sharply when
   teams multiplies membership-like invariants.
 - **Horizon & trigger:** `6–18 months` — the teams build; second trigger: the first
-  account-deletion path that isn't `AccountDeleteView` (a GDPR erasure command would be a third
-  boundary). SA47 (first step) is open and ready on Track 1.
+   account-deletion path that isn't `AccountDeleteView` (a GDPR erasure command would be a third
+   boundary). SA47 (first step) landed 2026-07-07.
 - **Confidence:** High — all implementations re-verified this pass: the two divergent last-owner
   copies are intact, and repo-wide search confirms zero `pre_delete` receivers in orgs, billing,
   or auth.
@@ -193,10 +194,11 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
   boundaries *invoke* the domain rather than re-implementing it.
 - **Options:** (unchanged from 2026-07-06 — orgs-owned deletion service + signal backstop /
   signal-only / DB-level constraints; see reconciliation history for full text.)
-- **Recommendation:** Option 1, first step already scheduled as SA47 (move the last-owner check
-  into orgs as the single implementation, pick one semantic, add the concurrent-deletion test).
-  The semantic question — which last-owner rule is canonical — is SA47's first decision.
-  · **Size:** M · **First step:** SA47 as written in roadmap.md.
+- **Recommendation:** Option 1, first step landed as SA47 2026-07-07 — the last-owner check is now
+   a single `is_last_owner_with_members()` implementation in orgs, the canonical semantic is settled,
+   and concurrent-deletion protection is in place. The finding remains open for a `pre_delete` receiver
+   backstop and the teams build.
+   · **Size:** M remaining · **First step:** SA47 (landed 2026-07-07).
 
 ---
 
@@ -314,28 +316,29 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
   `csrf_exempt` appears only where a cryptographic request authenticator replaces it; a CI gate
   enforces the pairing (**this last clause is now satisfied**).
 - **Options:**
-  1. **Gate first, consolidate opportunistically (recommended — gate half done):** ~~add the
-     pairing gate~~ (done, SA46); fold orgs' `OrgApi*` mixin stack into one `OrgApiBaseView`
-     (S, still open); declare the DRF baseline required for *new* endpoints (a decisions.md
-     paragraph, still open); migrate billing's four plain Views when next touched.
+  1. **Gate first, consolidate opportunistically (recommended — all pieces except migration done):**
+     ~~add the pairing gate~~ (done, SA46); ~~fold orgs' `OrgApi*` mixin stack~~ (done, SA50);
+     ~~declare the DRF baseline required for new endpoints~~ (done, SA55); migrate billing's four
+     plain Views (SA56, open).
   2. **Full consolidation onto DRF now** — highest regression risk on money paths for no
      user-visible change; still not recommended.
-- **Recommendation:** finish Option 1's remaining two S-size pieces before teams kickoff: the
-  `OrgApiBaseView` fold and the decisions.md rule naming the sanctioned shape for new endpoints.
-  · **Size:** M (remaining: fold S + rule S + billing migration as the long tail)
-  · **First step:** the `OrgApiBaseView` fold in `orgs/views.py:944–1271`.
+- **Recommendation:** the billing migration (SA56) is the sole remaining piece — schedule before
+  teams kickoff so teams endpoints have a clean DRF baseline.
+  · **Size:** S (remaining: billing migration)
+  · **Next step:** SA56 as written in roadmap.md.
 
 ---
 
 ### Fix order and interactions
 
-1. **SA44 (Finding 1 stage 1)** — ready now on Track 3, no deps; every future DR change benefits.
-   The CR-SA38-001 copy-pair is unaffected by SA44 (it's an Option 2 problem) — leave the copies
-   in place until then; do not "fix" one side alone.
-2. **SA47 (Finding 2 first step)** — ready now on Track 1, no blocker.
-3. **Finding 4's coverage-boundary assertion (S) and Finding 5's `OrgApiBaseView` fold + rule (S+S)
-   before teams kickoff** — independent of each other and of SA44/SA47, but both edit orgs
-   surfaces (`tests/settings.py`+CI vs `views.py`), so sequence within one track.
+1. **SA44 (Finding 1 stage 1)** — **landed.** SA44 eliminated the string-matching classifier and
+   made adapter registration explicit. The CR-SA38-001 copy-pair is unaffected by SA44 (it's an
+   Option 2 problem) — leave the copies in place until then; do not "fix" one side alone.
+2. **SA47 (Finding 2 first step)** — **landed.** The three divergent last-owner implementations are
+   now one canonical check. The finding stays open for a pre_delete receiver backstop and the teams build.
+3. **Finding 4's coverage-boundary assertion landed** (SA49); **Finding 5's fold and rule landed**
+   (SA50, SA55). The sole remaining Finding 5 item is the billing migration (SA56), independent and
+   ready on Track 3.
 4. Finding 4 Option 2 (purge-plan derivation) waits for teams' models as its test bed.
 
 All four findings are otherwise independent; no fix forces rework of another.
@@ -408,8 +411,7 @@ the commons decision (watchlist).
 
 ### Questions that would change the ranking
 
-- Which last-owner semantic is canonical? — **now SA47's first decision**; answer resolves
-  Finding 2's divergence either way.
+- ~~Which last-owner semantic is canonical?~~ **Resolved by SA47 (landed 2026-07-07).**
 - Is `TENANT_TABLE_REGISTRY` intended to retire in favor of marker derivation? — **partially
   answered in code this pass**: `test_doc_consistency.py:11–14` calls the literal "the temporary
   SSOT" kept "so the derived view can eventually replace the hand-maintained literal." If that
@@ -423,11 +425,10 @@ the commons decision (watchlist).
 ### Red flags (out of scope — fix now)
 
 - **Resolved 2026-07-07 (roadmap cleanup), no longer re-flagged:** `_get_manage_py()`'s silent
-  fallback (SA52), the SA21.2 helper's permissive `getattr` settings reads (SA48), and the false
-  `backups/services.py:1–10` header contract (SA51) — all three landed; detail in CHANGELOG.md
-  and the tech-audit.md reconciliation log (TA42/TA43/TA44).
-- **Carried → now scheduled, no longer re-flagged:** the `entry_point.py` post-hook permissive
-  coercion defaults (flagged 2026-07-05 and 2026-07-06) are tracked as SA42, open on Track 3.
+  fallback (SA52), the SA21.2 helper's permissive `getattr` settings reads (SA48), the false
+  `backups/services.py:1–10` header contract (SA51), and the `entry_point.py` post-hook permissive
+  coercion defaults (SA42) — all four landed; detail in CHANGELOG.md and the tech-audit.md
+  reconciliation log (TA42/TA43/TA44).
 
 Lenses scanned with no qualifying finding this pass: data/state integrity, trust boundaries
 (SA46 gate strengthens; SA39 made `operator_access` fail-hard outside transactions), module
@@ -613,4 +614,8 @@ CAS verified), security architecture (SA26 copies noted → watchlist), build/su
   contract → **fixed** (SA51) — all three removed from the Red flags section, detail in
   CHANGELOG.md and tech-audit.md (TA42/TA43/TA44). Full narrative re-verification of Findings
   1/2/4/5's evidence prose is deferred to the next full autopsy re-run; this entry records what
-  changed since the 2026-07-07 delta pass above without rewriting it.
+   changed since the 2026-07-07 delta pass above without rewriting it.
+- 2026-07-08 (docs cleanup) — Finding 5 (`json-api-boundary-idiom-fragmentation`): **progressed.**
+   The `OrgApiBaseView` fold (SA50) **landed** since the last entry (SA55 was already recorded
+   in the 2026-07-07 entry); the sole remaining piece is the billing migration (SA56, open on
+   Track 3, no blockers). Summary table size updated from M to S. Finding remains open pending SA56.
