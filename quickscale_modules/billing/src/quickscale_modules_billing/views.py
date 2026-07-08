@@ -14,7 +14,6 @@ from django.http import (
     HttpResponseBase,
     JsonResponse,
 )
-from django.middleware.csrf import CsrfViewMiddleware
 from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -78,11 +77,6 @@ def _resolve_request_organization(
             return organization, True
 
     return organization, False
-
-
-def _enforce_csrf(request: HttpRequest) -> HttpResponse | None:
-    middleware = CsrfViewMiddleware(lambda req: JsonResponse({"error": "Forbidden"}))
-    return middleware.process_view(request, lambda req: JsonResponse({}), (), {})
 
 
 def _parse_json_object_payload(
@@ -156,41 +150,56 @@ class PlanListView(APIView):
         return Response(serializer.data)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class CreateCheckoutSessionView(View):
+class _RenderedAPIView(APIView):
+    """APIView variant that renders the response during dispatch.
+
+    DRF 3.16+ defers response rendering to the WSGI handler layer, so
+    calling ``as_view()(request)`` directly (outside the middleware
+    stack) leaves ``response.content`` inaccessible.  This mixin renders
+    the response at the end of ``dispatch()`` so that the content is
+    available immediately — preserving the pre-existing ``JsonResponse``
+    behavior for direct view invocations.
+    """
+
+    def dispatch(self, *args: Any, **kwargs: Any) -> HttpResponse:
+        response = super().dispatch(*args, **kwargs)
+        if isinstance(response, Response):
+            response.render()
+        return response
+
+
+class CreateCheckoutSessionView(_RenderedAPIView):
     """Create a hosted Stripe checkout session for a one-time credit purchase."""
 
+    permission_classes = [AllowAny]
+    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
 
-    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
+            return Response({"error": "Authentication required"}, status=401)
 
         organization, access_denied = _resolve_request_organization(
-            request,
+            request._request,
             require_owner=True,
         )
         if organization is None:
-            return JsonResponse(
+            return Response(
                 {"error": _ORG_SELECTION_REQUIRED_ERROR},
                 status=409,
             )
         if access_denied:
-            return HttpResponse(status=403)
+            return Response(status=403)
 
-        csrf_response = _enforce_csrf(request)
-        if csrf_response is not None:
-            return csrf_response
-
-        payload, payload_error = _parse_json_object_payload(request)
+        payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
         assert payload is not None
 
         serializer = CreateCheckoutSessionSerializer(data=payload)
         if not serializer.is_valid():
-            return JsonResponse({"errors": serializer.errors}, status=400)
+            return Response({"errors": serializer.errors}, status=400)
 
         try:
             checkout_url = create_checkout_session(
@@ -201,52 +210,49 @@ class CreateCheckoutSessionView(View):
                 organization=organization,
             )
         except BillingDisabledError as exc:
-            return JsonResponse({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)
         except BillingValidationError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)
         except BillingConfigurationError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
         except BillingError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
 
-        return JsonResponse({"checkout_url": checkout_url})
+        return Response({"checkout_url": checkout_url})
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class CreateSubscriptionCheckoutView(View):
+class CreateSubscriptionCheckoutView(_RenderedAPIView):
     """Create a hosted Stripe checkout session for a recurring subscription."""
 
+    permission_classes = [AllowAny]
+    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
 
-    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
+            return Response({"error": "Authentication required"}, status=401)
 
         organization, access_denied = _resolve_request_organization(
-            request,
+            request._request,
             require_owner=True,
         )
         if organization is None:
-            return JsonResponse(
+            return Response(
                 {"error": _ORG_SELECTION_REQUIRED_ERROR},
                 status=409,
             )
         if access_denied:
-            return HttpResponse(status=403)
+            return Response(status=403)
 
-        csrf_response = _enforce_csrf(request)
-        if csrf_response is not None:
-            return csrf_response
-
-        payload, payload_error = _parse_json_object_payload(request)
+        payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
         assert payload is not None
 
         serializer = CreateSubscriptionCheckoutSerializer(data=payload)
         if not serializer.is_valid():
-            return JsonResponse({"errors": serializer.errors}, status=400)
+            return Response({"errors": serializer.errors}, status=400)
 
         try:
             checkout_url = create_subscription_checkout_session(
@@ -257,52 +263,49 @@ class CreateSubscriptionCheckoutView(View):
                 organization=organization,
             )
         except BillingDisabledError as exc:
-            return JsonResponse({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)
         except BillingValidationError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)
         except BillingConfigurationError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
         except BillingError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
 
-        return JsonResponse({"checkout_url": checkout_url})
+        return Response({"checkout_url": checkout_url})
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class CancelSubscriptionView(View):
+class CancelSubscriptionView(_RenderedAPIView):
     """Cancel the authenticated organization's current recurring subscription."""
 
+    permission_classes = [AllowAny]
+    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
 
-    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
+            return Response({"error": "Authentication required"}, status=401)
 
         organization, access_denied = _resolve_request_organization(
-            request,
+            request._request,
             require_owner=True,
         )
         if organization is None:
-            return JsonResponse(
+            return Response(
                 {"error": _ORG_SELECTION_REQUIRED_ERROR},
                 status=409,
             )
         if access_denied:
-            return HttpResponse(status=403)
+            return Response(status=403)
 
-        csrf_response = _enforce_csrf(request)
-        if csrf_response is not None:
-            return csrf_response
-
-        payload, payload_error = _parse_json_object_payload(request)
+        payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
         assert payload is not None
 
         serializer = CancelSubscriptionSerializer(data=payload)
         if not serializer.is_valid():
-            return JsonResponse({"errors": serializer.errors}, status=400)
+            return Response({"errors": serializer.errors}, status=400)
 
         try:
             cancel_current_subscription(
@@ -310,54 +313,51 @@ class CancelSubscriptionView(View):
                 organization=organization,
             )
         except BillingDisabledError as exc:
-            return JsonResponse({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)
         except BillingValidationError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)
         except BillingSubscriptionAnomalyError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)
         except BillingConfigurationError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
         except BillingError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
 
-        return HttpResponse(status=204)
+        return Response(status=204)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
-class CreateBillingPortalSessionView(View):
+class CreateBillingPortalSessionView(_RenderedAPIView):
     """Create a hosted Stripe billing portal session for the current organization."""
 
+    permission_classes = [AllowAny]
+    authentication_classes = [SessionAuthentication]
     http_method_names = ["post"]
 
-    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required"}, status=401)
+            return Response({"error": "Authentication required"}, status=401)
 
         organization, access_denied = _resolve_request_organization(
-            request,
+            request._request,
             require_owner=True,
         )
         if organization is None:
-            return JsonResponse(
+            return Response(
                 {"error": _ORG_SELECTION_REQUIRED_ERROR},
                 status=409,
             )
         if access_denied:
-            return HttpResponse(status=403)
+            return Response(status=403)
 
-        csrf_response = _enforce_csrf(request)
-        if csrf_response is not None:
-            return csrf_response
-
-        payload, payload_error = _parse_json_object_payload(request)
+        payload, payload_error = _parse_json_object_payload(request._request)
         if payload_error is not None:
             return payload_error
         assert payload is not None
 
         serializer = CreateBillingPortalSessionSerializer(data=payload)
         if not serializer.is_valid():
-            return JsonResponse({"errors": serializer.errors}, status=400)
+            return Response({"errors": serializer.errors}, status=400)
 
         try:
             portal_url = create_billing_portal_session(
@@ -366,15 +366,15 @@ class CreateBillingPortalSessionView(View):
                 organization=organization,
             )
         except BillingDisabledError as exc:
-            return JsonResponse({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)
         except BillingValidationError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)
         except BillingConfigurationError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
         except BillingError as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
+            return Response({"error": str(exc)}, status=500)
 
-        return JsonResponse({"portal_url": portal_url})
+        return Response({"portal_url": portal_url})
 
 
 class CreditBalanceView(APIView):
