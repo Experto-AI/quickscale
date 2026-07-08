@@ -34,13 +34,16 @@ since yesterday's deep pass (verified by diffstat: `apply_command.py`, `orgs/vie
 `tenancy.py` trigger APIs, billing webhook phases all unchanged). Severity floor unchanged: CLI is
 a single-process local tool; generated apps are single-service WSGI; tenant isolation is the
 highest-blast property. Growth direction unchanged: teams is the next build; SA44 and SA47 have since
-landed, SA42 is resolved, the SA46 gate is live, and SA56 (Finding 5's billing migration) is the
-remaining scheduled roadmap item.
+landed, SA42 is resolved, the SA46 gate is live, and SA56 (Finding 5's billing migration) is
+complete.
 
-**Result: all four prior findings still open, zero new findings.** Finding 1 is *strengthened*
+**Result: three prior findings still open, Finding 5 closed.** Finding 1 is *strengthened*
 (the batch paid its coordination tax again — CR-SA38-001 hand-copied a module-side guard into
 core), Finding 4 is *narrowed with a correction* (the prior pass under-credited SA15.3's existing
-registry derivation gate), Finding 5 *progressed* (SA46's pairing gate is live and CI-blocking).
+registry derivation gate), Finding 5 *closed* (SA46's pairing gate is live and CI-blocking, and
+SA56's billing migration is complete — all four plain-View endpoints migrated onto DRF baseline;
+the blog dual-auth function-view path remains as a documented bounded exception — see decisions.md
+§json-api-endpoint-base-contract).
 One new watchlist item: shared module-runtime code has no sanctioned home.
 
 ### Summary table
@@ -50,7 +53,7 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
 | 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2; stage 1/SA44 landed 2026-07-07) | DR logic lives in core but its state and lifecycle live in the backups module, producing a bidirectional import lattice held together by hand-maintained symbol tables, a string-matching exception classifier — and now hand-copied parity guards across the boundary |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months (teams) | M remaining (receiver backstop + billing seam; first step/SA47 landed 2026-07-07) | Org/billing invariants at the account-deletion boundary are re-implemented per callsite with divergent semantics instead of being owned by their domain modules |
 | 4 | `org-model-universe-hand-enumerated` | 6–18 months (teams) | M remaining (Option 2) | orgs hand-enumerates the cross-module tenant-model universe in literals; both literals are now CI-gated against derivations (SA15.3 + SA45), but the purge plan is still hand-ordered and every gate sees only what orgs' hand-maintained test env installs |
-| 5 | `json-api-boundary-idiom-fragmentation` | 6–18 months (teams) | S remaining (billing migration only) | Three coexisting idioms for authed state-changing JSON endpoints; the silent-hole class is now closed by the SA46 CI gate, the mixin fold is done (SA50), the sanctioned-base rule is done (SA55), and the billing migration (SA56) remains |
+| 5 | `json-api-boundary-idiom-fragmentation` | 6–18 months (teams) | S (closed — SA56 complete 2026-07-08) | Three coexisting idioms for authed state-changing JSON endpoints; the silent-hole class is now closed by the SA46 CI gate, the mixin fold is done (SA50), the sanctioned-base rule is done (SA55), and the billing migration (SA56) is complete — all four plain-Views migrated onto the DRF baseline. The blog dual-auth function-view path (`@_typed_csrf_exempt` + `authenticate_blog_api_request`) remains as a narrow documented bounded exception (see decisions.md §json-api-endpoint-base-contract). Reopen if an unsanctioned idiom recurs in new endpoints. |
 
 ---
 
@@ -274,58 +277,7 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
 
 ### Finding 5: Authed state-changing JSON endpoints have three coexisting boundary idioms
 
-- **ID:** `json-api-boundary-idiom-fragmentation`
-- **Rank rationale (blast radius × likelihood):** the hand-built instances guard money paths
-  (billing checkout/cancel/portal) and org management; the *silent-miss* class is now gated (see
-  below), so remaining likelihood concentrates on teams copying the wrong template.
-- **Horizon & trigger:** `6–18 months` — teams management endpoints.
-- **Confidence:** High — all three idioms re-verified in code this pass; the gate and its CI
-  wiring read directly.
-- **Context dependence:** wrong-for-now on the new-domain dimension.
-- **Problem:** the project established a fail-closed DRF baseline as the sanctioned JSON-API shape
-  (SA11), but two parallel hand-rolled idioms survive beside it, so the boundary contract is
-  re-implemented per idiom — three templates lie around for the next module to copy.
-- **Evidence:**
-  - The three idioms are unchanged in code: DRF baseline (billing read endpoints); orgs
-    `JsonApiMixin`/`JsonOrganizationAccessMixin` stack across eight `OrgApi*` views
-    (`orgs/views.py:220–1271`, file untouched since last pass, still 1,273 lines); billing's four
-    state-changing plain Views with `@method_decorator(csrf_exempt)` + manual `_enforce_csrf`
-    (`billing/views.py:82–84,159,215,271,326`).
-  - **Progressed — the recommended gate landed and is blocking:** SA46 shipped
-    `scripts/check_csrf_exempt_gate.py` (hard-fail AST gate: every `csrf_exempt` callsite must
-    pair with `_enforce_csrf`, blog's session/token authenticator, or a webhook signature
-    verifier) with a 1,755-line test suite, wired as a required CI job that the test,
-    isolation-conformance, and lint jobs all depend on (`ci.yml:206–231,236,355,436`). The
-    "silent CSRF hole on a new endpoint" failure mode from the 2026-07-06 pass is structurally
-    closed. Residual: CR-SA46-REV-003 (evaluator completeness for `not`/`~`/unary-bool literals —
-    ticket-shaped, scheduled, no pairing hole).
-  - Note the gate's approved-verifier list is a hand-maintained name allowlist inside the script —
-    a new module with its own signature-verified webhook must add its verifier name there. One
-    more station, inherent to gate design; acceptable, worth knowing at teams kickoff.
-- **Why it compounds:** every new JSON surface picks one of three idioms or invents a fourth; each
-  hand idiom re-implements the same boundary concerns, so a boundary-rule change costs ×3 (SA21.2
-  just demonstrated the class: the client-IP change had to be applied per-idiom — DRF
-  `NUM_PROXIES`, blog's limiter, forms' throttle); each endpoint on a hand stack raises later
-  consolidation cost.
-- **Detection signal:** the miss case is now gated (CI); remaining signal is process-level — a
-  teams PR whose endpoints subclass anything other than the sanctioned base.
-- **Steelman:** the plain-View idiom exists for JSON error bodies; every instance is tested;
-  migrating working money paths is churn with regression risk. Justifies current endpoints, not
-  three templates at the moment a new module's API surface is about to be built.
-- **Correct shape:** one base per transport need owns CSRF/auth/org-role/parsing exactly once;
-  `csrf_exempt` appears only where a cryptographic request authenticator replaces it; a CI gate
-  enforces the pairing (**this last clause is now satisfied**).
-- **Options:**
-  1. **Gate first, consolidate opportunistically (recommended — all pieces except migration done):**
-     ~~add the pairing gate~~ (done, SA46); ~~fold orgs' `OrgApi*` mixin stack~~ (done, SA50);
-     ~~declare the DRF baseline required for new endpoints~~ (done, SA55); migrate billing's four
-     plain Views (SA56, open).
-  2. **Full consolidation onto DRF now** — highest regression risk on money paths for no
-     user-visible change; still not recommended.
-- **Recommendation:** the billing migration (SA56) is the sole remaining piece — schedule before
-  teams kickoff so teams endpoints have a clean DRF baseline.
-  · **Size:** S (remaining: billing migration)
-  · **Next step:** SA56 as written in roadmap.md.
+> **Closed 2026-07-08** — SA56 billing DRF migration completed. All sub-items resolved (SA46 gate, SA50 fold, SA55 rule, SA56 migration). The blog dual-auth function-view path (`@_typed_csrf_exempt` + `authenticate_blog_api_request`) remains as a narrow documented bounded exception — see decisions.md §json-api-endpoint-base-contract. Full text preserved in version control; see reconciliation log entry below and [CHANGELOG.md](../../CHANGELOG.md) for closeout detail.
 
 ---
 
@@ -336,9 +288,8 @@ One new watchlist item: shared module-runtime code has no sanctioned home.
    Option 2 problem) — leave the copies in place until then; do not "fix" one side alone.
 2. **SA47 (Finding 2 first step)** — **landed.** The three divergent last-owner implementations are
    now one canonical check. The finding stays open for a pre_delete receiver backstop and the teams build.
-3. **Finding 4's coverage-boundary assertion landed** (SA49); **Finding 5's fold and rule landed**
-   (SA50, SA55). The sole remaining Finding 5 item is the billing migration (SA56), independent and
-   ready on Track 3.
+3. **Finding 4's coverage-boundary assertion landed** (SA49); **Finding 5 fully resolved** —
+    fold (SA50), rule (SA55), and billing migration (SA56) all landed. No remaining Finding 5 items.
 4. Finding 4 Option 2 (purge-plan derivation) waits for teams' models as its test bed.
 
 All four findings are otherwise independent; no fix forces rework of another.
@@ -615,7 +566,12 @@ CAS verified), security architecture (SA26 copies noted → watchlist), build/su
   CHANGELOG.md and tech-audit.md (TA42/TA43/TA44). Full narrative re-verification of Findings
   1/2/4/5's evidence prose is deferred to the next full autopsy re-run; this entry records what
    changed since the 2026-07-07 delta pass above without rewriting it.
-- 2026-07-08 (docs cleanup) — Finding 5 (`json-api-boundary-idiom-fragmentation`): **progressed.**
-   The `OrgApiBaseView` fold (SA50) **landed** since the last entry (SA55 was already recorded
-   in the 2026-07-07 entry); the sole remaining piece is the billing migration (SA56, open on
-   Track 3, no blockers). Summary table size updated from M to S. Finding remains open pending SA56.
+- 2026-07-08 (docs cleanup, continued) — Finding 5 (`json-api-boundary-idiom-fragmentation`): **closed.**
+   SA50 landed since the 2026-07-07 entry (SA55 already recorded). SA56 billing migration **completed
+   2026-07-08** — all four plain-View endpoints migrated onto the DRF baseline. The blog dual-auth
+   function-view path (`@_typed_csrf_exempt` + `authenticate_blog_api_request`) was not migrated — it was
+   validated as a narrow documented bounded exception in decisions.md §json-api-endpoint-base-contract,
+   matching the SA46 gate's existing treatment of `authenticate_blog_api_request` as an approved verification
+   helper. All Finding 5 sub-items are resolved (SA46 gate, SA50 fold, SA55 rule, SA56 migration plus
+   the bounded-exception documentation). Finding 5 is now closed. Summary table size updated from M to S
+   on the prior entry, now marked closed.
