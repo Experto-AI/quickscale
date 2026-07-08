@@ -20,6 +20,7 @@ from quickscale_modules_backups.models import (
     BackupSnapshot,
 )
 from quickscale_modules_backups.services import (
+    STALE_RESTORE_THRESHOLD_MINUTES,
     BackupError,
     BackupRestoreBlocked,
     RestoreSourceResolutionMode,
@@ -437,6 +438,9 @@ class BackupPolicyAdmin(admin.ModelAdmin):
                                     form.cleaned_data["uploaded_file"],
                                     confirmation=form.cleaned_data["confirmation"],
                                     dry_run=True,
+                                    stale_threshold_minutes=(
+                                        STALE_RESTORE_THRESHOLD_MINUTES
+                                    ),
                                 )
                         except BackupError as exc:
                             form.add_error(None, str(exc))
