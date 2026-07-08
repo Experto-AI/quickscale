@@ -4092,6 +4092,25 @@ class TestStaleRestoreDetection:
         assert backup_artifact.status == BackupArtifact.STATUS_FAILED
         assert backup_artifact.restore_error == "real child failure"
 
+    # ------------------------------------------------------------------
+    # SA54 — Deduplicate the stale-restore threshold constant
+    # ------------------------------------------------------------------
+
+    def test_sa54_stale_threshold_default_matches_constant(self) -> None:
+        """SA54: The default ``stale_threshold_minutes`` parameter of
+        ``restore_admin_uploaded_backup`` must match the canonical
+        ``STALE_RESTORE_THRESHOLD_MINUTES`` constant in services.py.
+        Changing one without the other will fail this test."""
+        import inspect
+
+        sig = inspect.signature(backup_services.restore_admin_uploaded_backup)
+        param = sig.parameters["stale_threshold_minutes"]
+        assert param.default == backup_services.STALE_RESTORE_THRESHOLD_MINUTES, (
+            f"restore_admin_uploaded_backup default ({param.default}) does not "
+            f"match STALE_RESTORE_THRESHOLD_MINUTES "
+            f"({backup_services.STALE_RESTORE_THRESHOLD_MINUTES})"
+        )
+
 
 # ---------------------------------------------------------------------------
 # SA52 — _get_manage_py fail-hard on unresolvable manage.py

@@ -2781,6 +2781,7 @@ def restore_admin_uploaded_backup(
     dry_run: bool = False,
     allow_production: bool = False,
     shell_runner: ShellCommandRunner | None = None,
+    stale_threshold_minutes: int = 30,
 ) -> RestoreResult:
     """Restore one admin-uploaded backup after trusted snapshot-backed matching."""
     staging_directory = Path(mkdtemp(prefix="quickscale-backups-admin-upload-"))
@@ -2801,7 +2802,9 @@ def restore_admin_uploaded_backup(
         # uploaded-file dry-run path applies the same eligibility guard
         # and recovery guidance as the recorded-artifact branch.
         if trusted_artifact.status == BackupArtifact.STATUS_RESTORING:
-            stale_threshold = django_timezone.now() - timedelta(minutes=30)
+            stale_threshold = django_timezone.now() - timedelta(
+                minutes=stale_threshold_minutes
+            )
             if (
                 trusted_artifact.restore_started_at is not None
                 and trusted_artifact.restore_started_at < stale_threshold
