@@ -378,7 +378,12 @@ def prepare_admin_uploaded_restore_artifact(
                         buf = src_f.read(65536)
                         if not buf:
                             break
-                        os.write(fd, buf)
+                        # CR-SA53-REV-002: Retry short os.write() returns
+                        # using memoryview slicing so a partial write never
+                        # silently truncates the artifact.
+                        view = memoryview(buf)
+                        while view:
+                            view = view[os.write(fd, view) :]
                 os.fsync(fd)
                 os.replace(tmp_path, local_path)
             except Exception:

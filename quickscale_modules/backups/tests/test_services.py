@@ -4540,3 +4540,90 @@ class TestPrepareAdminUploadedRestoreArtifactSA53:
         assert target_file.is_file()
         assert not target_file.is_symlink()
         assert target_file.read_bytes() == b"staged upload content"
+
+    def test_short_write_retry_produces_byte_identical_copy(
+        self,
+        tmp_path: Path,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """CR-SA53-REV-002: Partial os.write() returns (short writes) still
+        result in a byte-identical copy at the target path.  The retry loop
+        slices the unwritten remainder via memoryview until the full chunk
+        is flushed.
+        """
+        staged_content = b"staged upload content with enough data to require retry"
+        target_dir = tmp_path / "backups"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        backup_artifact.status = BackupArtifact.STATUS_READY
+        backup_artifact.save(update_fields=["status", "updated_at"])
+
+        staged_file = tmp_path / "staged" / "upload.dump"
+        staged_file.parent.mkdir(parents=True, exist_ok=True)
+        staged_file.write_bytes(staged_content)
+        staged = backup_services.StagedAdminRestoreUpload(
+            local_path=staged_file,
+            checksum_sha256=backup_artifact.checksum_sha256,
+            size_bytes=backup_artifact.size_bytes,
+        )
+
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(target_dir),
+            remote_bucket_name="",
+            remote_prefix="",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+
+        monkeypatch.setattr(
+            backup_services,
+            "_stage_admin_restore_upload",
+            lambda uploaded_file, staging_directory=None: staged,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "_resolve_admin_uploaded_restore_artifact",
+            lambda checksum_sha256, size_bytes: backup_artifact,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "load_policy_snapshot",
+            lambda: policy,
+        )
+        monkeypatch.setattr(
+            backup_services,
+            "get_local_backup_directory",
+            lambda policy: Path(policy.local_directory),
+        )
+
+        # Simulate short writes: every os.write() call writes only half
+        # the requested bytes into the fd, forcing the retry loop to
+        # split each chunk across multiple writes until fully flushed.
+        original_write = os.write
+
+        def short_write(fd: int, data: bytes | memoryview) -> int:
+            to_write = max(1, len(data) // 2)
+            original_write(fd, data[:to_write])
+            return to_write
+
+        monkeypatch.setattr(os, "write", short_write)
+
+        result = backup_services.prepare_admin_uploaded_restore_artifact(
+            SimpleUploadedFile("upload.dump", b"data"),
+            confirmation=backup_artifact.filename,
+        )
+
+        result.refresh_from_db()
+        target_file = target_dir / backup_artifact.filename
+        assert result.local_path == str(target_file)
+        assert target_file.exists()
+        assert target_file.is_file()
+        assert target_file.read_bytes() == staged_content
