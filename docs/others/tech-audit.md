@@ -11,7 +11,7 @@
 > [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
 > Remediation mapping this pass: TA18→SA21.2, TA37→SA38, TA39→SA41 (all resolved);
 > TA42→SA52, TA43→SA48, TA44→SA51 (resolved 2026-07-07, roadmap cleanup pass);
-> TA40→SA42 (resolved); TA45→SA54, TA46→SA53 (scheduled, still open).
+> TA40→SA42 (resolved); TA45→SA54 (scheduled, still open); TA46→SA53 (resolved 2026-07-08 — see Reconciliation log).
 
 ## Orientation summary
 
@@ -83,10 +83,11 @@ script, and as a `needs:` gate for test/isolation/lint jobs); `backups_create --
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
 | TA45 | S4 | duplication drift | 30-minute stale-restore threshold is a bare literal in `orchestration.py:2804` but a named constant (`STALE_RESTORE_THRESHOLD_MINUTES`) in `services.py` — the two can drift silently | Trivial | High | open (SA54 scheduled, Track 2) |
-| TA46 | S4 | partial failure | `prepare_admin_uploaded_restore_artifact` fd-based copy loop ignores partial `os.write()` — local restore artifact can be silently truncated/corrupted | Small | High | open (SA53 partial: short-write handling / CR-SA53-REV-002) |
+| TA46 | S4 | partial failure | `prepare_admin_uploaded_restore_artifact` fd-based copy loop ignored partial `os.write()` — resolved via SA53 + CR-SA53-REV-002 (short-write retry loop + fd-based copy) | Small | High | resolved (SA53 + CR-SA53-REV-002 — short-write retry loop) |
 
-Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 2.** Quick wins: TA45 is Trivial-effort. Resolved since
+Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 1.** Quick wins: TA45 is Trivial-effort. Resolved since
 the 2026-07-06/07 passes: **TA18, TA37, TA39, TA40, TA42, TA43, TA44** (see Reconciliation log).
+TA46 resolved per the 2026-07-08 doc-review follow-up (see Reconciliation log).
 
 ---
 
@@ -97,12 +98,16 @@ the 2026-07-06/07 passes: **TA18, TA37, TA39, TA40, TA42, TA43, TA44** (see Reco
   parity block and the canonical threshold can drift silently (import direction prevents
   orchestration importing from the module app; move the constant to the engine and re-export, or
   pass it in).
-- **TA46** — `backups/services.py:376-381`: SA53 partially shipped (2026-07-08) — the
-  unlink/copy-finally cleanup defect was fixed (copy to `.tmp` suffix + `os.replace` + `finally`
-  cleanup). The remaining blocker is short-write handling (CR-SA53-REV-002): the fd-based copy
-  loop ignores partial `os.write()` results, so a local restore artifact can be silently truncated
-  or corrupted while the function reports success. Fix: handle short `os.write()` results or use
-  an fd-backed file object without reopening by pathname.
+- **TA46** — `backups/services.py:376-381`: the initial SA53 fix (2026-07-07) replaced
+  `unlink`+`shutil.copy2` with `.tmp` suffix + `os.replace` + `finally` cleanup, but the fd-based copy
+  loop still ignored partial `os.write()` results. **Resolved** via CR-SA53-REV-002 (2026-07-08): the
+  copy loop now wraps `os.write(fd, buf)` in a `memoryview`-slicing retry loop so a short write
+  repeats until the full 64KiB chunk is flushed — the local restore artifact can no longer be
+  silently truncated or corrupted. The final seam uses `mkstemp` for the fd, a single `finally:
+  os.close(fd)`, and `except: os.unlink(tmp_path)` cleanup from REV-001, plus the short-write
+  retry loop. `TestPrepareAdminUploadedRestoreArtifactSA53` covers copy-failure, happy-path, and
+  short-write-retry scenarios on the `mkstemp`+fd write path (3 regressions). Full detail in
+  CHANGELOG.md. Closes TA46.
 
 ---
 
@@ -193,8 +198,9 @@ regression suites assert real behavior).
 - 2026-07-06 (roadmap closeout) — **TA33: resolved** (SA34 — `createcachetable` added to `start.sh.j2` after the migrate step, gated behind `[[ -z "${REDIS_URL:-}" ]]` so it only runs when `DatabaseCache` is the active backend). **TA38: resolved** (SA39 — `operator_access()`/`_set_operator_access()` now raise `ImproperlyConfigured` when called outside an open transaction, instead of silently no-opping). **TA41: resolved** (SA40 — public form-submit validation now rejects non-string JSON values with 400s instead of an uncaught `TypeError`/500; the staff-authored ReDoS-via-`regex` residual noted when TA41 opened remains an accepted low-priority watch item, same trust class as the pre-SA26 TA25 pattern, not promoted to its own ID). **TA32: resolved** (SA30 — confirmed directly in code: `listings/views.py` and `storage/helpers.py` now raise `ImproperlyConfigured` on missing/invalid runtime settings instead of silently defaulting/coercing; this closure was flagged in `roadmap.md`'s 2026-07-06 triage note but not yet reconciled here — corrected in this pass). Findings-table counts updated (S2 2→1, S3 6→4, S4 3→2); full detail for all four lives in CHANGELOG.md (SA34/SA39/SA40) and the SA30 CHANGELOG entry.
 - 2026-07-07 (roadmap cleanup) — **TA34: resolved** (SA35 — `Post.author`/`ContactNote.created_by`/`DealNote.created_by` changed `CASCADE`→`SET_NULL`; `OrganizationInvitation.invited_by`'s CASCADE documented as intentional in `decisions.md`; new `TestUserFkDeleteRuleConformance` cross-module gate closes the matching tooling gap below). **TA17: resolved** (SA37 — admin backup create/prune moved to background dispatch via `dispatch_background_create()`/`dispatch_background_prune()`, following the SA20/SA43 restore-dispatch pattern; restore itself was already resolved by SA20). **TA35: resolved** (SA36 — `get_client_ip()` guard changed to `len(ips) >= TRUSTED_PROXY_COUNT`, index to `ips[-TRUSTED_PROXY_COUNT]`, matching DRF's `NUM_PROXIES` semantics; landed before SA21.2 consumes the helper). Findings-table counts updated (S2 1→0, S3 4→2); full detail for all three lives in CHANGELOG.md (SA35/SA37/SA36 entries).
 - 2026-07-07 (re-run, HEAD `1e618ed8`) — **TA18: resolved** (SA21.2, `3e48d04f` — shared canonical `get_client_ip()` added to `orgs/current_org.py`; blog API limiter ident (`blog/views.py:328`), forms `FormSubmission.ip_address` (`forms/views.py:231,257`), and `FormSubmitThrottle.get_ident` all switched off raw `REMOTE_ADDR`; verified in code. Residual: the helper's `getattr`-default settings reads opened as **TA43**). **TA37: resolved** (SA38, `16ede27a` — `is_restore_stale()` + CAS `reset_stale_restore()` in `services.py`, admin list column `stale_restore_warning` + guarded `reset_stale_restore_action`, stale-aware guidance on both upload-path guards (`services.py` + `orchestration.py` CR-SA38-001 parity); CAS verified unable to overwrite a concurrently finishing child. Residual: threshold-literal duplication opened as **TA45**). **TA39: resolved** (SA41, `2305591f` — `cancel_current_subscription` raises distinct `BillingSubscriptionAnomalyError` for the missing-Stripe-id case; `AccountDeleteView` logs it at WARNING with user/org identifiers and proceeds; `CancelSubscriptionView` maps it to 400; verified end-to-end). **TA40: still-open** (all four location groups re-verified byte-identical; SA42 scheduled on Track 3 — carried, not re-argued). **TA42–TA46: opened this pass** (TA42/TA43/TA44 accepted from arch-audit red-flag hand-off after independent verification; TA45/TA46 found reading the SA38/SA43 delta in full).
-- 2026-07-07 (roadmap cleanup) — **TA42: resolved** (SA52 — `_get_manage_py()` now raises `BackupError` instead of swallowing resolution failure and falling back to a bare `"manage.py"` literal; the fail-hard raise happens before `_atomic_claim_restore`, so a resolution failure never leaves an artifact claimed; 5 regressions in `TestGetManagePySA52`). **TA43: resolved** (SA48 — `get_client_ip()` reads `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` via direct required access, raising `ImproperlyConfigured` on missing/invalid values instead of silently defaulting). **TA44: resolved** (SA51 — `backups/services.py:1-10` header rewritten to state the real division of responsibility; no more false "under 400 LOC" claim). Findings-table counts updated (S3 1→0, S4 5→3); full detail for all three lives in CHANGELOG.md (SA52/SA48/SA51 entries). TA45 and TA46 remain open (SA54/SA53, both scheduled on Track 2, not yet landed).
+- 2026-07-07 (roadmap cleanup) — **TA42: resolved** (SA52 — `_get_manage_py()` now raises `BackupError` instead of swallowing resolution failure and falling back to a bare `"manage.py"` literal; the fail-hard raise happens before `_atomic_claim_restore`, so a resolution failure never leaves an artifact claimed; 5 regressions in `TestGetManagePySA52`). **TA43: resolved** (SA48 — `get_client_ip()` reads `USE_X_FORWARDED_FOR`/`TRUSTED_PROXY_COUNT` via direct required access, raising `ImproperlyConfigured` on missing/invalid values instead of silently defaulting). **TA44: resolved** (SA51 — `backups/services.py:1-10` header rewritten to state the real division of responsibility; no more false "under 400 LOC" claim). Findings-table counts updated (S3 1→0, S4 5→3); full detail for all three lives in CHANGELOG.md (SA52/SA48/SA51 entries). TA45 remains open (SA54 scheduled on Track 2, not yet landed); TA46 open (SA53 partial, short-write handling pending CR-SA53-REV-002).
 - 2026-07-08 (docs cleanup) — **TA40: resolved** (SA42 — all four post-hook locations switched to direct required reads; 16 regression tests added. Full detail in CHANGELOG.md). Findings-table counts updated (S4 3→2); counts and status summary updated in this document.
+- 2026-07-08 (doc-review follow-up) — **TA46: resolved** (SA53 + CR-SA53-REV-002 complete — the fd-based short-write retry loop replaces the interim `.tmp`+`os.replace` copy path from the initial SA53 fix. The final seam uses `mkstemp` for the fd, `os.write` in a `memoryview`-slicing retry loop, a single `finally: os.close(fd)`, and `except: os.unlink(tmp_path)` cleanup. `TestPrepareAdminUploadedRestoreArtifactSA53` covers copy-failure, happy-path, and short-write-retry regressions on the `mkstemp`+fd write path — 3 tests total. Full detail in CHANGELOG.md CR-SA53-REV-002 entry.) Findings-table counts updated (S4: 2→1).
 
 ## Notes (not violations, watch items)
 
