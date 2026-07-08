@@ -47,7 +47,7 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA21.2 (2026-07-07), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05), SA34 (2026-07-06), SA35 (2026-07-07), SA36 (2026-07-07), SA37 (2026-07-07), SA38 (2026-07-07), SA39 (2026-07-06), SA40 (2026-07-06), SA41 (2026-07-07), SA42 (2026-07-07), SA43 (2026-07-07), SA44 (2026-07-07), SA45 (2026-07-06), SA46 (2026-07-07), SA47 (2026-07-07), SA48 (2026-07-07), SA49 (2026-07-07), SA50 (2026-07-07), SA51 (2026-07-07), SA52 (2026-07-07), SA55 (2026-07-07), SA56 (2026-07-08). All closed per template rule — detail lives in CHANGELOG.md.
+> **Closed batches (detail in [CHANGELOG.md](../../CHANGELOG.md)):** SA1–SA5 (2026-07-02), SA6–SA12 (2026-07-03), SA13.1–SA13.4 (2026-07-04), SA14.1–SA14.6 (2026-07-05), SA15.1–SA15.3 (2026-07-04), SA16.1/SA16.2 (2026-07-03), SA17.1–SA17.8 (2026-07-05), SA18.1–SA18.11 (2026-07-04), SA19 (2026-07-05), SA20 (2026-07-06), SA21.1 (2026-07-05), SA21.2 (2026-07-07), SA22 (2026-07-05), SA23 (2026-07-05), SA24 (2026-07-05), SA25 (2026-07-05), SA26 (2026-07-06), SA27 (2026-07-05), SA28 (2026-07-05), SA29 (2026-07-05), SA30 (2026-07-06), SA31 (2026-07-05), SA32 (2026-07-06), SA33 (2026-07-05), SA34 (2026-07-06), SA35 (2026-07-07), SA36 (2026-07-07), SA37 (2026-07-07), SA38 (2026-07-07), SA39 (2026-07-06), SA40 (2026-07-06), SA41 (2026-07-07), SA42 (2026-07-07), SA43 (2026-07-07), SA44 (2026-07-07), SA45 (2026-07-06), SA46 (2026-07-07), SA47 (2026-07-07), SA48 (2026-07-07), SA49 (2026-07-07), SA50 (2026-07-07), SA51 (2026-07-07), SA52 (2026-07-07), SA53 (2026-07-08), SA55 (2026-07-07), SA56 (2026-07-08). All closed per template rule — detail lives in CHANGELOG.md.
 >
 > **Origin note:** SA34–SA47 trace to the 2026-07-06 triage against [tech-audit.md](../others/tech-audit.md) (TA33–TA41) and [arch-audit.md](../others/arch-audit.md) (Findings 1–5), each sized Tier 1–2 (arch-audit's larger Findings 1/2/4/5 are cut down to their recommended *first step* only — later stages are explicitly deferred and remain tracked in arch-audit.md itself).
 >
@@ -71,7 +71,7 @@ All items in Track 1 are complete (SA47, SA48, SA49, SA50) — detail in [CHANGE
 
 ### Track 2 — Module contracts & settings
 
-SA21.2, SA37, SA38, SA40, SA43, SA51, plus its earlier share of the SA19–SA33 batch, are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). New open items this pass, below.
+SA21.2, SA37, SA38, SA40, SA43, SA51, SA52, SA53, plus its earlier share of the SA19–SA33 batch, are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). The `backups-dispatch-fail-open-robustness` finding (SA52/SA53, `why →` [tech-audit.md TA46](../others/tech-audit.md)) is fully closed — both items landed and TA46 is resolved. One open item this pass, below.
 
 #### Finding — `dr-engine-module-circular-lattice` (`why →` [arch-audit.md Finding 1](../others/arch-audit.md), compounding evidence — doc drift + duplicated literal)
 
@@ -82,26 +82,9 @@ SA21.2, SA37, SA38, SA40, SA43, SA51, plus its earlier share of the SA19–SA33 
   *Acceptance:* the threshold exists in exactly one place (`services.py`); `orchestration.py` no longer hardcodes `timedelta(minutes=30)`; a test asserts both paths agree after changing the value in its single location.
   *(why →* [tech-audit.md TA45](../others/tech-audit.md)*)*
 
-#### Finding — `backups-dispatch-fail-open-robustness` (`why →` [tech-audit.md TA46](../others/tech-audit.md))
-
-SA52 is complete — detail in [CHANGELOG.md](../../CHANGELOG.md).
-
-- [x] **SA53 — Make the uploaded-restore-artifact copy crash-safe.** `Tier 1 · Track 2 · deps: none`
-  `prepare_admin_uploaded_restore_artifact` (`services.py:365-366`) unlinks the existing local artifact file before `shutil.copy2`, with no `try/finally` — a copy failure (disk full, permissions) destroys the prior local copy and leaks the `mkdtemp` staging directory. Step 1 (2026-07-07, pre-REV-002): copy via `shutil.copy2` to a `.tmp` suffix file under the target directory and `os.replace` atomically into place, consolidating cleanup in a `finally`.
-  *Files:* `quickscale_modules/backups/src/quickscale_modules_backups/services.py:281-370` (`prepare_admin_uploaded_restore_artifact`).
-  *Acceptance:* a simulated copy failure (e.g. mocked `shutil.copy2` raising) leaves the pre-existing local artifact file intact and the staging directory removed; a regression test covers this path.
-  **Shipped (2026-07-07):** Changed the local-artifact copy from `unlink(missing_ok=True)` + `shutil.copy2` (destroy-on-failure) to `shutil.copy2` to a `.tmp` suffix file + `os.replace` (atomic same-filesystem swap), preserving the existing artifact on any copy failure. All manual `_cleanup_admin_restore_upload_directory` calls in early-exit paths were consolidated into a single `finally` block so the staging directory is never leaked. Added `TestPrepareAdminUploadedRestoreArtifactSA53` in `test_services.py` with two regression tests: one proving a mocked `shutil.copy2` `OSError` leaves both the pre-existing file intact and the staging directory cleaned, and one proving the happy path materializes content at the authoritative backup location and persists `local_path`.
-
-  **Current state — CR-SA53-REV-002 resolved (2026-07-08):** The fd-based copy loop in `services.py:376-381` now wraps `os.write(fd, buf)` in a retry loop using `memoryview` slicing — after each `os.write`, the unwritten remainder is sliced via `view = view[os.write(fd, view):]` and the write repeats until the full 64KiB chunk is flushed. A short `os.write()` return (partial write) no longer silently truncates the artifact. The `mkstemp`-created fd, the single `finally: os.close(fd)`, and the `except: os.unlink(tmp_path)` cleanup from CR-SA53-REV-001 are all left untouched. Added `test_short_write_retry_produces_byte_identical_copy` to `TestPrepareAdminUploadedRestoreArtifactSA53` — a regression that mocks `os.write` to return half the requested bytes every call and proves the final copy is still byte-identical. Existing copy-failure and happy-path tests pass unchanged. **This `mkstemp`+fd short-write-retry loop is the current production seam** — the interim `.tmp`+`os.replace` approach from Step 1 was replaced during REV-001/002. Full detail in [CHANGELOG.md](../../CHANGELOG.md). Closes SA53.
-
 ### Track 3 — Core/CLI plumbing
 
-SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`) is complete — detail in [CHANGELOG.md](../../CHANGELOG.md).
-
-#### Finding — `json-api-boundary-idiom-fragmentation` (`why →` [arch-audit.md Finding 5](../others/arch-audit.md))
-
-- [x] **SA56 — Migrate billing's four plain-View state-changing endpoints onto the DRF baseline.** `Tier 2 · Track 3 · deps: none (SA55 complete — the sanctioned-base rule now exists in decisions.md)`
-  `CreateCheckoutSessionView`, `CreateSubscriptionCheckoutView`, `CancelSubscriptionView`, and `CreateBillingPortalSessionView` were plain Django `View` classes wrapped in `@method_decorator(csrf_exempt, name="dispatch")` with a hand-written `_enforce_csrf()` call at the top of each `post()`. All four now subclass `APIView` with `AllowAny` + `SessionAuthentication`, matching the file's five existing DRF endpoints. The `@method_decorator(csrf_exempt, ...)` decorators and the `_enforce_csrf` helper have been removed entirely — DRF's `SessionAuthentication` enforces CSRF automatically for session-authenticated POST requests. `_resolve_request_organization` and `_parse_json_object_payload` calls changed from `request` to `request._request` (the underlying `HttpRequest`) following the existing DRF pattern. `StripeWebhookView`'s `csrf_exempt` is unchanged (out of scope — signature-verified, different trust class). URL conf required no change — it already uses `.as_view()` uniformly. All existing checkout/cancel/portal-flow tests pass unchanged (behavior-preserving migration on money paths — no new user-visible contract). Closes SA56.
+SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`) is complete — detail in [CHANGELOG.md](../../CHANGELOG.md). SA56 (Finding 5, `json-api-boundary-idiom-fragmentation`) is also complete — Finding 5 is fully closed (see [arch-audit.md](../others/arch-audit.md)). Track 3 has 0 open items.
 
 ---
 

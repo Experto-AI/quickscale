@@ -83,11 +83,10 @@ script, and as a `needs:` gate for test/isolation/lint jobs); `backups_create --
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
 | TA45 | S4 | duplication drift | 30-minute stale-restore threshold is a bare literal in `orchestration.py:2804` but a named constant (`STALE_RESTORE_THRESHOLD_MINUTES`) in `services.py` — the two can drift silently | Trivial | High | open (SA54 scheduled, Track 2) |
-| TA46 | S4 | partial failure | `prepare_admin_uploaded_restore_artifact` fd-based copy loop ignored partial `os.write()` — resolved via SA53 + CR-SA53-REV-002 (short-write retry loop + fd-based copy) | Small | High | resolved (SA53 + CR-SA53-REV-002 — short-write retry loop) |
 
 Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 1.** Quick wins: TA45 is Trivial-effort. Resolved since
-the 2026-07-06/07 passes: **TA18, TA37, TA39, TA40, TA42, TA43, TA44** (see Reconciliation log).
-TA46 resolved per the 2026-07-08 doc-review follow-up (see Reconciliation log).
+the 2026-07-06/07 passes: **TA18, TA37, TA39, TA40, TA42, TA43, TA44**; TA46 resolved 2026-07-08
+(see Reconciliation log).
 
 ---
 
@@ -98,16 +97,6 @@ TA46 resolved per the 2026-07-08 doc-review follow-up (see Reconciliation log).
   parity block and the canonical threshold can drift silently (import direction prevents
   orchestration importing from the module app; move the constant to the engine and re-export, or
   pass it in).
-- **TA46** — `backups/services.py:376-381`: the initial SA53 fix (2026-07-07) replaced
-  `unlink`+`shutil.copy2` with `.tmp` suffix + `os.replace` + `finally` cleanup, but the fd-based copy
-  loop still ignored partial `os.write()` results. **Resolved** via CR-SA53-REV-002 (2026-07-08): the
-  copy loop now wraps `os.write(fd, buf)` in a `memoryview`-slicing retry loop so a short write
-  repeats until the full 64KiB chunk is flushed — the local restore artifact can no longer be
-  silently truncated or corrupted. The final seam uses `mkstemp` for the fd, a single `finally:
-  os.close(fd)`, and `except: os.unlink(tmp_path)` cleanup from REV-001, plus the short-write
-  retry loop. `TestPrepareAdminUploadedRestoreArtifactSA53` covers copy-failure, happy-path, and
-  short-write-retry scenarios on the `mkstemp`+fd write path (3 regressions). Full detail in
-  CHANGELOG.md. Closes TA46.
 
 ---
 
