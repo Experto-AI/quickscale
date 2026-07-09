@@ -792,6 +792,8 @@ class BlogPublicReadMixin(PublicSystemOrgReadMixin):
     RLS policies see the correct org context.
     """
 
+    request: HttpRequest
+
     def get_public_org(self) -> Any | None:  # type: ignore[override]
         """Return the organization for this request.
 
