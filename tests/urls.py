@@ -156,6 +156,14 @@ urlpatterns = [
     path("", include("quickscale_modules_orgs.urls")),
     # SA35: AccountDeleteView needs auth URL routing in the test harness
     # so view-level survivor regression can reach it.
-    path("accounts/", include("quickscale_modules_auth.urls")),
+    # Use the same explicit namespace tuple pattern as the auth test harness
+    # to ensure reverse("quickscale_auth:account-delete") resolves reliably.
+    path(
+        "accounts/",
+        include(
+            ("quickscale_modules_auth.urls", "quickscale_auth"),
+            namespace="quickscale_auth",
+        ),
+    ),
     path("admin/", admin.site.urls),
 ]

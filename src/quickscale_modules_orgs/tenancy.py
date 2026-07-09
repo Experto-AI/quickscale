@@ -903,7 +903,7 @@ ALTER TABLE {child_table} ADD CONSTRAINT {constraint}
     FOREIGN KEY ({child_fk_column}, organization_id)
     REFERENCES {parent_table}(id, organization_id)
     ON DELETE {on_delete}
-    DEFERRABLE INITIALLY DEFERRED;
+    NOT DEFERRABLE;
 """
 
 _REMOVE_COMPOSITE_FK_SQL = """
@@ -1548,12 +1548,19 @@ def is_tenant_model(model: type[models.Model]) -> bool:
     * Its default ``objects`` manager is a ``TenantManager`` instance, **or**
     * It inherits from ``TenantModel``.
 
+    A model that carries a truthy ``tenant_excluded`` marker is never
+    considered tenant-scoped, regardless of manager or class hierarchy.
+
     Args:
         model: A Django ``Model`` subclass.
 
     Returns:
         ``True`` if the model appears to be tenant-scoped.
     """
+    # Explicit opt-out via tenant_excluded marker takes precedence.
+    if has_tenant_excluded_marker(model):
+        return False
+
     from quickscale_modules_orgs.managers import TenantManager
 
     # Check by manager marker first (works before TenantModel adoption).

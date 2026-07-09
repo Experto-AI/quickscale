@@ -17,6 +17,15 @@ from quickscale_modules_billing.models import (
     Plan,
     Subscription,
 )
+from quickscale_modules_orgs.current_org import set_current_org_id
+from quickscale_modules_orgs.management.commands.migrate_billing_to_orgs import (
+    _billing_user_ids,
+    _candidate_customer_ids_for_user,
+    _collect_unmigratable_row_messages,
+    _existing_personal_org,
+    _normalized_text,
+    _resolve_authoritative_organization,
+)
 from quickscale_modules_orgs.management.commands.purge_organization import Command
 from quickscale_modules_orgs.models import (
     OrgRole,
@@ -220,6 +229,405 @@ def test_migrate_billing_to_orgs_fails_on_ambiguous_memberships_without_updates(
         Organization.objects.filter(is_personal=True, memberships__user=user).count()
         == 0
     )
+
+
+# ---------------------------------------------------------------------------
+# Current-schema migrate_billing_to_orgs tests
+#
+# The existing pre-migration tests (above) skip when organization_id is NOT
+# NULL (the RLS-migrated schema).  These tests exercise the helper functions
+# and Command.handle() paths that work with the current NOT NULL schema.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_migrate_billing_normalized_text_none() -> None:
+    """_normalized_text(None) must return empty string."""
+    assert _normalized_text(None) == ""
+
+
+@pytest.mark.django_db
+def test_migrate_billing_normalized_text_empty() -> None:
+    """_normalized_text('') must return empty string."""
+    assert _normalized_text("") == ""
+
+
+@pytest.mark.django_db
+def test_migrate_billing_normalized_text_stripped() -> None:
+    """_normalized_text must strip surrounding whitespace."""
+    assert _normalized_text("  cus_abc  ") == "cus_abc"
+
+
+@pytest.mark.django_db
+def test_migrate_billing_billing_user_ids_empty() -> None:
+    """_billing_user_ids() must return [] when no billing rows exist."""
+    assert _billing_user_ids() == []
+
+
+@pytest.mark.django_db
+def test_migrate_billing_billing_user_ids_from_subscription() -> None:
+    """_billing_user_ids() must include user IDs from Subscription rows."""
+    user = get_user_model().objects.create_user(
+        username="bill-user-ids",
+        email="bill-ids@example.com",
+        password="secret123",
+    )
+    plan = _create_plan(slug="growth-bill-ids", price_id="price_growth_bill_ids")
+    org = Organization.objects.create(name="Billing IDs", slug="billing-ids")
+    Subscription.objects.create(
+        user=user,
+        organization=org,
+        plan=plan,
+        stripe_subscription_id="sub_bill_ids",
+        stripe_customer_id="cus_bill_ids",
+        status=Subscription.Status.ACTIVE,
+    )
+    set_current_org_id(org.pk)
+    user_ids = _billing_user_ids()
+    assert user.pk in user_ids
+
+
+@pytest.mark.django_db
+def test_migrate_billing_existing_personal_org_none() -> None:
+    """_existing_personal_org() must return None when user has no personal org."""
+    user = get_user_model().objects.create_user(
+        username="no-personal",
+        email="no-personal@example.com",
+        password="secret123",
+    )
+    assert _existing_personal_org(user=user) is None
+
+
+@pytest.mark.django_db
+def test_migrate_billing_existing_personal_org_found() -> None:
+    """_existing_personal_org() must return the personal org when one exists."""
+    user = get_user_model().objects.create_user(
+        username="has-personal",
+        email="has-personal@example.com",
+        password="secret123",
+    )
+    org = Organization.objects.create(
+        name="Personal", slug="personal", is_personal=True
+    )
+    OrganizationMembership.objects.create(
+        user=user, organization=org, role=OrgRole.OWNER
+    )
+    result = _existing_personal_org(user=user)
+    assert result is not None
+    assert result.pk == org.pk
+
+
+@pytest.mark.django_db
+def test_migrate_billing_existing_personal_org_multiple_raises() -> None:
+    """_existing_personal_org() must raise CommandError when user has multiple personal orgs."""
+    user = get_user_model().objects.create_user(
+        username="multi-personal",
+        email="multi-personal@example.com",
+        password="secret123",
+    )
+    org_a = Organization.objects.create(
+        name="Personal A", slug="personal-a", is_personal=True
+    )
+    org_b = Organization.objects.create(
+        name="Personal B", slug="personal-b", is_personal=True
+    )
+    OrganizationMembership.objects.create(
+        user=user, organization=org_a, role=OrgRole.OWNER
+    )
+    OrganizationMembership.objects.create(
+        user=user, organization=org_b, role=OrgRole.OWNER
+    )
+    with pytest.raises(CommandError, match="multiple personal organizations"):
+        _existing_personal_org(user=user)
+
+
+@pytest.mark.django_db
+def test_migrate_billing_resolve_authoritative_reuses_personal_org() -> None:
+    """_resolve_authoritative_organization() must reuse existing personal org."""
+    user = get_user_model().objects.create_user(
+        username="resolve-personal",
+        email="resolve-personal@example.com",
+        password="secret123",
+    )
+    org = Organization.objects.create(
+        name="Personal", slug="resolve-personal", is_personal=True
+    )
+    OrganizationMembership.objects.create(
+        user=user, organization=org, role=OrgRole.OWNER
+    )
+    resolved_org, created = _resolve_authoritative_organization(user)
+    assert resolved_org.pk == org.pk
+    assert created is False
+
+
+@pytest.mark.django_db
+def test_migrate_billing_resolve_authoritative_reuses_sole_membership() -> None:
+    """_resolve_authoritative_organization() must reuse sole membership org."""
+    user = get_user_model().objects.create_user(
+        username="resolve-sole",
+        email="resolve-sole@example.com",
+        password="secret123",
+    )
+    org = Organization.objects.create(name="Sole", slug="resolve-sole")
+    OrganizationMembership.objects.create(
+        user=user, organization=org, role=OrgRole.ADMIN
+    )
+    resolved_org, created = _resolve_authoritative_organization(user)
+    assert resolved_org.pk == org.pk
+    assert created is False
+
+
+@pytest.mark.django_db
+def test_migrate_billing_resolve_authoritative_creates_personal_org() -> None:
+    """_resolve_authoritative_organization() must create personal org when user has no memberships."""
+    user = get_user_model().objects.create_user(
+        username="resolve-create",
+        email="resolve-create@example.com",
+        password="secret123",
+    )
+    resolved_org, created = _resolve_authoritative_organization(user)
+    assert resolved_org.is_personal is True
+    assert created is True
+    assert OrganizationMembership.objects.filter(
+        user=user, organization=resolved_org
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_migrate_billing_resolve_authoritative_ambiguous_raises() -> None:
+    """_resolve_authoritative_organization() must raise when user is in multiple orgs."""
+    user = get_user_model().objects.create_user(
+        username="resolve-ambig",
+        email="resolve-ambig@example.com",
+        password="secret123",
+    )
+    org_a = Organization.objects.create(name="Ambiguous A", slug="ambig-a")
+    org_b = Organization.objects.create(name="Ambiguous B", slug="ambig-b")
+    OrganizationMembership.objects.create(
+        user=user, organization=org_a, role=OrgRole.ADMIN
+    )
+    OrganizationMembership.objects.create(
+        user=user, organization=org_b, role=OrgRole.MEMBER
+    )
+    with pytest.raises(CommandError, match="ambiguous organization memberships"):
+        _resolve_authoritative_organization(user)
+
+
+@pytest.mark.django_db
+def test_migrate_billing_candidate_customer_ids_current() -> None:
+    """_candidate_customer_ids_for_user() must return current subscription IDs."""
+    user = get_user_model().objects.create_user(
+        username="candidate-curr",
+        email="candidate-curr@example.com",
+        password="secret123",
+    )
+    plan = _create_plan(
+        slug="growth-candidate-curr", price_id="price_growth_candidate_curr"
+    )
+    org = Organization.objects.create(name="Candidate", slug="candidate")
+    Subscription.objects.create(
+        user=user,
+        organization=org,
+        plan=plan,
+        stripe_subscription_id="sub_candidate_curr",
+        stripe_customer_id="cus_candidate_curr",
+        status=Subscription.Status.ACTIVE,
+    )
+    set_current_org_id(org.pk)
+    customer_ids = _candidate_customer_ids_for_user(user_id=user.pk)
+    assert "cus_candidate_curr" in customer_ids
+
+
+@pytest.mark.django_db
+def test_migrate_billing_candidate_customer_ids_historical() -> None:
+    """_candidate_customer_ids_for_user() must fall back to historical IDs when no current subs."""
+    user = get_user_model().objects.create_user(
+        username="candidate-hist",
+        email="candidate-hist@example.com",
+        password="secret123",
+    )
+    plan = _create_plan(
+        slug="growth-candidate-hist", price_id="price_growth_candidate_hist"
+    )
+    org = Organization.objects.create(name="Candidate Hist", slug="candidate-hist")
+    Subscription.objects.create(
+        user=user,
+        organization=org,
+        plan=plan,
+        stripe_subscription_id="sub_candidate_hist",
+        stripe_customer_id="cus_candidate_hist",
+        status=Subscription.Status.CANCELED,
+    )
+    set_current_org_id(org.pk)
+    customer_ids = _candidate_customer_ids_for_user(user_id=user.pk)
+    assert "cus_candidate_hist" in customer_ids
+
+
+@pytest.mark.django_db
+def test_migrate_billing_collect_unmigratable_empty() -> None:
+    """_collect_unmigratable_row_messages() must return [] when no null-user rows exist."""
+    messages = _collect_unmigratable_row_messages()
+    assert messages == []
+
+
+@pytest.mark.django_db
+def test_migrate_billing_no_users_early_return() -> None:
+    """Command.handle() must exit early when no billing users exist."""
+    stdout = StringIO()
+    call_command(
+        "migrate_billing_to_orgs",
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    output = stdout.getvalue()
+    assert "No billing users required migration" in output
+
+
+@pytest.mark.django_db
+def test_migrate_billing_completes_with_preassigned_org() -> None:
+    """Command.handle() must complete cleanly when billing rows already point at the resolved org.
+
+    In the current RLS schema where organization_id is NOT NULL, update filters
+    with organization_id__isnull=True will match zero rows. The command still
+    completes successfully with updated=0 counters.
+    """
+    user = get_user_model().objects.create_user(
+        username="preassigned",
+        email="preassigned@example.com",
+        password="secret123",
+    )
+    plan = _create_plan(
+        slug="growth-preassigned",
+        price_id="price_growth_preassigned",
+    )
+    org = Organization.objects.create(name="Preassigned", slug="preassigned")
+    OrganizationMembership.objects.create(
+        user=user, organization=org, role=OrgRole.ADMIN
+    )
+
+    Subscription.objects.create(
+        user=user,
+        organization=org,
+        plan=plan,
+        stripe_subscription_id="sub_preassigned",
+        stripe_customer_id="cus_preassigned",
+        status=Subscription.Status.ACTIVE,
+    )
+    CreditBalance.objects.create(
+        organization=org,
+        user=user,
+        balance=50,
+    )
+    CreditTransaction.objects.create(
+        organization=org,
+        user=user,
+        amount=25,
+        transaction_type=CreditTransaction.TransactionType.PURCHASE,
+        description="Preassigned test",
+        balance_after=50,
+    )
+
+    set_current_org_id(org.pk)
+    stdout = StringIO()
+    call_command(
+        "migrate_billing_to_orgs",
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    output = stdout.getvalue()
+    assert "subscriptions_updated=0" in output
+    assert "balances_updated=0" in output
+    assert "transactions_updated=0" in output
+    assert "preassigned" in output
+    assert "completed for 1 billing users" in output
+
+
+@pytest.mark.django_db
+def test_migrate_billing_syncs_stripe_customer_id_when_org_has_none() -> None:
+    """Command.handle() must sync stripe_customer_id from billing rows when org has none."""
+    user = get_user_model().objects.create_user(
+        username="sync-cus",
+        email="sync-cus@example.com",
+        password="secret123",
+    )
+    plan = _create_plan(
+        slug="growth-sync-cus",
+        price_id="price_growth_sync_cus",
+    )
+    org = Organization.objects.create(
+        name="Sync Cus",
+        slug="sync-cus",
+        stripe_customer_id="",
+    )
+    OrganizationMembership.objects.create(
+        user=user, organization=org, role=OrgRole.ADMIN
+    )
+
+    Subscription.objects.create(
+        user=user,
+        organization=org,
+        plan=plan,
+        stripe_subscription_id="sub_sync_cus",
+        stripe_customer_id="cus_synced",
+        status=Subscription.Status.ACTIVE,
+    )
+
+    set_current_org_id(org.pk)
+    stdout = StringIO()
+    call_command(
+        "migrate_billing_to_orgs",
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    output = stdout.getvalue()
+    assert "subscriptions_updated=0" in output
+    assert "stripe_customer_id=cus_synced" in output
+    assert "completed for 1 billing users" in output
+    org.refresh_from_db()
+    assert org.stripe_customer_id == "cus_synced"
+
+
+@pytest.mark.django_db
+def test_migrate_billing_fails_on_conflicting_stripe_customer_id() -> None:
+    """Command.handle() must detect when org's existing stripe_customer_id conflicts with billing rows."""
+    user = get_user_model().objects.create_user(
+        username="conflict-cus",
+        email="conflict-cus@example.com",
+        password="secret123",
+    )
+    plan = _create_plan(
+        slug="growth-conflict-cus",
+        price_id="price_growth_conflict_cus",
+    )
+    org = Organization.objects.create(
+        name="Conflict Cus",
+        slug="conflict-cus",
+        stripe_customer_id="cus_existing",
+    )
+    OrganizationMembership.objects.create(
+        user=user, organization=org, role=OrgRole.ADMIN
+    )
+
+    Subscription.objects.create(
+        user=user,
+        organization=org,
+        plan=plan,
+        stripe_subscription_id="sub_conflict_cus",
+        stripe_customer_id="cus_diff",
+        status=Subscription.Status.ACTIVE,
+    )
+
+    set_current_org_id(org.pk)
+    with pytest.raises(CommandError, match="already has stripe_customer_id"):
+        call_command(
+            "migrate_billing_to_orgs",
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
 
 
 @pytest.mark.django_db
