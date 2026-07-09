@@ -2868,10 +2868,11 @@ class TestBackupLifecycle:
 class TestBackupServiceHelpers:
     """Focused tests for helper branches that underpin coverage policy enforcement."""
 
-    def test_build_media_sync_manifest_fails_closed_for_malformed_storage_helpers(
+    def test_build_media_sync_manifest_falls_back_to_local_when_storage_helpers_malformed(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """When select_storage_backend is missing, fall back to local MEDIA_ROOT detection."""
         monkeypatch.setattr(
             "quickscale_core.dr_engine.orchestration.import_module",
             lambda _module_name: SimpleNamespace(
@@ -2883,9 +2884,7 @@ class TestBackupServiceHelpers:
             captured_at=datetime(2026, 4, 30, tzinfo=timezone.utc)
         )
 
-        assert manifest["status"] == "unsupported"
-        assert manifest["reason"] == "storage helper is unavailable in this runtime"
-        assert manifest["error_type"] == "AttributeError"
+        assert manifest["status"] == "missing_media_root"
         assert manifest["inventory"] == []
 
     def test_build_media_sync_manifest_inventory_failed(
