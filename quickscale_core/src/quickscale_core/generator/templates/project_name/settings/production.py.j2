@@ -27,7 +27,7 @@ from typing import cast
 import dj_database_url
 from decouple import config
 
-from .base import *  # noqa: F403
+from .base import *  # noqa: F403, F405
 
 _SHIPPED_SECRET_KEY_PLACEHOLDER = "django-insecure-change-this-in-production"
 
@@ -112,7 +112,7 @@ TRUSTED_PROXY_COUNT = config("TRUSTED_PROXY_COUNT", default=1, cast=int)
 # :func:`get_client_ip` reads the overridden values of
 # ``USE_X_FORWARDED_FOR`` and ``TRUSTED_PROXY_COUNT`` rather than the
 # base defaults.
-def get_client_ip(request: object) -> str:
+def get_client_ip(request: object) -> str:  # type: ignore[no-redef]
     """Return the canonical client IP address for *request*.
 
     See the base :func:`get_client_ip` docstring for full semantics.
@@ -121,21 +121,21 @@ def get_client_ip(request: object) -> str:
     actually in effect at request time.
     """
     if not USE_X_FORWARDED_FOR or TRUSTED_PROXY_COUNT <= 0:
-        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[attr-defined, no-any-return]
 
     x_forwarded_for: str = (
-        request.META.get("HTTP_X_FORWARDED_FOR", "")  # type: ignore[union-attr]
+        request.META.get("HTTP_X_FORWARDED_FOR", "")  # type: ignore[attr-defined]
     ).strip()
     if not x_forwarded_for:
-        return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+        return request.META.get("REMOTE_ADDR", "")  # type: ignore[attr-defined, no-any-return]
 
     ips = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
     if len(ips) >= TRUSTED_PROXY_COUNT:
-        return ips[-TRUSTED_PROXY_COUNT]
+        return ips[-TRUSTED_PROXY_COUNT]  # type: ignore[no-any-return]
     # Chain shorter than the declared proxy count — fail closed to
     # REMOTE_ADDR instead of trusting a potentially spoofed leftmost
     # address.
-    return request.META.get("REMOTE_ADDR", "")  # type: ignore[union-attr]
+    return request.META.get("REMOTE_ADDR", "")  # type: ignore[attr-defined, no-any-return]
 
 
 # Recompute DRF proxy setting after the override so that
@@ -292,7 +292,7 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "json": {
-            "()": JsonFormatter,
+            "()": JsonFormatter,  # noqa: F405
         },
         "verbose": {
             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
@@ -305,7 +305,7 @@ LOGGING = {
     },
     "filters": {
         "correlation_id": {
-            "()": CorrelationIdFilter,
+            "()": CorrelationIdFilter,  # noqa: F405
         },
         "require_debug_false": {
             "()": "django.utils.log.RequireDebugFalse",

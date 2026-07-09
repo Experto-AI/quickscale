@@ -29,6 +29,7 @@ REPO_LOCAL_ARTIFACT_NAMES = frozenset(
         ".pnpm-store",
         ".pytest_cache",
         ".ruff_cache",
+        ".venv",
         "__pycache__",
         "build",
         "coverage.json",
@@ -199,8 +200,34 @@ LOGGING = {
     settings_path.write_text(settings_content)
 
 
+def _create_test_database() -> None:
+    """Create the test database if it does not exist."""
+    import psycopg2
+
+    db_name = os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke")
+    db_user = os.environ.get("QS_SMOKE_DB_USER", "postgres")
+    db_password = os.environ.get("QS_SMOKE_DB_PASSWORD", "")
+    db_host = os.environ.get("QS_SMOKE_DB_HOST", "localhost")
+    db_port = os.environ.get("QS_SMOKE_DB_PORT", "5432")
+
+    conn = psycopg2.connect(
+        host=db_host,
+        port=db_port,
+        user=db_user,
+        password=db_password,
+        dbname="postgres",
+    )
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+        if not cur.fetchone():
+            cur.execute(f'CREATE DATABASE "{db_name}"')
+    conn.close()
+
+
 def _run_migrations(project_path: Path, project_name: str) -> None:
     """Run database migrations against the PostgreSQL test database."""
+    _create_test_database()
     result = subprocess.run(
         ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
         cwd=project_path,

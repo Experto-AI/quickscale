@@ -30,10 +30,14 @@ from {{ package_name }}.urls_modules import (
     POST_HOME_MODULE_URLPATTERNS,
     PRE_HOME_MODULE_URLPATTERNS,
 )
-from {{ package_name }}.views import custom_404_view, orgs_react_shell_view  # noqa: F401
-{%- if theme == 'showcase_html' %}
-from {{ package_name }}.views import social_embeds_view, social_link_tree_view
-{%- endif %}
+from {{ package_name }}.views import (  # noqa: F401
+    custom_404_view,
+    orgs_react_shell_view,
+    {%- if theme == 'showcase_html' %}
+    social_embeds_view,
+    social_link_tree_view,
+    {%- endif %}
+)
 
 
 def healthcheck(request: HttpRequest) -> HttpResponse:

@@ -41,6 +41,7 @@ REPO_LOCAL_ARTIFACT_NAMES = frozenset(
         ".pytest_cache",
         ".ruff_cache",
         ".tox",
+        ".venv",
         "__pycache__",
         "build",
         "coverage.json",
@@ -583,21 +584,25 @@ class TestFullE2EWorkflow:
         generator.generate(project_name, project_path)
         self._install_project_dependencies(project_path)
 
-        # ── Embed the orgs module as a path dependency ──────────────────
-        module_dir = project_path / "modules" / "orgs"
-        _copytree_for_generated_project_smoke(
-            REPO_ROOT / "quickscale_modules" / "orgs",
-            module_dir,
-        )
+        # ── Embed the auth and orgs modules as path dependencies ────────
+        # orgs depends on auth, so both must be available at lock time.
+        for module_name in ("auth", "orgs"):
+            _copytree_for_generated_project_smoke(
+                REPO_ROOT / "quickscale_modules" / module_name,
+                project_path / "modules" / module_name,
+            )
 
         pyproject_path = project_path / "pyproject.toml"
         pyproject_content = pyproject_path.read_text()
 
-        if "quickscale-module-orgs" not in pyproject_content:
+        if "quickscale-module-auth" not in pyproject_content:
+            path_deps = (
+                'quickscale-module-auth = {path = "./modules/auth", develop = true}\n'
+                'quickscale-module-orgs = {path = "./modules/orgs", develop = true}\n'
+            )
             pyproject_content = pyproject_content.replace(
                 'dj-database-url = "^3.1.0"\n',
-                'dj-database-url = "^3.1.0"\n'
-                'quickscale-module-orgs = {path = "./modules/orgs", develop = true}\n',
+                f'dj-database-url = "^3.1.0"\n{path_deps}',
             )
             pyproject_path.write_text(pyproject_content)
 
@@ -652,6 +657,8 @@ class TestFullE2EWorkflow:
         test_settings.write_text(
             f'"""E2E conformance test settings — includes orgs + unprotected test app."""\n'
             f"from .base import *\n"
+            f"\n"
+            f"QUICKSCALE_MODE = 'solo'\n"
             f"\n"
             f"INSTALLED_APPS += [\n"
             f'    "quickscale_modules_orgs",\n'
@@ -1570,6 +1577,24 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         )
 
         branch = self._get_local_repo_branch()
+
+        # git subtree add requires full history; unshallow if needed.
+        shallow_check = subprocess.run(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if shallow_check.stdout.strip() == "true":
+            subprocess.run(
+                ["git", "fetch", "--unshallow"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+
         subtree_result = self._run_git(
             project_path,
             "subtree",

@@ -14,7 +14,7 @@ def social_link_tree_view(request: HttpRequest) -> HttpResponse:
     """Serve the public social link tree rendered server-side from the managed social module."""
     context: dict[str, object] = {}
     try:
-        from quickscale_modules_social.services import build_social_link_tree_payload  # type: ignore[import-not-found]
+        from quickscale_modules_social.services import build_social_link_tree_payload  # noqa: I001
 
         context["social"] = build_social_link_tree_payload()
     except ImportError:
@@ -26,7 +26,7 @@ def social_embeds_view(request: HttpRequest) -> HttpResponse:
     """Serve the public social embeds gallery rendered server-side from the managed social module."""
     context: dict[str, object] = {}
     try:
-        from quickscale_modules_social.services import build_social_embeds_payload  # type: ignore[import-not-found]
+        from quickscale_modules_social.services import build_social_embeds_payload  # noqa: I001
 
         context["social"] = build_social_embeds_payload()
     except ImportError:

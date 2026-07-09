@@ -862,6 +862,45 @@ def apply_forms_configuration(
 
 
 # ============================================================================
+# LISTINGS MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_listings_config() -> dict[str, Any]:
+    """Return default configuration for the listings module."""
+    return {
+        "listings_per_page": 12,
+    }
+
+
+def configure_listings_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Interactive configuration for the listings module."""
+    defaults = _merge_existing_config(get_default_listings_config(), existing_config)
+
+    if non_interactive:
+        click.echo("\n\u2699\ufe0f  Using default listings module configuration...")
+        config = defaults
+        click.echo(f"  \u2022 Listings per page: {config['listings_per_page']}")
+        return config
+
+    click.echo("\n\u2699\ufe0f  Configuring listings module...")
+    click.echo("The listings module will be configured with default settings.\n")
+
+    config = {
+        "listings_per_page": click.prompt(
+            "Listings per page",
+            type=int,
+            default=int(defaults["listings_per_page"]),
+        ),
+    }
+    click.echo(f"  \u2022 Listings per page: {config['listings_per_page']}")
+    return config
+
+
+# ============================================================================
 # STORAGE MODULE CONFIGURATION
 # ============================================================================
 
@@ -2034,6 +2073,12 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
             configure=configure_forms_module,
             apply=apply_forms_configuration,
             get_defaults=get_default_forms_config,
+        ),
+        ModuleConfigurator(
+            name="listings",
+            configure=configure_listings_module,
+            apply=None,
+            get_defaults=get_default_listings_config,
         ),
         ModuleConfigurator(
             name="storage",

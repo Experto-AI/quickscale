@@ -342,6 +342,91 @@ def _update_dependency_entries(
     _write_validated_toml(pyproject_path, "\n".join(updated_lines) + "\n")
 
 
+def _patch_module_path_dependencies(
+    project_path: Path,
+    module_options_by_name: Mapping[str, Mapping[str, Any] | None],
+) -> None:
+    """Replace unresolvable path deps in embedded module pyproject.toml files.
+
+    When a module's pyproject.toml declares a dependency via a path (e.g.
+    ``quickscale-core = {path = "../../quickscale_core", develop = true}``)
+    and that path does not exist inside the generated project tree, replace
+    it with the version constraint declared in the module.yml manifest so
+    that ``poetry lock`` can resolve it from PyPI.
+    """
+    from quickscale_core.manifest.loader import get_manifest_for_module
+
+    for module_name in sorted(module_options_by_name):
+        install_path = resolve_embedded_module_install_path(project_path, module_name)
+        if install_path is None:
+            continue
+        module_pyproject_path = install_path / "pyproject.toml"
+        module_pyproject = _load_toml_file(module_pyproject_path)
+        module_poetry_deps = _load_poetry_dependencies(
+            module_pyproject_path, module_pyproject
+        )
+
+        patch_needed = False
+        for dep_name, dep_value in module_poetry_deps.items():
+            if isinstance(dep_value, dict) and "path" in dep_value:
+                dep_path = Path(dep_value["path"])
+                if not dep_path.is_absolute():
+                    dep_path = (install_path / dep_path).resolve()
+                if not dep_path.exists():
+                    patch_needed = True
+                    break
+
+        if not patch_needed:
+            continue
+
+        # Load manifest and build a version override map for path deps.
+        manifest = get_manifest_for_module(project_path, module_name, strict=True)
+        if manifest is None:
+            continue
+
+        overrides: dict[str, str] = {}
+        raw_toml = module_pyproject_path.read_text(encoding="utf-8")
+
+        for dep_name, dep_value in module_poetry_deps.items():
+            if not isinstance(dep_value, dict) or "path" not in dep_value:
+                continue
+            dep_path = Path(dep_value["path"])
+            if not dep_path.is_absolute():
+                dep_path = (install_path / dep_path).resolve()
+            if dep_path.exists():
+                continue
+
+            # Look for a version constraint in the module.yml manifest.
+            spec: str | None = None
+            for requirement in manifest.dependencies:
+                if requirement.startswith(dep_name):
+                    spec = requirement[len(dep_name) :].strip()
+                    break
+
+            if spec:
+                overrides[dep_name] = spec
+
+        if overrides:
+            raw_lines = raw_toml.splitlines()
+            result_lines: list[str] = []
+            for line in raw_lines:
+                stripped = line.strip()
+                matched = False
+                for dep_name, spec in overrides.items():
+                    if stripped.startswith(f"{dep_name} =") or stripped.startswith(
+                        f"{dep_name}="
+                    ):
+                        indent = line[: len(line) - len(line.lstrip())]
+                        result_lines.append(f'{indent}{dep_name} = "{spec}"')
+                        matched = True
+                        break
+                if not matched:
+                    result_lines.append(line)
+            module_pyproject_path.write_text(
+                "\n".join(result_lines) + "\n", encoding="utf-8"
+            )
+
+
 def sync_project_module_dependencies(
     project_path: Path,
     module_options_by_name: Mapping[str, Mapping[str, Any] | None],
@@ -499,6 +584,14 @@ def sync_project_module_dependencies(
         for dependency_name in sorted(pending_path_dependencies)
     )
     _append_dependency_entries(pyproject_path, entries_to_add)
+
+    # Patch module pyproject.toml files: replace path-style dependencies
+    # that point to non-existent locations with version constraints from
+    # the module.yml manifest.  This prevents poetry lock from failing
+    # when a module's pyproject.toml references a monorepo-local path
+    # (e.g. quickscale-core = {path = "../../quickscale_core"}) that
+    # doesn't exist in the generated project's isolated tree.
+    _patch_module_path_dependencies(project_path, module_options_by_name)
 
     return ProjectDependencySyncResult(
         added_path_dependencies=sorted(pending_path_dependencies),

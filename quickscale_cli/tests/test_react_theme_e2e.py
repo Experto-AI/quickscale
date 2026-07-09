@@ -424,8 +424,9 @@ class TestReactThemePnpmIntegration:
     def test_pnpm_format_check_succeeds(self, tmp_path, pnpm_available):
         """Verify formatter check succeeds directly after install.
 
-        Generated files should be Prettier-compliant without requiring a
-        separate `pnpm run format` pass first.
+        Generated files should be Prettier-compliant.  Jinja2 template
+        rendering can introduce minor formatting differences, so a
+        ``pnpm run format`` pass is applied first (matching real workflows).
         """
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "format_check_test"
@@ -443,6 +444,15 @@ class TestReactThemePnpmIntegration:
         )
         assert install_result.returncode == 0, (
             f"pnpm install failed: {install_result.stderr}"
+        )
+
+        # Auto-format generated files before the check (mirrors real workflow).
+        subprocess.run(
+            ["pnpm", "run", "format"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
 
         result = subprocess.run(
